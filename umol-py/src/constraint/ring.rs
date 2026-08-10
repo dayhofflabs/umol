@@ -51,7 +51,7 @@ impl RingScope {
 }
 
 #[pyclass]
-pub struct RingMembershipAst {
+pub struct RingMembershipForm {
     #[pyo3(get)]
     scope: Py<RingScope>,
     #[pyo3(get)]
@@ -59,7 +59,7 @@ pub struct RingMembershipAst {
 }
 
 #[pymethods]
-impl RingMembershipAst {
+impl RingMembershipForm {
     #[new]
     fn new(py: Python<'_>, scope: Py<RingScope>, count: NumLike) -> PyResult<Self> {
         Ok(Self {
@@ -78,7 +78,7 @@ impl RingMembershipAst {
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "RingMembershipAst({}, {})",
+            "RingMembershipForm({}, {})",
             self.scope.bind(py).as_any().repr()?.extract::<String>()?,
             self.count.bind(py).as_any().repr()?.extract::<String>()?,
         ))
@@ -86,17 +86,17 @@ impl RingMembershipAst {
 }
 
 impl_py_lattice!(
-    RingMembershipAst,
+    RingMembershipForm,
     GraphIrRingMembershipForm,
-    |value: &RingMembershipAst, py: Python<'_>| -> PyResult<GraphIrRingMembershipForm> {
+    |value: &RingMembershipForm, py: Python<'_>| -> PyResult<GraphIrRingMembershipForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrRingMembershipForm| -> PyResult<RingMembershipAst> {
-        RingMembershipAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrRingMembershipForm| -> PyResult<RingMembershipForm> {
+        RingMembershipForm::from_rust(py, &value)
     }
 );
 
-impl RingMembershipAst {
+impl RingMembershipForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipForm) -> PyResult<Self> {
         Ok(Self {
             scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
@@ -128,10 +128,10 @@ mod tests {
     #[rstest]
     #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::All, 2))]
     #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::Size(6), 1))]
-    fn test_ring_membership_ast_roundtrip(#[case] ast: GraphIrRingMembershipForm) {
+    fn test_ring_membership_form_roundtrip(#[case] ast: GraphIrRingMembershipForm) {
         Python::attach(|py| {
             assert_eq!(
-                RingMembershipAst::from_rust(py, &ast).unwrap().to_rust(py),
+                RingMembershipForm::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });

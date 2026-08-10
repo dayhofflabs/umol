@@ -3,9 +3,9 @@ import pytest
 from umol import (
     AtomForm,
     BondForm,
-    BondConstraintAst,
+    BondConstraintForm,
     BondConstraintKey,
-    BondConstraintsAst,
+    BondConstraintsForm,
     BondUpdate,
     BooleanForm,
     CisTransConfiguration,
@@ -13,7 +13,7 @@ from umol import (
     Element,
     MoleculeAst,
     ParseError,
-    RingMembershipAst,
+    RingMembershipForm,
     RingScope,
     StereoCoset,
     UnpairedElectronsForm,
@@ -27,7 +27,7 @@ from umol import (
     [
         (
             BondUpdate(),
-            (None, None, UnpairedElectronsUpdate(), BondConstraintsAst([])),
+            (None, None, UnpairedElectronsUpdate(), BondConstraintsForm([])),
         ),
         (
             BondUpdate(order=2, charge=-1, unpaired_electrons=UnpairedElectronsUpdate(count=2)),
@@ -35,22 +35,22 @@ from umol import (
                 NumForm.Lit(2),
                 NumForm.Lit(-1),
                 UnpairedElectronsUpdate(count=2),
-                BondConstraintsAst([]),
+                BondConstraintsForm([]),
             ),
         ),
         (
             BondUpdate(
                 unpaired_electrons=UnpairedElectronsUpdate(multiplicity=1),
-                constraints=BondConstraintsAst(
-                    [BondConstraintAst.Aromatic(BooleanForm.Undetermined())]
+                constraints=BondConstraintsForm(
+                    [BondConstraintForm.Aromatic(BooleanForm.Undetermined())]
                 ),
             ),
             (
                 None,
                 None,
                 UnpairedElectronsUpdate(multiplicity=1),
-                BondConstraintsAst(
-                    [BondConstraintAst.Aromatic(BooleanForm.Undetermined())]
+                BondConstraintsForm(
+                    [BondConstraintForm.Aromatic(BooleanForm.Undetermined())]
                 ),
             ),
         ),
@@ -111,8 +111,8 @@ def test_bondast_new():
             BondForm.aromatic(),
             BondForm(
                 1,
-                constraints=BondConstraintsAst(
-                    [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
+                constraints=BondConstraintsForm(
+                    [BondConstraintForm.Aromatic(BooleanForm.Lit(True))]
                 ),
             ),
             id="aromatic",
@@ -137,8 +137,8 @@ def test_bondast_new_kwargs():
 def test_bondast_constraints_kwarg():
     bond = BondForm(
         1,
-        constraints=BondConstraintsAst(
-            [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
+        constraints=BondConstraintsForm(
+            [BondConstraintForm.Aromatic(BooleanForm.Lit(True))]
         ),
     )
     assert len(bond.constraints) == 1
@@ -178,8 +178,8 @@ def test_bondast_asdict():
 def test_bondast_asdict_constraints():
     bond = BondForm(
         1,
-        constraints=BondConstraintsAst(
-            [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
+        constraints=BondConstraintsForm(
+            [BondConstraintForm.Aromatic(BooleanForm.Lit(True))]
         ),
     )
     constraints = bond.asdict()["constraints"]
@@ -206,26 +206,26 @@ def test_bondast_parse_error():
 
 
 def test_bondconstraint_key_aromatic():
-    assert BondConstraintAst.Aromatic(BooleanForm.Lit(True)).key == BondConstraintKey.Aromatic()
+    assert BondConstraintForm.Aromatic(BooleanForm.Lit(True)).key == BondConstraintKey.Aromatic()
 
 
 def test_bondconstraint_key_cis_trans_stereo():
-    constraint = BondConstraintAst.CisTransStereo(CisTransStereoForm.NotStereo())
+    constraint = BondConstraintForm.CisTransStereo(CisTransStereoForm.NotStereo())
     assert constraint.key == BondConstraintKey.CisTransStereo()
 
 
 def test_bondconstraint_key_ring_membership():
-    constraint = BondConstraintAst.RingMembership(
-        RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
+    constraint = BondConstraintForm.RingMembership(
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
     )
     assert constraint.key == BondConstraintKey.RingMembership(RingScope.Size(6))
 
 
 def test_bondconstraints_iter():
-    constraints = BondConstraintsAst(
+    constraints = BondConstraintsForm(
         [
-            BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
-            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(2))),
+            BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
         ]
     )
     assert len(constraints) == 2
@@ -235,45 +235,45 @@ def test_bondconstraints_iter():
         BondConstraintKey.RingMembership(RingScope.All()),
     ]
     assert list(constraints.values()) == [
-        BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
-        BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(2))),
+        BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+        BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
     ]
     assert list(constraints.items()) == [
-        (BondConstraintKey.Aromatic(), BondConstraintAst.Aromatic(BooleanForm.Lit(True))),
+        (BondConstraintKey.Aromatic(), BondConstraintForm.Aromatic(BooleanForm.Lit(True))),
         (
             BondConstraintKey.RingMembership(RingScope.All()),
-            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(2))),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
         ),
     ]
 
 
 def test_bondconstraints_get():
-    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert BondConstraintKey.Aromatic() in constraints
     assert BondConstraintKey.CisTransStereo() not in constraints
     assert constraints.get(BondConstraintKey.CisTransStereo()) is None
     assert constraints.get(BondConstraintKey.CisTransStereo(), 0) == 0
-    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
 
 
 def test_bondconstraints_aromatic():
-    empty = BondConstraintsAst([])
+    empty = BondConstraintsForm([])
     # aromatic is non-optional: unset reads back as Undetermined
     assert empty.aromatic == BooleanForm.Undetermined()
     assert empty.cis_trans_stereo is None
     assert empty.ring_count is None
-    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert constraints.aromatic == BooleanForm.Lit(True)
 
 
 def test_bondconstraints_asdict():
-    constraints = BondConstraintsAst(
+    constraints = BondConstraintsForm(
         [
-            BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
-            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(2))),
-            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))),
+            BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))),
         ]
     )
     d = constraints.asdict()
@@ -284,8 +284,8 @@ def test_bondconstraints_asdict():
 
 
 def test_bondconstraints_ring_size_count():
-    constraints = BondConstraintsAst(
-        [BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))]
+    constraints = BondConstraintsForm(
+        [BondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
     assert constraints.ring_size_count[5] is None
@@ -293,17 +293,17 @@ def test_bondconstraints_ring_size_count():
 
 
 def test_bondconstraintsast_set():
-    constraints = BondConstraintsAst([])
-    constraints.set(BondConstraintAst.Aromatic(BooleanForm.Lit(True)))
+    constraints = BondConstraintsForm([])
+    constraints.set(BondConstraintForm.Aromatic(BooleanForm.Lit(True)))
     assert len(constraints) == 1
-    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    assert constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
 
 
 def test_bondconstraintsast_pop():
-    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
-    assert constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
+    assert constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
     assert len(constraints) == 0
@@ -311,13 +311,13 @@ def test_bondconstraintsast_pop():
 
 
 def test_bondconstraintsast_update():
-    constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     constraints.update(
-        BondConstraintsAst(
+        BondConstraintsForm(
             [
-                BondConstraintAst.Aromatic(BooleanForm.Lit(False)),
-                BondConstraintAst.RingMembership(
-                    RingMembershipAst(RingScope.All(), NumForm.Lit(2))
+                BondConstraintForm.Aromatic(BooleanForm.Lit(False)),
+                BondConstraintForm.RingMembership(
+                    RingMembershipForm(RingScope.All(), NumForm.Lit(2))
                 ),
             ]
         )
@@ -328,11 +328,11 @@ def test_bondconstraintsast_update():
 
 
 def test_bondconstraints_update_iterable():
-    cs = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    cs = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     cs.update(
         [
-            BondConstraintAst.Aromatic(BooleanForm.Lit(False)),
-            BondConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(1))),
+            BondConstraintForm.Aromatic(BooleanForm.Lit(False)),
+            BondConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(1))),
         ]
     )
     assert len(cs) == 2
@@ -340,37 +340,37 @@ def test_bondconstraints_update_iterable():
 
 
 def test_bondconstraints_aromatic_property():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.aromatic = True
     assert cs.aromatic == BooleanForm.Lit(True)
 
 
 def test_bondconstraints_cis_trans_stereo_config():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.cis_trans_stereo = CisTransConfiguration.E
     assert cs.cis_trans_stereo == CisTransStereoForm.Stereo(StereoCoset.Lit(1))
 
 
 def test_bondconstraints_cis_trans_stereo_false():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.cis_trans_stereo = False
     assert cs.cis_trans_stereo == CisTransStereoForm.NotStereo()
 
 
 def test_bondconstraints_cis_trans_stereo_true_error():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     with pytest.raises(ValueError):
         cs.cis_trans_stereo = True
 
 
 def test_bondconstraints_ring_count_property():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.ring_count = 2
     assert cs.ring_count.as_lit() == 2
 
 
 def test_bondconstraints_ring_size_count_subscript():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.ring_size_count[6] = 3
     assert cs.ring_size_count[6].as_lit() == 3
     del cs.ring_size_count[6]
@@ -378,7 +378,7 @@ def test_bondconstraints_ring_size_count_subscript():
 
 
 def test_bondringsizecounts_len_iter_contains():
-    cs = BondConstraintsAst([])
+    cs = BondConstraintsForm([])
     cs.ring_size_count[6] = 3
     cs.ring_size_count[5] = 1
     rsc = cs.ring_size_count
@@ -389,9 +389,9 @@ def test_bondringsizecounts_len_iter_contains():
 
 
 def test_bondconstraints_getitem_delitem():
-    cs = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    cs = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert BondConstraintKey.Aromatic() in cs
-    assert cs[BondConstraintKey.Aromatic()] == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
+    assert cs[BondConstraintKey.Aromatic()] == BondConstraintForm.Aromatic(BooleanForm.Lit(True))
     with pytest.raises(KeyError):
         cs[BondConstraintKey.CisTransStereo()]
     del cs[BondConstraintKey.Aromatic()]
@@ -402,10 +402,10 @@ def test_bondconstraints_getitem_delitem():
 
 def test_bondconstraintsview_set():
     bond = BondForm(1)
-    bond.constraints.set(BondConstraintAst.Aromatic(BooleanForm.Lit(True)))
+    bond.constraints.set(BondConstraintForm.Aromatic(BooleanForm.Lit(True)))
     # a fresh view proves the write mutated the standalone bond in place
     assert len(bond.constraints) == 1
-    assert bond.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    assert bond.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
 
@@ -413,9 +413,9 @@ def test_bondconstraintsview_set():
 def test_bondconstraintsview_pop():
     bond = BondForm(
         1,
-        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
+        constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
     )
-    assert bond.constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    assert bond.constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
     assert len(bond.constraints) == 0
@@ -424,11 +424,11 @@ def test_bondconstraintsview_pop():
 def test_bondconstraintsview_update():
     bond = BondForm(1)
     bond.constraints.update(
-        BondConstraintsAst(
+        BondConstraintsForm(
             [
-                BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
-                BondConstraintAst.RingMembership(
-                    RingMembershipAst(RingScope.All(), NumForm.Lit(2))
+                BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+                BondConstraintForm.RingMembership(
+                    RingMembershipForm(RingScope.All(), NumForm.Lit(2))
                 ),
             ]
         )
@@ -455,7 +455,7 @@ def test_bondconstraintsview_ring_size_count():
 def test_bondconstraintsview_reads():
     bond = BondForm(
         1,
-        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
+        constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
     )
     constraints = bond.constraints
     assert constraints
@@ -464,17 +464,17 @@ def test_bondconstraintsview_reads():
     assert constraints.aromatic == BooleanForm.Lit(True)
     assert set(constraints.asdict().keys()) == {"aromatic"}
     assert list(constraints) == [BondConstraintKey.Aromatic()]
-    assert list(constraints.values()) == [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
+    assert list(constraints.values()) == [BondConstraintForm.Aromatic(BooleanForm.Lit(True))]
 
 
 def test_bondconstraintsview_getitem_delitem():
     bond = BondForm(
         1,
-        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
+        constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
     )
     cs = bond.constraints
     assert BondConstraintKey.Aromatic() in cs
-    assert cs[BondConstraintKey.Aromatic()] == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
+    assert cs[BondConstraintKey.Aromatic()] == BondConstraintForm.Aromatic(BooleanForm.Lit(True))
     with pytest.raises(KeyError):
         cs[BondConstraintKey.CisTransStereo()]
     del bond.constraints[BondConstraintKey.Aromatic()]
@@ -486,7 +486,7 @@ def test_bondconstraintsview_getitem_delitem():
 def test_bondconstraintsview_update_from_view():
     src = BondForm(
         1,
-        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
+        constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
     )
     dst = BondForm(2)
     dst.constraints.update(src.constraints)
@@ -495,8 +495,8 @@ def test_bondconstraintsview_update_from_view():
 
 def test_bondast_set_constraints_from_value():
     dst = BondForm(2)
-    dst.constraints = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
-    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    dst.constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
+    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
 
@@ -504,27 +504,27 @@ def test_bondast_set_constraints_from_value():
 def test_bondast_set_constraints_from_view():
     src = BondForm(
         1,
-        constraints=BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))]),
+        constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
     )
     dst = BondForm(2)
     dst.constraints = src.constraints  # RHS is a live view, not a value container
-    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintAst.Aromatic(
+    assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
 
 
 def test_bondconstraint_eq_hash():
-    assert BondConstraintAst.Aromatic(BooleanForm.Lit(True)) == BondConstraintAst.Aromatic(
+    assert BondConstraintForm.Aromatic(BooleanForm.Lit(True)) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
     )
-    assert BondConstraintAst.Aromatic(BooleanForm.Lit(True)) != BondConstraintAst.Aromatic(
+    assert BondConstraintForm.Aromatic(BooleanForm.Lit(True)) != BondConstraintForm.Aromatic(
         BooleanForm.Lit(False)
     )
     assert (
         len(
             {
-                BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
-                BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
+                BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
+                BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
             }
         )
         == 1
@@ -532,10 +532,10 @@ def test_bondconstraint_eq_hash():
 
 
 def test_bondconstraint_repr():
-    x = BondConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))
+    x = BondConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))
     env = {
-        "BondConstraintAst": BondConstraintAst,
-        "RingMembershipAst": RingMembershipAst,
+        "BondConstraintForm": BondConstraintForm,
+        "RingMembershipForm": RingMembershipForm,
         "RingScope": RingScope,
         "NumForm": NumForm,
     }
@@ -555,17 +555,17 @@ def test_bondconstraintkey_eq_hash():
 
 
 def test_bondconstraintsast_eq_repr():
-    a = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
-    b = BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])
+    a = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
+    b = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert a == b
-    assert a != BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(False))])
-    assert repr(a) == "BondConstraintsAst([BondConstraintAst.Aromatic(BooleanForm.Lit(True))])"
+    assert a != BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(False))])
+    assert repr(a) == "BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])"
 
 
 def test_bondconstraintsast_unhashable():
     # mutable container: value-equal but unhashable, like BondForm
     with pytest.raises(TypeError):
-        hash(BondConstraintsAst([]))
+        hash(BondConstraintsForm([]))
 
 
 def test_bondconstraintsview_repr():
@@ -614,7 +614,7 @@ def test_bondview_asdict():
 
 def test_bondview_constraints_write_through():
     mol = ethene()
-    mol.bonds[0].constraints.set(BondConstraintAst.Aromatic(BooleanForm.Lit(True)))
+    mol.bonds[0].constraints.set(BondConstraintForm.Aromatic(BooleanForm.Lit(True)))
     # a fresh view proves the write hit the molecule, not a transient copy
     constraints = mol.bonds[0].constraints
     assert len(constraints) == 1
@@ -637,8 +637,8 @@ def test_bondview_constraints_ring_size_count():
 
 def test_bondview_set_constraints():
     mol = ethene()
-    mol.bonds[0].constraints = BondConstraintsAst(
-        [BondConstraintAst.Aromatic(BooleanForm.Lit(True))]
+    mol.bonds[0].constraints = BondConstraintsForm(
+        [BondConstraintForm.Aromatic(BooleanForm.Lit(True))]
     )
     assert mol.bonds[0].constraints.aromatic == BooleanForm.Lit(True)
 

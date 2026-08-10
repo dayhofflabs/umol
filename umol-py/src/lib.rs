@@ -17,20 +17,20 @@ use crate::{
     boolean::BooleanForm,
     constraint::{
         aromatic::{
-            AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsAst,
-            AromaticSystemConstraintsView,
+            AromaticSystemConstraintForm, AromaticSystemConstraintKey,
+            AromaticSystemConstraintsForm, AromaticSystemConstraintsView,
         },
         atom::{
-            AromaticValence, AromaticValenceAst, AtomConstraintAst, AtomConstraintKey,
-            AtomConstraintsAst, AtomConstraintsView, AtomRingSizeCounts, MulticenterValence,
-            MulticenterValenceAst,
+            AromaticValence, AromaticValenceForm, AtomConstraintForm, AtomConstraintKey,
+            AtomConstraintsForm, AtomConstraintsView, AtomRingSizeCounts, MulticenterValence,
+            MulticenterValenceForm,
         },
         bond::{
-            BondConstraintAst, BondConstraintKey, BondConstraintsAst, BondConstraintsView,
+            BondConstraintForm, BondConstraintKey, BondConstraintsForm, BondConstraintsView,
             BondRingSizeCounts,
         },
         dative::{
-            DativeBondConstraintAst, DativeBondConstraintKey, DativeBondConstraintsAst,
+            DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm,
             DativeBondConstraintsView, DativeBondRingSizeCounts,
         },
         molecule::{
@@ -38,19 +38,19 @@ use crate::{
             SubPatternAnchor,
         },
         multicenter::{
-            MulticenterBondConstraintAst, MulticenterBondConstraintKey,
-            MulticenterBondConstraintsAst, MulticenterBondConstraintsView,
+            MulticenterBondConstraintForm, MulticenterBondConstraintKey,
+            MulticenterBondConstraintsForm, MulticenterBondConstraintsView,
         },
         noncovalent::{
-            NoncovalentBondConstraintAst, NoncovalentBondConstraintKey,
-            NoncovalentBondConstraintsAst, NoncovalentBondConstraintsView,
+            NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
+            NoncovalentBondConstraintsForm, NoncovalentBondConstraintsView,
         },
-        ring::{RingMembershipAst, RingScope},
+        ring::{RingMembershipForm, RingScope},
         stereo::{
-            FluxionalityAst, LigandSymmetryAst, StereoAtomConstraintAst, StereoAtomConstraintKey,
-            StereoAtomConstraintsAst, StereoAtomConstraintsView, StereoBondConstraintAst,
-            StereoBondConstraintKey, StereoBondConstraintsAst, StereoBondConstraintsView,
-            StereogenicityAst, TopicityAst, TopicityRelationAst,
+            FluxionalityForm, LigandSymmetryForm, StereoAtomConstraintForm,
+            StereoAtomConstraintKey, StereoAtomConstraintsForm, StereoAtomConstraintsView,
+            StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm,
+            StereoBondConstraintsView, StereogenicityForm, TopicityForm, TopicityRelationForm,
         },
     },
     correspondence::{Correspondence, MoleculeCorrespondence},
@@ -323,30 +323,30 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AtomView>()?;
         module.add_class::<AtomViews>()?;
         module.add_class::<AromaticValence>()?;
-        module.add_class::<AromaticValenceAst>()?;
+        module.add_class::<AromaticValenceForm>()?;
         module.add_class::<MulticenterValence>()?;
-        module.add_class::<MulticenterValenceAst>()?;
+        module.add_class::<MulticenterValenceForm>()?;
         module.add_class::<RingScope>()?;
-        module.add_class::<RingMembershipAst>()?;
-        module.add_class::<AtomConstraintAst>()?;
+        module.add_class::<RingMembershipForm>()?;
+        module.add_class::<AtomConstraintForm>()?;
         module.add_class::<AtomConstraintKey>()?;
-        module.add_class::<AtomConstraintsAst>()?;
+        module.add_class::<AtomConstraintsForm>()?;
         module.add_class::<AtomConstraintsView>()?;
         module.add_class::<AtomRingSizeCounts>()?;
         module.add_class::<BondForm>()?;
         module.add_class::<BondUpdate>()?;
-        module.add_class::<BondConstraintAst>()?;
+        module.add_class::<BondConstraintForm>()?;
         module.add_class::<BondConstraintKey>()?;
-        module.add_class::<BondConstraintsAst>()?;
+        module.add_class::<BondConstraintsForm>()?;
         module.add_class::<BondConstraintsView>()?;
         module.add_class::<BondRingSizeCounts>()?;
         module.add_class::<BondView>()?;
         module.add_class::<BondViews>()?;
         module.add_class::<DativeBondForm>()?;
         module.add_class::<DativeBondUpdate>()?;
-        module.add_class::<DativeBondConstraintAst>()?;
+        module.add_class::<DativeBondConstraintForm>()?;
         module.add_class::<DativeBondConstraintKey>()?;
-        module.add_class::<DativeBondConstraintsAst>()?;
+        module.add_class::<DativeBondConstraintsForm>()?;
         module.add_class::<DativeBondConstraintsView>()?;
         module.add_class::<DativeBondRingSizeCounts>()?;
         module.add_class::<DativeBondView>()?;
@@ -354,17 +354,17 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ElectronCountsForm>()?;
         module.add_class::<AromaticSystemForm>()?;
         module.add_class::<AromaticSystemUpdate>()?;
-        module.add_class::<AromaticSystemConstraintAst>()?;
+        module.add_class::<AromaticSystemConstraintForm>()?;
         module.add_class::<AromaticSystemConstraintKey>()?;
-        module.add_class::<AromaticSystemConstraintsAst>()?;
+        module.add_class::<AromaticSystemConstraintsForm>()?;
         module.add_class::<AromaticSystemConstraintsView>()?;
         module.add_class::<AromaticSystemView>()?;
         module.add_class::<AromaticSystemViews>()?;
         module.add_class::<MulticenterBondForm>()?;
         module.add_class::<MulticenterBondUpdate>()?;
-        module.add_class::<MulticenterBondConstraintAst>()?;
+        module.add_class::<MulticenterBondConstraintForm>()?;
         module.add_class::<MulticenterBondConstraintKey>()?;
-        module.add_class::<MulticenterBondConstraintsAst>()?;
+        module.add_class::<MulticenterBondConstraintsForm>()?;
         module.add_class::<MulticenterBondConstraintsView>()?;
         module.add_class::<MulticenterBondView>()?;
         module.add_class::<MulticenterBondViews>()?;
@@ -372,9 +372,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<NoncovalentBondKindForm>()?;
         module.add_class::<NoncovalentBondForm>()?;
         module.add_class::<NoncovalentBondUpdate>()?;
-        module.add_class::<NoncovalentBondConstraintAst>()?;
+        module.add_class::<NoncovalentBondConstraintForm>()?;
         module.add_class::<NoncovalentBondConstraintKey>()?;
-        module.add_class::<NoncovalentBondConstraintsAst>()?;
+        module.add_class::<NoncovalentBondConstraintsForm>()?;
         module.add_class::<NoncovalentBondConstraintsView>()?;
         module.add_class::<NoncovalentBondView>()?;
         module.add_class::<NoncovalentBondViews>()?;
@@ -399,17 +399,17 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<LigandPermutation>()?;
         module.add_class::<OrientedLigandPermutation>()?;
         module.add_class::<StereoLigandPair>()?;
-        module.add_class::<TopicityRelationAst>()?;
-        module.add_class::<StereogenicityAst>()?;
-        module.add_class::<LigandSymmetryAst>()?;
-        module.add_class::<FluxionalityAst>()?;
-        module.add_class::<TopicityAst>()?;
+        module.add_class::<TopicityRelationForm>()?;
+        module.add_class::<StereogenicityForm>()?;
+        module.add_class::<LigandSymmetryForm>()?;
+        module.add_class::<FluxionalityForm>()?;
+        module.add_class::<TopicityForm>()?;
         module.add_class::<StereoAtomConstraintKey>()?;
-        module.add_class::<StereoAtomConstraintAst>()?;
-        module.add_class::<StereoAtomConstraintsAst>()?;
+        module.add_class::<StereoAtomConstraintForm>()?;
+        module.add_class::<StereoAtomConstraintsForm>()?;
         module.add_class::<StereoBondConstraintKey>()?;
-        module.add_class::<StereoBondConstraintAst>()?;
-        module.add_class::<StereoBondConstraintsAst>()?;
+        module.add_class::<StereoBondConstraintForm>()?;
+        module.add_class::<StereoBondConstraintsForm>()?;
         module.add_class::<StereoAtomForm>()?;
         module.add_class::<StereoAtomUpdate>()?;
         module.add_class::<StereoBondForm>()?;

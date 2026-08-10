@@ -2,15 +2,15 @@ import pytest
 
 from umol import (
     AromaticSystemForm,
-    AromaticSystemConstraintAst,
+    AromaticSystemConstraintForm,
     AromaticSystemDelta,
     AromaticSystemFieldChange,
     AtomForm,
-    AtomConstraintAst,
+    AtomConstraintForm,
     AtomDelta,
     AtomFieldChange,
     BondForm,
-    BondConstraintAst,
+    BondConstraintForm,
     BondDelta,
     BondFieldChange,
     BooleanForm,
@@ -18,7 +18,7 @@ from umol import (
     ConstraintDelta,
     ContradictionError,
     DativeBondForm,
-    DativeBondConstraintAst,
+    DativeBondConstraintForm,
     DativeBondDelta,
     DativeBondFieldChange,
     Delta,
@@ -30,22 +30,22 @@ from umol import (
     MoleculeAst,
     MoleculeConstraint,
     MulticenterBondForm,
-    MulticenterBondConstraintAst,
+    MulticenterBondConstraintForm,
     MulticenterBondDelta,
     MulticenterBondFieldChange,
     NoncovalentBondForm,
-    NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintForm,
     NoncovalentBondDelta,
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindForm,
     Permutation,
     StereoAtomForm,
-    StereoAtomConstraintAst,
+    StereoAtomConstraintForm,
     StereoAtomDelta,
     StereoAtomFieldChange,
     StereoBondForm,
-    StereoBondConstraintAst,
+    StereoBondConstraintForm,
     StereoBondDelta,
     StereoBondFieldChange,
     StereoConfigurationForm,
@@ -53,7 +53,7 @@ from umol import (
     StereoKind,
     StereoLigand,
     StereoLigandKind,
-    StereogenicityAst,
+    StereogenicityForm,
     SubPatternAnchor,
     UnpairedElectronsForm,
     NumForm,
@@ -732,20 +732,20 @@ def test_atomdelta_modifyconstraint_match():
     delta = AtomDelta.ModifyConstraint(
         id=3,
         old=None,
-        new=AtomConstraintAst.Valence(NumForm.Lit(4)),
+        new=AtomConstraintForm.Valence(NumForm.Lit(4)),
     )
 
     match delta:
         case AtomDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 3
             assert old is None
-            assert new == AtomConstraintAst.Valence(NumForm.Lit(4))
+            assert new == AtomConstraintForm.Valence(NumForm.Lit(4))
         case _:
             raise AssertionError("atom delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, AtomDelta.ModifyConstraint)
-    assert inverse.old == AtomConstraintAst.Valence(NumForm.Lit(4))
+    assert inverse.old == AtomConstraintForm.Valence(NumForm.Lit(4))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -814,20 +814,20 @@ def test_bonddelta_modifyconstraint_match():
     delta = BondDelta.ModifyConstraint(
         id=2,
         old=None,
-        new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
+        new=BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
     )
 
     match delta:
         case BondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 2
             assert old is None
-            assert new == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
+            assert new == BondConstraintForm.Aromatic(BooleanForm.Lit(True))
         case _:
             raise AssertionError("bond delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, BondDelta.ModifyConstraint)
-    assert inverse.old == BondConstraintAst.Aromatic(BooleanForm.Lit(True))
+    assert inverse.old == BondConstraintForm.Aromatic(BooleanForm.Lit(True))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -912,20 +912,20 @@ def test_dativebonddelta_modifyconstraint_match():
     delta = DativeBondDelta.ModifyConstraint(
         id=1,
         old=None,
-        new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
+        new=DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True)),
     )
 
     match delta:
         case DativeBondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 1
             assert old is None
-            assert new == DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
+            assert new == DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True))
         case _:
             raise AssertionError("dative bond delta did not match its constraint variant")
 
     inverse = delta.inverse()
     assert isinstance(inverse, DativeBondDelta.ModifyConstraint)
-    assert inverse.old == DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True))
+    assert inverse.old == DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -1001,14 +1001,14 @@ def test_aromaticsystemdelta_modifyconstraint_match():
     delta = AromaticSystemDelta.ModifyConstraint(
         id=2,
         old=None,
-        new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)),
+        new=AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)),
     )
 
     match delta:
         case AromaticSystemDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 2
             assert old is None
-            assert new == AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
+            assert new == AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))
         case _:
             raise AssertionError(
                 "aromatic system delta did not match its constraint variant"
@@ -1016,7 +1016,7 @@ def test_aromaticsystemdelta_modifyconstraint_match():
 
     inverse = delta.inverse()
     assert isinstance(inverse, AromaticSystemDelta.ModifyConstraint)
-    assert inverse.old == AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
+    assert inverse.old == AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -1092,14 +1092,14 @@ def test_multicenterbonddelta_modifyconstraint_match():
     delta = MulticenterBondDelta.ModifyConstraint(
         id=3,
         old=None,
-        new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)),
+        new=MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6)),
     )
 
     match delta:
         case MulticenterBondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 3
             assert old is None
-            assert new == MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
+            assert new == MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6))
         case _:
             raise AssertionError(
                 "multicenter bond delta did not match its constraint variant"
@@ -1107,7 +1107,7 @@ def test_multicenterbonddelta_modifyconstraint_match():
 
     inverse = delta.inverse()
     assert isinstance(inverse, MulticenterBondDelta.ModifyConstraint)
-    assert inverse.old == MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))
+    assert inverse.old == MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6))
     assert inverse.new is None
     assert inverse.inverse() == delta
 
@@ -1187,14 +1187,14 @@ def test_noncovalentbonddelta_modifyconstraint_match():
     delta = NoncovalentBondDelta.ModifyConstraint(
         id=4,
         old=None,
-        new=NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)),
+        new=NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True)),
     )
 
     match delta:
         case NoncovalentBondDelta.ModifyConstraint(id=id, old=old, new=new):
             assert id == 4
             assert old is None
-            assert new == NoncovalentBondConstraintAst.Intramolecular(
+            assert new == NoncovalentBondConstraintForm.Intramolecular(
                 BooleanForm.Lit(True)
             )
         case _:
@@ -1204,7 +1204,7 @@ def test_noncovalentbonddelta_modifyconstraint_match():
 
     inverse = delta.inverse()
     assert isinstance(inverse, NoncovalentBondDelta.ModifyConstraint)
-    assert inverse.old == NoncovalentBondConstraintAst.Intramolecular(
+    assert inverse.old == NoncovalentBondConstraintForm.Intramolecular(
         BooleanForm.Lit(True)
     )
     assert inverse.new is None
@@ -1332,8 +1332,8 @@ def test_stereoatomdelta_modifyconstraint_match():
         id=5,
         kind=StereoKind.Tetrahedral,
         old=None,
-        new=StereoAtomConstraintAst.Stereogenicity(
-            StereogenicityAst.Undetermined()
+        new=StereoAtomConstraintForm.Stereogenicity(
+            StereogenicityForm.Undetermined()
         ),
     )
 
@@ -1344,8 +1344,8 @@ def test_stereoatomdelta_modifyconstraint_match():
             assert id == 5
             assert kind is StereoKind.Tetrahedral
             assert old is None
-            assert new == StereoAtomConstraintAst.Stereogenicity(
-                StereogenicityAst.Undetermined()
+            assert new == StereoAtomConstraintForm.Stereogenicity(
+                StereogenicityForm.Undetermined()
             )
         case _:
             raise AssertionError("stereo atom delta did not match its constraint variant")
@@ -1353,8 +1353,8 @@ def test_stereoatomdelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, StereoAtomDelta.ModifyConstraint)
     assert inverse.kind is StereoKind.Tetrahedral
-    assert inverse.old == StereoAtomConstraintAst.Stereogenicity(
-        StereogenicityAst.Undetermined()
+    assert inverse.old == StereoAtomConstraintForm.Stereogenicity(
+        StereogenicityForm.Undetermined()
     )
     assert inverse.new is None
     assert inverse.inverse() == delta
@@ -1364,8 +1364,8 @@ def test_stereoatomdelta_modifyconstraint_kind_none():
     delta = StereoAtomDelta.ModifyConstraint(
         id=5,
         kind=None,
-        old=StereoAtomConstraintAst.Stereogenicity(
-            StereogenicityAst.Undetermined()
+        old=StereoAtomConstraintForm.Stereogenicity(
+            StereogenicityForm.Undetermined()
         ),
         new=None,
     )
@@ -1374,8 +1374,8 @@ def test_stereoatomdelta_modifyconstraint_kind_none():
     inverse = delta.inverse()
     assert inverse.kind is None
     assert inverse.old is None
-    assert inverse.new == StereoAtomConstraintAst.Stereogenicity(
-        StereogenicityAst.Undetermined()
+    assert inverse.new == StereoAtomConstraintForm.Stereogenicity(
+        StereogenicityForm.Undetermined()
     )
     assert inverse.inverse() == delta
 
@@ -1548,8 +1548,8 @@ def test_stereobonddelta_modifyconstraint_match():
         id=5,
         kind=StereoKind.CisTrans,
         old=None,
-        new=StereoBondConstraintAst.Stereogenicity(
-            StereogenicityAst.Undetermined()
+        new=StereoBondConstraintForm.Stereogenicity(
+            StereogenicityForm.Undetermined()
         ),
     )
 
@@ -1560,8 +1560,8 @@ def test_stereobonddelta_modifyconstraint_match():
             assert id == 5
             assert kind is StereoKind.CisTrans
             assert old is None
-            assert new == StereoBondConstraintAst.Stereogenicity(
-                StereogenicityAst.Undetermined()
+            assert new == StereoBondConstraintForm.Stereogenicity(
+                StereogenicityForm.Undetermined()
             )
         case _:
             raise AssertionError("stereo bond delta did not match its constraint variant")
@@ -1569,8 +1569,8 @@ def test_stereobonddelta_modifyconstraint_match():
     inverse = delta.inverse()
     assert isinstance(inverse, StereoBondDelta.ModifyConstraint)
     assert inverse.kind is StereoKind.CisTrans
-    assert inverse.old == StereoBondConstraintAst.Stereogenicity(
-        StereogenicityAst.Undetermined()
+    assert inverse.old == StereoBondConstraintForm.Stereogenicity(
+        StereogenicityForm.Undetermined()
     )
     assert inverse.new is None
     assert inverse.inverse() == delta
@@ -1580,8 +1580,8 @@ def test_stereobonddelta_modifyconstraint_kind_none():
     delta = StereoBondDelta.ModifyConstraint(
         id=5,
         kind=None,
-        old=StereoBondConstraintAst.Stereogenicity(
-            StereogenicityAst.Undetermined()
+        old=StereoBondConstraintForm.Stereogenicity(
+            StereogenicityForm.Undetermined()
         ),
         new=None,
     )
@@ -1590,8 +1590,8 @@ def test_stereobonddelta_modifyconstraint_kind_none():
     inverse = delta.inverse()
     assert inverse.kind is None
     assert inverse.old is None
-    assert inverse.new == StereoBondConstraintAst.Stereogenicity(
-        StereogenicityAst.Undetermined()
+    assert inverse.new == StereoBondConstraintForm.Stereogenicity(
+        StereogenicityForm.Undetermined()
     )
     assert inverse.inverse() == delta
 
@@ -1674,10 +1674,10 @@ def test_stereobonddelta_involutions():
             AtomDelta.ModifyConstraint(
                 id=3,
                 old=None,
-                new=AtomConstraintAst.Valence(NumForm.Lit(4)),
+                new=AtomConstraintForm.Valence(NumForm.Lit(4)),
             ),
             "AtomDelta.ModifyConstraint(id=3, old=None, "
-            "new=AtomConstraintAst.Valence(NumForm.Lit(4)))",
+            "new=AtomConstraintForm.Valence(NumForm.Lit(4)))",
             AtomDelta.ModifyConstraint,
         ),
         (
@@ -1706,10 +1706,10 @@ def test_stereobonddelta_involutions():
             BondDelta.ModifyConstraint(
                 id=2,
                 old=None,
-                new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)),
+                new=BondConstraintForm.Aromatic(BooleanForm.Lit(True)),
             ),
             "BondDelta.ModifyConstraint(id=2, old=None, "
-            "new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
+            "new=BondConstraintForm.Aromatic(BooleanForm.Lit(True)))",
             BondDelta.ModifyConstraint,
         ),
     ],
@@ -1767,10 +1767,10 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             DativeBondDelta.ModifyConstraint(
                 id=1,
                 old=None,
-                new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)),
+                new=DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True)),
             ),
             "DativeBondDelta.ModifyConstraint(id=1, old=None, "
-            "new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
+            "new=DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True)))",
             DativeBondDelta.ModifyConstraint,
         ),
         (
@@ -1805,10 +1805,10 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             AromaticSystemDelta.ModifyConstraint(
                 id=2,
                 old=None,
-                new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)),
+                new=AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)),
             ),
             "AromaticSystemDelta.ModifyConstraint(id=2, old=None, "
-            "new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))",
+            "new=AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)))",
             AromaticSystemDelta.ModifyConstraint,
         ),
         (
@@ -1843,10 +1843,10 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             MulticenterBondDelta.ModifyConstraint(
                 id=3,
                 old=None,
-                new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)),
+                new=MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6)),
             ),
             "MulticenterBondDelta.ModifyConstraint(id=3, old=None, "
-            "new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)))",
+            "new=MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6)))",
             MulticenterBondDelta.ModifyConstraint,
         ),
         (
@@ -1889,12 +1889,12 @@ def test_entitydelta_closure(delta, expected_repr, inverse_type):
             NoncovalentBondDelta.ModifyConstraint(
                 id=4,
                 old=None,
-                new=NoncovalentBondConstraintAst.Intramolecular(
+                new=NoncovalentBondConstraintForm.Intramolecular(
                     BooleanForm.Lit(True)
                 ),
             ),
             "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, "
-            "new=NoncovalentBondConstraintAst.Intramolecular("
+            "new=NoncovalentBondConstraintForm.Intramolecular("
             "BooleanForm.Lit(True)))",
             NoncovalentBondDelta.ModifyConstraint,
         ),
@@ -1978,11 +1978,11 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 id=5,
                 kind=StereoKind.Tetrahedral,
                 old=None,
-                new=StereoAtomConstraintAst.Stereogenicity(
-                    StereogenicityAst.Undetermined()
+                new=StereoAtomConstraintForm.Stereogenicity(
+                    StereogenicityForm.Undetermined()
                 ),
             ),
-            "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+            "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
             StereoAtomDelta.ModifyConstraint,
             False,
         ),
@@ -2057,11 +2057,11 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
                 id=5,
                 kind=StereoKind.CisTrans,
                 old=None,
-                new=StereoBondConstraintAst.Stereogenicity(
-                    StereogenicityAst.Undetermined()
+                new=StereoBondConstraintForm.Stereogenicity(
+                    StereogenicityForm.Undetermined()
                 ),
             ),
-            "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+            "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
             StereoBondDelta.ModifyConstraint,
             False,
         ),
@@ -2114,7 +2114,7 @@ def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
 
 
 def test_constraintdelta_fields():
-    source = Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))
+    source = Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2)))
     delta = ConstraintDelta.Add(constraint=source)
 
     assert delta.constraint == source
@@ -2122,7 +2122,7 @@ def test_constraintdelta_fields():
     assert delta.constraint is delta.constraint
     assert repr(delta) == (
         "ConstraintDelta.Add(constraint=Constraint.Atom(3, "
-        "AtomConstraintAst.Degree(NumForm.Lit(2))))"
+        "AtomConstraintForm.Degree(NumForm.Lit(2))))"
     )
     with pytest.raises(AttributeError):
         delta.constraint = Constraint.Or([])
@@ -2134,7 +2134,7 @@ def test_constraintdelta_add_match():
     delta = ConstraintDelta.Add(
         constraint=Constraint.Atom(
             3,
-            AtomConstraintAst.Degree(NumForm.Lit(2)),
+            AtomConstraintForm.Degree(NumForm.Lit(2)),
         )
     )
 
@@ -2142,7 +2142,7 @@ def test_constraintdelta_add_match():
         case ConstraintDelta.Add(Constraint.Atom(atom_id, constraint)):
             assert (atom_id, constraint) == (
                 3,
-                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                AtomConstraintForm.Degree(NumForm.Lit(2)),
             )
         case _:
             raise AssertionError("constraint delta did not match its add variant")
@@ -2159,7 +2159,7 @@ def test_constraintdelta_remove_match():
             [
                 Constraint.Atom(
                     7,
-                    AtomConstraintAst.Valence(NumForm.Lit(4)),
+                    AtomConstraintForm.Valence(NumForm.Lit(4)),
                 ),
                 Constraint.Not(Constraint.Or([])),
             ]
@@ -2177,7 +2177,7 @@ def test_constraintdelta_remove_match():
         ):
             assert (atom_id, constraint) == (
                 7,
-                AtomConstraintAst.Valence(NumForm.Lit(4)),
+                AtomConstraintForm.Valence(NumForm.Lit(4)),
             )
         case _:
             raise AssertionError("constraint delta did not match its remove variant")
@@ -2219,10 +2219,10 @@ def test_constraintdelta_payload_ownership():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
             ),
-            "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2))))",
+            "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2))))",
             ConstraintDelta.Remove,
         ),
         (
@@ -2231,13 +2231,13 @@ def test_constraintdelta_payload_ownership():
                     [
                         Constraint.Atom(
                             7,
-                            AtomConstraintAst.Valence(NumForm.Lit(4)),
+                            AtomConstraintForm.Valence(NumForm.Lit(4)),
                         ),
                         Constraint.Not(Constraint.Or([])),
                     ]
                 )
             ),
-            "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+            "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintForm.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
             ConstraintDelta.Add,
         ),
     ],
@@ -2391,11 +2391,11 @@ def test_delta_atom_match():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(NumForm.Lit(2)),
+                        AtomConstraintForm.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
-            "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))",
+            "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2)))))",
             Delta.Constraint,
             ConstraintDelta.Remove,
         ),
@@ -2486,7 +2486,7 @@ def test_delta_match():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2542,7 +2542,7 @@ def test_delta_match():
             case Delta.Constraint(ConstraintDelta.Add(constraint=constraint)):
                 assert constraint == Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
                 seen.append("constraint")
             case _:
@@ -2610,7 +2610,7 @@ def test_deltas_extend():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(NumForm.Lit(2)),
+                        AtomConstraintForm.Degree(NumForm.Lit(2)),
                     )
                 )
             )
@@ -2634,7 +2634,7 @@ def test_deltas_extend():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2651,7 +2651,7 @@ def test_deltas_extend_self():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(NumForm.Lit(2)),
+                        AtomConstraintForm.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
@@ -2666,7 +2666,7 @@ def test_deltas_extend_self():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2675,7 +2675,7 @@ def test_deltas_extend_self():
             ConstraintDelta.Add(
                 constraint=Constraint.Atom(
                     3,
-                    AtomConstraintAst.Degree(NumForm.Lit(2)),
+                    AtomConstraintForm.Degree(NumForm.Lit(2)),
                 )
             )
         ),
@@ -2690,7 +2690,7 @@ def test_deltas_getitem():
                 ConstraintDelta.Add(
                     constraint=Constraint.Atom(
                         3,
-                        AtomConstraintAst.Degree(NumForm.Lit(2)),
+                        AtomConstraintForm.Degree(NumForm.Lit(2)),
                     )
                 )
             ),
@@ -2841,7 +2841,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                                AtomConstraintForm.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2849,7 +2849,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                                AtomConstraintForm.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2857,7 +2857,7 @@ def test_deltas_iter():
                         ConstraintDelta.Remove(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                                AtomConstraintForm.Degree(NumForm.Lit(2)),
                             )
                         )
                     ),
@@ -2869,7 +2869,7 @@ def test_deltas_iter():
                         ConstraintDelta.Add(
                             constraint=Constraint.Atom(
                                 3,
-                                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                                AtomConstraintForm.Degree(NumForm.Lit(2)),
                             )
                         )
                     )

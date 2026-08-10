@@ -2,9 +2,9 @@ import pytest
 
 from umol import (
     AtomForm,
-    AtomConstraintAst,
+    AtomConstraintForm,
     AtomConstraintKey,
-    AtomConstraintsAst,
+    AtomConstraintsForm,
     AtomUpdate,
     Element,
     ElementForm,
@@ -25,7 +25,7 @@ from umol import (
     [
         (
             AtomUpdate(),
-            (None, None, None, None, None, UnpairedElectronsUpdate(), AtomConstraintsAst([])),
+            (None, None, None, None, None, UnpairedElectronsUpdate(), AtomConstraintsForm([])),
         ),
         (
             AtomUpdate(
@@ -35,8 +35,8 @@ from umol import (
                 implicit_hydrogens=2,
                 lone_pairs=1,
                 unpaired_electrons=UnpairedElectronsUpdate(count=1),
-                constraints=AtomConstraintsAst(
-                    [AtomConstraintAst.Valence(NumForm.Lit(3))]
+                constraints=AtomConstraintsForm(
+                    [AtomConstraintForm.Valence(NumForm.Lit(3))]
                 ),
             ),
             (
@@ -46,13 +46,13 @@ from umol import (
                 NumForm.Lit(2),
                 NumForm.Lit(1),
                 UnpairedElectronsUpdate(count=1),
-                AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(3))]),
+                AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(3))]),
             ),
         ),
         (
             AtomUpdate(
-                constraints=AtomConstraintsAst(
-                    [AtomConstraintAst.Valence(NumForm.Undetermined())]
+                constraints=AtomConstraintsForm(
+                    [AtomConstraintForm.Valence(NumForm.Undetermined())]
                 )
             ),
             (
@@ -62,8 +62,8 @@ from umol import (
                 None,
                 None,
                 UnpairedElectronsUpdate(),
-                AtomConstraintsAst(
-                    [AtomConstraintAst.Valence(NumForm.Undetermined())]
+                AtomConstraintsForm(
+                    [AtomConstraintForm.Valence(NumForm.Undetermined())]
                 ),
             ),
         ),
@@ -247,10 +247,10 @@ def test_atomast_constraints_empty():
 def test_atomast_constraints_kwarg():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     assert len(atom.constraints) == 1
-    assert atom.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert atom.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
@@ -258,7 +258,7 @@ def test_atomast_constraints_kwarg():
 def test_atomview_constraints():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     mol = MoleculeAst.from_entries([atom])
     assert len(mol.atoms[0].constraints) == 1
@@ -282,7 +282,7 @@ def test_atomast_asdict():
 def test_atomast_asdict_constraints():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     constraints = atom.asdict()["constraints"]
     assert isinstance(constraints, dict)
@@ -483,16 +483,16 @@ def test_atomview_asdict():
 
 def test_atomview_set_constraints():
     mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    mol.atoms[0].constraints = AtomConstraintsAst([AtomConstraintAst.Degree(NumForm.Lit(2))])
+    mol.atoms[0].constraints = AtomConstraintsForm([AtomConstraintForm.Degree(NumForm.Lit(2))])
     assert len(mol.atoms[0].constraints) == 1
-    assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintAst.Degree(
+    assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintForm.Degree(
         NumForm.Lit(2)
     )
 
 
 def test_atomast_set_constraints():
     atom = AtomForm(Element("C"))
-    atom.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    atom.constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert len(atom.constraints) == 1
-    atom.constraints = AtomConstraintsAst([])
+    atom.constraints = AtomConstraintsForm([])
     assert not atom.constraints

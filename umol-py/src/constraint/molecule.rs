@@ -13,13 +13,13 @@ use umol_graph_ir::ir::{
     StereoBondId as GraphIrStereoBondId, SubPatternAnchor as GraphIrSubPatternAnchor,
 };
 
-use super::aromatic::AromaticSystemConstraintAst;
-use super::atom::AtomConstraintAst;
-use super::bond::BondConstraintAst;
-use super::dative::DativeBondConstraintAst;
-use super::multicenter::MulticenterBondConstraintAst;
-use super::noncovalent::NoncovalentBondConstraintAst;
-use super::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
+use super::aromatic::AromaticSystemConstraintForm;
+use super::atom::AtomConstraintForm;
+use super::bond::BondConstraintForm;
+use super::dative::DativeBondConstraintForm;
+use super::multicenter::MulticenterBondConstraintForm;
+use super::noncovalent::NoncovalentBondConstraintForm;
+use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::lattice::impl_py_canonicalize;
 use crate::molecule::MoleculeAst;
@@ -49,34 +49,34 @@ pub enum RelationalConstraint {
     DativeBondDonors(u32, Vec<u32>),
     DativeBondDonor(u32, u32),
     DativeBondContainsAllDonors(u32, Vec<u32>),
-    DativeBondAllDonors(u32, Py<AtomConstraintAst>),
-    DativeBondAnyDonor(u32, Py<AtomConstraintAst>),
+    DativeBondAllDonors(u32, Py<AtomConstraintForm>),
+    DativeBondAnyDonor(u32, Py<AtomConstraintForm>),
     DativeBondAcceptor(u32, u32),
-    DativeBondAcceptorSatisfies(u32, Py<AtomConstraintAst>),
+    DativeBondAcceptorSatisfies(u32, Py<AtomConstraintForm>),
     DativeBondParallels(u32, u32),
     AromaticSystemAtoms(u32, Vec<u32>),
     AromaticSystemContains(u32, u32),
     AromaticSystemContainsAll(u32, Vec<u32>),
-    AromaticSystemAllAtoms(u32, Py<AtomConstraintAst>),
-    AromaticSystemAnyAtom(u32, Py<AtomConstraintAst>),
+    AromaticSystemAllAtoms(u32, Py<AtomConstraintForm>),
+    AromaticSystemAnyAtom(u32, Py<AtomConstraintForm>),
     MulticenterBondAtoms(u32, Vec<u32>),
     MulticenterBondContains(u32, u32),
     MulticenterBondContainsAll(u32, Vec<u32>),
-    MulticenterBondAllAtoms(u32, Py<AtomConstraintAst>),
-    MulticenterBondAnyAtom(u32, Py<AtomConstraintAst>),
+    MulticenterBondAllAtoms(u32, Py<AtomConstraintForm>),
+    MulticenterBondAnyAtom(u32, Py<AtomConstraintForm>),
     NoncovalentBondEnds(u32, [u32; 2]),
     NoncovalentBondContains(u32, u32),
-    NoncovalentBondEndsSatisfy(u32, [Py<AtomConstraintAst>; 2]),
+    NoncovalentBondEndsSatisfy(u32, [Py<AtomConstraintForm>; 2]),
     StereoAtomSite(u32, u32),
     StereoAtomContains(u32, u32),
     StereoAtomLigands(u32, Vec<u32>),
-    StereoAtomAllLigands(u32, Py<AtomConstraintAst>),
-    StereoAtomAnyLigand(u32, Py<AtomConstraintAst>),
+    StereoAtomAllLigands(u32, Py<AtomConstraintForm>),
+    StereoAtomAnyLigand(u32, Py<AtomConstraintForm>),
     StereoBondSite(u32, u32),
     StereoBondContains(u32, u32),
     StereoBondLigands(u32, Vec<u32>),
-    StereoBondAllLigands(u32, Py<AtomConstraintAst>),
-    StereoBondAnyLigand(u32, Py<AtomConstraintAst>),
+    StereoBondAllLigands(u32, Py<AtomConstraintForm>),
+    StereoBondAnyLigand(u32, Py<AtomConstraintForm>),
 }
 
 /// A molecule-scope predicate over values, connectivity, or a nested pattern.
@@ -97,14 +97,14 @@ pub enum MoleculeConstraint {
 /// leaves, and Boolean combinators.
 #[pyclass]
 pub enum Constraint {
-    Atom(u32, Py<AtomConstraintAst>),
-    Bond(u32, Py<BondConstraintAst>),
-    DativeBond(u32, Py<DativeBondConstraintAst>),
-    AromaticSystem(u32, Py<AromaticSystemConstraintAst>),
-    MulticenterBond(u32, Py<MulticenterBondConstraintAst>),
-    NoncovalentBond(u32, Py<NoncovalentBondConstraintAst>),
-    StereoAtom(u32, StereoKind, Py<StereoAtomConstraintAst>),
-    StereoBond(u32, StereoKind, Py<StereoBondConstraintAst>),
+    Atom(u32, Py<AtomConstraintForm>),
+    Bond(u32, Py<BondConstraintForm>),
+    DativeBond(u32, Py<DativeBondConstraintForm>),
+    AromaticSystem(u32, Py<AromaticSystemConstraintForm>),
+    MulticenterBond(u32, Py<MulticenterBondConstraintForm>),
+    NoncovalentBond(u32, Py<NoncovalentBondConstraintForm>),
+    StereoAtom(u32, StereoKind, Py<StereoAtomConstraintForm>),
+    StereoBond(u32, StereoKind, Py<StereoBondConstraintForm>),
     Relational(Py<RelationalConstraint>),
     Molecule(Py<MoleculeConstraint>),
     And(Vec<Py<Constraint>>),
@@ -152,37 +152,37 @@ impl Constraint {
         Ok(match constraint {
             GraphIrConstraint::Atom(id, child) => Self::Atom(
                 id.0,
-                into_py_variant(py, AtomConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, AtomConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::Bond(id, child) => Self::Bond(
                 id.0,
-                into_py_variant(py, BondConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, BondConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::DativeBond(id, child) => Self::DativeBond(
                 id.0,
-                into_py_variant(py, DativeBondConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, DativeBondConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::AromaticSystem(id, child) => Self::AromaticSystem(
                 id.0,
-                into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::MulticenterBond(id, child) => Self::MulticenterBond(
                 id.0,
-                into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, MulticenterBondConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::NoncovalentBond(id, child) => Self::NoncovalentBond(
                 id.0,
-                into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, NoncovalentBondConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::StereoAtom(id, kind, child) => Self::StereoAtom(
                 id.0,
                 StereoKind::from_rust(*kind),
-                into_py_variant(py, StereoAtomConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, StereoAtomConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::StereoBond(id, kind, child) => Self::StereoBond(
                 id.0,
                 StereoKind::from_rust(*kind),
-                into_py_variant(py, StereoBondConstraintAst::from_rust(py, child)?)?,
+                into_py_variant(py, StereoBondConstraintForm::from_rust(py, child)?)?,
             ),
             GraphIrConstraint::Relational(child) => Self::Relational(into_py_variant(
                 py,
@@ -729,13 +729,13 @@ impl RelationalConstraint {
             GraphIrRelationalConstraint::DativeBondAllDonors { bond, predicate } => {
                 Self::DativeBondAllDonors(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
                 Self::DativeBondAnyDonor(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::DativeBondAcceptor { bond, atom } => {
@@ -744,7 +744,7 @@ impl RelationalConstraint {
             GraphIrRelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
                 Self::DativeBondAcceptorSatisfies(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::DativeBondParallels { dative, parallel } => {
@@ -762,13 +762,13 @@ impl RelationalConstraint {
             GraphIrRelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
                 Self::AromaticSystemAllAtoms(
                     system.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
                 Self::AromaticSystemAnyAtom(
                     system.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
@@ -783,13 +783,13 @@ impl RelationalConstraint {
             GraphIrRelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
                 Self::MulticenterBondAllAtoms(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
                 Self::MulticenterBondAnyAtom(
                     bond.0,
-                    into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                    into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
                 )
             }
             GraphIrRelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
@@ -802,8 +802,8 @@ impl RelationalConstraint {
                 Self::NoncovalentBondEndsSatisfy(
                     bond.0,
                     [
-                        into_py_variant(py, AtomConstraintAst::from_rust(py, &predicates[0])?)?,
-                        into_py_variant(py, AtomConstraintAst::from_rust(py, &predicates[1])?)?,
+                        into_py_variant(py, AtomConstraintForm::from_rust(py, &predicates[0])?)?,
+                        into_py_variant(py, AtomConstraintForm::from_rust(py, &predicates[1])?)?,
                     ],
                 )
             }
@@ -821,14 +821,14 @@ impl RelationalConstraint {
                 predicate,
             } => Self::StereoAtomAllLigands(
                 stereo_atom.0,
-                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
             ),
             GraphIrRelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => Self::StereoAtomAnyLigand(
                 stereo_atom.0,
-                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
             ),
             GraphIrRelationalConstraint::StereoBondSite { stereo_bond, bond } => {
                 Self::StereoBondSite(stereo_bond.0, bond.0)
@@ -844,14 +844,14 @@ impl RelationalConstraint {
                 predicate,
             } => Self::StereoBondAllLigands(
                 stereo_bond.0,
-                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
             ),
             GraphIrRelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => Self::StereoBondAnyLigand(
                 stereo_bond.0,
-                into_py_variant(py, AtomConstraintAst::from_rust(py, predicate)?)?,
+                into_py_variant(py, AtomConstraintForm::from_rust(py, predicate)?)?,
             ),
         })
     }
@@ -1534,7 +1534,7 @@ mod tests {
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "Constraint.And([Constraint.Atom(17, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
+                "Constraint.And([Constraint.Atom(17, AtomConstraintForm.Valence(NumForm.Lit(4))), Constraint.Or([Constraint.Relational(RelationalConstraint.DativeBondDonor(18, 19)), Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected([20, 21])))])])"
             );
 
             let children = value.bind(py).as_any().getattr("_0").unwrap();
@@ -1723,7 +1723,7 @@ match node:
 
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "Constraints([Constraint.Atom(1, AtomConstraintAst.Degree(NumForm.Lit(2))), Constraint.Or([])])"
+                "Constraints([Constraint.Atom(1, AtomConstraintForm.Degree(NumForm.Lit(2))), Constraint.Or([])])"
             );
         });
     }

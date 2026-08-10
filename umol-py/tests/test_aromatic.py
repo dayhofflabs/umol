@@ -2,9 +2,9 @@ import pytest
 
 from umol import (
     AromaticSystemForm,
-    AromaticSystemConstraintAst,
+    AromaticSystemConstraintForm,
     AromaticSystemConstraintKey,
-    AromaticSystemConstraintsAst,
+    AromaticSystemConstraintsForm,
     AromaticSystemUpdate,
     AtomForm,
     ElectronCountsForm,
@@ -22,32 +22,32 @@ from umol import (
     [
         (
             AromaticSystemUpdate(),
-            (None, None, UnpairedElectronsUpdate(), AromaticSystemConstraintsAst([])),
+            (None, None, UnpairedElectronsUpdate(), AromaticSystemConstraintsForm([])),
         ),
         (
             AromaticSystemUpdate(
                 electrons=[1, 1, 1],
                 charge=-1,
                 unpaired_electrons=UnpairedElectronsUpdate(count=2),
-                constraints=AromaticSystemConstraintsAst(
-                    [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+                constraints=AromaticSystemConstraintsForm(
+                    [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
                 ),
             ),
             (
                 ElectronCountsForm.Lit([1, 1, 1]),
                 NumForm.Lit(-1),
                 UnpairedElectronsUpdate(count=2),
-                AromaticSystemConstraintsAst(
-                    [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+                AromaticSystemConstraintsForm(
+                    [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
                 ),
             ),
         ),
         (
             AromaticSystemUpdate(
                 unpaired_electrons=UnpairedElectronsUpdate(multiplicity=1),
-                constraints=AromaticSystemConstraintsAst(
+                constraints=AromaticSystemConstraintsForm(
                     [
-                        AromaticSystemConstraintAst.ElectronCount(
+                        AromaticSystemConstraintForm.ElectronCount(
                             NumForm.Undetermined()
                         )
                     ]
@@ -57,9 +57,9 @@ from umol import (
                 None,
                 None,
                 UnpairedElectronsUpdate(multiplicity=1),
-                AromaticSystemConstraintsAst(
+                AromaticSystemConstraintsForm(
                     [
-                        AromaticSystemConstraintAst.ElectronCount(
+                        AromaticSystemConstraintForm.ElectronCount(
                             NumForm.Undetermined()
                         )
                     ]
@@ -126,8 +126,8 @@ def test_aromaticsystemast_new_kwargs():
 def test_aromaticsystemast_constraints_kwarg():
     system = AromaticSystemForm(
         [1, 1, 1],
-        constraints=AromaticSystemConstraintsAst(
-            [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+        constraints=AromaticSystemConstraintsForm(
+            [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
         ),
     )
     assert len(system.constraints) == 1
@@ -167,8 +167,8 @@ def test_aromaticsystemast_parse_error():
 def test_aromaticsystemast_asdict():
     system = AromaticSystemForm(
         [1, 1, 1],
-        constraints=AromaticSystemConstraintsAst(
-            [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+        constraints=AromaticSystemConstraintsForm(
+            [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
         ),
     )
     d = system.asdict()
@@ -184,26 +184,26 @@ def test_aromaticsystemast_asdict():
 
 def test_aromaticsystemast_set_constraints():
     system = AromaticSystemForm([1, 1, 1])
-    system.constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+    system.constraints = AromaticSystemConstraintsForm(
+        [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
     )
     assert system.constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemconstraints_electron_count():
-    constraints = AromaticSystemConstraintsAst([])
+    constraints = AromaticSystemConstraintsForm([])
     assert constraints.electron_count == NumForm.Undetermined()
     constraints.electron_count = 6
     assert constraints.electron_count == NumForm.Lit(6)
 
 
 def test_aromaticsystemconstraints_mapping_ops():
-    constraints = AromaticSystemConstraintsAst([])
-    constraints.set(AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))
+    constraints = AromaticSystemConstraintsForm([])
+    constraints.set(AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)))
     assert len(constraints) == 1
     assert AromaticSystemConstraintKey.ElectronCount() in constraints
     assert constraints[AromaticSystemConstraintKey.ElectronCount()] == (
-        AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
+        AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))
     )
     assert [key for key in constraints] == [AromaticSystemConstraintKey.ElectronCount()]
     del constraints[AromaticSystemConstraintKey.ElectronCount()]
@@ -211,13 +211,13 @@ def test_aromaticsystemconstraints_mapping_ops():
 
 
 def test_aromaticsystemconstraints_getitem_missing():
-    constraints = AromaticSystemConstraintsAst([])
+    constraints = AromaticSystemConstraintsForm([])
     with pytest.raises(KeyError):
         constraints[AromaticSystemConstraintKey.ElectronCount()]
 
 
 def test_aromaticsystemconstraints_delitem_missing():
-    constraints = AromaticSystemConstraintsAst([])
+    constraints = AromaticSystemConstraintsForm([])
     with pytest.raises(KeyError):
         del constraints[AromaticSystemConstraintKey.ElectronCount()]
 
@@ -229,8 +229,8 @@ def test_aromaticsystemconstraintkey_electron_count():
 
 
 def test_aromaticsystemconstraints_asdict():
-    constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+    constraints = AromaticSystemConstraintsForm(
+        [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
     )
     d = constraints.asdict()
     assert set(d.keys()) == {"electron_count"}
@@ -279,7 +279,7 @@ def test_aromaticsystemview_asdict():
 def test_aromaticsystemview_constraints_write_through():
     mol = benzene()
     mol.aromatic_systems[0].constraints.set(
-        AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))
+        AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))
     )
     constraints = mol.aromatic_systems[0].constraints
     assert len(constraints) == 1
@@ -294,8 +294,8 @@ def test_aromaticsystemview_constraints_electron_count_property():
 
 def test_aromaticsystemview_set_constraints():
     mol = benzene()
-    mol.aromatic_systems[0].constraints = AromaticSystemConstraintsAst(
-        [AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))]
+    mol.aromatic_systems[0].constraints = AromaticSystemConstraintsForm(
+        [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]
     )
     assert mol.aromatic_systems[0].constraints.electron_count == NumForm.Lit(6)
 

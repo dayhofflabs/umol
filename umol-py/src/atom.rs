@@ -16,7 +16,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::atom::{
-    atom_constraints_asdict, AtomConstraintsAst, AtomConstraintsBacking, AtomConstraintsLike,
+    atom_constraints_asdict, AtomConstraintsBacking, AtomConstraintsForm, AtomConstraintsLike,
     AtomConstraintsView,
 };
 use crate::convert::{hash_rust, variant_repr};
@@ -264,7 +264,7 @@ impl AtomUpdate {
         implicit_hydrogens: Option<NumLike>,
         lone_pairs: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<AtomConstraintsAst>>,
+        constraints: Option<Py<AtomConstraintsForm>>,
     ) -> Self {
         Self::from_rust(&GraphIrAtomUpdate {
             element: element.map(|value| value.to_rust(py)),
@@ -348,8 +348,8 @@ impl AtomUpdate {
     }
 
     #[getter]
-    fn constraints(&self) -> AtomConstraintsAst {
-        AtomConstraintsAst::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> AtomConstraintsForm {
+        AtomConstraintsForm::from_inner(self.0.constraints.clone())
     }
 }
 
@@ -384,7 +384,7 @@ impl AtomForm {
         implicit_hydrogens: Option<NumLike>,
         lone_pairs: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
-        constraints: Option<Py<AtomConstraintsAst>>,
+        constraints: Option<Py<AtomConstraintsForm>>,
     ) -> Self {
         let atom = GraphIrAtomForm::new(element.to_rust(py));
         AtomForm(apply_fields(
@@ -565,7 +565,7 @@ fn apply_fields(
     implicit_hydrogens: Option<NumLike>,
     lone_pairs: Option<NumLike>,
     unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
-    constraints: Option<Py<AtomConstraintsAst>>,
+    constraints: Option<Py<AtomConstraintsForm>>,
 ) -> GraphIrAtomForm {
     if let Some(isotope_mass) = isotope_mass {
         atom = atom.with_isotope_mass(isotope_mass.to_rust(py));
@@ -905,7 +905,7 @@ mod tests {
 
     use super::*;
     use crate::constraint::atom::{
-        AromaticValenceAst, AromaticValenceLike, AtomConstraintAst, AtomConstraintKey,
+        AromaticValenceForm, AromaticValenceLike, AtomConstraintForm, AtomConstraintKey,
         AtomConstraintsUpdate, TetrahedralStereoLike,
     };
     use crate::convert::into_py_variant;
@@ -1270,7 +1270,7 @@ mod tests {
     fn test_atom_constraint_roundtrip(#[case] ast: GraphIrAtomConstraintForm) {
         Python::attach(|py| {
             assert_eq!(
-                AtomConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
+                AtomConstraintForm::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
@@ -1281,15 +1281,15 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
             )
             .unwrap();
-            let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
+            let constraints = AtomConstraintsForm::new(py, vec![valence, degree]);
             assert_eq!(constraints.__len__(), 2);
             assert!(constraints.__contains__(
                 py,
@@ -1311,15 +1311,15 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
             )
             .unwrap();
-            let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
+            let constraints = AtomConstraintsForm::new(py, vec![valence, degree]);
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
@@ -1352,14 +1352,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_get() {
+    fn test_atom_constraints_form_get() {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
-            let constraints = AtomConstraintsAst::new(py, vec![valence]);
+            let constraints = AtomConstraintsForm::new(py, vec![valence]);
             let present = constraints
                 .get(
                     py,
@@ -1369,7 +1369,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap()
             .into_any();
@@ -1401,15 +1401,15 @@ mod tests {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
             )
             .unwrap();
-            let constraints = AtomConstraintsAst::new(py, vec![valence, degree]);
+            let constraints = AtomConstraintsForm::new(py, vec![valence, degree]);
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(4)
@@ -1428,15 +1428,15 @@ mod tests {
         Python::attach(|py| {
             let membership = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(
+                AtomConstraintForm::from_rust(
                     py,
                     &GraphIrAtomConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![membership])).unwrap();
-            let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![membership])).unwrap();
+            let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(1)
@@ -1452,12 +1452,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set() {
+    fn test_atom_constraints_form_set() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             constraints.set(py, valence);
@@ -1470,14 +1470,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_pop() {
+    fn test_atom_constraints_form_pop() {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
-            let mut constraints = AtomConstraintsAst::new(py, vec![valence]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![valence]);
             let removed = constraints
                 .pop(
                     py,
@@ -1485,7 +1485,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(AtomConstraintAst::Valence(v)) => {
+                Some(AtomConstraintForm::Valence(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
@@ -1495,17 +1495,17 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_update() {
+    fn test_atom_constraints_form_update() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
             let mut other = GraphIrAtomConstraintsForm::new();
             other.set(GraphIrAtomConstraintForm::valence(4));
             other.set(GraphIrAtomConstraintForm::degree(3));
-            AtomConstraintsAst::update(
+            AtomConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AtomConstraintsUpdate::Container(
-                    Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, AtomConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1541,7 +1541,7 @@ mod tests {
             };
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             view.set(py, valence);
@@ -1559,7 +1559,7 @@ mod tests {
                 )
                 .unwrap()
             {
-                AtomConstraintAst::Valence(v) => {
+                AtomConstraintForm::Valence(v) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
@@ -1593,7 +1593,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(AtomConstraintAst::Valence(v)) => {
+                Some(AtomConstraintForm::Valence(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
@@ -1631,7 +1631,7 @@ mod tests {
             view.update(
                 py,
                 AtomConstraintsUpdate::Container(
-                    Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, AtomConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1658,7 +1658,7 @@ mod tests {
             };
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             view.set(py, valence);
@@ -1674,7 +1674,7 @@ mod tests {
                 )
                 .unwrap()
             {
-                AtomConstraintAst::Valence(v) => {
+                AtomConstraintForm::Valence(v) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected Valence(Lit(4))"),
@@ -1703,7 +1703,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(AtomConstraintAst::Valence(v)) => {
+                Some(AtomConstraintForm::Valence(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(4))
                 }
                 _ => panic!("expected removed Valence(Lit(4))"),
@@ -1732,7 +1732,7 @@ mod tests {
             view.update(
                 py,
                 AtomConstraintsUpdate::Container(
-                    Py::new(py, AtomConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, AtomConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1744,9 +1744,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set_valence() {
+    fn test_atom_constraints_form_set_valence() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints.set_valence(py, NumLike::Lit(4));
             assert_eq!(
                 constraints.valence(py).unwrap().unwrap().to_rust(py),
@@ -1756,9 +1756,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set_ring_count() {
+    fn test_atom_constraints_form_set_ring_count() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
@@ -1768,14 +1768,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set_aromatic_valence() {
+    fn test_atom_constraints_form_set_aromatic_valence() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints
                 .set_aromatic_valence(py, AromaticValenceLike::Value(NumLike::Lit(1)))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
-                AromaticValenceAst::Aromatic(v) => {
+                AromaticValenceForm::Aromatic(v) => {
                     assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
                 _ => panic!("expected Aromatic"),
@@ -1784,16 +1784,16 @@ mod tests {
                 .set_aromatic_valence(py, AromaticValenceLike::Flag(false))
                 .unwrap();
             match constraints.aromatic_valence(py).unwrap().unwrap() {
-                AromaticValenceAst::NotAromatic() => {}
+                AromaticValenceForm::NotAromatic() => {}
                 _ => panic!("expected NotAromatic"),
             }
         });
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set_aromatic_valence_error() {
+    fn test_atom_constraints_form_set_aromatic_valence_error() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             assert!(constraints
                 .set_aromatic_valence(py, AromaticValenceLike::Flag(true))
                 .is_err());
@@ -1801,9 +1801,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_set_tetrahedral_stereo() {
+    fn test_atom_constraints_form_set_tetrahedral_stereo() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             constraints
                 .set_tetrahedral_stereo(
                     py,
@@ -1848,7 +1848,7 @@ mod tests {
                 },
             };
             match fresh.aromatic_valence(py).unwrap().unwrap() {
-                AromaticValenceAst::Aromatic(v) => {
+                AromaticValenceForm::Aromatic(v) => {
                     assert_eq!(v.to_rust(py), GraphIrNumForm::Lit(1))
                 }
                 _ => panic!("expected Aromatic"),
@@ -1859,8 +1859,8 @@ mod tests {
     #[rstest]
     fn test_ring_size_counts_value_backed() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
-            let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
+            let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
@@ -1908,20 +1908,20 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_update_entries() {
+    fn test_atom_constraints_form_update_entries() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
             let degree = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::degree(3)).unwrap(),
             )
             .unwrap();
-            AtomConstraintsAst::update(
+            AtomConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AtomConstraintsUpdate::Entries(vec![valence, degree]),
@@ -1934,15 +1934,15 @@ mod tests {
     /// Regression: a container updating itself resolves `other` before the write borrow,
     /// so it is an idempotent no-op, not a RefCell double-borrow panic.
     #[rstest]
-    fn test_atom_constraints_ast_update_self() {
+    fn test_atom_constraints_form_update_self() {
         Python::attach(|py| {
             let valence = into_py_variant(
                 py,
-                AtomConstraintAst::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
+                AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![valence])).unwrap();
-            AtomConstraintsAst::update(
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![valence])).unwrap();
+            AtomConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AtomConstraintsUpdate::Container(constraints.clone_ref(py)),
@@ -2000,18 +2000,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_getitem_error() {
+    fn test_atom_constraints_form_getitem_error() {
         Python::attach(|py| {
-            let constraints = AtomConstraintsAst::new(py, vec![]);
+            let constraints = AtomConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, AtomConstraintKey::Valence()).unwrap();
             assert!(constraints.__getitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_atom_constraints_ast_delitem_error() {
+    fn test_atom_constraints_form_delitem_error() {
         Python::attach(|py| {
-            let mut constraints = AtomConstraintsAst::new(py, vec![]);
+            let mut constraints = AtomConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, AtomConstraintKey::Valence()).unwrap();
             assert!(constraints.__delitem__(py, key).is_err());
         });
@@ -2020,8 +2020,8 @@ mod tests {
     #[rstest]
     fn test_ring_size_counts_len_iter_contains() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AtomConstraintsAst::new(py, vec![])).unwrap();
-            let proxy = AtomConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
+            let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3));
             proxy.__setitem__(py, 5, NumLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);

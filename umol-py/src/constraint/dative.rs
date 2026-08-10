@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     DativeBondId as GraphIrDativeBondId, RingScope as GraphIrRingScope,
 };
 
-use super::ring::{RingMembershipAst, RingScope};
+use super::ring::{RingMembershipForm, RingScope};
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
@@ -79,13 +79,13 @@ impl DativeBondConstraintKey {
 /// A dative-bond-scope constraint: the aromatic flag or a ring membership of a
 /// single dative bond.
 #[pyclass]
-pub enum DativeBondConstraintAst {
+pub enum DativeBondConstraintForm {
     Aromatic(Py<BooleanForm>),
-    RingMembership(Py<RingMembershipAst>),
+    RingMembership(Py<RingMembershipForm>),
 }
 
 #[pymethods]
-impl DativeBondConstraintAst {
+impl DativeBondConstraintForm {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> PyResult<DativeBondConstraintKey> {
@@ -102,25 +102,30 @@ impl DativeBondConstraintAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let variant = match &*slf.bind(py).borrow() {
-            DativeBondConstraintAst::Aromatic(_) => "Aromatic",
-            DativeBondConstraintAst::RingMembership(_) => "RingMembership",
+            DativeBondConstraintForm::Aromatic(_) => "Aromatic",
+            DativeBondConstraintForm::RingMembership(_) => "RingMembership",
         };
-        variant_repr(slf.bind(py).as_any(), "DativeBondConstraintAst", variant, 1)
+        variant_repr(
+            slf.bind(py).as_any(),
+            "DativeBondConstraintForm",
+            variant,
+            1,
+        )
     }
 }
 
 impl_py_lattice!(
-    DativeBondConstraintAst,
+    DativeBondConstraintForm,
     GraphIrDativeBondConstraintForm,
-    |value: &DativeBondConstraintAst,
+    |value: &DativeBondConstraintForm,
      py: Python<'_>|
      -> PyResult<GraphIrDativeBondConstraintForm> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrDativeBondConstraintForm| -> PyResult<DativeBondConstraintAst> {
-        DativeBondConstraintAst::from_rust(py, &value)
-    }
+    |py: Python<'_>,
+     value: GraphIrDativeBondConstraintForm|
+     -> PyResult<DativeBondConstraintForm> { DativeBondConstraintForm::from_rust(py, &value) }
 );
 
-impl DativeBondConstraintAst {
+impl DativeBondConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrDativeBondConstraintForm,
@@ -130,7 +135,7 @@ impl DativeBondConstraintAst {
                 Self::Aromatic(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
             GraphIrDativeBondConstraintForm::RingMembership(m) => {
-                Self::RingMembership(into_py_variant(py, RingMembershipAst::from_rust(py, m)?)?)
+                Self::RingMembership(into_py_variant(py, RingMembershipForm::from_rust(py, m)?)?)
             }
         })
     }
@@ -148,12 +153,12 @@ impl DativeBondConstraintAst {
 }
 
 /// The argument to `update`: another constraint container (value or live view) or
-/// an iterable of `DativeBondConstraintAst` (each `set`, last-wins).
+/// an iterable of `DativeBondConstraintForm` (each `set`, last-wins).
 #[derive(FromPyObject)]
 pub(crate) enum DativeBondConstraintsUpdate {
-    Container(Py<DativeBondConstraintsAst>),
+    Container(Py<DativeBondConstraintsForm>),
     View(Py<DativeBondConstraintsView>),
-    Entries(Vec<Py<DativeBondConstraintAst>>),
+    Entries(Vec<Py<DativeBondConstraintForm>>),
 }
 
 impl DativeBondConstraintsUpdate {
@@ -209,7 +214,7 @@ impl ResolvedDativeBondConstraintsUpdate {
 /// view — for the dative bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
 pub(crate) enum DativeBondConstraintsLike {
-    Container(Py<DativeBondConstraintsAst>),
+    Container(Py<DativeBondConstraintsForm>),
     View(Py<DativeBondConstraintsView>),
 }
 
@@ -226,34 +231,34 @@ impl DativeBondConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `DativeBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct DativeBondConstraintsAst(GraphIrDativeBondConstraintsForm);
+pub struct DativeBondConstraintsForm(GraphIrDativeBondConstraintsForm);
 
 #[pymethods]
-impl DativeBondConstraintsAst {
+impl DativeBondConstraintsForm {
     /// Build from a sequence of constraints (kind-sorted; a unique kind replaces
     /// an earlier one, ring memberships accumulate per scope).
     #[new]
-    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<DativeBondConstraintAst>>) -> Self {
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<DativeBondConstraintForm>>) -> Self {
         let mut constraints = GraphIrDativeBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
-        DativeBondConstraintsAst(constraints)
+        DativeBondConstraintsForm(constraints)
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, DativeBondConstraintAst::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, DativeBondConstraintForm::from_rust(py, entry)?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
-        Ok(format!("DativeBondConstraintsAst([{}])", parts.join(", ")))
+        Ok(format!("DativeBondConstraintsForm([{}])", parts.join(", ")))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
-    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<DativeBondConstraintAst>) {
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<DativeBondConstraintForm>) {
         self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
@@ -262,15 +267,15 @@ impl DativeBondConstraintsAst {
         &mut self,
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
-    ) -> PyResult<Option<DativeBondConstraintAst>> {
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
         self.0
             .remove(key.bind(py).borrow().to_rust(py))
-            .map(|c| DativeBondConstraintAst::from_rust(py, &c))
+            .map(|c| DativeBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
     /// Overlay `other` onto self in place — another container, a live view, or an
-    /// iterable of `DativeBondConstraintAst` (last-wins per key; undetermined entries
+    /// iterable of `DativeBondConstraintForm` (last-wins per key; undetermined entries
     /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow
     /// — `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
     pub(crate) fn update(
@@ -318,7 +323,7 @@ impl DativeBondConstraintsAst {
         match self.0.get(key.bind(py).borrow().to_rust(py)) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                DativeBondConstraintAst::from_rust(py, constraint)?,
+                DativeBondConstraintForm::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -330,9 +335,9 @@ impl DativeBondConstraintsAst {
         &self,
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
-    ) -> PyResult<DativeBondConstraintAst> {
+    ) -> PyResult<DativeBondConstraintForm> {
         match self.0.get(key.bind(py).borrow().to_rust(py)) {
-            Some(constraint) => DativeBondConstraintAst::from_rust(py, constraint),
+            Some(constraint) => DativeBondConstraintForm::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -405,7 +410,7 @@ impl DativeBondConstraintsAst {
     }
 }
 
-impl DativeBondConstraintsAst {
+impl DativeBondConstraintsForm {
     /// The wrapped AST constraints — read access for dative bond construction.
     pub(crate) fn inner(&self) -> &GraphIrDativeBondConstraintsForm {
         &self.0
@@ -417,21 +422,21 @@ impl DativeBondConstraintsAst {
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `DativeBondConstraintsAst(..)` directly.
+    /// in-crate construction wraps `DativeBondConstraintsForm(..)` directly.
     pub(crate) fn from_inner(constraints: GraphIrDativeBondConstraintsForm) -> Self {
-        DativeBondConstraintsAst(constraints)
+        DativeBondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
-    DativeBondConstraintsAst,
+    DativeBondConstraintsForm,
     GraphIrDativeBondConstraintsForm,
-    |value: &DativeBondConstraintsAst,
+    |value: &DativeBondConstraintsForm,
      _py: Python<'_>|
      -> PyResult<GraphIrDativeBondConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
      value: GraphIrDativeBondConstraintsForm|
-     -> PyResult<DativeBondConstraintsAst> { Ok(DativeBondConstraintsAst(value)) }
+     -> PyResult<DativeBondConstraintsForm> { Ok(DativeBondConstraintsForm(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
@@ -441,7 +446,7 @@ pub(crate) fn dative_bond_constraints_iter(
 ) -> PyResult<DativeBondConstraintIter> {
     let entries = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?))
+        .map(|constraint| into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?))
         .collect::<PyResult<Vec<_>>>()?;
     Ok(DativeBondConstraintIter {
         entries: entries.into_iter(),
@@ -480,7 +485,7 @@ pub(crate) fn dative_bond_constraint_items(
                     py,
                     DativeBondConstraintKey::from_rust(py, &constraint.key())?,
                 )?,
-                into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?)?,
+                into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -600,7 +605,7 @@ impl DativeBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<DativeBondConstraintAst>) {
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<DativeBondConstraintForm>) {
         self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
@@ -610,9 +615,9 @@ impl DativeBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
-    ) -> PyResult<Option<DativeBondConstraintAst>> {
+    ) -> PyResult<Option<DativeBondConstraintForm>> {
         self.remove_ast(py, key.bind(py).borrow().to_rust(py))
-            .map(|c| DativeBondConstraintAst::from_rust(py, &c))
+            .map(|c| DativeBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
@@ -635,7 +640,7 @@ impl DativeBondConstraintsView {
     }
 
     /// Overlay `other` onto the bond's constraints in place — another container, a live
-    /// view, or an iterable of `DativeBondConstraintAst` (last-wins per key; undetermined
+    /// view, or an iterable of `DativeBondConstraintForm` (last-wins per key; undetermined
     /// entries remove). Resolves `other` to owned data *before* the write borrow, so a
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(
@@ -683,7 +688,7 @@ impl DativeBondConstraintsView {
         let key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| DativeBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| DativeBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -697,11 +702,11 @@ impl DativeBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
-    ) -> PyResult<DativeBondConstraintAst> {
+    ) -> PyResult<DativeBondConstraintForm> {
         let ast_key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| DativeBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| DativeBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -783,14 +788,14 @@ impl DativeBondConstraintsView {
 
 /// What a `DativeBondRingSizeCounts` proxy reads/writes through to: a dative bond
 /// within a molecule, a standalone `DativeBondForm`, or a standalone
-/// `DativeBondConstraintsAst` value.
+/// `DativeBondConstraintsForm` value.
 pub(crate) enum DativeBondRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondForm>),
-    Value(Py<DativeBondConstraintsAst>),
+    Value(Py<DativeBondConstraintsForm>),
 }
 
 /// A subscriptable proxy over the sized-ring membership counts of a dative bond,
@@ -946,7 +951,7 @@ impl DativeBondRingSizeIter {
 
 #[pyclass]
 pub(crate) struct DativeBondConstraintIter {
-    entries: IntoIter<Py<DativeBondConstraintAst>>,
+    entries: IntoIter<Py<DativeBondConstraintForm>>,
 }
 
 #[pymethods]
@@ -955,7 +960,7 @@ impl DativeBondConstraintIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<Py<DativeBondConstraintAst>> {
+    pub(crate) fn __next__(&mut self) -> Option<Py<DativeBondConstraintForm>> {
         self.entries.next()
     }
 }
@@ -978,7 +983,7 @@ impl DativeBondConstraintKeyIter {
 
 #[pyclass]
 pub(crate) struct DativeBondConstraintItemsIter {
-    items: IntoIter<(Py<DativeBondConstraintKey>, Py<DativeBondConstraintAst>)>,
+    items: IntoIter<(Py<DativeBondConstraintKey>, Py<DativeBondConstraintForm>)>,
 }
 
 #[pymethods]
@@ -989,7 +994,7 @@ impl DativeBondConstraintItemsIter {
 
     pub(crate) fn __next__(
         &mut self,
-    ) -> Option<(Py<DativeBondConstraintKey>, Py<DativeBondConstraintAst>)> {
+    ) -> Option<(Py<DativeBondConstraintKey>, Py<DativeBondConstraintForm>)> {
         self.items.next()
     }
 }

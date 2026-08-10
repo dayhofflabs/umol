@@ -10,16 +10,16 @@ PUBLIC_EXPORTS = frozenset(
     AromaticBondConstraintMismatchPolicy
     AromaticSystemForm
     AromaticSystemUpdate
-    AromaticSystemConstraintAst
+    AromaticSystemConstraintForm
     AromaticSystemConstraintKey
-    AromaticSystemConstraintsAst
+    AromaticSystemConstraintsForm
     AromaticSystemConstraintsView
     AromaticSystemDelta
     AromaticSystemFieldChange
     AromaticSystemView
     AromaticSystemViews
     AromaticValence
-    AromaticValenceAst
+    AromaticValenceForm
     AromaticityConfig
     AromaticityFailurePolicy
     AromaticityMismatchPolicy
@@ -27,9 +27,9 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityResolveConfig
     AtomForm
     AtomUpdate
-    AtomConstraintAst
+    AtomConstraintForm
     AtomConstraintKey
-    AtomConstraintsAst
+    AtomConstraintsForm
     AtomConstraintsView
     AtomDelta
     AtomFieldChange
@@ -41,9 +41,9 @@ PUBLIC_EXPORTS = frozenset(
     BitFp
     BondForm
     BondUpdate
-    BondConstraintAst
+    BondConstraintForm
     BondConstraintKey
-    BondConstraintsAst
+    BondConstraintsForm
     BondConstraintsView
     BondDelta
     BondFieldChange
@@ -67,9 +67,9 @@ PUBLIC_EXPORTS = frozenset(
     CountedHashedFeatureSet
     DativeBondForm
     DativeBondUpdate
-    DativeBondConstraintAst
+    DativeBondConstraintForm
     DativeBondConstraintKey
-    DativeBondConstraintsAst
+    DativeBondConstraintsForm
     DativeBondConstraintsView
     DativeBondDelta
     DativeBondFieldChange
@@ -87,14 +87,14 @@ PUBLIC_EXPORTS = frozenset(
     ElementForm
     ElementScope
     Entity
-    FluxionalityAst
+    FluxionalityForm
     HashedFeatureSet
     HashedFingerprintConfig
     InvalidStructureError
     IsotopeMass
     IsotopeMassForm
     LigandPermutation
-    LigandSymmetryAst
+    LigandSymmetryForm
     MaximumIndependentSetAlgorithm
     MemOp
     MetadataError
@@ -107,21 +107,21 @@ PUBLIC_EXPORTS = frozenset(
     MoleculeMetadata
     MulticenterBondForm
     MulticenterBondUpdate
-    MulticenterBondConstraintAst
+    MulticenterBondConstraintForm
     MulticenterBondConstraintKey
-    MulticenterBondConstraintsAst
+    MulticenterBondConstraintsForm
     MulticenterBondConstraintsView
     MulticenterBondDelta
     MulticenterBondFieldChange
     MulticenterBondView
     MulticenterBondViews
     MulticenterValence
-    MulticenterValenceAst
+    MulticenterValenceForm
     New
     NoncovalentBondForm
-    NoncovalentBondConstraintAst
+    NoncovalentBondConstraintForm
     NoncovalentBondConstraintKey
-    NoncovalentBondConstraintsAst
+    NoncovalentBondConstraintsForm
     NoncovalentBondConstraintsView
     NoncovalentBondDelta
     NoncovalentBondFieldChange
@@ -152,7 +152,7 @@ PUBLIC_EXPORTS = frozenset(
     ResolveConfig
     RingConfig
     RingLimits
-    RingMembershipAst
+    RingMembershipForm
     RingScope
     RoleTaggedHashedFeatureSet
     SignedHashedFeatureSet
@@ -162,9 +162,9 @@ PUBLIC_EXPORTS = frozenset(
     SpinState
     StereoAtomForm
     StereoAtomUpdate
-    StereoAtomConstraintAst
+    StereoAtomConstraintForm
     StereoAtomConstraintKey
-    StereoAtomConstraintsAst
+    StereoAtomConstraintsForm
     StereoAtomConstraintsView
     StereoAtomDelta
     StereoAtomFieldChange
@@ -172,9 +172,9 @@ PUBLIC_EXPORTS = frozenset(
     StereoAtomViews
     StereoBondForm
     StereoBondUpdate
-    StereoBondConstraintAst
+    StereoBondConstraintForm
     StereoBondConstraintKey
-    StereoBondConstraintsAst
+    StereoBondConstraintsForm
     StereoBondConstraintsView
     StereoBondDelta
     StereoBondFieldChange
@@ -194,7 +194,7 @@ PUBLIC_EXPORTS = frozenset(
     StereoResolveConfig
     StereoTerm
     Stereogenicity
-    StereogenicityAst
+    StereogenicityForm
     StructuralFeatureSet
     StructuralFingerprintConfig
     SubPatternAnchor
@@ -206,8 +206,8 @@ PUBLIC_EXPORTS = frozenset(
     TetrahedralStereo
     TetrahedralStereoForm
     Topicity
-    TopicityAst
-    TopicityRelationAst
+    TopicityForm
+    TopicityRelationForm
     Transaction
     TransactionError
     UnpairedElectrons

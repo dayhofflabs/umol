@@ -4,7 +4,7 @@ import pytest
 
 from umol import (
     AromaticSystemForm,
-    AromaticValenceAst,
+    AromaticValenceForm,
     AromaticityConfig,
     AromaticityFailurePolicy,
     AromaticityModel,
@@ -454,7 +454,7 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
 
     assert [atom.implicit_hydrogens for atom in molecule.atoms] == [NumForm.Lit(1)] * 6
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
-        AromaticValenceAst.Aromatic(NumForm.Lit(1))
+        AromaticValenceForm.Aromatic(NumForm.Lit(1))
     ] * 6
     assert list(molecule.aromatic_systems) == []
 
@@ -583,9 +583,9 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
             (
                 [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
                 [
-                    AromaticValenceAst.Aromatic(NumForm.Lit(0)),
-                    AromaticValenceAst.Aromatic(NumForm.Lit(1)),
-                    AromaticValenceAst.Aromatic(NumForm.Lit(1)),
+                    AromaticValenceForm.Aromatic(NumForm.Lit(0)),
+                    AromaticValenceForm.Aromatic(NumForm.Lit(1)),
+                    AromaticValenceForm.Aromatic(NumForm.Lit(1)),
                 ],
                 [None] * 3,
                 [((0, 1, 2), NumForm.Lit(0))],
@@ -616,7 +616,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(0)] * 4,
-                [AromaticValenceAst.NotAromatic()] * 4,
+                [AromaticValenceForm.NotAromatic()] * 4,
                 [None] * 4,
                 [],
                 [(1, StereoKind.Tetrahedral, StereoCoset.Lit(0))],

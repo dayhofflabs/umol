@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
     RingScope as GraphIrRingScope,
 };
 
-use super::ring::{RingMembershipAst, RingScope};
+use super::ring::{RingMembershipForm, RingScope};
 use crate::bond::BondForm;
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
@@ -74,14 +74,14 @@ impl BondConstraintKey {
 /// A bond-scope constraint: the aromatic flag, cis/trans stereo, or a ring
 /// membership of a single bond.
 #[pyclass]
-pub enum BondConstraintAst {
+pub enum BondConstraintForm {
     Aromatic(Py<BooleanForm>),
     CisTransStereo(Py<CisTransStereoForm>),
-    RingMembership(Py<RingMembershipAst>),
+    RingMembership(Py<RingMembershipForm>),
 }
 
 #[pymethods]
-impl BondConstraintAst {
+impl BondConstraintForm {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> PyResult<BondConstraintKey> {
@@ -98,26 +98,26 @@ impl BondConstraintAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let variant = match &*slf.bind(py).borrow() {
-            BondConstraintAst::Aromatic(_) => "Aromatic",
-            BondConstraintAst::CisTransStereo(_) => "CisTransStereo",
-            BondConstraintAst::RingMembership(_) => "RingMembership",
+            BondConstraintForm::Aromatic(_) => "Aromatic",
+            BondConstraintForm::CisTransStereo(_) => "CisTransStereo",
+            BondConstraintForm::RingMembership(_) => "RingMembership",
         };
-        variant_repr(slf.bind(py).as_any(), "BondConstraintAst", variant, 1)
+        variant_repr(slf.bind(py).as_any(), "BondConstraintForm", variant, 1)
     }
 }
 
 impl_py_lattice!(
-    BondConstraintAst,
+    BondConstraintForm,
     GraphIrBondConstraintForm,
-    |value: &BondConstraintAst, py: Python<'_>| -> PyResult<GraphIrBondConstraintForm> {
+    |value: &BondConstraintForm, py: Python<'_>| -> PyResult<GraphIrBondConstraintForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrBondConstraintForm| -> PyResult<BondConstraintAst> {
-        BondConstraintAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrBondConstraintForm| -> PyResult<BondConstraintForm> {
+        BondConstraintForm::from_rust(py, &value)
     }
 );
 
-impl BondConstraintAst {
+impl BondConstraintForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrBondConstraintForm) -> PyResult<Self> {
         Ok(match ast {
             GraphIrBondConstraintForm::Aromatic(b) => {
@@ -127,7 +127,7 @@ impl BondConstraintAst {
                 Self::CisTransStereo(into_py_variant(py, CisTransStereoForm::from_rust(py, c)?)?)
             }
             GraphIrBondConstraintForm::RingMembership(m) => {
-                Self::RingMembership(into_py_variant(py, RingMembershipAst::from_rust(py, m)?)?)
+                Self::RingMembership(into_py_variant(py, RingMembershipForm::from_rust(py, m)?)?)
             }
         })
     }
@@ -146,12 +146,12 @@ impl BondConstraintAst {
 }
 
 /// The argument to `update`: another constraint container (value or live view) or
-/// an iterable of `BondConstraintAst` (each `set`, last-wins).
+/// an iterable of `BondConstraintForm` (each `set`, last-wins).
 #[derive(FromPyObject)]
 pub(crate) enum BondConstraintsUpdate {
-    Container(Py<BondConstraintsAst>),
+    Container(Py<BondConstraintsForm>),
     View(Py<BondConstraintsView>),
-    Entries(Vec<Py<BondConstraintAst>>),
+    Entries(Vec<Py<BondConstraintForm>>),
 }
 
 impl BondConstraintsUpdate {
@@ -205,7 +205,7 @@ impl ResolvedBondConstraintsUpdate {
 /// view — for the bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
 pub(crate) enum BondConstraintsLike {
-    Container(Py<BondConstraintsAst>),
+    Container(Py<BondConstraintsForm>),
     View(Py<BondConstraintsView>),
 }
 
@@ -222,34 +222,34 @@ impl BondConstraintsLike {
 /// value-equal but unhashable (matching `BondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct BondConstraintsAst(GraphIrBondConstraintsForm);
+pub struct BondConstraintsForm(GraphIrBondConstraintsForm);
 
 #[pymethods]
-impl BondConstraintsAst {
+impl BondConstraintsForm {
     /// Build from a sequence of constraints (kind-sorted; a unique kind replaces
     /// an earlier one, ring memberships accumulate per scope).
     #[new]
-    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<BondConstraintAst>>) -> Self {
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<BondConstraintForm>>) -> Self {
         let mut constraints = GraphIrBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
-        BondConstraintsAst(constraints)
+        BondConstraintsForm(constraints)
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, BondConstraintAst::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, BondConstraintForm::from_rust(py, entry)?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
-        Ok(format!("BondConstraintsAst([{}])", parts.join(", ")))
+        Ok(format!("BondConstraintsForm([{}])", parts.join(", ")))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
-    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<BondConstraintAst>) {
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<BondConstraintForm>) {
         self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
@@ -258,15 +258,15 @@ impl BondConstraintsAst {
         &mut self,
         py: Python<'_>,
         key: Py<BondConstraintKey>,
-    ) -> PyResult<Option<BondConstraintAst>> {
+    ) -> PyResult<Option<BondConstraintForm>> {
         self.0
             .remove(key.bind(py).borrow().to_rust(py))
-            .map(|c| BondConstraintAst::from_rust(py, &c))
+            .map(|c| BondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
     /// Overlay `other` onto self in place — another container, a live view, or an
-    /// iterable of `BondConstraintAst` (last-wins per key; undetermined entries remove).
+    /// iterable of `BondConstraintForm` (last-wins per key; undetermined entries remove).
     /// Takes `slf` by handle so `other` is fully read *before* the write borrow —
     /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
     pub(crate) fn update(
@@ -313,7 +313,7 @@ impl BondConstraintsAst {
     ) -> PyResult<Py<PyAny>> {
         match self.0.get(key.bind(py).borrow().to_rust(py)) {
             Some(constraint) => {
-                Ok(into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)?.into_any())
+                Ok(into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)?.into_any())
             }
             None => Ok(default.unwrap_or_else(|| py.None())),
         }
@@ -324,9 +324,9 @@ impl BondConstraintsAst {
         &self,
         py: Python<'_>,
         key: Py<BondConstraintKey>,
-    ) -> PyResult<BondConstraintAst> {
+    ) -> PyResult<BondConstraintForm> {
         match self.0.get(key.bind(py).borrow().to_rust(py)) {
-            Some(constraint) => BondConstraintAst::from_rust(py, constraint),
+            Some(constraint) => BondConstraintForm::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -420,7 +420,7 @@ impl BondConstraintsAst {
     }
 }
 
-impl BondConstraintsAst {
+impl BondConstraintsForm {
     /// The wrapped AST constraints — read access for bond construction.
     pub(crate) fn inner(&self) -> &GraphIrBondConstraintsForm {
         &self.0
@@ -432,20 +432,20 @@ impl BondConstraintsAst {
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `BondConstraintsAst(..)` directly.
+    /// in-crate construction wraps `BondConstraintsForm(..)` directly.
     pub(crate) fn from_inner(constraints: GraphIrBondConstraintsForm) -> Self {
-        BondConstraintsAst(constraints)
+        BondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
-    BondConstraintsAst,
+    BondConstraintsForm,
     GraphIrBondConstraintsForm,
-    |value: &BondConstraintsAst, _py: Python<'_>| -> PyResult<GraphIrBondConstraintsForm> {
+    |value: &BondConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrBondConstraintsForm> {
         Ok(value.inner().clone())
     },
-    |_py: Python<'_>, value: GraphIrBondConstraintsForm| -> PyResult<BondConstraintsAst> {
-        Ok(BondConstraintsAst(value))
+    |_py: Python<'_>, value: GraphIrBondConstraintsForm| -> PyResult<BondConstraintsForm> {
+        Ok(BondConstraintsForm(value))
     }
 );
 
@@ -456,7 +456,7 @@ pub(crate) fn bond_constraints_iter(
 ) -> PyResult<BondConstraintIter> {
     let entries = constraints
         .iter()
-        .map(|constraint| into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?))
+        .map(|constraint| into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?))
         .collect::<PyResult<Vec<_>>>()?;
     Ok(BondConstraintIter {
         entries: entries.into_iter(),
@@ -487,7 +487,7 @@ pub(crate) fn bond_constraint_items(
         .map(|constraint| {
             Ok((
                 into_py_variant(py, BondConstraintKey::from_rust(py, &constraint.key())?)?,
-                into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)?,
+                into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -610,7 +610,7 @@ impl BondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintAst>) {
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintForm>) {
         self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
@@ -620,9 +620,9 @@ impl BondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<BondConstraintKey>,
-    ) -> PyResult<Option<BondConstraintAst>> {
+    ) -> PyResult<Option<BondConstraintForm>> {
         self.remove_ast(py, key.bind(py).borrow().to_rust(py))
-            .map(|c| BondConstraintAst::from_rust(py, &c))
+            .map(|c| BondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
@@ -641,7 +641,7 @@ impl BondConstraintsView {
     }
 
     /// Overlay `other` onto the bond's constraints in place — another container, a live
-    /// view, or an iterable of `BondConstraintAst` (last-wins per key; undetermined
+    /// view, or an iterable of `BondConstraintForm` (last-wins per key; undetermined
     /// entries remove). Resolves `other` to owned data *before* the write borrow, so a
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
@@ -685,7 +685,7 @@ impl BondConstraintsView {
         let key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| BondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| BondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -699,11 +699,11 @@ impl BondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<BondConstraintKey>,
-    ) -> PyResult<BondConstraintAst> {
+    ) -> PyResult<BondConstraintForm> {
         let ast_key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| BondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| BondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -797,14 +797,14 @@ impl BondConstraintsView {
 }
 
 /// What a `BondRingSizeCounts` proxy reads/writes through to: a bond within a
-/// molecule, a standalone `BondForm`, or a standalone `BondConstraintsAst` value.
+/// molecule, a standalone `BondForm`, or a standalone `BondConstraintsForm` value.
 pub(crate) enum BondRingSizeBacking {
     Molecule {
         owner: Py<MoleculeAst>,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
-    Value(Py<BondConstraintsAst>),
+    Value(Py<BondConstraintsForm>),
 }
 
 /// A subscriptable proxy over the sized-ring membership counts of a bond, keyed by
@@ -949,7 +949,7 @@ impl BondRingSizeIter {
 
 #[pyclass]
 pub(crate) struct BondConstraintIter {
-    entries: IntoIter<Py<BondConstraintAst>>,
+    entries: IntoIter<Py<BondConstraintForm>>,
 }
 
 #[pymethods]
@@ -958,7 +958,7 @@ impl BondConstraintIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<Py<BondConstraintAst>> {
+    pub(crate) fn __next__(&mut self) -> Option<Py<BondConstraintForm>> {
         self.entries.next()
     }
 }
@@ -981,7 +981,7 @@ impl BondConstraintKeyIter {
 
 #[pyclass]
 pub(crate) struct BondConstraintItemsIter {
-    items: IntoIter<(Py<BondConstraintKey>, Py<BondConstraintAst>)>,
+    items: IntoIter<(Py<BondConstraintKey>, Py<BondConstraintForm>)>,
 }
 
 #[pymethods]
@@ -990,7 +990,7 @@ impl BondConstraintItemsIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<(Py<BondConstraintKey>, Py<BondConstraintAst>)> {
+    pub(crate) fn __next__(&mut self) -> Option<(Py<BondConstraintKey>, Py<BondConstraintForm>)> {
         self.items.next()
     }
 }

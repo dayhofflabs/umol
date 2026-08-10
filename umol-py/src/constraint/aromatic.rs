@@ -65,12 +65,12 @@ impl AromaticSystemConstraintKey {
 /// An aromatic-system-scope constraint: the asserted total π-electron count of the
 /// system (cross-checked against `sum(AromaticSystemForm::electrons)`).
 #[pyclass]
-pub enum AromaticSystemConstraintAst {
+pub enum AromaticSystemConstraintForm {
     ElectronCount(Py<NumForm>),
 }
 
 #[pymethods]
-impl AromaticSystemConstraintAst {
+impl AromaticSystemConstraintForm {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> AromaticSystemConstraintKey {
@@ -87,11 +87,11 @@ impl AromaticSystemConstraintAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let variant = match &*slf.bind(py).borrow() {
-            AromaticSystemConstraintAst::ElectronCount(_) => "ElectronCount",
+            AromaticSystemConstraintForm::ElectronCount(_) => "ElectronCount",
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "AromaticSystemConstraintAst",
+            "AromaticSystemConstraintForm",
             variant,
             1,
         )
@@ -99,19 +99,19 @@ impl AromaticSystemConstraintAst {
 }
 
 impl_py_lattice!(
-    AromaticSystemConstraintAst,
+    AromaticSystemConstraintForm,
     GraphIrAromaticSystemConstraintForm,
-    |value: &AromaticSystemConstraintAst,
+    |value: &AromaticSystemConstraintForm,
      py: Python<'_>|
      -> PyResult<GraphIrAromaticSystemConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
      value: GraphIrAromaticSystemConstraintForm|
-     -> PyResult<AromaticSystemConstraintAst> {
-        AromaticSystemConstraintAst::from_rust(py, &value)
+     -> PyResult<AromaticSystemConstraintForm> {
+        AromaticSystemConstraintForm::from_rust(py, &value)
     }
 );
 
-impl AromaticSystemConstraintAst {
+impl AromaticSystemConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrAromaticSystemConstraintForm,
@@ -133,12 +133,12 @@ impl AromaticSystemConstraintAst {
 }
 
 /// The argument to `update`: another constraint container (value or live view) or an
-/// iterable of `AromaticSystemConstraintAst` (each `set`, last-wins).
+/// iterable of `AromaticSystemConstraintForm` (each `set`, last-wins).
 #[derive(FromPyObject)]
 pub(crate) enum AromaticSystemConstraintsUpdate {
-    Container(Py<AromaticSystemConstraintsAst>),
+    Container(Py<AromaticSystemConstraintsForm>),
     View(Py<AromaticSystemConstraintsView>),
-    Entries(Vec<Py<AromaticSystemConstraintAst>>),
+    Entries(Vec<Py<AromaticSystemConstraintForm>>),
 }
 
 impl AromaticSystemConstraintsUpdate {
@@ -201,7 +201,7 @@ impl ResolvedAromaticSystemConstraintsUpdate {
 /// — for the aromatic system `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
 pub(crate) enum AromaticSystemConstraintsLike {
-    Container(Py<AromaticSystemConstraintsAst>),
+    Container(Py<AromaticSystemConstraintsForm>),
     View(Py<AromaticSystemConstraintsView>),
 }
 
@@ -220,37 +220,37 @@ impl AromaticSystemConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `AromaticSystemForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AromaticSystemConstraintsAst(GraphIrAromaticSystemConstraintsForm);
+pub struct AromaticSystemConstraintsForm(GraphIrAromaticSystemConstraintsForm);
 
 #[pymethods]
-impl AromaticSystemConstraintsAst {
+impl AromaticSystemConstraintsForm {
     /// Build from a sequence of constraints (a later entry of the same key replaces
     /// an earlier one, last-wins).
     #[new]
-    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<AromaticSystemConstraintAst>>) -> Self {
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<AromaticSystemConstraintForm>>) -> Self {
         let mut constraints = GraphIrAromaticSystemConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
-        AromaticSystemConstraintsAst(constraints)
+        AromaticSystemConstraintsForm(constraints)
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, entry)?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!(
-            "AromaticSystemConstraintsAst([{}])",
+            "AromaticSystemConstraintsForm([{}])",
             parts.join(", ")
         ))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
-    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<AromaticSystemConstraintAst>) {
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<AromaticSystemConstraintForm>) {
         self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
@@ -259,15 +259,15 @@ impl AromaticSystemConstraintsAst {
         &mut self,
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
-    ) -> PyResult<Option<AromaticSystemConstraintAst>> {
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
         self.0
             .remove(key.bind(py).borrow().to_rust())
-            .map(|c| AromaticSystemConstraintAst::from_rust(py, &c))
+            .map(|c| AromaticSystemConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
     /// Overlay `other` onto self in place — another container, a live view, or an
-    /// iterable of `AromaticSystemConstraintAst` (last-wins per key; undetermined entries
+    /// iterable of `AromaticSystemConstraintForm` (last-wins per key; undetermined entries
     /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow —
     /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
     pub(crate) fn update(
@@ -315,7 +315,7 @@ impl AromaticSystemConstraintsAst {
         match self.0.get(key.bind(py).borrow().to_rust()) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(py, constraint)?,
+                AromaticSystemConstraintForm::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -327,9 +327,9 @@ impl AromaticSystemConstraintsAst {
         &self,
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
-    ) -> PyResult<AromaticSystemConstraintAst> {
+    ) -> PyResult<AromaticSystemConstraintForm> {
         match self.0.get(key.bind(py).borrow().to_rust()) {
-            Some(constraint) => AromaticSystemConstraintAst::from_rust(py, constraint),
+            Some(constraint) => AromaticSystemConstraintForm::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -381,7 +381,7 @@ impl AromaticSystemConstraintsAst {
     }
 }
 
-impl AromaticSystemConstraintsAst {
+impl AromaticSystemConstraintsForm {
     /// The wrapped AST constraints — read access for aromatic system construction.
     pub(crate) fn inner(&self) -> &GraphIrAromaticSystemConstraintsForm {
         &self.0
@@ -389,19 +389,19 @@ impl AromaticSystemConstraintsAst {
 
     /// Wrap owned AST constraints.
     pub(crate) fn from_inner(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
-        AromaticSystemConstraintsAst(constraints)
+        AromaticSystemConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
-    AromaticSystemConstraintsAst,
+    AromaticSystemConstraintsForm,
     GraphIrAromaticSystemConstraintsForm,
-    |value: &AromaticSystemConstraintsAst,
+    |value: &AromaticSystemConstraintsForm,
      _py: Python<'_>|
      -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
      value: GraphIrAromaticSystemConstraintsForm|
-     -> PyResult<AromaticSystemConstraintsAst> { Ok(AromaticSystemConstraintsAst(value)) }
+     -> PyResult<AromaticSystemConstraintsForm> { Ok(AromaticSystemConstraintsForm(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
@@ -412,7 +412,7 @@ pub(crate) fn aromatic_system_constraints_iter(
     let entries = constraints
         .iter()
         .map(|constraint| {
-            into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)
+            into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, constraint)?)
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(AromaticSystemConstraintIter {
@@ -452,7 +452,7 @@ pub(crate) fn aromatic_system_constraint_items(
                     py,
                     AromaticSystemConstraintKey::from_rust(&constraint.key()),
                 )?,
-                into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, constraint)?)?,
+                into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, constraint)?)?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -564,7 +564,7 @@ impl AromaticSystemConstraintsView {
 
     /// Insert `c` on the system in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintAst>) {
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintForm>) {
         self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
@@ -574,9 +574,9 @@ impl AromaticSystemConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
-    ) -> PyResult<Option<AromaticSystemConstraintAst>> {
+    ) -> PyResult<Option<AromaticSystemConstraintForm>> {
         self.remove_ast(py, key.bind(py).borrow().to_rust())
-            .map(|c| AromaticSystemConstraintAst::from_rust(py, &c))
+            .map(|c| AromaticSystemConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
@@ -599,7 +599,7 @@ impl AromaticSystemConstraintsView {
     }
 
     /// Overlay `other` onto the system's constraints in place — another container, a live
-    /// view, or an iterable of `AromaticSystemConstraintAst` (last-wins per key;
+    /// view, or an iterable of `AromaticSystemConstraintForm` (last-wins per key;
     /// undetermined entries remove). Resolves `other` to owned data *before* the write
     /// borrow, so a view aliasing the same system is not a double-borrow panic.
     pub(crate) fn update(
@@ -647,7 +647,7 @@ impl AromaticSystemConstraintsView {
         let key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| AromaticSystemConstraintAst::from_rust(py, constraint))
+                .map(|constraint| AromaticSystemConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -661,11 +661,11 @@ impl AromaticSystemConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
-    ) -> PyResult<AromaticSystemConstraintAst> {
+    ) -> PyResult<AromaticSystemConstraintForm> {
         let ast_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| AromaticSystemConstraintAst::from_rust(py, constraint))
+                .map(|constraint| AromaticSystemConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -708,7 +708,7 @@ impl AromaticSystemConstraintsView {
 
 #[pyclass]
 pub(crate) struct AromaticSystemConstraintIter {
-    entries: IntoIter<Py<AromaticSystemConstraintAst>>,
+    entries: IntoIter<Py<AromaticSystemConstraintForm>>,
 }
 
 #[pymethods]
@@ -717,7 +717,7 @@ impl AromaticSystemConstraintIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<Py<AromaticSystemConstraintAst>> {
+    pub(crate) fn __next__(&mut self) -> Option<Py<AromaticSystemConstraintForm>> {
         self.entries.next()
     }
 }
@@ -742,7 +742,7 @@ impl AromaticSystemConstraintKeyIter {
 pub(crate) struct AromaticSystemConstraintItemsIter {
     items: IntoIter<(
         Py<AromaticSystemConstraintKey>,
-        Py<AromaticSystemConstraintAst>,
+        Py<AromaticSystemConstraintForm>,
     )>,
 }
 
@@ -756,7 +756,7 @@ impl AromaticSystemConstraintItemsIter {
         &mut self,
     ) -> Option<(
         Py<AromaticSystemConstraintKey>,
-        Py<AromaticSystemConstraintAst>,
+        Py<AromaticSystemConstraintForm>,
     )> {
         self.items.next()
     }

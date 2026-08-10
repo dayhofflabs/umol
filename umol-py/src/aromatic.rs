@@ -35,7 +35,7 @@ impl AromaticSystemUpdate {
         electrons: Option<ElectronCountsLike>,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<AromaticSystemConstraintsAst>>,
+        constraints: Option<Py<AromaticSystemConstraintsForm>>,
     ) -> Self {
         Self::from_rust(&GraphIrAromaticSystemUpdate {
             electrons: electrons.map(|value| value.to_rust(py)),
@@ -93,8 +93,8 @@ impl AromaticSystemUpdate {
     }
 
     #[getter]
-    fn constraints(&self) -> AromaticSystemConstraintsAst {
-        AromaticSystemConstraintsAst::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> AromaticSystemConstraintsForm {
+        AromaticSystemConstraintsForm::from_inner(self.0.constraints.clone())
     }
 }
 
@@ -127,7 +127,7 @@ impl AromaticSystemForm {
         electrons: ElectronCountsLike,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
-        constraints: Option<Py<AromaticSystemConstraintsAst>>,
+        constraints: Option<Py<AromaticSystemConstraintsForm>>,
     ) -> Self {
         let mut system = GraphIrAromaticSystemForm::new(electrons.to_rust(py));
         if let Some(charge) = charge {
@@ -555,12 +555,12 @@ impl AromaticSystemViewIter {
 }
 
 use crate::constraint::aromatic::{
-    aromatic_system_constraints_asdict, AromaticSystemConstraintsAst,
-    AromaticSystemConstraintsBacking, AromaticSystemConstraintsLike, AromaticSystemConstraintsView,
+    aromatic_system_constraints_asdict, AromaticSystemConstraintsBacking,
+    AromaticSystemConstraintsForm, AromaticSystemConstraintsLike, AromaticSystemConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::aromatic::{
-    AromaticSystemConstraintAst, AromaticSystemConstraintKey, AromaticSystemConstraintsUpdate,
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemConstraintsUpdate,
 };
 
 #[cfg(test)]
@@ -623,14 +623,15 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![ec])).unwrap();
+            let constraints =
+                Py::new(py, AromaticSystemConstraintsForm::new(py, vec![ec])).unwrap();
             let system = AromaticSystemForm::new(
                 py,
                 ElectronCountsLike::Lit(vec![1, 1, 1]),
@@ -884,11 +885,11 @@ mod tests {
             };
             let constraints = Py::new(
                 py,
-                AromaticSystemConstraintsAst::new(
+                AromaticSystemConstraintsForm::new(
                     py,
                     vec![into_py_variant(
                         py,
-                        AromaticSystemConstraintAst::from_rust(
+                        AromaticSystemConstraintForm::from_rust(
                             py,
                             &GraphIrAromaticSystemConstraintForm::electron_count(6),
                         )
@@ -1058,10 +1059,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraint_ast_key() {
+    fn test_aromatic_system_constraint_form_key() {
         Python::attach(|py| {
             let constraint = GraphIrAromaticSystemConstraintForm::electron_count(6);
-            let key = AromaticSystemConstraintAst::from_rust(py, &constraint)
+            let key = AromaticSystemConstraintForm::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
             assert_eq!(
@@ -1074,12 +1075,12 @@ mod tests {
     #[rstest]
     #[case(GraphIrAromaticSystemConstraintForm::electron_count(6))]
     #[case(GraphIrAromaticSystemConstraintForm::electron_count(GraphIrNumForm::Undetermined))]
-    fn test_aromatic_system_constraint_ast_roundtrip(
+    fn test_aromatic_system_constraint_form_roundtrip(
         #[case] ast: GraphIrAromaticSystemConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                AromaticSystemConstraintAst::from_rust(py, &ast)
+                AromaticSystemConstraintForm::from_rust(py, &ast)
                     .unwrap()
                     .to_rust(py),
                 ast
@@ -1088,18 +1089,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_new() {
+    fn test_aromatic_system_constraints_form_new() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
@@ -1109,32 +1110,32 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_repr() {
+    fn test_aromatic_system_constraints_form_repr() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "AromaticSystemConstraintsAst([AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6))])"
+                "AromaticSystemConstraintsForm([AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))])"
             );
         });
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_set() {
+    fn test_aromatic_system_constraints_form_set() {
         Python::attach(|py| {
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let mut constraints = AromaticSystemConstraintsForm::new(py, vec![]);
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
@@ -1151,22 +1152,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_pop() {
+    fn test_aromatic_system_constraints_form_pop() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let mut constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             let key = into_py_variant(py, AromaticSystemConstraintKey::ElectronCount()).unwrap();
             let removed = constraints.pop(py, key).unwrap();
             match removed {
-                Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
+                Some(AromaticSystemConstraintForm::ElectronCount(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
@@ -1176,16 +1177,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_update() {
+    fn test_aromatic_system_constraints_form_update() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, AromaticSystemConstraintsForm::new(py, vec![])).unwrap();
             let mut other = GraphIrAromaticSystemConstraintsForm::new();
             other.set(GraphIrAromaticSystemConstraintForm::electron_count(6));
-            AromaticSystemConstraintsAst::update(
+            AromaticSystemConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AromaticSystemConstraintsUpdate::Container(
-                    Py::new(py, AromaticSystemConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, AromaticSystemConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1199,19 +1200,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_update_entries() {
+    fn test_aromatic_system_constraints_form_update_entries() {
         Python::attach(|py| {
-            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, AromaticSystemConstraintsForm::new(py, vec![])).unwrap();
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            AromaticSystemConstraintsAst::update(
+            AromaticSystemConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AromaticSystemConstraintsUpdate::Entries(vec![ec]),
@@ -1229,19 +1230,20 @@ mod tests {
     /// Regression: a container updating itself resolves `other` before the write borrow,
     /// so it is an idempotent no-op, not a RefCell double-borrow panic.
     #[rstest]
-    fn test_aromatic_system_constraints_ast_update_self() {
+    fn test_aromatic_system_constraints_form_update_self() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, AromaticSystemConstraintsAst::new(py, vec![ec])).unwrap();
-            AromaticSystemConstraintsAst::update(
+            let constraints =
+                Py::new(py, AromaticSystemConstraintsForm::new(py, vec![ec])).unwrap();
+            AromaticSystemConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 AromaticSystemConstraintsUpdate::Container(constraints.clone_ref(py)),
@@ -1335,9 +1337,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_len_contains() {
+    fn test_aromatic_system_constraints_form_len_contains() {
         Python::attach(|py| {
-            let empty = AromaticSystemConstraintsAst::new(py, vec![]);
+            let empty = AromaticSystemConstraintsForm::new(py, vec![]);
             assert_eq!(empty.__len__(), 0);
             assert!(!empty.__contains__(
                 py,
@@ -1345,14 +1347,14 @@ mod tests {
             ));
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             assert!(constraints.__contains__(
                 py,
                 into_py_variant(py, AromaticSystemConstraintKey::ElectronCount()).unwrap()
@@ -1361,18 +1363,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_keys_values_items() {
+    fn test_aromatic_system_constraints_form_keys_values_items() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
@@ -1401,18 +1403,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_get() {
+    fn test_aromatic_system_constraints_form_get() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             let present = constraints
                 .get(
                     py,
@@ -1422,7 +1424,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
@@ -1432,7 +1434,7 @@ mod tests {
             .into_any();
             assert!(present.bind(py).eq(expected.bind(py)).unwrap());
 
-            let empty = AromaticSystemConstraintsAst::new(py, vec![]);
+            let empty = AromaticSystemConstraintsForm::new(py, vec![]);
             let absent = empty
                 .get(
                     py,
@@ -1458,23 +1460,23 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_electron_count() {
+    fn test_aromatic_system_constraints_form_electron_count() {
         Python::attach(|py| {
-            let empty = AromaticSystemConstraintsAst::new(py, vec![]);
+            let empty = AromaticSystemConstraintsForm::new(py, vec![]);
             assert_eq!(
                 empty.electron_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Undetermined
             );
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(6)
@@ -1483,9 +1485,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_set_electron_count() {
+    fn test_aromatic_system_constraints_form_set_electron_count() {
         Python::attach(|py| {
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let mut constraints = AromaticSystemConstraintsForm::new(py, vec![]);
             constraints.set_electron_count(py, NumLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
@@ -1495,36 +1497,36 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_getitem_error() {
+    fn test_aromatic_system_constraints_form_getitem_error() {
         Python::attach(|py| {
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, AromaticSystemConstraintKey::ElectronCount()).unwrap();
             assert!(constraints.__getitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_delitem_error() {
+    fn test_aromatic_system_constraints_form_delitem_error() {
         Python::attach(|py| {
-            let mut constraints = AromaticSystemConstraintsAst::new(py, vec![]);
+            let mut constraints = AromaticSystemConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, AromaticSystemConstraintKey::ElectronCount()).unwrap();
             assert!(constraints.__delitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_aromatic_system_constraints_ast_asdict() {
+    fn test_aromatic_system_constraints_form_asdict() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = AromaticSystemConstraintsAst::new(py, vec![ec]);
+            let constraints = AromaticSystemConstraintsForm::new(py, vec![ec]);
             let dict = constraints.asdict(py).unwrap();
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
@@ -1550,7 +1552,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )
@@ -1591,7 +1593,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(AromaticSystemConstraintAst::ElectronCount(v)) => {
+                Some(AromaticSystemConstraintForm::ElectronCount(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
@@ -1621,7 +1623,7 @@ mod tests {
             view.update(
                 py,
                 AromaticSystemConstraintsUpdate::Container(
-                    Py::new(py, AromaticSystemConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, AromaticSystemConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1676,7 +1678,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                AromaticSystemConstraintAst::from_rust(
+                AromaticSystemConstraintForm::from_rust(
                     py,
                     &GraphIrAromaticSystemConstraintForm::electron_count(6),
                 )

@@ -10,12 +10,12 @@ from umol import (
     ParseError,
     Permutation,
     StereoAtomForm,
-    StereoAtomConstraintAst,
-    StereoAtomConstraintsAst,
+    StereoAtomConstraintForm,
+    StereoAtomConstraintsForm,
     StereoAtomUpdate,
     StereoBondForm,
-    StereoBondConstraintAst,
-    StereoBondConstraintsAst,
+    StereoBondConstraintForm,
+    StereoBondConstraintsForm,
     StereoBondUpdate,
     StereoConfigurationForm,
     StereoConfigurationUpdate,
@@ -25,7 +25,7 @@ from umol import (
     StereoLigandKind,
     StereoTerm,
     Stereogenicity,
-    StereogenicityAst,
+    StereogenicityForm,
     TetrahedralConfiguration,
     TetrahedralStereo,
     TetrahedralStereoForm,
@@ -68,7 +68,7 @@ def test_stereo_configuration_update(update, expected):
     [
         (
             StereoAtomUpdate(),
-            (StereoConfigurationUpdate.Unchanged(), StereoAtomConstraintsAst([])),
+            (StereoConfigurationUpdate.Unchanged(), StereoAtomConstraintsForm([])),
         ),
         (
             StereoAtomUpdate(
@@ -78,7 +78,7 @@ def test_stereo_configuration_update(update, expected):
             ),
             (
                 StereoConfigurationUpdate.Kinded(StereoKind.Tetrahedral, None),
-                StereoAtomConstraintsAst([]),
+                StereoAtomConstraintsForm([]),
             ),
         ),
         (
@@ -91,29 +91,29 @@ def test_stereo_configuration_update(update, expected):
                 StereoConfigurationUpdate.Kinded(
                     StereoKind.Tetrahedral, StereoCoset.Lit(1)
                 ),
-                StereoAtomConstraintsAst([]),
+                StereoAtomConstraintsForm([]),
             ),
         ),
         (
             StereoAtomUpdate(configuration=StereoConfigurationUpdate.Undetermined()),
-            (StereoConfigurationUpdate.Undetermined(), StereoAtomConstraintsAst([])),
+            (StereoConfigurationUpdate.Undetermined(), StereoAtomConstraintsForm([])),
         ),
         (
             StereoAtomUpdate(
-                constraints=StereoAtomConstraintsAst(
+                constraints=StereoAtomConstraintsForm(
                     [
-                        StereoAtomConstraintAst.Stereogenicity(
-                            StereogenicityAst.Undetermined()
+                        StereoAtomConstraintForm.Stereogenicity(
+                            StereogenicityForm.Undetermined()
                         )
                     ]
                 )
             ),
             (
                 StereoConfigurationUpdate.Unchanged(),
-                StereoAtomConstraintsAst(
+                StereoAtomConstraintsForm(
                     [
-                        StereoAtomConstraintAst.Stereogenicity(
-                            StereogenicityAst.Undetermined()
+                        StereoAtomConstraintForm.Stereogenicity(
+                            StereogenicityForm.Undetermined()
                         )
                     ]
                 ),
@@ -151,7 +151,7 @@ def test_stereo_atom_update_parse_error():
     [
         (
             StereoBondUpdate(),
-            (StereoConfigurationUpdate.Unchanged(), StereoBondConstraintsAst([])),
+            (StereoConfigurationUpdate.Unchanged(), StereoBondConstraintsForm([])),
         ),
         (
             StereoBondUpdate(
@@ -161,7 +161,7 @@ def test_stereo_atom_update_parse_error():
             ),
             (
                 StereoConfigurationUpdate.Kinded(StereoKind.CisTrans, None),
-                StereoBondConstraintsAst([]),
+                StereoBondConstraintsForm([]),
             ),
         ),
         (
@@ -174,29 +174,29 @@ def test_stereo_atom_update_parse_error():
                 StereoConfigurationUpdate.Kinded(
                     StereoKind.CisTrans, StereoCoset.Lit(0)
                 ),
-                StereoBondConstraintsAst([]),
+                StereoBondConstraintsForm([]),
             ),
         ),
         (
             StereoBondUpdate(configuration=StereoConfigurationUpdate.Undetermined()),
-            (StereoConfigurationUpdate.Undetermined(), StereoBondConstraintsAst([])),
+            (StereoConfigurationUpdate.Undetermined(), StereoBondConstraintsForm([])),
         ),
         (
             StereoBondUpdate(
-                constraints=StereoBondConstraintsAst(
+                constraints=StereoBondConstraintsForm(
                     [
-                        StereoBondConstraintAst.Stereogenicity(
-                            StereogenicityAst.Undetermined()
+                        StereoBondConstraintForm.Stereogenicity(
+                            StereogenicityForm.Undetermined()
                         )
                     ]
                 )
             ),
             (
                 StereoConfigurationUpdate.Unchanged(),
-                StereoBondConstraintsAst(
+                StereoBondConstraintsForm(
                     [
-                        StereoBondConstraintAst.Stereogenicity(
-                            StereogenicityAst.Undetermined()
+                        StereoBondConstraintForm.Stereogenicity(
+                            StereogenicityForm.Undetermined()
                         )
                     ]
                 ),
@@ -382,15 +382,15 @@ def test_stereoatomast_configuration_setter():
 def test_stereoatomast_constraints_kwarg():
     atom = StereoAtomForm(
         TetrahedralConfiguration.Ccw,
-        constraints=StereoAtomConstraintsAst(
+        constraints=StereoAtomConstraintsForm(
             [
-                StereoAtomConstraintAst.Stereogenicity(
-                    StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+                StereoAtomConstraintForm.Stereogenicity(
+                    StereogenicityForm.Lit(Stereogenicity.Stereogenic)
                 )
             ]
         ),
     )
-    assert atom.constraints.stereogenicity() == StereogenicityAst.Lit(
+    assert atom.constraints.stereogenicity() == StereogenicityForm.Lit(
         Stereogenicity.Stereogenic
     )
 
@@ -437,11 +437,11 @@ def test_stereoatomview_configuration_write_through():
 def test_stereoatomview_constraints_write_through():
     mol = stereo_atom_molecule()
     mol.stereo_atoms[0].constraints.set(
-        StereoAtomConstraintAst.Stereogenicity(
-            StereogenicityAst.Lit(Stereogenicity.Stereogenic)
+        StereoAtomConstraintForm.Stereogenicity(
+            StereogenicityForm.Lit(Stereogenicity.Stereogenic)
         )
     )
-    assert mol.stereo_atoms[0].constraints.stereogenicity() == StereogenicityAst.Lit(
+    assert mol.stereo_atoms[0].constraints.stereogenicity() == StereogenicityForm.Lit(
         Stereogenicity.Stereogenic
     )
 

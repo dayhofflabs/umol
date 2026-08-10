@@ -6,9 +6,9 @@ from umol import (
     Element,
     MoleculeAst,
     NoncovalentBondForm,
-    NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintForm,
     NoncovalentBondConstraintKey,
-    NoncovalentBondConstraintsAst,
+    NoncovalentBondConstraintsForm,
     NoncovalentBondKind,
     NoncovalentBondKindForm,
     NoncovalentBondUpdate,
@@ -19,23 +19,23 @@ from umol import (
 @pytest.mark.parametrize(
     ("update", "expected"),
     [
-        (NoncovalentBondUpdate(), (None, NoncovalentBondConstraintsAst([]))),
+        (NoncovalentBondUpdate(), (None, NoncovalentBondConstraintsForm([]))),
         (
             NoncovalentBondUpdate(kind=NoncovalentBondKind.Ionic),
             (
                 NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic),
-                NoncovalentBondConstraintsAst([]),
+                NoncovalentBondConstraintsForm([]),
             ),
         ),
         (
             NoncovalentBondUpdate(kind=NoncovalentBondKindForm.Undetermined()),
-            (NoncovalentBondKindForm.Undetermined(), NoncovalentBondConstraintsAst([])),
+            (NoncovalentBondKindForm.Undetermined(), NoncovalentBondConstraintsForm([])),
         ),
         (
             NoncovalentBondUpdate(
-                constraints=NoncovalentBondConstraintsAst(
+                constraints=NoncovalentBondConstraintsForm(
                     [
-                        NoncovalentBondConstraintAst.Intramolecular(
+                        NoncovalentBondConstraintForm.Intramolecular(
                             BooleanForm.Undetermined()
                         )
                     ]
@@ -43,9 +43,9 @@ from umol import (
             ),
             (
                 None,
-                NoncovalentBondConstraintsAst(
+                NoncovalentBondConstraintsForm(
                     [
-                        NoncovalentBondConstraintAst.Intramolecular(
+                        NoncovalentBondConstraintForm.Intramolecular(
                             BooleanForm.Undetermined()
                         )
                     ]
@@ -116,8 +116,8 @@ def test_noncovalentbondast_new():
 def test_noncovalentbondast_new_constraints_kwarg():
     bond = NoncovalentBondForm(
         NoncovalentBondKind.HalogenBond,
-        constraints=NoncovalentBondConstraintsAst(
-            [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))]
+        constraints=NoncovalentBondConstraintsForm(
+            [NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True))]
         ),
     )
     assert bond.constraints.intramolecular == BooleanForm.Lit(True)
@@ -151,8 +151,8 @@ def test_noncovalentbondast_asdict():
 
 def test_noncovalentbondast_set_constraints():
     bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
-    bond.constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(False))]
+    bond.constraints = NoncovalentBondConstraintsForm(
+        [NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(False))]
     )
     assert bond.constraints.intramolecular == BooleanForm.Lit(False)
 
@@ -167,19 +167,19 @@ def test_noncovalentbondast_constraints_self_assign():
 
 
 def test_noncovalentbondconstraints_intramolecular():
-    constraints = NoncovalentBondConstraintsAst([])
+    constraints = NoncovalentBondConstraintsForm([])
     assert constraints.intramolecular == BooleanForm.Undetermined()
     constraints.intramolecular = True
     assert constraints.intramolecular == BooleanForm.Lit(True)
 
 
 def test_noncovalentbondconstraints_mapping_ops():
-    constraints = NoncovalentBondConstraintsAst([])
-    constraints.set(NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)))
+    constraints = NoncovalentBondConstraintsForm([])
+    constraints.set(NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True)))
     assert len(constraints) == 1
     assert NoncovalentBondConstraintKey.Intramolecular() in constraints
     assert constraints[NoncovalentBondConstraintKey.Intramolecular()] == (
-        NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))
+        NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True))
     )
     assert [key for key in constraints] == [NoncovalentBondConstraintKey.Intramolecular()]
     del constraints[NoncovalentBondConstraintKey.Intramolecular()]
@@ -187,13 +187,13 @@ def test_noncovalentbondconstraints_mapping_ops():
 
 
 def test_noncovalentbondconstraints_getitem_missing():
-    constraints = NoncovalentBondConstraintsAst([])
+    constraints = NoncovalentBondConstraintsForm([])
     with pytest.raises(KeyError):
         constraints[NoncovalentBondConstraintKey.Intramolecular()]
 
 
 def test_noncovalentbondconstraints_delitem_missing():
-    constraints = NoncovalentBondConstraintsAst([])
+    constraints = NoncovalentBondConstraintsForm([])
     with pytest.raises(KeyError):
         del constraints[NoncovalentBondConstraintKey.Intramolecular()]
 
@@ -205,8 +205,8 @@ def test_noncovalentbondconstraintkey_intramolecular():
 
 
 def test_noncovalentbondconstraints_asdict():
-    constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))]
+    constraints = NoncovalentBondConstraintsForm(
+        [NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True))]
     )
     assert constraints.asdict() == {"intramolecular": BooleanForm.Lit(True)}
 
@@ -243,8 +243,8 @@ def test_noncovalentbondview_constraints_write_through():
 
 def test_noncovalentbondview_set_constraints():
     mol = hbond_molecule()
-    mol.noncovalent_bonds[0].constraints = NoncovalentBondConstraintsAst(
-        [NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(False))]
+    mol.noncovalent_bonds[0].constraints = NoncovalentBondConstraintsForm(
+        [NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(False))]
     )
     assert mol.noncovalent_bonds[0].constraints.intramolecular == BooleanForm.Lit(False)
 

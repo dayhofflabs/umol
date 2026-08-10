@@ -25,14 +25,14 @@ use umol_graph_ir::ir::{
 use crate::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use crate::atom::{AtomForm, AtomUpdate};
 use crate::bond::{BondForm, BondUpdate};
-use crate::constraint::aromatic::AromaticSystemConstraintAst;
-use crate::constraint::atom::AtomConstraintAst;
-use crate::constraint::bond::BondConstraintAst;
-use crate::constraint::dative::DativeBondConstraintAst;
+use crate::constraint::aromatic::AromaticSystemConstraintForm;
+use crate::constraint::atom::AtomConstraintForm;
+use crate::constraint::bond::BondConstraintForm;
+use crate::constraint::dative::DativeBondConstraintForm;
 use crate::constraint::molecule::Constraint;
-use crate::constraint::multicenter::MulticenterBondConstraintAst;
-use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
-use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
+use crate::constraint::multicenter::MulticenterBondConstraintForm;
+use crate::constraint::noncovalent::NoncovalentBondConstraintForm;
+use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::into_py_variant;
 use crate::dative::{DativeBondForm, DativeBondUpdate};
 use crate::defaults::MoleculeDefaults;
@@ -493,45 +493,45 @@ pub enum Edit {
     },
     ModifyAtomConstraint {
         id: HandleLike,
-        old: Option<Py<AtomConstraintAst>>,
-        new: Option<Py<AtomConstraintAst>>,
+        old: Option<Py<AtomConstraintForm>>,
+        new: Option<Py<AtomConstraintForm>>,
     },
     ModifyBondConstraint {
         id: HandleLike,
-        old: Option<Py<BondConstraintAst>>,
-        new: Option<Py<BondConstraintAst>>,
+        old: Option<Py<BondConstraintForm>>,
+        new: Option<Py<BondConstraintForm>>,
     },
     ModifyDativeBondConstraint {
         id: HandleLike,
-        old: Option<Py<DativeBondConstraintAst>>,
-        new: Option<Py<DativeBondConstraintAst>>,
+        old: Option<Py<DativeBondConstraintForm>>,
+        new: Option<Py<DativeBondConstraintForm>>,
     },
     ModifyAromaticSystemConstraint {
         id: HandleLike,
-        old: Option<Py<AromaticSystemConstraintAst>>,
-        new: Option<Py<AromaticSystemConstraintAst>>,
+        old: Option<Py<AromaticSystemConstraintForm>>,
+        new: Option<Py<AromaticSystemConstraintForm>>,
     },
     ModifyMulticenterBondConstraint {
         id: HandleLike,
-        old: Option<Py<MulticenterBondConstraintAst>>,
-        new: Option<Py<MulticenterBondConstraintAst>>,
+        old: Option<Py<MulticenterBondConstraintForm>>,
+        new: Option<Py<MulticenterBondConstraintForm>>,
     },
     ModifyNoncovalentBondConstraint {
         id: HandleLike,
-        old: Option<Py<NoncovalentBondConstraintAst>>,
-        new: Option<Py<NoncovalentBondConstraintAst>>,
+        old: Option<Py<NoncovalentBondConstraintForm>>,
+        new: Option<Py<NoncovalentBondConstraintForm>>,
     },
     ModifyStereoAtomConstraint {
         id: HandleLike,
         kind: Option<StereoKind>,
-        old: Option<Py<StereoAtomConstraintAst>>,
-        new: Option<Py<StereoAtomConstraintAst>>,
+        old: Option<Py<StereoAtomConstraintForm>>,
+        new: Option<Py<StereoAtomConstraintForm>>,
     },
     ModifyStereoBondConstraint {
         id: HandleLike,
         kind: Option<StereoKind>,
-        old: Option<Py<StereoBondConstraintAst>>,
-        new: Option<Py<StereoBondConstraintAst>>,
+        old: Option<Py<StereoBondConstraintForm>>,
+        new: Option<Py<StereoBondConstraintForm>>,
     },
     AddMoleculeConstraint {
         constraint: Py<ConstraintEdit>,
@@ -840,22 +840,22 @@ impl Edit {
                 id: HandleLike::from_atom_handle(id),
                 old: old
                     .as_ref()
-                    .map(|value| into_py_variant(py, AtomConstraintAst::from_rust(py, value)?))
+                    .map(|value| into_py_variant(py, AtomConstraintForm::from_rust(py, value)?))
                     .transpose()?,
                 new: new
                     .as_ref()
-                    .map(|value| into_py_variant(py, AtomConstraintAst::from_rust(py, value)?))
+                    .map(|value| into_py_variant(py, AtomConstraintForm::from_rust(py, value)?))
                     .transpose()?,
             },
             GraphIrEdit::ModifyBondConstraint { id, old, new } => Self::ModifyBondConstraint {
                 id: HandleLike::from_bond_handle(id),
                 old: old
                     .as_ref()
-                    .map(|value| into_py_variant(py, BondConstraintAst::from_rust(py, value)?))
+                    .map(|value| into_py_variant(py, BondConstraintForm::from_rust(py, value)?))
                     .transpose()?,
                 new: new
                     .as_ref()
-                    .map(|value| into_py_variant(py, BondConstraintAst::from_rust(py, value)?))
+                    .map(|value| into_py_variant(py, BondConstraintForm::from_rust(py, value)?))
                     .transpose()?,
             },
             GraphIrEdit::ModifyDativeBondConstraint { id, old, new } => {
@@ -864,13 +864,13 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, DativeBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, DativeBondConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, DativeBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, DativeBondConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                 }
@@ -881,13 +881,13 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, AromaticSystemConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, AromaticSystemConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                 }
@@ -898,13 +898,19 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(
+                                py,
+                                MulticenterBondConstraintForm::from_rust(py, value)?,
+                            )
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(
+                                py,
+                                MulticenterBondConstraintForm::from_rust(py, value)?,
+                            )
                         })
                         .transpose()?,
                 }
@@ -915,13 +921,19 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(
+                                py,
+                                NoncovalentBondConstraintForm::from_rust(py, value)?,
+                            )
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(
+                                py,
+                                NoncovalentBondConstraintForm::from_rust(py, value)?,
+                            )
                         })
                         .transpose()?,
                 }
@@ -933,13 +945,13 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, StereoAtomConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, StereoAtomConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                 }
@@ -951,13 +963,13 @@ impl Edit {
                     old: old
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, StereoBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, StereoBondConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|value| {
-                            into_py_variant(py, StereoBondConstraintAst::from_rust(py, value)?)
+                            into_py_variant(py, StereoBondConstraintForm::from_rust(py, value)?)
                         })
                         .transpose()?,
                 }

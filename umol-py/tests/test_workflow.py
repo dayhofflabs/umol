@@ -2,7 +2,7 @@ import pytest
 
 from umol import (
     AromaticBondConstraintMismatchPolicy,
-    AromaticValenceAst,
+    AromaticValenceForm,
     AromaticityConfig,
     AromaticityFailurePolicy,
     AromaticityMismatchPolicy,
@@ -94,9 +94,9 @@ def test_resolved_smiles_workflow():
         NumForm.Lit(0),
     ]
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
-        AromaticValenceAst.Aromatic(NumForm.Lit(0)),
-        AromaticValenceAst.Aromatic(NumForm.Lit(1)),
-        AromaticValenceAst.Aromatic(NumForm.Lit(1)),
+        AromaticValenceForm.Aromatic(NumForm.Lit(0)),
+        AromaticValenceForm.Aromatic(NumForm.Lit(1)),
+        AromaticValenceForm.Aromatic(NumForm.Lit(1)),
     ]
     assert [
         (system.atom_ids, system.charge) for system in molecule.aromatic_systems

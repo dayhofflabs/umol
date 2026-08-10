@@ -65,12 +65,12 @@ impl NoncovalentBondConstraintKey {
 /// A noncovalent-bond-scope constraint: whether the bond is intramolecular (a boolean
 /// value; `Undetermined` when unspecified).
 #[pyclass]
-pub enum NoncovalentBondConstraintAst {
+pub enum NoncovalentBondConstraintForm {
     Intramolecular(Py<BooleanForm>),
 }
 
 #[pymethods]
-impl NoncovalentBondConstraintAst {
+impl NoncovalentBondConstraintForm {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> NoncovalentBondConstraintKey {
@@ -87,11 +87,11 @@ impl NoncovalentBondConstraintAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let variant = match &*slf.bind(py).borrow() {
-            NoncovalentBondConstraintAst::Intramolecular(_) => "Intramolecular",
+            NoncovalentBondConstraintForm::Intramolecular(_) => "Intramolecular",
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "NoncovalentBondConstraintAst",
+            "NoncovalentBondConstraintForm",
             variant,
             1,
         )
@@ -99,19 +99,19 @@ impl NoncovalentBondConstraintAst {
 }
 
 impl_py_lattice!(
-    NoncovalentBondConstraintAst,
+    NoncovalentBondConstraintForm,
     GraphIrNoncovalentBondConstraintForm,
-    |value: &NoncovalentBondConstraintAst,
+    |value: &NoncovalentBondConstraintForm,
      py: Python<'_>|
      -> PyResult<GraphIrNoncovalentBondConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
      value: GraphIrNoncovalentBondConstraintForm|
-     -> PyResult<NoncovalentBondConstraintAst> {
-        NoncovalentBondConstraintAst::from_rust(py, &value)
+     -> PyResult<NoncovalentBondConstraintForm> {
+        NoncovalentBondConstraintForm::from_rust(py, &value)
     }
 );
 
-impl NoncovalentBondConstraintAst {
+impl NoncovalentBondConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrNoncovalentBondConstraintForm,
@@ -133,12 +133,12 @@ impl NoncovalentBondConstraintAst {
 }
 
 /// The argument to `update`: another constraint container, a live view, or an
-/// iterable of `NoncovalentBondConstraintAst` (each `set`, last-wins).
+/// iterable of `NoncovalentBondConstraintForm` (each `set`, last-wins).
 #[derive(FromPyObject)]
 pub(crate) enum NoncovalentBondConstraintsUpdate {
-    Container(Py<NoncovalentBondConstraintsAst>),
+    Container(Py<NoncovalentBondConstraintsForm>),
     View(Py<NoncovalentBondConstraintsView>),
-    Entries(Vec<Py<NoncovalentBondConstraintAst>>),
+    Entries(Vec<Py<NoncovalentBondConstraintForm>>),
 }
 
 impl NoncovalentBondConstraintsUpdate {
@@ -202,37 +202,37 @@ impl ResolvedNoncovalentBondConstraintsUpdate {
 /// Mutable, hence value-equal but unhashable (matching `NoncovalentBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct NoncovalentBondConstraintsAst(GraphIrNoncovalentBondConstraintsForm);
+pub struct NoncovalentBondConstraintsForm(GraphIrNoncovalentBondConstraintsForm);
 
 #[pymethods]
-impl NoncovalentBondConstraintsAst {
+impl NoncovalentBondConstraintsForm {
     /// Build from a sequence of constraints (a later entry of the same key replaces
     /// an earlier one, last-wins).
     #[new]
-    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<NoncovalentBondConstraintAst>>) -> Self {
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<NoncovalentBondConstraintForm>>) -> Self {
         let mut constraints = GraphIrNoncovalentBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
-        NoncovalentBondConstraintsAst(constraints)
+        NoncovalentBondConstraintsForm(constraints)
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, NoncovalentBondConstraintForm::from_rust(py, entry)?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!(
-            "NoncovalentBondConstraintsAst([{}])",
+            "NoncovalentBondConstraintsForm([{}])",
             parts.join(", ")
         ))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
-    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<NoncovalentBondConstraintAst>) {
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<NoncovalentBondConstraintForm>) {
         self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
@@ -241,15 +241,15 @@ impl NoncovalentBondConstraintsAst {
         &mut self,
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
-    ) -> PyResult<Option<NoncovalentBondConstraintAst>> {
+    ) -> PyResult<Option<NoncovalentBondConstraintForm>> {
         self.0
             .remove(key.bind(py).borrow().to_rust())
-            .map(|c| NoncovalentBondConstraintAst::from_rust(py, &c))
+            .map(|c| NoncovalentBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
     /// Overlay `other` onto self in place — another container, a live view, or an
-    /// iterable of `NoncovalentBondConstraintAst` (last-wins per key; undetermined
+    /// iterable of `NoncovalentBondConstraintForm` (last-wins per key; undetermined
     /// entries remove). Takes `slf` by handle so `other` is fully read *before* the
     /// write borrow — `cs.update(cs)` on the same container is then a no-op, not a
     /// double-borrow panic.
@@ -298,7 +298,7 @@ impl NoncovalentBondConstraintsAst {
         match self.0.get(key.bind(py).borrow().to_rust()) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -310,9 +310,9 @@ impl NoncovalentBondConstraintsAst {
         &self,
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
-    ) -> PyResult<NoncovalentBondConstraintAst> {
+    ) -> PyResult<NoncovalentBondConstraintForm> {
         match self.0.get(key.bind(py).borrow().to_rust()) {
-            Some(constraint) => NoncovalentBondConstraintAst::from_rust(py, constraint),
+            Some(constraint) => NoncovalentBondConstraintForm::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -364,28 +364,28 @@ impl NoncovalentBondConstraintsAst {
     }
 }
 
-impl NoncovalentBondConstraintsAst {
+impl NoncovalentBondConstraintsForm {
     /// The wrapped AST constraints — read access for noncovalent bond construction.
     pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondConstraintsForm {
         &self.0
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `NoncovalentBondConstraintsAst(..)` directly.
+    /// in-crate construction wraps `NoncovalentBondConstraintsForm(..)` directly.
     pub(crate) fn from_inner(constraints: GraphIrNoncovalentBondConstraintsForm) -> Self {
-        NoncovalentBondConstraintsAst(constraints)
+        NoncovalentBondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
-    NoncovalentBondConstraintsAst,
+    NoncovalentBondConstraintsForm,
     GraphIrNoncovalentBondConstraintsForm,
-    |value: &NoncovalentBondConstraintsAst,
+    |value: &NoncovalentBondConstraintsForm,
      _py: Python<'_>|
      -> PyResult<GraphIrNoncovalentBondConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
      value: GraphIrNoncovalentBondConstraintsForm|
-     -> PyResult<NoncovalentBondConstraintsAst> { Ok(NoncovalentBondConstraintsAst(value)) }
+     -> PyResult<NoncovalentBondConstraintsForm> { Ok(NoncovalentBondConstraintsForm(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
@@ -396,7 +396,10 @@ pub(crate) fn noncovalent_bond_constraints_iter(
     let entries = constraints
         .iter()
         .map(|constraint| {
-            into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, constraint)?)
+            into_py_variant(
+                py,
+                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
+            )
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(NoncovalentBondConstraintIter {
@@ -436,7 +439,10 @@ pub(crate) fn noncovalent_bond_constraint_items(
                     py,
                     NoncovalentBondConstraintKey::from_rust(&constraint.key()),
                 )?,
-                into_py_variant(py, NoncovalentBondConstraintAst::from_rust(py, constraint)?)?,
+                into_py_variant(
+                    py,
+                    NoncovalentBondConstraintForm::from_rust(py, constraint)?,
+                )?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -464,7 +470,7 @@ pub(crate) fn noncovalent_bond_constraints_asdict<'py>(
 
 #[pyclass]
 pub(crate) struct NoncovalentBondConstraintIter {
-    entries: IntoIter<Py<NoncovalentBondConstraintAst>>,
+    entries: IntoIter<Py<NoncovalentBondConstraintForm>>,
 }
 
 #[pymethods]
@@ -473,7 +479,7 @@ impl NoncovalentBondConstraintIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<Py<NoncovalentBondConstraintAst>> {
+    pub(crate) fn __next__(&mut self) -> Option<Py<NoncovalentBondConstraintForm>> {
         self.entries.next()
     }
 }
@@ -498,7 +504,7 @@ impl NoncovalentBondConstraintKeyIter {
 pub(crate) struct NoncovalentBondConstraintItemsIter {
     items: IntoIter<(
         Py<NoncovalentBondConstraintKey>,
-        Py<NoncovalentBondConstraintAst>,
+        Py<NoncovalentBondConstraintForm>,
     )>,
 }
 
@@ -512,7 +518,7 @@ impl NoncovalentBondConstraintItemsIter {
         &mut self,
     ) -> Option<(
         Py<NoncovalentBondConstraintKey>,
-        Py<NoncovalentBondConstraintAst>,
+        Py<NoncovalentBondConstraintForm>,
     )> {
         self.items.next()
     }
@@ -522,7 +528,7 @@ impl NoncovalentBondConstraintItemsIter {
 /// — for the noncovalent bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
 pub(crate) enum NoncovalentBondConstraintsLike {
-    Container(Py<NoncovalentBondConstraintsAst>),
+    Container(Py<NoncovalentBondConstraintsForm>),
     View(Py<NoncovalentBondConstraintsView>),
 }
 
@@ -626,7 +632,7 @@ impl NoncovalentBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintAst>) {
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintForm>) {
         self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
@@ -636,9 +642,9 @@ impl NoncovalentBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
-    ) -> PyResult<Option<NoncovalentBondConstraintAst>> {
+    ) -> PyResult<Option<NoncovalentBondConstraintForm>> {
         self.remove_ast(py, key.bind(py).borrow().to_rust())
-            .map(|c| NoncovalentBondConstraintAst::from_rust(py, &c))
+            .map(|c| NoncovalentBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
@@ -661,7 +667,7 @@ impl NoncovalentBondConstraintsView {
     }
 
     /// Overlay `other` onto the bond's constraints in place — another container, a live
-    /// view, or an iterable of `NoncovalentBondConstraintAst` (last-wins per key;
+    /// view, or an iterable of `NoncovalentBondConstraintForm` (last-wins per key;
     /// undetermined entries remove).
     pub(crate) fn update(
         &self,
@@ -711,7 +717,7 @@ impl NoncovalentBondConstraintsView {
         let key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| NoncovalentBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| NoncovalentBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -725,11 +731,11 @@ impl NoncovalentBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
-    ) -> PyResult<NoncovalentBondConstraintAst> {
+    ) -> PyResult<NoncovalentBondConstraintForm> {
         let ast_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| NoncovalentBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| NoncovalentBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {

@@ -2,16 +2,16 @@ import pytest
 
 from umol import (
     AromaticValence,
-    AromaticValenceAst,
+    AromaticValenceForm,
     AtomForm,
-    AtomConstraintAst,
+    AtomConstraintForm,
     AtomConstraintKey,
-    AtomConstraintsAst,
+    AtomConstraintsForm,
     Element,
     MoleculeAst,
     MulticenterValence,
-    MulticenterValenceAst,
-    RingMembershipAst,
+    MulticenterValenceForm,
+    RingMembershipForm,
     RingScope,
     StereoCoset,
     TetrahedralConfiguration,
@@ -21,33 +21,33 @@ from umol import (
 
 
 def test_aromaticvalenceast_aromatic():
-    assert AromaticValenceAst.Aromatic(NumForm.Lit(1)) == AromaticValenceAst.Aromatic(
+    assert AromaticValenceForm.Aromatic(NumForm.Lit(1)) == AromaticValenceForm.Aromatic(
         NumForm.Lit(1)
     )
 
 
 def test_aromaticvalenceast_not_aromatic():
-    assert AromaticValenceAst.NotAromatic() == AromaticValenceAst.NotAromatic()
+    assert AromaticValenceForm.NotAromatic() == AromaticValenceForm.NotAromatic()
 
 
 def test_aromaticvalenceast_as_lit():
-    assert AromaticValenceAst.NotAromatic().as_lit() == AromaticValence.NotAromatic()
-    assert AromaticValenceAst.Aromatic(2).as_lit() == AromaticValence.Aromatic(2)
-    assert AromaticValenceAst.Undetermined().as_lit() is None
+    assert AromaticValenceForm.NotAromatic().as_lit() == AromaticValence.NotAromatic()
+    assert AromaticValenceForm.Aromatic(2).as_lit() == AromaticValence.Aromatic(2)
+    assert AromaticValenceForm.Undetermined().as_lit() is None
     assert AromaticValence.NotAromatic().valence_count() == 0
     assert AromaticValence.Aromatic(2).valence_count() == 2
 
 
 def test_multicentervalenceast_multicenter():
-    assert MulticenterValenceAst.Multicenter(NumForm.Lit(2)) == MulticenterValenceAst.Multicenter(
+    assert MulticenterValenceForm.Multicenter(NumForm.Lit(2)) == MulticenterValenceForm.Multicenter(
         NumForm.Lit(2)
     )
 
 
 def test_multicentervalenceast_as_lit():
-    assert MulticenterValenceAst.NotMulticenter().as_lit() == MulticenterValence.NotMulticenter()
-    assert MulticenterValenceAst.Multicenter(3).as_lit() == MulticenterValence.Multicenter(3)
-    assert MulticenterValenceAst.Undetermined().as_lit() is None
+    assert MulticenterValenceForm.NotMulticenter().as_lit() == MulticenterValence.NotMulticenter()
+    assert MulticenterValenceForm.Multicenter(3).as_lit() == MulticenterValence.Multicenter(3)
+    assert MulticenterValenceForm.Undetermined().as_lit() is None
     assert MulticenterValence.NotMulticenter().valence_count() == 0
     assert MulticenterValence.Multicenter(3).valence_count() == 3
 
@@ -57,36 +57,36 @@ def test_ringscope_size():
 
 
 def test_ringmembershipast_fields():
-    rm = RingMembershipAst(RingScope.All(), NumForm.Lit(2))
+    rm = RingMembershipForm(RingScope.All(), NumForm.Lit(2))
     assert rm.scope == RingScope.All()
     assert rm.count == NumForm.Lit(2)
 
 
 def test_ringmembershipast_int_count():
-    assert RingMembershipAst(RingScope.All(), 2).count == NumForm.Lit(2)
+    assert RingMembershipForm(RingScope.All(), 2).count == NumForm.Lit(2)
 
 
 def test_atomconstraint_key_valence():
-    assert AtomConstraintAst.Valence(NumForm.Lit(4)).key == AtomConstraintKey.Valence()
+    assert AtomConstraintForm.Valence(NumForm.Lit(4)).key == AtomConstraintKey.Valence()
 
 
 def test_atomconstraint_key_tetrahedral_stereo():
-    constraint = AtomConstraintAst.TetrahedralStereo(TetrahedralStereoForm.NotStereo())
+    constraint = AtomConstraintForm.TetrahedralStereo(TetrahedralStereoForm.NotStereo())
     assert constraint.key == AtomConstraintKey.TetrahedralStereo()
 
 
 def test_atomconstraint_key_ring_membership():
-    constraint = AtomConstraintAst.RingMembership(
-        RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
+    constraint = AtomConstraintForm.RingMembership(
+        RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
     )
     assert constraint.key == AtomConstraintKey.RingMembership(RingScope.Size(6))
 
 
 def test_atomconstraints_iter():
-    constraints = AtomConstraintsAst(
+    constraints = AtomConstraintsForm(
         [
-            AtomConstraintAst.Valence(NumForm.Lit(4)),
-            AtomConstraintAst.Degree(NumForm.Lit(3)),
+            AtomConstraintForm.Valence(NumForm.Lit(4)),
+            AtomConstraintForm.Degree(NumForm.Lit(3)),
         ]
     )
     assert len(constraints) == 2
@@ -94,42 +94,42 @@ def test_atomconstraints_iter():
     assert list(constraints) == list(constraints.keys())
     assert list(constraints) == [AtomConstraintKey.Valence(), AtomConstraintKey.Degree()]
     assert list(constraints.values()) == [
-        AtomConstraintAst.Valence(NumForm.Lit(4)),
-        AtomConstraintAst.Degree(NumForm.Lit(3)),
+        AtomConstraintForm.Valence(NumForm.Lit(4)),
+        AtomConstraintForm.Degree(NumForm.Lit(3)),
     ]
     assert list(constraints.items()) == [
-        (AtomConstraintKey.Valence(), AtomConstraintAst.Valence(NumForm.Lit(4))),
-        (AtomConstraintKey.Degree(), AtomConstraintAst.Degree(NumForm.Lit(3))),
+        (AtomConstraintKey.Valence(), AtomConstraintForm.Valence(NumForm.Lit(4))),
+        (AtomConstraintKey.Degree(), AtomConstraintForm.Degree(NumForm.Lit(3))),
     ]
 
 
 def test_atomconstraints_get():
-    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert AtomConstraintKey.Valence() in constraints
     assert AtomConstraintKey.Degree() not in constraints
     assert constraints.get(AtomConstraintKey.Degree()) is None
     assert constraints.get(AtomConstraintKey.Degree(), 0) == 0
-    assert constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
 
 def test_atomconstraints_get_ring_membership():
-    constraints = AtomConstraintsAst(
-        [AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))]
+    constraints = AtomConstraintsForm(
+        [AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))]
     )
     assert AtomConstraintKey.RingMembership(RingScope.Size(6)) in constraints
     assert AtomConstraintKey.RingMembership(RingScope.All()) not in constraints
     assert constraints.get(
         AtomConstraintKey.RingMembership(RingScope.Size(6))
-    ) == AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))
+    ) == AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))
 
 
 def test_atomconstraints_valence():
-    constraints = AtomConstraintsAst(
+    constraints = AtomConstraintsForm(
         [
-            AtomConstraintAst.Valence(NumForm.Lit(4)),
-            AtomConstraintAst.Degree(NumForm.Lit(3)),
+            AtomConstraintForm.Valence(NumForm.Lit(4)),
+            AtomConstraintForm.Degree(NumForm.Lit(3)),
         ]
     )
     assert constraints.valence == NumForm.Lit(4)
@@ -139,12 +139,12 @@ def test_atomconstraints_valence():
 
 
 def test_atomconstraints_asdict():
-    constraints = AtomConstraintsAst(
+    constraints = AtomConstraintsForm(
         [
-            AtomConstraintAst.Valence(NumForm.Lit(4)),
-            AtomConstraintAst.Degree(NumForm.Lit(3)),
-            AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.All(), NumForm.Lit(2))),
-            AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))),
+            AtomConstraintForm.Valence(NumForm.Lit(4)),
+            AtomConstraintForm.Degree(NumForm.Lit(3)),
+            AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.All(), NumForm.Lit(2))),
+            AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))),
         ]
     )
     d = constraints.asdict()
@@ -156,8 +156,8 @@ def test_atomconstraints_asdict():
 
 
 def test_atomconstraints_ring_size_count():
-    constraints = AtomConstraintsAst(
-        [AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))]
+    constraints = AtomConstraintsForm(
+        [AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))]
     )
     assert constraints.ring_size_count[6] == NumForm.Lit(1)
     assert constraints.ring_size_count[5] is None
@@ -165,17 +165,17 @@ def test_atomconstraints_ring_size_count():
 
 
 def test_atomconstraintsast_set():
-    constraints = AtomConstraintsAst([])
-    constraints.set(AtomConstraintAst.Valence(NumForm.Lit(4)))
+    constraints = AtomConstraintsForm([])
+    constraints.set(AtomConstraintForm.Valence(NumForm.Lit(4)))
     assert len(constraints) == 1
-    assert constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
 
 def test_atomconstraintsast_pop():
-    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
-    assert constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
+    assert constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
     assert len(constraints) == 0
@@ -183,12 +183,12 @@ def test_atomconstraintsast_pop():
 
 
 def test_atomconstraintsast_update():
-    constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     constraints.update(
-        AtomConstraintsAst(
+        AtomConstraintsForm(
             [
-                AtomConstraintAst.Valence(NumForm.Lit(3)),
-                AtomConstraintAst.Degree(NumForm.Lit(2)),
+                AtomConstraintForm.Valence(NumForm.Lit(3)),
+                AtomConstraintForm.Degree(NumForm.Lit(2)),
             ]
         )
     )
@@ -200,35 +200,35 @@ def test_atomconstraintsast_update():
 def test_atomconstraintsview_set():
     mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.set(
-        AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(NumForm.Lit(1)))
+        AtomConstraintForm.AromaticValence(AromaticValenceForm.Aromatic(NumForm.Lit(1)))
     )
     # a fresh view proves the write hit the molecule, not a transient copy
     constraints = mol.atoms[0].constraints
     assert len(constraints) == 1
     assert constraints.get(
         AtomConstraintKey.AromaticValence()
-    ) == AtomConstraintAst.AromaticValence(AromaticValenceAst.Aromatic(NumForm.Lit(1)))
+    ) == AtomConstraintForm.AromaticValence(AromaticValenceForm.Aromatic(NumForm.Lit(1)))
 
 
 def test_atomconstraintsview_pop():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     mol = MoleculeAst.from_entries([atom])
     assert mol.atoms[0].constraints.pop(
         AtomConstraintKey.Valence()
-    ) == AtomConstraintAst.Valence(NumForm.Lit(4))
+    ) == AtomConstraintForm.Valence(NumForm.Lit(4))
     assert len(mol.atoms[0].constraints) == 0
 
 
 def test_atomconstraintsview_update():
     mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.update(
-        AtomConstraintsAst(
+        AtomConstraintsForm(
             [
-                AtomConstraintAst.Valence(NumForm.Lit(4)),
-                AtomConstraintAst.Degree(NumForm.Lit(3)),
+                AtomConstraintForm.Valence(NumForm.Lit(4)),
+                AtomConstraintForm.Degree(NumForm.Lit(3)),
             ]
         )
     )
@@ -239,10 +239,10 @@ def test_atomconstraintsview_update():
 
 def test_atomconstraintsview_atom_backed_set():
     atom = AtomForm(Element("C"))
-    atom.constraints.set(AtomConstraintAst.Valence(NumForm.Lit(4)))
+    atom.constraints.set(AtomConstraintForm.Valence(NumForm.Lit(4)))
     # a fresh view proves the write mutated the standalone atom in place
     assert len(atom.constraints) == 1
-    assert atom.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert atom.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
@@ -250,9 +250,9 @@ def test_atomconstraintsview_atom_backed_set():
 def test_atomconstraintsview_atom_backed_pop():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
-    assert atom.constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert atom.constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
     assert len(atom.constraints) == 0
@@ -261,10 +261,10 @@ def test_atomconstraintsview_atom_backed_pop():
 def test_atomconstraintsview_atom_backed_update():
     atom = AtomForm(Element("C"))
     atom.constraints.update(
-        AtomConstraintsAst(
+        AtomConstraintsForm(
             [
-                AtomConstraintAst.Valence(NumForm.Lit(4)),
-                AtomConstraintAst.Degree(NumForm.Lit(3)),
+                AtomConstraintForm.Valence(NumForm.Lit(4)),
+                AtomConstraintForm.Degree(NumForm.Lit(3)),
             ]
         )
     )
@@ -275,7 +275,7 @@ def test_atomconstraintsview_atom_backed_update():
 def test_atomconstraintsview_reads():
     atom = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     mol = MoleculeAst.from_entries([atom])
     constraints = mol.atoms[0].constraints
@@ -285,59 +285,59 @@ def test_atomconstraintsview_reads():
     assert constraints.valence == NumForm.Lit(4)
     assert set(constraints.asdict().keys()) == {"valence"}
     assert list(constraints) == [AtomConstraintKey.Valence()]
-    assert list(constraints.values()) == [AtomConstraintAst.Valence(NumForm.Lit(4))]
+    assert list(constraints.values()) == [AtomConstraintForm.Valence(NumForm.Lit(4))]
 
 
 def test_atomconstraints_valence_property():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.valence = 4
     assert cs.valence.as_lit() == 4
 
 
 def test_atomconstraints_aromatic_valence_int():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.aromatic_valence = 1
-    assert cs.aromatic_valence == AromaticValenceAst.Aromatic(NumForm.Lit(1))
+    assert cs.aromatic_valence == AromaticValenceForm.Aromatic(NumForm.Lit(1))
 
 
 def test_atomconstraints_aromatic_valence_false():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.aromatic_valence = False
-    assert cs.aromatic_valence == AromaticValenceAst.NotAromatic()
+    assert cs.aromatic_valence == AromaticValenceForm.NotAromatic()
 
 
 def test_atomconstraints_aromatic_valence_true_error():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     with pytest.raises(ValueError):
         cs.aromatic_valence = True
 
 
 def test_atomconstraints_multicenter_valence_int():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.multicenter_valence = 2
-    assert cs.multicenter_valence == MulticenterValenceAst.Multicenter(NumForm.Lit(2))
+    assert cs.multicenter_valence == MulticenterValenceForm.Multicenter(NumForm.Lit(2))
 
 
 def test_atomconstraints_tetrahedral_stereo_config():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.tetrahedral_stereo = TetrahedralConfiguration.Cw
     assert cs.tetrahedral_stereo == TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))
 
 
 def test_atomconstraints_tetrahedral_stereo_false():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.tetrahedral_stereo = False
     assert cs.tetrahedral_stereo == TetrahedralStereoForm.NotStereo()
 
 
 def test_atomconstraints_ring_count_property():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.ring_count = 2
     assert cs.ring_count.as_lit() == 2
 
 
 def test_atomconstraints_ring_size_count_subscript():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.ring_size_count[6] = 3
     assert cs.ring_size_count[6].as_lit() == 3
     del cs.ring_size_count[6]
@@ -348,7 +348,7 @@ def test_atomconstraintsview_property_on_molecule():
     mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.aromatic_valence = 1
     # a fresh view proves the write hit the molecule
-    assert mol.atoms[0].constraints.aromatic_valence == AromaticValenceAst.Aromatic(NumForm.Lit(1))
+    assert mol.atoms[0].constraints.aromatic_valence == AromaticValenceForm.Aromatic(NumForm.Lit(1))
 
 
 def test_atomconstraintsview_ring_size_count_on_molecule():
@@ -360,11 +360,11 @@ def test_atomconstraintsview_ring_size_count_on_molecule():
 
 
 def test_aromaticvalenceast_aromatic_int():
-    assert AromaticValenceAst.Aromatic(1) == AromaticValenceAst.Aromatic(NumForm.Lit(1))
+    assert AromaticValenceForm.Aromatic(1) == AromaticValenceForm.Aromatic(NumForm.Lit(1))
 
 
 def test_multicentervalenceast_multicenter_int():
-    assert MulticenterValenceAst.Multicenter(2) == MulticenterValenceAst.Multicenter(NumForm.Lit(2))
+    assert MulticenterValenceForm.Multicenter(2) == MulticenterValenceForm.Multicenter(NumForm.Lit(2))
 
 
 def test_tetrahedralconfiguration_enum():
@@ -380,20 +380,20 @@ def test_tetrahedralconfiguration_enum():
 
 
 def test_atomconstraint_eq_hash():
-    assert AtomConstraintAst.Valence(NumForm.Lit(4)) == AtomConstraintAst.Valence(
+    assert AtomConstraintForm.Valence(NumForm.Lit(4)) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
-    assert AtomConstraintAst.Valence(NumForm.Lit(4)) != AtomConstraintAst.Valence(
+    assert AtomConstraintForm.Valence(NumForm.Lit(4)) != AtomConstraintForm.Valence(
         NumForm.Lit(5)
     )
-    assert AtomConstraintAst.Valence(NumForm.Lit(4)) != AtomConstraintAst.Degree(
+    assert AtomConstraintForm.Valence(NumForm.Lit(4)) != AtomConstraintForm.Degree(
         NumForm.Lit(4)
     )
     assert (
         len(
             {
-                AtomConstraintAst.Valence(NumForm.Lit(4)),
-                AtomConstraintAst.Valence(NumForm.Lit(4)),
+                AtomConstraintForm.Valence(NumForm.Lit(4)),
+                AtomConstraintForm.Valence(NumForm.Lit(4)),
             }
         )
         == 1
@@ -401,10 +401,10 @@ def test_atomconstraint_eq_hash():
 
 
 def test_atomconstraint_repr():
-    x = AtomConstraintAst.RingMembership(RingMembershipAst(RingScope.Size(6), NumForm.Lit(1)))
+    x = AtomConstraintForm.RingMembership(RingMembershipForm(RingScope.Size(6), NumForm.Lit(1)))
     env = {
-        "AtomConstraintAst": AtomConstraintAst,
-        "RingMembershipAst": RingMembershipAst,
+        "AtomConstraintForm": AtomConstraintForm,
+        "RingMembershipForm": RingMembershipForm,
         "RingScope": RingScope,
         "NumForm": NumForm,
     }
@@ -424,29 +424,29 @@ def test_atomconstraintkey_eq_hash():
 
 
 def test_atomconstraintsast_eq_repr():
-    a = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
-    b = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    a = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
+    b = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert a == b
-    assert a != AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(5))])
-    assert repr(a) == "AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])"
+    assert a != AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(5))])
+    assert repr(a) == "AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])"
 
 
 def test_atomconstraintsast_unhashable():
     # mutable container: value-equal but unhashable, like AtomForm
     with pytest.raises(TypeError):
-        hash(AtomConstraintsAst([]))
+        hash(AtomConstraintsForm([]))
 
 
 def test_aromaticvalenceast_eq():
-    assert AromaticValenceAst.Aromatic(1) == AromaticValenceAst.Aromatic(1)
-    assert AromaticValenceAst.Aromatic(1) != AromaticValenceAst.NotAromatic()
+    assert AromaticValenceForm.Aromatic(1) == AromaticValenceForm.Aromatic(1)
+    assert AromaticValenceForm.Aromatic(1) != AromaticValenceForm.NotAromatic()
 
 
 def test_ringmembershipast_eq_repr():
-    a = RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
-    assert a == RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))
-    assert a != RingMembershipAst(RingScope.All(), NumForm.Lit(1))
-    assert repr(a) == "RingMembershipAst(RingScope.Size(6), NumForm.Lit(1))"
+    a = RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
+    assert a == RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
+    assert a != RingMembershipForm(RingScope.All(), NumForm.Lit(1))
+    assert repr(a) == "RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))"
 
 
 def test_atomconstraintsview_repr():
@@ -455,9 +455,9 @@ def test_atomconstraintsview_repr():
 
 
 def test_atomconstraints_getitem_delitem():
-    cs = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    cs = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert AtomConstraintKey.Valence() in cs
-    assert cs[AtomConstraintKey.Valence()] == AtomConstraintAst.Valence(NumForm.Lit(4))
+    assert cs[AtomConstraintKey.Valence()] == AtomConstraintForm.Valence(NumForm.Lit(4))
     with pytest.raises(KeyError):
         cs[AtomConstraintKey.Degree()]
     del cs[AtomConstraintKey.Valence()]
@@ -467,11 +467,11 @@ def test_atomconstraints_getitem_delitem():
 
 
 def test_atomconstraints_update_iterable():
-    cs = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
+    cs = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     cs.update(
         [
-            AtomConstraintAst.Valence(NumForm.Lit(2)),
-            AtomConstraintAst.Degree(NumForm.Lit(3)),
+            AtomConstraintForm.Valence(NumForm.Lit(2)),
+            AtomConstraintForm.Degree(NumForm.Lit(3)),
         ]
     )
     assert len(cs) == 2
@@ -479,8 +479,8 @@ def test_atomconstraints_update_iterable():
 
 
 def test_atomconstraints_update_container():
-    cs = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
-    cs.update(AtomConstraintsAst([AtomConstraintAst.Degree(NumForm.Lit(3))]))
+    cs = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
+    cs.update(AtomConstraintsForm([AtomConstraintForm.Degree(NumForm.Lit(3))]))
     assert len(cs) == 2
 
 
@@ -489,13 +489,13 @@ def test_atomconstraintsview_getitem_delitem():
         [
             AtomForm(
                 Element("C"),
-                constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+                constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
             )
         ]
     )
     cs = mol.atoms[0].constraints
     assert AtomConstraintKey.Valence() in cs
-    assert cs[AtomConstraintKey.Valence()] == AtomConstraintAst.Valence(NumForm.Lit(4))
+    assert cs[AtomConstraintKey.Valence()] == AtomConstraintForm.Valence(NumForm.Lit(4))
     with pytest.raises(KeyError):
         cs[AtomConstraintKey.Degree()]
     del mol.atoms[0].constraints[AtomConstraintKey.Valence()]
@@ -507,7 +507,7 @@ def test_atomconstraintsview_getitem_delitem():
 def test_atomconstraintsview_update_from_view():
     src = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints.update(src.constraints)
@@ -516,8 +516,8 @@ def test_atomconstraintsview_update_from_view():
 
 def test_atomast_set_constraints_from_value():
     dst = AtomForm(Element("N"))
-    dst.constraints = AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))])
-    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    dst.constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
+    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
@@ -525,17 +525,17 @@ def test_atomast_set_constraints_from_value():
 def test_atomast_set_constraints_from_view():
     src = AtomForm(
         Element("C"),
-        constraints=AtomConstraintsAst([AtomConstraintAst.Valence(NumForm.Lit(4))]),
+        constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
     dst = AtomForm(Element("N"))
     dst.constraints = src.constraints  # RHS is a live view, not a value container
-    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintAst.Valence(
+    assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
     )
 
 
 def test_ringsizecounts_len_iter_contains():
-    cs = AtomConstraintsAst([])
+    cs = AtomConstraintsForm([])
     cs.ring_size_count[6] = 3
     cs.ring_size_count[5] = 1
     rsc = cs.ring_size_count

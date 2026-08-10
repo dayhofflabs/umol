@@ -32,14 +32,14 @@ use umol_graph_ir::ir::{
 use crate::aromatic::AromaticSystemForm;
 use crate::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use crate::bond::BondForm;
-use crate::constraint::aromatic::AromaticSystemConstraintAst;
-use crate::constraint::atom::AtomConstraintAst;
-use crate::constraint::bond::BondConstraintAst;
-use crate::constraint::dative::DativeBondConstraintAst;
+use crate::constraint::aromatic::AromaticSystemConstraintForm;
+use crate::constraint::atom::AtomConstraintForm;
+use crate::constraint::bond::BondConstraintForm;
+use crate::constraint::dative::DativeBondConstraintForm;
 use crate::constraint::molecule::Constraint;
-use crate::constraint::multicenter::MulticenterBondConstraintAst;
-use crate::constraint::noncovalent::NoncovalentBondConstraintAst;
-use crate::constraint::stereo::{StereoAtomConstraintAst, StereoBondConstraintAst};
+use crate::constraint::multicenter::MulticenterBondConstraintForm;
+use crate::constraint::noncovalent::NoncovalentBondConstraintForm;
+use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
@@ -511,8 +511,8 @@ pub enum AtomDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<AtomConstraintAst>>,
-        new: Option<Py<AtomConstraintAst>>,
+        old: Option<Py<AtomConstraintForm>>,
+        new: Option<Py<AtomConstraintForm>>,
     },
 }
 
@@ -558,13 +558,13 @@ impl AtomDelta {
                 old: old
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, AtomConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
                 new: new
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, AtomConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, AtomConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
             },
@@ -650,8 +650,8 @@ pub enum BondDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<BondConstraintAst>>,
-        new: Option<Py<BondConstraintAst>>,
+        old: Option<Py<BondConstraintForm>>,
+        new: Option<Py<BondConstraintForm>>,
     },
 }
 
@@ -699,13 +699,13 @@ impl BondDelta {
                 old: old
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
                 new: new
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, BondConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, BondConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
             },
@@ -795,8 +795,8 @@ pub enum DativeBondDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<DativeBondConstraintAst>>,
-        new: Option<Py<DativeBondConstraintAst>>,
+        old: Option<Py<DativeBondConstraintForm>>,
+        new: Option<Py<DativeBondConstraintForm>>,
     },
 }
 
@@ -856,13 +856,13 @@ impl DativeBondDelta {
                 old: old
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
                 new: new
                     .as_ref()
                     .map(|constraint| {
-                        into_py_variant(py, DativeBondConstraintAst::from_rust(py, constraint)?)
+                        into_py_variant(py, DativeBondConstraintForm::from_rust(py, constraint)?)
                     })
                     .transpose()?,
             },
@@ -968,8 +968,8 @@ pub enum AromaticSystemDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<AromaticSystemConstraintAst>>,
-        new: Option<Py<AromaticSystemConstraintAst>>,
+        old: Option<Py<AromaticSystemConstraintForm>>,
+        new: Option<Py<AromaticSystemConstraintForm>>,
     },
 }
 
@@ -1025,7 +1025,7 @@ impl AromaticSystemDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                AromaticSystemConstraintAst::from_rust(py, constraint)?,
+                                AromaticSystemConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1034,7 +1034,7 @@ impl AromaticSystemDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                AromaticSystemConstraintAst::from_rust(py, constraint)?,
+                                AromaticSystemConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1132,8 +1132,8 @@ pub enum MulticenterBondDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<MulticenterBondConstraintAst>>,
-        new: Option<Py<MulticenterBondConstraintAst>>,
+        old: Option<Py<MulticenterBondConstraintForm>>,
+        new: Option<Py<MulticenterBondConstraintForm>>,
     },
 }
 
@@ -1189,7 +1189,7 @@ impl MulticenterBondDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                                MulticenterBondConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1198,7 +1198,7 @@ impl MulticenterBondDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                                MulticenterBondConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1296,8 +1296,8 @@ pub enum NoncovalentBondDelta {
     },
     ModifyConstraint {
         id: u32,
-        old: Option<Py<NoncovalentBondConstraintAst>>,
-        new: Option<Py<NoncovalentBondConstraintAst>>,
+        old: Option<Py<NoncovalentBondConstraintForm>>,
+        new: Option<Py<NoncovalentBondConstraintForm>>,
     },
 }
 
@@ -1353,7 +1353,7 @@ impl NoncovalentBondDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1362,7 +1362,7 @@ impl NoncovalentBondDelta {
                         .map(|constraint| {
                             into_py_variant(
                                 py,
-                                NoncovalentBondConstraintAst::from_rust(py, constraint)?,
+                                NoncovalentBondConstraintForm::from_rust(py, constraint)?,
                             )
                         })
                         .transpose()?,
@@ -1457,8 +1457,8 @@ pub enum StereoAtomDelta {
     ModifyConstraint {
         id: u32,
         kind: Option<StereoKind>,
-        old: Option<Py<StereoAtomConstraintAst>>,
-        new: Option<Py<StereoAtomConstraintAst>>,
+        old: Option<Py<StereoAtomConstraintForm>>,
+        new: Option<Py<StereoAtomConstraintForm>>,
     },
     Apply {
         id: u32,
@@ -1544,13 +1544,19 @@ impl StereoAtomDelta {
                     old: old
                         .as_ref()
                         .map(|constraint| {
-                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
+                            into_py_variant(
+                                py,
+                                StereoAtomConstraintForm::from_rust(py, constraint)?,
+                            )
                         })
                         .transpose()?,
                     new: new
                         .as_ref()
                         .map(|constraint| {
-                            into_py_variant(py, StereoAtomConstraintAst::from_rust(py, constraint)?)
+                            into_py_variant(
+                                py,
+                                StereoAtomConstraintForm::from_rust(py, constraint)?,
+                            )
                         })
                         .transpose()?,
                 }
@@ -1688,8 +1694,8 @@ pub enum StereoBondDelta {
     ModifyConstraint {
         id: u32,
         kind: Option<StereoKind>,
-        old: Option<Py<StereoBondConstraintAst>>,
-        new: Option<Py<StereoBondConstraintAst>>,
+        old: Option<Py<StereoBondConstraintForm>>,
+        new: Option<Py<StereoBondConstraintForm>>,
     },
     Apply {
         id: u32,
@@ -1771,11 +1777,11 @@ impl StereoBondDelta {
                     kind: kind.map(StereoKind::from_rust),
                     old: old
                         .as_ref()
-                        .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                        .map(|c| into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?))
                         .transpose()?,
                     new: new
                         .as_ref()
-                        .map(|c| into_py_variant(py, StereoBondConstraintAst::from_rust(py, c)?))
+                        .map(|c| into_py_variant(py, StereoBondConstraintForm::from_rust(py, c)?))
                         .transpose()?,
                 }
             }
@@ -3148,7 +3154,7 @@ mod tests {
             old: None,
             new: Some(GraphIrAtomConstraintForm::Valence(GraphIrNumForm::Lit(4))),
         },
-        "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintAst.Valence(NumForm.Lit(4)))",
+        "AtomDelta.ModifyConstraint(id=3, old=None, new=AtomConstraintForm.Valence(NumForm.Lit(4)))",
     )]
     fn test_atom_delta_repr(#[case] delta: GraphIrAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3321,7 +3327,7 @@ mod tests {
             old: None,
             new: Some(GraphIrBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
-        "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
+        "BondDelta.ModifyConstraint(id=2, old=None, new=BondConstraintForm.Aromatic(BooleanForm.Lit(True)))",
     )]
     fn test_bond_delta_repr(#[case] delta: GraphIrBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3507,7 +3513,7 @@ mod tests {
             old: None,
             new: Some(GraphIrDativeBondConstraintForm::Aromatic(GraphIrBooleanForm::Lit(true))),
         },
-        "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintAst.Aromatic(BooleanForm.Lit(True)))",
+        "DativeBondDelta.ModifyConstraint(id=1, old=None, new=DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True)))",
     )]
     fn test_dative_bond_delta_repr(#[case] delta: GraphIrDativeBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -3690,7 +3696,7 @@ mod tests {
             old: None,
             new: Some(GraphIrAromaticSystemConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
-        "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintAst.ElectronCount(NumForm.Lit(6)))",
+        "AromaticSystemDelta.ModifyConstraint(id=2, old=None, new=AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6)))",
     )]
     fn test_aromatic_system_delta_repr(
         #[case] delta: GraphIrAromaticSystemDelta,
@@ -3874,7 +3880,7 @@ mod tests {
             old: None,
             new: Some(GraphIrMulticenterBondConstraintForm::ElectronCount(GraphIrNumForm::Lit(6))),
         },
-        "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6)))",
+        "MulticenterBondDelta.ModifyConstraint(id=3, old=None, new=MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6)))",
     )]
     fn test_multicenter_bond_delta_repr(
         #[case] delta: GraphIrMulticenterBondDelta,
@@ -4058,7 +4064,7 @@ mod tests {
             old: None,
             new: Some(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Lit(true))),
         },
-        "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True)))",
+        "NoncovalentBondDelta.ModifyConstraint(id=4, old=None, new=NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True)))",
     )]
     fn test_noncovalent_bond_delta_repr(
         #[case] delta: GraphIrNoncovalentBondDelta,
@@ -4324,7 +4330,7 @@ mod tests {
                 GraphIrStereogenicityForm::Undetermined,
             )),
         },
-        "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+        "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
     )]
     #[case::apply(
         GraphIrStereoAtomDelta::Apply {
@@ -4643,7 +4649,7 @@ mod tests {
                 GraphIrStereogenicityForm::Undetermined,
             )),
         },
-        "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintAst.Stereogenicity(StereogenicityAst.Undetermined()))",
+        "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
     )]
     #[case::apply(
         GraphIrStereoBondDelta::Apply {
@@ -4833,14 +4839,14 @@ mod tests {
             GraphIrAtomId(3),
             GraphIrAtomConstraintForm::degree(2),
         )),
-        "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2))))",
+        "ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2))))",
     )]
     #[case::remove_recursive(
         GraphIrConstraintDelta::Remove(GraphIrConstraint::And(vec![
             GraphIrConstraint::Atom(GraphIrAtomId(7), GraphIrAtomConstraintForm::valence(4)),
             GraphIrConstraint::Not(Box::new(GraphIrConstraint::Or(Vec::new()))),
         ])),
-        "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintAst.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
+        "ConstraintDelta.Remove(constraint=Constraint.And([Constraint.Atom(7, AtomConstraintForm.Valence(NumForm.Lit(4))), Constraint.Not(Constraint.Or([]))]))",
     )]
     fn test_constraint_delta_repr(#[case] delta: GraphIrConstraintDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -5014,7 +5020,7 @@ mod tests {
             GraphIrAtomId(3),
             GraphIrAtomConstraintForm::degree(2),
         ))),
-        "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))"
+        "Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2)))))"
     )]
     fn test_delta_repr(#[case] delta: GraphIrDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -5194,7 +5200,7 @@ mod tests {
                 GraphIrAtomConstraintForm::degree(2),
             ))),
         ],
-        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomForm.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintAst.Degree(NumForm.Lit(2)))))])",
+        "Deltas([Delta.Atom(AtomDelta.Add(id=3, ast=AtomForm.parse('C'))), Delta.Constraint(ConstraintDelta.Add(constraint=Constraint.Atom(3, AtomConstraintForm.Degree(NumForm.Lit(2)))))])",
     )]
     fn test_deltas_repr(#[case] entries: Vec<GraphIrDelta>, #[case] expected: &str) {
         Python::attach(|py| {

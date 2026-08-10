@@ -18,13 +18,12 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::noncovalent::{
-    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsAst,
-    NoncovalentBondConstraintsBacking, NoncovalentBondConstraintsLike,
-    NoncovalentBondConstraintsView,
+    noncovalent_bond_constraints_asdict, NoncovalentBondConstraintsBacking,
+    NoncovalentBondConstraintsForm, NoncovalentBondConstraintsLike, NoncovalentBondConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::noncovalent::{
-    NoncovalentBondConstraintAst, NoncovalentBondConstraintKey, NoncovalentBondConstraintsUpdate,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsUpdate,
 };
 use crate::convert::{hash_rust, variant_repr};
 use crate::error::parse_error;
@@ -159,7 +158,7 @@ impl NoncovalentBondUpdate {
     fn new(
         py: Python<'_>,
         kind: Option<NoncovalentBondKindLike>,
-        constraints: Option<Py<NoncovalentBondConstraintsAst>>,
+        constraints: Option<Py<NoncovalentBondConstraintsForm>>,
     ) -> Self {
         Self::from_rust(&GraphIrNoncovalentBondUpdate {
             kind: kind.map(|value| value.to_rust(py)),
@@ -199,8 +198,8 @@ impl NoncovalentBondUpdate {
     }
 
     #[getter]
-    fn constraints(&self) -> NoncovalentBondConstraintsAst {
-        NoncovalentBondConstraintsAst::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> NoncovalentBondConstraintsForm {
+        NoncovalentBondConstraintsForm::from_inner(self.0.constraints.clone())
     }
 }
 
@@ -232,7 +231,7 @@ impl NoncovalentBondForm {
     fn new(
         py: Python<'_>,
         kind: NoncovalentBondKindLike,
-        constraints: Option<Py<NoncovalentBondConstraintsAst>>,
+        constraints: Option<Py<NoncovalentBondConstraintsForm>>,
     ) -> Self {
         let mut bond = GraphIrNoncovalentBondForm::new(kind.to_rust(py));
         if let Some(constraints) = constraints {
@@ -644,11 +643,11 @@ mod tests {
         });
     }
 
-    /// A `Py<NoncovalentBondConstraintAst>` for `Intramolecular(b)`.
-    fn intramolecular(py: Python<'_>, b: bool) -> Py<NoncovalentBondConstraintAst> {
+    /// A `Py<NoncovalentBondConstraintForm>` for `Intramolecular(b)`.
+    fn intramolecular(py: Python<'_>, b: bool) -> Py<NoncovalentBondConstraintForm> {
         into_py_variant(
             py,
-            NoncovalentBondConstraintAst::from_rust(
+            NoncovalentBondConstraintForm::from_rust(
                 py,
                 &GraphIrNoncovalentBondConstraintForm::intramolecular(b),
             )
@@ -673,10 +672,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraint_ast_key() {
+    fn test_noncovalent_bond_constraint_form_key() {
         Python::attach(|py| {
             let constraint = GraphIrNoncovalentBondConstraintForm::intramolecular(true);
-            let key = NoncovalentBondConstraintAst::from_rust(py, &constraint)
+            let key = NoncovalentBondConstraintForm::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
             assert_eq!(
@@ -690,12 +689,12 @@ mod tests {
     #[case(GraphIrNoncovalentBondConstraintForm::intramolecular(true))]
     #[case(GraphIrNoncovalentBondConstraintForm::intramolecular(false))]
     #[case(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Undetermined))]
-    fn test_noncovalent_bond_constraint_ast_roundtrip(
+    fn test_noncovalent_bond_constraint_form_roundtrip(
         #[case] ast: GraphIrNoncovalentBondConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                NoncovalentBondConstraintAst::from_rust(py, &ast)
+                NoncovalentBondConstraintForm::from_rust(py, &ast)
                     .unwrap()
                     .to_rust(py),
                 ast
@@ -704,10 +703,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_new() {
+    fn test_noncovalent_bond_constraints_form_new() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.intramolecular().to_rust(),
@@ -717,21 +716,21 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_repr() {
+    fn test_noncovalent_bond_constraints_form_repr() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "NoncovalentBondConstraintsAst([NoncovalentBondConstraintAst.Intramolecular(BooleanForm.Lit(True))])"
+                "NoncovalentBondConstraintsForm([NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(True))])"
             );
         });
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_set() {
+    fn test_noncovalent_bond_constraints_form_set() {
         Python::attach(|py| {
-            let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let mut constraints = NoncovalentBondConstraintsForm::new(py, vec![]);
             constraints.set(py, intramolecular(py, false));
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
@@ -742,13 +741,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_pop() {
+    fn test_noncovalent_bond_constraints_form_pop() {
         Python::attach(|py| {
             let mut constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             let removed = constraints.pop(py, intramolecular_key(py)).unwrap();
             match removed {
-                Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
+                Some(NoncovalentBondConstraintForm::Intramolecular(b)) => {
                     assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
@@ -758,16 +757,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_update_container() {
+    fn test_noncovalent_bond_constraints_form_update_container() {
         Python::attach(|py| {
-            let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, NoncovalentBondConstraintsForm::new(py, vec![])).unwrap();
             let mut other = GraphIrNoncovalentBondConstraintsForm::new();
             other.set(GraphIrNoncovalentBondConstraintForm::intramolecular(true));
-            NoncovalentBondConstraintsAst::update(
+            NoncovalentBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsUpdate::Container(
-                    Py::new(py, NoncovalentBondConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, NoncovalentBondConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -779,10 +778,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_update_entries() {
+    fn test_noncovalent_bond_constraints_form_update_entries() {
         Python::attach(|py| {
-            let constraints = Py::new(py, NoncovalentBondConstraintsAst::new(py, vec![])).unwrap();
-            NoncovalentBondConstraintsAst::update(
+            let constraints = Py::new(py, NoncovalentBondConstraintsForm::new(py, vec![])).unwrap();
+            NoncovalentBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsUpdate::Entries(vec![intramolecular(py, false)]),
@@ -798,14 +797,14 @@ mod tests {
     /// Regression: a container updating itself resolves `other` before the write borrow,
     /// so it is an idempotent no-op, not a RefCell double-borrow panic.
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_update_self() {
+    fn test_noncovalent_bond_constraints_form_update_self() {
         Python::attach(|py| {
             let constraints = Py::new(
                 py,
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]),
             )
             .unwrap();
-            NoncovalentBondConstraintsAst::update(
+            NoncovalentBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 NoncovalentBondConstraintsUpdate::Container(constraints.clone_ref(py)),
@@ -819,22 +818,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_len_contains() {
+    fn test_noncovalent_bond_constraints_form_len_contains() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             assert_eq!(constraints.__len__(), 1);
             assert!(constraints.__contains__(py, intramolecular_key(py)));
-            let empty = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let empty = NoncovalentBondConstraintsForm::new(py, vec![]);
             assert!(!empty.__contains__(py, intramolecular_key(py)));
         });
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_keys_values_items() {
+    fn test_noncovalent_bond_constraints_form_keys_values_items() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             let mut keys = constraints.keys(py).unwrap();
             assert_eq!(
                 keys.__next__().unwrap().bind(py).borrow().to_rust(),
@@ -860,30 +859,30 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_get() {
+    fn test_noncovalent_bond_constraints_form_get() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             let present = constraints.get(py, intramolecular_key(py), None).unwrap();
             let expected = intramolecular(py, true).into_any();
             assert!(present.bind(py).eq(expected.bind(py)).unwrap());
             // absent → None
-            let empty = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let empty = NoncovalentBondConstraintsForm::new(py, vec![]);
             let absent = empty.get(py, intramolecular_key(py), None).unwrap();
             assert!(absent.bind(py).is_none());
         });
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_intramolecular() {
+    fn test_noncovalent_bond_constraints_form_intramolecular() {
         Python::attach(|py| {
-            let present = NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+            let present = NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             assert_eq!(
                 present.intramolecular().to_rust(),
                 GraphIrBooleanForm::Lit(true)
             );
             // absent → Undetermined (non-optional accessor)
-            let empty = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let empty = NoncovalentBondConstraintsForm::new(py, vec![]);
             assert_eq!(
                 empty.intramolecular().to_rust(),
                 GraphIrBooleanForm::Undetermined
@@ -892,9 +891,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_set_intramolecular() {
+    fn test_noncovalent_bond_constraints_form_set_intramolecular() {
         Python::attach(|py| {
-            let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let mut constraints = NoncovalentBondConstraintsForm::new(py, vec![]);
             constraints.set_intramolecular(py, BooleanLike::Lit(false));
             assert_eq!(
                 constraints.intramolecular().to_rust(),
@@ -904,26 +903,26 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_getitem_error() {
+    fn test_noncovalent_bond_constraints_form_getitem_error() {
         Python::attach(|py| {
-            let constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let constraints = NoncovalentBondConstraintsForm::new(py, vec![]);
             assert!(constraints.__getitem__(py, intramolecular_key(py)).is_err());
         });
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_delitem_error() {
+    fn test_noncovalent_bond_constraints_form_delitem_error() {
         Python::attach(|py| {
-            let mut constraints = NoncovalentBondConstraintsAst::new(py, vec![]);
+            let mut constraints = NoncovalentBondConstraintsForm::new(py, vec![]);
             assert!(constraints.__delitem__(py, intramolecular_key(py)).is_err());
         });
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_ast_asdict() {
+    fn test_noncovalent_bond_constraints_form_asdict() {
         Python::attach(|py| {
             let constraints =
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]);
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]);
             let dict = constraints.asdict(py).unwrap();
             let value = dict.get_item("intramolecular").unwrap().unwrap();
             let expected = into_py_variant(py, BooleanForm::Lit(true)).unwrap();
@@ -963,7 +962,7 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(
                 py,
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]),
             )
             .unwrap();
             let bond = NoncovalentBondForm::new(
@@ -1024,7 +1023,7 @@ mod tests {
             let bond = hbond(py);
             let constraints = Py::new(
                 py,
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, true)]),
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, true)]),
             )
             .unwrap();
             NoncovalentBondForm::set_constraints(
@@ -1171,7 +1170,7 @@ mod tests {
             };
             let removed = view.pop(py, intramolecular_key(py)).unwrap();
             match removed {
-                Some(NoncovalentBondConstraintAst::Intramolecular(b)) => {
+                Some(NoncovalentBondConstraintForm::Intramolecular(b)) => {
                     assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Intramolecular(Lit(true))"),
@@ -1345,7 +1344,7 @@ mod tests {
             };
             let constraints = Py::new(
                 py,
-                NoncovalentBondConstraintsAst::new(py, vec![intramolecular(py, false)]),
+                NoncovalentBondConstraintsForm::new(py, vec![intramolecular(py, false)]),
             )
             .unwrap();
             view.set_constraints(py, NoncovalentBondConstraintsLike::Container(constraints))

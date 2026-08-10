@@ -13,7 +13,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::bond::{
-    bond_constraints_asdict, BondConstraintsAst, BondConstraintsBacking, BondConstraintsLike,
+    bond_constraints_asdict, BondConstraintsBacking, BondConstraintsForm, BondConstraintsLike,
     BondConstraintsView,
 };
 use crate::convert::hash_rust;
@@ -37,7 +37,7 @@ impl BondUpdate {
         order: Option<NumLike>,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<BondConstraintsAst>>,
+        constraints: Option<Py<BondConstraintsForm>>,
     ) -> Self {
         Self::from_rust(&GraphIrBondUpdate {
             order: order.map(|value| value.to_rust(py)),
@@ -99,8 +99,8 @@ impl BondUpdate {
     }
 
     #[getter]
-    fn constraints(&self) -> BondConstraintsAst {
-        BondConstraintsAst::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> BondConstraintsForm {
+        BondConstraintsForm::from_inner(self.0.constraints.clone())
     }
 }
 
@@ -130,7 +130,7 @@ impl BondForm {
         order: NumLike,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
-        constraints: Option<Py<BondConstraintsAst>>,
+        constraints: Option<Py<BondConstraintsForm>>,
     ) -> Self {
         let mut bond = GraphIrBondForm::new(order.to_rust(py));
         if let Some(charge) = charge {
@@ -548,7 +548,7 @@ mod tests {
 
     use super::*;
     use crate::boolean::BooleanLike;
-    use crate::constraint::bond::{BondConstraintAst, BondConstraintKey, BondConstraintsUpdate};
+    use crate::constraint::bond::{BondConstraintForm, BondConstraintKey, BondConstraintsUpdate};
     use crate::convert::into_py_variant;
     use crate::stereo::{CisTransConfiguration, CisTransStereoForm, CisTransStereoLike};
 
@@ -630,21 +630,21 @@ mod tests {
     )]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2))]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1))]
-    fn test_bond_constraint_ast_roundtrip(#[case] ast: GraphIrBondConstraintForm) {
+    fn test_bond_constraint_form_roundtrip(#[case] ast: GraphIrBondConstraintForm) {
         Python::attach(|py| {
             assert_eq!(
-                BondConstraintAst::from_rust(py, &ast).unwrap().to_rust(py),
+                BondConstraintForm::from_rust(py, &ast).unwrap().to_rust(py),
                 ast
             );
         });
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_len_contains() {
+    fn test_bond_constraints_form_len_contains() {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -653,14 +653,14 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = BondConstraintsAst::new(py, vec![aromatic, ring]);
+            let constraints = BondConstraintsForm::new(py, vec![aromatic, ring]);
             assert_eq!(constraints.__len__(), 2);
             assert!(constraints.__contains__(
                 py,
@@ -674,11 +674,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_keys_values_items() {
+    fn test_bond_constraints_form_keys_values_items() {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -687,14 +687,14 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = BondConstraintsAst::new(py, vec![aromatic, ring]);
+            let constraints = BondConstraintsForm::new(py, vec![aromatic, ring]);
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
@@ -727,18 +727,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_get() {
+    fn test_bond_constraints_form_get() {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = BondConstraintsAst::new(py, vec![aromatic]);
+            let constraints = BondConstraintsForm::new(py, vec![aromatic]);
             let present = constraints
                 .get(
                     py,
@@ -748,7 +748,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -780,22 +780,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_aromatic() {
+    fn test_bond_constraints_form_aromatic() {
         Python::attach(|py| {
-            let empty = BondConstraintsAst::new(py, vec![]);
+            let empty = BondConstraintsForm::new(py, vec![]);
             assert_eq!(empty.aromatic().to_rust(), GraphIrBooleanForm::Undetermined);
             assert!(empty.cis_trans_stereo(py).unwrap().is_none());
             assert!(empty.ring_count(py).unwrap().is_none());
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = BondConstraintsAst::new(py, vec![aromatic]);
+            let constraints = BondConstraintsForm::new(py, vec![aromatic]);
             assert_eq!(
                 constraints.aromatic().to_rust(),
                 GraphIrBooleanForm::Lit(true)
@@ -804,19 +804,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_ring_size_count() {
+    fn test_bond_constraints_form_ring_size_count() {
         Python::attach(|py| {
             let membership = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![membership])).unwrap();
-            let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![membership])).unwrap();
+            let proxy = BondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(1)
@@ -832,12 +832,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_set() {
+    fn test_bond_constraints_form_set() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -854,18 +854,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_pop() {
+    fn test_bond_constraints_form_pop() {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let mut constraints = BondConstraintsAst::new(py, vec![aromatic]);
+            let mut constraints = BondConstraintsForm::new(py, vec![aromatic]);
             let removed = constraints
                 .pop(
                     py,
@@ -873,7 +873,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(BondConstraintAst::Aromatic(b)) => {
+                Some(BondConstraintForm::Aromatic(b)) => {
                     assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
@@ -883,9 +883,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_update() {
+    fn test_bond_constraints_form_update() {
         Python::attach(|py| {
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![])).unwrap();
             let mut other = GraphIrBondConstraintsForm::new();
             other.set(GraphIrBondConstraintForm::aromatic(
                 GraphIrBooleanForm::Lit(true),
@@ -894,11 +894,11 @@ mod tests {
                 GraphIrRingScope::All,
                 2,
             ));
-            BondConstraintsAst::update(
+            BondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 BondConstraintsUpdate::Container(
-                    Py::new(py, BondConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, BondConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -913,12 +913,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_update_entries() {
+    fn test_bond_constraints_form_update_entries() {
         Python::attach(|py| {
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![])).unwrap();
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -927,14 +927,14 @@ mod tests {
             .unwrap();
             let ring = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2),
                 )
                 .unwrap(),
             )
             .unwrap();
-            BondConstraintsAst::update(
+            BondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 BondConstraintsUpdate::Entries(vec![aromatic, ring]),
@@ -947,19 +947,19 @@ mod tests {
     /// Regression: a container updating itself resolves `other` before the write borrow,
     /// so it is an idempotent no-op, not a RefCell double-borrow panic.
     #[rstest]
-    fn test_bond_constraints_ast_update_self() {
+    fn test_bond_constraints_form_update_self() {
         Python::attach(|py| {
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![aromatic])).unwrap();
-            BondConstraintsAst::update(
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![aromatic])).unwrap();
+            BondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 BondConstraintsUpdate::Container(constraints.clone_ref(py)),
@@ -1033,9 +1033,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_set_aromatic() {
+    fn test_bond_constraints_form_set_aromatic() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             constraints.set_aromatic(py, BooleanLike::Lit(true));
             assert_eq!(
                 constraints.aromatic().to_rust(),
@@ -1050,9 +1050,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_set_cis_trans_stereo() {
+    fn test_bond_constraints_form_set_cis_trans_stereo() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             constraints
                 .set_cis_trans_stereo(py, CisTransStereoLike::Config(CisTransConfiguration::E))
                 .unwrap();
@@ -1076,9 +1076,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_set_cis_trans_stereo_error() {
+    fn test_bond_constraints_form_set_cis_trans_stereo_error() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             assert!(constraints
                 .set_cis_trans_stereo(py, CisTransStereoLike::Flag(true))
                 .is_err());
@@ -1086,9 +1086,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_set_ring_count() {
+    fn test_bond_constraints_form_set_ring_count() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             constraints.set_ring_count(py, NumLike::Lit(2));
             assert_eq!(
                 constraints.ring_count(py).unwrap().unwrap().to_rust(py),
@@ -1098,18 +1098,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_getitem_error() {
+    fn test_bond_constraints_form_getitem_error() {
         Python::attach(|py| {
-            let constraints = BondConstraintsAst::new(py, vec![]);
+            let constraints = BondConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, BondConstraintKey::Aromatic()).unwrap();
             assert!(constraints.__getitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_bond_constraints_ast_delitem_error() {
+    fn test_bond_constraints_form_delitem_error() {
         Python::attach(|py| {
-            let mut constraints = BondConstraintsAst::new(py, vec![]);
+            let mut constraints = BondConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, BondConstraintKey::Aromatic()).unwrap();
             assert!(constraints.__delitem__(py, key).is_err());
         });
@@ -1124,7 +1124,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )
@@ -1144,7 +1144,7 @@ mod tests {
                 )
                 .unwrap()
             {
-                BondConstraintAst::Aromatic(b) => {
+                BondConstraintForm::Aromatic(b) => {
                     assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected Aromatic(Lit(true))"),
@@ -1172,7 +1172,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(BondConstraintAst::Aromatic(b)) => {
+                Some(BondConstraintForm::Aromatic(b)) => {
                     assert_eq!(b.bind(py).borrow().to_rust(), GraphIrBooleanForm::Lit(true))
                 }
                 _ => panic!("expected removed Aromatic(Lit(true))"),
@@ -1202,7 +1202,7 @@ mod tests {
             view.update(
                 py,
                 BondConstraintsUpdate::Container(
-                    Py::new(py, BondConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, BondConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1238,8 +1238,8 @@ mod tests {
     #[rstest]
     fn test_bond_ring_size_counts_value_backed() {
         Python::attach(|py| {
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
-            let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![])).unwrap();
+            let proxy = BondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3));
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
@@ -1276,8 +1276,8 @@ mod tests {
     #[rstest]
     fn test_bond_ring_size_counts_len_iter_contains() {
         Python::attach(|py| {
-            let constraints = Py::new(py, BondConstraintsAst::new(py, vec![])).unwrap();
-            let proxy = BondConstraintsAst::ring_size_count(constraints.clone_ref(py));
+            let constraints = Py::new(py, BondConstraintsForm::new(py, vec![])).unwrap();
+            let proxy = BondConstraintsForm::ring_size_count(constraints.clone_ref(py));
             proxy.__setitem__(py, 6, NumLike::Lit(3));
             proxy.__setitem__(py, 5, NumLike::Lit(1));
             assert_eq!(proxy.__len__(py).unwrap(), 2);
@@ -1379,7 +1379,7 @@ mod tests {
             };
             let aromatic = into_py_variant(
                 py,
-                BondConstraintAst::from_rust(
+                BondConstraintForm::from_rust(
                     py,
                     &GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )

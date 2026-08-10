@@ -5,8 +5,8 @@ from umol import (
     AromaticSystemFieldChange,
     AromaticSystemUpdate,
     AtomForm,
-    AtomConstraintAst,
-    AtomConstraintsAst,
+    AtomConstraintForm,
+    AtomConstraintsForm,
     AtomFieldChange,
     AtomUpdate,
     BondForm,
@@ -74,7 +74,7 @@ def test_new_error(index):
 
 def test_constraint_edit():
     constraint = Constraint.Atom(
-        0, AtomConstraintAst.Valence(NumForm.Lit(4))
+        0, AtomConstraintForm.Valence(NumForm.Lit(4))
     )
 
     identity = ConstraintEdit(constraint)
@@ -374,8 +374,8 @@ def test_edits_update_empty():
 
 def test_edits_update():
     edits = Edits()
-    atom_constraints = AtomConstraintsAst(
-        [AtomConstraintAst.Valence(NumForm.Lit(4))]
+    atom_constraints = AtomConstraintsForm(
+        [AtomConstraintForm.Valence(NumForm.Lit(4))]
     )
 
     edits.update_atom(
@@ -444,8 +444,8 @@ def test_edits_update():
         ),
         Edit.ModifyAtomConstraint(
             id=New(0),
-            old=AtomConstraintAst.Valence(NumForm.Lit(3)),
-            new=AtomConstraintAst.Valence(NumForm.Lit(4)),
+            old=AtomConstraintForm.Valence(NumForm.Lit(3)),
+            new=AtomConstraintForm.Valence(NumForm.Lit(4)),
         ),
         Edit.ModifyBondField(
             id=0,

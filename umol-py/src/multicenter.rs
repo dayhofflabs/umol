@@ -15,13 +15,12 @@ use umol_graph_ir::ir::{
 };
 
 use crate::constraint::multicenter::{
-    multicenter_bond_constraints_asdict, MulticenterBondConstraintsAst,
-    MulticenterBondConstraintsBacking, MulticenterBondConstraintsLike,
-    MulticenterBondConstraintsView,
+    multicenter_bond_constraints_asdict, MulticenterBondConstraintsBacking,
+    MulticenterBondConstraintsForm, MulticenterBondConstraintsLike, MulticenterBondConstraintsView,
 };
 #[cfg(test)]
 use crate::constraint::multicenter::{
-    MulticenterBondConstraintAst, MulticenterBondConstraintKey, MulticenterBondConstraintsUpdate,
+    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsUpdate,
 };
 use crate::convert::hash_rust;
 use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
@@ -45,7 +44,7 @@ impl MulticenterBondUpdate {
         electrons: Option<ElectronCountsLike>,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsUpdate>>,
-        constraints: Option<Py<MulticenterBondConstraintsAst>>,
+        constraints: Option<Py<MulticenterBondConstraintsForm>>,
     ) -> Self {
         Self::from_rust(&GraphIrMulticenterBondUpdate {
             electrons: electrons.map(|value| value.to_rust(py)),
@@ -103,8 +102,8 @@ impl MulticenterBondUpdate {
     }
 
     #[getter]
-    fn constraints(&self) -> MulticenterBondConstraintsAst {
-        MulticenterBondConstraintsAst::from_inner(self.0.constraints.clone())
+    fn constraints(&self) -> MulticenterBondConstraintsForm {
+        MulticenterBondConstraintsForm::from_inner(self.0.constraints.clone())
     }
 }
 
@@ -137,7 +136,7 @@ impl MulticenterBondForm {
         electrons: ElectronCountsLike,
         charge: Option<NumLike>,
         unpaired_electrons: Option<PyRef<'_, UnpairedElectronsForm>>,
-        constraints: Option<Py<MulticenterBondConstraintsAst>>,
+        constraints: Option<Py<MulticenterBondConstraintsForm>>,
     ) -> Self {
         let mut bond = GraphIrMulticenterBondForm::new(electrons.to_rust(py));
         if let Some(charge) = charge {
@@ -621,7 +620,7 @@ mod tests {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
@@ -629,7 +628,7 @@ mod tests {
             )
             .unwrap();
             let constraints =
-                Py::new(py, MulticenterBondConstraintsAst::new(py, vec![ec])).unwrap();
+                Py::new(py, MulticenterBondConstraintsForm::new(py, vec![ec])).unwrap();
             let bond = MulticenterBondForm::new(
                 py,
                 ElectronCountsLike::Lit(vec![1, 1, 1]),
@@ -883,11 +882,11 @@ mod tests {
             };
             let constraints = Py::new(
                 py,
-                MulticenterBondConstraintsAst::new(
+                MulticenterBondConstraintsForm::new(
                     py,
                     vec![into_py_variant(
                         py,
-                        MulticenterBondConstraintAst::from_rust(
+                        MulticenterBondConstraintForm::from_rust(
                             py,
                             &GraphIrMulticenterBondConstraintForm::electron_count(6),
                         )
@@ -1066,10 +1065,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraint_ast_key() {
+    fn test_multicenter_bond_constraint_form_key() {
         Python::attach(|py| {
             let constraint = GraphIrMulticenterBondConstraintForm::electron_count(6);
-            let key = MulticenterBondConstraintAst::from_rust(py, &constraint)
+            let key = MulticenterBondConstraintForm::from_rust(py, &constraint)
                 .unwrap()
                 .key(py);
             assert_eq!(
@@ -1082,12 +1081,12 @@ mod tests {
     #[rstest]
     #[case(GraphIrMulticenterBondConstraintForm::electron_count(6))]
     #[case(GraphIrMulticenterBondConstraintForm::electron_count(GraphIrNumForm::Undetermined))]
-    fn test_multicenter_bond_constraint_ast_roundtrip(
+    fn test_multicenter_bond_constraint_form_roundtrip(
         #[case] ast: GraphIrMulticenterBondConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                MulticenterBondConstraintAst::from_rust(py, &ast)
+                MulticenterBondConstraintForm::from_rust(py, &ast)
                     .unwrap()
                     .to_rust(py),
                 ast
@@ -1096,18 +1095,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_new() {
+    fn test_multicenter_bond_constraints_form_new() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
@@ -1117,32 +1116,32 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_repr() {
+    fn test_multicenter_bond_constraints_form_repr() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             assert_eq!(
                 constraints.__repr__(py).unwrap(),
-                "MulticenterBondConstraintsAst([MulticenterBondConstraintAst.ElectronCount(NumForm.Lit(6))])"
+                "MulticenterBondConstraintsForm([MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6))])"
             );
         });
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_set() {
+    fn test_multicenter_bond_constraints_form_set() {
         Python::attach(|py| {
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let mut constraints = MulticenterBondConstraintsForm::new(py, vec![]);
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
@@ -1159,22 +1158,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_pop() {
+    fn test_multicenter_bond_constraints_form_pop() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let mut constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             let key = into_py_variant(py, MulticenterBondConstraintKey::ElectronCount()).unwrap();
             let removed = constraints.pop(py, key).unwrap();
             match removed {
-                Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
+                Some(MulticenterBondConstraintForm::ElectronCount(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
@@ -1184,16 +1183,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_update() {
+    fn test_multicenter_bond_constraints_form_update() {
         Python::attach(|py| {
-            let constraints = Py::new(py, MulticenterBondConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, MulticenterBondConstraintsForm::new(py, vec![])).unwrap();
             let mut other = GraphIrMulticenterBondConstraintsForm::new();
             other.set(GraphIrMulticenterBondConstraintForm::electron_count(6));
-            MulticenterBondConstraintsAst::update(
+            MulticenterBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 MulticenterBondConstraintsUpdate::Container(
-                    Py::new(py, MulticenterBondConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, MulticenterBondConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1207,19 +1206,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_update_entries() {
+    fn test_multicenter_bond_constraints_form_update_entries() {
         Python::attach(|py| {
-            let constraints = Py::new(py, MulticenterBondConstraintsAst::new(py, vec![])).unwrap();
+            let constraints = Py::new(py, MulticenterBondConstraintsForm::new(py, vec![])).unwrap();
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            MulticenterBondConstraintsAst::update(
+            MulticenterBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 MulticenterBondConstraintsUpdate::Entries(vec![ec]),
@@ -1237,11 +1236,11 @@ mod tests {
     /// Regression: a container updating itself resolves `other` before the write borrow,
     /// so it is an idempotent no-op, not a RefCell double-borrow panic.
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_update_self() {
+    fn test_multicenter_bond_constraints_form_update_self() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
@@ -1249,8 +1248,8 @@ mod tests {
             )
             .unwrap();
             let constraints =
-                Py::new(py, MulticenterBondConstraintsAst::new(py, vec![ec])).unwrap();
-            MulticenterBondConstraintsAst::update(
+                Py::new(py, MulticenterBondConstraintsForm::new(py, vec![ec])).unwrap();
+            MulticenterBondConstraintsForm::update(
                 constraints.clone_ref(py),
                 py,
                 MulticenterBondConstraintsUpdate::Container(constraints.clone_ref(py)),
@@ -1334,9 +1333,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_len_contains() {
+    fn test_multicenter_bond_constraints_form_len_contains() {
         Python::attach(|py| {
-            let empty = MulticenterBondConstraintsAst::new(py, vec![]);
+            let empty = MulticenterBondConstraintsForm::new(py, vec![]);
             assert_eq!(empty.__len__(), 0);
             assert!(!empty.__contains__(
                 py,
@@ -1344,14 +1343,14 @@ mod tests {
             ));
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             assert!(constraints.__contains__(
                 py,
                 into_py_variant(py, MulticenterBondConstraintKey::ElectronCount()).unwrap()
@@ -1360,18 +1359,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_keys_values_items() {
+    fn test_multicenter_bond_constraints_form_keys_values_items() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
 
             let mut keys = constraints.__iter__(py).unwrap();
             assert_eq!(
@@ -1400,18 +1399,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_get() {
+    fn test_multicenter_bond_constraints_form_get() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             let present = constraints
                 .get(
                     py,
@@ -1421,7 +1420,7 @@ mod tests {
                 .unwrap();
             let expected = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
@@ -1431,7 +1430,7 @@ mod tests {
             .into_any();
             assert!(present.bind(py).eq(expected.bind(py)).unwrap());
 
-            let empty = MulticenterBondConstraintsAst::new(py, vec![]);
+            let empty = MulticenterBondConstraintsForm::new(py, vec![]);
             let absent = empty
                 .get(
                     py,
@@ -1457,23 +1456,23 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_electron_count() {
+    fn test_multicenter_bond_constraints_form_electron_count() {
         Python::attach(|py| {
-            let empty = MulticenterBondConstraintsAst::new(py, vec![]);
+            let empty = MulticenterBondConstraintsForm::new(py, vec![]);
             assert_eq!(
                 empty.electron_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Undetermined
             );
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(6)
@@ -1482,9 +1481,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_set_electron_count() {
+    fn test_multicenter_bond_constraints_form_set_electron_count() {
         Python::attach(|py| {
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let mut constraints = MulticenterBondConstraintsForm::new(py, vec![]);
             constraints.set_electron_count(py, NumLike::Lit(6));
             assert_eq!(
                 constraints.electron_count(py).unwrap().to_rust(py),
@@ -1494,36 +1493,36 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_getitem_error() {
+    fn test_multicenter_bond_constraints_form_getitem_error() {
         Python::attach(|py| {
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, MulticenterBondConstraintKey::ElectronCount()).unwrap();
             assert!(constraints.__getitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_delitem_error() {
+    fn test_multicenter_bond_constraints_form_delitem_error() {
         Python::attach(|py| {
-            let mut constraints = MulticenterBondConstraintsAst::new(py, vec![]);
+            let mut constraints = MulticenterBondConstraintsForm::new(py, vec![]);
             let key = into_py_variant(py, MulticenterBondConstraintKey::ElectronCount()).unwrap();
             assert!(constraints.__delitem__(py, key).is_err());
         });
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_ast_asdict() {
+    fn test_multicenter_bond_constraints_form_asdict() {
         Python::attach(|py| {
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
                 .unwrap(),
             )
             .unwrap();
-            let constraints = MulticenterBondConstraintsAst::new(py, vec![ec]);
+            let constraints = MulticenterBondConstraintsForm::new(py, vec![ec]);
             let dict = constraints.asdict(py).unwrap();
             assert_eq!(dict.len(), 1);
             let value = dict.get_item("electron_count").unwrap().unwrap();
@@ -1549,7 +1548,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )
@@ -1590,7 +1589,7 @@ mod tests {
                 )
                 .unwrap();
             match removed {
-                Some(MulticenterBondConstraintAst::ElectronCount(v)) => {
+                Some(MulticenterBondConstraintForm::ElectronCount(v)) => {
                     assert_eq!(v.bind(py).borrow().to_rust(py), GraphIrNumForm::Lit(6))
                 }
                 _ => panic!("expected removed ElectronCount(Lit(6))"),
@@ -1620,7 +1619,7 @@ mod tests {
             view.update(
                 py,
                 MulticenterBondConstraintsUpdate::Container(
-                    Py::new(py, MulticenterBondConstraintsAst::from_inner(other)).unwrap(),
+                    Py::new(py, MulticenterBondConstraintsForm::from_inner(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1675,7 +1674,7 @@ mod tests {
             };
             let ec = into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(
+                MulticenterBondConstraintForm::from_rust(
                     py,
                     &GraphIrMulticenterBondConstraintForm::electron_count(6),
                 )

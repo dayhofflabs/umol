@@ -379,7 +379,7 @@ impl NumLike {
 }
 
 /// `IntoPyObject` for `&NumLike` so it can be a complex-enum field: constructors
-/// (`AromaticValenceAst.Aromatic(1)`) coerce `int | NumForm` in, and the field
+/// (`AromaticValenceForm.Aromatic(1)`) coerce `int | NumForm` in, and the field
 /// reads back as a `NumForm`.
 impl<'py> IntoPyObject<'py> for &NumLike {
     type Target = NumForm;

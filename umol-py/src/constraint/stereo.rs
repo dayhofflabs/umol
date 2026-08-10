@@ -30,9 +30,9 @@ use crate::stereo::{
 
 /// A topicity relation constraint value: the undetermined wildcard, a single topicity, a set
 /// of admissible topicities, or the complement of a set. A finite-domain subset lattice over
-/// `Topicity`. Corresponds to the Rust `TopicityRelationAst`.
+/// `Topicity`. Corresponds to the Rust `TopicityRelationForm`.
 #[pyclass]
-pub enum TopicityRelationAst {
+pub enum TopicityRelationForm {
     Undetermined(),
     Lit(Topicity),
     LitSet(BTreeSet<Topicity>),
@@ -40,7 +40,7 @@ pub enum TopicityRelationAst {
 }
 
 #[pymethods]
-impl TopicityRelationAst {
+impl TopicityRelationForm {
     /// The single topicity this resolves to, or `None` when it is not a bare literal.
     pub(crate) fn as_lit(&self) -> Option<Topicity> {
         match self {
@@ -59,27 +59,32 @@ impl TopicityRelationAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            TopicityRelationAst::Undetermined() => ("Undetermined", 0),
-            TopicityRelationAst::Lit(_) => ("Lit", 1),
-            TopicityRelationAst::LitSet(_) => ("LitSet", 1),
-            TopicityRelationAst::NotSet(_) => ("NotSet", 1),
+            TopicityRelationForm::Undetermined() => ("Undetermined", 0),
+            TopicityRelationForm::Lit(_) => ("Lit", 1),
+            TopicityRelationForm::LitSet(_) => ("LitSet", 1),
+            TopicityRelationForm::NotSet(_) => ("NotSet", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "TopicityRelationAst", variant, arity)
+        variant_repr(
+            slf.bind(py).as_any(),
+            "TopicityRelationForm",
+            variant,
+            arity,
+        )
     }
 }
 
 impl_py_lattice!(
-    TopicityRelationAst,
+    TopicityRelationForm,
     GraphIrTopicityRelationForm,
-    |value: &TopicityRelationAst, _py: Python<'_>| -> PyResult<GraphIrTopicityRelationForm> {
+    |value: &TopicityRelationForm, _py: Python<'_>| -> PyResult<GraphIrTopicityRelationForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrTopicityRelationForm| -> PyResult<TopicityRelationAst> {
-        Ok(TopicityRelationAst::from_rust(&value))
+    |_py: Python<'_>, value: GraphIrTopicityRelationForm| -> PyResult<TopicityRelationForm> {
+        Ok(TopicityRelationForm::from_rust(&value))
     }
 );
 
-impl TopicityRelationAst {
+impl TopicityRelationForm {
     pub(crate) fn from_rust(ast: &GraphIrTopicityRelationForm) -> Self {
         match ast {
             GraphIrTopicityRelationForm::Undetermined => Self::Undetermined(),
@@ -108,19 +113,19 @@ impl TopicityRelationAst {
 }
 
 /// Setter coercion for a topicity relation: a `Topicity` literal (→ `Lit`) or a
-/// `TopicityRelationAst` passthrough (matching `impl From<Topicity>`).
+/// `TopicityRelationForm` passthrough (matching `impl From<Topicity>`).
 #[derive(FromPyObject)]
 pub(crate) enum TopicityRelationLike {
     Lit(Topicity),
-    Ast(Py<TopicityRelationAst>),
+    Ast(Py<TopicityRelationForm>),
 }
 
 impl TopicityRelationLike {
-    /// Coerce to a `Py<TopicityRelationAst>` (for the `TopicityAst.relation` field).
-    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<TopicityRelationAst>> {
+    /// Coerce to a `Py<TopicityRelationForm>` (for the `TopicityForm.relation` field).
+    pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<TopicityRelationForm>> {
         match self {
             TopicityRelationLike::Lit(topicity) => {
-                into_py_variant(py, TopicityRelationAst::Lit(*topicity))
+                into_py_variant(py, TopicityRelationForm::Lit(*topicity))
             }
             TopicityRelationLike::Ast(relation) => Ok(relation.clone_ref(py)),
         }
@@ -129,9 +134,9 @@ impl TopicityRelationLike {
 
 /// A stereogenicity constraint value: the undetermined wildcard, a single classification, a
 /// set of admissible classifications, or the complement of a set. A finite-domain subset
-/// lattice over `Stereogenicity`. Corresponds to the Rust `StereogenicityAst`.
+/// lattice over `Stereogenicity`. Corresponds to the Rust `StereogenicityForm`.
 #[pyclass]
-pub enum StereogenicityAst {
+pub enum StereogenicityForm {
     Undetermined(),
     Lit(Stereogenicity),
     LitSet(BTreeSet<Stereogenicity>),
@@ -139,7 +144,7 @@ pub enum StereogenicityAst {
 }
 
 #[pymethods]
-impl StereogenicityAst {
+impl StereogenicityForm {
     /// The single classification this resolves to, or `None` when it is not a bare literal.
     pub(crate) fn as_lit(&self) -> Option<Stereogenicity> {
         match self {
@@ -158,27 +163,27 @@ impl StereogenicityAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let (variant, arity) = match &*slf.bind(py).borrow() {
-            StereogenicityAst::Undetermined() => ("Undetermined", 0),
-            StereogenicityAst::Lit(_) => ("Lit", 1),
-            StereogenicityAst::LitSet(_) => ("LitSet", 1),
-            StereogenicityAst::NotSet(_) => ("NotSet", 1),
+            StereogenicityForm::Undetermined() => ("Undetermined", 0),
+            StereogenicityForm::Lit(_) => ("Lit", 1),
+            StereogenicityForm::LitSet(_) => ("LitSet", 1),
+            StereogenicityForm::NotSet(_) => ("NotSet", 1),
         };
-        variant_repr(slf.bind(py).as_any(), "StereogenicityAst", variant, arity)
+        variant_repr(slf.bind(py).as_any(), "StereogenicityForm", variant, arity)
     }
 }
 
 impl_py_lattice!(
-    StereogenicityAst,
+    StereogenicityForm,
     GraphIrStereogenicityForm,
-    |value: &StereogenicityAst, _py: Python<'_>| -> PyResult<GraphIrStereogenicityForm> {
+    |value: &StereogenicityForm, _py: Python<'_>| -> PyResult<GraphIrStereogenicityForm> {
         Ok(value.to_rust())
     },
-    |_py: Python<'_>, value: GraphIrStereogenicityForm| -> PyResult<StereogenicityAst> {
-        Ok(StereogenicityAst::from_rust(&value))
+    |_py: Python<'_>, value: GraphIrStereogenicityForm| -> PyResult<StereogenicityForm> {
+        Ok(StereogenicityForm::from_rust(&value))
     }
 );
 
-impl StereogenicityAst {
+impl StereogenicityForm {
     pub(crate) fn from_rust(ast: &GraphIrStereogenicityForm) -> Self {
         match ast {
             GraphIrStereogenicityForm::Undetermined => Self::Undetermined(),
@@ -216,22 +221,22 @@ impl StereogenicityAst {
 
 /// A ligand-symmetry constraint value: an oriented ligand permutation with a presence
 /// assertion (whether the permutation is a ligand symmetry). Corresponds to the Rust
-/// `LigandSymmetryAst`.
+/// `LigandSymmetryForm`.
 #[pyclass]
-pub struct LigandSymmetryAst {
+pub struct LigandSymmetryForm {
     pub(crate) permutation: OrientedLigandPermutation,
     pub(crate) invariant: Py<BooleanForm>,
 }
 
 #[pymethods]
-impl LigandSymmetryAst {
+impl LigandSymmetryForm {
     #[new]
     pub(crate) fn new(
         py: Python<'_>,
         permutation: OrientedLigandPermutation,
         invariant: BooleanLike,
     ) -> PyResult<Self> {
-        Ok(LigandSymmetryAst {
+        Ok(LigandSymmetryForm {
             permutation,
             invariant: into_py_variant(py, BooleanForm::from_rust(&invariant.to_rust(py)))?,
         })
@@ -257,7 +262,7 @@ impl LigandSymmetryAst {
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "LigandSymmetryAst({}, {})",
+            "LigandSymmetryForm({}, {})",
             self.permutation.__repr__(),
             self.invariant
                 .bind(py)
@@ -269,19 +274,19 @@ impl LigandSymmetryAst {
 }
 
 impl_py_lattice!(
-    LigandSymmetryAst,
+    LigandSymmetryForm,
     GraphIrLigandSymmetryForm,
-    |value: &LigandSymmetryAst, py: Python<'_>| -> PyResult<GraphIrLigandSymmetryForm> {
+    |value: &LigandSymmetryForm, py: Python<'_>| -> PyResult<GraphIrLigandSymmetryForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrLigandSymmetryForm| -> PyResult<LigandSymmetryAst> {
-        LigandSymmetryAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrLigandSymmetryForm| -> PyResult<LigandSymmetryForm> {
+        LigandSymmetryForm::from_rust(py, &value)
     }
 );
 
-impl LigandSymmetryAst {
+impl LigandSymmetryForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrLigandSymmetryForm) -> PyResult<Self> {
-        Ok(LigandSymmetryAst {
+        Ok(LigandSymmetryForm {
             permutation: OrientedLigandPermutation::from_rust(ast.permutation),
             invariant: into_py_variant(py, BooleanForm::from_rust(&ast.invariant))?,
         })
@@ -296,22 +301,22 @@ impl LigandSymmetryAst {
 }
 
 /// A fluxionality constraint value: a proper ligand permutation realized by dynamics, with an
-/// assertion of whether the move is `active`. Corresponds to the Rust `FluxionalityAst`.
+/// assertion of whether the move is `active`. Corresponds to the Rust `FluxionalityForm`.
 #[pyclass]
-pub struct FluxionalityAst {
+pub struct FluxionalityForm {
     pub(crate) permutation: LigandPermutation,
     pub(crate) active: Py<BooleanForm>,
 }
 
 #[pymethods]
-impl FluxionalityAst {
+impl FluxionalityForm {
     #[new]
     pub(crate) fn new(
         py: Python<'_>,
         permutation: LigandPermutation,
         active: BooleanLike,
     ) -> PyResult<Self> {
-        Ok(FluxionalityAst {
+        Ok(FluxionalityForm {
             permutation,
             active: into_py_variant(py, BooleanForm::from_rust(&active.to_rust(py)))?,
         })
@@ -337,7 +342,7 @@ impl FluxionalityAst {
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "FluxionalityAst({}, {})",
+            "FluxionalityForm({}, {})",
             self.permutation.__repr__(),
             self.active.bind(py).as_any().repr()?.extract::<String>()?,
         ))
@@ -345,19 +350,19 @@ impl FluxionalityAst {
 }
 
 impl_py_lattice!(
-    FluxionalityAst,
+    FluxionalityForm,
     GraphIrFluxionalityForm,
-    |value: &FluxionalityAst, py: Python<'_>| -> PyResult<GraphIrFluxionalityForm> {
+    |value: &FluxionalityForm, py: Python<'_>| -> PyResult<GraphIrFluxionalityForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrFluxionalityForm| -> PyResult<FluxionalityAst> {
-        FluxionalityAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrFluxionalityForm| -> PyResult<FluxionalityForm> {
+        FluxionalityForm::from_rust(py, &value)
     }
 );
 
-impl FluxionalityAst {
+impl FluxionalityForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrFluxionalityForm) -> PyResult<Self> {
-        Ok(FluxionalityAst {
+        Ok(FluxionalityForm {
             permutation: LigandPermutation::from_rust(ast.permutation),
             active: into_py_variant(py, BooleanForm::from_rust(&ast.active))?,
         })
@@ -372,22 +377,22 @@ impl FluxionalityAst {
 }
 
 /// A per-pair topicity constraint value: a relation between a pair of ligand positions.
-/// Corresponds to the Rust `TopicityAst`.
+/// Corresponds to the Rust `TopicityForm`.
 #[pyclass]
-pub struct TopicityAst {
+pub struct TopicityForm {
     pub(crate) pair: StereoLigandPair,
-    pub(crate) relation: Py<TopicityRelationAst>,
+    pub(crate) relation: Py<TopicityRelationForm>,
 }
 
 #[pymethods]
-impl TopicityAst {
+impl TopicityForm {
     #[new]
     pub(crate) fn new(
         py: Python<'_>,
         pair: StereoLigandPair,
         relation: TopicityRelationLike,
     ) -> PyResult<Self> {
-        Ok(TopicityAst {
+        Ok(TopicityForm {
             pair,
             relation: relation.to_py(py)?,
         })
@@ -399,7 +404,7 @@ impl TopicityAst {
     }
 
     #[getter]
-    pub(crate) fn relation(&self, py: Python<'_>) -> Py<TopicityRelationAst> {
+    pub(crate) fn relation(&self, py: Python<'_>) -> Py<TopicityRelationForm> {
         self.relation.clone_ref(py)
     }
 
@@ -413,7 +418,7 @@ impl TopicityAst {
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         Ok(format!(
-            "TopicityAst({}, {})",
+            "TopicityForm({}, {})",
             self.pair.__repr__(),
             self.relation
                 .bind(py)
@@ -425,21 +430,21 @@ impl TopicityAst {
 }
 
 impl_py_lattice!(
-    TopicityAst,
+    TopicityForm,
     GraphIrTopicityForm,
-    |value: &TopicityAst, py: Python<'_>| -> PyResult<GraphIrTopicityForm> {
+    |value: &TopicityForm, py: Python<'_>| -> PyResult<GraphIrTopicityForm> {
         Ok(value.to_rust(py))
     },
-    |py: Python<'_>, value: GraphIrTopicityForm| -> PyResult<TopicityAst> {
-        TopicityAst::from_rust(py, &value)
+    |py: Python<'_>, value: GraphIrTopicityForm| -> PyResult<TopicityForm> {
+        TopicityForm::from_rust(py, &value)
     }
 );
 
-impl TopicityAst {
+impl TopicityForm {
     pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrTopicityForm) -> PyResult<Self> {
-        Ok(TopicityAst {
+        Ok(TopicityForm {
             pair: StereoLigandPair::from_rust(ast.pair),
-            relation: into_py_variant(py, TopicityRelationAst::from_rust(&ast.relation))?,
+            relation: into_py_variant(py, TopicityRelationForm::from_rust(&ast.relation))?,
         })
     }
 
@@ -453,7 +458,7 @@ impl TopicityAst {
 
 /// Per-entity stereo constraint surface — key + constraint enum + container + args —
 /// macro-generated for the two stereo entities (`StereoAtom`, `StereoBond`), which share the
-/// value types (`LigandSymmetryAst`/`FluxionalityAst`/`TopicityAst`/`StereogenicityAst`) and
+/// value types (`LigandSymmetryForm`/`FluxionalityForm`/`TopicityForm`/`StereogenicityForm`) and
 /// key sub-types (`OrientedLigandPermutation`/`LigandPermutation`/`StereoLigandPair`); only
 /// the enum/container/key names and their AST peers differ.
 macro_rules! stereo_constraints {
@@ -533,10 +538,10 @@ macro_rules! stereo_constraints {
         /// predicate on a stereo atom / bond.
         #[pyclass]
         pub enum $constraint {
-            LigandSymmetry(Py<LigandSymmetryAst>),
-            Fluxionality(Py<FluxionalityAst>),
-            Topicity(Py<TopicityAst>),
-            Stereogenicity(Py<StereogenicityAst>),
+            LigandSymmetry(Py<LigandSymmetryForm>),
+            Fluxionality(Py<FluxionalityForm>),
+            Topicity(Py<TopicityForm>),
+            Stereogenicity(Py<StereogenicityForm>),
         }
 
         #[pymethods]
@@ -581,17 +586,17 @@ macro_rules! stereo_constraints {
             pub(crate) fn from_rust(py: Python<'_>, ast: &$ast_constraint) -> PyResult<Self> {
                 Ok(match ast {
                     $ast_constraint::LigandSymmetry(value) => Self::LigandSymmetry(
-                        into_py_variant(py, LigandSymmetryAst::from_rust(py, value)?)?,
+                        into_py_variant(py, LigandSymmetryForm::from_rust(py, value)?)?,
                     ),
                     $ast_constraint::Fluxionality(value) => Self::Fluxionality(into_py_variant(
                         py,
-                        FluxionalityAst::from_rust(py, value)?,
+                        FluxionalityForm::from_rust(py, value)?,
                     )?),
                     $ast_constraint::Topicity(value) => {
-                        Self::Topicity(into_py_variant(py, TopicityAst::from_rust(py, value)?)?)
+                        Self::Topicity(into_py_variant(py, TopicityForm::from_rust(py, value)?)?)
                     }
                     $ast_constraint::Stereogenicity(value) => Self::Stereogenicity(
-                        into_py_variant(py, StereogenicityAst::from_rust(value))?,
+                        into_py_variant(py, StereogenicityForm::from_rust(value))?,
                     ),
                 })
             }
@@ -843,10 +848,10 @@ macro_rules! stereo_constraints {
             pub(crate) fn ligand_symmetries(
                 &self,
                 py: Python<'_>,
-            ) -> PyResult<Vec<LigandSymmetryAst>> {
+            ) -> PyResult<Vec<LigandSymmetryForm>> {
                 self.0
                     .ligand_symmetries()
-                    .map(|ls| LigandSymmetryAst::from_rust(py, ls))
+                    .map(|ls| LigandSymmetryForm::from_rust(py, ls))
                     .collect()
             }
 
@@ -855,15 +860,15 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryAst> {
-                LigandSymmetryAst::from_rust(py, &self.0.ligand_symmetry(permutation.to_rust()))
+            ) -> PyResult<LigandSymmetryForm> {
+                LigandSymmetryForm::from_rust(py, &self.0.ligand_symmetry(permutation.to_rust()))
             }
 
             /// The fluxionality constraints.
-            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
+            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityForm>> {
                 self.0
                     .fluxionalities()
-                    .map(|f| FluxionalityAst::from_rust(py, f))
+                    .map(|f| FluxionalityForm::from_rust(py, f))
                     .collect()
             }
 
@@ -872,26 +877,26 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityAst> {
-                FluxionalityAst::from_rust(py, &self.0.fluxionality(permutation.to_rust()))
+            ) -> PyResult<FluxionalityForm> {
+                FluxionalityForm::from_rust(py, &self.0.fluxionality(permutation.to_rust()))
             }
 
             /// The topicity constraints.
-            pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
+            pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityForm>> {
                 self.0
                     .topicities()
-                    .map(|t| TopicityAst::from_rust(py, t))
+                    .map(|t| TopicityForm::from_rust(py, t))
                     .collect()
             }
 
             /// The topicity relation at ligand `pair` (undetermined if absent).
-            pub(crate) fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationAst {
-                TopicityRelationAst::from_rust(&self.0.topicity(pair.to_rust()))
+            pub(crate) fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
+                TopicityRelationForm::from_rust(&self.0.topicity(pair.to_rust()))
             }
 
             /// The stereogenicity constraint (undetermined if absent).
-            pub(crate) fn stereogenicity(&self) -> StereogenicityAst {
-                StereogenicityAst::from_rust(&self.0.stereogenicity())
+            pub(crate) fn stereogenicity(&self) -> StereogenicityForm {
+                StereogenicityForm::from_rust(&self.0.stereogenicity())
             }
         }
 
@@ -1169,10 +1174,10 @@ macro_rules! stereo_constraints {
             pub(crate) fn ligand_symmetries(
                 &self,
                 py: Python<'_>,
-            ) -> PyResult<Vec<LigandSymmetryAst>> {
+            ) -> PyResult<Vec<LigandSymmetryForm>> {
                 self.read(py, |cs| {
                     cs.ligand_symmetries()
-                        .map(|ls| LigandSymmetryAst::from_rust(py, ls))
+                        .map(|ls| LigandSymmetryForm::from_rust(py, ls))
                         .collect()
                 })
             }
@@ -1182,17 +1187,17 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 permutation: OrientedLigandPermutation,
-            ) -> PyResult<LigandSymmetryAst> {
+            ) -> PyResult<LigandSymmetryForm> {
                 self.read(py, |cs| {
-                    LigandSymmetryAst::from_rust(py, &cs.ligand_symmetry(permutation.to_rust()))
+                    LigandSymmetryForm::from_rust(py, &cs.ligand_symmetry(permutation.to_rust()))
                 })
             }
 
             /// The fluxionality constraints.
-            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityAst>> {
+            pub(crate) fn fluxionalities(&self, py: Python<'_>) -> PyResult<Vec<FluxionalityForm>> {
                 self.read(py, |cs| {
                     cs.fluxionalities()
-                        .map(|f| FluxionalityAst::from_rust(py, f))
+                        .map(|f| FluxionalityForm::from_rust(py, f))
                         .collect()
                 })
             }
@@ -1202,17 +1207,17 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 permutation: LigandPermutation,
-            ) -> PyResult<FluxionalityAst> {
+            ) -> PyResult<FluxionalityForm> {
                 self.read(py, |cs| {
-                    FluxionalityAst::from_rust(py, &cs.fluxionality(permutation.to_rust()))
+                    FluxionalityForm::from_rust(py, &cs.fluxionality(permutation.to_rust()))
                 })
             }
 
             /// The topicity constraints.
-            pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityAst>> {
+            pub(crate) fn topicities(&self, py: Python<'_>) -> PyResult<Vec<TopicityForm>> {
                 self.read(py, |cs| {
                     cs.topicities()
-                        .map(|t| TopicityAst::from_rust(py, t))
+                        .map(|t| TopicityForm::from_rust(py, t))
                         .collect()
                 })
             }
@@ -1222,16 +1227,18 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 pair: StereoLigandPair,
-            ) -> PyResult<TopicityRelationAst> {
+            ) -> PyResult<TopicityRelationForm> {
                 self.read(py, |cs| {
-                    Ok(TopicityRelationAst::from_rust(&cs.topicity(pair.to_rust())))
+                    Ok(TopicityRelationForm::from_rust(
+                        &cs.topicity(pair.to_rust()),
+                    ))
                 })
             }
 
             /// The stereogenicity constraint (undetermined if absent).
-            pub(crate) fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityAst> {
+            pub(crate) fn stereogenicity(&self, py: Python<'_>) -> PyResult<StereogenicityForm> {
                 self.read(py, |cs| {
-                    Ok(StereogenicityAst::from_rust(&cs.stereogenicity()))
+                    Ok(StereogenicityForm::from_rust(&cs.stereogenicity()))
                 })
             }
         }
@@ -1239,7 +1246,7 @@ macro_rules! stereo_constraints {
 }
 
 stereo_constraints! {
-    StereoAtomConstraintKey, StereoAtomConstraintAst, StereoAtomConstraintsAst,
+    StereoAtomConstraintKey, StereoAtomConstraintForm, StereoAtomConstraintsForm,
     StereoAtomConstraintsUpdate, ResolvedStereoAtomConstraintsUpdate, StereoAtomConstraintsLike,
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
@@ -1248,7 +1255,7 @@ stereo_constraints! {
 }
 
 stereo_constraints! {
-    StereoBondConstraintKey, StereoBondConstraintAst, StereoBondConstraintsAst,
+    StereoBondConstraintKey, StereoBondConstraintForm, StereoBondConstraintsForm,
     StereoBondConstraintsUpdate, ResolvedStereoBondConstraintsUpdate, StereoBondConstraintsLike,
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,

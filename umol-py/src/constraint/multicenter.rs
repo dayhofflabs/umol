@@ -65,12 +65,12 @@ impl MulticenterBondConstraintKey {
 /// A multicenter-bond-scope constraint: the asserted total electron count of the
 /// bond (cross-checked against `sum(MulticenterBondForm::electrons)`).
 #[pyclass]
-pub enum MulticenterBondConstraintAst {
+pub enum MulticenterBondConstraintForm {
     ElectronCount(Py<NumForm>),
 }
 
 #[pymethods]
-impl MulticenterBondConstraintAst {
+impl MulticenterBondConstraintForm {
     /// The constraint's key (identity).
     #[getter]
     pub(crate) fn key(&self, py: Python<'_>) -> MulticenterBondConstraintKey {
@@ -87,11 +87,11 @@ impl MulticenterBondConstraintAst {
 
     pub(crate) fn __repr__(slf: Py<Self>, py: Python<'_>) -> PyResult<String> {
         let variant = match &*slf.bind(py).borrow() {
-            MulticenterBondConstraintAst::ElectronCount(_) => "ElectronCount",
+            MulticenterBondConstraintForm::ElectronCount(_) => "ElectronCount",
         };
         variant_repr(
             slf.bind(py).as_any(),
-            "MulticenterBondConstraintAst",
+            "MulticenterBondConstraintForm",
             variant,
             1,
         )
@@ -99,19 +99,19 @@ impl MulticenterBondConstraintAst {
 }
 
 impl_py_lattice!(
-    MulticenterBondConstraintAst,
+    MulticenterBondConstraintForm,
     GraphIrMulticenterBondConstraintForm,
-    |value: &MulticenterBondConstraintAst,
+    |value: &MulticenterBondConstraintForm,
      py: Python<'_>|
      -> PyResult<GraphIrMulticenterBondConstraintForm> { Ok(value.to_rust(py)) },
     |py: Python<'_>,
      value: GraphIrMulticenterBondConstraintForm|
-     -> PyResult<MulticenterBondConstraintAst> {
-        MulticenterBondConstraintAst::from_rust(py, &value)
+     -> PyResult<MulticenterBondConstraintForm> {
+        MulticenterBondConstraintForm::from_rust(py, &value)
     }
 );
 
-impl MulticenterBondConstraintAst {
+impl MulticenterBondConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
         ast: &GraphIrMulticenterBondConstraintForm,
@@ -133,12 +133,12 @@ impl MulticenterBondConstraintAst {
 }
 
 /// The argument to `update`: another constraint container (value or live view) or an
-/// iterable of `MulticenterBondConstraintAst` (each `set`, last-wins).
+/// iterable of `MulticenterBondConstraintForm` (each `set`, last-wins).
 #[derive(FromPyObject)]
 pub(crate) enum MulticenterBondConstraintsUpdate {
-    Container(Py<MulticenterBondConstraintsAst>),
+    Container(Py<MulticenterBondConstraintsForm>),
     View(Py<MulticenterBondConstraintsView>),
-    Entries(Vec<Py<MulticenterBondConstraintAst>>),
+    Entries(Vec<Py<MulticenterBondConstraintForm>>),
 }
 
 impl MulticenterBondConstraintsUpdate {
@@ -201,7 +201,7 @@ impl ResolvedMulticenterBondConstraintsUpdate {
 /// — for the multicenter bond `constraints` setter, which accepts either.
 #[derive(FromPyObject)]
 pub(crate) enum MulticenterBondConstraintsLike {
-    Container(Py<MulticenterBondConstraintsAst>),
+    Container(Py<MulticenterBondConstraintsForm>),
     View(Py<MulticenterBondConstraintsView>),
 }
 
@@ -223,37 +223,37 @@ impl MulticenterBondConstraintsLike {
 /// Mutable, hence value-equal but unhashable (matching `MulticenterBondForm`).
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct MulticenterBondConstraintsAst(GraphIrMulticenterBondConstraintsForm);
+pub struct MulticenterBondConstraintsForm(GraphIrMulticenterBondConstraintsForm);
 
 #[pymethods]
-impl MulticenterBondConstraintsAst {
+impl MulticenterBondConstraintsForm {
     /// Build from a sequence of constraints (a later entry of the same key replaces
     /// an earlier one, last-wins).
     #[new]
-    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<MulticenterBondConstraintAst>>) -> Self {
+    pub(crate) fn new(py: Python<'_>, entries: Vec<Py<MulticenterBondConstraintForm>>) -> Self {
         let mut constraints = GraphIrMulticenterBondConstraintsForm::new();
         constraints.extend(
             entries
                 .into_iter()
                 .map(|entry| entry.bind(py).borrow().to_rust(py)),
         );
-        MulticenterBondConstraintsAst(constraints)
+        MulticenterBondConstraintsForm(constraints)
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let mut parts = Vec::with_capacity(self.0.len());
         for entry in self.0.iter() {
-            let value = into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, entry)?)?;
+            let value = into_py_variant(py, MulticenterBondConstraintForm::from_rust(py, entry)?)?;
             parts.push(value.bind(py).as_any().repr()?.extract::<String>()?);
         }
         Ok(format!(
-            "MulticenterBondConstraintsAst([{}])",
+            "MulticenterBondConstraintsForm([{}])",
             parts.join(", ")
         ))
     }
 
     /// Insert `c`, replacing any existing entry of the same key (last-wins).
-    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<MulticenterBondConstraintAst>) {
+    pub(crate) fn set(&mut self, py: Python<'_>, c: Py<MulticenterBondConstraintForm>) {
         self.0.set(c.bind(py).borrow().to_rust(py));
     }
 
@@ -262,15 +262,15 @@ impl MulticenterBondConstraintsAst {
         &mut self,
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
-    ) -> PyResult<Option<MulticenterBondConstraintAst>> {
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
         self.0
             .remove(key.bind(py).borrow().to_rust())
-            .map(|c| MulticenterBondConstraintAst::from_rust(py, &c))
+            .map(|c| MulticenterBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
     /// Overlay `other` onto self in place — another container, a live view, or an
-    /// iterable of `MulticenterBondConstraintAst` (last-wins per key; undetermined entries
+    /// iterable of `MulticenterBondConstraintForm` (last-wins per key; undetermined entries
     /// remove). Takes `slf` by handle so `other` is fully read *before* the write borrow —
     /// `cs.update(cs)` on the same container is then a no-op, not a double-borrow panic.
     pub(crate) fn update(
@@ -318,7 +318,7 @@ impl MulticenterBondConstraintsAst {
         match self.0.get(key.bind(py).borrow().to_rust()) {
             Some(constraint) => Ok(into_py_variant(
                 py,
-                MulticenterBondConstraintAst::from_rust(py, constraint)?,
+                MulticenterBondConstraintForm::from_rust(py, constraint)?,
             )?
             .into_any()),
             None => Ok(default.unwrap_or_else(|| py.None())),
@@ -330,9 +330,9 @@ impl MulticenterBondConstraintsAst {
         &self,
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
-    ) -> PyResult<MulticenterBondConstraintAst> {
+    ) -> PyResult<MulticenterBondConstraintForm> {
         match self.0.get(key.bind(py).borrow().to_rust()) {
-            Some(constraint) => MulticenterBondConstraintAst::from_rust(py, constraint),
+            Some(constraint) => MulticenterBondConstraintForm::from_rust(py, constraint),
             None => Err(PyKeyError::new_err(
                 key.bind(py).as_any().repr()?.extract::<String>()?,
             )),
@@ -384,28 +384,28 @@ impl MulticenterBondConstraintsAst {
     }
 }
 
-impl MulticenterBondConstraintsAst {
+impl MulticenterBondConstraintsForm {
     /// The wrapped AST constraints — read access for multicenter bond construction.
     pub(crate) fn inner(&self) -> &GraphIrMulticenterBondConstraintsForm {
         &self.0
     }
 
     /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
-    /// in-crate construction wraps `MulticenterBondConstraintsAst(..)` directly.
+    /// in-crate construction wraps `MulticenterBondConstraintsForm(..)` directly.
     pub(crate) fn from_inner(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
-        MulticenterBondConstraintsAst(constraints)
+        MulticenterBondConstraintsForm(constraints)
     }
 }
 
 impl_py_lattice!(
-    MulticenterBondConstraintsAst,
+    MulticenterBondConstraintsForm,
     GraphIrMulticenterBondConstraintsForm,
-    |value: &MulticenterBondConstraintsAst,
+    |value: &MulticenterBondConstraintsForm,
      _py: Python<'_>|
      -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.inner().clone()) },
     |_py: Python<'_>,
      value: GraphIrMulticenterBondConstraintsForm|
-     -> PyResult<MulticenterBondConstraintsAst> { Ok(MulticenterBondConstraintsAst(value)) }
+     -> PyResult<MulticenterBondConstraintsForm> { Ok(MulticenterBondConstraintsForm(value)) }
 );
 
 /// Build the per-constraint iterator handle from a borrowed container.
@@ -416,7 +416,10 @@ pub(crate) fn multicenter_bond_constraints_iter(
     let entries = constraints
         .iter()
         .map(|constraint| {
-            into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, constraint)?)
+            into_py_variant(
+                py,
+                MulticenterBondConstraintForm::from_rust(py, constraint)?,
+            )
         })
         .collect::<PyResult<Vec<_>>>()?;
     Ok(MulticenterBondConstraintIter {
@@ -456,7 +459,10 @@ pub(crate) fn multicenter_bond_constraint_items(
                     py,
                     MulticenterBondConstraintKey::from_rust(&constraint.key()),
                 )?,
-                into_py_variant(py, MulticenterBondConstraintAst::from_rust(py, constraint)?)?,
+                into_py_variant(
+                    py,
+                    MulticenterBondConstraintForm::from_rust(py, constraint)?,
+                )?,
             ))
         })
         .collect::<PyResult<Vec<_>>>()?;
@@ -568,7 +574,7 @@ impl MulticenterBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintAst>) {
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintForm>) {
         self.set_ast(py, c.bind(py).borrow().to_rust(py));
     }
 
@@ -578,9 +584,9 @@ impl MulticenterBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
-    ) -> PyResult<Option<MulticenterBondConstraintAst>> {
+    ) -> PyResult<Option<MulticenterBondConstraintForm>> {
         self.remove_ast(py, key.bind(py).borrow().to_rust())
-            .map(|c| MulticenterBondConstraintAst::from_rust(py, &c))
+            .map(|c| MulticenterBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
 
@@ -603,7 +609,7 @@ impl MulticenterBondConstraintsView {
     }
 
     /// Overlay `other` onto the bond's constraints in place — another container, a live
-    /// view, or an iterable of `MulticenterBondConstraintAst` (last-wins per key;
+    /// view, or an iterable of `MulticenterBondConstraintForm` (last-wins per key;
     /// undetermined entries remove). Resolves `other` to owned data *before* the write
     /// borrow, so a view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(
@@ -651,7 +657,7 @@ impl MulticenterBondConstraintsView {
         let key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(key)
-                .map(|constraint| MulticenterBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| MulticenterBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -665,11 +671,11 @@ impl MulticenterBondConstraintsView {
         &self,
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
-    ) -> PyResult<MulticenterBondConstraintAst> {
+    ) -> PyResult<MulticenterBondConstraintForm> {
         let ast_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
             cs.get(ast_key)
-                .map(|constraint| MulticenterBondConstraintAst::from_rust(py, constraint))
+                .map(|constraint| MulticenterBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
         match found {
@@ -712,7 +718,7 @@ impl MulticenterBondConstraintsView {
 
 #[pyclass]
 pub(crate) struct MulticenterBondConstraintIter {
-    entries: IntoIter<Py<MulticenterBondConstraintAst>>,
+    entries: IntoIter<Py<MulticenterBondConstraintForm>>,
 }
 
 #[pymethods]
@@ -721,7 +727,7 @@ impl MulticenterBondConstraintIter {
         slf
     }
 
-    pub(crate) fn __next__(&mut self) -> Option<Py<MulticenterBondConstraintAst>> {
+    pub(crate) fn __next__(&mut self) -> Option<Py<MulticenterBondConstraintForm>> {
         self.entries.next()
     }
 }
@@ -746,7 +752,7 @@ impl MulticenterBondConstraintKeyIter {
 pub(crate) struct MulticenterBondConstraintItemsIter {
     items: IntoIter<(
         Py<MulticenterBondConstraintKey>,
-        Py<MulticenterBondConstraintAst>,
+        Py<MulticenterBondConstraintForm>,
     )>,
 }
 
@@ -760,7 +766,7 @@ impl MulticenterBondConstraintItemsIter {
         &mut self,
     ) -> Option<(
         Py<MulticenterBondConstraintKey>,
-        Py<MulticenterBondConstraintAst>,
+        Py<MulticenterBondConstraintForm>,
     )> {
         self.items.next()
     }
