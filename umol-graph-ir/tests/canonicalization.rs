@@ -11,8 +11,8 @@ use pretty_assertions::assert_eq;
 use rstest::rstest;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    AtomId, ConstitutionColoring, ConstitutionFeatures, GraphSymmetry, GraphSymmetryConfig,
-    Molecule,
+    AtomId, ConstitutionColoring, GraphSymmetry, GraphSymmetryConfig, Molecule,
+    MoleculeColoringFeatures,
 };
 use umol_graph_ir::mol_dsl;
 
@@ -140,9 +140,9 @@ const STEREO_BOND_STAR_ORBITS: &[&[u32]] = &[&[0, 1], &[2, 4], &[3, 5]];
 
 fn graph_symmetry(molecule: &Molecule, include_isotopes: bool) -> GraphSymmetry {
     let features = if include_isotopes {
-        ConstitutionFeatures::all()
+        MoleculeColoringFeatures::all()
     } else {
-        ConstitutionFeatures::all().difference(ConstitutionFeatures::ISOTOPE)
+        MoleculeColoringFeatures::all().difference(MoleculeColoringFeatures::ISOTOPE)
     };
     molecule.graph_symmetry(&GraphSymmetryConfig {
         coloring: ConstitutionColoring::new(features),

@@ -964,7 +964,7 @@ and the semantic properties validated by the corresponding property tests.
 - **S0c — Coloring-feature terminology.** Rename `ConstitutionFeatures` to
   `MoleculeColoringFeatures` throughout `umol-graph-ir` and its callers, preserving the independent
   bitflag semantics and the existing coloring behavior. Update imports, rustdoc, unit tests, and
-  benchmarks in the same breaking red-to-green subitem. [dep: S0a]
+  benchmarks in the same breaking red-to-green subitem. [dep: S0a] **Done.**
 - **S0d — Structural-level terminology.** Replace the bitflag-shaped `IncidenceNodeSelection` with
   `IncidenceLevel::{Topology, Constitution, Full}` and migrate every incidence, symmetry,
   substructure, test, and benchmark caller. Verify the exact entity-kind membership of each level;

@@ -20,7 +20,7 @@ bitflags! {
     /// (ring, degree, valence) are excluded here, they are folded in by the
     /// automorphism.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub struct ConstitutionFeatures: u32 {
+    pub struct MoleculeColoringFeatures: u32 {
         // atom
         const ELEMENT = 1 << 0;
         const ISOTOPE = 1 << 1;
@@ -52,21 +52,21 @@ bitflags! {
 /// Constitution coloring includes only inherent fields on all entities.
 #[derive(Clone, Copy, Debug)]
 pub struct ConstitutionColoring {
-    features: ConstitutionFeatures,
+    features: MoleculeColoringFeatures,
 }
 
 impl ConstitutionColoring {
-    pub fn new(features: ConstitutionFeatures) -> Self {
+    pub fn new(features: MoleculeColoringFeatures) -> Self {
         Self { features }
     }
 
     pub fn entity_only() -> Self {
-        Self::new(ConstitutionFeatures::empty())
+        Self::new(MoleculeColoringFeatures::empty())
     }
 
     /// Every inherent field selected.
     pub fn full() -> Self {
-        Self::new(ConstitutionFeatures::all())
+        Self::new(MoleculeColoringFeatures::all())
     }
 }
 
@@ -79,42 +79,45 @@ impl MoleculeColoring for ConstitutionColoring {
         match entity {
             Entity::Atom(id) => {
                 let atom = mol.atom(id);
-                if self.features.contains(ConstitutionFeatures::ELEMENT) {
+                if self.features.contains(MoleculeColoringFeatures::ELEMENT) {
                     atom.element().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::ISOTOPE) {
+                if self.features.contains(MoleculeColoringFeatures::ISOTOPE) {
                     atom.isotope_mass().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::CHARGE) {
+                if self.features.contains(MoleculeColoringFeatures::CHARGE) {
                     atom.charge().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::IMPLICIT_HYDROGENS)
+                    .contains(MoleculeColoringFeatures::IMPLICIT_HYDROGENS)
                 {
                     atom.implicit_hydrogens().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::LONE_PAIRS) {
+                if self.features.contains(MoleculeColoringFeatures::LONE_PAIRS) {
                     atom.lone_pairs().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::UNPAIRED_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::UNPAIRED_ELECTRONS)
                 {
                     atom.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::Bond(id) => {
                 let bond = mol.bond(id);
-                if self.features.contains(ConstitutionFeatures::BOND_ORDER) {
+                if self.features.contains(MoleculeColoringFeatures::BOND_ORDER) {
                     bond.order().hash(&mut hasher);
                 }
-                if self.features.contains(ConstitutionFeatures::BOND_CHARGE) {
+                if self
+                    .features
+                    .contains(MoleculeColoringFeatures::BOND_CHARGE)
+                {
                     bond.charge().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::BOND_UNPAIRED_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::BOND_UNPAIRED_ELECTRONS)
                 {
                     bond.unpaired_electrons().hash(&mut hasher);
                 }
@@ -126,19 +129,19 @@ impl MoleculeColoring for ConstitutionColoring {
                     .expect("aromatic id in range");
                 if self
                     .features
-                    .contains(ConstitutionFeatures::AROMATIC_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::AROMATIC_ELECTRONS)
                 {
                     system.electron_count().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::AROMATIC_CHARGE)
+                    .contains(MoleculeColoringFeatures::AROMATIC_CHARGE)
                 {
                     system.charge().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::AROMATIC_UNPAIRED_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::AROMATIC_UNPAIRED_ELECTRONS)
                 {
                     system.unpaired_electrons().hash(&mut hasher);
                 }
@@ -150,26 +153,29 @@ impl MoleculeColoring for ConstitutionColoring {
                     .expect("multicenter id in range");
                 if self
                     .features
-                    .contains(ConstitutionFeatures::MULTICENTER_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::MULTICENTER_ELECTRONS)
                 {
                     bond.electron_count().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::MULTICENTER_CHARGE)
+                    .contains(MoleculeColoringFeatures::MULTICENTER_CHARGE)
                 {
                     bond.charge().hash(&mut hasher);
                 }
                 if self
                     .features
-                    .contains(ConstitutionFeatures::MULTICENTER_UNPAIRED_ELECTRONS)
+                    .contains(MoleculeColoringFeatures::MULTICENTER_UNPAIRED_ELECTRONS)
                 {
                     bond.unpaired_electrons().hash(&mut hasher);
                 }
             }
             Entity::DativeBond(id) => {
                 let bond = mol.dative_bonds().get(id).expect("dative id in range");
-                if self.features.contains(ConstitutionFeatures::DATIVE_ORDER) {
+                if self
+                    .features
+                    .contains(MoleculeColoringFeatures::DATIVE_ORDER)
+                {
                     bond.order().hash(&mut hasher);
                 }
             }
@@ -180,13 +186,16 @@ impl MoleculeColoring for ConstitutionColoring {
                     .expect("noncovalent id in range");
                 if self
                     .features
-                    .contains(ConstitutionFeatures::NONCOVALENT_KIND)
+                    .contains(MoleculeColoringFeatures::NONCOVALENT_KIND)
                 {
                     bond.kind().hash(&mut hasher);
                 }
             }
             Entity::StereoAtom(id) => {
-                if self.features.contains(ConstitutionFeatures::STEREO_KIND) {
+                if self
+                    .features
+                    .contains(MoleculeColoringFeatures::STEREO_KIND)
+                {
                     mol.stereo_atoms()
                         .get(id)
                         .expect("stereo atom id in range")
@@ -195,7 +204,10 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
             }
             Entity::StereoBond(id) => {
-                if self.features.contains(ConstitutionFeatures::STEREO_KIND) {
+                if self
+                    .features
+                    .contains(MoleculeColoringFeatures::STEREO_KIND)
+                {
                     mol.stereo_bonds()
                         .get(id)
                         .expect("stereo bond id in range")
@@ -243,13 +255,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct_element( ConstitutionFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
-    #[case::same_element( ConstitutionFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
-    #[case::kind_tag_disjoint( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
-    #[case::element_not_selected( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), true)]
+    #[case::distinct_element( MoleculeColoringFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+    #[case::same_element( MoleculeColoringFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
+    #[case::kind_tag_disjoint( MoleculeColoringFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+    #[case::element_not_selected( MoleculeColoringFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), true)]
     fn test_constitution_coloring_color(
         ethanol_fragment: Molecule,
-        #[case] features: ConstitutionFeatures,
+        #[case] features: MoleculeColoringFeatures,
         #[case] left: Entity,
         #[case] right: Entity,
         #[case] expected_equal: bool,
@@ -304,14 +316,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::kind_distinct(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), ConstitutionFeatures::STEREO_KIND, false)]
-    #[case::kind_blind(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), ConstitutionFeatures::empty(), true)]
-    #[case::atom_bond_tag_disjoint(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)), ConstitutionFeatures::empty(), false)]
+    #[case::kind_distinct(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), MoleculeColoringFeatures::STEREO_KIND, false)]
+    #[case::kind_blind(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), MoleculeColoringFeatures::empty(), true)]
+    #[case::atom_bond_tag_disjoint(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)), MoleculeColoringFeatures::empty(), false)]
     fn test_constitution_coloring_color_stereo(
         stereo_molecule: Molecule,
         #[case] left: Entity,
         #[case] right: Entity,
-        #[case] features: ConstitutionFeatures,
+        #[case] features: MoleculeColoringFeatures,
         #[case] expected_equal: bool,
     ) {
         let coloring = ConstitutionColoring::new(features);
@@ -321,21 +333,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::both_undetermined( UnpairedElectronsForm::default(), UnpairedElectronsForm::default(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
-    #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, true)]
-    #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
-    #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::UNPAIRED_ELECTRONS, false)]
+    #[case::both_undetermined( UnpairedElectronsForm::default(), UnpairedElectronsForm::default(), MoleculeColoringFeatures::UNPAIRED_ELECTRONS, true)]
+    #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), MoleculeColoringFeatures::UNPAIRED_ELECTRONS, true)]
+    #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), MoleculeColoringFeatures::UNPAIRED_ELECTRONS, false)]
+    #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), MoleculeColoringFeatures::UNPAIRED_ELECTRONS, false)]
     #[case::partial_vs_undetermined(
         UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined },
         UnpairedElectronsForm::default(),
-        ConstitutionFeatures::UNPAIRED_ELECTRONS,
+        MoleculeColoringFeatures::UNPAIRED_ELECTRONS,
         false,
     )]
-    #[case::unpaired_electrons_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
+    #[case::unpaired_electrons_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), MoleculeColoringFeatures::empty(), true)]
     fn test_constitution_coloring_color_unpaired_electrons(
         #[case] unpaired_electrons_a: UnpairedElectronsForm,
         #[case] unpaired_electrons_b: UnpairedElectronsForm,
-        #[case] features: ConstitutionFeatures,
+        #[case] features: MoleculeColoringFeatures,
         #[case] expected_equal: bool,
     ) {
         // Two same-element atoms differing only in unpaired electrons; the color matches iff

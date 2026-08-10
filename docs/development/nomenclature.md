@@ -643,7 +643,7 @@ flags are therefore `MoleculeColoringFeatures`, not `ConstitutionFeatures`: the 
 stereo-kind switch and is not limited to constitution.
 
 **Not:** *level*, whose alternatives are mutually exclusive nested layers.
-**In code:** `MoleculeColoringFeatures` (planned rename of `ConstitutionFeatures`).
+**In code:** `MoleculeColoringFeatures`.
 
 ### Form
 

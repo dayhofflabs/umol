@@ -40,7 +40,7 @@ pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
-pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
+pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
 pub use constraint::{
     aromatic_covalence, AromaticSystemConstraintForm, AromaticSystemConstraintKey,
     AromaticSystemConstraintsForm, AromaticValence, AromaticValenceForm, AtomConstraintForm,
