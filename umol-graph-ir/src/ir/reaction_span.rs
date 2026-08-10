@@ -656,7 +656,7 @@ impl ReactionSpan {
                 })
                 .collect(),
         )
-        .apply_remapping(&participant_remapping);
+        .remap(&participant_remapping);
         let remapped_rhs_aromatic: VarRelationSet<NodeId, Unordered, AromaticSystemForm> =
             VarRelationSet::new(
                 rhs.aromatic_systems()
@@ -669,7 +669,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .apply_remapping(&participant_remapping);
+            .remap(&participant_remapping);
         let remapped_rhs_multicenter: VarRelationSet<NodeId, Unordered, MulticenterBondForm> =
             VarRelationSet::new(
                 rhs.multicenter_bonds()
@@ -682,7 +682,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .apply_remapping(&participant_remapping);
+            .remap(&participant_remapping);
         let remapped_rhs_noncovalent: FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2> =
             FixedRelationSet::new(
                 rhs.noncovalent_bonds()
@@ -696,7 +696,7 @@ impl ReactionSpan {
                     })
                     .collect(),
             )
-            .apply_remapping(&participant_remapping);
+            .remap(&participant_remapping);
         let remapped_rhs_stereo_atoms: FixedVarBirelationSet<
             NodeId,
             Ordered,
@@ -716,7 +716,7 @@ impl ReactionSpan {
                 })
                 .collect(),
         )
-        .apply_remapping(&participant_remapping);
+        .remap(&participant_remapping);
         let remapped_rhs_stereo_bonds: FixedVarBirelationSet<
             EdgeId,
             Ordered,
@@ -736,7 +736,7 @@ impl ReactionSpan {
                 })
                 .collect(),
         )
-        .apply_remapping(&participant_remapping);
+        .remap(&participant_remapping);
 
         // Atoms
         let mut atoms: Vec<EntitySpan<AtomForm>> = Vec::new();

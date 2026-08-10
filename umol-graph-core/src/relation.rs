@@ -499,7 +499,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant.
+    pub fn compact(&self, compaction: &Compaction) -> Self
     where
         D: RelationData + Clone,
     {
@@ -518,7 +519,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         Self::new(entries)
     }
 
-    /// Relabel every participant and transport positional data into the canonicalized result.
+    /// Relabel every participant and transport positional data into canonical participant order.
     ///
     /// # Semantic properties
     ///
@@ -527,7 +528,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &Remapping) -> Self
     where
         D: RelationData + Clone,
     {
@@ -544,13 +545,13 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
     where
         D: RelationData + Clone,
     {
         self.relation_ids()
             .all(|id| participants_are_covered_by(self.participants(id), remapping))
-            .then(|| self.apply_remapping(remapping))
+            .then(|| self.remap(remapping))
     }
 
     /// Glue `self` and `right`, both **already in the same participant id-space**, identifying
@@ -558,7 +559,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     /// the data of a coincidence (`None` = ⊥ ⇒ the whole glue is inadmissible ⇒ `None`); every other
     /// relation is carried. `self`'s ids are the identity prefix of the object, `right`'s
     /// non-coinciding relations are appended. The caller brings both sides, including positional
-    /// data, into the common space with [`apply_remapping`](Self::apply_remapping) first.
+    /// data, into the common space with [`remap`](Self::remap) first.
     pub fn pushout(
         &self,
         right: &Self,
@@ -796,7 +797,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant.
+    pub fn compact(&self, compaction: &Compaction) -> Self
     where
         D: RelationData + Clone,
     {
@@ -814,7 +816,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         Self::new(entries)
     }
 
-    /// Relabel every participant and transport positional data into the canonicalized result.
+    /// Relabel every participant and transport positional data into canonical participant order.
     ///
     /// # Semantic properties
     ///
@@ -823,7 +825,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &Remapping) -> Self
     where
         D: RelationData + Clone,
     {
@@ -840,13 +842,13 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover the set.
-    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
     where
         D: RelationData + Clone,
     {
         self.relation_ids()
             .all(|id| participants_are_covered_by(self.participants(id), remapping))
-            .then(|| self.apply_remapping(remapping))
+            .then(|| self.remap(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`].
@@ -1109,7 +1111,8 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant.
+    pub fn compact(&self, compaction: &Compaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1134,7 +1137,7 @@ where
         Self::new(entries)
     }
 
-    /// Relabel every participant and transport positional data into the canonicalized result.
+    /// Relabel every participant and transport positional data into canonical participant order.
     ///
     /// # Semantic properties
     ///
@@ -1144,7 +1147,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1164,7 +1167,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
     where
         D: BiRelationData + Clone,
     {
@@ -1173,7 +1176,7 @@ where
                 participants_are_covered_by(self.participants_1(id), remapping)
                     && participants_are_covered_by(self.participants_2(id), remapping)
             })
-            .then(|| self.apply_remapping(remapping))
+            .then(|| self.remap(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -1470,7 +1473,8 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant.
+    pub fn compact(&self, compaction: &Compaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1494,7 +1498,7 @@ where
         Self::new(entries)
     }
 
-    /// Relabel every participant and transport positional data into the canonicalized result.
+    /// Relabel every participant and transport positional data into canonical participant order.
     ///
     /// # Semantic properties
     ///
@@ -1504,7 +1508,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1525,7 +1529,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
     where
         D: BiRelationData + Clone,
     {
@@ -1534,7 +1538,7 @@ where
                 participants_are_covered_by(self.participants_1(id), remapping)
                     && participants_are_covered_by(self.participants_2(id), remapping)
             })
-            .then(|| self.apply_remapping(remapping))
+            .then(|| self.remap(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -1847,7 +1851,8 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    pub fn apply_compaction(&self, compaction: &Compaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant.
+    pub fn compact(&self, compaction: &Compaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1870,7 +1875,7 @@ where
         Self::new(entries)
     }
 
-    /// Relabel every participant and transport positional data into the canonicalized result.
+    /// Relabel every participant and transport positional data into canonical participant order.
     ///
     /// # Semantic properties
     ///
@@ -1880,7 +1885,7 @@ where
     /// # Panics
     ///
     /// Panics when a participant lies outside the remapping's corresponding source range.
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    pub fn remap(&self, remapping: &Remapping) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1898,7 +1903,7 @@ where
     }
 
     /// Relabel every participant, returning `None` when the remapping does not cover either factor.
-    pub fn try_apply_remapping(&self, remapping: &Remapping) -> Option<Self>
+    pub fn try_remap(&self, remapping: &Remapping) -> Option<Self>
     where
         D: BiRelationData + Clone,
     {
@@ -1907,7 +1912,7 @@ where
                 participants_are_covered_by(self.participants_1(id), remapping)
                     && participants_are_covered_by(self.participants_2(id), remapping)
             })
-            .then(|| self.apply_remapping(remapping))
+            .then(|| self.remap(remapping))
     }
 
     /// Same-space relation pushout — see [`FixedRelationSet::pushout`]. Coincidence is equality of
@@ -2290,22 +2295,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_apply_compaction() {
+    fn test_fixed_relation_set_compact() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
         let compaction = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&compaction);
+        let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
     #[rstest]
-    fn test_fixed_relation_set_apply_remapping() {
+    fn test_fixed_relation_set_remap() {
         let rs: FixedRelationSet<NodeId, Unordered, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
         let remapping = Remapping::new(vec![n(1), n(0)], vec![]);
-        let out = rs.apply_remapping(&remapping);
+        let out = rs.remap(&remapping);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &PositionLabels(vec![11, 10]));
     }
@@ -2313,15 +2318,12 @@ mod tests {
     #[rstest]
     #[case::covered(vec![n(1), n(0)], true)]
     #[case::uncovered_node(vec![n(0)], false)]
-    fn test_fixed_relation_set_try_apply_remapping(
-        #[case] nodes: Vec<NodeId>,
-        #[case] covered: bool,
-    ) {
+    fn test_fixed_relation_set_try_remap(#[case] nodes: Vec<NodeId>, #[case] covered: bool) {
         let rs: FixedRelationSet<NodeId, Unordered, PositionLabels, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], PositionLabels(vec![10, 11]))]);
         let remapping = Remapping::new(nodes, vec![]);
-        let expected = covered.then(|| rs.apply_remapping(&remapping));
-        assert_eq!(rs.try_apply_remapping(&remapping), expected);
+        let expected = covered.then(|| rs.remap(&remapping));
+        assert_eq!(rs.try_remap(&remapping), expected);
     }
 
     #[rstest]
@@ -2466,26 +2468,26 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_relation_set_apply_compaction() {
+    fn test_var_relation_set_compact() {
         let rs: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(vec![
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
         ]);
         let compaction = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&compaction);
+        let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
     #[rstest]
-    fn test_var_relation_set_apply_remapping() {
+    fn test_var_relation_set_remap() {
         let rs: VarRelationSet<EdgeId, Ordered, PositionLabels> = VarRelationSet::new(vec![(
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
         let remapping = Remapping::new(vec![], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
-        let out = rs.apply_remapping(&remapping);
+        let out = rs.remap(&remapping);
         assert_eq!(
             out.participants(RelationId(0)),
             &[EdgeId(2), EdgeId(0), EdgeId(1)]
@@ -2496,17 +2498,14 @@ mod tests {
     #[rstest]
     #[case::covered(vec![EdgeId(2), EdgeId(0), EdgeId(1)], true)]
     #[case::uncovered_edge(vec![EdgeId(2), EdgeId(0)], false)]
-    fn test_var_relation_set_try_apply_remapping(
-        #[case] edges: Vec<EdgeId>,
-        #[case] covered: bool,
-    ) {
+    fn test_var_relation_set_try_remap(#[case] edges: Vec<EdgeId>, #[case] covered: bool) {
         let rs: VarRelationSet<EdgeId, Ordered, PositionLabels> = VarRelationSet::new(vec![(
             vec![EdgeId(0), EdgeId(1), EdgeId(2)],
             PositionLabels(vec![20, 21, 22]),
         )]);
         let remapping = Remapping::new(vec![], edges);
-        let expected = covered.then(|| rs.apply_remapping(&remapping));
-        assert_eq!(rs.try_apply_remapping(&remapping), expected);
+        let expected = covered.then(|| rs.remap(&remapping));
+        assert_eq!(rs.try_remap(&remapping), expected);
     }
 
     #[rstest]
@@ -2600,7 +2599,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_fixed_birelation_set_apply_compaction() {
+    fn test_fixed_fixed_birelation_set_compact() {
         // dropped relation loses a factor-1 participant
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
             FixedFixedBirelationSet::new(vec![
@@ -2608,7 +2607,7 @@ mod tests {
                 ([n(1)], [n(5), n(6)], "drop"),
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&compaction);
+        let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -2616,7 +2615,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_fixed_birelation_set_apply_remapping() {
+    fn test_fixed_fixed_birelation_set_remap() {
         let rs: FixedFixedBirelationSet<
             NodeId,
             Unordered,
@@ -2634,7 +2633,7 @@ mod tests {
             },
         )]);
         let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)]);
-        let out = rs.apply_remapping(&remapping);
+        let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[EdgeId(0), EdgeId(1)]);
         assert_eq!(
@@ -2650,7 +2649,7 @@ mod tests {
     #[case::covered(vec![n(1), n(0)], vec![EdgeId(1), EdgeId(0)], true)]
     #[case::uncovered_node(vec![n(0)], vec![EdgeId(1), EdgeId(0)], false)]
     #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(1)], false)]
-    fn test_fixed_fixed_birelation_set_try_apply_remapping(
+    fn test_fixed_fixed_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
         #[case] covered: bool,
@@ -2672,8 +2671,8 @@ mod tests {
             },
         )]);
         let remapping = Remapping::new(nodes, edges);
-        let expected = covered.then(|| rs.apply_remapping(&remapping));
-        assert_eq!(rs.try_apply_remapping(&remapping), expected);
+        let expected = covered.then(|| rs.remap(&remapping));
+        assert_eq!(rs.try_remap(&remapping), expected);
     }
 
     #[rstest]
@@ -2775,14 +2774,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_apply_compaction() {
+    fn test_fixed_var_birelation_set_compact() {
         let rs: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![
                 ([n(0)], vec![n(2), n(4)], "keep"),
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&compaction);
+        let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
@@ -2790,7 +2789,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_apply_remapping() {
+    fn test_fixed_var_birelation_set_remap() {
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Unordered, BiPositionLabels> =
             FixedVarBirelationSet::new(vec![(
                 [EdgeId(0), EdgeId(1)],
@@ -2801,7 +2800,7 @@ mod tests {
                 },
             )]);
         let remapping = Remapping::new(vec![n(2), n(0), n(1)], vec![EdgeId(2), EdgeId(0)]);
-        let out = rs.apply_remapping(&remapping);
+        let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[EdgeId(2), EdgeId(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(0), n(1), n(2)]);
         assert_eq!(
@@ -2821,7 +2820,7 @@ mod tests {
     )]
     #[case::uncovered_node(vec![n(2), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
     #[case::uncovered_edge(vec![n(2), n(0), n(1)], vec![EdgeId(2)], false)]
-    fn test_fixed_var_birelation_set_try_apply_remapping(
+    fn test_fixed_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
         #[case] covered: bool,
@@ -2836,8 +2835,8 @@ mod tests {
                 },
             )]);
         let remapping = Remapping::new(nodes, edges);
-        let expected = covered.then(|| rs.apply_remapping(&remapping));
-        assert_eq!(rs.try_apply_remapping(&remapping), expected);
+        let expected = covered.then(|| rs.remap(&remapping));
+        assert_eq!(rs.try_remap(&remapping), expected);
     }
 
     #[rstest]
@@ -2936,7 +2935,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_var_birelation_set_apply_compaction() {
+    fn test_var_var_birelation_set_compact() {
         // dropped relation loses a factor-2 participant
         let rs: VarVarBirelationSet<NodeId, Unordered, NodeId, Unordered, &str> =
             VarVarBirelationSet::new(vec![
@@ -2944,7 +2943,7 @@ mod tests {
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
         let compaction = Compaction::new(vec![1], vec![]);
-        let out = rs.apply_compaction(&compaction);
+        let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
@@ -2952,7 +2951,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_var_birelation_set_apply_remapping() {
+    fn test_var_var_birelation_set_remap() {
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Ordered, BiPositionLabels> =
             VarVarBirelationSet::new(vec![(
                 vec![n(0), n(1)],
@@ -2963,7 +2962,7 @@ mod tests {
                 },
             )]);
         let remapping = Remapping::new(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0), EdgeId(1)]);
-        let out = rs.apply_remapping(&remapping);
+        let out = rs.remap(&remapping);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(
             out.participants_2(RelationId(0)),
@@ -2986,7 +2985,7 @@ mod tests {
     )]
     #[case::uncovered_node(vec![n(1)], vec![EdgeId(2), EdgeId(0), EdgeId(1)], false)]
     #[case::uncovered_edge(vec![n(1), n(0)], vec![EdgeId(2), EdgeId(0)], false)]
-    fn test_var_var_birelation_set_try_apply_remapping(
+    fn test_var_var_birelation_set_try_remap(
         #[case] nodes: Vec<NodeId>,
         #[case] edges: Vec<EdgeId>,
         #[case] covered: bool,
@@ -3001,8 +3000,8 @@ mod tests {
                 },
             )]);
         let remapping = Remapping::new(nodes, edges);
-        let expected = covered.then(|| rs.apply_remapping(&remapping));
-        assert_eq!(rs.try_apply_remapping(&remapping), expected);
+        let expected = covered.then(|| rs.remap(&remapping));
+        assert_eq!(rs.try_remap(&remapping), expected);
     }
 
     #[rstest]

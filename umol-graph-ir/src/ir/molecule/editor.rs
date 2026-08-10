@@ -135,10 +135,10 @@ where
             .collect()
     }
 
-    fn apply_compaction(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &Compaction) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
+                FixedSetStorage::Shared(Arc::new(arc.compact(compaction)))
             }
             FixedSetStorage::Mutable(vec) => {
                 let compacted: Vec<([P; N], D)> = vec
@@ -275,11 +275,9 @@ where
             .collect()
     }
 
-    fn apply_compaction(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &Compaction) -> Self {
         match self {
-            VarSetStorage::Shared(arc) => {
-                VarSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
-            }
+            VarSetStorage::Shared(arc) => VarSetStorage::Shared(Arc::new(arc.compact(compaction))),
             VarSetStorage::Mutable(vec) => {
                 let compacted: Vec<(Vec<P>, D)> = vec
                     .into_iter()
@@ -440,10 +438,10 @@ where
         Some((sigma_1, sigma_2))
     }
 
-    fn apply_compaction(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &Compaction) -> Self {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.apply_compaction(compaction)))
+                FixedVarSetStorage::Shared(Arc::new(arc.compact(compaction)))
             }
             FixedVarSetStorage::Mutable(vec) => {
                 let compacted: Vec<([L1; N1], Vec<L2>, D)> = vec
@@ -1289,25 +1287,25 @@ impl MoleculeEditor {
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.apply_compaction(&compaction);
+        self.dative_bonds = dative.compact(&compaction);
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.apply_compaction(&compaction);
+        self.aromatic_systems = aromatic.compact(&compaction);
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.apply_compaction(&compaction);
+        self.multicenter_bonds = multicenter.compact(&compaction);
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.apply_compaction(&compaction);
+        self.noncovalent_bonds = noncovalent.compact(&compaction);
 
         // Forward-compact stereo overlays: a stereo element whose site or any
         // ligand atom/bond was removed drops out (cascade). The dropped ids
@@ -1317,12 +1315,12 @@ impl MoleculeEditor {
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.apply_compaction(&compaction);
+        self.stereo_atoms = stereo_atoms.compact(&compaction);
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.apply_compaction(&compaction);
+        self.stereo_bonds = stereo_bonds.compact(&compaction);
 
         let id_compaction = IdCompaction::new(
             compaction,

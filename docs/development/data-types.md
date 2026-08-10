@@ -490,8 +490,8 @@ a second payload-equivalence API.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public
-relation-set APIs provide paired routes. `apply_remapping` asserts coverage for producer paths that
-establish it and documents that a mismatch panics; `try_apply_remapping` checks coverage and returns
+relation-set APIs provide paired routes. `remap` asserts coverage for producer paths that
+establish it and documents that a mismatch panics; `try_remap` checks coverage and returns
 `None` for an independently supplied mismatch. Both use the same transport implementation. The
 checked route belongs at application because construction cannot know which carrier will later be
 supplied; `map_node`, `map_edge`, and participant-level remapping remain direct indexing operations.

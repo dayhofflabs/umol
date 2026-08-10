@@ -1,6 +1,6 @@
 # 186 - Molecule AST canonicalization
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-05
 Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
@@ -876,18 +876,18 @@ work required by that transport: relation-set remapping additionally restores ca
 order and permutes position-sensitive relation data, but this is the relation set's implementation
 of remapping rather than a distinct operation.
 
-Before canonicalization is implemented, rename graph-core relation-set `apply_remapping` to `remap`
-and `try_apply_remapping` to `try_remap` across all five relation-set forms and their callers. The
-ordinary `remap` route asserts that the remapping covers the receiver; `try_remap` checks coverage
-for an independently supplied receiver/remapping pair and returns `None` on a mismatch. This is a
-naming-only migration and must not change transport, participant-order, payload-permutation, or
-failure semantics.
+Before canonicalization is implemented, graph-core relation sets use `remap` and `try_remap` across
+all five forms. The ordinary `remap` route asserts that the remapping covers the receiver;
+`try_remap` checks coverage for an independently supplied receiver/remapping pair and returns `None`
+on a mismatch. The analogous removal-driven operation is `compact`: it drops relations containing
+removed participants and relabels every survivor into the compacted id space. These names must not
+change transport, participant-order, payload-permutation, dropping, or failure semantics.
 
 AST values transported through `IdRemapping` retain the existing `remap` spelling. The end-to-end
 `MoleculeAst` operation follows the same pair: `remap` is the asserted route for a producer-known
 dense correspondence, while `try_remap` checks an independently supplied correspondence. The
-argument type, rather than an `apply_remapping` verb, identifies whether graph ids, typed molecule
-ids, or the complete molecule namespace are being transported.
+argument type identifies whether graph ids, typed molecule ids, or the complete molecule namespace
+are being transported.
 
 ## Required molecule-remapping operation
 
@@ -1038,10 +1038,12 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S3 — Complete remapping
 
-- **S3a — Relation remapping names.** Rename public graph-core relation-set `apply_remapping` to
-  `remap` and `try_apply_remapping` to `try_remap` across all five relation-set forms and every
-  caller. Preserve asserted coverage, checked `None`, participant canonical ordering, and
-  `RelationData`/`BiRelationData` permutation behavior. This is breaking red-to-green. [dep: S1b]
+- **S3a — Relation remapping and compaction names.** Rename public graph-core relation-set
+  `apply_remapping` to `remap`, `try_apply_remapping` to `try_remap`, and `apply_compaction` to
+  `compact` across all five relation-set forms and every caller. Preserve asserted coverage,
+  checked `None`, removal-driven relation dropping, participant canonical ordering, and
+  `RelationData`/`BiRelationData` permutation behavior. This is breaking red-to-green.
+  [dep: doc 176] **Done.**
 - **S3b — Dense molecule remapping.** Add public `MoleculeAst::remap` and `try_remap` over a complete
   `MoleculeCorrespondence`. The checked route returns `None` unless source counts agree and every
   entity-family mapping is a bijection onto a dense target. Rebuild topology and every entity table
@@ -1216,7 +1218,8 @@ and the semantic properties validated by the corresponding property tests.
   graph property targets at the agreed larger case count, conformance targets, affected fuzz builds,
   and the canonicalization benchmarks. Confirm that no old `Canonicalize` normalization names,
   relative stereo delta variants, `IncidenceNodeSelection`, `ConstitutionFeatures`, AST validator
-  modules, or `apply_remapping` spellings remain. This is additive. [dep: S13a]
+  modules, or `apply_remapping`/`try_apply_remapping`/`apply_compaction` spellings remain. This is
+  additive. [dep: S13a]
 - **S13c — Permanent documentation and status.** Update the DSL specification, current examples,
   nomenclature, data-type, and property-test guides to the implemented API; remove the dated doc-186
   TODO markers; record benchmark results and exact compatibility promises; then mark this document

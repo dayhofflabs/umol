@@ -219,6 +219,8 @@ spelling.
 | `ast` as the graph-IR module or entity payload member | `ir` for the module; `attributes` for the payload | the graph model is an IR, and the payload is the entity's complete attribute form |
 | `:type` for an entity payload in the DSL | `:attrs` | the payload contains attributes, not the entity kind |
 | `Ctx` in a public identifier | `Context` | public identifiers use complete words |
+| `apply_remapping`, `try_apply_remapping` | `remap`, `try_remap` | the receiver is transported through the supplied remapping |
+| `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
 
 ## Open issues
 
@@ -325,8 +327,8 @@ them.
 
 **Not:** a correspondence, whose unmatched ids remain members of their respective carriers; not a
 remapping, which gives every source id an image and never expresses removal.
-**In code:** `IdCompaction`, `UndoCompaction`, `umol_graph_core::Compaction`; `compact_*`,
-`uncompact_*`.
+**In code:** `IdCompaction`, `UndoCompaction`, `umol_graph_core::Compaction`; `compact`,
+`compact_*`, `uncompact_*`.
 
 ### Config
 
@@ -1194,7 +1196,7 @@ structural edit.
 
 **Not:** a correspondence, which may be partial and only records pairing; not a compaction, which
 expresses removal by leaving removed source ids without images.
-**In code:** `umol_graph_core::Remapping`, `IdRemapping`, `apply_remapping`, `to_remapping`.
+**In code:** `umol_graph_core::Remapping`, `IdRemapping`, `remap`, `to_remapping`.
 
 ### Reset
 

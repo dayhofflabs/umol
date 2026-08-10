@@ -115,7 +115,7 @@ impl Molecule {
             &participant_remapping,
         )?;
 
-        let dative_glue = other.dative_bonds.apply_remapping(&participant_remapping);
+        let dative_glue = other.dative_bonds.remap(&participant_remapping);
         let dative_merged = self.dative_bonds.pushout(&dative_glue, |a, b| a.meet(b))?;
         let dative_object = &dative_merged.object;
         let dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = dative_object
@@ -133,9 +133,7 @@ impl Molecule {
             })
             .collect();
 
-        let noncovalent_glue = other
-            .noncovalent_bonds
-            .apply_remapping(&participant_remapping);
+        let noncovalent_glue = other.noncovalent_bonds.remap(&participant_remapping);
         let noncovalent_merged = self
             .noncovalent_bonds
             .pushout(&noncovalent_glue, |a, b| a.meet(b))?;
@@ -160,7 +158,7 @@ impl Molecule {
         // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
         // collision leaves two overlays on one site — over-coordination, rejected by the `has_conflict`
         // gate below.
-        let remapped_stereo_atoms = other.stereo_atoms.apply_remapping(&participant_remapping);
+        let remapped_stereo_atoms = other.stereo_atoms.remap(&participant_remapping);
 
         let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
             &self.stereo_atoms,
@@ -182,7 +180,7 @@ impl Molecule {
             })
             .collect();
 
-        let remapped_stereo_bonds = other.stereo_bonds.apply_remapping(&participant_remapping);
+        let remapped_stereo_bonds = other.stereo_bonds.remap(&participant_remapping);
         let stereo_bond_right = FixedVarBirelationSet::new(stereo_glue_entries(
             &self.stereo_bonds,
             &remapped_stereo_bonds,
@@ -315,7 +313,7 @@ fn glue_var_overlays<D: Lattice + RelationData>(
     right: &VarRelationSet<NodeId, Unordered, D>,
     remapping: &Remapping,
 ) -> Option<Vec<(Vec<AtomId>, D)>> {
-    let right_glue = right.apply_remapping(remapping);
+    let right_glue = right.remap(remapping);
     let merged = left.pushout(&right_glue, |a, b| a.meet(b))?;
     Some(
         merged
