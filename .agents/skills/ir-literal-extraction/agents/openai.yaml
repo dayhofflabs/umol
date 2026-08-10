@@ -1,0 +1,4 @@
+interface:
+  display_name: "Graph-IR Literal Extraction"
+  short_description: "Choose literal extraction patterns in umol"
+  default_prompt: "Use $ir-literal-extraction when implementing graph-IR-consuming operations in umol."

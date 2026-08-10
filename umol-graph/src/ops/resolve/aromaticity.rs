@@ -247,22 +247,27 @@ impl AromaticityResolver {
     /// Plan and atomically apply aromaticity resolution.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityError> {
-        let edits = match self.plan(ast)? {
+        let edits = match self.plan(molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 
-    fn plan_system(&self, ast: &Molecule, atoms: Vec<AtomId>, system: AromaticSystemForm) -> Edits {
+    fn plan_system(
+        &self,
+        molecule: &Molecule,
+        atoms: Vec<AtomId>,
+        system: AromaticSystemForm,
+    ) -> Edits {
         let mut atom_updates = Vec::new();
         if self.config.reset_aromatic_valence {
             for &atom_id in &atoms {
@@ -279,7 +284,7 @@ impl AromaticityResolver {
         for (atom_id, update) in atom_updates {
             edits.update_atom(
                 AtomHandle::Id(atom_id),
-                ast.atom(atom_id).attributes,
+                molecule.atom(atom_id).attributes,
                 &update,
             );
         }
@@ -287,7 +292,7 @@ impl AromaticityResolver {
         let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
         let mut bond_ids = BTreeSet::new();
         for &atom_id in &atoms {
-            for neighbor in ast.atom(atom_id).neighbors() {
+            for neighbor in molecule.atom(atom_id).neighbors() {
                 if members.contains(&neighbor.atom_id()) {
                     bond_ids.insert(neighbor.bond_id());
                 }
@@ -295,7 +300,7 @@ impl AromaticityResolver {
         }
         for bond_id in bond_ids {
             if matches!(
-                ast.bond(bond_id).attributes.constraints.aromatic(),
+                molecule.bond(bond_id).attributes.constraints.aromatic(),
                 BooleanForm::Lit(_)
             ) {
                 continue;
@@ -306,7 +311,7 @@ impl AromaticityResolver {
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
             edits.update_bond(
                 BondHandle::Id(bond_id),
-                ast.bond(bond_id).attributes,
+                molecule.bond(bond_id).attributes,
                 &update,
             );
         }

@@ -12,12 +12,12 @@ This is the practical reference for the common 90%.
 
 | Macro | Input | Produces | Use for |
 |---|---|---|---|
-| `mol!("{...}")` | molecule EDN | `MoleculeAst`, **un-grounded** (wildcards preserved, metadata dropped) | **query/substructure patterns**; molecules with wildcards |
-| `mol_ground!("{...}")` | molecule EDN | `MoleculeAst` with `MoleculeDefaults::ground()` applied | **concrete test molecules** |
+| `mol!("{...}")` | molecule EDN | `Molecule`, **un-grounded** (wildcards preserved, metadata dropped) | **query/substructure patterns**; molecules with wildcards |
+| `mol_ground!("{...}")` | molecule EDN | `Molecule` with `MoleculeDefaults::ground()` applied | **concrete test molecules** |
 | `dsl!("{...}")` | molecule EDN | `MoleculeDsl` (keeps metadata: ids, aliases) | when ids/aliases matter |
-| `atom!("C#h3")` | atom-string | `AtomAst`, un-grounded | a single pattern/atom |
-| `atom_ground!("C#h3")` | atom-string | grounded `AtomAst` | a single concrete atom |
-| `bond!("2")` / `bond_ground!("2")` | bond-string | `BondAst` | a single bond |
+| `atom!("C#h3")` | atom-string | `AtomForm`, un-grounded | a single pattern/atom |
+| `atom_ground!("C#h3")` | atom-string | grounded `AtomForm` | a single concrete atom |
+| `bond!("2")` / `bond_ground!("2")` | bond-string | `BondForm` | a single bond |
 
 `mol!` vs `mol_ground!` is the key choice: **patterns → `mol!`** (Undetermined stays
 a match wildcard), **concrete molecules → `mol_ground!`** (defaults fill the slots).
@@ -107,7 +107,7 @@ stereo (`#Cn`/`#C+`/`#C!`/`#C*`). Keyword shorthands `:single :double :triple
 - **Query/pattern** (`mol!`, `atom!`, `bond!`): wildcards, sets, `#R+`, bool-exprs
   allowed. A pattern matches a target iff, per slot, the pattern's solution-set ⊇ the
   target's (the pattern admits everything the target does). `*` matches anything; an
-  empty/`default()` atom matches any atom (`AtomAst::default()` ≡ `"*"`).
+  empty/`default()` atom matches any atom (`AtomForm::default()` ≡ `"*"`).
 
 ## Common patterns
 

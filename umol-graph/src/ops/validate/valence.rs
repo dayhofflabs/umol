@@ -38,16 +38,16 @@ impl<'a> ValenceConformanceValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ValenceConformanceContradiction>, ValenceConformanceError> {
         let mut any_undetermined = false;
-        for id in ast.atoms().ids() {
+        for id in molecule.atoms().ids() {
             let outcome = match self {
                 Self::AtomTyping(engine) => engine
-                    .classify_molecule_atom(ast, id)
+                    .classify_molecule_atom(molecule, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
                 Self::Counts(engine) => engine
-                    .classify_molecule_atom(ast, id)
+                    .classify_molecule_atom(molecule, id)
                     .map_contradiction(ValenceConformanceContradiction::from),
             };
             match outcome {

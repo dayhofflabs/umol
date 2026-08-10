@@ -47,7 +47,7 @@ pub trait TryIntoIr<A>: Sized {
     fn try_into_ir(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
 }
 
-/// Exact literal projection for AST types whose value space includes an
+/// Exact literal projection for graph-IR forms whose value space includes an
 /// `Undetermined` or otherwise non-ground branch.
 ///
 /// For a type implementing both `Lattice` and `AsLit`, projection is total
@@ -59,11 +59,11 @@ pub trait AsLit {
     /// Exact non-lattice representation of a ground value.
     type Lit;
 
-    /// `Some(lit)` exactly when the AST value is structurally ground.
+    /// `Some(lit)` exactly when the form is structurally ground.
     fn as_lit(&self) -> Option<Self::Lit>;
 }
 
-/// Refinement lattice on AST value types.
+/// Refinement lattice on graph-IR forms.
 ///
 /// `Undetermined` is the top (most general / "any value"); fully ground
 /// concrete values are bottom (most specific). `meet` is the greatest lower
@@ -137,7 +137,7 @@ pub trait Lattice: Canonicalize {
     }
 }
 
-/// Normal (canonical) form of an AST value. The per-type `canonicalize` puts a
+/// Normal (canonical) form of a graph-IR value. The per-type `canonicalize` puts a
 /// value into its one canonical form — sorted/deduped sets, singleton collapse,
 /// folded decidable expressions — returning `Err(Contradiction)` for an
 /// unsatisfiable value (e.g. an empty set).

@@ -91,7 +91,7 @@ short-circuit style. Within/between checks run per entity type.
 
 ## Test consumption
 
-`molecule_ast_strategy()` may emit structurally-invalid molecules. The
+`molecule_strategy()` may emit structurally-invalid molecules. The
 cross-validation invariant (all strategies + subiso algorithms agree) holds only
 for well-formed hosts/patterns. Both `test_substructure_cross_validation` and
 `test_substructure_cross_validation_planted` gain a `prop_filter` that drops

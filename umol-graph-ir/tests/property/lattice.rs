@@ -159,10 +159,10 @@ proptest! {
     fn test_aromatic_valence_form_aromatic_covalence(
         valence in any::<i64>(),
     ) {
-        let ast = AromaticValenceForm::from(AromaticValence::Aromatic(valence));
+        let form = AromaticValenceForm::from(AromaticValence::Aromatic(valence));
         let expected = if valence == 1 { 1 } else { 0 };
         prop_assert_eq!(aromatic_covalence(valence), expected);
-        prop_assert_eq!(ast.aromatic_covalence(), NumForm::Lit(expected));
+        prop_assert_eq!(form.aromatic_covalence(), NumForm::Lit(expected));
     }
 
     #[test]

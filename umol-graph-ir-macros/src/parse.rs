@@ -252,7 +252,7 @@ impl Parse for Ligand {
 }
 
 /// An overlay statement: a keyword-led relation over already-declared atoms/bonds (references only).
-/// Each desugars to its L2 term; the optional payload is a quoted DSL spec for the entity's own Ast.
+/// Each desugars to its L2 term; the optional payload is a quoted DSL spec for the entity's own Form.
 pub(crate) enum Overlay {
     Aromatic {
         atoms: Vec<Atom>,
@@ -521,12 +521,12 @@ fn overlay_atom(atom: &Atom, labels: &HashMap<String, Label>) -> Result<TokenStr
     }
 }
 
-/// The `ast: impl Into<…>` payload argument of an overlay term — the quoted DSL spec, or the entity's
+/// The `form: impl Into<…>` payload argument of an overlay term — the quoted DSL spec, or the entity's
 /// `default()` when none was given.
-fn overlay_payload(payload: &Option<LitStr>, ast_ty: TokenStream) -> TokenStream {
+fn overlay_payload(payload: &Option<LitStr>, form_ty: TokenStream) -> TokenStream {
     match payload {
         Some(spec) => quote! { #spec },
-        None => quote! { <#ast_ty>::default() },
+        None => quote! { <#form_ty>::default() },
     }
 }
 
@@ -538,8 +538,8 @@ pub(crate) fn overlay_term(
     match overlay {
         Overlay::Aromatic { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::AromaticSystemForm });
-            Ok(quote! { aromatic_system([ #(#atoms),* ], #ast) })
+            let form = overlay_payload(payload, quote! { ::umol_graph_ir::ir::AromaticSystemForm });
+            Ok(quote! { aromatic_system([ #(#atoms),* ], #form) })
         }
         Overlay::Dative {
             donors,
@@ -548,13 +548,14 @@ pub(crate) fn overlay_term(
         } => {
             let donors = overlay_atoms(donors, labels)?;
             let acceptor = overlay_atom(acceptor, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::DativeBondForm });
-            Ok(quote! { dative_bond([ #(#donors),* ], #acceptor, #ast) })
+            let form = overlay_payload(payload, quote! { ::umol_graph_ir::ir::DativeBondForm });
+            Ok(quote! { dative_bond([ #(#donors),* ], #acceptor, #form) })
         }
         Overlay::Multicenter { atoms, payload } => {
             let atoms = overlay_atoms(atoms, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::MulticenterBondForm });
-            Ok(quote! { multicenter_bond([ #(#atoms),* ], #ast) })
+            let form =
+                overlay_payload(payload, quote! { ::umol_graph_ir::ir::MulticenterBondForm });
+            Ok(quote! { multicenter_bond([ #(#atoms),* ], #form) })
         }
         Overlay::Noncovalent { atoms, payload } => {
             if atoms.len() != 2 {
@@ -565,8 +566,9 @@ pub(crate) fn overlay_term(
             }
             let first = overlay_atom(&atoms[0], labels)?;
             let second = overlay_atom(&atoms[1], labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::NoncovalentBondForm });
-            Ok(quote! { noncovalent_bond(#first, #second, #ast) })
+            let form =
+                overlay_payload(payload, quote! { ::umol_graph_ir::ir::NoncovalentBondForm });
+            Ok(quote! { noncovalent_bond(#first, #second, #form) })
         }
         Overlay::StereoAtom {
             site,
@@ -575,8 +577,8 @@ pub(crate) fn overlay_term(
         } => {
             let site = overlay_atom(site, labels)?;
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoAtomForm });
-            Ok(quote! { stereo_atom(#site, [ #(#ligands),* ], #ast) })
+            let form = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoAtomForm });
+            Ok(quote! { stereo_atom(#site, [ #(#ligands),* ], #form) })
         }
         Overlay::StereoBond {
             site,
@@ -592,8 +594,8 @@ pub(crate) fn overlay_term(
             resolve_bond_ref(labels, name)?;
             let site = name.to_string();
             let ligands = overlay_ligands(ligands, labels)?;
-            let ast = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoBondForm });
-            Ok(quote! { stereo_bond(#site, [ #(#ligands),* ], #ast) })
+            let form = overlay_payload(payload, quote! { ::umol_graph_ir::ir::StereoBondForm });
+            Ok(quote! { stereo_bond(#site, [ #(#ligands),* ], #form) })
         }
     }
 }

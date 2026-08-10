@@ -127,7 +127,7 @@ pub(crate) fn fmt_unpaired_electrons(
 // Canonical-rendering rules:
 //
 // - Vacuous constraints (any constraint whose payload is `NumForm::Undetermined`)
-//   are elided from the rendered surface form. The AST may carry them; the
+//   are elided from the rendered surface form. The IR may carry them; the
 //   canonical entity / molecule string does not show them.
 // - Inherent fields whose payload is `NumForm::Undetermined` are likewise
 //   elided when they have a leading prefix (`#c`, `#u`, `#s`, `#e`, …).
@@ -136,7 +136,7 @@ pub(crate) fn fmt_unpaired_electrons(
 //   string's start position. For these, `Undetermined` renders as `*`.
 //
 // Consequence for round-trip: rendering a vacuous constraint and reparsing
-// produces an AST without that constraint, so AST equality across a
+// produces an IR value without that constraint, so structural equality across a
 // render/parse cycle requires either generating only non-vacuous payloads
 // or normalizing the input before comparing.
 
@@ -204,7 +204,7 @@ pub(crate) fn raise_unpaired_electrons(
 /// `strip_multiplicity`
 /// first so that under (Derived, Derived) the tie-break keeps `u` explicit:
 /// `strip_count` under `Derived` backs off when `strip_multiplicity` has already fired, so at
-/// most one of the two is stripped and re-raising recovers the original AST.
+/// most one of the two is stripped and re-raising recovers the original form.
 pub(crate) fn lower_unpaired_electrons(
     unpaired_electrons: &mut UnpairedElectronsForm,
     count_default: UnpairedElectronsDefault,
@@ -462,7 +462,7 @@ mod tests {
         assert_eq!(unpaired_electrons.multiplicity, expected_multiplicity);
     }
 
-    /// Per-mode lowering: covers the AST states reachable by raising the canonical DSL fragments, plus (U, U) where applicable.
+    /// Per-mode lowering: covers the form states reachable by raising the canonical DSL fragments, plus (U, U) where applicable.
     #[rustfmt::skip]
     #[rstest]
     // u: Zero, m: Derived
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(unpaired_electrons.multiplicity, expected_multiplicity);
     }
 
-    /// AST preservation: the raised AST is a fixed point of `lower → raise`. Lowering strips default content; re-raising the result must recover the same AST.
+    /// Form preservation: the raised form is a fixed point of `lower → raise`. Lowering strips default content; re-raising the result must recover the same form.
     #[rustfmt::skip]
     #[rstest]
     #[case::zd_empty(NumForm::Undetermined, NumForm::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]

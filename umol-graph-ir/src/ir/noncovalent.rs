@@ -236,7 +236,7 @@ mod tests {
         NoncovalentBondForm::default().with_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraintsForm::new() })]
-    #[case::with_kind_ast(
+    #[case::with_kind_form(
         NoncovalentBondForm::default().with_kind(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraintsForm::new() })]

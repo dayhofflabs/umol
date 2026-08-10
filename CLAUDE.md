@@ -68,8 +68,8 @@
 
 ## Coding Rules
 - Avoid creating many "helper" methods or free functions for single-use operations.
-- Before editing AST literal extraction in `umol-graph` or higher-level crates, consult the
-  `ast-literal-extraction` skill.
+- Before editing graph-IR literal extraction in `umol-graph` or higher-level crates, consult the
+  `ir-literal-extraction` skill.
 - No long comments, no self-talk, no references to previous implementations in comments.
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.

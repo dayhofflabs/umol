@@ -13,7 +13,7 @@ use umol_graph_ir::ir::MoleculeCorrespondence;
 
 use crate::strategies::*;
 
-fn identity_correspondence(ast: &Molecule) -> MoleculeCorrespondence {
+fn identity_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
     fn identity<Id>(count: usize) -> Correspondence<Id>
     where
         Id: Copy + Ord + From<usize>,
@@ -23,14 +23,14 @@ fn identity_correspondence(ast: &Molecule) -> MoleculeCorrespondence {
     }
 
     MoleculeCorrespondence::new(
-        identity::<AtomId>(ast.atoms().count()),
-        identity::<BondId>(ast.bonds().count()),
-        identity::<DativeBondId>(ast.dative_bonds().count()),
-        identity::<AromaticSystemId>(ast.aromatic_systems().count()),
-        identity::<MulticenterBondId>(ast.multicenter_bonds().count()),
-        identity::<NoncovalentBondId>(ast.noncovalent_bonds().count()),
-        identity::<StereoAtomId>(ast.stereo_atoms().count()),
-        identity::<StereoBondId>(ast.stereo_bonds().count()),
+        identity::<AtomId>(molecule.atoms().count()),
+        identity::<BondId>(molecule.bonds().count()),
+        identity::<DativeBondId>(molecule.dative_bonds().count()),
+        identity::<AromaticSystemId>(molecule.aromatic_systems().count()),
+        identity::<MulticenterBondId>(molecule.multicenter_bonds().count()),
+        identity::<NoncovalentBondId>(molecule.noncovalent_bonds().count()),
+        identity::<StereoAtomId>(molecule.stereo_atoms().count()),
+        identity::<StereoBondId>(molecule.stereo_bonds().count()),
     )
 }
 
@@ -61,20 +61,20 @@ proptest! {
         ..Config::default()
     })]
     #[test]
-    fn test_molecule_ast_equiv_reflexive(ast in molecule_ast_with_constraints_strategy()) {
-        prop_assert!(ast.equiv(&ast));
+    fn test_molecule_equiv_reflexive(molecule in molecule_with_constraints_strategy()) {
+        prop_assert!(molecule.equiv(&molecule));
     }
 
     #[test]
-    fn test_molecule_ast_equiv_symmetric(
-        left in molecule_ast_with_constraints_strategy(),
-        right in molecule_ast_with_constraints_strategy(),
+    fn test_molecule_equiv_symmetric(
+        left in molecule_with_constraints_strategy(),
+        right in molecule_with_constraints_strategy(),
     ) {
         prop_assert_eq!(left.equiv(&right), right.equiv(&left));
     }
 
     #[test]
-    fn test_molecule_ast_equiv_under_transitive(
+    fn test_molecule_equiv_under_transitive(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
     ) {
         let count = atoms.len();
@@ -117,31 +117,31 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_equiv_agrees_with_equality_for_canonical_asts(
-        left in molecule_ast_strategy(),
-        right in molecule_ast_strategy(),
+    fn test_molecule_equiv_agrees_with_equality_for_canonical_molecules(
+        left in molecule_strategy(),
+        right in molecule_strategy(),
     ) {
         prop_assert_eq!(left.equiv(&right), left == right);
     }
 
     #[test]
-    fn test_molecule_ast_equiv_under_identity_reduces_to_equiv(
-        ast in molecule_ast_with_constraints_strategy(),
+    fn test_molecule_equiv_under_identity_reduces_to_equiv(
+        molecule in molecule_with_constraints_strategy(),
     ) {
-        let correspondence = identity_correspondence(&ast);
-        let mut other = ast.clone();
+        let correspondence = identity_correspondence(&molecule);
+        let mut other = molecule.clone();
         if other.atoms().count() > 0 {
             other.atom_mut(AtomId(0)).attributes.charge = NumForm::Lit(99);
         }
 
         prop_assert_eq!(
-            ast.equiv_under(&other, &correspondence),
-            ast.equiv(&other),
+            molecule.equiv_under(&other, &correspondence),
+            molecule.equiv(&other),
         );
     }
 
     #[test]
-    fn test_molecule_ast_equiv_under_symmetric_under_reverse(
+    fn test_molecule_equiv_under_symmetric_under_reverse(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
         change_mapped_atom in any::<bool>(),
     ) {

@@ -57,40 +57,40 @@ use crate::ir::stereo::{StereoAtomForm, StereoBondForm};
 use crate::ir::traits::{FromIr, IntoIr};
 
 /// Surface DSL for a whole molecule. Pairs `Molecule` with `MoleculeMetadata`;
-/// fields are private so metadata cannot drift onto a different AST.
+/// fields are private so metadata cannot drift onto a different molecule.
 #[derive(Clone, Debug, Default)]
 pub struct MoleculeDsl {
-    ast: Molecule,
+    molecule: Molecule,
     metadata: MoleculeMetadata,
 }
 
 impl MoleculeDsl {
-    /// Pair a molecule AST with coherent surface metadata.
-    pub fn new(ast: Molecule, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
+    /// Pair a molecule with coherent surface metadata.
+    pub fn new(molecule: Molecule, metadata: MoleculeMetadata) -> Result<Self, MetadataError> {
         for (entity, _) in metadata.iter_keywords() {
             let contains = match entity {
-                Entity::Atom(id) => ast.atoms().contains(id),
-                Entity::Bond(id) => ast.bonds().contains(id),
-                Entity::DativeBond(id) => ast.dative_bonds().contains(id),
-                Entity::AromaticSystem(id) => ast.aromatic_systems().contains(id),
-                Entity::MulticenterBond(id) => ast.multicenter_bonds().contains(id),
-                Entity::NoncovalentBond(id) => ast.noncovalent_bonds().contains(id),
-                Entity::StereoAtom(id) => ast.stereo_atoms().contains(id),
-                Entity::StereoBond(id) => ast.stereo_bonds().contains(id),
+                Entity::Atom(id) => molecule.atoms().contains(id),
+                Entity::Bond(id) => molecule.bonds().contains(id),
+                Entity::DativeBond(id) => molecule.dative_bonds().contains(id),
+                Entity::AromaticSystem(id) => molecule.aromatic_systems().contains(id),
+                Entity::MulticenterBond(id) => molecule.multicenter_bonds().contains(id),
+                Entity::NoncovalentBond(id) => molecule.noncovalent_bonds().contains(id),
+                Entity::StereoAtom(id) => molecule.stereo_atoms().contains(id),
+                Entity::StereoBond(id) => molecule.stereo_bonds().contains(id),
             };
             if !contains {
                 return Err(MetadataError::EntityOutOfRange(entity));
             }
         }
-        Ok(Self::from_parts(ast, metadata))
+        Ok(Self::from_parts(molecule, metadata))
     }
 
-    fn from_parts(ast: Molecule, metadata: MoleculeMetadata) -> Self {
-        Self { ast, metadata }
+    fn from_parts(molecule: Molecule, metadata: MoleculeMetadata) -> Self {
+        Self { molecule, metadata }
     }
 
-    pub fn ast(&self) -> &Molecule {
-        &self.ast
+    pub fn molecule(&self) -> &Molecule {
+        &self.molecule
     }
 
     pub fn metadata(&self) -> &MoleculeMetadata {
@@ -98,13 +98,13 @@ impl MoleculeDsl {
     }
 
     pub fn into_parts(self) -> (Molecule, MoleculeMetadata) {
-        (self.ast, self.metadata)
+        (self.molecule, self.metadata)
     }
 }
 
 impl PartialEq for MoleculeDsl {
     fn eq(&self, other: &Self) -> bool {
-        self.ast == other.ast && self.metadata == other.metadata
+        self.molecule == other.molecule && self.metadata == other.metadata
     }
 }
 
@@ -127,18 +127,18 @@ impl Display for MoleculeDsl {
 impl<'de> FromEdn<'de> for MoleculeDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let input = parse_molecule_input(edn)?;
-        let (ast, context) = input
+        let (molecule, context) = input
             .into_ir()
             .map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
+        Ok(MoleculeDsl::from_parts(molecule, context.into_metadata()))
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
         let mut de = EdnStreamDeserializer::new(input);
         let mi = read_molecule_input(&mut de)?;
         de.expect_eof()?;
-        let (ast, context) = mi.into_ir().map_err(|e| DeError::Custom(e.to_string()))?;
-        Ok(MoleculeDsl::from_parts(ast, context.into_metadata()))
+        let (molecule, context) = mi.into_ir().map_err(|e| DeError::Custom(e.to_string()))?;
+        Ok(MoleculeDsl::from_parts(molecule, context.into_metadata()))
     }
 }
 
@@ -171,7 +171,7 @@ impl Display for Molecule {
 }
 
 /// Direct EDN rendering for `Molecule`. Always emits canonical positional
-/// refs (no entity keywords, no aliases) since the AST carries no metadata.
+/// refs (no entity keywords, no aliases) since the molecule carries no metadata.
 /// For keyword-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
 /// [`MoleculeMetadata`] and call [`MoleculeDsl::to_edn`].
 impl ToEdn for Molecule {
@@ -570,35 +570,35 @@ pub(super) fn read_atom_aliases(
 
 impl ToEdn for MoleculeDsl {
     fn to_edn(&self) -> Edn<'static> {
-        render_molecule_edn(&self.ast, &self.metadata)
+        render_molecule_edn(&self.molecule, &self.metadata)
     }
 }
 
 impl FromIr<Molecule> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
 
-    fn from_ir(ast: &Molecule, cfg: &Self::Ctx) -> Self {
-        let mut ast_out = ast.clone();
-        ast_out.modify_atoms(|atom| AtomDsl::from_ir(&atom, &cfg.atom).0);
-        ast_out.modify_bonds(|bond| BondDsl::from_ir(&bond, &cfg.bond).0);
-        ast_out.modify_aromatic_systems(|system| {
+    fn from_ir(molecule: &Molecule, cfg: &Self::Ctx) -> Self {
+        let mut dsl_molecule = molecule.clone();
+        dsl_molecule.modify_atoms(|atom| AtomDsl::from_ir(&atom, &cfg.atom).0);
+        dsl_molecule.modify_bonds(|bond| BondDsl::from_ir(&bond, &cfg.bond).0);
+        dsl_molecule.modify_aromatic_systems(|system| {
             AromaticSystemDsl::from_ir(&system, &cfg.aromatic_system).0
         });
-        ast_out.modify_multicenter_bonds(|bond| {
+        dsl_molecule.modify_multicenter_bonds(|bond| {
             MulticenterBondDsl::from_ir(&bond, &cfg.multicenter_bond).0
         });
-        ast_out.modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &cfg.dative_bond).0);
-        ast_out.modify_noncovalent_bonds(|bond| {
+        dsl_molecule.modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &cfg.dative_bond).0);
+        dsl_molecule.modify_noncovalent_bonds(|bond| {
             NoncovalentBondDsl::from_ir(&bond, &cfg.noncovalent_bond).0
         });
-        ast_out.modify_stereo_atoms(|stereo_atom| {
+        dsl_molecule.modify_stereo_atoms(|stereo_atom| {
             StereoAtomDsl::from_ir(&stereo_atom, &cfg.stereo_atom).0
         });
-        ast_out.modify_stereo_bonds(|stereo_bond| {
+        dsl_molecule.modify_stereo_bonds(|stereo_bond| {
             StereoBondDsl::from_ir(&stereo_bond, &cfg.stereo_bond).0
         });
         MoleculeDsl {
-            ast: ast_out,
+            molecule: dsl_molecule,
             metadata: MoleculeMetadata::default(),
         }
     }
@@ -608,66 +608,79 @@ impl IntoIr<Molecule> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
 
     fn into_ir(self, cfg: &Self::Ctx) -> Molecule {
-        let mut ast = self.ast;
-        ast.modify_atoms(|atom| AtomDsl(atom).into_ir(&cfg.atom));
-        ast.modify_bonds(|bond| BondDsl(bond).into_ir(&cfg.bond));
-        ast.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&cfg.dative_bond));
-        ast.modify_aromatic_systems(|system| {
+        let mut molecule = self.molecule;
+        molecule.modify_atoms(|atom| AtomDsl(atom).into_ir(&cfg.atom));
+        molecule.modify_bonds(|bond| BondDsl(bond).into_ir(&cfg.bond));
+        molecule.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&cfg.dative_bond));
+        molecule.modify_aromatic_systems(|system| {
             AromaticSystemDsl(system).into_ir(&cfg.aromatic_system)
         });
-        ast.modify_multicenter_bonds(|bond| {
+        molecule.modify_multicenter_bonds(|bond| {
             MulticenterBondDsl(bond).into_ir(&cfg.multicenter_bond)
         });
-        ast.modify_noncovalent_bonds(|bond| {
+        molecule.modify_noncovalent_bonds(|bond| {
             NoncovalentBondDsl(bond).into_ir(&cfg.noncovalent_bond)
         });
-        ast.modify_stereo_atoms(|stereo_atom| StereoAtomDsl(stereo_atom).into_ir(&cfg.stereo_atom));
-        ast.modify_stereo_bonds(|stereo_bond| StereoBondDsl(stereo_bond).into_ir(&cfg.stereo_bond));
-        ast
+        molecule.modify_stereo_atoms(|stereo_atom| {
+            StereoAtomDsl(stereo_atom).into_ir(&cfg.stereo_atom)
+        });
+        molecule.modify_stereo_bonds(|stereo_bond| {
+            StereoBondDsl(stereo_bond).into_ir(&cfg.stereo_bond)
+        });
+        molecule
     }
 }
 
-pub(super) fn render_molecule_edn(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+pub(super) fn render_molecule_edn(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
-    map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
-    map.insert(Edn::keyword("bonds"), render_bonds(ast, meta));
-    if ast.dative_bonds().count() > 0 {
-        map.insert(Edn::keyword("dative-bonds"), render_dative(ast, meta));
+    map.insert(Edn::keyword("atoms"), render_atoms(molecule, meta));
+    map.insert(Edn::keyword("bonds"), render_bonds(molecule, meta));
+    if molecule.dative_bonds().count() > 0 {
+        map.insert(Edn::keyword("dative-bonds"), render_dative(molecule, meta));
     }
-    if ast.aromatic_systems().count() > 0 {
-        map.insert(Edn::keyword("aromatic-systems"), render_aromatic(ast, meta));
+    if molecule.aromatic_systems().count() > 0 {
+        map.insert(
+            Edn::keyword("aromatic-systems"),
+            render_aromatic(molecule, meta),
+        );
     }
-    if ast.multicenter_bonds().count() > 0 {
+    if molecule.multicenter_bonds().count() > 0 {
         map.insert(
             Edn::keyword("multicenter-bonds"),
-            render_multicenter(ast, meta),
+            render_multicenter(molecule, meta),
         );
     }
-    if ast.noncovalent_bonds().count() > 0 {
+    if molecule.noncovalent_bonds().count() > 0 {
         map.insert(
             Edn::keyword("noncovalent-bonds"),
-            render_noncovalent(ast, meta),
+            render_noncovalent(molecule, meta),
         );
     }
-    if ast.stereo_atoms().count() > 0 {
-        map.insert(Edn::keyword("stereo-atoms"), render_stereo_atoms(ast, meta));
+    if molecule.stereo_atoms().count() > 0 {
+        map.insert(
+            Edn::keyword("stereo-atoms"),
+            render_stereo_atoms(molecule, meta),
+        );
     }
-    if ast.stereo_bonds().count() > 0 {
-        map.insert(Edn::keyword("stereo-bonds"), render_stereo_bonds(ast, meta));
+    if molecule.stereo_bonds().count() > 0 {
+        map.insert(
+            Edn::keyword("stereo-bonds"),
+            render_stereo_bonds(molecule, meta),
+        );
     }
     if meta.iter_atom_aliases().len() != 0 {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
     }
-    let constraints_dsl = ConstraintsDsl::from_ir(ast.constraints(), meta)
-        .expect("ConstraintsDsl::from_ir is infallible for a well-formed AST");
+    let constraints_dsl = ConstraintsDsl::from_ir(molecule.constraints(), meta)
+        .expect("ConstraintsDsl::from_ir is infallible for well-formed graph IR");
     if !constraints_dsl.0.is_empty() {
         map.insert(Edn::keyword("constraints"), constraints_dsl.to_edn());
     }
     Edn::Map(map)
 }
 
-fn render_atoms(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .atoms()
         .iter()
         .map(|view| render_atom_entry(view.id, view.attributes, meta))
@@ -730,8 +743,8 @@ pub(super) fn render_bond_entry(
     }
 }
 
-fn render_bonds(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .bonds()
         .iter()
         .map(|view| {
@@ -778,8 +791,8 @@ pub(super) fn render_dative_entry(
     Edn::Map(m)
 }
 
-fn render_dative(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_dative(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .dative_bonds()
         .iter()
         .map(|view| {
@@ -821,8 +834,8 @@ pub(super) fn render_aromatic_entry(
     Edn::Map(m)
 }
 
-fn render_aromatic(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_aromatic(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .aromatic_systems()
         .iter()
         .map(|view| {
@@ -865,8 +878,8 @@ pub(super) fn render_multicenter_entry(
     Edn::Map(m)
 }
 
-fn render_multicenter(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_multicenter(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .multicenter_bonds()
         .iter()
         .map(|view| {
@@ -904,8 +917,8 @@ pub(super) fn render_noncovalent_entry(
     Edn::Map(m)
 }
 
-fn render_noncovalent(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_noncovalent(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .noncovalent_bonds()
         .iter()
         .map(|view| {
@@ -940,8 +953,8 @@ pub(super) fn render_stereo_atom_entry(
     Edn::Map(m)
 }
 
-fn render_stereo_atoms(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_stereo_atoms(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .stereo_atoms()
         .iter()
         .map(|view| {
@@ -980,8 +993,8 @@ pub(super) fn render_stereo_bond_entry(
     Edn::Map(m)
 }
 
-fn render_stereo_bonds(ast: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
-    let entries: Vec<Edn<'static>> = ast
+fn render_stereo_bonds(molecule: &Molecule, meta: &MoleculeMetadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = molecule
         .stereo_bonds()
         .iter()
         .map(|view| {
@@ -1262,7 +1275,7 @@ impl MoleculeInput {
         // The context is complete; constraints resolve against it directly.
         let constraints = ConstraintsDsl(constraint_dsls).into_ir(&context)?;
 
-        let ast = Molecule::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative: dative_list,
@@ -1273,7 +1286,7 @@ impl MoleculeInput {
             stereo_bonds: stereo_bond_list,
             constraints,
         });
-        Ok((ast, context))
+        Ok((molecule, context))
     }
 }
 

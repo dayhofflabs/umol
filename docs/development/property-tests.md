@@ -44,8 +44,8 @@ Semantic property:
     update(x, difference_to(x, y)) = y
 
 Operational domains:
-    canonical entity ASTs
-    entity ASTs containing independent undetermined fields
+    canonical entity forms
+    entity forms containing independent undetermined fields
     each of the eight entity families
 
 Validation method:
@@ -193,7 +193,7 @@ module obscures the asserted properties.
 
 ### Strategy modules
 
-- Split strategies by the domain generated: values, entity ASTs, molecules, reactions, edits,
+- Split strategies by the domain generated: values, entity forms, molecules, reactions, edits,
   metadata, and other independently meaningful domains.
 - Import production symbols directly in the property module that tests them. A strategy module must
   not act as a wildcard prelude that re-exports the production API.
@@ -372,7 +372,7 @@ The delta properties are related but distinct:
 - appending transaction batches preserves the sequential application and
   rollback semantics.
 
-The direct update law is about entity ASTs. Delta properties are about a
+The direct update law is about entity forms. Delta properties are about a
 reaction-side change representation. Edit and transaction properties are about
 host-molecule mutation. The similar equations do not make the three
 operational domains interchangeable.

@@ -220,7 +220,7 @@ def test_return_only_value_constructor_error(value_type, message):
         value_type()
 
 
-def test_reactionast_constructor():
+def test_reaction_constructor():
     empty = Reaction()
     populated = Reaction(
         Molecule.from_entries([AtomForm(Element("C"))]),
@@ -235,7 +235,7 @@ def test_reactionast_constructor():
     )
 
 
-def test_reactionast_constructor_snapshot():
+def test_reaction_constructor_snapshot():
     lhs = Molecule.from_entries([AtomForm(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))])
     reaction = Reaction(lhs, deltas)
@@ -251,7 +251,7 @@ def test_reactionast_constructor_snapshot():
     assert reaction.deltas is not deltas
 
 
-def test_reactionast_components():
+def test_reaction_components():
     reaction = Reaction(
         Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas(),
@@ -270,7 +270,7 @@ def test_reactionast_components():
     )
 
 
-def test_reactionast_component_replacement():
+def test_reaction_component_replacement():
     reaction = Reaction()
     lhs = Molecule.from_entries([AtomForm(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))])
@@ -288,7 +288,7 @@ def test_reactionast_component_replacement():
     assert reaction.deltas is not deltas
 
 
-def test_reactionast_component_replacement_self():
+def test_reaction_component_replacement_self():
     reaction = Reaction(
         Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]),
@@ -301,7 +301,7 @@ def test_reactionast_component_replacement_self():
     assert reaction == expected
 
 
-def test_reactionast_value():
+def test_reaction_value():
     reaction = Reaction(
         Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]),
@@ -359,7 +359,7 @@ def test_reactiondefaults_value(value, expected, expected_repr):
         ),
     ],
 )
-def test_reactionast_parse(text):
+def test_reaction_parse(text):
     first = Reaction.parse(text)
 
     canonical = str(first)
@@ -371,7 +371,7 @@ def test_reactionast_parse(text):
     assert second.deltas is not first.deltas
 
 
-def test_reactionast_parse_defaults():
+def test_reaction_parse_defaults():
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
@@ -385,7 +385,7 @@ def test_reactionast_parse_defaults():
     )
 
 
-def test_reactionast_parse_error():
+def test_reaction_parse_error():
     with pytest.raises(
         ParseError,
         match="^EDN parse: unexpected token 'n' at byte 0$",
@@ -393,7 +393,7 @@ def test_reactionast_parse_error():
         Reaction.parse("not edn")
 
 
-def test_reactionast_parse_keyword_error():
+def test_reaction_parse_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
@@ -487,7 +487,7 @@ def test_reactionast_parse_keyword_error():
         ),
     ],
 )
-def test_reactionast_parse_with_metadata(source, lhs_entity, delta_entity):
+def test_reaction_parse_with_metadata(source, lhs_entity, delta_entity):
     reaction, metadata = Reaction.parse_with_metadata(source)
 
     rendered = reaction.render_with_metadata(metadata)
@@ -502,7 +502,7 @@ def test_reactionast_parse_with_metadata(source, lhs_entity, delta_entity):
     assert reparsed.render_with_metadata(reparsed_metadata) == rendered
 
 
-def test_reactionast_parse_with_metadata_aliases():
+def test_reaction_parse_with_metadata_aliases():
     source = (
         '{:lhs {:atoms [:lhs-c] :atom-aliases [:lhs-c "C"]} '
         ':atom-aliases [:delta-o "O"] '
@@ -527,7 +527,7 @@ def test_reactionast_parse_with_metadata_aliases():
     assert reparsed.render_with_metadata(reparsed_metadata) == rendered
 
 
-def test_reactionast_parse_with_metadata_defaults():
+def test_reaction_parse_with_metadata_defaults():
     reaction, metadata = Reaction.parse_with_metadata(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
@@ -558,7 +558,7 @@ def test_reactionast_parse_with_metadata_defaults():
     assert metadata == ReactionMetadata()
 
 
-def test_reactionast_parse_with_metadata_keyword_error():
+def test_reaction_parse_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
@@ -623,11 +623,11 @@ def test_reactionast_parse_with_metadata_keyword_error():
         ),
     ],
 )
-def test_reactionast_render(reaction, defaults, expected):
+def test_reaction_render(reaction, defaults, expected):
     assert reaction.render(defaults=defaults) == expected
 
 
-def test_reactionast_render_keyword_error():
+def test_reaction_render_keyword_error():
     with pytest.raises(
         TypeError,
         match="^Reaction.render\\(\\) takes 0 positional arguments but 1 was given$",
@@ -635,7 +635,7 @@ def test_reactionast_render_keyword_error():
         Reaction().render(ReactionDefaults())
 
 
-def test_reactionast_render_with_metadata():
+def test_reaction_render_with_metadata():
     reaction, metadata = Reaction.parse_with_metadata(
         '{:lhs {:atoms [[:carbon "C"] [:oxygen "O"]]} '
         ':deltas [{:atom {:add [:nitrogen "N"]}}]}'
@@ -651,7 +651,7 @@ def test_reactionast_render_with_metadata():
     )
 
 
-def test_reactionast_render_with_metadata_error():
+def test_reaction_render_with_metadata_error():
     metadata = ReactionMetadata()
     metadata.set_delta_keyword(Entity.Atom(1), "absent")
 
@@ -666,7 +666,7 @@ def test_reactionast_render_with_metadata_error():
         ).render_with_metadata(metadata)
 
 
-def test_reactionast_render_with_metadata_keyword_error():
+def test_reaction_render_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
@@ -680,7 +680,7 @@ def test_reactionast_render_with_metadata_keyword_error():
         )
 
 
-def test_reactionast_from_sides():
+def test_reaction_from_sides():
     lhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
     rhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
     lhs_snapshot = Molecule.from_entries(
@@ -708,7 +708,7 @@ def test_reactionast_from_sides():
     assert Reaction.from_sides(lhs, rhs, atom_correspondence) == reaction
 
 
-def test_reactionast_from_sides_snapshot():
+def test_reaction_from_sides_snapshot():
     lhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
     rhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
     reaction = Reaction.from_sides(lhs, rhs, Correspondence([(0, 0)], 2, 2))
@@ -731,7 +731,7 @@ def test_reactionast_from_sides_snapshot():
     assert rhs.atoms[0].charge == NumForm.Lit(-1)
 
 
-def test_reactionast_from_sides_error():
+def test_reaction_from_sides_error():
     lhs = Molecule.from_entries([AtomForm(Element("C"))])
     rhs = Molecule.from_entries([AtomForm(Element("C"))])
     atom_correspondence = Correspondence([(0, 0)], 2, 1)
@@ -1039,7 +1039,7 @@ def test_reaction_from_reaction_smiles_ownership():
     )
 
 
-def test_reactionast_str_components():
+def test_reaction_str_components():
     reaction = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
 
     reaction.lhs.atoms[0].charge = 1
@@ -1052,7 +1052,7 @@ def test_reactionast_str_components():
     )
 
 
-def test_reactionast_parse_repr():
+def test_reaction_parse_repr():
     reaction = Reaction.parse('{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}')
 
     assert repr(reaction) == (
@@ -1062,7 +1062,7 @@ def test_reactionast_parse_repr():
     )
 
 
-def test_reactionast_canonicalize():
+def test_reaction_canonicalize():
     source = Reaction(
         Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
@@ -1113,7 +1113,7 @@ def test_reactionast_canonicalize():
     assert len(canonical.deltas) == 2
 
 
-def test_reactionast_canonicalize_error():
+def test_reaction_canonicalize_error():
     source = Reaction(
         Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
@@ -1145,7 +1145,7 @@ def test_reactionast_canonicalize_error():
     assert source == snapshot
 
 
-def test_reactionast_canonical_eq():
+def test_reaction_canonical_eq():
     source = Reaction(
         Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
         Deltas(
@@ -1221,7 +1221,7 @@ def test_reactionast_canonical_eq():
     assert source.canonical_eq(renumbered) is False
 
 
-def test_reactionast_reverse():
+def test_reaction_reverse():
     source = Reaction.parse(
         '{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}'
     )
@@ -1404,7 +1404,7 @@ def test_reaction_compose_snapshot():
     assert second == second_snapshot
 
 
-def test_reactionast_apply():
+def test_reaction_apply():
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
@@ -1628,7 +1628,7 @@ def test_reaction_apply_iteration_error():
         next(application)
 
 
-def test_reactionast_workflow():
+def test_reaction_workflow():
     lhs = Reaction.parse(
         '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} '

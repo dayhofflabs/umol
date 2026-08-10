@@ -214,7 +214,7 @@ scope and membership payloads live in `constraint/ring.rs`.
      collections: `atoms`, `bonds`, `dative_bonds`, `aromatic_systems`,
      `multicenter_bonds`, `noncovalent_bonds`, `stereo_atoms`, and
      `stereo_bonds`. Constructor/getters use bare `int` pairs. Its
-     `from_ast`/`to_ast` bridge is required by `MoleculeConstraint::SubPattern`.
+     `from_ir`/`to_ir` bridge is required by `MoleculeConstraint::SubPattern`.
   2. **DONE — `RelationalConstraint` structural mirror enum** — all 31 Rust variants,
      grouped by referenced entity:
      - dative (8): `DativeBondDonors`, `DativeBondDonor`,
@@ -301,10 +301,10 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   The Rust representation is therefore `Py<...>` for every nested complex-enum
   child, `Vec<Py<Constraint>>` for `And`/`Or`, and `Py<Constraint>` for `Not`.
-  `from_ast` must call `into_py_variant` at every such edge—including entity,
+  `from_ir` must call `into_py_variant` at every such edge—including entity,
   relational, molecule, and recursive children—so Python receives the concrete
   variant subtype with `_0`/`_1`/`_2`, `__match_args__`, and `match` support;
-  `Py::new` would create an unusable base-enum instance. `to_ast` recursively
+  `Py::new` would create an unusable base-enum instance. `to_ir` recursively
   borrows each child and rebuilds owned Rust values. Equality delegates to the
   complete Rust tree; `variant_repr` uses arity 2 for ordinary leaves, arity 3
   for stereo leaves, and arity 1 for aggregate/combinator variants. The mirror
@@ -490,7 +490,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   1. **DONE — S2b.1 — stereo configuration adapter and atom field change** — implement
      the local S2a macro's payload adapter for `StereoConfigurationAst`, using
-     its existing Python-aware `from_ast`/`to_ast` conversion, then invoke the
+     its existing Python-aware `from_ir`/`to_ir` conversion, then invoke the
      macro for `StereoAtomFieldChange::Configuration` and register/export the
      class. Rust tests cover round-trip conversion, named fields/repr, equality,
      inverse, and double inverse. Include both top-level `Undetermined` and
@@ -563,7 +563,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   1. **DONE — S3a.1 — conversion cleanup and `AtomDelta`** — remove the
      `FieldValueMirror` trait and give every field-change class its own explicit
-     `from_ast`/`to_ast` implementation. The field-change macro is limited to the
+     `from_ir`/`to_ir` implementation. The field-change macro is limited to the
      actually uniform Python enum declaration, equality, repr, and inverse
      surface. Define `AtomDelta` and its conversion directly, with no generic
      entity-delta macro or participant-conversion trait. Promote
@@ -582,7 +582,7 @@ scope and membership payloads live in `constraint/ring.rs`.
 
   2. **DONE — S3a.2 — `BondDelta` and fixed-pair participants** — promote
      `BondAst::from_inner` from its test-only gate and define `BondDelta` and its
-     `from_ast`/`to_ast` conversion directly. `Add`/`Remove` map Rust
+     `from_ir`/`to_ir` conversion directly. `Add`/`Remove` map Rust
      `[AtomId; 2]` to Python `tuple[int, int]` inline, without sorting or
      set-conversion; the modify variants have no participant field. Register and
      export the class. Give it the same Rust conversion/equality/repr/inverse and

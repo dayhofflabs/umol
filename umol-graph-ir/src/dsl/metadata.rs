@@ -13,7 +13,7 @@ use crate::ir::id::{
 };
 
 /// Error raised when metadata would violate its namespace invariants or refer
-/// outside the AST with which it is paired.
+/// outside the graph IR with which it is paired.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MetadataError {
     #[error("duplicate keyword: {0}")]
@@ -28,7 +28,7 @@ pub enum MetadataError {
 
 /// The persistent rendering counterpart to [`crate::dsl::Namespace`].
 ///
-/// Entity-keyword lookup renders a numerical AST identifier as a keyword
+/// Entity-keyword lookup renders a numerical entity identifier as a keyword
 /// reference when one is available, or as its positional index otherwise.
 /// Rendering never emits structural references, so this surface needs neither
 /// counts nor participant indexes.

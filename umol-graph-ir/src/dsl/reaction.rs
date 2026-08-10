@@ -77,26 +77,26 @@ use crate::ir::{
 };
 
 /// Surface DSL for a reaction. Pairs `Reaction` with `ReactionMetadata`; fields are
-/// private so metadata cannot drift onto a different AST.
+/// private so metadata cannot drift onto a different reaction.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionDsl {
-    ast: Reaction,
+    reaction: Reaction,
     metadata: ReactionMetadata,
 }
 
 impl ReactionDsl {
-    /// Pair a reaction AST with coherent lhs and delta surface metadata.
-    pub fn new(ast: Reaction, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
+    /// Pair a reaction with coherent lhs and delta surface metadata.
+    pub fn new(reaction: Reaction, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
         for (entity, _) in metadata.lhs().iter_keywords() {
             let contains = match entity {
-                Entity::Atom(id) => ast.lhs.atoms().contains(id),
-                Entity::Bond(id) => ast.lhs.bonds().contains(id),
-                Entity::DativeBond(id) => ast.lhs.dative_bonds().contains(id),
-                Entity::AromaticSystem(id) => ast.lhs.aromatic_systems().contains(id),
-                Entity::MulticenterBond(id) => ast.lhs.multicenter_bonds().contains(id),
-                Entity::NoncovalentBond(id) => ast.lhs.noncovalent_bonds().contains(id),
-                Entity::StereoAtom(id) => ast.lhs.stereo_atoms().contains(id),
-                Entity::StereoBond(id) => ast.lhs.stereo_bonds().contains(id),
+                Entity::Atom(id) => reaction.lhs.atoms().contains(id),
+                Entity::Bond(id) => reaction.lhs.bonds().contains(id),
+                Entity::DativeBond(id) => reaction.lhs.dative_bonds().contains(id),
+                Entity::AromaticSystem(id) => reaction.lhs.aromatic_systems().contains(id),
+                Entity::MulticenterBond(id) => reaction.lhs.multicenter_bonds().contains(id),
+                Entity::NoncovalentBond(id) => reaction.lhs.noncovalent_bonds().contains(id),
+                Entity::StereoAtom(id) => reaction.lhs.stereo_atoms().contains(id),
+                Entity::StereoBond(id) => reaction.lhs.stereo_bonds().contains(id),
             };
             if !contains {
                 return Err(MetadataError::EntityOutOfRange(entity));
@@ -104,7 +104,7 @@ impl ReactionDsl {
         }
 
         for (entity, _) in metadata.iter_delta_keywords() {
-            let added = ast.deltas.iter().any(|delta| match (delta, entity) {
+            let added = reaction.deltas.iter().any(|delta| match (delta, entity) {
                 (Delta::Atom(AtomDelta::Add { id, .. }), Entity::Atom(expected)) => *id == expected,
                 (Delta::Bond(BondDelta::Add { id, .. }), Entity::Bond(expected)) => *id == expected,
                 (
@@ -138,15 +138,15 @@ impl ReactionDsl {
             }
         }
 
-        Ok(Self::from_parts(ast, metadata))
+        Ok(Self::from_parts(reaction, metadata))
     }
 
-    fn from_parts(ast: Reaction, metadata: ReactionMetadata) -> Self {
-        Self { ast, metadata }
+    fn from_parts(reaction: Reaction, metadata: ReactionMetadata) -> Self {
+        Self { reaction, metadata }
     }
 
-    pub fn ast(&self) -> &Reaction {
-        &self.ast
+    pub fn reaction(&self) -> &Reaction {
+        &self.reaction
     }
 
     pub fn metadata(&self) -> &ReactionMetadata {
@@ -154,24 +154,24 @@ impl ReactionDsl {
     }
 
     pub fn into_parts(self) -> (Reaction, ReactionMetadata) {
-        (self.ast, self.metadata)
+        (self.reaction, self.metadata)
     }
 }
 
 impl FromIr<Reaction> for ReactionDsl {
     type Ctx = ReactionDefaults;
 
-    fn from_ir(ast: &Reaction, cfg: &Self::Ctx) -> Self {
-        let lhs = MoleculeDsl::from_ir(&ast.lhs, &cfg.molecule_defaults())
+    fn from_ir(reaction: &Reaction, cfg: &Self::Ctx) -> Self {
+        let lhs = MoleculeDsl::from_ir(&reaction.lhs, &cfg.molecule_defaults())
             .into_parts()
             .0;
         let delta_cfg = cfg.delta_defaults();
-        let mut deltas = ast.deltas.clone();
+        let mut deltas = reaction.deltas.clone();
         for delta in deltas.iter_mut() {
             lower_delta(delta, &delta_cfg);
         }
         ReactionDsl {
-            ast: Reaction { lhs, deltas },
+            reaction: Reaction { lhs, deltas },
             metadata: ReactionMetadata::default(),
         }
     }
@@ -181,7 +181,7 @@ impl IntoIr<Reaction> for ReactionDsl {
     type Ctx = ReactionDefaults;
 
     fn into_ir(self, cfg: &Self::Ctx) -> Reaction {
-        let Reaction { lhs, mut deltas } = self.ast;
+        let Reaction { lhs, mut deltas } = self.reaction;
         let lhs = MoleculeDsl::new(lhs, MoleculeMetadata::default())
             .expect("empty metadata is coherent")
             .into_ir(&cfg.molecule_defaults());
@@ -193,7 +193,7 @@ impl IntoIr<Reaction> for ReactionDsl {
     }
 }
 
-/// Lower a delta's embedded entity AST to DSL-display form (AST → DSL).
+/// Lower a delta's embedded entity form to DSL-display form (IR → DSL).
 fn lower_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
     match delta {
         Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
@@ -227,7 +227,7 @@ fn lower_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
     }
 }
 
-/// Raise a delta's embedded entity AST from DSL-display form (DSL → AST).
+/// Raise a delta's embedded entity form from DSL-display form (DSL → IR).
 fn raise_delta(delta: &mut Delta, cfg: &DeltaDefaults) {
     match delta {
         Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
@@ -1178,7 +1178,7 @@ impl FromStr for ReactionDsl {
 
 impl ToEdn for ReactionDsl {
     fn to_edn(&self) -> Edn<'static> {
-        render_reaction_edn(&self.ast, &self.metadata)
+        render_reaction_edn(&self.reaction, &self.metadata)
     }
 }
 
@@ -1213,7 +1213,7 @@ impl Display for Reaction {
 }
 
 /// Direct EDN rendering for `Reaction`. The lhs and refs emit canonical positional
-/// form (no entity keywords, no aliases) since the AST carries no metadata. For keyword/alias-bearing
+/// form (no entity keywords, no aliases) since the reaction carries no metadata. For keyword/alias-bearing
 /// surface output, wrap in [`ReactionDsl`] with the appropriate [`ReactionMetadata`].
 impl ToEdn for Reaction {
     fn to_edn(&self) -> Edn<'static> {
@@ -2150,7 +2150,7 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     ConstraintDelta::Remove(c) => ("remove", c),
                 };
                 let dsl = ConstraintDsl::from_ir(constraint, meta)
-                    .expect("ConstraintDsl::from_ir is infallible for a well-formed AST");
+                    .expect("ConstraintDsl::from_ir is infallible for well-formed graph IR");
                 out.push(single_key_map(
                     "constraint",
                     single_key_map(op, dsl.to_edn()),
@@ -2921,15 +2921,15 @@ mod tests {
     #[case::stereo_atom(Some(Entity::StereoAtom(StereoAtomId(0))))]
     #[case::stereo_bond(Some(Entity::StereoBond(StereoBondId(0))))]
     fn test_reaction_dsl_new(populated_reaction_dsl: ReactionDsl, #[case] entity: Option<Entity>) {
-        let ast = populated_reaction_dsl.into_parts().0;
+        let reaction = populated_reaction_dsl.into_parts().0;
         let mut metadata = ReactionMetadata::default();
         if let Some(entity) = entity {
             metadata.set_delta_keyword(entity, "key").unwrap();
         }
 
-        let actual = ReactionDsl::new(ast.clone(), metadata.clone()).unwrap();
+        let actual = ReactionDsl::new(reaction.clone(), metadata.clone()).unwrap();
 
-        assert_eq!(actual.into_parts(), (ast, metadata));
+        assert_eq!(actual.into_parts(), (reaction, metadata));
     }
 
     #[rustfmt::skip]
@@ -2959,17 +2959,17 @@ mod tests {
         #[case] metadata: ReactionMetadata,
         #[case] expected: MetadataError,
     ) {
-        let ast = populated_reaction_dsl.into_parts().0;
+        let reaction = populated_reaction_dsl.into_parts().0;
 
-        assert_eq!(ReactionDsl::new(ast, metadata), Err(expected));
+        assert_eq!(ReactionDsl::new(reaction, metadata), Err(expected));
     }
 
     #[rstest]
     fn test_reaction_dsl_new_parsed(populated_reaction_dsl: ReactionDsl) {
         let expected = populated_reaction_dsl.clone();
-        let (ast, metadata) = populated_reaction_dsl.into_parts();
+        let (reaction, metadata) = populated_reaction_dsl.into_parts();
 
-        assert_eq!(ReactionDsl::new(ast, metadata).unwrap(), expected);
+        assert_eq!(ReactionDsl::new(reaction, metadata).unwrap(), expected);
     }
 
     #[rstest]
@@ -2995,11 +2995,11 @@ mod tests {
     #[case::noncovalent(r##"{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :attrs "Hbd"}}}]}"##.parse().unwrap())]
     #[case::stereo_atom(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :attrs "Th1"}}}]}"##.parse().unwrap())]
     #[case::stereo_bond(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 3] :attrs "Ct1"}}}]}"##.parse().unwrap())]
-    fn test_reaction_dsl_from_ast_roundtrip(#[case] reaction: Reaction) {
+    fn test_reaction_dsl_from_ir_roundtrip(#[case] reaction: Reaction) {
         let cfg = ReactionDefaults::ground();
         let dsl = ReactionDsl::new(reaction, ReactionMetadata::default()).unwrap();
         let lowered = ReactionDsl::from_ir(&dsl.clone().into_ir(&cfg), &cfg);
-        assert_eq!(lowered.ast(), dsl.ast());
+        assert_eq!(lowered.reaction(), dsl.reaction());
     }
 
     #[rstest]
@@ -3465,14 +3465,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast() {
+    fn test_reaction_input_into_ir() {
         let input = r##"{:lhs {:atoms ["C"]} :atom-aliases [:me "C#h3"] :deltas [{:atom {:add [:nu :me]}} {:atom {:add "O"}}]}"##;
-        let (ast, meta) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, meta) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
@@ -3501,16 +3501,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_alias_union() {
+    fn test_reaction_input_into_ir_alias_union() {
         // `:lo` is an lhs alias, `:hi` a reaction alias; both `:add` resolve (union),
         // but each set stays in its own metadata field for independent round-trip.
         let input = r##"{:lhs {:atoms ["C"] :atom-aliases [:lo "N"]} :atom-aliases [:hi "C#h3"] :deltas [{:atom {:add :lo}} {:atom {:add :hi}}]}"##;
-        let (ast, meta) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, meta) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
@@ -3554,14 +3554,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_atom_remove() {
+    fn test_reaction_input_into_ir_atom_remove() {
         let input = r##"{:lhs {:atoms [[:br "Br"] "C"]} :deltas [{:atom {:remove :br}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::from_element(Element::Br),
@@ -3570,7 +3570,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_atom_remove_error() {
+    fn test_reaction_input_into_ir_atom_remove_error() {
         // Adding then removing through the same keyword is prohibited:
         // recover-from-lhs cannot reach an added atom.
         let input =
@@ -3608,7 +3608,7 @@ mod tests {
         r##"{:lhs {:atoms ["C"]} :atom-aliases [:a "N"] :deltas [{:atom {:add [:a "O"]}}]}"##,
         ParseError::DuplicateKeyword("a".to_string()),
     )]
-    fn test_reaction_input_into_ast_duplicate_keyword_error(
+    fn test_reaction_input_into_ir_duplicate_keyword_error(
         #[case] input: &str,
         #[case] expected: ParseError,
     ) {
@@ -3630,13 +3630,13 @@ mod tests {
         r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c*"]}}]}"##,
         NumForm::Undetermined
     )]
-    fn test_reaction_input_into_ast_atom_modify(#[case] input: &str, #[case] new: NumForm) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+    fn test_reaction_input_into_ir_atom_modify(#[case] input: &str, #[case] new: NumForm) {
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
@@ -3652,16 +3652,16 @@ mod tests {
         r##"{:lhs {:atoms [[:c "C#u2#s3"]]} :deltas [{:atom {:modify [:c "#s1"]}}]}"##,
         UnpairedElectronsForm::from((2_u8, 1_u8)),
     )]
-    fn test_reaction_input_into_ast_atom_modify_unpaired_electrons(
+    fn test_reaction_input_into_ir_atom_modify_unpaired_electrons(
         #[case] input: &str,
         #[case] new: UnpairedElectronsForm,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::UnpairedElectrons {
@@ -3673,15 +3673,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_atom_modify_remove_constraint() {
+    fn test_reaction_input_into_ir_atom_modify_remove_constraint() {
         // An undetermined constraint in an AtomUpdate removes that keyed constraint.
         let input = r##"{:lhs {:atoms [[:me "C#v4"]]} :deltas [{:atom {:modify [:me "#v*"]}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: Some(AtomConstraintForm::valence(4)),
@@ -3691,15 +3691,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_add() {
+    fn test_reaction_input_into_ir_bond_add() {
         // Bond-add attaches to a same-reaction atom: :o is AtomId(1), bond endpoints [0, :o].
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
@@ -3715,14 +3715,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_remove() {
+    fn test_reaction_input_into_ir_bond_remove() {
         let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :attrs "1"}]} :deltas [{:bond {:remove :b1}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
@@ -3732,7 +3732,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_remove_error() {
+    fn test_reaction_input_into_ir_bond_remove_error() {
         // Adding then removing the same bond is prohibited — recover-from-lhs cannot reach it.
         let input =
             r##"{:lhs {:atoms ["C" "O"]} :deltas [{:bond {:add [0 1 "1"]}} {:bond {:remove 0}}]}"##;
@@ -3759,13 +3759,13 @@ mod tests {
         r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :attrs "1"}]} :deltas [{:bond {:modify [:b1 "*"]}}]}"##,
         NumForm::Undetermined,
     )]
-    fn test_reaction_input_into_ast_bond_modify(#[case] input: &str, #[case] new: NumForm) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+    fn test_reaction_input_into_ir_bond_modify(#[case] input: &str, #[case] new: NumForm) {
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
@@ -3777,14 +3777,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_modify_unpaired_electrons() {
+    fn test_reaction_input_into_ir_bond_modify_unpaired_electrons() {
         let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :attrs "1#u2#s3"}]} :deltas [{:bond {:modify [:b1 "#s1"]}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::UnpairedElectrons {
@@ -3796,14 +3796,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_bond_modify_constraint() {
+    fn test_reaction_input_into_ir_bond_modify_constraint() {
         let input = r##"{:lhs {:atoms ["C" "O"] :bonds [{:id :b1 :atoms [0 1] :attrs "1#R(6)"}]} :deltas [{:bond {:modify [:b1 "#R(6)*"]}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyConstraint {
                 id: BondId(0),
                 old: Some(BondConstraintForm::ring_membership(
@@ -3824,13 +3824,13 @@ mod tests {
         r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1"}]} :deltas [{:dative-bond {:modify [:d1 "*"]}}]}"##,
         NumForm::Undetermined,
     )]
-    fn test_reaction_input_into_ast_dative_bond_modify(#[case] input: &str, #[case] new: NumForm) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+    fn test_reaction_input_into_ir_dative_bond_modify(#[case] input: &str, #[case] new: NumForm) {
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyField {
                 id: DativeBondId(0),
                 change: DativeBondFieldChange::Order {
@@ -3846,16 +3846,16 @@ mod tests {
         r##"{:lhs {:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1#R(6)"}]} :deltas [{:dative-bond {:modify [:d1 "#R(6)*"]}}]}"##,
         DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Lit(1)),
     )]
-    fn test_reaction_input_into_ast_dative_bond_modify_constraint(
+    fn test_reaction_input_into_ir_dative_bond_modify_constraint(
         #[case] input: &str,
         #[case] old: DativeBondConstraintForm,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(0),
                 old: Some(old),
@@ -3882,15 +3882,15 @@ mod tests {
         r##"{:lhs {:atoms ["C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2] :attrs "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:aromatic-system {:modify [:a1 "#e*"]}}]}"##,
         vec![Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { id: AromaticSystemId(0), old: Some(AromaticSystemConstraintForm::electron_count(6_i64)), new: None })],
     )]
-    fn test_reaction_input_into_ast_aromatic_system_modify(
+    fn test_reaction_input_into_ir_aromatic_system_modify(
         #[case] input: &str,
         #[case] expected: Vec<Delta>,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3911,15 +3911,15 @@ mod tests {
         r##"{:lhs {:atoms ["C" "C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1 2] :attrs "[1,1,1]#c0#u2#s3#e6"}]} :deltas [{:multicenter-bond {:modify [:m1 "#e*"]}}]}"##,
         vec![Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { id: MulticenterBondId(0), old: Some(MulticenterBondConstraintForm::electron_count(6_i64)), new: None })],
     )]
-    fn test_reaction_input_into_ast_multicenter_bond_modify(
+    fn test_reaction_input_into_ir_multicenter_bond_modify(
         #[case] input: &str,
         #[case] expected: Vec<Delta>,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3932,15 +3932,15 @@ mod tests {
         r##"{:lhs {:atoms ["N" "H"] :noncovalent-bonds [{:id :n1 :atoms [0 1] :attrs "Hbd#I"}]} :deltas [{:noncovalent-bond {:modify [:n1 "#I*"]}}]}"##,
         vec![Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { id: NoncovalentBondId(0), old: Some(NoncovalentBondConstraintForm::intramolecular(true)), new: None })],
     )]
-    fn test_reaction_input_into_ast_noncovalent_bond_modify(
+    fn test_reaction_input_into_ir_noncovalent_bond_modify(
         #[case] input: &str,
         #[case] expected: Vec<Delta>,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3957,15 +3957,15 @@ mod tests {
         r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :attrs "Th0#g/"}]} :deltas [{:stereo-atom {:modify [:s1 "Th#g*"]}}]}"##,
         vec![Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { id: StereoAtomId(0), kind: Some(StereoKind::Tetrahedral), old: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })],
     )]
-    fn test_reaction_input_into_ast_stereo_atom_modify(
+    fn test_reaction_input_into_ir_stereo_atom_modify(
         #[case] input: &str,
         #[case] expected: Vec<Delta>,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3982,26 +3982,26 @@ mod tests {
         r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :t1 :site 1 :ligands [0 3] :attrs "Ct0#g/"}]} :deltas [{:stereo-bond {:modify [:t1 "Ct#g*"]}}]}"##,
         vec![Delta::StereoBond(StereoBondDelta::ModifyConstraint { id: StereoBondId(0), kind: Some(StereoKind::CisTrans), old: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))), new: None })],
     )]
-    fn test_reaction_input_into_ast_stereo_bond_modify(
+    fn test_reaction_input_into_ir_stereo_bond_modify(
         #[case] input: &str,
         #[case] expected: Vec<Delta>,
     ) {
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(ast.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_constraint_add() {
+    fn test_reaction_input_into_ir_constraint_add() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
             ))]),
@@ -4009,7 +4009,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_constraint_remove() {
+    fn test_reaction_input_into_ir_constraint_remove() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:remove {:connected {}}}}]}"##;
         let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
@@ -4024,7 +4024,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_constraint_added_atom_ref() {
+    fn test_reaction_input_into_ir_constraint_added_atom_ref() {
         // The constraint ref :o names an atom added in the same reaction (AtomId(1)), resolved
         // against the unified context.
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##;
@@ -4048,7 +4048,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_input_into_ast_constraint_structural_bond_ref() {
+    fn test_reaction_input_into_ir_constraint_structural_bond_ref() {
         // A structural bond ref ({:atoms [0 1]}) names the lhs bond by its endpoints, resolved
         // against the context's participant lookup.
         let input = r##"{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:bond [{:atoms [0 1]} {:aromatic true}]}}}]}"##;
@@ -4095,7 +4095,7 @@ mod tests {
     )]
     fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: Reaction) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();
-        assert_eq!(dsl.ast(), &expected);
+        assert_eq!(dsl.reaction(), &expected);
     }
 
     #[rstest]
@@ -4451,7 +4451,7 @@ mod tests {
     #[case::add_atom_and_bond(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:bond {:add [0 1 "1"]}}]}"##)]
     #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:connected {}}}}]}"##)]
     #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:constraint {:add {:atom [1 {:valence 2}]}}}]}"##)]
-    fn test_reaction_ast_to_edn(#[case] input: &str) {
+    fn test_reaction_to_edn(#[case] input: &str) {
         let reaction = Reaction::from_edn(&read_string(input).unwrap()).unwrap();
         let reparsed = Reaction::from_edn(&reaction.to_edn()).unwrap();
         assert_eq!(reparsed, reaction);
@@ -4523,7 +4523,7 @@ mod tests {
         0,
         Err(ParseError::InvalidRef { kind: "bond", value: "[0 0]".to_string() })
     )]
-    fn test_reaction_context_from_ast(
+    fn test_reaction_context_from_ir(
         #[from(add_bond_reaction)] context: ReactionContext,
         #[case] a: usize,
         #[case] b: usize,

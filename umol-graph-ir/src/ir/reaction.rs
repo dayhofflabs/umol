@@ -1657,7 +1657,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_from_sides() {
+    fn test_reaction_from_sides() {
         // C-C (order 1) → C-C (order 2) under the total atom correspondence: one bond-order modify.
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
@@ -1693,7 +1693,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_canonicalize() {
+    fn test_reaction_canonicalize() {
         // The delta chain fuses; the lhs is passed through unchanged.
         let reaction = Reaction::new(
             Molecule::default(),
@@ -1737,7 +1737,7 @@ mod tests {
         vec![AtomId(0), AtomId(1)],
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
     )]
-    fn test_reaction_ast_apply_at(
+    fn test_reaction_apply_at(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] atom_map: Vec<AtomId>,
@@ -1796,7 +1796,7 @@ mod tests {
         vec![AtomId(0), AtomId(1)],
         ApplyError::StructuralConflict,
     )]
-    fn test_reaction_ast_apply_at_error(
+    fn test_reaction_apply_at_error(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] atom_map: Vec<AtomId>,
@@ -1858,7 +1858,7 @@ mod tests {
         ),
         ApplyError::CorrespondenceMismatch { entity: Entity::NoncovalentBond(NoncovalentBondId(0)) },
     )]
-    fn test_reaction_ast_apply_at_correspondence_error(
+    fn test_reaction_apply_at_correspondence_error(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] correspondence: MoleculeCorrespondence,
@@ -1886,7 +1886,7 @@ mod tests {
         ],
         attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
     }))]
-    fn test_reaction_ast_apply_at_stereo_atom_error(#[case] delta: Delta) {
+    fn test_reaction_apply_at_stereo_atom_error(#[case] delta: Delta) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             stereo_atoms: vec![(
@@ -1962,7 +1962,7 @@ mod tests {
         ],
         attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
     }))]
-    fn test_reaction_ast_apply_at_stereo_bond_error(#[case] delta: Delta) {
+    fn test_reaction_apply_at_stereo_bond_error(#[case] delta: Delta) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
@@ -2022,7 +2022,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_at_molecule_constraint() {
+    fn test_reaction_apply_at_molecule_constraint() {
         // A reaction adding a molecule-level `ChargeSum` over its lhs atoms; applied at a match
         // that maps lhs atoms 0,1 → host atoms 1,2, the constraint's refs re-anchor to the host.
         let reaction = Reaction::new(
@@ -2070,7 +2070,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_at_molecule_constraint_created() {
+    fn test_reaction_apply_at_molecule_constraint_created() {
         let constraint = Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3_i64)),
             Constraint::Bond(BondId(0), BondConstraintForm::aromatic(true)),
@@ -2208,7 +2208,7 @@ mod tests {
             ..Default::default()
         }),
     )]
-    fn test_reaction_ast_validate_application(#[case] reaction: Reaction, #[case] host: Molecule) {
+    fn test_reaction_validate_application(#[case] reaction: Reaction, #[case] host: Molecule) {
         assert_eq!(reaction.validate_application(&host), Ok(()));
     }
 
@@ -2263,7 +2263,7 @@ mod tests {
         }),
         ApplyPreconditionError::HostStructure(EntityStructureContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }),
     )]
-    fn test_reaction_ast_validate_application_error(
+    fn test_reaction_validate_application_error(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] expected: ApplyPreconditionError,
@@ -2304,7 +2304,7 @@ mod tests {
         Delta::StereoBond(StereoBondDelta::Remove { id: StereoBondId(0), site: BondId(0), ligands: vec![], attributes: StereoBondForm::default() }),
         Entity::StereoBond(StereoBondId(0)),
     )]
-    fn test_reaction_ast_validate_application_rejects_missing_delta_target(
+    fn test_reaction_validate_application_rejects_missing_delta_target(
         #[case] delta: Delta,
         #[case] entity: Entity,
     ) {
@@ -2316,7 +2316,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_created_id_collision() {
+    fn test_reaction_validate_application_rejects_created_id_collision() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -2375,7 +2375,7 @@ mod tests {
         ligands: vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
         attributes: StereoAtomForm::default(),
     }))]
-    fn test_reaction_ast_validate_application_rejects_missing_structural_reference(
+    fn test_reaction_validate_application_rejects_missing_structural_reference(
         #[case] delta: Delta,
     ) {
         let lhs = Molecule::from_entries(MoleculeEntries {
@@ -2392,7 +2392,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_missing_stereo_bond_site() {
+    fn test_reaction_validate_application_rejects_missing_stereo_bond_site() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -2415,7 +2415,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_bond_incidence_mismatch() {
+    fn test_reaction_validate_application_rejects_bond_incidence_mismatch() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -2442,7 +2442,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_dative_incidence_mismatch() {
+    fn test_reaction_validate_application_rejects_dative_incidence_mismatch() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
@@ -2470,7 +2470,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_stereo_frame_incidence_mismatch() {
+    fn test_reaction_validate_application_rejects_stereo_frame_incidence_mismatch() {
         let stored_ligands = vec![
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -2512,7 +2512,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_validate_application_rejects_recursive_constraint_reference() {
+    fn test_reaction_validate_application_rejects_recursive_constraint_reference() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -2563,7 +2563,7 @@ mod tests {
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)], ..Default::default() }),
         vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64)], ..Default::default() })],
     )]
-    fn test_reaction_ast_apply(
+    fn test_reaction_apply(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] expected: Vec<Molecule>,
@@ -2584,9 +2584,7 @@ mod tests {
     #[rstest]
     #[case::graph_and_overlays(SubstructureMatchAlgorithm::GraphAndOverlays)]
     #[case::incidence(SubstructureMatchAlgorithm::Incidence)]
-    fn test_reaction_ast_apply_match_algorithm(
-        #[case] match_algorithm: SubstructureMatchAlgorithm,
-    ) {
+    fn test_reaction_apply_match_algorithm(#[case] match_algorithm: SubstructureMatchAlgorithm) {
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -2629,7 +2627,7 @@ mod tests {
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
         ApplyError::Transaction(TransactionError::MissingEntry),
     )]
-    fn test_reaction_ast_apply_error(
+    fn test_reaction_apply_error(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] expected: ApplyError,
@@ -2653,7 +2651,7 @@ mod tests {
         }),
         ApplyPreconditionError::HostStructure(EntityStructureContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }),
     )]
-    fn test_reaction_ast_apply_precondition_error(
+    fn test_reaction_apply_precondition_error(
         #[case] reaction: Reaction,
         #[case] host: Molecule,
         #[case] expected: ApplyPreconditionError,
@@ -2719,7 +2717,7 @@ mod tests {
     #[rstest]
     #[case::same_frame([1, 2, 3, 4], 0, 1)]
     #[case::swapped_frame([2, 1, 3, 4], 1, 0)]
-    fn test_reaction_ast_apply_stereo_cross_frame(
+    fn test_reaction_apply_stereo_cross_frame(
         tetrahedral_inversion: Reaction,
         #[case] host_ligands: [u32; 4],
         #[case] host_coset: u32,
@@ -2790,7 +2788,7 @@ mod tests {
     // index is the bond creation ordinal and is independent of the atom creation namespace.
     #[rstest]
     #[case::coset_0(0u32)]
-    fn test_reaction_ast_apply_stereo_bond_created_site(#[case] coset: u32) {
+    fn test_reaction_apply_stereo_bond_created_site(#[case] coset: u32) {
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
@@ -2861,7 +2859,7 @@ mod tests {
     // stereo compose completeness surfaced.
     #[rstest]
     #[case::undetermined(StereoCoset::Undetermined)]
-    fn test_reaction_ast_apply_two_stereo_centers(#[case] coset: StereoCoset) {
+    fn test_reaction_apply_two_stereo_centers(#[case] coset: StereoCoset) {
         let center = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -2904,7 +2902,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_at_comap() {
+    fn test_reaction_apply_at_comap() {
         // Remove atom O (id 1) and its bond: host C-O ⇒ product C. Atom 0 is preserved (matched),
         // atom 1 is deleted (left-unmatched), so the comap's atom map records exactly that.
         let reaction = Reaction::new(

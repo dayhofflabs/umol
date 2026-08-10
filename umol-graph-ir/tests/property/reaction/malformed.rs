@@ -488,28 +488,28 @@ proptest! {
     })]
 
     #[test]
-    fn test_reaction_ast_validate_application_entity_reference_error(
+    fn test_reaction_validate_application_entity_reference_error(
         (reaction, expected) in unavailable_entity_strategy(),
     ) {
         prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_ast_validate_application_participant_reference_error(
+    fn test_reaction_validate_application_participant_reference_error(
         (reaction, expected) in unavailable_participant_strategy(),
     ) {
         prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_ast_validate_application_incidence_error(
+    fn test_reaction_validate_application_incidence_error(
         (reaction, expected) in incompatible_incidence_strategy(),
     ) {
         prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_ast_validate_application_update_error(
+    fn test_reaction_validate_application_update_error(
         reaction in malformed_update_strategy(),
     ) {
         prop_assert_eq!(
@@ -519,7 +519,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_apply_error(host_atom_count in 1usize..=8) {
+    fn test_reaction_apply_error(host_atom_count in 1usize..=8) {
         let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(0)]),
             sum: NumForm::Lit(0),

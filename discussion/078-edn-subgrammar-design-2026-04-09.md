@@ -257,7 +257,7 @@ any single EDN shape — it requires semantic postprocessing.
 ```rust
 impl<'de> FromEdn<'de> for MoleculeAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        MoleculeInput::from_edn(edn)?.into_ast().map_err(...)
+        MoleculeInput::from_edn(edn)?.into_ir().map_err(...)
     }
 }
 ```

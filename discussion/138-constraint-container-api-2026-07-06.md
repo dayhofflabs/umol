@@ -726,14 +726,14 @@ field**:
 stay uniform — every `#R…` is an independent entry, no collect-mode in the framework. The
 multiplicity reconciliation lives in the boundary conversion, as plain Rust:
 
-- `to_ast` (Dsl → Ast) **collects** the flat entries into the `BTreeMap` — one fold over
+- `to_ir` (Dsl → Ast) **collects** the flat entries into the `BTreeMap` — one fold over
   an already-parsed list.
-- `from_ast` (Ast → Dsl) **expands** the map back to flat entries in canonical order.
+- `from_ir` (Ast → Dsl) **expands** the map back to flat entries in canonical order.
 
 The reader/writer never see the map, the flat surface is preserved, and the Ast is free to
 be the clean map (data + traits + `Lattice`). One subtlety in the collect: **duplicate
 keys must `meet`, not last-win** — two `#R(6)` entries are `RingMembership(6)` twice, which
-today's `canonicalize` merges by value-`meet` (Err on contradiction), so `to_ast` folds
+today's `canonicalize` merges by value-`meet` (Err on contradiction), so `to_ir` folds
 with `entry().and_modify(meet).or_insert()` (or a normalize pass) to preserve that.
 
 **The block form (`#R{all=>2, 6=>1}`) is rejected.** It is verbose even for ring
@@ -804,13 +804,13 @@ generalizes — the block form is essentially unusable here.
   extra `*Dsl` type is justified by that container tidy-up.
 - **Settled (delta boundary)** — `AtomConstraintKey` is **retained** but relocated to the
   delta (`constraint_key`) and DSL boundaries; per-scope ring edits stay independently
-  keyed, so `fold_preserved`/`ConstraintKey` are unchanged. `diff`/`apply`/`from_ast`
-  expand the map into single-entry ring units, `add`/`to_ast` collect — the same pattern
+  keyed, so `fold_preserved`/`ConstraintKey` are unchanged. `diff`/`apply`/`from_ir`
+  expand the map into single-entry ring units, `add`/`to_ir` collect — the same pattern
   as the `*Dsl`. The reaction machinery ruled out deleting `*Key`: whole-map deltas collide
   disjoint-scope edits and cannot express a rule's substructure modification against a host
   carrying other scopes.
 - **Settled** — serialization stays on the flat repeated-tag surface; the flat↔map
-  reconciliation lives in an `AtomConstraintsDsl` boundary (`to_ast` collects, `from_ast`
+  reconciliation lives in an `AtomConstraintsDsl` boundary (`to_ir` collects, `from_ir`
   expands, `meet` on duplicate keys). The block-map form is rejected — verbose for rings,
   unusable for the stereo map-valued constraints (permutation keys, glyph values).
   Generalizes to the whole constraint family.
@@ -851,8 +851,8 @@ a delta is a rule, not tied to a concrete old state. So the split is removed fro
 **container only**: `AtomConstraintKey` is **retained** and relocated to the two boundaries
 (`delta.rs::constraint_key`, the DSL), where per-scope identity is real and reads fine.
 `fold_preserved` and `ConstraintKey` are **unchanged**; the container becomes the clean
-kind-keyed map; `diff`/`apply`/`from_ast` **expand** the map into per-scope units and
-`add`/`to_ast` **collect** — the same expand/collect the `*Dsl` already uses. A
+kind-keyed map; `diff`/`apply`/`from_ir` **expand** the map into per-scope units and
+`add`/`to_ir` **collect** — the same expand/collect the `*Dsl` already uses. A
 `RingMembership` is a multi-entry map in the container, single-entry at the boundaries (the
 one invariant; the same shape as the `*Dsl` flat entries). The complexity lands on the
 reaction/serialization side, which is read less often than the container.
@@ -915,8 +915,8 @@ Expand/collect keyed by the **retained** `AtomConstraintKey`; `fold_preserved` a
 
 ### S3 — atom DSL boundary (flat ↔ map)
 
-- **S3a** — `dsl/`: `AtomConstraintsDsl` (new) — a flat per-scope list; `to_ast`
-  **collects** ring entries into the map (`meet` on duplicate scope), `from_ast`
+- **S3a** — `dsl/`: `AtomConstraintsDsl` (new) — a flat per-scope list; `to_ir`
+  **collects** ring entries into the map (`meet` on duplicate scope), `from_ir`
   **expands** the map to per-scope entries in `All, Size(n)` order. `AtomConstraintDsl`
   handles single-entry ring via the existing flat `RingMembershipDsl` shape; wire into
   `AtomDsl`. Tests: `#R2#R(6)1` roundtrip, dup-scope `meet`, canonical order. [dep: S1]

@@ -106,14 +106,14 @@ def three_center_bond():
     )
 
 
-def test_multicenterbondast_new():
+def test_multicenterbond_form_new():
     bond = MulticenterBondForm([1, 1, 1])
     assert bond.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert bond.charge == NumForm.Undetermined()
     assert len(bond.constraints) == 0
 
 
-def test_multicenterbondast_new_kwargs():
+def test_multicenterbond_form_new_kwargs():
     bond = MulticenterBondForm(
         [1, 1, 1],
         charge=-1,
@@ -123,7 +123,7 @@ def test_multicenterbondast_new_kwargs():
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
-def test_multicenterbondast_constraints_kwarg():
+def test_multicenterbond_form_constraints_kwarg():
     bond = MulticenterBondForm(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsForm(
@@ -134,37 +134,37 @@ def test_multicenterbondast_constraints_kwarg():
     assert bond.constraints.electron_count == NumForm.Lit(6)
 
 
-def test_multicenterbondast_electrons_setter():
+def test_multicenterbond_form_electrons_setter():
     bond = MulticenterBondForm([1, 1, 1])
     bond.electrons = [2, 2]
     assert bond.electrons == ElectronCountsForm.Lit([2, 2])
 
 
-def test_multicenterbondast_charge_setter():
+def test_multicenterbond_form_charge_setter():
     bond = MulticenterBondForm([1, 1, 1])
     bond.charge = -1
     assert bond.charge == NumForm.Lit(-1)
 
 
-def test_multicenterbondast_unpaired_electrons_setter():
+def test_multicenterbond_form_unpaired_electrons_setter():
     bond = MulticenterBondForm([1, 1, 1])
     bond.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
-def test_multicenterbondast_parse_roundtrip(dsl):
+def test_multicenterbond_form_parse_roundtrip(dsl):
     bond = MulticenterBondForm.parse(dsl)
     assert str(bond) == dsl
     assert repr(bond) == f"MulticenterBondForm.parse('{dsl}')"
 
 
-def test_multicenterbondast_parse_error():
+def test_multicenterbond_form_parse_error():
     with pytest.raises(ParseError):
         MulticenterBondForm.parse("z")
 
 
-def test_multicenterbondast_asdict():
+def test_multicenterbond_form_asdict():
     bond = MulticenterBondForm(
         [1, 1, 1],
         constraints=MulticenterBondConstraintsForm(
@@ -182,7 +182,7 @@ def test_multicenterbondast_asdict():
     assert d["constraints"]["electron_count"] == NumForm.Lit(6)
 
 
-def test_multicenterbondast_set_constraints():
+def test_multicenterbond_form_set_constraints():
     bond = MulticenterBondForm([1, 1, 1])
     bond.constraints = MulticenterBondConstraintsForm(
         [MulticenterBondConstraintForm.ElectronCount(NumForm.Lit(6))]

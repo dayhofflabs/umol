@@ -20,7 +20,7 @@ use std::{env, fs, process};
 
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{FromIr, Molecule, TryIntoIr};
-use umol_io::ctfile::parse_mol_bytes_to_ast;
+use umol_io::ctfile::parse_mol_bytes_to_ir;
 use umol_io::smiles::Smiles;
 
 /// `(category, name, smiles)` — the stereo conformance corpus. `category` is the
@@ -227,7 +227,7 @@ fn main() {
             }
         }
         Some("mol") if args.len() == 3 => {
-            let molecule = parse_mol_bytes_to_ast(&read_input(&args[2])).unwrap_or_else(|e| {
+            let molecule = parse_mol_bytes_to_ir(&read_input(&args[2])).unwrap_or_else(|e| {
                 eprintln!("parse error: {e}");
                 process::exit(1);
             });

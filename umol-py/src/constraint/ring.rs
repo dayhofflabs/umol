@@ -35,8 +35,8 @@ impl RingScope {
 }
 
 impl RingScope {
-    pub(crate) fn from_rust(ast: &GraphIrRingScope) -> Self {
-        match ast {
+    pub(crate) fn from_rust(scope: &GraphIrRingScope) -> Self {
+        match scope {
             GraphIrRingScope::All => Self::All(),
             GraphIrRingScope::Size(size) => Self::Size(*size),
         }
@@ -97,10 +97,10 @@ impl_py_lattice!(
 );
 
 impl RingMembershipForm {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrRingMembershipForm) -> PyResult<Self> {
+    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrRingMembershipForm) -> PyResult<Self> {
         Ok(Self {
-            scope: into_py_variant(py, RingScope::from_rust(&ast.scope))?,
-            count: into_py_variant(py, NumForm::from_rust(py, &ast.count)?)?,
+            scope: into_py_variant(py, RingScope::from_rust(&form.scope))?,
+            count: into_py_variant(py, NumForm::from_rust(py, &form.count)?)?,
         })
     }
 
@@ -121,18 +121,20 @@ mod tests {
     #[rstest]
     #[case(GraphIrRingScope::All)]
     #[case(GraphIrRingScope::Size(6))]
-    fn test_ring_scope_roundtrip(#[case] ast: GraphIrRingScope) {
-        assert_eq!(RingScope::from_rust(&ast).to_rust(), ast);
+    fn test_ring_scope_roundtrip(#[case] form: GraphIrRingScope) {
+        assert_eq!(RingScope::from_rust(&form).to_rust(), form);
     }
 
     #[rstest]
     #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::All, 2))]
     #[case(GraphIrRingMembershipForm::new(GraphIrRingScope::Size(6), 1))]
-    fn test_ring_membership_form_roundtrip(#[case] ast: GraphIrRingMembershipForm) {
+    fn test_ring_membership_form_roundtrip(#[case] form: GraphIrRingMembershipForm) {
         Python::attach(|py| {
             assert_eq!(
-                RingMembershipForm::from_rust(py, &ast).unwrap().to_rust(py),
-                ast
+                RingMembershipForm::from_rust(py, &form)
+                    .unwrap()
+                    .to_rust(py),
+                form
             );
         });
     }

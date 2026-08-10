@@ -20,17 +20,17 @@ from umol import (
 )
 
 
-def test_aromaticvalenceast_aromatic():
+def test_aromatic_valence_form_aromatic():
     assert AromaticValenceForm.Aromatic(NumForm.Lit(1)) == AromaticValenceForm.Aromatic(
         NumForm.Lit(1)
     )
 
 
-def test_aromaticvalenceast_not_aromatic():
+def test_aromatic_valence_form_not_aromatic():
     assert AromaticValenceForm.NotAromatic() == AromaticValenceForm.NotAromatic()
 
 
-def test_aromaticvalenceast_as_lit():
+def test_aromatic_valence_form_as_lit():
     assert AromaticValenceForm.NotAromatic().as_lit() == AromaticValence.NotAromatic()
     assert AromaticValenceForm.Aromatic(2).as_lit() == AromaticValence.Aromatic(2)
     assert AromaticValenceForm.Undetermined().as_lit() is None
@@ -38,13 +38,13 @@ def test_aromaticvalenceast_as_lit():
     assert AromaticValence.Aromatic(2).valence_count() == 2
 
 
-def test_multicentervalenceast_multicenter():
+def test_multicenter_valence_form_multicenter():
     assert MulticenterValenceForm.Multicenter(NumForm.Lit(2)) == MulticenterValenceForm.Multicenter(
         NumForm.Lit(2)
     )
 
 
-def test_multicentervalenceast_as_lit():
+def test_multicenter_valence_form_as_lit():
     assert MulticenterValenceForm.NotMulticenter().as_lit() == MulticenterValence.NotMulticenter()
     assert MulticenterValenceForm.Multicenter(3).as_lit() == MulticenterValence.Multicenter(3)
     assert MulticenterValenceForm.Undetermined().as_lit() is None
@@ -56,13 +56,13 @@ def test_ringscope_size():
     assert RingScope.Size(6) == RingScope.Size(6)
 
 
-def test_ringmembershipast_fields():
+def test_ring_membership_form_fields():
     rm = RingMembershipForm(RingScope.All(), NumForm.Lit(2))
     assert rm.scope == RingScope.All()
     assert rm.count == NumForm.Lit(2)
 
 
-def test_ringmembershipast_int_count():
+def test_ring_membership_form_int_count():
     assert RingMembershipForm(RingScope.All(), 2).count == NumForm.Lit(2)
 
 
@@ -164,7 +164,7 @@ def test_atomconstraints_ring_size_count():
     assert constraints.ring_count is None
 
 
-def test_atomconstraintsast_set():
+def test_atom_constraints_form_set():
     constraints = AtomConstraintsForm([])
     constraints.set(AtomConstraintForm.Valence(NumForm.Lit(4)))
     assert len(constraints) == 1
@@ -173,7 +173,7 @@ def test_atomconstraintsast_set():
     )
 
 
-def test_atomconstraintsast_pop():
+def test_atom_constraints_form_pop():
     constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert constraints.pop(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
         NumForm.Lit(4)
@@ -182,7 +182,7 @@ def test_atomconstraintsast_pop():
     assert constraints.pop(AtomConstraintKey.Valence()) is None
 
 
-def test_atomconstraintsast_update():
+def test_atom_constraints_form_update():
     constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     constraints.update(
         AtomConstraintsForm(
@@ -359,11 +359,11 @@ def test_atomconstraintsview_ring_size_count_on_molecule():
     assert mol.atoms[0].constraints.ring_size_count[6] is None
 
 
-def test_aromaticvalenceast_aromatic_int():
+def test_aromatic_valence_form_aromatic_int():
     assert AromaticValenceForm.Aromatic(1) == AromaticValenceForm.Aromatic(NumForm.Lit(1))
 
 
-def test_multicentervalenceast_multicenter_int():
+def test_multicenter_valence_form_multicenter_int():
     assert MulticenterValenceForm.Multicenter(2) == MulticenterValenceForm.Multicenter(NumForm.Lit(2))
 
 
@@ -423,7 +423,7 @@ def test_atomconstraintkey_eq_hash():
     assert len({AtomConstraintKey.Valence(), AtomConstraintKey.Valence()}) == 1
 
 
-def test_atomconstraintsast_eq_repr():
+def test_atom_constraints_form_eq_repr():
     a = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     b = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert a == b
@@ -431,18 +431,18 @@ def test_atomconstraintsast_eq_repr():
     assert repr(a) == "AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])"
 
 
-def test_atomconstraintsast_unhashable():
+def test_atom_constraints_form_unhashable():
     # mutable container: value-equal but unhashable, like AtomForm
     with pytest.raises(TypeError):
         hash(AtomConstraintsForm([]))
 
 
-def test_aromaticvalenceast_eq():
+def test_aromatic_valence_form_eq():
     assert AromaticValenceForm.Aromatic(1) == AromaticValenceForm.Aromatic(1)
     assert AromaticValenceForm.Aromatic(1) != AromaticValenceForm.NotAromatic()
 
 
-def test_ringmembershipast_eq_repr():
+def test_ring_membership_form_eq_repr():
     a = RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
     assert a == RingMembershipForm(RingScope.Size(6), NumForm.Lit(1))
     assert a != RingMembershipForm(RingScope.All(), NumForm.Lit(1))
@@ -514,7 +514,7 @@ def test_atomconstraintsview_update_from_view():
     assert AtomConstraintKey.Valence() in mol.atoms[0].constraints
 
 
-def test_atomast_set_constraints_from_value():
+def test_atom_form_set_constraints_from_value():
     dst = AtomForm(Element("N"))
     dst.constraints = AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))])
     assert dst.constraints.get(AtomConstraintKey.Valence()) == AtomConstraintForm.Valence(
@@ -522,7 +522,7 @@ def test_atomast_set_constraints_from_value():
     )
 
 
-def test_atomast_set_constraints_from_view():
+def test_atom_form_set_constraints_from_view():
     src = AtomForm(
         Element("C"),
         constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),

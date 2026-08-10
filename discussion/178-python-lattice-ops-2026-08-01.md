@@ -153,7 +153,7 @@ From `Canonicalize`, worth including in the same pass since they complete the pi
   **Additive (green).** [dep: S2a, S2b, S2c, S2d, S2e, S3a, S3b]
 - **S3d — Complete the Rust lattice-law inventory.** **Done.** Add `StereoAtomAst` and
   `StereoBondAst` cases to `umol-ast/tests/property/lattice.rs` using the existing
-  `stereo_atom_ast_strategy` and `stereo_bond_ast_strategy`. Each case generates a value triple and
+  `stereo_atom_form_strategy` and `stereo_bond_form_strategy`. Each case generates a value triple and
   applies both `assert_lattice_laws` and `assert_canonical_lattice_laws`, matching the other entity
   AST cases.
   Run the two cases directly before the complete `umol-ast` lattice property module.

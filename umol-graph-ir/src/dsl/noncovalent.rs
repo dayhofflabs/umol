@@ -437,14 +437,14 @@ impl ToEdn for NoncovalentBondConstraintDsl {
 }
 
 impl NoncovalentBondConstraintDsl {
-    /// Build from the narrow inline AST form.
+    /// Build from the narrow inline form.
     pub(crate) fn from_ir(c: &NoncovalentBondConstraintForm) -> Self {
         match c {
             NoncovalentBondConstraintForm::Intramolecular(b) => Self::Intramolecular(*b),
         }
     }
 
-    /// Convert into the narrow inline AST form.
+    /// Convert into the narrow inline form.
     pub(crate) fn into_ir(self) -> NoncovalentBondConstraintForm {
         match self {
             Self::Intramolecular(b) => NoncovalentBondConstraintForm::Intramolecular(b),
@@ -563,7 +563,7 @@ mod tests {
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondDsl(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)),
     )]
-    fn test_noncovalent_bond_dsl_from_ast(
+    fn test_noncovalent_bond_dsl_from_ir(
         #[case] input: NoncovalentBondForm,
         #[case] expected: NoncovalentBondDsl,
     ) {
@@ -579,7 +579,7 @@ mod tests {
         NoncovalentBondDsl(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
     )]
-    fn test_noncovalent_bond_dsl_into_ast(
+    fn test_noncovalent_bond_dsl_into_ir(
         #[case] input: NoncovalentBondDsl,
         #[case] expected: NoncovalentBondForm,
     ) {
@@ -743,7 +743,7 @@ mod tests {
     #[rstest]
     #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true), NoncovalentBondConstraintDsl::Intramolecular(BooleanForm::Lit(true)))]
     #[case::undetermined(NoncovalentBondConstraintForm::Intramolecular(BooleanForm::Undetermined), NoncovalentBondConstraintDsl::Intramolecular(BooleanForm::Undetermined))]
-    fn test_noncovalent_bond_constraint_dsl_from_ast(
+    fn test_noncovalent_bond_constraint_dsl_from_ir(
         #[case] form: NoncovalentBondConstraintForm,
         #[case] expected: NoncovalentBondConstraintDsl,
     ) {
@@ -753,7 +753,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::intramolecular(NoncovalentBondConstraintDsl::Intramolecular(BooleanForm::Lit(false)), NoncovalentBondConstraintForm::intramolecular(false))]
-    fn test_noncovalent_bond_constraint_dsl_into_ast(
+    fn test_noncovalent_bond_constraint_dsl_into_ir(
         #[case] dsl: NoncovalentBondConstraintDsl,
         #[case] expected: NoncovalentBondConstraintForm,
     ) {

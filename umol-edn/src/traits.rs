@@ -102,7 +102,7 @@ pub trait FromEdn<'de>: Sized {
 ///
 /// `to_edn` returns `Edn<'static>` — a fully owned tree with no
 /// borrows. This allows callers to delegate through temporaries
-/// (e.g. `self.to_ast().to_edn()`) without lifetime issues.
+/// (e.g. converting through a temporary and then calling `to_edn()`) without lifetime issues.
 ///
 /// # Infallibility
 ///

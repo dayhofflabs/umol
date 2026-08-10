@@ -2,7 +2,7 @@
 //!
 //! The parallel property families are intentional. `*_delta_diff_apply` checks
 //! delta derivation and application, `*_delta_diff_identity` checks the empty
-//! delta representation, and `*_ast_difference_to` checks the public update
+//! delta representation, and `*_form_difference_to` checks the public update
 //! value and `update` operation directly. Delta inversion has its own property
 //! and is not folded into each diff/application property.
 
@@ -343,15 +343,15 @@ proptest! {
 
     #[test]
     fn test_aromatic_system_delta_diff_apply(
-        lhs in aromatic_system_patch_ast_strategy(),
-        rhs in aromatic_system_patch_ast_strategy(),
+        lhs in aromatic_system_patch_form_strategy(),
+        rhs in aromatic_system_patch_form_strategy(),
     ) {
         let diff = AromaticSystemDelta::diff(AromaticSystemId(0), &lhs, &rhs);
         prop_assert_eq!(apply_aromatic_system_diff(lhs, diff), rhs);
     }
 
     #[test]
-    fn test_aromatic_system_delta_diff_identity(system in aromatic_system_patch_ast_strategy()) {
+    fn test_aromatic_system_delta_diff_identity(system in aromatic_system_patch_form_strategy()) {
         let diff = AromaticSystemDelta::diff(AromaticSystemId(0), &system, &system);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_aromatic_system_diff(system.clone(), diff), system);
@@ -359,8 +359,8 @@ proptest! {
 
     #[test]
     fn test_aromatic_system_form_difference_to(
-        lhs in aromatic_system_patch_ast_strategy(),
-        rhs in aromatic_system_patch_ast_strategy(),
+        lhs in aromatic_system_patch_form_strategy(),
+        rhs in aromatic_system_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
@@ -368,15 +368,15 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_delta_diff_apply(
-        lhs in multicenter_bond_patch_ast_strategy(),
-        rhs in multicenter_bond_patch_ast_strategy(),
+        lhs in multicenter_bond_patch_form_strategy(),
+        rhs in multicenter_bond_patch_form_strategy(),
     ) {
         let diff = MulticenterBondDelta::diff(MulticenterBondId(0), &lhs, &rhs);
         prop_assert_eq!(apply_multicenter_bond_diff(lhs, diff), rhs);
     }
 
     #[test]
-    fn test_multicenter_bond_delta_diff_identity(bond in multicenter_bond_patch_ast_strategy()) {
+    fn test_multicenter_bond_delta_diff_identity(bond in multicenter_bond_patch_form_strategy()) {
         let diff = MulticenterBondDelta::diff(MulticenterBondId(0), &bond, &bond);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_multicenter_bond_diff(bond.clone(), diff), bond);
@@ -384,8 +384,8 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_form_difference_to(
-        lhs in multicenter_bond_patch_ast_strategy(),
-        rhs in multicenter_bond_patch_ast_strategy(),
+        lhs in multicenter_bond_patch_form_strategy(),
+        rhs in multicenter_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));
@@ -393,15 +393,15 @@ proptest! {
 
     #[test]
     fn test_noncovalent_bond_delta_diff_apply(
-        lhs in noncovalent_bond_patch_ast_strategy(),
-        rhs in noncovalent_bond_patch_ast_strategy(),
+        lhs in noncovalent_bond_patch_form_strategy(),
+        rhs in noncovalent_bond_patch_form_strategy(),
     ) {
         let diff = NoncovalentBondDelta::diff(NoncovalentBondId(0), &lhs, &rhs);
         prop_assert_eq!(apply_noncovalent_bond_diff(lhs, diff), rhs);
     }
 
     #[test]
-    fn test_noncovalent_bond_delta_diff_identity(bond in noncovalent_bond_patch_ast_strategy()) {
+    fn test_noncovalent_bond_delta_diff_identity(bond in noncovalent_bond_patch_form_strategy()) {
         let diff = NoncovalentBondDelta::diff(NoncovalentBondId(0), &bond, &bond);
         prop_assert!(diff.is_empty());
         prop_assert_eq!(apply_noncovalent_bond_diff(bond.clone(), diff), bond);
@@ -409,8 +409,8 @@ proptest! {
 
     #[test]
     fn test_noncovalent_bond_form_difference_to(
-        lhs in noncovalent_bond_patch_ast_strategy(),
-        rhs in noncovalent_bond_patch_ast_strategy(),
+        lhs in noncovalent_bond_patch_form_strategy(),
+        rhs in noncovalent_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
         prop_assert!(lhs.update(&update).canonical_eq(&rhs));

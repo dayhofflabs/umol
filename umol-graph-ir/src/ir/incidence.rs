@@ -42,7 +42,7 @@ impl IncidenceNodeSelection {
 ///
 /// Bond direction is not encoded structurally: the coloring separates the
 /// endpoints of a directed bond (a dative donor and acceptor are never
-/// automorphism-equivalent), and the direction itself is retained in the AST.
+/// automorphism-equivalent), and the direction itself is retained in the IR.
 #[derive(Clone, Debug)]
 pub struct IncidenceGraph {
     graph: Graph,
@@ -289,7 +289,7 @@ mod tests {
             Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)),
         ],
     )]
-    fn test_molecule_ast_incidence_graph(
+    fn test_molecule_incidence_graph(
         molecule: Molecule,
         #[case] selection: IncidenceNodeSelection,
         #[case] expected: Vec<Entity>,
@@ -317,7 +317,7 @@ mod tests {
     // stereo bond to the pseudonode of its site BondId(1) = node 6 + 1 = 7.
     #[case::stereo_atom(13, vec![1])]
     #[case::stereo_bond(14, vec![7])]
-    fn test_molecule_ast_incidence_graph_neighbors(
+    fn test_molecule_incidence_graph_neighbors(
         molecule: Molecule,
         #[case] node: u32,
         #[case] expected: Vec<u32>,

@@ -5,14 +5,14 @@ use umol_graph_ir::dsl::{
     MoleculeDefaults as GraphIrMoleculeDefaults, ReactionDefaults as GraphIrReactionDefaults,
 };
 
-/// Defaults applied while constructing a molecule AST from its DSL.
+/// Defaults applied while constructing a molecule from its DSL.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeDefaults(GraphIrMoleculeDefaults);
 
 #[pymethods]
 impl MoleculeDefaults {
-    /// Preserve every AST value; omitted input values remain undetermined.
+    /// Preserve every IR value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
         Self(GraphIrMoleculeDefaults::new())
@@ -39,14 +39,14 @@ impl MoleculeDefaults {
     }
 }
 
-/// Defaults applied while constructing a reaction AST from its DSL.
+/// Defaults applied while constructing a reaction from its DSL.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReactionDefaults(GraphIrReactionDefaults);
 
 #[pymethods]
 impl ReactionDefaults {
-    /// Preserve every AST value; omitted input values remain undetermined.
+    /// Preserve every IR value; omitted input values remain undetermined.
     #[new]
     pub(crate) fn new() -> Self {
         Self(GraphIrReactionDefaults::new())

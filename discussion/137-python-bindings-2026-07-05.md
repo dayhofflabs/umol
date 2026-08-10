@@ -331,14 +331,14 @@ the enum compiles, and from Python it constructs (`ValueTerm.Lit(5)`,
 natively. So the pure-Python-over-opaque fallback is **not needed** — every value
 mirror type is a native complex enum. AST recursion (`Box<Self>`/`Vec<Self>`) maps to
 `Py<Self>`/`Vec<Py<Self>>`; the two are *distinct* types bridged by `pub(crate)`
-`from_ast(py, &AstT) -> PyResult<T>` / `to_ast(&self, py) -> AstT` conversions (the
+`from_ir(py, &AstT) -> PyResult<T>` / `to_ir(&self, py) -> AstT` conversions (the
 parallel-representation cost native enums carry — accepted, since native gives the
 match ergonomics and the conversions are mechanical and roundtrip-tested).
 
 Notes from the spike + S1b–d (native-enum mechanics that recur across every mirror):
 
 - Tuple variants expose fields as `_0`/`_1` (positional `match` works:
-  `case ValueTerm.Lit(n)`); `from_ast` allocates one Python object per node via
+  `case ValueTerm.Lit(n)`); `from_ir` allocates one Python object per node via
   `Py::new`; GIL-holding Rust tests use `Python::attach` (PyO3 0.29 renamed `with_gil`)
   under the `auto-initialize` dev-dependency (test-only, absent from the wheel build).
 - **Unit variants are rejected** in a complex enum — use an empty-tuple variant
@@ -348,13 +348,13 @@ Notes from the spike + S1b–d (native-enum mechanics that recur across every mi
   needs `#[derive(Clone)]` + `#[pyclass(…, from_py_object)]` — the getter clones it, the
   constructor extracts it. Opposite of a held leaf like `Element`, which drops `Clone`.
   Keys on: *is this type extracted from Python as a value?*
-- `from_ast`/`to_ast` stay `#[allow(dead_code)]` until a live `#[pymethods]` caller
+- `from_ir`/`to_ir` stay `#[allow(dead_code)]` until a live `#[pymethods]` caller
   reaches them (the `AtomAst` field getters at S3); the roundtrip tests keep them
   covered in the test build meanwhile. (Retired at S3.)
 - **`Py::new` builds a *base*-type complex-enum instance** (S3): its Python-visible
   variant fields (`_0`, …) and `match` are absent. Wrap every nested `Py<…>` child in
-  a `from_ast` with `IntoPyObject` instead — the `into_py_variant(py, value)` helper
-  (`convert.rs`). Insidious because the Rust-side roundtrip tests (`to_ast`) never
+  a `from_ir` with `IntoPyObject` instead — the `into_py_variant(py, value)` helper
+  (`convert.rs`). Insidious because the Rust-side roundtrip tests (`to_ir`) never
   exercise Python-side variant access, so it stayed hidden until a getter (`atom.spin`)
   read a nested child; the fix carries a Python-side regression test.
 
@@ -375,8 +375,8 @@ by `ast`-module membership (`MoleculeAst` is both, and is *held*, not mirrored).
   `ChemElement`).
 - **Structural mirror** — `#[pyclass] enum W { …variants… }`, a distinct native enum
   reproducing the Rust enum's variants (recursion re-expressed `Box<Self>` → `Py<Self>`).
-  Being a separate type, it **carries conversions to/from the AST** (the `from_ast` /
-  `to_ast` pair on `ValueTerm`). Used for the value/pattern algebra (`ValueAst`,
+  Being a separate type, it **carries conversions to/from the AST** (the `from_ir` /
+  `to_ir` pair on `ValueTerm`). Used for the value/pattern algebra (`ValueAst`,
   `ValueTerm`, `ValuePredicate`, `ElementAst`, `IsotopeMassAst`, …).
 
 Criterion: **does Python construct / `match` it by variant?** Yes → structural mirror
@@ -391,9 +391,9 @@ That two-way cut is the coarse criterion; the concrete kinds observed through S4
 | --- | --- | --- | --- | --- |
 | **Leaf newtype** | `Element` | `(eq, hash, frozen, from_py_object)` struct over a *vocab* type | by value | `From<Chem>` / `From<&Self>` — not an AST |
 | **Id newtype** | `AtomId` | `(eq, hash, frozen, from_py_object)` struct over an id | by value (index arg) | `From<AstId>`; `#[new](u32)`, `.index` |
-| **Simple enum** | `RelOp`, `MemOp` | `(eq, from_py_object)` enum, unit variants | by value | `from_ast`/`to_ast`, **py-free** |
-| **Complex enum** | `ValueTerm`, `ValueAst`, `ValuePredicate`, `ElementAst`, `IsotopeMassAst` | `#[pyclass]` enum, data variants; unit → `()` | `Py<Self>` for recursion, by-value data else | `from_ast`/`to_ast` (**py** iff it holds `Py` children) |
-| **Mirror struct** | `SpinStateAst` | `#[pyclass]` struct, `#[pyo3(get)]` + `#[new]` | `Py<mirror>` fields | `from_ast`/`to_ast` (**py**) |
+| **Simple enum** | `RelOp`, `MemOp` | `(eq, from_py_object)` enum, unit variants | by value | `from_ir`/`to_ir`, **py-free** |
+| **Complex enum** | `ValueTerm`, `ValueAst`, `ValuePredicate`, `ElementAst`, `IsotopeMassAst` | `#[pyclass]` enum, data variants; unit → `()` | `Py<Self>` for recursion, by-value data else | `from_ir`/`to_ir` (**py** iff it holds `Py` children) |
+| **Mirror struct** | `SpinStateAst` | `#[pyclass]` struct, `#[pyo3(get)]` + `#[new]` | `Py<mirror>` fields | `from_ir`/`to_ir` (**py**) |
 | **Hold-the-value struct** | `MoleculeAst`, `AtomAst` | `(eq)` struct `W(AstT)` | holds `AstT`; getters mirror fields on read | **`inner`/`from_inner`** (borrow out / move in — no rebuild) |
 | **Handle view** | `AtomView`, `AtomViews` | `#[pyclass]` struct `{ owner: Py<W>, id }` | — | none — rebuilds a transient Rust view via `owner.inner()` |
 | **Iterator** | `AtomViewIter` | `#[pyclass]` struct, `__iter__`/`__next__` | holds `owner` + id iter | none — internal, unexported, not `add_class`'d |
@@ -402,12 +402,12 @@ The wrapping-infra methods that bridge each kind to the AST:
 
 | Method | On | Role |
 | --- | --- | --- |
-| `from_ast(py?, &AstT) -> PyResult<T>` / `to_ast(&self, py?) -> AstT` | simple + complex enums, mirror struct | structural **convert** mirror ↔ AST (rebuilds; `py` when it allocates `Py` children) |
+| `from_ir(py?, &AstT) -> PyResult<T>` / `to_ir(&self, py?) -> AstT` | simple + complex enums, mirror struct | structural **convert** mirror ↔ AST (rebuilds; `py` when it allocates `Py` children) |
 | `inner(&self) -> &AstT` / `from_inner(ast: AstT) -> Self` | hold-the-value structs | **wrap/unwrap** the held value (borrow out, move in — no rebuild, no `py`) |
-| `into_py_variant(py, value) -> PyResult<Py<T>>` | every `from_ast` with `Py<…>` children | wrap a complex-enum child as its **variant** instance — `Py::new` yields a base instance (S3 bug) |
+| `into_py_variant(py, value) -> PyResult<Py<T>>` | every `from_ir` with `Py<…>` children | wrap a complex-enum child as its **variant** instance — `Py::new` yields a base instance (S3 bug) |
 | `From<Chem>` / `From<&Self> for Chem` | leaf newtypes | vocab-type conversion (not an AST bridge) |
 
-The two bridge *pairs* track the two strategies: `from_ast`/`to_ast` = structural
+The two bridge *pairs* track the two strategies: `from_ir`/`to_ir` = structural
 **conversion** (the mirror rebuilds a parallel structure), `inner`/`from_inner` =
 **wrap/unwrap** of a held value (trivial). Which pair a type carries tells you its
 strategy at a glance; a handle view carries neither — it reads through `owner.inner()`.
@@ -435,7 +435,7 @@ Settled:
 - **Mirror mechanism** — **native PyO3 complex enums throughout** (S1a spike, 2026-07-05:
   a complex enum *does* hold recursive `Py<Self>`/`Vec<Py<Self>>` fields — construct,
   field-read, and `match` all work). Pure-Python fallback dropped. Each mirror type is
-  a distinct native enum bridged to the AST by `pub(crate)` `from_ast`/`to_ast`.
+  a distinct native enum bridged to the AST by `pub(crate)` `from_ir`/`to_ir`.
 - **Reaction derivations** — `ReactionDerivation` is a fully owned Rust value;
   the binding wraps that type directly.
 - **Generics** — monomorphize at the boundary: per-entity-family `EntitySpan<T>`
@@ -468,7 +468,7 @@ Settled:
   mechanism as the `__getitem__` overloads; input-only (getters still return mirrors).
   Applied to the atom value fields, `SpinStateAst(unpaired, multiplicity)`, and
   `RingMembershipAst.count`. The shared `ValueArg` lives in `value.rs` (with two coercions:
-  `to_ast` → `AstValueAst` for `with_*` builders, `to_py` → `Py<ValueAst>` for mirror
+  `to_ir` → `AstValueAst` for `with_*` builders, `to_py` → `Py<ValueAst>` for mirror
   structs that store the field); `ElementArg`/`IsotopeMassArg` stay in `atom.rs`.
 - **Doc separation** — four artifacts, coordinated by hand, no generation between
   them; Guide is not derived from doc comments.
@@ -566,7 +566,7 @@ bare `int`. Revisit on alpha-user feedback.
 - **S5b** *(done)* — `AtomConstraint` (13 variants, `.kind`), `AtomConstraintKind`
   (simple enum, keyed lookup), `AtomConstraints` container (hold-the-value:
   `len`/iteration/`get(kind)`/`contains(kind)`, built from a list). Consuming the
-  sub-ASTs here made every `from_ast`/`to_ast` live (cleared the S5a `dead_code`).
+  sub-ASTs here made every `from_ir`/`to_ir` live (cleared the S5a `dead_code`).
   *Additive.*
 - **S5c** *(done)* — `constraints` getter on `AtomAst` and `AtomView`, plus a
   `constraints=` kwarg on `AtomAst(...)`/`replace` (wipe-and-set via the `pub`
@@ -622,7 +622,7 @@ immutable-`AtomAst` premise was **not** treated as settled (Python leans mutable
   property + `ring_size_count[size]` subscript proxy (`RingSizeCounts`); `as_lit()` on
   `ValueAst`/`ElementAst`/`IsotopeMassAst`; deeper `*Arg` int coercion. `E.H`/`E.As`
   element shorthand (`python/umol/` `__getattr__`) — Python todo 2, dynamic form.
-- **API-review polish.** Value `__eq__`/`__hash__` (via `to_ast`) + eval-able `__repr__`
+- **API-review polish.** Value `__eq__`/`__hash__` (via `to_ir`) + eval-able `__repr__`
   across all mirrors — so `ValueAst.Lit(1) == ValueAst.Lit(1)` (was identity-false); dict
   protocol on the constraint containers (`in`/`[]`/`del`, alongside `get`/`remove`);
   dropped `is_empty`, `atom_count` (→ `len(mol.atoms)`), `AtomViews.get`; `AtomView.asdict`
@@ -787,7 +787,7 @@ these change only umol-py, not umol-ast).
    once the mirrors have reprs — do the set together. Each `__repr__` is the eval-able
    constructor form (recursing via Python `repr()` on children); separately decide
    whether `__str__` should be the compact **DSL string** (the AST value types impl
-   `Display` as the value-expr, reachable via `to_ast`) — ties into the S6 DSL-string
+   `Display` as the value-expr, reachable via `to_ir`) — ties into the S6 DSL-string
    surface.
 5. **`FromAst`/`IntoAst` (raise/lower) binding** — the primary, complete AST↔DSL
    conversion (perception boundary + structural raise/lower, parameterized by the
@@ -799,7 +799,7 @@ these change only umol-py, not umol-ast).
 3. **Pickling** (`__reduce__` / `__getstate__`+`__setstate__`) — not automatic for
    pyclasses. Not needed now; may matter later for multiprocessing/distribution of the
    large reaction networks (atoms/molecules crossing process boundaries). The natural
-   state is `to_ast`/`from_inner` (structs) or `to_ast` + variant tag (mirrors); the
+   state is `to_ir`/`from_inner` (structs) or `to_ir` + variant tag (mirrors); the
    value types already round-trip, so `__reduce__` over that is mechanical.
 4. **`AtomConstraints` container surface** *(done, 2026-07-08)* — reworked after doc 138
    settled: by-key `AtomConstraintKey` addressing (`get`/`contains`), Rust-mirroring named

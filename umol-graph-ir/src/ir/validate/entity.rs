@@ -70,14 +70,14 @@ pub enum EntityStructureError {}
 impl EntityStructureValidator {
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), EntityStructureContradiction>, EntityStructureError> {
-        let contradiction = bond_structure_check(ast)
-            .or_else(|| dative_structure_check(ast))
-            .or_else(|| noncovalent_structure_check(ast))
-            .or_else(|| aromatic_structure_check(ast))
-            .or_else(|| multicenter_structure_check(ast))
-            .or_else(|| stereo_structure_check(ast));
+        let contradiction = bond_structure_check(molecule)
+            .or_else(|| dative_structure_check(molecule))
+            .or_else(|| noncovalent_structure_check(molecule))
+            .or_else(|| aromatic_structure_check(molecule))
+            .or_else(|| multicenter_structure_check(molecule))
+            .or_else(|| stereo_structure_check(molecule));
         match contradiction {
             Some(c) => Ok(Solution::Contradictory(c)),
             None => Ok(Solution::Determined(())),
@@ -89,13 +89,13 @@ impl EntityStructureValidator {
 /// Each atom's neighbors are stored sorted by atom id (CSR invariant), so a
 /// self-loop is a neighbor equal to the atom and a parallel bond is two adjacent
 /// equal neighbors — a single linear scan over the adjacency, no auxiliary set.
-fn bond_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    if !ast.bonds().has_conflict() {
+fn bond_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    if !molecule.bonds().has_conflict() {
         return None;
     }
-    for atom in ast.atoms().ids() {
+    for atom in molecule.atoms().ids() {
         let mut prev: Option<AtomId> = None;
-        for neighbor in ast.neighbors(atom) {
+        for neighbor in molecule.neighbors(atom) {
             let other = neighbor.atom_id();
             if other == atom {
                 return Some(EntityStructureContradiction::BondSelfLoop { atom });
@@ -116,12 +116,12 @@ fn bond_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> 
 
 /// Dative bonds: donors distinct, acceptor not among donors, and for any shared
 /// acceptor the donor sets are vertex-disjoint.
-fn dative_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    if !ast.dative_bonds().has_conflict() {
+fn dative_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    if !molecule.dative_bonds().has_conflict() {
         return None;
     }
     let mut donors_by_acceptor: HashMap<AtomId, HashSet<AtomId>> = HashMap::new();
-    for d in ast.dative_bonds().iter() {
+    for d in molecule.dative_bonds().iter() {
         let acceptor = d.acceptor_id();
         let mut donors: HashSet<AtomId> = HashSet::new();
         for donor in d.donor_ids() {
@@ -154,12 +154,12 @@ fn dative_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction
 /// Noncovalent bonds: endpoints distinct, at most one interaction per unordered atom pair
 /// (parallel bonds of any kind are forbidden — the uniqueness that makes structural refs
 /// unambiguous).
-fn noncovalent_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    if !ast.noncovalent_bonds().has_conflict() {
+fn noncovalent_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    if !molecule.noncovalent_bonds().has_conflict() {
         return None;
     }
     let mut seen: HashSet<[AtomId; 2]> = HashSet::new();
-    for nc in ast.noncovalent_bonds().iter() {
+    for nc in molecule.noncovalent_bonds().iter() {
         let [a, b] = nc.atom_ids();
         if a == b {
             return Some(EntityStructureContradiction::NoncovalentBondSelfLoop { atom: a });
@@ -175,8 +175,8 @@ fn noncovalent_structure_check(ast: &Molecule) -> Option<EntityStructureContradi
 /// Aromatic systems: electron-count length match (a per-system data-shape check), participants
 /// distinct within a system, and systems pairwise vertex-disjoint. The disjointness conflict is the
 /// per-entity `has_conflict` primitive; the detailed contradiction locates the offending atom.
-fn aromatic_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    for view in ast.aromatic_systems().iter() {
+fn aromatic_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    for view in molecule.aromatic_systems().iter() {
         if let ElectronCountsForm::Lit(counts) = &view.attributes.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
@@ -189,9 +189,9 @@ fn aromatic_structure_check(ast: &Molecule) -> Option<EntityStructureContradicti
             }
         }
     }
-    if ast.aromatic_systems().has_conflict() {
+    if molecule.aromatic_systems().has_conflict() {
         let mut global: HashSet<AtomId> = HashSet::new();
-        for view in ast.aromatic_systems().iter() {
+        for view in molecule.aromatic_systems().iter() {
             let mut local: HashSet<AtomId> = HashSet::new();
             for atom in view.atom_ids() {
                 if !local.insert(atom) {
@@ -213,8 +213,8 @@ fn aromatic_structure_check(ast: &Molecule) -> Option<EntityStructureContradicti
 /// within a bond, and no two bonds with an identical participant set (partial overlap allowed). The
 /// duplicate/identical conflict is the per-entity `has_conflict` primitive; the detailed contradiction
 /// locates the offender.
-fn multicenter_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    for view in ast.multicenter_bonds().iter() {
+fn multicenter_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    for view in molecule.multicenter_bonds().iter() {
         if let ElectronCountsForm::Lit(counts) = &view.attributes.electrons {
             let atoms_len = view.atom_ids().count();
             if counts.len() != atoms_len {
@@ -227,9 +227,9 @@ fn multicenter_structure_check(ast: &Molecule) -> Option<EntityStructureContradi
             }
         }
     }
-    if ast.multicenter_bonds().has_conflict() {
+    if molecule.multicenter_bonds().has_conflict() {
         let mut seen_sets: HashSet<BTreeSet<AtomId>> = HashSet::new();
-        for view in ast.multicenter_bonds().iter() {
+        for view in molecule.multicenter_bonds().iter() {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             let mut set: BTreeSet<AtomId> = BTreeSet::new();
             for &atom in &atoms {
@@ -250,10 +250,10 @@ fn multicenter_structure_check(ast: &Molecule) -> Option<EntityStructureContradi
 /// Stereo overlays: stereo-atom sites pairwise distinct, stereo-bond sites pairwise distinct. The
 /// conflict predicate is the per-entity `has_conflict` primitive (also consulted by `apply_at` /
 /// `meet_pushout`); the detailed contradiction locates the offending site.
-fn stereo_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction> {
-    if ast.stereo_atoms().has_conflict() {
+fn stereo_structure_check(molecule: &Molecule) -> Option<EntityStructureContradiction> {
+    if molecule.stereo_atoms().has_conflict() {
         let mut sites: HashSet<AtomId> = HashSet::new();
-        let atom = ast
+        let atom = molecule
             .stereo_atoms()
             .iter()
             .map(|sp| sp.site_id())
@@ -261,9 +261,9 @@ fn stereo_structure_check(ast: &Molecule) -> Option<EntityStructureContradiction
             .expect("has_conflict reports a repeated stereo-atom site");
         return Some(EntityStructureContradiction::StereoAtomSitesDuplicate { atom });
     }
-    if ast.stereo_bonds().has_conflict() {
+    if molecule.stereo_bonds().has_conflict() {
         let mut sites: HashSet<BondId> = HashSet::new();
-        let bond = ast
+        let bond = molecule
             .stereo_bonds()
             .iter()
             .map(|sp| sp.site_id())
@@ -289,9 +289,9 @@ mod tests {
     #[case::dative_shared_acceptor_disjoint_donors(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 0 :attrs "1"}]}"#))]
     #[case::dative_shared_donors_distinct_acceptors(mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :dative-bonds [{:donors [2] :acceptor 0 :attrs "1"} {:donors [2] :acceptor 1 :attrs "1"}]}"#))]
     #[case::multicenter_partial_overlap(mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"} {:atoms [1 2 3] :attrs "*"}]}"#))]
-    fn test_entity_structure_validator_validate(#[case] ast: Molecule) {
+    fn test_entity_structure_validator_validate(#[case] molecule: Molecule) {
         assert_eq!(
-            EntityStructureValidator.validate(&ast).unwrap(),
+            EntityStructureValidator.validate(&molecule).unwrap(),
             Solution::Determined(())
         );
     }
@@ -362,11 +362,11 @@ mod tests {
         EntityStructureContradiction::DativeBondDonorDuplicate { acceptor: AtomId(0), donor: AtomId(1) }
     )]
     fn test_entity_structure_validator_validate_error(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: EntityStructureContradiction,
     ) {
         assert_eq!(
-            EntityStructureValidator.validate(&ast).unwrap(),
+            EntityStructureValidator.validate(&molecule).unwrap(),
             Solution::Contradictory(expected)
         );
     }

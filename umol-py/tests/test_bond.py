@@ -94,7 +94,7 @@ def ethene():
     )
 
 
-def test_bondast_new():
+def test_bond_form_new():
     bond = BondForm(2)
     assert bond.order == NumForm.Lit(2)
     assert bond.charge == NumForm.Undetermined()
@@ -119,11 +119,11 @@ def test_bondast_new():
         ),
     ],
 )
-def test_bondast_keyword_constructors(actual, expected):
+def test_bond_form_keyword_constructors(actual, expected):
     assert actual == expected
 
 
-def test_bondast_new_kwargs():
+def test_bond_form_new_kwargs():
     bond = BondForm(
         1,
         charge=NumForm.Lit(-1),
@@ -134,7 +134,7 @@ def test_bondast_new_kwargs():
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
-def test_bondast_constraints_kwarg():
+def test_bond_form_constraints_kwarg():
     bond = BondForm(
         1,
         constraints=BondConstraintsForm(
@@ -145,25 +145,25 @@ def test_bondast_constraints_kwarg():
     assert bond.constraints.aromatic == BooleanForm.Lit(True)
 
 
-def test_bondast_order_setter():
+def test_bond_form_order_setter():
     bond = BondForm(1)
     bond.order = 2
     assert bond.order == NumForm.Lit(2)
 
 
-def test_bondast_charge_setter():
+def test_bond_form_charge_setter():
     bond = BondForm(1)
     bond.charge = -1
     assert bond.charge == NumForm.Lit(-1)
 
 
-def test_bondast_unpaired_electrons_setter():
+def test_bond_form_unpaired_electrons_setter():
     bond = BondForm(1)
     bond.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert bond.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
-def test_bondast_asdict():
+def test_bond_form_asdict():
     d = BondForm(2, charge=NumForm.Lit(-1)).asdict()
     assert set(d.keys()) == {
         "order",
@@ -175,7 +175,7 @@ def test_bondast_asdict():
     assert d["charge"] == NumForm.Lit(-1)
 
 
-def test_bondast_asdict_constraints():
+def test_bond_form_asdict_constraints():
     bond = BondForm(
         1,
         constraints=BondConstraintsForm(
@@ -188,19 +188,19 @@ def test_bondast_asdict_constraints():
     assert constraints["aromatic"] == BooleanForm.Lit(True)
 
 
-def test_bondast_eq():
+def test_bond_form_eq():
     assert BondForm(1) == BondForm(1)
     assert BondForm(1) != BondForm(2)
 
 
 @pytest.mark.parametrize("dsl", ["1", "2#c-", "1#a", "1#R(6)"])
-def test_bondast_parse(dsl):
+def test_bond_form_parse(dsl):
     bond = BondForm.parse(dsl)
     assert str(bond) == dsl
     assert repr(bond) == f"BondForm.parse('{dsl}')"
 
 
-def test_bondast_parse_error():
+def test_bond_form_parse_error():
     with pytest.raises(ParseError):
         BondForm.parse("x#")
 
@@ -292,7 +292,7 @@ def test_bondconstraints_ring_size_count():
     assert constraints.ring_count is None
 
 
-def test_bondconstraintsast_set():
+def test_bond_constraints_form_set():
     constraints = BondConstraintsForm([])
     constraints.set(BondConstraintForm.Aromatic(BooleanForm.Lit(True)))
     assert len(constraints) == 1
@@ -301,7 +301,7 @@ def test_bondconstraintsast_set():
     )
 
 
-def test_bondconstraintsast_pop():
+def test_bond_constraints_form_pop():
     constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert constraints.pop(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
         BooleanForm.Lit(True)
@@ -310,7 +310,7 @@ def test_bondconstraintsast_pop():
     assert constraints.pop(BondConstraintKey.Aromatic()) is None
 
 
-def test_bondconstraintsast_update():
+def test_bond_constraints_form_update():
     constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     constraints.update(
         BondConstraintsForm(
@@ -493,7 +493,7 @@ def test_bondconstraintsview_update_from_view():
     assert BondConstraintKey.Aromatic() in dst.constraints
 
 
-def test_bondast_set_constraints_from_value():
+def test_bond_form_set_constraints_from_value():
     dst = BondForm(2)
     dst.constraints = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert dst.constraints.get(BondConstraintKey.Aromatic()) == BondConstraintForm.Aromatic(
@@ -501,7 +501,7 @@ def test_bondast_set_constraints_from_value():
     )
 
 
-def test_bondast_set_constraints_from_view():
+def test_bond_form_set_constraints_from_view():
     src = BondForm(
         1,
         constraints=BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))]),
@@ -554,7 +554,7 @@ def test_bondconstraintkey_eq_hash():
     assert len({BondConstraintKey.Aromatic(), BondConstraintKey.Aromatic()}) == 1
 
 
-def test_bondconstraintsast_eq_repr():
+def test_bond_constraints_form_eq_repr():
     a = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     b = BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])
     assert a == b
@@ -562,7 +562,7 @@ def test_bondconstraintsast_eq_repr():
     assert repr(a) == "BondConstraintsForm([BondConstraintForm.Aromatic(BooleanForm.Lit(True))])"
 
 
-def test_bondconstraintsast_unhashable():
+def test_bond_constraints_form_unhashable():
     # mutable container: value-equal but unhashable, like BondForm
     with pytest.raises(TypeError):
         hash(BondConstraintsForm([]))

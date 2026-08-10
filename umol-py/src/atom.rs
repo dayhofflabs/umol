@@ -77,8 +77,8 @@ impl_py_lattice!(
 );
 
 impl ElementForm {
-    pub(crate) fn from_rust(ast: &GraphIrElementForm) -> ElementForm {
-        match ast {
+    pub(crate) fn from_rust(form: &GraphIrElementForm) -> ElementForm {
+        match form {
             GraphIrElementForm::Undetermined => ElementForm::Undetermined(),
             GraphIrElementForm::Lit(e) => ElementForm::Lit(Element::from(*e)),
             GraphIrElementForm::LitSet(members) => {
@@ -207,8 +207,8 @@ impl IsotopeMassForm {
 }
 
 impl IsotopeMassForm {
-    pub(crate) fn from_rust(ast: &GraphIrIsotopeMassForm) -> IsotopeMassForm {
-        match ast {
+    pub(crate) fn from_rust(form: &GraphIrIsotopeMassForm) -> IsotopeMassForm {
+        match form {
             GraphIrIsotopeMassForm::Undetermined => IsotopeMassForm::Undetermined(),
             GraphIrIsotopeMassForm::Natural => IsotopeMassForm::Natural(),
             GraphIrIsotopeMassForm::Lit(mass) => IsotopeMassForm::Lit(*mass),
@@ -555,20 +555,20 @@ impl_py_lattice!(
 
 /// A binding argument that converts a literal or Python value to its Rust value — the `*Like`
 /// convention for these inputs (`*Input` is reserved for the DSL side). Extracted as
-/// a PyO3 `FromPyObject` union tried in order; variants are `Ast` = the `*Ast`
+/// a PyO3 `FromPyObject` union tried in order; variants are `Form` = the `*Form`
 /// wrapper, `Lit` = the literal, corresponding to `impl Into<..>` on the Rust builders.
 ///
 /// `ElementLike` accepts a concrete `Element` or an `ElementForm`.
 #[derive(FromPyObject)]
 enum ElementLike {
-    Ast(Py<ElementForm>),
+    Form(Py<ElementForm>),
     Lit(Element),
 }
 
 impl ElementLike {
     fn to_rust(&self, py: Python<'_>) -> GraphIrElementForm {
         match self {
-            ElementLike::Ast(expr) => expr.bind(py).borrow().to_rust(),
+            ElementLike::Form(expr) => expr.bind(py).borrow().to_rust(),
             ElementLike::Lit(element) => GraphIrElementForm::Lit(ChemElement::from(element)),
         }
     }
@@ -577,14 +577,14 @@ impl ElementLike {
 /// An `IsotopeMassForm` or a Python `int` (→ `IsotopeMassForm::Lit`, a mass number).
 #[derive(FromPyObject)]
 enum IsotopeMassLike {
-    Ast(Py<IsotopeMassForm>),
+    Form(Py<IsotopeMassForm>),
     Lit(u32),
 }
 
 impl IsotopeMassLike {
     fn to_rust(&self, py: Python<'_>) -> GraphIrIsotopeMassForm {
         match self {
-            IsotopeMassLike::Ast(mass) => mass.bind(py).borrow().to_rust(),
+            IsotopeMassLike::Form(mass) => mass.bind(py).borrow().to_rust(),
             IsotopeMassLike::Lit(number) => GraphIrIsotopeMassForm::Lit(*number),
         }
     }
@@ -623,12 +623,12 @@ fn apply_fields(
 }
 
 impl AtomForm {
-    /// The wrapped AST atom — read access for molecule construction.
+    /// The wrapped IR atom — read access for molecule construction.
     pub(crate) fn to_rust(&self) -> &GraphIrAtomForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST atom — write access for the atom-backed
+    /// Mutable access to the wrapped IR atom — write access for the atom-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrAtomForm> {
         if self.readonly {
@@ -979,8 +979,8 @@ mod tests {
         "y".to_string(),
         Some((GraphIrMemOp::In, BTreeSet::from([ChemElement::C, ChemElement::N]))),
     ))))]
-    fn test_element_form_roundtrip(#[case] ast: GraphIrElementForm) {
-        assert_eq!(ElementForm::from_rust(&ast).to_rust(), ast);
+    fn test_element_form_roundtrip(#[case] form: GraphIrElementForm) {
+        assert_eq!(ElementForm::from_rust(&form).to_rust(), form);
     }
 
     #[rstest]
@@ -988,10 +988,10 @@ mod tests {
     #[case(GraphIrElementForm::Undetermined, None)]
     #[case(GraphIrElementForm::LitSet(Box::new(BTreeSet::from([ChemElement::C, ChemElement::N]))), None)]
     fn test_element_form_as_lit(
-        #[case] ast: GraphIrElementForm,
+        #[case] form: GraphIrElementForm,
         #[case] expected: Option<ChemElement>,
     ) {
-        let got = ElementForm::from_rust(&ast)
+        let got = ElementForm::from_rust(&form)
             .as_lit()
             .map(|e| ChemElement::from(&e));
         assert_eq!(got, expected);
@@ -1007,8 +1007,8 @@ mod tests {
         "y".to_string(),
         Some(BTreeSet::from([12, 13])),
     ))))]
-    fn test_isotope_mass_form_roundtrip(#[case] ast: GraphIrIsotopeMassForm) {
-        assert_eq!(IsotopeMassForm::from_rust(&ast).to_rust(), ast);
+    fn test_isotope_mass_form_roundtrip(#[case] form: GraphIrIsotopeMassForm) {
+        assert_eq!(IsotopeMassForm::from_rust(&form).to_rust(), form);
     }
 
     #[rstest]
@@ -1019,11 +1019,11 @@ mod tests {
     #[case(GraphIrIsotopeMassForm::Natural, Some(GraphIrIsotopeMass::Natural))]
     #[case(GraphIrIsotopeMassForm::Undetermined, None)]
     fn test_isotope_mass_form_as_lit(
-        #[case] ast: GraphIrIsotopeMassForm,
+        #[case] form: GraphIrIsotopeMassForm,
         #[case] expected: Option<GraphIrIsotopeMass>,
     ) {
         assert_eq!(
-            IsotopeMassForm::from_rust(&ast)
+            IsotopeMassForm::from_rust(&form)
                 .as_lit()
                 .map(IsotopeMass::to_rust),
             expected
@@ -1325,11 +1325,13 @@ mod tests {
     #[case(GraphIrAtomConstraintForm::tetrahedral_stereo(
         GraphIrTetrahedralStereoForm::not_stereo()
     ))]
-    fn test_atom_constraint_roundtrip(#[case] ast: GraphIrAtomConstraintForm) {
+    fn test_atom_constraint_roundtrip(#[case] form: GraphIrAtomConstraintForm) {
         Python::attach(|py| {
             assert_eq!(
-                AtomConstraintForm::from_rust(py, &ast).unwrap().to_rust(py),
-                ast
+                AtomConstraintForm::from_rust(py, &form)
+                    .unwrap()
+                    .to_rust(py),
+                form
             );
         });
     }

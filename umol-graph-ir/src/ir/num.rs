@@ -767,9 +767,9 @@ mod tests {
     #[case::undetermined(NumForm::Undetermined, None)]
     #[case::litset(NumForm::lit_set([1, 2]), None)]
     #[case::term(NumForm::arith_expr(ArithExpr::Var("x".to_string())), None)]
-    fn test_num_form_as_lit(#[case] ast: NumForm, #[case] expected: Option<i64>) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+    fn test_num_form_as_lit(#[case] form: NumForm, #[case] expected: Option<i64>) {
+        assert_eq!(form.as_lit(), expected);
+        assert_eq!(form.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -780,8 +780,8 @@ mod tests {
     #[case::term(NumForm::var("x"), false)]
     #[case::predicate(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("r".to_string()), RelOp::Ge, ArithExpr::Lit(1))), false)]
     #[case::range_from(NumForm::RangeFrom(1), false)]
-    fn test_num_form_is_undetermined(#[case] ast: NumForm, #[case] expected: bool) {
-        assert_eq!(ast.is_undetermined(), expected);
+    fn test_num_form_is_undetermined(#[case] form: NumForm, #[case] expected: bool) {
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]

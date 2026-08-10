@@ -39,9 +39,9 @@ impl AromaticityConformanceValidator {
 
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
-        match self.perception.derive(ast, self.config)? {
+        match self.perception.derive(molecule, self.config)? {
             Solution::Determined(derivation) => {
                 if let Some(&inconsistency) = derivation.inconsistencies.first() {
                     Ok(Solution::Contradictory(inconsistency.into()))

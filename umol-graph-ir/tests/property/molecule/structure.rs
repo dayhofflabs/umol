@@ -14,7 +14,7 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_ast_try_from_entries(
+    fn test_molecule_try_from_entries(
         entries in molecule_entries_with_constraints_strategy(),
     ) {
         let expected = Molecule::from_entries(entries.clone());
@@ -23,25 +23,25 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_extract(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+    fn test_molecule_extract(
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
-        let extracted = ast.extract(&correspondence);
+        let correspondence = molecule.induced_subgraph(&atoms);
+        let extracted = molecule.extract(&correspondence);
         let reinduced = MoleculeCorrespondence::induce(
             &extracted,
-            &ast,
+            &molecule,
             correspondence.atoms().clone(),
         ).expect("extraction preserves unique entity incidence");
 
         prop_assert_eq!(&reinduced, &correspondence);
-        prop_assert_eq!(ast.extract(&reinduced), extracted);
+        prop_assert_eq!(molecule.extract(&reinduced), extracted);
     }
 
     #[test]
-    fn test_molecule_ast_combine_all(
+    fn test_molecule_combine_all(
         molecules in prop::collection::vec(
-            molecule_ast_structurally_unambiguous_strategy(),
+            molecule_structurally_unambiguous_strategy(),
             0..5,
         ),
     ) {
@@ -53,18 +53,18 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_combine(
-        left in molecule_ast_structurally_unambiguous_strategy(),
-        right in molecule_ast_structurally_unambiguous_strategy(),
+    fn test_molecule_combine(
+        left in molecule_structurally_unambiguous_strategy(),
+        right in molecule_structurally_unambiguous_strategy(),
     ) {
         let (combined, correspondence) = left.combine(&right);
         prop_assert_eq!(combined.extract(&correspondence), right);
     }
 
     #[test]
-    fn test_molecule_ast_combine_from(
-        left in molecule_ast_structurally_unambiguous_strategy(),
-        right in molecule_ast_structurally_unambiguous_strategy(),
+    fn test_molecule_combine_from(
+        left in molecule_structurally_unambiguous_strategy(),
+        right in molecule_structurally_unambiguous_strategy(),
     ) {
         let (expected, expected_correspondence) = left.combine(&right);
         let mut combined = left;
@@ -75,12 +75,12 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_split(ast in molecule_ast_structurally_unambiguous_strategy()) {
-        let components = ast.split();
+    fn test_molecule_split(molecule in molecule_structurally_unambiguous_strategy()) {
+        let components = molecule.split();
         let mut covered_atoms = Vec::new();
 
         for (component, correspondence) in &components {
-            prop_assert_eq!(&ast.extract(correspondence), component);
+            prop_assert_eq!(&molecule.extract(correspondence), component);
             covered_atoms.extend(
                 correspondence
                     .atoms()
@@ -93,18 +93,18 @@ proptest! {
         covered_atoms.sort_unstable();
         prop_assert_eq!(
             covered_atoms,
-            (0..ast.atoms().count()).map(AtomId::from).collect::<Vec<_>>(),
+            (0..molecule.atoms().count()).map(AtomId::from).collect::<Vec<_>>(),
         );
     }
 
     #[test]
-    fn test_molecule_ast_constraint_atoms_unpaired_electron_coupling(
+    fn test_molecule_constraint_atoms_unpaired_electron_coupling(
         (atom_count, subset_mask) in (1usize..=8).prop_flat_map(|atom_count| (
             Just(atom_count),
             prop::collection::vec(any::<bool>(), atom_count),
         )),
     ) {
-        let ast = Molecule::from_entries(MoleculeEntries {
+        let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); atom_count],
             ..Default::default()
         });
@@ -117,7 +117,7 @@ proptest! {
         let unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
 
         prop_assert_eq!(
-            ast.constraint_atoms(&Constraint::Molecule(
+            molecule.constraint_atoms(&Constraint::Molecule(
                 MoleculeConstraint::UnpairedElectronCoupling {
                     atoms: None,
                     unpaired_electrons: unpaired_electrons.clone(),
@@ -126,7 +126,7 @@ proptest! {
             all_atoms,
         );
         prop_assert_eq!(
-            ast.constraint_atoms(&Constraint::Molecule(
+            molecule.constraint_atoms(&Constraint::Molecule(
                 MoleculeConstraint::UnpairedElectronCoupling {
                     atoms: Some(subset.clone()),
                     unpaired_electrons,

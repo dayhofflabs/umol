@@ -24,13 +24,13 @@ impl RingConstraintValidator {
     /// Validate every inline ring constraint against the fixed Relevant ring projection.
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
-        if !uses_ring_constraints(ast) {
+        if !uses_ring_constraints(molecule) {
             return Ok(Solution::Determined(()));
         }
-        let rings = ast.rings(
+        let rings = molecule.rings(
             RingModel::default(),
             RingConfig {
                 relevant_cycle_algorithm,
@@ -39,29 +39,29 @@ impl RingConstraintValidator {
         );
         let mut any_underdetermined = false;
 
-        for id in ast.atoms().ids() {
+        for id in molecule.atoms().ids() {
             if let Some(contradiction) = observe(
                 rings
                     .atom(id)
-                    .validate_constraints(id, ast.atom(id).constraints()),
+                    .validate_constraints(id, molecule.atom(id).constraints()),
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
 
-        for id in ast.bonds().ids() {
+        for id in molecule.bonds().ids() {
             if let Some(contradiction) = observe(
                 rings
                     .bond(id)
-                    .validate_constraints(id, ast.bond(id).constraints()),
+                    .validate_constraints(id, molecule.bond(id).constraints()),
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
 
-        for bond in ast.dative_bonds().iter() {
+        for bond in molecule.dative_bonds().iter() {
             if bond.constraints().iter().any(|constraint| {
                 matches!(
                     constraint,
@@ -83,11 +83,11 @@ impl RingConstraintValidator {
     /// Validate all inline ring constraints on one molecule atom.
     pub fn validate_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
-        let atom = ast
+        let atom = molecule
             .atoms()
             .get(atom_id)
             .ok_or(ConstraintError::InvalidReference {
@@ -96,7 +96,7 @@ impl RingConstraintValidator {
         if !atom.constraints().iter().any(is_atom_ring_constraint) {
             return Ok(Solution::Determined(()));
         }
-        let rings = ast.rings(
+        let rings = molecule.rings(
             RingModel::default(),
             RingConfig {
                 relevant_cycle_algorithm,
@@ -111,11 +111,11 @@ impl RingConstraintValidator {
     /// Validate all inline ring constraints on one molecule bond.
     pub fn validate_molecule_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: BondId,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
-        let bond = ast
+        let bond = molecule
             .bonds()
             .get(bond_id)
             .ok_or(ConstraintError::InvalidReference {
@@ -124,7 +124,7 @@ impl RingConstraintValidator {
         if !bond.constraints().iter().any(is_bond_ring_constraint) {
             return Ok(Solution::Determined(()));
         }
-        let rings = ast.rings(
+        let rings = molecule.rings(
             RingModel::default(),
             RingConfig {
                 relevant_cycle_algorithm,
@@ -139,15 +139,16 @@ impl RingConstraintValidator {
     /// Validate inline ring constraints on one molecule dative bond.
     pub fn validate_molecule_dative_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: DativeBondId,
     ) -> Result<Solution<(), RingConstraintContradiction>, ConstraintError> {
-        let bond = ast
-            .dative_bonds()
-            .get(bond_id)
-            .ok_or(ConstraintError::InvalidReference {
-                entity: Entity::DativeBond(bond_id),
-            })?;
+        let bond =
+            molecule
+                .dative_bonds()
+                .get(bond_id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::DativeBond(bond_id),
+                })?;
         if bond.constraints().iter().any(|constraint| {
             matches!(
                 constraint,
@@ -271,15 +272,16 @@ fn conjunction(
     }
 }
 
-fn uses_ring_constraints(ast: &Molecule) -> bool {
-    ast.atoms()
+fn uses_ring_constraints(molecule: &Molecule) -> bool {
+    molecule
+        .atoms()
         .iter()
         .any(|atom| atom.constraints().iter().any(is_atom_ring_constraint))
-        || ast
+        || molecule
             .bonds()
             .iter()
             .any(|bond| bond.constraints().iter().any(is_bond_ring_constraint))
-        || ast.dative_bonds().iter().any(|bond| {
+        || molecule.dative_bonds().iter().any(|bond| {
             bond.constraints().iter().any(|constraint| {
                 matches!(
                     constraint,

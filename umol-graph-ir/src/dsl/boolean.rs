@@ -19,8 +19,8 @@ pub struct BooleanDsl(pub BooleanForm);
 impl FromIr<BooleanForm> for BooleanDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &BooleanForm, _ctx: &Self::Ctx) -> Self {
-        Self(*ast)
+    fn from_ir(form: &BooleanForm, _ctx: &Self::Ctx) -> Self {
+        Self(*form)
     }
 }
 

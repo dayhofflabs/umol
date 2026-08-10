@@ -44,7 +44,7 @@ pub enum SubstructureMatchAlgorithm {
 
 /// Algorithms used to enumerate substructure matches.
 ///
-/// This type deliberately has no default at the AST layer: every graph
+/// This type deliberately has no default at the graph-IR layer: every graph
 /// algorithm selection remains explicit at the call site.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SubstructureMatchConfig {
@@ -296,7 +296,7 @@ impl Molecule {
         host_levi.graph().visit_subgraph_isomorphisms(
             pattern_levi.graph(),
             // Atoms/bonds carry their predicates; overlay pseudonodes match by
-            // kind only (the exact AST/participation check is `verify_overlays`).
+            // kind only (the exact form/participation check is `verify_overlays`).
             &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
                 (Entity::Atom(pa), Entity::Atom(ha)) => {
                     pattern.atom(pa).attributes.matches(&host_atoms[ha.index()])
@@ -485,20 +485,20 @@ impl Molecule {
     }
 }
 
-/// `pattern_ast` matches `host_ast` for an overlay whose payload is position-indexed by member
+/// `pattern_form` matches `host_form` for an overlay whose payload is position-indexed by member
 /// (aromatic / multicenter electron counts). The two overlays store their members in their own
 /// participant order and `matches` compares the count vector whole, so the pattern payload is first
 /// reindexed into the host's member order (via the atom correspondence) with
 /// [`RelationData::on_permutation`].
 fn overlay_matches<D: Lattice + RelationData>(
-    pattern_ast: &D,
-    host_ast: &D,
+    pattern_form: &D,
+    host_form: &D,
     pattern_atoms: &[AtomId],
     host_atoms: &[AtomId],
     atoms: &Correspondence<AtomId>,
 ) -> bool {
-    if pattern_ast.is_permutation_invariant() {
-        return pattern_ast.matches(host_ast);
+    if pattern_form.is_permutation_invariant() {
+        return pattern_form.matches(host_form);
     }
     let order: Vec<ParticipantPosition> = host_atoms
         .iter()
@@ -514,9 +514,9 @@ fn overlay_matches<D: Lattice + RelationData>(
             )
         })
         .collect();
-    let mut probe = pattern_ast.clone();
+    let mut probe = pattern_form.clone();
     probe.on_permutation(&order);
-    probe.matches(host_ast)
+    probe.matches(host_form)
 }
 
 #[cfg(test)]
@@ -567,7 +567,7 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [0 2 "1"]]}"#),
         vec![]
     )]
-    fn test_molecule_ast_visit_substructure_matches(
+    fn test_molecule_visit_substructure_matches(
         #[case] host: Molecule,
         #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,
@@ -605,7 +605,7 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
-    fn test_molecule_ast_visit_substructure_matches_termination(
+    fn test_molecule_visit_substructure_matches_termination(
         #[case] host: Molecule,
         #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,
@@ -747,7 +747,7 @@ mod tests {
         mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :attrs "Ct1"}]}"#),
         vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)]]
     )]
-    fn test_molecule_ast_substructure_matches(
+    fn test_molecule_substructure_matches(
         #[case] host: Molecule,
         #[case] pattern: Molecule,
         #[case] expected: Vec<Vec<AtomId>>,

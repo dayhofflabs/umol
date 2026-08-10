@@ -46,11 +46,11 @@ pub enum SpinInvariantsError {}
 impl SpinInvariantsValidator {
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         let mut any_undetermined = false;
 
-        for atom in ast.atoms().iter() {
+        for atom in molecule.atoms().iter() {
             match validate_unpaired_electrons(atom.unpaired_electrons()) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
@@ -64,7 +64,7 @@ impl SpinInvariantsValidator {
                 }
             }
         }
-        for bond in ast.bonds().iter() {
+        for bond in molecule.bonds().iter() {
             match validate_unpaired_electrons(bond.unpaired_electrons()) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
@@ -76,7 +76,7 @@ impl SpinInvariantsValidator {
                 }
             }
         }
-        for system in ast.aromatic_systems().iter() {
+        for system in molecule.aromatic_systems().iter() {
             match validate_unpaired_electrons(system.unpaired_electrons()) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
@@ -90,7 +90,7 @@ impl SpinInvariantsValidator {
                 }
             }
         }
-        for bond in ast.multicenter_bonds().iter() {
+        for bond in molecule.multicenter_bonds().iter() {
             match validate_unpaired_electrons(bond.unpaired_electrons()) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
@@ -104,7 +104,7 @@ impl SpinInvariantsValidator {
                 }
             }
         }
-        for (constraint_index, constraint) in ast.constraints().iter().enumerate() {
+        for (constraint_index, constraint) in molecule.constraints().iter().enumerate() {
             match validate_couplings_in_constraint(constraint) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,

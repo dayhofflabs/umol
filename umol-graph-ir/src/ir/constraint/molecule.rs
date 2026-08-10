@@ -29,7 +29,7 @@ use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 /// combinator. The bare entity-leaf forms appear only inside a combinator
 /// (e.g. `And(Atom(..), Bond(..))`) or a molecule-scope predicate;
 /// unconditional per-entity value-only constraints live inline on the entity
-/// AST and are lifted there at DSL → AST conversion time. Cross-entity
+/// form and are lifted there at DSL → IR conversion time. Cross-entity
 /// ref-bearing constraints (e.g. a dative-bond donor identity, aromatic
 /// system membership, noncovalent endpoints) live only at molecule scope
 /// via `Relational`.
@@ -227,7 +227,7 @@ fn canonicalize_logical_constraints(
 /// Molecule-level constraint store: a flat list of `Constraint` tree nodes
 /// (molecule-scope predicates, combinators, and entity-leaves that appear
 /// inside combinators). Unconditional per-entity constraints live on the
-/// entity AST's own `constraints` field; the DSL parser lifts them there.
+/// entity form's own `constraints` field; the DSL parser lifts them there.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Constraints(Vec<Constraint>);
 

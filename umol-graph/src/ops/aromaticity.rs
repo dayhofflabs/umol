@@ -382,7 +382,7 @@ impl AromaticityPerception {
         let mut builder = molecule.edit();
         let new_indices: Vec<AromaticSystemId> = systems
             .into_iter()
-            .map(|(atoms, system_ast)| builder.add_aromatic_system(atoms, system_ast))
+            .map(|(atoms, system_form)| builder.add_aromatic_system(atoms, system_form))
             .collect();
         *molecule = builder.build();
 

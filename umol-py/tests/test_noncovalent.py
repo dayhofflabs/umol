@@ -100,20 +100,20 @@ def test_noncovalentbondkind_members():
     assert NoncovalentBondKind.HydrogenBond != NoncovalentBondKind.Ionic
 
 
-def test_noncovalentbondkindast_as_lit():
+def test_noncovalent_bond_kind_form_as_lit():
     assert NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic).as_lit() == (
         NoncovalentBondKind.Ionic
     )
     assert NoncovalentBondKindForm.Undetermined().as_lit() is None
 
 
-def test_noncovalentbondast_new():
+def test_noncovalentbond_form_new():
     bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.HydrogenBond)
     assert len(bond.constraints) == 0
 
 
-def test_noncovalentbondast_new_constraints_kwarg():
+def test_noncovalentbond_form_new_constraints_kwarg():
     bond = NoncovalentBondForm(
         NoncovalentBondKind.HalogenBond,
         constraints=NoncovalentBondConstraintsForm(
@@ -123,25 +123,25 @@ def test_noncovalentbondast_new_constraints_kwarg():
     assert bond.constraints.intramolecular == BooleanForm.Lit(True)
 
 
-def test_noncovalentbondast_kind_setter():
+def test_noncovalentbond_form_kind_setter():
     bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.kind = NoncovalentBondKind.Ionic
     assert bond.kind == NoncovalentBondKindForm.Lit(NoncovalentBondKind.Ionic)
 
 
 @pytest.mark.parametrize("dsl", ["Hbd", "Hbd#I", "Hbd#I!", "*"])
-def test_noncovalentbondast_parse_roundtrip(dsl):
+def test_noncovalentbond_form_parse_roundtrip(dsl):
     bond = NoncovalentBondForm.parse(dsl)
     assert str(bond) == dsl
     assert repr(bond) == f"NoncovalentBondForm.parse('{dsl}')"
 
 
-def test_noncovalentbondast_parse_error():
+def test_noncovalentbond_form_parse_error():
     with pytest.raises(ParseError):
         NoncovalentBondForm.parse("z")
 
 
-def test_noncovalentbondast_asdict():
+def test_noncovalentbond_form_asdict():
     bond = NoncovalentBondForm.parse("Hbd#I")
     d = bond.asdict()
     assert set(d.keys()) == {"kind", "constraints"}
@@ -149,7 +149,7 @@ def test_noncovalentbondast_asdict():
     assert d["constraints"] == {"intramolecular": BooleanForm.Lit(True)}
 
 
-def test_noncovalentbondast_set_constraints():
+def test_noncovalentbond_form_set_constraints():
     bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.constraints = NoncovalentBondConstraintsForm(
         [NoncovalentBondConstraintForm.Intramolecular(BooleanForm.Lit(False))]
@@ -157,7 +157,7 @@ def test_noncovalentbondast_set_constraints():
     assert bond.constraints.intramolecular == BooleanForm.Lit(False)
 
 
-def test_noncovalentbondast_constraints_self_assign():
+def test_noncovalentbond_form_constraints_self_assign():
     # regression: assigning the bond's own constraints view back to it is a no-op, not a panic
     bond = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
     bond.constraints.intramolecular = True

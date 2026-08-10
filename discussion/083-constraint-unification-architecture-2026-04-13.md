@@ -292,6 +292,6 @@ Step 7 was previously suspended pending the graph representation question (doc 8
 
 - **Phase 0**: `MoleculeAst` relation indexing — resolved by doc 84. `MoleculeAst` has CSR `Graph`, `neighbors()`, `bond_order_sum()`, `is_in_aromatic_system()`.
 - **Phase 1**: `RingEnumerator::enumerate_ast` — uses `Graph::induced_subgraph` for aromatic atom filtering, BCC + cycle enumeration per component, maps back to original indices.
-- **Phase 2**: `find_from_ast` on all three models (Hückel, HMO, Clar). `AromaticityModel::aromatic_systems_ast` dispatch. Temporary petgraph `AtomIndex` bridge via numeric conversion; goes away when GraphIR is removed (step 8).
+- **Phase 2**: `find_from_ir` on all three models (Hückel, HMO, Clar). `AromaticityModel::aromatic_systems_ast` dispatch. Temporary petgraph `AtomIndex` bridge via numeric conversion; goes away when GraphIR is removed (step 8).
 - **Phase 3**: `AromaticityConfig` on `Solver`. Resolve loop: valence → aromaticity → re-valence. `Solver::resolve` returns `Result<Solution<()>, AromaticityError>`. `MoleculeAst::set_aromatic_systems` replaces the `VarRelationSet` wholesale.
 

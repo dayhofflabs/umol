@@ -23,11 +23,11 @@ DSL-only state on the DSL side: `Metadata` carries `atom_ids`, `atom_aliases`, `
 The lower/raise direction is currently expressed by two traits in `umol_ast::ast::traits`:
 
 ```rust
-trait FromAst<A>      { type Ctx; type Error; fn from_ast(ast: &A, cfg: &Self::Ctx) -> Result<Self, Self::Error>; }
-trait IntoAst<A>      { type Ctx; type Error; fn into_ast(self, cfg: &Self::Ctx) -> Result<A,    Self::Error>; }
+trait FromAst<A>      { type Ctx; type Error; fn from_ir(ast: &A, cfg: &Self::Ctx) -> Result<Self, Self::Error>; }
+trait IntoAst<A>      { type Ctx; type Error; fn into_ir(self, cfg: &Self::Ctx) -> Result<A,    Self::Error>; }
 ```
 
-Every entity-level impl declares `Error = ParseError` but the underlying `lower_*` / `raise_*` functions return `()`; the impls wrap unconditionally with `Ok(...)`. `ConstraintsDsl::from_ast` is already invoked with `.expect("ConstraintsDsl::from_ast is infallible for a well-formed AST")` at `umol-ast/src/dsl/molecule.rs:673`. The fallibility is fictional.
+Every entity-level impl declares `Error = ParseError` but the underlying `lower_*` / `raise_*` functions return `()`; the impls wrap unconditionally with `Ok(...)`. `ConstraintsDsl::from_ir` is already invoked with `.expect("ConstraintsDsl::from_ir is infallible for a well-formed AST")` at `umol-ast/src/dsl/molecule.rs:673`. The fallibility is fictional.
 
 `MoleculeAst::new` takes seven positional `vec!`-shaped arguments; the only common-case shortcut is going through the DSL.
 
@@ -100,24 +100,24 @@ Breaking change: the current `MoleculeAst::new(7-args)` is renamed to `from_part
 ```rust
 trait FromAst<A>: Sized {
     type Ctx;
-    fn from_ast(ast: &A, cfg: &Self::Ctx) -> Self;
+    fn from_ir(ast: &A, cfg: &Self::Ctx) -> Self;
 }
 
 trait IntoAst<A>: Sized {
     type Ctx;
-    fn into_ast(self, cfg: &Self::Ctx) -> A;
+    fn into_ir(self, cfg: &Self::Ctx) -> A;
 }
 
 trait TryFromAst<A>: Sized {
     type Ctx;
     type Error;
-    fn try_from_ast(ast: &A, cfg: &Self::Ctx) -> Result<Self, Self::Error>;
+    fn try_from_ir(ast: &A, cfg: &Self::Ctx) -> Result<Self, Self::Error>;
 }
 
 trait TryIntoAst<A>: Sized {
     type Ctx;
     type Error;
-    fn try_into_ast(self, cfg: &Self::Ctx) -> Result<A, Self::Error>;
+    fn try_into_ir(self, cfg: &Self::Ctx) -> Result<A, Self::Error>;
 }
 ```
 

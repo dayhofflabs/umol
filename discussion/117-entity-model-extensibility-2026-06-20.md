@@ -169,10 +169,10 @@ surface becomes an ordinary 1-key Boolean constraint) and documents the feature-
 | Edits + transact + undo | `ast/edit.rs`, `ast/transact.rs` | **New** `Edit::ModifyNoncovalentBondConstraint` variant; `apply_edit` + `apply_edit_checked` (undo) dispatch arms; new `apply_modify_noncovalent_bond_constraint` helper. |
 | Reactions | `ast/reaction.rs` | Deltas→Edits lowering arm (`Delta::NoncovalentBond(ModifyConstraint)`); delta→EDN partial-render fold. `apply` has-conflict check already generic. |
 | Reaction span | `ast/reaction_span.rs` | **Zero changes** — `materialize`/classification folds `ModifyField \| ModifyConstraint` and replays through the generic `apply_noncovalent_change`; goes live automatically once delta stops returning empty. |
-| String DSL | `dsl/noncovalent.rs` | **New** `NoncovalentBondPredicate` enum + `noncovalent_bond_predicate` parser + `apply_predicates` + `constraint_tag`/`fmt_constraint` (mirror bond `#a`); wire into `noncovalent_bond`, `fmt_noncovalent_bond_ast`, `PartialNoncovalentBondDsl::fmt`. |
-| EDN serde | `dsl/noncovalent.rs`, `dsl/constraint.rs` | Inhabit the DSL boundary enum `NoncovalentBondConstraintDsl` (also `{}` today) with `Intramolecular(BooleanDsl)` + `from_ast`/`into_ast` (don't exist) + `FromEdn`/`ToEdn`; fill `read_noncovalent_bond_constraint_dsl` + `ConstraintDsl::{to_edn,from_ast,into_ast}` noncovalent arms. |
+| String DSL | `dsl/noncovalent.rs` | **New** `NoncovalentBondPredicate` enum + `noncovalent_bond_predicate` parser + `apply_predicates` + `constraint_tag`/`fmt_constraint` (mirror bond `#a`); wire into `noncovalent_bond`, `fmt_noncovalent_bond_form`, `PartialNoncovalentBondDsl::fmt`. |
+| EDN serde | `dsl/noncovalent.rs`, `dsl/constraint.rs` | Inhabit the DSL boundary enum `NoncovalentBondConstraintDsl` (also `{}` today) with `Intramolecular(BooleanDsl)` + `from_ir`/`into_ir` (don't exist) + `FromEdn`/`ToEdn`; fill `read_noncovalent_bond_constraint_dsl` + `ConstraintDsl::{to_edn,from_ir,into_ir}` noncovalent arms. |
 | Errors | `dsl/error.rs` | **New** `ParseError::{UnknownNoncovalentBondPredicate, DuplicateNoncovalentBondPredicate}` (mirror the dative pair). |
-| Property tests | `tests/property/strategies.rs`, `tests/property/lattice.rs` | New `noncovalent_bond_constraint(s)_strategy`; wire into `noncovalent_bond_ast_strategy`; new lattice-law proptests for the constraint + value (a today-vacuous coverage slot that becomes meaningful). |
+| Property tests | `tests/property/strategies.rs`, `tests/property/lattice.rs` | New `noncovalent_bond_constraint(s)_strategy`; wire into `noncovalent_bond_form_strategy`; new lattice-law proptests for the constraint + value (a today-vacuous coverage slot that becomes meaningful). |
 | Config | `dsl/config.rs` | `NoncovalentBondDefaults` — likely no change (verify). |
 
 **Genuinely new** (everything else fills an empty `match {}` or copies a peer): the `Intramolecular`
@@ -187,7 +187,7 @@ has an exact `Aromatic(#a)` / `ElectronCount` precedent.
   `NoncovalentBondConstraintDsl`) at once, so they must all be filled in one edit to restore compilation.
   Sequence within: constraint element+container → value type → molecule `Constraint` arms → delta
   apply/diff → new `Edit` variant + transact dispatch/undo/helper → reaction lowering + delta→EDN render
-  → DSL boundary type + `from_ast`/`into_ast`/`FromEdn`/`ToEdn` + `ConstraintDsl` arms + reader +
+  → DSL boundary type + `from_ir`/`into_ir`/`FromEdn`/`ToEdn` + `ConstraintDsl` arms + reader +
   string-DSL **render** (`fmt`). `reaction_span.rs` unchanged. Green when the workspace compiles and the
   container + lattice unit tests pass. Each edit mirrors a peer — no essential design.
 - **B — string-DSL parse `#I` (additive/green).** The predicate parser/enum/applier + the two
@@ -259,7 +259,7 @@ not any design.
   4551 umol-ast tests pass, workspace green. Mirrored the dative `#a` predicate machinery exactly; the
   only asymmetry is noncovalent's single predicate vs dative's two.
 - **C done (2026-07-12).** `noncovalent_bond_constraint(s)_strategy` + wired into
-  `noncovalent_bond_ast_strategy`; `test_noncovalent_bond_ast_lattice_laws` +
+  `noncovalent_bond_form_strategy`; `test_noncovalent_bond_form_lattice_laws` +
   `test_noncovalent_bond_constraints_lattice_laws`. The high-value side effect: the *existing*
   molecule/reaction/edit/substructure round-trip proptests now generate noncovalent `#I` constraints and
   drive them through the whole Stage A pipeline (delta ↔ edit, transact + undo, reaction lowering, EDN

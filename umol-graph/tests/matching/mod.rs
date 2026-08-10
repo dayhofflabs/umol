@@ -31,12 +31,12 @@ fn test_clar_aromaticity_find_from_rings() {
         .iter()
         .map(|&[a, b]| (AtomId(a), AtomId(b), BondForm::from_order(1)))
         .collect();
-    let ast = Molecule::from_entries(MoleculeEntries {
+    let molecule = Molecule::from_entries(MoleculeEntries {
         atoms,
         bonds,
         ..Default::default()
     });
-    let rings = ast
+    let rings = molecule
         .rings(
             RingModel {
                 kind: RingSetKind::Relevant,
@@ -47,7 +47,7 @@ fn test_clar_aromaticity_find_from_rings() {
         .into_ring_set();
     let systems = ClarAromaticity
         .find_from_rings(
-            &ast,
+            &molecule,
             &rings,
             MaximumIndependentSetAlgorithm::BranchAndBound,
             &|view| match &view.attributes.element {

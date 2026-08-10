@@ -50,8 +50,8 @@ impl BondConstraintKey {
 }
 
 impl BondConstraintKey {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrBondConstraintKey) -> PyResult<Self> {
-        Ok(match ast {
+    pub(crate) fn from_rust(py: Python<'_>, key: &GraphIrBondConstraintKey) -> PyResult<Self> {
+        Ok(match key {
             GraphIrBondConstraintKey::Aromatic => Self::Aromatic(),
             GraphIrBondConstraintKey::CisTransStereo => Self::CisTransStereo(),
             GraphIrBondConstraintKey::RingMembership(scope) => {
@@ -118,8 +118,8 @@ impl_py_lattice!(
 );
 
 impl BondConstraintForm {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrBondConstraintForm) -> PyResult<Self> {
-        Ok(match ast {
+    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrBondConstraintForm) -> PyResult<Self> {
+        Ok(match form {
             GraphIrBondConstraintForm::Aromatic(b) => {
                 Self::Aromatic(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
@@ -421,17 +421,17 @@ impl BondConstraintsForm {
 }
 
 impl BondConstraintsForm {
-    /// The wrapped AST constraints — read access for bond construction.
+    /// The wrapped IR constraints — read access for bond construction.
     pub(crate) fn to_rust(&self) -> &GraphIrBondConstraintsForm {
         &self.0
     }
 
-    /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
+    /// Mutable access to the wrapped IR constraints — for the value-backed proxy.
     pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrBondConstraintsForm {
         &mut self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_rust` bridge). Test-only —
+    /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `BondConstraintsForm(..)` directly.
     pub(crate) fn from_rust(constraints: GraphIrBondConstraintsForm) -> Self {
         BondConstraintsForm(constraints)
@@ -587,7 +587,7 @@ impl BondConstraintsView {
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(
+    pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrBondConstraintForm,
@@ -596,7 +596,7 @@ impl BondConstraintsView {
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
-    pub(crate) fn remove_ast(
+    pub(crate) fn remove_form(
         &self,
         py: Python<'_>,
         key: GraphIrBondConstraintKey,
@@ -615,7 +615,7 @@ impl BondConstraintsView {
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintForm>) -> PyResult<()> {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py))
+        self.set_form(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -625,7 +625,7 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<Option<BondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust(py))?
+        self.remove_form(py, key.bind(py).borrow().to_rust(py))?
             .map(|c| BondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -633,7 +633,7 @@ impl BondConstraintsView {
     /// Remove the entry with the given key; raises `KeyError` if absent.
     pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust(py))?
+            .remove_form(py, key.bind(py).borrow().to_rust(py))?
             .is_some()
         {
             Ok(())
@@ -703,9 +703,9 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<BondConstraintForm> {
-        let ast_key = key.bind(py).borrow().to_rust(py);
+        let rust_key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
-            cs.get(ast_key)
+            cs.get(rust_key)
                 .map(|constraint| BondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
@@ -735,7 +735,7 @@ impl BondConstraintsView {
 
     #[setter]
     pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) -> PyResult<()> {
-        self.set_ast(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)))
+        self.set_form(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)))
     }
 
     /// The cis/trans-stereo state, or `None`.
@@ -754,7 +754,7 @@ impl BondConstraintsView {
         py: Python<'_>,
         value: CisTransStereoLike,
     ) -> PyResult<()> {
-        self.set_ast(
+        self.set_form(
             py,
             GraphIrBondConstraintForm::cis_trans_stereo(value.to_rust(py)?),
         )
@@ -772,7 +772,7 @@ impl BondConstraintsView {
 
     #[setter]
     pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.set_ast(
+        self.set_form(
             py,
             GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, value.to_rust(py)),
         )

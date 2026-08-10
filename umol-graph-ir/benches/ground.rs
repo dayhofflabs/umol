@@ -37,8 +37,8 @@ fn indole_with_bool_expr_fields() -> Molecule {
     // Realistic pattern: take the ground indole, then splat a few atom
     // fields with boolean-domain ValueExpr patterns (which short-circuit via
     // is_arithmetic()).
-    let mut ast = indole_ground();
-    let mut b = ast.edit();
+    let mut molecule = indole_ground();
+    let mut b = molecule.edit();
     b.atom_mut(AtomId(0)).attributes.charge = NumForm::pred_expr(PredExpr::Rel(
         ArithExpr::Var("c".into()),
         RelOp::Eq,
@@ -49,8 +49,8 @@ fn indole_with_bool_expr_fields() -> Molecule {
         MemOp::In,
         BTreeSet::from([0, 1, 2]),
     ));
-    ast = b.build();
-    ast
+    molecule = b.build();
+    molecule
 }
 
 fn arith_expr_heavy() -> Molecule {
@@ -103,7 +103,7 @@ fn arith_expr_heavy() -> Molecule {
 }
 
 fn bench_is_ground(c: &mut Criterion) {
-    let mut g = c.benchmark_group("molecule_ast_is_ground");
+    let mut g = c.benchmark_group("molecule_is_ground");
 
     let indole = indole_ground();
     g.bench_function("indole_ground", |b| {

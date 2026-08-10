@@ -31,22 +31,22 @@ fn cases() -> [(&'static str, &'static str); 8] {
     ]
 }
 
-fn bench_molecule_from_ast(c: &mut Criterion) {
+fn bench_molecule_from_ir(c: &mut Criterion) {
     let cfg = MoleculeDefaults::zeroed();
-    let mut g = c.benchmark_group("molecule_from_ast");
+    let mut g = c.benchmark_group("molecule_from_ir");
     for (label, source) in cases() {
-        let ast = MoleculeDsl::from_edn_str(source).unwrap().into_parts().0;
+        let molecule = MoleculeDsl::from_edn_str(source).unwrap().into_parts().0;
         g.throughput(Throughput::Bytes(source.len() as u64));
         g.bench_function(label, |b| {
-            b.iter(|| MoleculeDsl::from_ir(black_box(&ast), &cfg))
+            b.iter(|| MoleculeDsl::from_ir(black_box(&molecule), &cfg))
         });
     }
     g.finish();
 }
 
-fn bench_molecule_into_ast(c: &mut Criterion) {
+fn bench_molecule_into_ir(c: &mut Criterion) {
     let cfg = MoleculeDefaults::zeroed();
-    let mut g = c.benchmark_group("molecule_into_ast");
+    let mut g = c.benchmark_group("molecule_into_ir");
     for (label, source) in cases() {
         let dsl = MoleculeDsl::from_edn_str(source).unwrap();
         g.throughput(Throughput::Bytes(source.len() as u64));
@@ -61,5 +61,5 @@ fn bench_molecule_into_ast(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(conversion, bench_molecule_from_ast, bench_molecule_into_ast);
+criterion_group!(conversion, bench_molecule_from_ir, bench_molecule_into_ir);
 criterion_main!(conversion);

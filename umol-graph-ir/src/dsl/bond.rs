@@ -832,7 +832,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_dsl_from_ast() {
+    fn test_bond_dsl_from_ir() {
         let mut form = BondForm::new(NumForm::Lit(1));
         form.charge = NumForm::Lit(0);
         form.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
@@ -843,7 +843,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_dsl_into_ast() {
+    fn test_bond_dsl_into_ir() {
         let dsl = BondDsl(BondForm::new(NumForm::Lit(1)));
         let cfg = BondDefaults::zeroed();
         let form = dsl.into_ir(&cfg);

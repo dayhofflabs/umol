@@ -93,12 +93,15 @@ fn evaluate(
     }
 }
 
-fn atom_subset(ast: &Molecule, atoms: Option<&[AtomId]>) -> Result<Vec<AtomId>, ConstraintError> {
+fn atom_subset(
+    molecule: &Molecule,
+    atoms: Option<&[AtomId]>,
+) -> Result<Vec<AtomId>, ConstraintError> {
     match atoms {
         Some(atoms) => {
             let mut selected = BTreeSet::new();
             for &atom in atoms {
-                if !ast.atoms().contains(atom) {
+                if !molecule.atoms().contains(atom) {
                     return Err(ConstraintError::InvalidReference {
                         entity: Entity::Atom(atom),
                     });
@@ -107,16 +110,19 @@ fn atom_subset(ast: &Molecule, atoms: Option<&[AtomId]>) -> Result<Vec<AtomId>, 
             }
             Ok(selected.into_iter().collect())
         }
-        None => Ok(ast.atoms().ids().collect()),
+        None => Ok(molecule.atoms().ids().collect()),
     }
 }
 
-fn bond_subset(ast: &Molecule, bonds: Option<&[BondId]>) -> Result<Vec<BondId>, ConstraintError> {
+fn bond_subset(
+    molecule: &Molecule,
+    bonds: Option<&[BondId]>,
+) -> Result<Vec<BondId>, ConstraintError> {
     match bonds {
         Some(bonds) => {
             let mut selected = BTreeSet::new();
             for &bond in bonds {
-                if !ast.bonds().contains(bond) {
+                if !molecule.bonds().contains(bond) {
                     return Err(ConstraintError::InvalidReference {
                         entity: Entity::Bond(bond),
                     });
@@ -125,18 +131,23 @@ fn bond_subset(ast: &Molecule, bonds: Option<&[BondId]>) -> Result<Vec<BondId>, 
             }
             Ok(selected.into_iter().collect())
         }
-        None => Ok(ast.bonds().ids().collect()),
+        None => Ok(molecule.bonds().ids().collect()),
     }
 }
 
 /// Whether every selected atom belongs to one localized-bond component. Paths may pass through
 /// atoms outside the selected subset; empty and singleton subsets are connected.
-fn connected(ast: &Molecule, atoms: &[AtomId], algorithm: ConnectedComponentsAlgorithm) -> bool {
+fn connected(
+    molecule: &Molecule,
+    atoms: &[AtomId],
+    algorithm: ConnectedComponentsAlgorithm,
+) -> bool {
     if atoms.len() < 2 {
         return true;
     }
     let selected: BTreeSet<_> = atoms.iter().copied().collect();
-    ast.graph()
+    molecule
+        .graph()
         .enumerate_connected_components(algorithm)
         .into_iter()
         .any(|component| {

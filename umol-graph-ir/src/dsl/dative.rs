@@ -96,7 +96,7 @@ impl<'de> FromEdn<'de> for DativeBondDsl {
 /// - `:triple` → `"3"`
 /// - `:quadruple` → `"4"`
 ///
-/// Returns `None` for unrecognized keywords. Input sugar only — the AST
+/// Returns `None` for unrecognized keywords. Input sugar only — the form
 /// renders back to dative-string form.
 pub(crate) fn expand_dative_keyword(name: &str) -> Option<&'static str> {
     match name {
@@ -452,7 +452,7 @@ impl ToEdn for DativeBondConstraintDsl {
 }
 
 impl DativeBondConstraintDsl {
-    /// Build from the narrow inline AST form.
+    /// Build from the narrow inline form.
     pub(crate) fn from_ir(c: &DativeBondConstraintForm) -> Self {
         match c {
             DativeBondConstraintForm::Aromatic(b) => Self::Aromatic(*b),
@@ -460,7 +460,7 @@ impl DativeBondConstraintDsl {
         }
     }
 
-    /// Convert into the narrow inline AST form.
+    /// Convert into the narrow inline form.
     pub(crate) fn into_ir(self) -> DativeBondConstraintForm {
         match self {
             Self::Aromatic(b) => DativeBondConstraintForm::Aromatic(b),
@@ -600,7 +600,7 @@ mod tests {
         DativeBondDsl(DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(2))) }),
         DativeBondForm { order: NumForm::Lit(1), constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Lit(2))) },
     )]
-    fn test_dative_bond_dsl_into_ast(
+    fn test_dative_bond_dsl_into_ir(
         #[case] input: DativeBondDsl,
         #[case] expected: DativeBondForm,
     ) {
@@ -764,7 +764,7 @@ mod tests {
     #[case::aromatic_false(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)))]
     #[case::aromatic_undetermined(DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined), DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership(DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64), DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }))]
-    fn test_dative_bond_constraint_dsl_from_ast(
+    fn test_dative_bond_constraint_dsl_from_ir(
         #[case] input: DativeBondConstraintForm,
         #[case] expected: DativeBondConstraintDsl,
     ) {
@@ -777,7 +777,7 @@ mod tests {
     #[case::aromatic_false(DativeBondConstraintDsl::Aromatic(BooleanForm::Lit(false)), DativeBondConstraintForm::Aromatic(BooleanForm::Lit(false)))]
     #[case::aromatic_undetermined(DativeBondConstraintDsl::Aromatic(BooleanForm::Undetermined), DativeBondConstraintForm::Aromatic(BooleanForm::Undetermined))]
     #[case::ring_membership(DativeBondConstraintDsl::RingMembership(RingMembershipForm { scope: RingScope::Size(6), count: NumForm::Lit(1) }), DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1_i64))]
-    fn test_dative_bond_constraint_dsl_into_ast(
+    fn test_dative_bond_constraint_dsl_into_ir(
         #[case] input: DativeBondConstraintDsl,
         #[case] expected: DativeBondConstraintForm,
     ) {

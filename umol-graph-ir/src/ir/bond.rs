@@ -7,7 +7,7 @@ use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Canonicalize, Lattice};
 
-/// Bond AST: structural representation of a bond plus bond-level constraints
+/// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct BondForm {

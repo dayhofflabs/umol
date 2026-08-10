@@ -42,10 +42,10 @@ proptest! {
     /// as the positional ref, for every non-atom entity whose participant set is unique — the seven
     /// `resolve_*_structural` paths cross-checked against positional resolution.
     #[test]
-    fn test_structural_ref_resolves_like_positional(ast in molecule_ast_strategy()) {
-        let context = MoleculeContext::from_ir(&ast);
+    fn test_structural_ref_resolves_like_positional(molecule in molecule_strategy()) {
+        let context = MoleculeContext::from_ir(&molecule);
 
-        let bond_keys: Vec<[usize; 2]> = ast
+        let bond_keys: Vec<[usize; 2]> = molecule
             .bonds()
             .iter()
             .map(|v| {
@@ -53,7 +53,7 @@ proptest! {
                 sorted_pair(a.index(), b.index())
             })
             .collect();
-        for (i, view) in ast.bonds().iter().enumerate() {
+        for (i, view) in molecule.bonds().iter().enumerate() {
             if !is_unique(&bond_keys, i) {
                 continue;
             }
@@ -64,12 +64,12 @@ proptest! {
             prop_assert_eq!(BondRef::Index(i).resolve(&context), Ok(BondId(i as u32)));
         }
 
-        let dative_keys: Vec<(Vec<usize>, usize)> = ast
+        let dative_keys: Vec<(Vec<usize>, usize)> = molecule
             .dative_bonds()
             .iter()
             .map(|v| (atom_set(v.donor_ids()), v.acceptor_id().index()))
             .collect();
-        for (i, view) in ast.dative_bonds().iter().enumerate() {
+        for (i, view) in molecule.dative_bonds().iter().enumerate() {
             if !is_unique(&dative_keys, i) {
                 continue;
             }
@@ -79,12 +79,12 @@ proptest! {
             prop_assert_eq!(structural.resolve(&context), Ok(DativeBondId(i as u32)));
         }
 
-        let aromatic_keys: Vec<Vec<usize>> = ast
+        let aromatic_keys: Vec<Vec<usize>> = molecule
             .aromatic_systems()
             .iter()
             .map(|v| atom_set(v.atom_ids()))
             .collect();
-        for (i, view) in ast.aromatic_systems().iter().enumerate() {
+        for (i, view) in molecule.aromatic_systems().iter().enumerate() {
             if !is_unique(&aromatic_keys, i) {
                 continue;
             }
@@ -93,12 +93,12 @@ proptest! {
             prop_assert_eq!(structural.resolve(&context), Ok(AromaticSystemId(i as u32)));
         }
 
-        let multicenter_keys: Vec<Vec<usize>> = ast
+        let multicenter_keys: Vec<Vec<usize>> = molecule
             .multicenter_bonds()
             .iter()
             .map(|v| atom_set(v.atom_ids()))
             .collect();
-        for (i, view) in ast.multicenter_bonds().iter().enumerate() {
+        for (i, view) in molecule.multicenter_bonds().iter().enumerate() {
             if !is_unique(&multicenter_keys, i) {
                 continue;
             }
@@ -107,7 +107,7 @@ proptest! {
             prop_assert_eq!(structural.resolve(&context), Ok(MulticenterBondId(i as u32)));
         }
 
-        let noncovalent_keys: Vec<[usize; 2]> = ast
+        let noncovalent_keys: Vec<[usize; 2]> = molecule
             .noncovalent_bonds()
             .iter()
             .map(|v| {
@@ -115,7 +115,7 @@ proptest! {
                 sorted_pair(a.index(), b.index())
             })
             .collect();
-        for (i, view) in ast.noncovalent_bonds().iter().enumerate() {
+        for (i, view) in molecule.noncovalent_bonds().iter().enumerate() {
             if !is_unique(&noncovalent_keys, i) {
                 continue;
             }
@@ -126,7 +126,7 @@ proptest! {
         }
 
         // Stereo sites are distinct (one element per site), so keys never collide.
-        for (i, view) in ast.stereo_atoms().iter().enumerate() {
+        for (i, view) in molecule.stereo_atoms().iter().enumerate() {
             let site = AtomRef::Index(view.site_id().index());
             let ligands = view
                 .ligands()
@@ -139,7 +139,7 @@ proptest! {
             prop_assert_eq!(structural.resolve(&context), Ok(StereoAtomId(i as u32)));
         }
 
-        for (i, view) in ast.stereo_bonds().iter().enumerate() {
+        for (i, view) in molecule.stereo_bonds().iter().enumerate() {
             let site = BondRef::Index(view.site_id().index());
             let ligands = view
                 .ligands()
@@ -156,11 +156,11 @@ proptest! {
     /// A structural ref over a set that is not any entity's participant set fails to resolve
     /// (`InvalidRef`), never silently hitting a wrong id — one guaranteed-miss perturbation per kind.
     #[test]
-    fn test_structural_ref_wrong_participants_error(ast in molecule_ast_strategy()) {
-        let context = MoleculeContext::from_ir(&ast);
+    fn test_structural_ref_wrong_participants_error(molecule in molecule_strategy()) {
+        let context = MoleculeContext::from_ir(&molecule);
 
         // A two-atom entity: a self-pair is never a bond (endpoints are distinct).
-        for view in ast.bonds().iter() {
+        for view in molecule.bonds().iter() {
             let [a, _] = view.atom_ids();
             let wrong = BondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(a.index())]);
             prop_assert!(matches!(
@@ -168,7 +168,7 @@ proptest! {
                 Err(ParseError::InvalidRef { kind: "bond", .. })
             ), "structural ref over wrong participants must not resolve");
         }
-        for view in ast.noncovalent_bonds().iter() {
+        for view in molecule.noncovalent_bonds().iter() {
             let [a, _] = view.atom_ids();
             let wrong =
                 NoncovalentBondRef::Structural([AtomRef::Index(a.index()), AtomRef::Index(a.index())]);
@@ -179,7 +179,7 @@ proptest! {
         }
 
         // A single-atom set is never a multi-atom entity (aromatic/multicenter need ≥ 3 atoms).
-        for view in ast.aromatic_systems().iter() {
+        for view in molecule.aromatic_systems().iter() {
             let first = view.atom_ids().next().expect("aromatic systems are non-empty");
             let wrong = AromaticSystemRef::Structural(vec![AtomRef::Index(first.index())]);
             prop_assert!(matches!(
@@ -187,7 +187,7 @@ proptest! {
                 Err(ParseError::InvalidRef { kind: "aromatic-system", .. })
             ), "structural ref over wrong participants must not resolve");
         }
-        for view in ast.multicenter_bonds().iter() {
+        for view in molecule.multicenter_bonds().iter() {
             let first = view.atom_ids().next().expect("multicenter bonds are non-empty");
             let wrong = MulticenterBondRef::Structural(vec![AtomRef::Index(first.index())]);
             prop_assert!(matches!(
@@ -197,7 +197,7 @@ proptest! {
         }
 
         // The acceptor coinciding with a donor is never a real dative bond.
-        for view in ast.dative_bonds().iter() {
+        for view in molecule.dative_bonds().iter() {
             let donors = view.donor_ids().map(|a| AtomRef::Index(a.index())).collect();
             let acceptor = AtomRef::Index(view.donor_ids().next().expect("≥ 1 donor").index());
             let wrong = DativeBondRef::Structural(DativeBondParticipants { donors, acceptor });
@@ -208,7 +208,7 @@ proptest! {
         }
 
         // Repeating a ligand changes the multiset, which no real stereo element carries.
-        for view in ast.stereo_atoms().iter() {
+        for view in molecule.stereo_atoms().iter() {
             let site = AtomRef::Index(view.site_id().index());
             let mut ligands: Vec<StereoLigandRef> = view
                 .ligands()
@@ -227,7 +227,7 @@ proptest! {
                 Err(ParseError::InvalidRef { kind: "stereo-atom", .. })
             ), "structural ref over wrong participants must not resolve");
         }
-        for view in ast.stereo_bonds().iter() {
+        for view in molecule.stereo_bonds().iter() {
             let site = BondRef::Index(view.site_id().index());
             let mut ligands: Vec<StereoLigandRef> = view
                 .ligands()

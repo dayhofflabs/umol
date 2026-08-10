@@ -590,8 +590,8 @@ matcher feeding the target's derived stereo through the view's derived accessors
 
 Two surfaces: the **inline stereo-string** (`:type` payload, `dsl/stereo.rs`) and the **molecule-scope
 structured EDN** (`:stereo-atom`/`:stereo-bond` keys, `dsl/constraint.rs`). The four currently-`match {}`
-compile sites (`StereoAtomConstraintDsl`/`StereoBondConstraintDsl` `from_ast` at `dsl/stereo.rs:520`/`556`,
-`ConstraintDsl::from_ast` at `dsl/constraint.rs:1904`/`1905`) belong to the structured surface.
+compile sites (`StereoAtomConstraintDsl`/`StereoBondConstraintDsl` `from_ir` at `dsl/stereo.rs:520`/`556`,
+`ConstraintDsl::from_ir` at `dsl/constraint.rs:1904`/`1905`) belong to the structured surface.
 
 Substeps:
 
@@ -621,7 +621,7 @@ Substeps:
   wrapper** that owns its full, self-contained EDN, so it impls the normal `FromEdn`/`ToEdn` and the generic
   2-field entity-leaf machinery (`parse_entity_leaf`/`entity_leaf_edn`/`read_entity_leaf`) applies unchanged.
   Mirror at the envelope: `ConstraintDsl::StereoAtom(StereoAtomRef, StereoAtomConstraintDsl)` (the kind rides
-  inside the wrapper, not as a separate `ConstraintDsl` field); `from_ast`/`into_ast` construct/destructure the
+  inside the wrapper, not as a separate `ConstraintDsl` field); `from_ir`/`into_ir` construct/destructure the
   tuple inline (kind from the `Constraint` envelope). **No degree-free DSL intermediate, no `EntityCounts`
   change, no `MoleculeInput` change, no bespoke leaf parser** — the streaming reader bridges via
   `read_value_slice` + `read_string` + `FromEdn`.
@@ -780,7 +780,7 @@ constraints both import from it. One `MemOp` now, publicly reachable.
 `ligand_pair_strategy`, `topicity`/`stereogenicity` relation strategies (non-vacuous only — `Undetermined`
 elides on render), `orientation`/`mem_op` strategies, and a `stereo_constraint_strategy!` macro generating
 `StereoAtomConstraint`/`StereoBondConstraint` (all four kinds, perm degree = `kind.degree()`).
-`stereo_atom_ast_strategy`/`stereo_bond_ast_strategy` now attach inline constraints, so the existing
+`stereo_atom_form_strategy`/`stereo_bond_form_strategy` now attach inline constraints, so the existing
 Display↔FromStr and molecule EDN roundtrip props cover the **inline shorthand**. Two new props
 (`test_stereo_{atom,bond}_constraint_dsl_to_edn_from_edn_roundtrip`) cover the **EDN-shaped** molecule-scope
 form. 42 props green.

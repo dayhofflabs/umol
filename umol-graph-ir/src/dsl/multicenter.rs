@@ -677,7 +677,7 @@ mod tests {
         MulticenterBondForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsForm::new() },
         MulticenterBondDsl(MulticenterBondForm::default()),
     )]
-    fn test_multicenter_bond_dsl_from_ast(
+    fn test_multicenter_bond_dsl_from_ir(
         #[case] input: MulticenterBondForm,
         #[case] expected: MulticenterBondDsl,
     ) {
@@ -693,7 +693,7 @@ mod tests {
         MulticenterBondDsl(MulticenterBondForm::default()),
         MulticenterBondForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsForm::new() },
     )]
-    fn test_multicenter_bond_dsl_into_ast(
+    fn test_multicenter_bond_dsl_into_ir(
         #[case] input: MulticenterBondDsl,
         #[case] expected: MulticenterBondForm,
     ) {
@@ -816,7 +816,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electron_count(MulticenterBondConstraintForm::electron_count(6_i64), MulticenterBondConstraintDsl::ElectronCount(NumForm::Lit(6)))]
-    fn test_multicenter_bond_constraint_dsl_from_ast(
+    fn test_multicenter_bond_constraint_dsl_from_ir(
         #[case] input: MulticenterBondConstraintForm,
         #[case] expected: MulticenterBondConstraintDsl,
     ) {
@@ -826,7 +826,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electron_count(MulticenterBondConstraintDsl::ElectronCount(NumForm::Lit(6)), MulticenterBondConstraintForm::electron_count(6_i64))]
-    fn test_multicenter_bond_constraint_dsl_into_ast(
+    fn test_multicenter_bond_constraint_dsl_into_ir(
         #[case] input: MulticenterBondConstraintDsl,
         #[case] expected: MulticenterBondConstraintForm,
     ) {

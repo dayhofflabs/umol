@@ -15,19 +15,19 @@ proptest! {
 
     #[test]
     fn test_id_compaction_undo(
-        (ast, atoms, bonds) in molecule_ast_with_removals_strategy(),
+        (molecule, atoms, bonds) in molecule_with_removals_strategy(),
     ) {
         let counts = (
-            ast.atoms().count(),
-            ast.bonds().count(),
-            ast.dative_bonds().count(),
-            ast.aromatic_systems().count(),
-            ast.multicenter_bonds().count(),
-            ast.noncovalent_bonds().count(),
-            ast.stereo_atoms().count(),
-            ast.stereo_bonds().count(),
+            molecule.atoms().count(),
+            molecule.bonds().count(),
+            molecule.dative_bonds().count(),
+            molecule.aromatic_systems().count(),
+            molecule.multicenter_bonds().count(),
+            molecule.noncovalent_bonds().count(),
+            molecule.stereo_atoms().count(),
+            molecule.stereo_bonds().count(),
         );
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         let compaction = editor.remove(&atoms, &bonds);
         let undo = compaction.undo_compaction();
 

@@ -56,9 +56,9 @@ impl DativeBondConstraintKey {
 impl DativeBondConstraintKey {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrDativeBondConstraintKey,
+        key: &GraphIrDativeBondConstraintKey,
     ) -> PyResult<Self> {
-        Ok(match ast {
+        Ok(match key {
             GraphIrDativeBondConstraintKey::Aromatic => Self::Aromatic(),
             GraphIrDativeBondConstraintKey::RingMembership(scope) => {
                 Self::RingMembership(into_py_variant(py, RingScope::from_rust(scope))?)
@@ -128,9 +128,9 @@ impl_py_lattice!(
 impl DativeBondConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrDativeBondConstraintForm,
+        form: &GraphIrDativeBondConstraintForm,
     ) -> PyResult<Self> {
-        Ok(match ast {
+        Ok(match form {
             GraphIrDativeBondConstraintForm::Aromatic(b) => {
                 Self::Aromatic(into_py_variant(py, BooleanForm::from_rust(b))?)
             }
@@ -411,17 +411,17 @@ impl DativeBondConstraintsForm {
 }
 
 impl DativeBondConstraintsForm {
-    /// The wrapped AST constraints — read access for dative bond construction.
+    /// The wrapped IR constraints — read access for dative bond construction.
     pub(crate) fn to_rust(&self) -> &GraphIrDativeBondConstraintsForm {
         &self.0
     }
 
-    /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
+    /// Mutable access to the wrapped IR constraints — for the value-backed proxy.
     pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrDativeBondConstraintsForm {
         &mut self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_rust` bridge). Test-only —
+    /// Wrap IR constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `DativeBondConstraintsForm(..)` directly.
     pub(crate) fn from_rust(constraints: GraphIrDativeBondConstraintsForm) -> Self {
         DativeBondConstraintsForm(constraints)
@@ -582,7 +582,7 @@ impl DativeBondConstraintsView {
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(
+    pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrDativeBondConstraintForm,
@@ -591,7 +591,7 @@ impl DativeBondConstraintsView {
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
-    pub(crate) fn remove_ast(
+    pub(crate) fn remove_form(
         &self,
         py: Python<'_>,
         key: GraphIrDativeBondConstraintKey,
@@ -610,7 +610,7 @@ impl DativeBondConstraintsView {
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<DativeBondConstraintForm>) -> PyResult<()> {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py))
+        self.set_form(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -620,7 +620,7 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
     ) -> PyResult<Option<DativeBondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust(py))?
+        self.remove_form(py, key.bind(py).borrow().to_rust(py))?
             .map(|c| DativeBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -632,7 +632,7 @@ impl DativeBondConstraintsView {
         key: Py<DativeBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust(py))?
+            .remove_form(py, key.bind(py).borrow().to_rust(py))?
             .is_some()
         {
             Ok(())
@@ -706,9 +706,9 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
     ) -> PyResult<DativeBondConstraintForm> {
-        let ast_key = key.bind(py).borrow().to_rust(py);
+        let rust_key = key.bind(py).borrow().to_rust(py);
         let found = self.read(py, |cs| {
-            cs.get(ast_key)
+            cs.get(rust_key)
                 .map(|constraint| DativeBondConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
@@ -738,7 +738,7 @@ impl DativeBondConstraintsView {
 
     #[setter]
     pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) -> PyResult<()> {
-        self.set_ast(
+        self.set_form(
             py,
             GraphIrDativeBondConstraintForm::aromatic(value.to_rust(py)),
         )
@@ -756,7 +756,7 @@ impl DativeBondConstraintsView {
 
     #[setter]
     pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.set_ast(
+        self.set_form(
             py,
             GraphIrDativeBondConstraintForm::ring_membership(
                 GraphIrRingScope::All,

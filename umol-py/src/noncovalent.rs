@@ -44,8 +44,8 @@ pub enum NoncovalentBondKind {
 }
 
 impl NoncovalentBondKind {
-    pub(crate) fn from_rust(ast: GraphIrNoncovalentBondKind) -> Self {
-        match ast {
+    pub(crate) fn from_rust(form: GraphIrNoncovalentBondKind) -> Self {
+        match form {
             GraphIrNoncovalentBondKind::HydrogenBond => Self::HydrogenBond,
             GraphIrNoncovalentBondKind::HalogenBond => Self::HalogenBond,
             GraphIrNoncovalentBondKind::ChalcogenBond => Self::ChalcogenBond,
@@ -114,8 +114,8 @@ impl_py_lattice!(
 );
 
 impl NoncovalentBondKindForm {
-    pub(crate) fn from_rust(ast: &GraphIrNoncovalentBondKindForm) -> Self {
-        match ast {
+    pub(crate) fn from_rust(form: &GraphIrNoncovalentBondKindForm) -> Self {
+        match form {
             GraphIrNoncovalentBondKindForm::Undetermined => Self::Undetermined(),
             GraphIrNoncovalentBondKindForm::Lit(k) => Self::Lit(NoncovalentBondKind::from_rust(*k)),
         }
@@ -135,14 +135,14 @@ impl NoncovalentBondKindForm {
 #[derive(FromPyObject)]
 pub(crate) enum NoncovalentBondKindLike {
     Kind(NoncovalentBondKind),
-    Ast(Py<NoncovalentBondKindForm>),
+    Form(Py<NoncovalentBondKindForm>),
 }
 
 impl NoncovalentBondKindLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNoncovalentBondKindForm {
         match self {
             NoncovalentBondKindLike::Kind(k) => GraphIrNoncovalentBondKindForm::Lit(k.to_rust()),
-            NoncovalentBondKindLike::Ast(a) => a.bind(py).borrow().to_rust(),
+            NoncovalentBondKindLike::Form(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -323,12 +323,12 @@ impl NoncovalentBondForm {
 }
 
 impl NoncovalentBondForm {
-    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    /// The wrapped IR bond — read access for the bond-backed constraints view.
     pub(crate) fn to_rust(&self) -> &GraphIrNoncovalentBondForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// Mutable access to the wrapped IR bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrNoncovalentBondForm> {
         if self.readonly {
@@ -338,7 +338,7 @@ impl NoncovalentBondForm {
         }
     }
 
-    /// Wrap an owned Rust noncovalent-bond AST.
+    /// Wrap an owned Rust noncovalent-bond form.
     pub(crate) fn from_rust(bond: GraphIrNoncovalentBondForm) -> Self {
         Self {
             value: bond,
@@ -643,8 +643,8 @@ mod tests {
     #[case(GraphIrNoncovalentBondKindForm::Undetermined)]
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond))]
     #[case(GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::VanDerWaals))]
-    fn test_noncovalent_bond_kind_form_roundtrip(#[case] ast: GraphIrNoncovalentBondKindForm) {
-        assert_eq!(NoncovalentBondKindForm::from_rust(&ast).to_rust(), ast);
+    fn test_noncovalent_bond_kind_form_roundtrip(#[case] form: GraphIrNoncovalentBondKindForm) {
+        assert_eq!(NoncovalentBondKindForm::from_rust(&form).to_rust(), form);
     }
 
     #[rstest]
@@ -654,17 +654,17 @@ mod tests {
         Some(NoncovalentBondKind::Ionic)
     )]
     fn test_noncovalent_bond_kind_form_as_lit(
-        #[case] ast: GraphIrNoncovalentBondKindForm,
+        #[case] form: GraphIrNoncovalentBondKindForm,
         #[case] expected: Option<NoncovalentBondKind>,
     ) {
-        assert_eq!(NoncovalentBondKindForm::from_rust(&ast).as_lit(), expected);
+        assert_eq!(NoncovalentBondKindForm::from_rust(&form).as_lit(), expected);
     }
 
     #[rstest]
     #[case(GraphIrNoncovalentBondKind::HydrogenBond)]
     #[case(GraphIrNoncovalentBondKind::ChalcogenBond)]
-    fn test_noncovalent_bond_kind_roundtrip(#[case] ast: GraphIrNoncovalentBondKind) {
-        assert_eq!(NoncovalentBondKind::from_rust(ast).to_rust(), ast);
+    fn test_noncovalent_bond_kind_roundtrip(#[case] form: GraphIrNoncovalentBondKind) {
+        assert_eq!(NoncovalentBondKind::from_rust(form).to_rust(), form);
     }
 
     #[rstest]
@@ -676,10 +676,10 @@ mod tests {
                 GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::HydrogenBond)
             );
             // a NoncovalentBondKindForm passes through
-            let ast =
+            let form =
                 Py::new(py, NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)).unwrap();
             assert_eq!(
-                NoncovalentBondKindLike::Ast(ast).to_rust(py),
+                NoncovalentBondKindLike::Form(form).to_rust(py),
                 GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
             );
         });
@@ -732,14 +732,14 @@ mod tests {
     #[case(GraphIrNoncovalentBondConstraintForm::intramolecular(false))]
     #[case(GraphIrNoncovalentBondConstraintForm::Intramolecular(GraphIrBooleanForm::Undetermined))]
     fn test_noncovalent_bond_constraint_form_roundtrip(
-        #[case] ast: GraphIrNoncovalentBondConstraintForm,
+        #[case] form: GraphIrNoncovalentBondConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                NoncovalentBondConstraintForm::from_rust(py, &ast)
+                NoncovalentBondConstraintForm::from_rust(py, &form)
                     .unwrap()
                     .to_rust(py),
-                ast
+                form
             );
         });
     }

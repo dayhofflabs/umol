@@ -260,12 +260,12 @@ impl MulticenterBondForm {
 }
 
 impl MulticenterBondForm {
-    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    /// The wrapped IR bond — read access for the bond-backed constraints view.
     pub(crate) fn to_rust(&self) -> &GraphIrMulticenterBondForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// Mutable access to the wrapped IR bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrMulticenterBondForm> {
         if self.readonly {
@@ -275,7 +275,7 @@ impl MulticenterBondForm {
         }
     }
 
-    /// Wrap an owned Rust multicenter-bond AST.
+    /// Wrap an owned Rust multicenter-bond form.
     pub(crate) fn from_rust(bond: GraphIrMulticenterBondForm) -> Self {
         Self {
             value: bond,
@@ -1138,14 +1138,14 @@ mod tests {
     #[case(GraphIrMulticenterBondConstraintForm::electron_count(6))]
     #[case(GraphIrMulticenterBondConstraintForm::electron_count(GraphIrNumForm::Undetermined))]
     fn test_multicenter_bond_constraint_form_roundtrip(
-        #[case] ast: GraphIrMulticenterBondConstraintForm,
+        #[case] form: GraphIrMulticenterBondConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                MulticenterBondConstraintForm::from_rust(py, &ast)
+                MulticenterBondConstraintForm::from_rust(py, &form)
                     .unwrap()
                     .to_rust(py),
-                ast
+                form
             );
         });
     }

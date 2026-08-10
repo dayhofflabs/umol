@@ -160,7 +160,7 @@ mod tests {
             ..Default::default()
         })
     )]
-    fn test_perceived_molecule_into_ast(
+    fn test_perceived_molecule_into_ir(
         #[case] perceived: PerceivedMolecule,
         #[case] expected: Molecule,
     ) {

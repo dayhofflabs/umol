@@ -26,8 +26,8 @@ pub struct NumDsl(pub NumForm);
 impl FromIr<NumForm> for NumDsl {
     type Ctx = ();
 
-    fn from_ir(ast: &NumForm, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
+    fn from_ir(form: &NumForm, _ctx: &Self::Ctx) -> Self {
+        Self(form.clone())
     }
 }
 

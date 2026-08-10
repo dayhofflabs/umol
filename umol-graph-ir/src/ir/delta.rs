@@ -2154,7 +2154,7 @@ impl EntityPatch for StereoBondDelta {
     }
 }
 
-/// Apply a resolved per-entity change to a value AST, reusing the `EntityPatch` apply that
+/// Apply a resolved per-entity change to a form, reusing the `EntityPatch` apply that
 /// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the attributes; `Add` / `Remove` are
 /// no-ops (they carry a whole attributes, not a change). Materializes the rhs-hand value of a
 /// preserved entity for a `ReactionSpan`.

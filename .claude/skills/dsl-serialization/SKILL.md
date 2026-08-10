@@ -1,10 +1,10 @@
 ---
-description: Apply on ANY task that adds, extends, revises, or reviews DSL serialization/deserialization in a umol-workspace crate — `FromEdn`/`ToEdn` impls, `*Dsl` boundary types, compact-string DSL (`FromStr`/`Display`, winnow parsers), EDN readers/writers (tree or streaming), or the free functions that build/encode AST types. Trigger whenever serde code is created or edited, or whenever the request mentions EDN, the DSL, `FromEdn`/`ToEdn`, `*Dsl` types, `parse_`/`fmt_`/`read_`/`render_` functions, `_to_edn`/`_from_edn`, streaming deserialization, or roundtrip. Covers which types must own their serde via traits vs which may use free functions, the mandatory function-naming scheme, the same-prefix rule for shared helpers, and the ban on single-use helpers. Consult before writing or editing any DSL/EDN ser/de, and re-check naming and structure on every such edit.
+description: Apply on ANY task that adds, extends, revises, or reviews DSL serialization/deserialization in a umol-workspace crate — `FromEdn`/`ToEdn` impls, `*Dsl` boundary types, compact-string DSL (`FromStr`/`Display`, winnow parsers), EDN readers/writers (tree or streaming), or the free functions that build/encode graph-IR types. Trigger whenever serde code is created or edited, or whenever the request mentions EDN, the DSL, `FromEdn`/`ToEdn`, `*Dsl` types, `parse_`/`fmt_`/`read_`/`render_` functions, `_to_edn`/`_from_edn`, streaming deserialization, or roundtrip. Covers which types must own their serde via traits vs which may use free functions, the mandatory function-naming scheme, the same-prefix rule for shared helpers, and the ban on single-use helpers. Consult before writing or editing any DSL/EDN ser/de, and re-check naming and structure on every such edit.
 ---
 
 # umol DSL serialization conventions
 
-**Scope: all DSL/EDN serialization lives in the `umol-graph-ir` crate (its `dsl` module). No serialization anywhere else.** Other crates (umol-graph, umol-io, …) must go through `umol-graph-ir`'s DSL boundary types — they do not define their own `FromEdn`/`ToEdn`/`parse_`/`fmt_`/`read_`/`render_` for umol DSL or EDN. (Foreign *format* parsers — MOL/SDF/SMILES → AST in umol-io — are a separate concern, not this DSL/EDN serde.)
+**Scope: all DSL/EDN serialization lives in the `umol-graph-ir` crate (its `dsl` module). No serialization anywhere else.** Other crates (umol-graph, umol-io, …) must go through `umol-graph-ir`'s DSL boundary types — they do not define their own `FromEdn`/`ToEdn`/`parse_`/`fmt_`/`read_`/`render_` for umol DSL or EDN. (Foreign *format* parsers — MOL/SDF/SMILES → graph IR in umol-io — are a separate concern, not this DSL/EDN serde.)
 
 Two surfaces: the **compact string DSL** (`FromStr`/`Display`, winnow) and the **EDN** form (tree `FromEdn`/`ToEdn` + streaming readers). These rules govern how the work is structured and named. When a type can't serialize cleanly, **restructure it** — never declare the problem unsolvable and stop.
 
@@ -42,11 +42,11 @@ A top-level `*Dsl` boundary type **must** serialize via `FromEdn`/`ToEdn` (and, 
 
 - If a `*Dsl` lacks the data to de/serialize itself, **restructure it to carry that data** — e.g. a stereo constraint needs `StereoKind` for the permutation degree, so the boundary type is `StereoAtomConstraintDsl(StereoKind, _)`. Do **not** fall back to a free helper that takes the missing data as a parameter.
 - There must be **no `_to_edn` / `_from_edn` free helpers**. This includes the per-constraint `*Dsl` types.
-- `*Dsl` types **should transparently wrap** their AST type (`StructDsl(pub StructAst)`); deviate only where absolutely necessary.
+- `*Dsl` types **should transparently wrap** their IR type (`StructDsl(pub StructForm)`); deviate only where absolutely necessary.
 
 ## ii. Constituent types may use free functions
 
-Structs/enums that are used to build the AST types and do **not** have their own `*Dsl` type **may** have free-function ser/de, named:
+Structs/enums that are used to build the IR types and do **not** have their own `*Dsl` type **may** have free-function ser/de, named:
 
 | surface | deserialize | serialize |
 |---|---|---|

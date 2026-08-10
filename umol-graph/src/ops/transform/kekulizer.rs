@@ -251,16 +251,16 @@ impl Kekulizer {
 impl Transformer for Kekulizer {
     type Error = KekulizerError;
 
-    fn transform_into(&self, ast: &mut Molecule) -> Result<(), KekulizerError> {
-        if ast.aromatic_systems().count() == 0 {
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), KekulizerError> {
+        if molecule.aromatic_systems().count() == 0 {
             return Ok(());
         }
 
-        // Plan the per-system matching against an immutable AST snapshot, then
+        // Plan the per-system matching against an immutable molecule snapshot, then
         // apply the bond-order writes and structural cleanup in passes that
         // require &mut.
-        let plans = self.plan_systems(ast)?;
-        let mut candidate = ast.clone();
+        let plans = self.plan_systems(molecule)?;
+        let mut candidate = molecule.clone();
 
         // Pass 1: bond-order writes and Aromatic-constraint stripping.
         for plan in &plans {
@@ -314,13 +314,16 @@ impl Transformer for Kekulizer {
         candidate = builder.build();
 
         validate_localized_candidate(&candidate)?;
-        *ast = candidate;
+        *molecule = candidate;
 
         Ok(())
     }
 
-    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a> {
-        Box::new(self.transform(ast).ok().into_iter())
+    fn generate_all<'a>(
+        &'a self,
+        molecule: &'a Molecule,
+    ) -> Box<dyn Iterator<Item = Molecule> + 'a> {
+        Box::new(self.transform(molecule).ok().into_iter())
     }
 }
 
@@ -370,10 +373,10 @@ struct SystemPlan {
 }
 
 impl Kekulizer {
-    /// Build the per-system matching plan against an immutable AST.
-    fn plan_systems(&self, ast: &Molecule) -> Result<Vec<SystemPlan>, KekulizerError> {
-        let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
-        for view in ast.aromatic_systems().iter() {
+    /// Build the per-system matching plan against an immutable molecule.
+    fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizerError> {
+        let mut plans = Vec::with_capacity(molecule.aromatic_systems().count());
+        for view in molecule.aromatic_systems().iter() {
             let system_idx = view.id;
             let system_atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
@@ -435,8 +438,8 @@ impl Kekulizer {
                 .copied()
                 .filter(|atom| !prescribed_exposed_set.contains(atom))
                 .collect();
-            let correspondence = ast.induced_subgraph(&correspondence_host_atoms);
-            let extracted = ast.extract(&correspondence);
+            let correspondence = molecule.induced_subgraph(&correspondence_host_atoms);
+            let extracted = molecule.extract(&correspondence);
             let sub_order: Vec<AtomId> = matching_host_atoms
                 .iter()
                 .map(|&host| {
@@ -501,7 +504,7 @@ impl Kekulizer {
                 .collect();
             let matched_atoms: HashSet<AtomId> = matched
                 .iter()
-                .flat_map(|&bond| ast.bond(bond).atom_ids())
+                .flat_map(|&bond| molecule.bond(bond).atom_ids())
                 .collect();
             let exposed_set: HashSet<AtomId> = exposed_atoms.iter().copied().collect();
             let actual_exposed: HashSet<AtomId> = system_atoms
@@ -712,21 +715,21 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: Molecule,
     ) {
-        let mut ast = input;
+        let mut molecule = input;
         Kekulizer::new(KekulizationConfig::default(), node_order)
-            .transform_into(&mut ast)
+            .transform_into(&mut molecule)
             .unwrap();
-        assert_eq!(ast, expected);
+        assert_eq!(molecule, expected);
     }
 
     #[rstest]
     #[case::kekule_benzene( mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
     fn test_kekulizer_transform_into_identity(#[case] input: Molecule) {
-        let mut ast = input.clone();
+        let mut molecule = input.clone();
         Kekulizer::new(KekulizationConfig::default(), (0..6).map(AtomId).collect())
-            .transform_into(&mut ast)
+            .transform_into(&mut molecule)
             .unwrap();
-        assert_eq!(ast, input);
+        assert_eq!(molecule, input);
     }
 
     #[rstest]
@@ -771,11 +774,11 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: KekulizerError,
     ) {
-        let mut ast = input.clone();
+        let mut molecule = input.clone();
         let result =
-            Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut ast);
+            Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut molecule);
         assert_eq!(result, Err(expected));
-        assert_eq!(ast, input);
+        assert_eq!(molecule, input);
     }
 
     #[rstest]

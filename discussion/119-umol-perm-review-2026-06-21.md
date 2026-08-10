@@ -3,7 +3,7 @@
 ## Trigger
 
 The stage-E6 substructure-matching proptest (umol-ast) feeds `MoleculeAst`s with
-structurally-invalid stereo overlays produced by `molecule_ast_strategy`: a ligand
+structurally-invalid stereo overlays produced by `molecule_strategy`: a ligand
 frame whose size differs from the stereo kind's degree (e.g. a Tetrahedral center
 with two ligands), and a coset index `Lit(0..=6)` that can exceed the kind's coset
 count. The stereo coset post-filter calls `CosetSpace::coset_for`/`reindex`, which
@@ -162,7 +162,7 @@ resolver-validated input in `raise.rs`/`symmetry.rs`); `Coset::new` is checked w
 
 The substructure matcher needs no defensive code: with the `Option` family a
 malformed generated stereo overlay yields no match instead of a panic. The planted
-proptest dropped its `!is_empty` self-match assertion — `molecule_ast_strategy` can
+proptest dropped its `!is_empty` self-match assertion — `molecule_strategy` can
 emit stored constraints inconsistent with the derived topology (e.g. a stored valence
 differing from the bond-derived one), so a self-match is not guaranteed; the surviving
 cross-strategy / cross-algorithm agreement invariant holds.

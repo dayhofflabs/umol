@@ -46,7 +46,7 @@ create_exception!(
     umol,
     MetadataError,
     PyException,
-    "Raised when DSL metadata violates namespace or AST-coherence invariants."
+    "Raised when DSL metadata violates namespace or graph-IR coherence invariants."
 );
 
 create_exception!(

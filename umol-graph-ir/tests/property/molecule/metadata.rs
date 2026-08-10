@@ -88,25 +88,25 @@ proptest! {
         let parsed = MoleculeDsl::from_edn_str(&rendered)
             .map_err(|error| TestCaseError::fail(format!("parse failed: {error}")))?;
         let expected = parsed.clone();
-        let (ast, metadata) = parsed.into_parts();
+        let (molecule, metadata) = parsed.into_parts();
 
-        prop_assert_eq!(MoleculeDsl::new(ast, metadata), Ok(expected));
+        prop_assert_eq!(MoleculeDsl::new(molecule, metadata), Ok(expected));
     }
 
     #[test]
     fn test_molecule_dsl_new_error(
-        (ast, metadata, entity) in invalid_molecule_dsl_parts_strategy(),
+        (molecule, metadata, entity) in invalid_molecule_dsl_parts_strategy(),
     ) {
         prop_assert_eq!(
-            MoleculeDsl::new(ast, metadata),
+            MoleculeDsl::new(molecule, metadata),
             Err(MetadataError::EntityOutOfRange(entity)),
         );
     }
 
     #[test]
     fn test_molecule_metadata_remap_identity(dsl in molecule_dsl_strategy()) {
-        let atoms = dsl.ast().atoms().ids().collect::<Vec<_>>();
-        let identity = dsl.ast().induced_subgraph(&atoms).reverse();
+        let atoms = dsl.molecule().atoms().ids().collect::<Vec<_>>();
+        let identity = dsl.molecule().induced_subgraph(&atoms).reverse();
 
         prop_assert_eq!(
             dsl.metadata().clone().remap(&identity),
@@ -116,9 +116,9 @@ proptest! {
 
     #[test]
     fn test_molecule_metadata_remap_composition(
-        (ast, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
+        (molecule, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
     ) {
-        let sub_to_host = ast.induced_subgraph(&atoms);
+        let sub_to_host = molecule.induced_subgraph(&atoms);
         let host_to_sub = sub_to_host.reverse();
         let direct = metadata
             .clone()
@@ -133,9 +133,9 @@ proptest! {
 
     #[test]
     fn test_molecule_metadata_remap_roundtrip(dsl in molecule_dsl_strategy()) {
-        let mut atoms = dsl.ast().atoms().ids().collect::<Vec<_>>();
+        let mut atoms = dsl.molecule().atoms().ids().collect::<Vec<_>>();
         atoms.reverse();
-        let copy_to_host = dsl.ast().induced_subgraph(&atoms);
+        let copy_to_host = dsl.molecule().induced_subgraph(&atoms);
         let host_to_copy = copy_to_host.reverse();
         let roundtrip = dsl
             .metadata()
@@ -148,9 +148,9 @@ proptest! {
 
     #[test]
     fn test_molecule_metadata_remap_partial(
-        (ast, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
+        (molecule, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
     ) {
-        let host_to_sub = ast.induced_subgraph(&atoms).reverse();
+        let host_to_sub = molecule.induced_subgraph(&atoms).reverse();
         let restricted = metadata.clone().remap(&host_to_sub);
 
         for (entity, keyword) in metadata.iter_keywords() {
@@ -163,9 +163,9 @@ proptest! {
 
     #[test]
     fn test_molecule_metadata_remap_aliases(
-        (ast, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
+        (molecule, metadata, atoms) in molecule_metadata_with_atom_subset_strategy(),
     ) {
-        let host_to_sub = ast.induced_subgraph(&atoms).reverse();
+        let host_to_sub = molecule.induced_subgraph(&atoms).reverse();
         let expected = metadata
             .iter_atom_aliases()
             .map(|(name, atom)| (name.to_string(), atom.clone()))

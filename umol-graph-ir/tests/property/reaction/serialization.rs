@@ -17,7 +17,7 @@ proptest! {
     /// fixpoint, exercising the atom/bond add / remove / modify-field delta ops
     /// (`Reaction::to_edn` then `from_edn`, twice, must agree).
     #[test]
-    fn test_reaction_ast_edn_roundtrip_stable(reaction in reaction_strategy()) {
+    fn test_reaction_edn_roundtrip_stable(reaction in reaction_strategy()) {
         let once = Reaction::from_edn(&reaction.to_edn())
             .map_err(|e| TestCaseError::fail(format!("first reparse failed: {e}")))?;
         let twice = Reaction::from_edn(&once.to_edn())

@@ -9,7 +9,7 @@ Related: [86-molecule-ast-api-2026-04-16.md](86-molecule-ast-api-2026-04-16.md) 
 
 ## Problem
 
-`parse_smiles` / `parse_mol` build `TableMolecule`, then `try_into_ast` produces
+`parse_smiles` / `parse_mol` build `TableMolecule`, then `try_into_ir` produces
 `MoleculeAst` for `Resolver`. Remaining gaps:
 
 - IO raise duplicates DSL `raise_atom` (`raise_ground_atom` in `raise.rs`; unify later).

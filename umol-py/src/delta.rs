@@ -47,7 +47,7 @@ use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintFo
 use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
-use crate::entity::ReadonlyForm;
+use crate::entity::Readonly;
 use crate::lattice::impl_py_canonicalize;
 use crate::multicenter::MulticenterBondForm;
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
@@ -126,7 +126,7 @@ macro_rules! field_change {
 }
 
 field_change! {
-    /// An atom attribute change carrying the field's old and new AST values.
+    /// An atom attribute change carrying the field's old and new forms.
     AtomFieldChange {
         Element(ElementForm),
         IsotopeMass(IsotopeMassForm),
@@ -138,7 +138,7 @@ field_change! {
 }
 
 field_change! {
-    /// A covalent-bond attribute change carrying the field's old and new AST values.
+    /// A covalent-bond attribute change carrying the field's old and new forms.
     BondFieldChange {
         Order(NumForm),
         Charge(NumForm),
@@ -147,14 +147,14 @@ field_change! {
 }
 
 field_change! {
-    /// A dative-bond attribute change carrying the field's old and new AST values.
+    /// A dative-bond attribute change carrying the field's old and new forms.
     DativeBondFieldChange {
         Order(NumForm),
     }
 }
 
 field_change! {
-    /// An aromatic-system attribute change carrying the field's old and new AST values.
+    /// An aromatic-system attribute change carrying the field's old and new forms.
     AromaticSystemFieldChange {
         Electrons(ElectronCountsForm),
         Charge(NumForm),
@@ -163,7 +163,7 @@ field_change! {
 }
 
 field_change! {
-    /// A multicenter-bond attribute change carrying the field's old and new AST values.
+    /// A multicenter-bond attribute change carrying the field's old and new forms.
     MulticenterBondFieldChange {
         Electrons(ElectronCountsForm),
         Charge(NumForm),
@@ -172,21 +172,21 @@ field_change! {
 }
 
 field_change! {
-    /// A noncovalent-bond kind change carrying the field's old and new AST values.
+    /// A noncovalent-bond kind change carrying the field's old and new forms.
     NoncovalentBondFieldChange {
         Kind(NoncovalentBondKindForm),
     }
 }
 
 field_change! {
-    /// A stereo-atom configuration change carrying the field's old and new AST values.
+    /// A stereo-atom configuration change carrying the field's old and new forms.
     StereoAtomFieldChange {
         Configuration(StereoConfigurationForm),
     }
 }
 
 field_change! {
-    /// A stereo-bond configuration change carrying the field's old and new AST values.
+    /// A stereo-bond configuration change carrying the field's old and new forms.
     StereoBondFieldChange {
         Configuration(StereoConfigurationForm),
     }
@@ -471,11 +471,11 @@ impl StereoBondFieldChange {
 pub enum AtomDelta {
     Add {
         id: u32,
-        attributes: ReadonlyForm<AtomForm>,
+        attributes: Readonly<AtomForm>,
     },
     Remove {
         id: u32,
-        attributes: ReadonlyForm<AtomForm>,
+        attributes: Readonly<AtomForm>,
     },
     ModifyField {
         id: u32,
@@ -515,11 +515,11 @@ impl AtomDelta {
         Ok(match delta {
             GraphIrAtomDelta::Add { id, attributes } => Self::Add {
                 id: id.0,
-                attributes: ReadonlyForm::<AtomForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<AtomForm>::from_rust(py, attributes)?,
             },
             GraphIrAtomDelta::Remove { id, attributes } => Self::Remove {
                 id: id.0,
-                attributes: ReadonlyForm::<AtomForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<AtomForm>::from_rust(py, attributes)?,
             },
             GraphIrAtomDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -576,12 +576,12 @@ pub enum BondDelta {
     Add {
         id: u32,
         atoms: (u32, u32),
-        attributes: ReadonlyForm<BondForm>,
+        attributes: Readonly<BondForm>,
     },
     Remove {
         id: u32,
         atoms: (u32, u32),
-        attributes: ReadonlyForm<BondForm>,
+        attributes: Readonly<BondForm>,
     },
     ModifyField {
         id: u32,
@@ -626,7 +626,7 @@ impl BondDelta {
             } => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
-                attributes: ReadonlyForm::<BondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<BondForm>::from_rust(py, attributes)?,
             },
             GraphIrBondDelta::Remove {
                 id,
@@ -635,7 +635,7 @@ impl BondDelta {
             } => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
-                attributes: ReadonlyForm::<BondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<BondForm>::from_rust(py, attributes)?,
             },
             GraphIrBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -703,13 +703,13 @@ pub enum DativeBondDelta {
         id: u32,
         donors: Vec<u32>,
         acceptor: u32,
-        attributes: ReadonlyForm<DativeBondForm>,
+        attributes: Readonly<DativeBondForm>,
     },
     Remove {
         id: u32,
         donors: Vec<u32>,
         acceptor: u32,
-        attributes: ReadonlyForm<DativeBondForm>,
+        attributes: Readonly<DativeBondForm>,
     },
     ModifyField {
         id: u32,
@@ -756,7 +756,7 @@ impl DativeBondDelta {
                 id: id.0,
                 donors: donors.iter().map(|atom| atom.0).collect(),
                 acceptor: acceptor.0,
-                attributes: ReadonlyForm::<DativeBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
             },
             GraphIrDativeBondDelta::Remove {
                 id,
@@ -767,7 +767,7 @@ impl DativeBondDelta {
                 id: id.0,
                 donors: donors.iter().map(|atom| atom.0).collect(),
                 acceptor: acceptor.0,
-                attributes: ReadonlyForm::<DativeBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<DativeBondForm>::from_rust(py, attributes)?,
             },
             GraphIrDativeBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -838,12 +838,12 @@ pub enum AromaticSystemDelta {
     Add {
         id: u32,
         atoms: Vec<u32>,
-        attributes: ReadonlyForm<AromaticSystemForm>,
+        attributes: Readonly<AromaticSystemForm>,
     },
     Remove {
         id: u32,
         atoms: Vec<u32>,
-        attributes: ReadonlyForm<AromaticSystemForm>,
+        attributes: Readonly<AromaticSystemForm>,
     },
     ModifyField {
         id: u32,
@@ -893,7 +893,7 @@ impl AromaticSystemDelta {
             } => Self::Add {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
-                attributes: ReadonlyForm::<AromaticSystemForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
             },
             GraphIrAromaticSystemDelta::Remove {
                 id,
@@ -902,7 +902,7 @@ impl AromaticSystemDelta {
             } => Self::Remove {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
-                attributes: ReadonlyForm::<AromaticSystemForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<AromaticSystemForm>::from_rust(py, attributes)?,
             },
             GraphIrAromaticSystemDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -979,12 +979,12 @@ pub enum MulticenterBondDelta {
     Add {
         id: u32,
         atoms: Vec<u32>,
-        attributes: ReadonlyForm<MulticenterBondForm>,
+        attributes: Readonly<MulticenterBondForm>,
     },
     Remove {
         id: u32,
         atoms: Vec<u32>,
-        attributes: ReadonlyForm<MulticenterBondForm>,
+        attributes: Readonly<MulticenterBondForm>,
     },
     ModifyField {
         id: u32,
@@ -1034,7 +1034,7 @@ impl MulticenterBondDelta {
             } => Self::Add {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
-                attributes: ReadonlyForm::<MulticenterBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
             },
             GraphIrMulticenterBondDelta::Remove {
                 id,
@@ -1043,7 +1043,7 @@ impl MulticenterBondDelta {
             } => Self::Remove {
                 id: id.0,
                 atoms: atoms.iter().map(|atom| atom.0).collect(),
-                attributes: ReadonlyForm::<MulticenterBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<MulticenterBondForm>::from_rust(py, attributes)?,
             },
             GraphIrMulticenterBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -1120,12 +1120,12 @@ pub enum NoncovalentBondDelta {
     Add {
         id: u32,
         atoms: (u32, u32),
-        attributes: ReadonlyForm<NoncovalentBondForm>,
+        attributes: Readonly<NoncovalentBondForm>,
     },
     Remove {
         id: u32,
         atoms: (u32, u32),
-        attributes: ReadonlyForm<NoncovalentBondForm>,
+        attributes: Readonly<NoncovalentBondForm>,
     },
     ModifyField {
         id: u32,
@@ -1175,7 +1175,7 @@ impl NoncovalentBondDelta {
             } => Self::Add {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
-                attributes: ReadonlyForm::<NoncovalentBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
             },
             GraphIrNoncovalentBondDelta::Remove {
                 id,
@@ -1184,7 +1184,7 @@ impl NoncovalentBondDelta {
             } => Self::Remove {
                 id: id.0,
                 atoms: (atoms[0].0, atoms[1].0),
-                attributes: ReadonlyForm::<NoncovalentBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<NoncovalentBondForm>::from_rust(py, attributes)?,
             },
             GraphIrNoncovalentBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -1262,13 +1262,13 @@ pub enum StereoAtomDelta {
         id: u32,
         site: u32,
         ligands: Vec<StereoLigand>,
-        attributes: ReadonlyForm<StereoAtomForm>,
+        attributes: Readonly<StereoAtomForm>,
     },
     Remove {
         id: u32,
         site: u32,
         ligands: Vec<StereoLigand>,
-        attributes: ReadonlyForm<StereoAtomForm>,
+        attributes: Readonly<StereoAtomForm>,
     },
     ModifyField {
         id: u32,
@@ -1336,7 +1336,7 @@ impl StereoAtomDelta {
                     .copied()
                     .map(StereoLigand::from_rust)
                     .collect(),
-                attributes: ReadonlyForm::<StereoAtomForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
             },
             GraphIrStereoAtomDelta::Remove {
                 id,
@@ -1351,7 +1351,7 @@ impl StereoAtomDelta {
                     .copied()
                     .map(StereoLigand::from_rust)
                     .collect(),
-                attributes: ReadonlyForm::<StereoAtomForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<StereoAtomForm>::from_rust(py, attributes)?,
             },
             GraphIrStereoAtomDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,
@@ -1469,13 +1469,13 @@ pub enum StereoBondDelta {
         id: u32,
         site: u32,
         ligands: Vec<StereoLigand>,
-        attributes: ReadonlyForm<StereoBondForm>,
+        attributes: Readonly<StereoBondForm>,
     },
     Remove {
         id: u32,
         site: u32,
         ligands: Vec<StereoLigand>,
-        attributes: ReadonlyForm<StereoBondForm>,
+        attributes: Readonly<StereoBondForm>,
     },
     ModifyField {
         id: u32,
@@ -1540,7 +1540,7 @@ impl StereoBondDelta {
                     .copied()
                     .map(StereoLigand::from_rust)
                     .collect(),
-                attributes: ReadonlyForm::<StereoBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<StereoBondForm>::from_rust(py, attributes)?,
             },
             GraphIrStereoBondDelta::Remove {
                 id,
@@ -1555,7 +1555,7 @@ impl StereoBondDelta {
                     .copied()
                     .map(StereoLigand::from_rust)
                     .collect(),
-                attributes: ReadonlyForm::<StereoBondForm>::from_rust(py, attributes)?,
+                attributes: Readonly::<StereoBondForm>::from_rust(py, attributes)?,
             },
             GraphIrStereoBondDelta::ModifyField { id, change } => Self::ModifyField {
                 id: id.0,

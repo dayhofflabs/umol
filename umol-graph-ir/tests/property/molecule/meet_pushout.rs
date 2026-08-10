@@ -14,7 +14,7 @@ proptest! {
         ..Config::default()
     })]
     #[test]
-    fn test_molecule_ast_meet_pushout_reframes_stereo_atom(
+    fn test_molecule_meet_pushout_reframes_stereo_atom(
         coset in 0..StereoKind::Tetrahedral.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
@@ -32,11 +32,11 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+        let left_form = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_ast.clone())],
+            stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_form.clone())],
             ..Default::default()
         });
         let right = Molecule::from_entries(MoleculeEntries {
@@ -45,7 +45,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&left_frame),
-                left_ast.apply(permutation),
+                left_form.apply(permutation),
             )],
             ..Default::default()
         });
@@ -61,7 +61,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_meet_pushout_rejects_changed_stereo_atom_ligand(
+    fn test_molecule_meet_pushout_rejects_changed_stereo_atom_ligand(
         coset in 0..StereoKind::Tetrahedral.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
@@ -79,11 +79,11 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+        let left_form = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_ast.clone())],
+            stereo_atoms: vec![(AtomId(0), left_frame.clone(), left_form.clone())],
             ..Default::default()
         });
         let mut right_frame = permutation.act(&left_frame);
@@ -91,7 +91,7 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_atoms: vec![(AtomId(0), right_frame, left_ast.apply(permutation))],
+            stereo_atoms: vec![(AtomId(0), right_frame, left_form.apply(permutation))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
@@ -103,7 +103,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_meet_pushout_reframes_stereo_bond(
+    fn test_molecule_meet_pushout_reframes_stereo_bond(
         coset in 0..StereoKind::CisTrans.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
@@ -125,11 +125,11 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
+        let left_form = StereoBondForm::new(StereoKind::CisTrans, coset);
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_bonds: vec![(BondId(0), left_frame.clone(), left_ast.clone())],
+            stereo_bonds: vec![(BondId(0), left_frame.clone(), left_form.clone())],
             ..Default::default()
         });
         let right = Molecule::from_entries(MoleculeEntries {
@@ -138,7 +138,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&left_frame),
-                left_ast.apply(permutation),
+                left_form.apply(permutation),
             )],
             ..Default::default()
         });
@@ -154,7 +154,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_meet_pushout_rejects_changed_stereo_bond_ligand(
+    fn test_molecule_meet_pushout_rejects_changed_stereo_bond_ligand(
         coset in 0..StereoKind::CisTrans.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
@@ -177,11 +177,11 @@ proptest! {
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let left_ast = StereoBondForm::new(StereoKind::CisTrans, coset);
+        let left_form = StereoBondForm::new(StereoKind::CisTrans, coset);
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_bonds: vec![(BondId(0), left_frame.clone(), left_ast.clone())],
+            stereo_bonds: vec![(BondId(0), left_frame.clone(), left_form.clone())],
             ..Default::default()
         });
         let mut right_frame = permutation.act(&left_frame);
@@ -189,7 +189,7 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_bonds: vec![(BondId(0), right_frame, left_ast.apply(permutation))],
+            stereo_bonds: vec![(BondId(0), right_frame, left_form.apply(permutation))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(

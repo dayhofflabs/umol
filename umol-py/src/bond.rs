@@ -285,12 +285,12 @@ impl BondForm {
 }
 
 impl BondForm {
-    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    /// The wrapped IR bond — read access for the bond-backed constraints view.
     pub(crate) fn to_rust(&self) -> &GraphIrBondForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// Mutable access to the wrapped IR bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrBondForm> {
         if self.readonly {
@@ -683,11 +683,13 @@ mod tests {
     )]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, 2))]
     #[case(GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1))]
-    fn test_bond_constraint_form_roundtrip(#[case] ast: GraphIrBondConstraintForm) {
+    fn test_bond_constraint_form_roundtrip(#[case] form: GraphIrBondConstraintForm) {
         Python::attach(|py| {
             assert_eq!(
-                BondConstraintForm::from_rust(py, &ast).unwrap().to_rust(py),
-                ast
+                BondConstraintForm::from_rust(py, &form)
+                    .unwrap()
+                    .to_rust(py),
+                form
             );
         });
     }

@@ -681,7 +681,7 @@ mod tests {
         AromaticSystemForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AromaticSystemConstraintsForm::new() },
         AromaticSystemDsl(AromaticSystemForm::default()),
     )]
-    fn test_aromatic_system_dsl_from_ast(
+    fn test_aromatic_system_dsl_from_ir(
         #[case] input: AromaticSystemForm,
         #[case] expected: AromaticSystemDsl,
     ) {
@@ -697,7 +697,7 @@ mod tests {
         AromaticSystemDsl(AromaticSystemForm::default()),
         AromaticSystemForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AromaticSystemConstraintsForm::new() },
     )]
-    fn test_aromatic_system_dsl_into_ast(
+    fn test_aromatic_system_dsl_into_ir(
         #[case] input: AromaticSystemDsl,
         #[case] expected: AromaticSystemForm,
     ) {
@@ -817,7 +817,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electron_count(AromaticSystemConstraintForm::electron_count(6_i64), AromaticSystemConstraintDsl::ElectronCount(NumForm::Lit(6)))]
-    fn test_aromatic_system_constraint_dsl_from_ast(
+    fn test_aromatic_system_constraint_dsl_from_ir(
         #[case] input: AromaticSystemConstraintForm,
         #[case] expected: AromaticSystemConstraintDsl,
     ) {
@@ -827,7 +827,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electron_count(AromaticSystemConstraintDsl::ElectronCount(NumForm::Lit(6)), AromaticSystemConstraintForm::electron_count(6_i64))]
-    fn test_aromatic_system_constraint_dsl_into_ast(
+    fn test_aromatic_system_constraint_dsl_into_ir(
         #[case] input: AromaticSystemConstraintDsl,
         #[case] expected: AromaticSystemConstraintForm,
     ) {

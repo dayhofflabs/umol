@@ -34,8 +34,8 @@ impl BooleanForm {
 }
 
 impl BooleanForm {
-    pub(crate) fn from_rust(ast: &GraphIrBooleanForm) -> Self {
-        match ast {
+    pub(crate) fn from_rust(form: &GraphIrBooleanForm) -> Self {
+        match form {
             GraphIrBooleanForm::Undetermined => Self::Undetermined(),
             GraphIrBooleanForm::Lit(b) => Self::Lit(*b),
         }
@@ -63,14 +63,14 @@ impl_py_lattice!(
 #[derive(FromPyObject)]
 pub(crate) enum BooleanLike {
     Lit(bool),
-    Ast(Py<BooleanForm>),
+    Form(Py<BooleanForm>),
 }
 
 impl BooleanLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrBooleanForm {
         match self {
             BooleanLike::Lit(b) => GraphIrBooleanForm::Lit(*b),
-            BooleanLike::Ast(a) => a.bind(py).borrow().to_rust(),
+            BooleanLike::Form(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -85,7 +85,7 @@ mod tests {
     #[case(GraphIrBooleanForm::Undetermined)]
     #[case(GraphIrBooleanForm::Lit(true))]
     #[case(GraphIrBooleanForm::Lit(false))]
-    fn test_boolean_form_roundtrip(#[case] ast: GraphIrBooleanForm) {
-        assert_eq!(BooleanForm::from_rust(&ast).to_rust(), ast);
+    fn test_boolean_form_roundtrip(#[case] form: GraphIrBooleanForm) {
+        assert_eq!(BooleanForm::from_rust(&form).to_rust(), form);
     }
 }

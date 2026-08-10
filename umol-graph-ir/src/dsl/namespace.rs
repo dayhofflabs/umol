@@ -39,11 +39,11 @@ pub struct MoleculeContext {
 }
 
 /// The parse-time **resolution** query surface — everything `ref::resolve` and the constraint /
-/// relational resolvers read to turn a surface ref into a numerical AST id
+/// relational resolvers read to turn a surface ref into a numerical entity id
 /// (keyword / index / participants → id). Written once, generic over this
 /// trait; implemented for [`MoleculeContext`] (a molecule), a reaction's
 /// `ReactionContext`, and other molecule contexts. The inverse direction
-/// (numerical AST id → keyword, for rendering) is the separate `Metadata`
+/// (numerical entity id → keyword, for rendering) is the separate `Metadata`
 /// trait.
 pub trait Namespace {
     fn atom_count(&self) -> usize;
@@ -116,35 +116,35 @@ impl MoleculeContext {
     /// The context of an already-resolved molecule: every entity registered anonymously (no
     /// keyword) with its participants, so index and structural refs resolve against it. The ids are
     /// anonymous, so registration cannot collide.
-    pub fn from_ir(ast: &Molecule) -> Self {
+    pub fn from_ir(molecule: &Molecule) -> Self {
         let free = "anonymous entity registration never collides";
         let mut context = Self::default();
-        for _ in ast.atoms().ids() {
+        for _ in molecule.atoms().ids() {
             context.register_atom(None).expect(free);
         }
-        for view in ast.bonds().iter() {
+        for view in molecule.bonds().iter() {
             let [a, b] = view.atom_ids();
             context.register_bond(None, a, b).expect(free);
         }
-        for view in ast.dative_bonds().iter() {
+        for view in molecule.dative_bonds().iter() {
             let donors: Vec<AtomId> = view.donor_ids().collect();
             context
                 .register_dative_bond(None, &donors, view.acceptor_id())
                 .expect(free);
         }
-        for view in ast.aromatic_systems().iter() {
+        for view in molecule.aromatic_systems().iter() {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             context.register_aromatic_system(None, &atoms).expect(free);
         }
-        for view in ast.multicenter_bonds().iter() {
+        for view in molecule.multicenter_bonds().iter() {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             context.register_multicenter_bond(None, &atoms).expect(free);
         }
-        for view in ast.noncovalent_bonds().iter() {
+        for view in molecule.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             context.register_noncovalent_bond(None, a, b).expect(free);
         }
-        for view in ast.stereo_atoms().iter() {
+        for view in molecule.stereo_atoms().iter() {
             let ligands: Vec<StereoLigand> = view
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
@@ -153,7 +153,7 @@ impl MoleculeContext {
                 .register_stereo_atom(None, view.site_id(), &ligands)
                 .expect(free);
         }
-        for view in ast.stereo_bonds().iter() {
+        for view in molecule.stereo_bonds().iter() {
             let ligands: Vec<StereoLigand> = view
                 .ligands()
                 .map(|l| StereoLigand::new(l.atom_id(), l.kind()))

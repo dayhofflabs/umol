@@ -33,7 +33,7 @@ macro_rules! define_ref {
         }
 
         impl $name {
-            /// Render a numerical AST id back to a ref: its keyword from `metadata` if one is
+            /// Render a numerical entity id back to a ref: its keyword from `metadata` if one is
             /// recorded for this id, else the bare index. This is the `id → ref` inverse of
             /// `resolve` over the entity-keyword bijection.
             pub fn denote<M: Metadata>(id: $id, metadata: &M) -> Self {
@@ -44,7 +44,7 @@ macro_rules! define_ref {
                 }
             }
 
-            /// Resolve this ref to an AST id against the parse-time `namespace`
+            /// Resolve this ref to an entity id against the parse-time `namespace`
             /// (the source of truth: count for index bounds, keyword lookup, and
             /// participant lookup for the structural form).
             pub fn resolve<N: Namespace>(self, namespace: &N) -> Result<$id, ParseError> {

@@ -88,17 +88,17 @@ impl StereoResolver {
         }
     }
 
-    /// Construct the complete stereo edit plan without mutating `ast`.
+    /// Construct the complete stereo edit plan without mutating `molecule`.
     pub fn plan(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<Edits, StereoContradiction>, StereoError> {
-        let partial_atom_constraint = ast.atoms().iter().any(|atom| {
+        let partial_atom_constraint = molecule.atoms().iter().any(|atom| {
             atom.constraints()
                 .tetrahedral_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
         });
-        let partial_bond_constraint = ast.bonds().iter().any(|bond| {
+        let partial_bond_constraint = molecule.bonds().iter().any(|bond| {
             bond.constraints()
                 .cis_trans_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined() && !constraint.is_ground())
@@ -107,7 +107,7 @@ impl StereoResolver {
             return Ok(Solution::Underdetermined(Edits::new()));
         }
 
-        let derivation = self.perception.derive(ast);
+        let derivation = self.perception.derive(molecule);
         for &inconsistency in &derivation.inconsistencies {
             let error = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. } => {
@@ -165,7 +165,7 @@ impl StereoResolver {
                     }
                 }
                 StereoInconsistency::StereoAtomFailure { stereo_atom } => {
-                    let site = ast.stereo_atom(stereo_atom).site_id();
+                    let site = molecule.stereo_atom(stereo_atom).site_id();
                     match self.config.stereo_atom_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {
@@ -206,7 +206,7 @@ impl StereoResolver {
                     }
                 }
                 StereoInconsistency::StereoBondFailure { stereo_bond } => {
-                    let site = ast.stereo_bond(stereo_bond).site_id();
+                    let site = molecule.stereo_bond(stereo_bond).site_id();
                     match self.config.stereo_bond_failure {
                         StereoFailurePolicy::Error => unreachable!(),
                         StereoFailurePolicy::Keep => {
@@ -245,7 +245,7 @@ impl StereoResolver {
                 remove_stereo_atoms
                     .iter()
                     .map(|&id| {
-                        let view = ast.stereo_atom(id);
+                        let view = molecule.stereo_atom(id);
                         (
                             StereoAtomHandle::Id(id),
                             AtomHandle::Id(view.site_id()),
@@ -263,7 +263,7 @@ impl StereoResolver {
                 remove_stereo_bonds
                     .iter()
                     .map(|&id| {
-                        let view = ast.stereo_bond(id);
+                        let view = molecule.stereo_bond(id);
                         (
                             StereoBondHandle::Id(id),
                             BondHandle::Id(view.site_id()),
@@ -277,13 +277,13 @@ impl StereoResolver {
             );
         }
 
-        let retained_atom_sites: BTreeSet<_> = ast
+        let retained_atom_sites: BTreeSet<_> = molecule
             .stereo_atoms()
             .iter()
             .filter(|view| !remove_stereo_atoms.contains(&view.id))
             .map(|view| view.site_id())
             .collect();
-        let retained_bond_sites: BTreeSet<_> = ast
+        let retained_bond_sites: BTreeSet<_> = molecule
             .stereo_bonds()
             .iter()
             .filter(|view| !remove_stereo_bonds.contains(&view.id))
@@ -330,14 +330,22 @@ impl StereoResolver {
                 .set(AtomConstraintForm::TetrahedralStereo(
                     TetrahedralStereoForm::Undetermined,
                 ));
-            edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).attributes, &update);
+            edits.update_atom(
+                AtomHandle::Id(atom),
+                molecule.atom(atom).attributes,
+                &update,
+            );
         }
         for bond in remove_bond_constraints {
             let mut update = BondUpdate::default();
             update.constraints.set(BondConstraintForm::CisTransStereo(
                 CisTransStereoForm::Undetermined,
             ));
-            edits.update_bond(BondHandle::Id(bond), ast.bond(bond).attributes, &update);
+            edits.update_bond(
+                BondHandle::Id(bond),
+                molecule.bond(bond).attributes,
+                &update,
+            );
         }
         Ok(Solution::Determined(edits))
     }
@@ -345,18 +353,18 @@ impl StereoResolver {
     /// Plan and atomically apply structural stereo resolution.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), StereoContradiction>, StereoError> {
-        let edits = match self.plan(ast)? {
+        let edits = match self.plan(molecule)? {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 }

@@ -33,7 +33,7 @@ proptest! {
     /// A pattern-relative atom update lowers against the matched host atom, including independent
     /// unpaired-electron components and keyed constraint set / replace / remove operations.
     #[test]
-    fn test_reaction_ast_apply_atom_update(
+    fn test_reaction_apply_atom_update(
         host_atom in atom_form_strategy(),
         update in atom_update_strategy(),
     ) {
@@ -72,7 +72,7 @@ proptest! {
 
     /// A pattern-relative localized-bond update lowers against the matched host bond.
     #[test]
-    fn test_reaction_ast_apply_bond_update(
+    fn test_reaction_apply_bond_update(
         host_bond in bond_form_strategy(),
         update in bond_update_strategy(),
     ) {
@@ -114,7 +114,7 @@ proptest! {
 
     /// A pattern-relative dative-bond update lowers against the matched host relation.
     #[test]
-    fn test_reaction_ast_apply_dative_bond_update(
+    fn test_reaction_apply_dative_bond_update(
         host_bond in dative_bond_strategy(),
         update in dative_bond_update_strategy(),
     ) {
@@ -160,7 +160,7 @@ proptest! {
 
     /// A pattern-relative aromatic-system update lowers against the matched host relation.
     #[test]
-    fn test_reaction_ast_apply_aromatic_system_update(
+    fn test_reaction_apply_aromatic_system_update(
         mut host_system in aromatic_system_form_for(3),
         update in aromatic_system_update_for(3),
     ) {
@@ -219,7 +219,7 @@ proptest! {
 
     /// A pattern-relative multicenter-bond update lowers against the matched host relation.
     #[test]
-    fn test_reaction_ast_apply_multicenter_bond_update(
+    fn test_reaction_apply_multicenter_bond_update(
         mut host_bond in multicenter_bond_form_for(3),
         update in multicenter_bond_update_for(3),
     ) {
@@ -278,7 +278,7 @@ proptest! {
 
     /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
     #[test]
-    fn test_reaction_ast_apply_noncovalent_bond_update(
+    fn test_reaction_apply_noncovalent_bond_update(
         host_bond in noncovalent_bond_form_strategy(),
         update in noncovalent_bond_update_strategy(),
     ) {
@@ -325,7 +325,7 @@ proptest! {
     /// A pattern-relative stereo-atom update lowers against the matched host configuration and
     /// keyed constraints.
     #[test]
-    fn test_reaction_ast_apply_stereo_atom_update(
+    fn test_reaction_apply_stereo_atom_update(
         host_coset in stereo_coset_for_kind(StereoKind::Tetrahedral),
         host_constraints in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
         update in stereo_atom_application_update_strategy(),
@@ -387,7 +387,7 @@ proptest! {
     /// A pattern-relative stereo-bond update lowers against the matched host configuration and
     /// keyed constraints.
     #[test]
-    fn test_reaction_ast_apply_stereo_bond_update(
+    fn test_reaction_apply_stereo_bond_update(
         host_coset in stereo_coset_for_kind(StereoKind::CisTrans),
         host_constraints in stereo_bond_constraints_strategy(StereoKind::CisTrans),
         update in stereo_bond_application_update_strategy(),
@@ -453,7 +453,7 @@ proptest! {
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]
-    fn test_reaction_ast_apply_reproduces_right(reaction in reaction_strategy()) {
+    fn test_reaction_apply_reproduces_right(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let right = span.rhs();
             prop_assert!(reaction
@@ -469,7 +469,7 @@ proptest! {
     /// Isolation probe: a plain overlay reaction's `apply` at its own `lhs` reproduces its
     /// `right()`. If this fails, the discrepancy is in apply-vs-span for overlays, not compose.
     #[test]
-    fn test_reaction_ast_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
+    fn test_reaction_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let right = span.rhs();
             prop_assert!(reaction
@@ -483,7 +483,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_apply_reframes_stereo_atom_modification(
+    fn test_reaction_apply_reframes_stereo_atom_modification(
         old in 0..StereoKind::Tetrahedral.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
@@ -501,12 +501,12 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let old_ast = StereoAtomForm::new(StereoKind::Tetrahedral, old);
-        let new_ast = StereoAtomForm::new(StereoKind::Tetrahedral, new);
+        let old_form = StereoAtomForm::new(StereoKind::Tetrahedral, old);
+        let new_form = StereoAtomForm::new(StereoKind::Tetrahedral, new);
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), old_ast.clone())],
+            stereo_atoms: vec![(AtomId(0), rule_frame.clone(), old_form.clone())],
             ..Default::default()
         });
         let reaction = Reaction::new(
@@ -514,8 +514,8 @@ proptest! {
             Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration {
-                    old: old_ast.configuration,
-                    new: new_ast.configuration,
+                    old: old_form.configuration,
+                    new: new_form.configuration,
                 },
             })]),
         );
@@ -554,7 +554,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_apply_reframes_stereo_atom_removal(
+    fn test_reaction_apply_reframes_stereo_atom_removal(
         coset in 0..StereoKind::Tetrahedral.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::Tetrahedral),
     ) {
@@ -616,7 +616,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_apply_reframes_stereo_bond_modification(
+    fn test_reaction_apply_reframes_stereo_bond_modification(
         old in 0..StereoKind::CisTrans.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {
@@ -639,12 +639,12 @@ proptest! {
         let rule_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
             .collect();
-        let old_ast = StereoBondForm::new(StereoKind::CisTrans, old);
-        let new_ast = StereoBondForm::new(StereoKind::CisTrans, new);
+        let old_form = StereoBondForm::new(StereoKind::CisTrans, old);
+        let new_form = StereoBondForm::new(StereoKind::CisTrans, new);
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
             bonds: bonds.clone(),
-            stereo_bonds: vec![(BondId(0), rule_frame.clone(), old_ast.clone())],
+            stereo_bonds: vec![(BondId(0), rule_frame.clone(), old_form.clone())],
             ..Default::default()
         });
         let reaction = Reaction::new(
@@ -652,8 +652,8 @@ proptest! {
             Deltas::from_iter([Delta::StereoBond(StereoBondDelta::ModifyField {
                 id: StereoBondId(0),
                 change: StereoBondFieldChange::Configuration {
-                    old: old_ast.configuration,
-                    new: new_ast.configuration,
+                    old: old_form.configuration,
+                    new: new_form.configuration,
                 },
             })]),
         );
@@ -692,7 +692,7 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_ast_apply_reframes_stereo_bond_removal(
+    fn test_reaction_apply_reframes_stereo_bond_removal(
         coset in 0..StereoKind::CisTrans.count() as u32,
         permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
     ) {

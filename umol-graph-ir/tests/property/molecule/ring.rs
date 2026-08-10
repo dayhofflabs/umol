@@ -15,8 +15,8 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_ast_rings(
-        ast in molecule_ast_strategy(),
+    fn test_molecule_rings(
+        molecule in molecule_strategy(),
         max_ring_size in 0usize..12,
         relevant in any::<bool>(),
     ) {
@@ -25,7 +25,7 @@ proptest! {
         } else {
             RingSetKind::Simple
         };
-        let rings = ast.rings(
+        let rings = molecule.rings(
             RingModel {
                 kind,
                 max_ring_size,
@@ -50,7 +50,7 @@ proptest! {
                 prop_assert!(rings.bond(bond).is_in_ring());
             }
         }
-        for atom in ast.atoms().iter() {
+        for atom in molecule.atoms().iter() {
             let view = rings.atom(atom.id);
             let containing: Vec<_> = view.rings().collect();
             prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
@@ -66,7 +66,7 @@ proptest! {
                 );
             }
         }
-        for bond in ast.bonds().iter() {
+        for bond in molecule.bonds().iter() {
             let view = rings.bond(bond.id);
             let containing: Vec<_> = view.rings().collect();
             prop_assert_eq!(view.is_in_ring(), !containing.is_empty());
@@ -85,8 +85,8 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_ast_rings_reindexing(
-        ast in molecule_ast_strategy(),
+    fn test_molecule_rings_reindexing(
+        molecule in molecule_strategy(),
         max_ring_size in 3usize..12,
         relevant in any::<bool>(),
     ) {
@@ -100,7 +100,7 @@ proptest! {
             max_ring_size,
         };
         let config = RingConfig::default();
-        let mut expected: Vec<_> = ast
+        let mut expected: Vec<_> = molecule
             .rings(model, config)
             .iter()
             .map(|ring| {
@@ -114,7 +114,7 @@ proptest! {
         expected.sort_unstable();
 
         let mut actual = Vec::new();
-        for (component, correspondence) in ast.split() {
+        for (component, correspondence) in molecule.split() {
             for ring in component.rings(model, config).iter() {
                 let mut atoms = ring
                     .atoms()

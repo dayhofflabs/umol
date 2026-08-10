@@ -741,11 +741,11 @@ impl ReactionSpan {
         // Atoms
         let mut atoms: Vec<EntitySpan<AtomForm>> = Vec::new();
         for i in 0..lhs_atom_count {
-            let lhs_ast = lhs.atom(AtomId(i as u32)).attributes.clone();
-            let rhs_ast = atoms_corr
+            let lhs_attributes = lhs.atom(AtomId(i as u32)).attributes.clone();
+            let rhs_attributes = atoms_corr
                 .right_of(AtomId(i as u32))
                 .map(|r| rhs.atom(r).attributes.clone());
-            atoms.push(EntitySpan::superimpose(Some(lhs_ast), rhs_ast).unwrap());
+            atoms.push(EntitySpan::superimpose(Some(lhs_attributes), rhs_attributes).unwrap());
         }
         for &r in &atoms_corr.right_unmatched() {
             atoms.push(EntitySpan::Added(rhs.atom(r).attributes.clone()));
@@ -755,14 +755,14 @@ impl ReactionSpan {
         let mut bonds: Vec<(AtomId, AtomId, EntitySpan<BondForm>)> = Vec::new();
         for i in 0..lhs_bond_count {
             let [a, b] = lhs.raw_graph().edge_endpoints(EdgeId(i as u32));
-            let lhs_ast = lhs.bond(BondId(i as u32)).attributes.clone();
-            let rhs_ast = bonds_corr
+            let lhs_attributes = lhs.bond(BondId(i as u32)).attributes.clone();
+            let rhs_attributes = bonds_corr
                 .right_of(BondId(i as u32))
                 .map(|r| rhs.bond(r).attributes.clone());
             bonds.push((
                 AtomId::from(a),
                 AtomId::from(b),
-                EntitySpan::superimpose(Some(lhs_ast), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(lhs_attributes), rhs_attributes).unwrap(),
             ));
         }
         for &r in &bonds_corr.right_unmatched() {
@@ -779,12 +779,12 @@ impl ReactionSpan {
         let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_ast = aromatic_corr
+            let rhs_attributes = aromatic_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_aromatic.data(id.into()).clone());
             aromatic.push((
                 participants,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &aromatic_corr.right_unmatched() {
@@ -806,12 +806,12 @@ impl ReactionSpan {
         let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_ast = multicenter_corr
+            let rhs_attributes = multicenter_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_multicenter.data(id.into()).clone());
             multicenter.push((
                 participants,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &multicenter_corr.right_unmatched() {
@@ -833,13 +833,13 @@ impl ReactionSpan {
         let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> = Vec::new();
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
-            let rhs_ast = noncovalent_corr
+            let rhs_attributes = noncovalent_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_noncovalent.data(id.into()).clone());
             noncovalent.push((
                 a,
                 b,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &noncovalent_corr.right_unmatched() {
@@ -858,13 +858,13 @@ impl ReactionSpan {
         for view in lhs.dative_bonds().iter() {
             let acceptor = view.acceptor_id();
             let donors = view.donor_ids().collect();
-            let rhs_ast = dative_corr
+            let rhs_attributes = dative_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_dative.data(id.into()).clone());
             dative.push((
                 donors,
                 acceptor,
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &dative_corr.right_unmatched() {
@@ -888,13 +888,13 @@ impl ReactionSpan {
         let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> =
             Vec::new();
         for view in lhs.stereo_atoms().iter() {
-            let rhs_ast = stereo_atom_corr
+            let rhs_attributes = stereo_atom_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_stereo_atoms.data(id.into()).clone());
             stereo_atoms.push((
                 view.site_id(),
                 view.ligand_frame(),
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &stereo_atom_corr.right_unmatched() {
@@ -915,13 +915,13 @@ impl ReactionSpan {
         let mut stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> =
             Vec::new();
         for view in lhs.stereo_bonds().iter() {
-            let rhs_ast = stereo_bond_corr
+            let rhs_attributes = stereo_bond_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_stereo_bonds.data(id.into()).clone());
             stereo_bonds.push((
                 view.site_id(),
                 view.ligand_frame(),
-                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_ast).unwrap(),
+                EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
         for &r in &stereo_bond_corr.right_unmatched() {
@@ -1093,7 +1093,7 @@ impl ReactionSpan {
     /// Recover the operational `Reaction` from the span — the inverse of
     /// `Reaction::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`
     /// (which preserves the original lhs id space); each entity's `EntitySpan` yields its delta, a
-    /// `Modified` one via an AST-diff of its left/right values.
+    /// `Modified` one via a form difference of its left/right values.
     pub fn to_reaction(&self) -> Reaction {
         let mut deltas = Deltas::new();
         AtomDelta::append_deltas_from_states(&self.atoms, |_| (), &mut deltas);
@@ -2132,7 +2132,7 @@ mod tests {
     use super::*;
 
     #[rstest]
-    fn test_reaction_span_ast_from_entries() {
+    fn test_reaction_span_from_entries() {
         let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -2319,7 +2319,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_from_entries_normalization() {
+    fn test_reaction_span_from_entries_normalization() {
         let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
         let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
         assert_ne!(lhs_atom, rhs_atom);
@@ -2455,7 +2455,7 @@ mod tests {
             AtomConstraintForm::valence(NumForm::Lit(4)),
         ))],
     )]
-    fn test_reaction_span_ast_try_from_entries(
+    fn test_reaction_span_try_from_entries(
         #[case] entries: ReactionSpanEntries,
         #[case] expected_graph: Graph,
         #[case] expected_atoms: Vec<EntitySpan<AtomForm>>,
@@ -2474,7 +2474,7 @@ mod tests {
     #[should_panic(
         expected = "invalid reaction span entries: reaction span entries reference unavailable atom 1"
     )]
-    fn test_reaction_span_ast_from_entries_error() {
+    fn test_reaction_span_from_entries_error() {
         ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
             bonds: vec![(
@@ -2768,7 +2768,7 @@ mod tests {
         },
         ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(0)) },
     )]
-    fn test_reaction_span_ast_try_from_entries_error(
+    fn test_reaction_span_try_from_entries_error(
         #[case] entries: ReactionSpanEntries,
         #[case] expected: ReactionSpanEntriesError,
     ) {
@@ -2825,7 +2825,7 @@ mod tests {
         ),
         Entity::StereoBond(StereoBondId(0))
     )]
-    fn test_reaction_span_ast_try_from_entries_constraint_error(
+    fn test_reaction_span_try_from_entries_constraint_error(
         #[case] constraint: Constraint,
         #[case] entity: Entity,
     ) {
@@ -2853,7 +2853,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_reaction_span() {
+    fn test_reaction_to_reaction_span() {
         assert_eq!(
             Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
@@ -3191,7 +3191,7 @@ mod tests {
             ..Default::default()
         }),
     )]
-    fn test_reaction_ast_to_reaction_span_constraint(
+    fn test_reaction_to_reaction_span_constraint(
         #[case] reaction: Reaction,
         #[case] expected: ReactionSpan,
     ) {
@@ -3199,7 +3199,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_reaction_span_constraint_error() {
+    fn test_reaction_to_reaction_span_constraint_error() {
         let constraint = Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
         });
@@ -3230,7 +3230,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_reaction_span_error() {
+    fn test_reaction_to_reaction_span_error() {
         assert_eq!(
             Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
@@ -3255,7 +3255,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_right(substitution_reaction: Reaction) {
+    fn test_reaction_span_right(substitution_reaction: Reaction) {
         let span = substitution_reaction.to_reaction_span().unwrap();
         assert_eq!(
             span.atoms(),
@@ -3286,7 +3286,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_left(substitution_reaction: Reaction) {
+    fn test_reaction_span_left(substitution_reaction: Reaction) {
         let span = substitution_reaction.to_reaction_span().unwrap();
         assert_eq!(
             span.lhs(),
@@ -3453,7 +3453,7 @@ mod tests {
             ..Default::default()
         }),
     )]
-    fn test_reaction_ast_reverse(
+    fn test_reaction_reverse(
         #[case] forward: Reaction,
         #[case] expected_reactant: Molecule,
         #[case] expected_product: Molecule,
@@ -3554,7 +3554,7 @@ mod tests {
         ),
         vec![ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }))],
     )]
-    fn test_reaction_span_ast_constraints(
+    fn test_reaction_span_constraints(
         #[case] reaction: Reaction,
         #[case] expected: Vec<ConstraintSpan>,
     ) {
@@ -3784,7 +3784,7 @@ mod tests {
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         })]),
     ))]
-    fn test_reaction_span_ast_to_reaction(#[case] reaction: Reaction) {
+    fn test_reaction_span_to_reaction(#[case] reaction: Reaction) {
         assert_eq!(
             reaction.clone().to_reaction_span().unwrap().to_reaction(),
             reaction,
@@ -3840,7 +3840,7 @@ mod tests {
             ..Default::default()
         }),
     )]
-    fn test_reaction_span_ast_project_overlay(
+    fn test_reaction_span_project_overlay(
         #[case] reaction: Reaction,
         #[case] expected_left: Molecule,
         #[case] expected_right: Molecule,
@@ -3888,7 +3888,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_superimpose() {
+    fn test_reaction_span_superimpose() {
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -4272,7 +4272,7 @@ mod tests {
             Correspondence::new(vec![], 0, 0).unwrap(),
         ),
     )]
-    fn test_reaction_span_ast_superimpose_invalid_context(
+    fn test_reaction_span_superimpose_invalid_context(
         #[case] lhs: Molecule,
         #[case] rhs: Molecule,
         #[case] correspondence: MoleculeCorrespondence,
@@ -4282,7 +4282,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_superimpose_narrow_correspondence() {
+    fn test_reaction_span_superimpose_narrow_correspondence() {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -4329,7 +4329,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_correspondence() {
+    fn test_reaction_span_correspondence() {
         // atom 0 unchanged, 1 modified (C→N), 2 removed (left) with 2 added (right O): all four
         // EntitySpan variants in the atom column.
         let left = Molecule::from_entries(MoleculeEntries {
@@ -4361,7 +4361,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_difference_to() {
+    fn test_molecule_difference_to() {
         // C-C (order 1) → C-C (order 2), total correspondence: a single bond-order modify.
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![

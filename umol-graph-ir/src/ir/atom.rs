@@ -13,7 +13,7 @@ use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{AsLit, Canonicalize, Lattice};
 
-/// Atom AST: structural representation of an atom plus the atom-level
+/// Atom form: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]

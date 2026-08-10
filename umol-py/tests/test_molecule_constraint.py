@@ -60,7 +60,7 @@ def test_constraints_sequence():
     )
 
 
-def test_moleculeast_from_entries_constraints():
+def test_molecule_from_entries_constraints():
     entry = connected_constraint()
     molecule = Molecule.from_entries([], constraints=[entry])
 
@@ -68,7 +68,7 @@ def test_moleculeast_from_entries_constraints():
     assert list(molecule.constraints) == [entry]
 
 
-def test_moleculeast_constraints_live_view():
+def test_molecule_constraints_live_view():
     molecule = Molecule()
     view = molecule.constraints
     entry = connected_constraint()
@@ -80,7 +80,7 @@ def test_moleculeast_constraints_live_view():
     assert len(view) == 0
 
 
-def test_moleculeast_constraints_set_container():
+def test_molecule_constraints_set_container():
     molecule = Molecule()
     entry = connected_constraint()
 
@@ -89,7 +89,7 @@ def test_moleculeast_constraints_set_container():
     assert list(molecule.constraints) == [entry, entry]
 
 
-def test_moleculeast_constraints_set_view():
+def test_molecule_constraints_set_view():
     source = Molecule.from_entries([], constraints=[connected_constraint()])
     target = Molecule()
 
@@ -98,7 +98,7 @@ def test_moleculeast_constraints_set_view():
     assert list(target.constraints) == list(source.constraints)
 
 
-def test_moleculeast_constraints_set_self():
+def test_molecule_constraints_set_self():
     molecule = Molecule.from_entries([], constraints=[connected_constraint()])
 
     molecule.constraints = molecule.constraints

@@ -91,25 +91,25 @@ impl<'a> CountsValence<'a> {
         Self { table }
     }
 
-    /// Construct the complete edit plan without mutating `ast`.
+    /// Construct the complete edit plan without mutating `molecule`.
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, CountsError> {
-        for atom in ast.atoms().iter() {
+    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, CountsError> {
+        for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
                 return Solution::Underdetermined(Edits::new());
             }
         }
 
         let mut edits = Edits::new();
-        for id in ast.atoms().ids() {
-            let selected = match self.resolve_molecule_atom(ast, id) {
+        for id in molecule.atoms().ids() {
+            let selected = match self.resolve_molecule_atom(molecule, id) {
                 Ok(Some(selected)) => selected,
                 Ok(None) => continue,
                 Err(contradiction) => return Solution::Contradictory(contradiction),
             };
-            let current = ast.atom(id).attributes;
+            let current = molecule.atom(id).attributes;
             let update = current.difference_to(&selected);
             edits.update_atom(AtomHandle::Id(id), current, &update);
         }
@@ -119,27 +119,27 @@ impl<'a> CountsValence<'a> {
     /// Plan and atomically apply counts-valence resolution.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), CountsError>, TransactionError> {
-        let edits = match self.plan(ast) {
+        let edits = match self.plan(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 
     fn resolve_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
     ) -> Result<Option<AtomForm>, CountsError> {
-        let atom = ast.atom(atom_id);
+        let atom = molecule.atom(atom_id);
         if atom.is_ground() {
             return Ok(None);
         }
@@ -183,10 +183,10 @@ impl<'a> CountsValence<'a> {
     /// - `Underdetermined` if atom is not ground.
     pub fn classify_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
     ) -> Solution<(), CountsMismatch> {
-        let atom = ast.atom(atom_id);
+        let atom = molecule.atom(atom_id);
         if !atom.is_ground() {
             return Solution::Underdetermined(());
         }

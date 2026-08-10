@@ -39,7 +39,7 @@ use super::super::view::RingViews;
 /// Algorithm selectors used by complete model-independent constraint validation.
 ///
 /// Focused validators take only the selectors they require. This bundle has no
-/// default at the AST layer so every algorithm choice remains explicit.
+/// default at the graph-IR layer so every algorithm choice remains explicit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ConstraintValidateConfig {
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
@@ -95,13 +95,13 @@ impl ConstraintValidator {
 
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
-        let mut evaluation = ConstraintEvaluation::new(ast, self.config);
+        let mut evaluation = ConstraintEvaluation::new(molecule, self.config);
         let mut any_underdetermined = false;
 
-        for id in ast.atoms().ids() {
-            for constraint in ast.atom(id).constraints().iter() {
+        for id in molecule.atoms().ids() {
+            for constraint in molecule.atom(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_atom(id, constraint)?,
                     &mut any_underdetermined,
@@ -110,8 +110,8 @@ impl ConstraintValidator {
                 }
             }
         }
-        for id in ast.bonds().ids() {
-            for constraint in ast.bond(id).constraints().iter() {
+        for id in molecule.bonds().ids() {
+            for constraint in molecule.bond(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_bond(id, constraint)?,
                     &mut any_underdetermined,
@@ -120,8 +120,8 @@ impl ConstraintValidator {
                 }
             }
         }
-        for id in ast.dative_bonds().ids() {
-            for constraint in ast.dative_bond(id).constraints().iter() {
+        for id in molecule.dative_bonds().ids() {
+            for constraint in molecule.dative_bond(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_dative_bond(id, constraint)?,
                     &mut any_underdetermined,
@@ -130,8 +130,8 @@ impl ConstraintValidator {
                 }
             }
         }
-        for id in ast.aromatic_systems().ids() {
-            for constraint in ast.aromatic_system(id).constraints().iter() {
+        for id in molecule.aromatic_systems().ids() {
+            for constraint in molecule.aromatic_system(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_aromatic_system(id, constraint)?,
                     &mut any_underdetermined,
@@ -140,8 +140,8 @@ impl ConstraintValidator {
                 }
             }
         }
-        for id in ast.multicenter_bonds().ids() {
-            for constraint in ast.multicenter_bond(id).constraints().iter() {
+        for id in molecule.multicenter_bonds().ids() {
+            for constraint in molecule.multicenter_bond(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_multicenter_bond(id, constraint)?,
                     &mut any_underdetermined,
@@ -150,8 +150,8 @@ impl ConstraintValidator {
                 }
             }
         }
-        for id in ast.noncovalent_bonds().ids() {
-            for constraint in ast.noncovalent_bond(id).constraints().iter() {
+        for id in molecule.noncovalent_bonds().ids() {
+            for constraint in molecule.noncovalent_bond(id).constraints().iter() {
                 if let Some(contradiction) = observe(
                     evaluation.evaluate_noncovalent_bond(id, constraint)?,
                     &mut any_underdetermined,
@@ -160,7 +160,7 @@ impl ConstraintValidator {
                 }
             }
         }
-        for constraint in ast.constraints().iter() {
+        for constraint in molecule.constraints().iter() {
             if let Some(contradiction) =
                 observe(evaluation.evaluate(constraint)?, &mut any_underdetermined)
             {
@@ -177,16 +177,16 @@ impl ConstraintValidator {
 }
 
 struct ConstraintEvaluation<'a> {
-    ast: &'a Molecule,
+    molecule: &'a Molecule,
     config: ConstraintValidateConfig,
     rings: Option<RingViews<'a>>,
     component_by_atom: Option<Vec<usize>>,
 }
 
 impl<'a> ConstraintEvaluation<'a> {
-    fn new(ast: &'a Molecule, config: ConstraintValidateConfig) -> Self {
+    fn new(molecule: &'a Molecule, config: ConstraintValidateConfig) -> Self {
         Self {
-            ast,
+            molecule,
             config,
             rings: None,
             component_by_atom: None,
@@ -217,7 +217,11 @@ impl<'a> ConstraintEvaluation<'a> {
                 self.evaluate_stereo_bond(*id, *kind, constraint)
             }
             Constraint::Relational(constraint) => RelationalConstraintValidator
-                .validate(self.ast, constraint, self.config.relevant_cycle_algorithm)
+                .validate(
+                    self.molecule,
+                    constraint,
+                    self.config.relevant_cycle_algorithm,
+                )
                 .map(|outcome| outcome.map_contradiction(ConstraintContradiction::from)),
             Constraint::Molecule(constraint) => self.evaluate_molecule(constraint),
             Constraint::And(constraints) => self.evaluate_and(constraints),
@@ -306,7 +310,7 @@ impl<'a> ConstraintEvaluation<'a> {
                 .into()
             }))
         } else {
-            Ok(validate_atom_constraint(self.ast, id, constraint)
+            Ok(validate_atom_constraint(self.molecule, id, constraint)
                 .map_contradiction(ConstraintContradiction::from))
         }
     }
@@ -330,7 +334,7 @@ impl<'a> ConstraintEvaluation<'a> {
                 .into()
             }))
         } else {
-            Ok(validate_bond_constraint(self.ast, id, constraint)
+            Ok(validate_bond_constraint(self.molecule, id, constraint)
                 .expect("non-ring bond constraint")
                 .map_contradiction(ConstraintContradiction::from))
         }
@@ -349,9 +353,11 @@ impl<'a> ConstraintEvaluation<'a> {
                 Err(ConstraintError::DativeBondRingMembershipUnsupported { bond: id })
             }
         } else {
-            Ok(validate_dative_bond_constraint(self.ast, id, constraint)
-                .expect("non-ring dative-bond constraint")
-                .map_contradiction(ConstraintContradiction::from))
+            Ok(
+                validate_dative_bond_constraint(self.molecule, id, constraint)
+                    .expect("non-ring dative-bond constraint")
+                    .map_contradiction(ConstraintContradiction::from),
+            )
         }
     }
 
@@ -362,7 +368,7 @@ impl<'a> ConstraintEvaluation<'a> {
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::AromaticSystem(id))?;
         Ok(
-            validate_aromatic_system_constraint(self.ast, id, constraint)
+            validate_aromatic_system_constraint(self.molecule, id, constraint)
                 .map_contradiction(ConstraintContradiction::from),
         )
     }
@@ -374,7 +380,7 @@ impl<'a> ConstraintEvaluation<'a> {
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         self.require(Entity::MulticenterBond(id))?;
         Ok(
-            validate_multicenter_bond_constraint(self.ast, id, constraint)
+            validate_multicenter_bond_constraint(self.molecule, id, constraint)
                 .map_contradiction(ConstraintContradiction::from),
         )
     }
@@ -388,7 +394,7 @@ impl<'a> ConstraintEvaluation<'a> {
         let intramolecular = if constraint.is_undetermined() {
             false
         } else {
-            let [a, b] = self.ast.noncovalent_bond(id).atom_ids();
+            let [a, b] = self.molecule.noncovalent_bond(id).atom_ids();
             self.components()[a.index()] == self.components()[b.index()]
         };
         Ok(
@@ -403,13 +409,13 @@ impl<'a> ConstraintEvaluation<'a> {
         kind: StereoKind,
         constraint: &StereoAtomConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
-        let stereo = self
-            .ast
-            .stereo_atoms()
-            .get(id)
-            .ok_or(ConstraintError::InvalidReference {
-                entity: Entity::StereoAtom(id),
-            })?;
+        let stereo =
+            self.molecule
+                .stereo_atoms()
+                .get(id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::StereoAtom(id),
+                })?;
         Ok(evaluate_stereo_constraint(
             stereo.kind() == kind,
             constraint,
@@ -428,13 +434,13 @@ impl<'a> ConstraintEvaluation<'a> {
         kind: StereoKind,
         constraint: &StereoBondConstraintForm,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
-        let stereo = self
-            .ast
-            .stereo_bonds()
-            .get(id)
-            .ok_or(ConstraintError::InvalidReference {
-                entity: Entity::StereoBond(id),
-            })?;
+        let stereo =
+            self.molecule
+                .stereo_bonds()
+                .get(id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::StereoBond(id),
+                })?;
         Ok(evaluate_stereo_constraint(
             stereo.kind() == kind,
             constraint,
@@ -459,7 +465,7 @@ impl<'a> ConstraintEvaluation<'a> {
                     }
                     atoms.clone()
                 }
-                None => self.ast.atoms().ids().collect(),
+                None => self.molecule.atoms().ids().collect(),
             };
             let determined = atoms.len() < 2
                 || atoms
@@ -477,13 +483,13 @@ impl<'a> ConstraintEvaluation<'a> {
             });
         }
         MoleculeConstraintValidator
-            .validate(self.ast, constraint, self.config)
+            .validate(self.molecule, constraint, self.config)
             .map(|outcome| outcome.map_contradiction(ConstraintContradiction::from))
     }
 
     fn rings(&mut self) -> &RingViews<'a> {
         if self.rings.is_none() {
-            self.rings = Some(self.ast.rings(
+            self.rings = Some(self.molecule.rings(
                 RingModel::default(),
                 RingConfig {
                     relevant_cycle_algorithm: self.config.relevant_cycle_algorithm,
@@ -497,7 +503,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn components(&mut self) -> &[usize] {
         if self.component_by_atom.is_none() {
             self.component_by_atom = Some(bond_components_by_atom(
-                self.ast,
+                self.molecule,
                 self.config.connected_components_algorithm,
             ));
         }
@@ -508,14 +514,14 @@ impl<'a> ConstraintEvaluation<'a> {
 
     fn require(&self, entity: Entity) -> Result<(), ConstraintError> {
         let present = match entity {
-            Entity::Atom(id) => self.ast.atoms().contains(id),
-            Entity::Bond(id) => self.ast.bonds().contains(id),
-            Entity::DativeBond(id) => self.ast.dative_bonds().contains(id),
-            Entity::AromaticSystem(id) => self.ast.aromatic_systems().contains(id),
-            Entity::MulticenterBond(id) => self.ast.multicenter_bonds().contains(id),
-            Entity::NoncovalentBond(id) => self.ast.noncovalent_bonds().contains(id),
-            Entity::StereoAtom(id) => self.ast.stereo_atoms().contains(id),
-            Entity::StereoBond(id) => self.ast.stereo_bonds().contains(id),
+            Entity::Atom(id) => self.molecule.atoms().contains(id),
+            Entity::Bond(id) => self.molecule.bonds().contains(id),
+            Entity::DativeBond(id) => self.molecule.dative_bonds().contains(id),
+            Entity::AromaticSystem(id) => self.molecule.aromatic_systems().contains(id),
+            Entity::MulticenterBond(id) => self.molecule.multicenter_bonds().contains(id),
+            Entity::NoncovalentBond(id) => self.molecule.noncovalent_bonds().contains(id),
+            Entity::StereoAtom(id) => self.molecule.stereo_atoms().contains(id),
+            Entity::StereoBond(id) => self.molecule.stereo_bonds().contains(id),
         };
         if present {
             Ok(())

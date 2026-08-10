@@ -261,16 +261,16 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
 }
 
 /// Parse MOL to [`Molecule`] without running the solver.
-pub fn parse_mol_to_ast(input: &str) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
-    parse_mol_bytes_to_ast(input.as_bytes())
+pub fn parse_mol_to_ir(input: &str) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
+    parse_mol_bytes_to_ir(input.as_bytes())
 }
 
 /// Parse MOL bytes to [`Molecule`] without running the solver. Spans the parse (`ParseError`)
 /// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
-pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
+pub fn parse_mol_bytes_to_ir(input: &[u8]) -> Result<GraphIrMolecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
-    let ast: GraphIrMolecule = (&table_mol).try_into_ir(&())?;
-    Ok(ast)
+    let molecule: GraphIrMolecule = (&table_mol).try_into_ir(&())?;
+    Ok(molecule)
 }
 
 /// Parse MOL bytes to `table_ir::Molecule` with options (optimized, basic molecules only)

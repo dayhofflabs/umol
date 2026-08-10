@@ -38,7 +38,7 @@ where
 
 proptest! {
     // The entity DSL types carry a compact string form (Display) parsed by their
-    // own `FromStr`; the invariant is `parse(display(x)) == x` for any generated AST.
+    // own `FromStr`; the invariant is `parse(display(x)) == x` for any generated form.
     #[test]
     fn test_atom_dsl_display_from_str_roundtrip(atom in atom_form_strategy()) {
         let dsl = AtomDsl(atom);
@@ -74,7 +74,7 @@ proptest! {
     }
 
     /// Canonical-shape bonds render as keyword shorthands, and the
-    /// keyword form parses back to the same AST.
+    /// keyword form parses back to the same form.
     #[test]
     fn test_bond_dsl_keyword_to_edn_from_edn_roundtrip(
         bond in canonical_keyword_bond_strategy(),
@@ -372,7 +372,7 @@ proptest! {
 
     #[test]
     fn test_aromatic_system_constraints_form_take_exact_size(
-        mut constraints in aromatic_system_form_strategy().prop_map(|ast| ast.constraints),
+        mut constraints in aromatic_system_form_strategy().prop_map(|form| form.constraints),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();
@@ -382,7 +382,7 @@ proptest! {
 
     #[test]
     fn test_multicenter_bond_constraints_form_take_exact_size(
-        mut constraints in multicenter_bond_form_strategy().prop_map(|ast| ast.constraints),
+        mut constraints in multicenter_bond_form_strategy().prop_map(|form| form.constraints),
         prefix in any::<usize>(),
     ) {
         let expected = constraints.iter().cloned().collect::<Vec<_>>();

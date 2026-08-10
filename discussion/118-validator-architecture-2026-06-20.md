@@ -215,8 +215,8 @@ post-rename names once a rename has happened in an earlier phase.
      validators from `umol_ast::ast`.
    - Tier-1 is available and standalone-callable. **Raise auto-wiring deferred** to the error-handling
      pass: a tier-1 `Contradictory` must surface as `Err` at the fallible raise entry
-     (`MoleculeInput::into_ast`), but no suitable contradiction error channel exists yet (`ParseError` is
-     not the right home; doc 065). The mechanical `IntoAst::into_ast` stays infallible regardless.
+     (`MoleculeInput::into_ir`), but no suitable contradiction error channel exists yet (`ParseError` is
+     not the right home; doc 065). The mechanical `IntoAst::into_ir` stays infallible regardless.
 
 3. **umol-io — TableIR raise.** *(deferred — moot for now)*
    - TableIR raise emits only atoms and bonds, so it cannot produce the inconsistencies tier-1 catches
@@ -265,7 +265,7 @@ post-rename names once a rename has happened in an earlier phase.
 
 ## Remaining (error-handling pass — doc 065)
 - umol-graph error/contradiction type survey.
-- Raise auto-wiring of tier-1: surface a `Contradictory` as `Err` at `MoleculeInput::into_ast` (and the
+- Raise auto-wiring of tier-1: surface a `Contradictory` as `Err` at `MoleculeInput::into_ir` (and the
   TableIR path once it can emit the relevant entities) through a proper contradiction error channel.
 
 ## Out of scope

@@ -110,9 +110,9 @@ impl StereoConformanceValidator {
     /// open contributes `Underdetermined`.
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError> {
-        let derivation = StereoPerception::new(&self.model).derive(ast);
+        let derivation = StereoPerception::new(&self.model).derive(molecule);
         for &inconsistency in &derivation.inconsistencies {
             let asserted = match inconsistency {
                 StereoInconsistency::TetrahedralStereoFailure { .. }
@@ -120,16 +120,18 @@ impl StereoConformanceValidator {
                 | StereoInconsistency::CisTransStereoFailure { .. }
                 | StereoInconsistency::CisTransStereoMismatch { .. } => true,
                 StereoInconsistency::StereoAtomFailure { stereo_atom } => {
-                    let atom = ast.stereo_atom(stereo_atom).site_id();
-                    ast.atom(atom)
+                    let atom = molecule.stereo_atom(stereo_atom).site_id();
+                    molecule
+                        .atom(atom)
                         .attributes
                         .constraints
                         .tetrahedral_stereo()
                         .is_some_and(|constraint| !constraint.is_undetermined())
                 }
                 StereoInconsistency::StereoBondFailure { stereo_bond } => {
-                    let bond = ast.stereo_bond(stereo_bond).site_id();
-                    ast.bond(bond)
+                    let bond = molecule.stereo_bond(stereo_bond).site_id();
+                    molecule
+                        .bond(bond)
                         .attributes
                         .constraints
                         .cis_trans_stereo()
@@ -142,44 +144,44 @@ impl StereoConformanceValidator {
         }
 
         for (atom, _, _) in &derivation.atoms {
-            let asserted = ast
+            let asserted = molecule
                 .atom(*atom)
                 .attributes
                 .constraints
                 .tetrahedral_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined());
-            if asserted && !ast.stereo_atoms().is_at(*atom) {
+            if asserted && !molecule.stereo_atoms().is_at(*atom) {
                 return Ok(Solution::Contradictory(
                     StereoValidatorContradiction::MissingStereoAtom { atom: *atom },
                 ));
             }
         }
         for (bond, _, _) in &derivation.bonds {
-            let asserted = ast
+            let asserted = molecule
                 .bond(*bond)
                 .attributes
                 .constraints
                 .cis_trans_stereo()
                 .is_some_and(|constraint| !constraint.is_undetermined());
-            if asserted && !ast.stereo_bonds().is_at(*bond) {
+            if asserted && !molecule.stereo_bonds().is_at(*bond) {
                 return Ok(Solution::Contradictory(
                     StereoValidatorContradiction::MissingStereoBond { bond: *bond },
                 ));
             }
         }
 
-        let symmetry = ast.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
+        let symmetry = molecule.graph_symmetry(&self.config.graph_symmetry_config(&self.model));
         let mut any_undetermined = false;
 
-        for id in ast.stereo_atoms().ids() {
-            match self.validate_stereo_atom(ast, id, &symmetry) {
+        for id in molecule.stereo_atoms().ids() {
+            match self.validate_stereo_atom(molecule, id, &symmetry) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
             }
         }
-        for id in ast.stereo_bonds().ids() {
-            match self.validate_stereo_bond(ast, id, &symmetry) {
+        for id in molecule.stereo_bonds().ids() {
+            match self.validate_stereo_bond(molecule, id, &symmetry) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => any_undetermined = true,
                 Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
@@ -195,11 +197,11 @@ impl StereoConformanceValidator {
 
     fn validate_stereo_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         id: StereoAtomId,
         symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
-        let view = ast.stereo_atom(id);
+        let view = molecule.stereo_atom(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
         let topicities: Vec<TopicityForm> = constraints.topicities().cloned().collect();
@@ -216,17 +218,17 @@ impl StereoConformanceValidator {
             Solution::Underdetermined(()) => return Solution::Underdetermined(()),
             Solution::Determined(()) => {}
         }
-        let sym = ast.stereo_atom_symmetry(symmetry, id);
+        let sym = molecule.stereo_atom_symmetry(symmetry, id);
         self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
     }
 
     fn validate_stereo_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         id: StereoBondId,
         symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
-        let view = ast.stereo_bond(id);
+        let view = molecule.stereo_bond(id);
         let constraints = view.constraints();
         let stereogenicity = constraints.stereogenicity();
         let topicities: Vec<TopicityForm> = constraints.topicities().cloned().collect();
@@ -243,7 +245,7 @@ impl StereoConformanceValidator {
             Solution::Underdetermined(()) => return Solution::Underdetermined(()),
             Solution::Determined(()) => {}
         }
-        let sym = ast.stereo_bond_symmetry(symmetry, id);
+        let sym = molecule.stereo_bond_symmetry(symmetry, id);
         self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
     }
 
@@ -410,14 +412,14 @@ mod tests {
 
     #[rstest]
     fn test_stereo_conformance_validator_new() {
-        let ast = mol_dsl_ground!(CFCLBRI);
+        let molecule = mol_dsl_ground!(CFCLBRI);
         assert_eq!(
-            StereoConformanceValidator::new(&StereoModel::default()).validate(&ast),
+            StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
             StereoConformanceValidator::with_config(
                 &StereoModel::default(),
                 StereoValidateConfig::default(),
             )
-            .validate(&ast)
+            .validate(&molecule)
         );
     }
 
@@ -425,8 +427,8 @@ mod tests {
     #[case::bare(CFCLBRI, (|_: &mut Molecule| {}) as fn(&mut Molecule))]
     #[case::matching_stereogenicity(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)));
         }) as fn(&mut Molecule)
@@ -435,10 +437,10 @@ mod tests {
         #[case] dsl: &str,
         #[case] mutate: fn(&mut Molecule),
     ) {
-        let mut ast = mol_dsl_ground!(dsl);
-        mutate(&mut ast);
+        let mut molecule = mol_dsl_ground!(dsl);
+        mutate(&mut molecule);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
-            .validate(&ast)
+            .validate(&molecule)
             .unwrap();
         assert_eq!(solution, Solution::Determined(()));
     }
@@ -574,12 +576,12 @@ mod tests {
         Solution::Determined(()),
     )]
     fn test_stereo_conformance_validator_validate_constraint(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<(), StereoValidatorContradiction>,
     ) {
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default())
-                .validate(&ast)
+                .validate(&molecule)
                 .unwrap(),
             expected
         );
@@ -588,8 +590,8 @@ mod tests {
     #[rstest]
     #[case::coset_out_of_range(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 9);
         }) as fn(&mut Molecule),
         StereoValidatorContradiction::CosetOutOfRange {
             kind: StereoKind::Tetrahedral,
@@ -599,8 +601,8 @@ mod tests {
     )]
     #[case::arity(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes.configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0);
         }) as fn(&mut Molecule),
         StereoValidatorContradiction::LigandArity {
             kind: StereoKind::TrigonalBipyramidal,
@@ -610,8 +612,8 @@ mod tests {
     )]
     #[case::improper_on_achiral(
         BUTENE,
-        (|ast: &mut Molecule| {
-            ast.stereo_bond_mut(StereoBondId(0)).attributes
+        (|molecule: &mut Molecule| {
+            molecule.stereo_bond_mut(StereoBondId(0)).attributes
                 .constraints
                 .set(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)));
         }) as fn(&mut Molecule),
@@ -621,8 +623,8 @@ mod tests {
     )]
     #[case::stereogenicity_mismatch(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)));
         }) as fn(&mut Molecule),
@@ -633,8 +635,8 @@ mod tests {
     )]
     #[case::topicity_mismatch(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::Topicity(TopicityForm {
                     pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
@@ -649,8 +651,8 @@ mod tests {
     )]
     #[case::ligand_symmetry_violation(
         CFCLBRI,
-        (|ast: &mut Molecule| {
-            ast.stereo_atom_mut(StereoAtomId(0)).attributes
+        (|molecule: &mut Molecule| {
+            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
                 .constraints
                 .set(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                     permutation: OrientedLigandPermutation {
@@ -675,10 +677,10 @@ mod tests {
         #[case] mutate: fn(&mut Molecule),
         #[case] expected: StereoValidatorContradiction,
     ) {
-        let mut ast = mol_dsl_ground!(dsl);
-        mutate(&mut ast);
+        let mut molecule = mol_dsl_ground!(dsl);
+        mutate(&mut molecule);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
-            .validate(&ast)
+            .validate(&molecule)
             .unwrap();
         assert_eq!(solution, Solution::Contradictory(expected));
     }

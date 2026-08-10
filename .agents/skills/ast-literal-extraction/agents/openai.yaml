@@ -1,4 +1,0 @@
-interface:
-  display_name: "AST Literal Extraction"
-  short_description: "Choose literal extraction patterns in umol"
-  default_prompt: "Use $ast-literal-extraction when implementing AST-consuming operations in umol."

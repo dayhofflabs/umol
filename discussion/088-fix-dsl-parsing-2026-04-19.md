@@ -141,14 +141,14 @@ pub trait ToAst<T> {
     type Error;
     type Config;
 
-    fn to_ast(&self, config: &Self::Config) -> Result<T, Self::Error>;
+    fn to_ir(&self, config: &Self::Config) -> Result<T, Self::Error>;
 }
 
 pub trait FromAst<T>: Sized {
     type Error;
     type Config;
 
-    fn from_ast(value: &T, config: &Self::Config) -> Result<Self, Self::Error>;
+    fn from_ir(value: &T, config: &Self::Config) -> Result<Self, Self::Error>;
 }
 ```
 
@@ -241,7 +241,7 @@ Auto-compaction is a legitimate feature, but it belongs in raising, not in the s
 That means:
 
 - `MoleculeAst` stays clean
-- `MoleculeDsl::from_ast(value, config)` may choose:
+- `MoleculeDsl::from_ir(value, config)` may choose:
   - canonical rendering
   - preserve ids if available
   - generate ids automatically
@@ -395,7 +395,7 @@ Implement:
 
 Alias resolution, id resolution, endpoint resolution, and surface constraint lowering should move from parse-time ad hoc logic into:
 
-- `MoleculeDsl::to_ast(&config)`
+- `MoleculeDsl::to_ir(&config)`
 
 This is the main step that removes the current knot in `molecule.rs`.
 
@@ -409,7 +409,7 @@ This path should require no metadata.
 
 Implement:
 
-- `MoleculeDsl::from_ast(&ast, &config)`
+- `MoleculeDsl::from_ir(&ast, &config)`
 
 This is where:
 

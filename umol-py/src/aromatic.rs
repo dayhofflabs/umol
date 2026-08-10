@@ -251,12 +251,12 @@ impl AromaticSystemForm {
 }
 
 impl AromaticSystemForm {
-    /// The wrapped AST system — read access for the system-backed constraints view.
+    /// The wrapped IR system — read access for the system-backed constraints view.
     pub(crate) fn to_rust(&self) -> &GraphIrAromaticSystemForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST system — write access for the system-backed
+    /// Mutable access to the wrapped IR system — write access for the system-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrAromaticSystemForm> {
         if self.readonly {
@@ -266,7 +266,7 @@ impl AromaticSystemForm {
         }
     }
 
-    /// Wrap an owned Rust aromatic-system AST.
+    /// Wrap an owned Rust aromatic-system form.
     pub(crate) fn from_rust(system: GraphIrAromaticSystemForm) -> Self {
         Self {
             value: system,
@@ -1134,14 +1134,14 @@ mod tests {
     #[case(GraphIrAromaticSystemConstraintForm::electron_count(6))]
     #[case(GraphIrAromaticSystemConstraintForm::electron_count(GraphIrNumForm::Undetermined))]
     fn test_aromatic_system_constraint_form_roundtrip(
-        #[case] ast: GraphIrAromaticSystemConstraintForm,
+        #[case] form: GraphIrAromaticSystemConstraintForm,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                AromaticSystemConstraintForm::from_rust(py, &ast)
+                AromaticSystemConstraintForm::from_rust(py, &form)
                     .unwrap()
                     .to_rust(py),
-                ast
+                form
             );
         });
     }

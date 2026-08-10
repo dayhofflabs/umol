@@ -105,7 +105,7 @@ proptest! {
     }
 
     /// Canonical `Th0`/`Th1` render to the `:ccw`/`:cw` EDN keyword shorthand
-    /// and parse back to the same AST.
+    /// and parse back to the same form.
     #[test]
     fn test_stereo_atom_dsl_keyword_to_edn_from_edn_roundtrip(
         coset in prop_oneof![Just(0u32), Just(1u32)],

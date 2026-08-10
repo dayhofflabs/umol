@@ -106,7 +106,7 @@ type greens its own `lattice::` test.
 3. **`TopicityRelationAst`/`StereogenicityAst`** **Done** — `relation_ast!` over `BTreeSet`; flatten
    stereogenicity (drop `StereogenicityRelationAst` + the wrapper).
 4. **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
-   fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
+   fixed-pair lattice proptest (covered by `test_topicity_relation_form_lattice_laws`).
 
 ### P3 · Stereo configuration cluster **Done**
 
@@ -183,7 +183,7 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
     Coset EDN keeps the `StereoCosetDsl(StereoCosetAst)` boundary type
     (`FromEdn`/`ToEdn`/`IntoAst`/`FromAst`); degree fixed at 4 for `#T`/`#C`. The per-kind
     `TetrahedralStereoDsl`/`CisTransStereoDsl` and the streaming `read_stereo_coset_dsl` parse
-    the `{:stereo <coset>}` value through it, then `into_ast` → `StereoCosetAst` wrapped as
+    the `{:stereo <coset>}` value through it, then `into_ir` → `StereoCosetAst` wrapped as
     `Stereo(coset)`. No `StereoTermDsl` (term is inline in the coset grammar). `NotSet`↔`!{0,1}`.
 
 #### P3f · DSL — constraint side **Done**
@@ -261,11 +261,11 @@ Still pending: **P4.7** (delete the dead `simplify*` cluster) and the global **P
    (`AtomConstraint`/`AromaticValenceAst`/`MulticenterValenceAst`/`Bond`/`Dative`/`Aromatic`/
    `Multicenter`/`Relational`/`Molecule`/`Constraint`), **and `ValueAst::simplify`** (it had no
    non-cluster caller, so it went too — the earlier "it stays" was temporary). All `simplify*`
-   unit tests + `test_molecule_ast_simplify_values{,_reduces_stereo}` removed; the two property
+   unit tests + `test_molecule_simplify_values{,_reduces_stereo}` removed; the two property
    tests in `tests/property/value.rs` were retargeted to `canonicalize`
-   (`test_value_ast_canonicalize_idempotent`, `test_value_ast_render_parse_equals_canonicalize`).
+   (`test_num_form_canonicalize_idempotent`, `test_num_form_render_parse_equals_canonicalize`).
    The cluster was confirmed test-only (no DSL/IO/graph/resolution caller), so this is a pure
-   deletion with no production behavior change; `test_molecule_ast_simplify_values`'s
+   deletion with no production behavior change; `test_molecule_simplify_values`'s
    `SubPattern`-recursion assertion is gone with its method (not ported — P5.5 `SubPattern` no-op).
    Verification: umol-ast lib 3540, property 67, resolution conformance 617, workspace builds.
 
@@ -390,7 +390,7 @@ is the build order.
       `render_<type>`/`read_<type>` (streaming) — distinguished by **name, not module**. Added
       `FromAst`/`IntoAst` to all four constraint `*Dsl` (`TopicityDsl`/`StereogenicityDsl`
       transparent `Ctx=()`; `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` with
-      `Ctx = StereoKind`, wired into `ConstraintDsl::from_ast`). Folded the `*_entry`/`*_from_entry`
+      `Ctx = StereoKind`, wired into `ConstraintDsl::from_ir`). Folded the `*_entry`/`*_from_entry`
       codecs into the `*Dsl` `ToEdn`/`FromEdn`; inlined single-use `ligand_position`.
       `OrientedLigandPermutation` stays decomposed in `ligand_symmetry` (not an EDN unit, single
       use); `stereo_kind` is composition-only (no `parse_` wrapper).
@@ -623,7 +623,7 @@ stay required. Equality stays lazy (P0); this only touches the `Lattice` surface
      Tighten its RHS from `a.meet(b) == Some(b.clone())` to `a.meet(b) == b.canonical().ok()` (correct
      even for a non-canonical generated `b`; strategies already canonicalize, so belt-and-suspenders).
    - **No standalone `test_lattice_matches_default`** — it would be tautological: the nine deleted
-     leaf types' existing `test_*_matches` (e.g. `test_element_ast_matches`, which already covers
+     leaf types' existing `test_*_matches` (e.g. `test_element_form_matches`, which already covers
      lit/set/notset/var membership + subset/superset) now route through the default verbatim, so they
      *are* the default's test suite.
 
@@ -1144,8 +1144,8 @@ in a `StereoAtomConstraints` collection are meet-combined there.
 
 **Consequence (at implementation).** Remove `impl Lattice for TopicityAst` and its
 fixed-`pair` lattice-law proptest (`property/lattice.rs:86`
-`test_topicity_ast_lattice_laws`); the per-pair lattice is already covered by
-`test_topicity_relation_ast_lattice_laws` (`:183`).
+`test_topicity_form_lattice_laws`); the per-pair lattice is already covered by
+`test_topicity_relation_form_lattice_laws` (`:183`).
 
 **Boundary.** `TopicityDsl` (carrying `pair` + `rel`), replacing the free-function serde
 noted above.

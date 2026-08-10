@@ -1695,7 +1695,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_dsl_from_ast() {
+    fn test_atom_dsl_from_ir() {
         let mut form = AtomForm::new(ElementForm::Lit(Element::C));
         form.charge = NumForm::Lit(0);
         form.lone_pairs = NumForm::Lit(0);
@@ -1718,7 +1718,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_dsl_into_ast() {
+    fn test_atom_dsl_into_ir() {
         let dsl = AtomDsl(AtomForm::new(ElementForm::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
         let form = dsl.into_ir(&cfg);

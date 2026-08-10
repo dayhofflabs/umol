@@ -51,9 +51,9 @@ mod pushout;
 pub mod spec;
 pub(super) mod transact;
 
-/// Molecule AST: atom-bond topology, overlays (typed hyperedges), and constraints.
+/// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
-/// Per-entity data are `Arc`-shared (copy-on-write). The AST itself only allows
+/// Per-entity data are `Arc`-shared (copy-on-write). The molecule itself only allows
 /// attribute mutation; structural edits go through `MoleculeEditor` via [`Molecule::edit`].
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Molecule {
@@ -467,7 +467,7 @@ impl Molecule {
     /// Complete semantic equality in the current id and participant frame.
     ///
     /// Topology, relation participants, and stereo sites/ligands must have the same stored ids;
-    /// entity ASTs and molecule constraints compare by canonical form.
+    /// entity forms and molecule constraints compare by canonical form.
     pub fn equiv(&self, other: &Self) -> bool {
         if self.graph != other.graph
             || self.atoms.len() != other.atoms.len()
@@ -625,18 +625,18 @@ impl Molecule {
         }
 
         for &(left, right) in correspondence.atoms().matched_pairs() {
-            let (Some(left_ast), Some(right_ast)) =
+            let (Some(left_attributes), Some(right_attributes)) =
                 (self.atoms.get(left.index()), other.atoms.get(right.index()))
             else {
                 return false;
             };
-            if !left_ast.canonical_eq(right_ast) {
+            if !left_attributes.canonical_eq(right_attributes) {
                 return false;
             }
         }
 
         for &(left, right) in correspondence.bonds().matched_pairs() {
-            let (Some(left_ast), Some(right_ast)) =
+            let (Some(left_attributes), Some(right_attributes)) =
                 (self.bonds.get(left.index()), other.bonds.get(right.index()))
             else {
                 return false;
@@ -655,7 +655,7 @@ impl Molecule {
                 return false;
             };
             if other.graph.find_edge(mapped_first, mapped_second) != Some(EdgeId::from(right))
-                || !left_ast.canonical_eq(right_ast)
+                || !left_attributes.canonical_eq(right_attributes)
             {
                 return false;
             }

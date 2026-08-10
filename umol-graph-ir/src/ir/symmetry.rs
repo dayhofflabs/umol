@@ -629,7 +629,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_graph_symmetry_constitutional(benzene_ring: Molecule) {
+    fn test_molecule_graph_symmetry_constitutional(benzene_ring: Molecule) {
         let symmetry = benzene_ring.graph_symmetry(&config());
         assert_eq!(
             symmetry.automorphism_algorithm,
@@ -651,7 +651,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_graph_symmetry_chiral() {
+    fn test_molecule_graph_symmetry_chiral() {
         // Four distinct ligands ⇒ a genuine stereocenter, no compensating symmetry.
         let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
         let symmetry = mol.graph_symmetry(&config());
@@ -659,7 +659,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_graph_symmetry_enantiotopic() {
+    fn test_molecule_graph_symmetry_enantiotopic() {
         // Two identical Cl ligands: enantiotopic — same star orbit, distinct proper.
         let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
         let symmetry = mol.graph_symmetry(&config());
@@ -683,7 +683,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_stereo_atom_symmetry_stereogenic() {
+    fn test_molecule_stereo_atom_symmetry_stereogenic() {
         let mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
         let gs = mol.graph_symmetry(&config());
         let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
@@ -696,7 +696,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_graph_symmetry_out_of_range_coset() {
+    fn test_molecule_graph_symmetry_out_of_range_coset() {
         // A malformed (out-of-range) coset must not panic graph_symmetry: the
         // element contributes no observable descriptor and the orbit partition
         // is still computed.
@@ -709,7 +709,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_observable_descriptor() {
+    fn test_molecule_observable_descriptor() {
         let mut mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
         mol.stereo_atom_mut(StereoAtomId(0))
             .attributes
@@ -724,7 +724,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_stereo_atom_symmetry_prochiral() {
+    fn test_molecule_stereo_atom_symmetry_prochiral() {
         let mol = tetrahedral([Element::Cl, Element::Cl, Element::F, Element::Br]);
         let gs = mol.graph_symmetry(&config());
         let stereo = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_ast_stereo_bond_symmetry() {
+    fn test_molecule_stereo_bond_symmetry() {
         // C0=C1 with four distinct substituents (F,Cl on C0; Br,I on C1): E/Z stereogenic.
         let mol = Molecule::from_entries(MoleculeEntries {
             atoms: vec![

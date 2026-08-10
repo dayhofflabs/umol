@@ -686,7 +686,7 @@ The **graph IR** is the explicit representation of the graph model. Its Rust pac
 module path are `umol-graph-ir` and `umol_graph_ir::ir`. Boundary conversions use `FromIr`,
 `IntoIr`, `TryFromIr`, and `TryIntoIr`; their associated type is `Context`.
 
-**Not:** the surface DSL, the format-level table IR, or an AST module retained under the renamed
+**Not:** the surface DSL, the format-level table IR, or a module retained under the renamed
 crate.
 **In code:** `umol_graph_ir::ir`; the `*Ir` conversion traits.
 

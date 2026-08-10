@@ -200,12 +200,12 @@ impl DativeBondForm {
 }
 
 impl DativeBondForm {
-    /// The wrapped AST bond — read access for the bond-backed constraints view.
+    /// The wrapped IR bond — read access for the bond-backed constraints view.
     pub(crate) fn to_rust(&self) -> &GraphIrDativeBondForm {
         &self.value
     }
 
-    /// Mutable access to the wrapped AST bond — write access for the bond-backed
+    /// Mutable access to the wrapped IR bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrDativeBondForm> {
         if self.readonly {
@@ -215,7 +215,7 @@ impl DativeBondForm {
         }
     }
 
-    /// Wrap an owned Rust dative-bond AST.
+    /// Wrap an owned Rust dative-bond form.
     pub(crate) fn from_rust(bond: GraphIrDativeBondForm) -> Self {
         Self {
             value: bond,
@@ -780,13 +780,13 @@ mod tests {
     #[case(GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)))]
     #[case(GraphIrDativeBondConstraintForm::ring_membership(GraphIrRingScope::All, 2))]
     #[case(GraphIrDativeBondConstraintForm::ring_membership(GraphIrRingScope::Size(6), 1))]
-    fn test_dative_bond_constraint_form_roundtrip(#[case] ast: GraphIrDativeBondConstraintForm) {
+    fn test_dative_bond_constraint_form_roundtrip(#[case] form: GraphIrDativeBondConstraintForm) {
         Python::attach(|py| {
             assert_eq!(
-                DativeBondConstraintForm::from_rust(py, &ast)
+                DativeBondConstraintForm::from_rust(py, &form)
                     .unwrap()
                     .to_rust(py),
-                ast
+                form
             );
         });
     }

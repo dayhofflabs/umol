@@ -1320,7 +1320,7 @@ Phases A–E are in scope; F (3D) and G follow.
       (tree), and the bond forms; wire into `parse_molecule_input`; emit both entry kinds (ligands
       back to ref / `[:h …]` / `[:lp …]`) in `render_molecule_edn`. **Done**
     - **D3f** — *`MoleculeDsl` raise/lower.* Thread the stereo entries through `FromAst`/`IntoAst` —1
-      ref → id resolution in `into_ast`, the ligand list resolved like `:atoms`. Also add the
+      ref → id resolution in `into_ir`, the ligand list resolved like `:atoms`. Also add the
       **noncovalent bonds**, which are currently missing from `MoleculeDsl`'s `FromAst`/`IntoAst`.
     - **D3g** — *Tests.* EDN↔AST round-trip for both entry kinds (string and `:ccw`/`:z` payloads;
       Atom / `[:h]` / `[:lp]` ligands); ref resolution + unknown-ref errors; the new overlay accessors
@@ -1390,7 +1390,7 @@ Phases A–E are in scope; F (3D) and G follow.
       add — site identity (`StereoAtomSite` → atom, `StereoBondSite` → bond), ligand-set membership /
       equality (`StereoAtom{Contains,Ligands}`, bond analogs), and ligand role predicates
       (`…AllLigands` / `…AnyLigand` delegating an `AtomConstraint`) — plus the `:<entity>-<role>` EDN
-      keys in `RELATIONAL_KEYS`, `from_ast` / `into_ast`, and `simplify` / `remap`. **Done**
+      keys in `RELATIONAL_KEYS`, `from_ir` / `into_ir`, and `simplify` / `remap`. **Done**
     - **D3n** Fix naming in remap.rs, index -> id, indices -> ids, review all field and method names **Done**
     - **D3o** Add coset constraint to StereoAtomConstraints and StereoBondConstraints **Rejected**
   - **D4** — sugar `:ccw`/`:cw`/`:e`/`:z` (each carries its class — `Th1`/`Th2`/`Ct1`/`Ct2`) ↔ the `:type` head.
@@ -1413,7 +1413,7 @@ Phases A–E are in scope; F (3D) and G follow.
   - **D9** - update specifications in umol-dsl-spec.md **Done** (top-level keys fixed; grammar non-terminals
       aligned to key names; stereo elements + `#T`/`#C` constraints + relational + anchor + §7.14 subgrammar added)
   - **D10** - add to prop test and fuzzing **Done** (stereo elements + `#T`/`#C` + relational + anchor in
-     `molecule_ast_strategy`/`constraint_leaf_strategy`/`sub_pattern_anchor_strategy`; stereo entity-string +
+     `molecule_strategy`/`constraint_leaf_strategy`/`sub_pattern_anchor_strategy`; stereo entity-string +
      keyword roundtrip tests; `parse_stereo_atom`/`parse_stereo_bond` in `fuzz_entity_strings`)
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
@@ -1571,7 +1571,7 @@ Phases A–E are in scope; F (3D) and G follow.
     `meet`-derived check), and the `Lattice` derive now generates a field-wise `matches` so
     `AtomAst`/`BondAst`/`SpinStateAst` recurse into them (the constraint collections already had cheap
     `matches`). Gated by `matches == meet`-derived proptests (`assert_lattice_laws`, plus new
-    `test_atom_ast_lattice_laws` / `test_bond_ast_lattice_laws`); zero behavior change. After (same bench,
+    `test_atom_form_lattice_laws` / `test_bond_form_lattice_laws`); zero behavior change. After (same bench,
     ms/pass):
 
     | pattern  | Vf2 | Ullmann | Ri  | ArcMatch | Vf2Rdkit | RayKirsch | RDKit | best gap |

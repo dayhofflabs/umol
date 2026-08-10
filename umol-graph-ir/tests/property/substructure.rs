@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
-use crate::strategies::molecule_ast_strategy;
+use crate::strategies::molecule_strategy;
 
 const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
     Vf2,
@@ -66,8 +66,8 @@ fn sorted_matches(
 proptest! {
     #[test]
     fn test_substructure_cross_validation(
-        host in molecule_ast_strategy().prop_filter("well-formed", is_well_formed),
-        pattern in molecule_ast_strategy().prop_filter("well-formed", is_well_formed),
+        host in molecule_strategy().prop_filter("well-formed", is_well_formed),
+        pattern in molecule_strategy().prop_filter("well-formed", is_well_formed),
     ) {
         let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
         for strategy in STRATEGIES {
@@ -83,7 +83,7 @@ proptest! {
 
     #[test]
     fn test_substructure_cross_validation_planted(
-        (host, subset) in molecule_ast_strategy()
+        (host, subset) in molecule_strategy()
             .prop_filter("well-formed", is_well_formed)
             .prop_filter("non-empty", |m| m.atoms().count() > 0)
             .prop_flat_map(|m| {

@@ -511,7 +511,7 @@ molecule counts, and every component correspondence must be total on both sides.
 returns `None` when these structural conditions do not hold.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
-stereo frames, entity ASTs, and every typed reference in constraints. It does not validate
+stereo frames, entity forms, and every typed reference in constraints. It does not validate
 chemistry, resolve values, normalize attributes, repair references, compact tables, or remove
 entities. Identity remapping is exact; applying a remapping and its inverse recovers the original;
 and sequential remapping agrees with correspondence composition.

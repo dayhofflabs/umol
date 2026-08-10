@@ -197,9 +197,9 @@ mod tests {
         #[case] input: UnpairedElectronsForm,
         #[case] expected: UnpairedElectronsForm,
     ) {
-        let mut ast = input.clone();
-        ast.high_spin_complete();
-        assert_eq!(ast, expected);
+        let mut form = input.clone();
+        form.high_spin_complete();
+        assert_eq!(form, expected);
     }
 
     #[rustfmt::skip]
@@ -234,8 +234,8 @@ mod tests {
     #[case::from_dsl(spin!("#u2").into(), true)]
     #[case::from_pair((2, 3).into(), true)]
     #[case::partial(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, false)]
-    fn test_unpaired_electrons_form_is_ground(#[case] ast: UnpairedElectronsForm, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    fn test_unpaired_electrons_form_is_ground(#[case] form: UnpairedElectronsForm, #[case] expected: bool) {
+        assert_eq!(form.is_ground(), expected);
     }
 
     #[rustfmt::skip]
@@ -243,8 +243,8 @@ mod tests {
     #[case::both_undetermined(UnpairedElectronsForm::default(), true)]
     #[case::ground((2_u8, 3_u8).into(), false)]
     #[case::partial(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Undetermined }, false)]
-    fn test_unpaired_electrons_form_is_undetermined(#[case] ast: UnpairedElectronsForm, #[case] expected: bool) {
-        assert_eq!(ast.is_undetermined(), expected);
+    fn test_unpaired_electrons_form_is_undetermined(#[case] form: UnpairedElectronsForm, #[case] expected: bool) {
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
@@ -373,9 +373,9 @@ mod tests {
         Some(UnpairedElectrons { count: 0, multiplicity: 256 }),
     )]
     fn test_unpaired_electrons_form_as_lit(
-        #[case] ast: UnpairedElectronsForm,
+        #[case] form: UnpairedElectronsForm,
         #[case] expected: Option<UnpairedElectrons>,
     ) {
-        assert_eq!(ast.as_lit(), expected);
+        assert_eq!(form.as_lit(), expected);
     }
 }

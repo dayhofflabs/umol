@@ -603,7 +603,7 @@ mod tests {
             ]),
         )]
     )]
-    fn test_reaction_ast_compose(
+    fn test_reaction_compose(
         #[case] a: Reaction,
         #[case] b: Reaction,
         #[case] algorithm: CommonSubgraphEnumerationAlgorithm,
@@ -711,7 +711,7 @@ mod tests {
             ]),
         )]
     )]
-    fn test_reaction_ast_compose_disjoint(
+    fn test_reaction_compose_disjoint(
         #[case] a: Reaction,
         #[case] b: Reaction,
         #[case] algorithm: CommonSubgraphEnumerationAlgorithm,
@@ -721,7 +721,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_compose_apply_equivalence() {
+    fn test_reaction_compose_apply_equivalence() {
         // compose(A,B).apply(H) == B.apply(A.apply(H)): C-O 1→2 then 2→3 on host C-O order 1.
         let a = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
@@ -904,7 +904,7 @@ mod tests {
     #[rstest]
     #[case::same_frame([1, 2, 3, 4], 1, 0)]
     #[case::swapped_frame([2, 1, 3, 4], 0, 1)]
-    fn test_reaction_ast_compose_stereo(
+    fn test_reaction_compose_stereo(
         #[case] b_ligands: [u32; 4],
         #[case] b_old: u32,
         #[case] b_new: u32,

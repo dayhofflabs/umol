@@ -153,11 +153,11 @@ impl UnpairedElectronsForm {
 impl UnpairedElectronsForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrUnpairedElectronsForm,
+        form: &GraphIrUnpairedElectronsForm,
     ) -> PyResult<UnpairedElectronsForm> {
         Ok(UnpairedElectronsForm {
-            count: into_py_variant(py, NumForm::from_rust(py, &ast.count)?)?,
-            multiplicity: into_py_variant(py, NumForm::from_rust(py, &ast.multiplicity)?)?,
+            count: into_py_variant(py, NumForm::from_rust(py, &form.count)?)?,
+            multiplicity: into_py_variant(py, NumForm::from_rust(py, &form.multiplicity)?)?,
         })
     }
 
@@ -341,12 +341,12 @@ mod tests {
         None,
     )]
     fn test_unpaired_electrons_form_as_lit(
-        #[case] ast: GraphIrUnpairedElectronsForm,
+        #[case] form: GraphIrUnpairedElectronsForm,
         #[case] expected: Option<ChemUnpairedElectrons>,
     ) {
         Python::attach(|py| {
-            let ast = UnpairedElectronsForm::from_rust(py, &ast).unwrap();
-            assert_eq!(ast.as_lit(py).map(UnpairedElectrons::to_rust), expected);
+            let form = UnpairedElectronsForm::from_rust(py, &form).unwrap();
+            assert_eq!(form.as_lit(py).map(UnpairedElectrons::to_rust), expected);
         });
     }
 
@@ -363,13 +363,13 @@ mod tests {
         count: GraphIrNumForm::Undetermined,
         multiplicity: GraphIrNumForm::Undetermined,
     })]
-    fn test_unpaired_electrons_form_roundtrip(#[case] ast: GraphIrUnpairedElectronsForm) {
+    fn test_unpaired_electrons_form_roundtrip(#[case] form: GraphIrUnpairedElectronsForm) {
         Python::attach(|py| {
             assert_eq!(
-                UnpairedElectronsForm::from_rust(py, &ast)
+                UnpairedElectronsForm::from_rust(py, &form)
                     .unwrap()
                     .to_rust(py),
-                ast
+                form
             );
         });
     }

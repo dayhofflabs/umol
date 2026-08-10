@@ -1,9 +1,9 @@
 ---
-name: ast-literal-extraction
-description: MANDATORY — load and apply before creating or editing code in umol-graph or higher-level crates that extracts literal values from AST types, calls AsLit methods, adds a ground view, or introduces an operation-specific literal input type. Also apply when reviewing repeated as_lit calls, literal extraction followed by expect, non-literal failure handling, or a proposed macro/helper for AST extraction. Classifies what non-literal values mean and selects the corresponding Rust control flow without hiding operation semantics.
+name: ir-literal-extraction
+description: MANDATORY — load and apply before creating or editing code in umol-graph or higher-level crates that extracts literal values from graph-IR forms, calls AsLit methods, adds a ground view, or introduces an operation-specific literal input type. Also apply when reviewing repeated as_lit calls, literal extraction followed by expect, non-literal failure handling, or a proposed macro/helper for graph-IR extraction. Classifies what non-literal values mean and selects the corresponding Rust control flow without hiding operation semantics.
 ---
 
-# AST literal extraction
+# Graph-IR literal extraction
 
 Treat `AsLit` as the leaf-level primitive. Decide what a non-literal value means for the operation
 before selecting extraction syntax.
@@ -43,7 +43,7 @@ site into a helper or projection type.
 
 Use a projection only when a coherent field set recurs within an operation family. It should:
 
-- express that operation's actual precondition, not complete AST groundness;
+- express that operation's actual precondition, not complete graph-IR groundness;
 - extract and validate once at the algorithm boundary;
 - carry concrete scalar values and borrow aggregate values where practical;
 - have `Option` or a domain-specific `Result` construction contract;
@@ -56,7 +56,7 @@ Do not invent a public name without the normal API naming review.
 A ground view is evidence of a checked precondition, not an unchecked marker:
 
 - validate during construction;
-- borrow the original AST rather than clone it merely to change the access API;
+- borrow the original graph-IR value rather than clone it merely to change the access API;
 - expose concrete literal accessors;
 - remove downstream `expect` calls where the view already proves groundness.
 

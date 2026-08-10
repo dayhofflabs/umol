@@ -83,11 +83,11 @@ impl<'a> ConnectivityValidator<'a> {
 
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ConnectivityContradiction>, ConnectivityError> {
-        let atom_count = ast.atoms().count();
+        let atom_count = molecule.atoms().count();
         let mut union = UnionFind::new(atom_count);
-        for bond in ast.bonds().iter() {
+        for bond in molecule.bonds().iter() {
             let [a, b] = bond.atom_ids();
             union.union(a.index(), b.index());
         }
@@ -100,7 +100,7 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_dative {
-            for (index, dative) in ast.dative_bonds().iter().enumerate() {
+            for (index, dative) in molecule.dative_bonds().iter().enumerate() {
                 if spans(&roots, dative.atom_ids()) {
                     return contradiction(ConnectivityContradiction::DisconnectedDativeBond {
                         bond: DativeBondId(index as u32),
@@ -109,7 +109,7 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_aromatic {
-            for (index, system) in ast.aromatic_systems().iter().enumerate() {
+            for (index, system) in molecule.aromatic_systems().iter().enumerate() {
                 if spans(&roots, system.atom_ids()) {
                     return contradiction(ConnectivityContradiction::DisconnectedAromaticSystem {
                         system: AromaticSystemId(index as u32),
@@ -118,7 +118,7 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_multicenter {
-            for (index, bond) in ast.multicenter_bonds().iter().enumerate() {
+            for (index, bond) in molecule.multicenter_bonds().iter().enumerate() {
                 if spans(&roots, bond.atom_ids()) {
                     return contradiction(ConnectivityContradiction::DisconnectedMulticenterBond {
                         bond: MulticenterBondId(index as u32),
@@ -127,7 +127,7 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_noncovalent {
-            for (index, bond) in ast.noncovalent_bonds().iter().enumerate() {
+            for (index, bond) in molecule.noncovalent_bonds().iter().enumerate() {
                 if spans(&roots, bond.atom_ids()) {
                     return contradiction(ConnectivityContradiction::DisconnectedNoncovalentBond {
                         bond: NoncovalentBondId(index as u32),
@@ -136,7 +136,7 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_stereo_atom {
-            for (index, stereo) in ast.stereo_atoms().iter().enumerate() {
+            for (index, stereo) in molecule.stereo_atoms().iter().enumerate() {
                 let atoms =
                     iter::once(stereo.site_id()).chain(stereo.ligands().map(|l| l.atom_id()));
                 if spans(&roots, atoms) {
@@ -147,8 +147,8 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_stereo_bond {
-            for (index, stereo) in ast.stereo_bonds().iter().enumerate() {
-                let [a, b] = ast.bond(stereo.site_id()).atom_ids();
+            for (index, stereo) in molecule.stereo_bonds().iter().enumerate() {
+                let [a, b] = molecule.bond(stereo.site_id()).atom_ids();
                 let atoms = [a, b]
                     .into_iter()
                     .chain(stereo.ligands().map(|l| l.atom_id()));
@@ -160,8 +160,8 @@ impl<'a> ConnectivityValidator<'a> {
             }
         }
         if !self.model.allow_disconnected_constraints {
-            for (index, constraint) in ast.constraints().iter().enumerate() {
-                if spans(&roots, ast.constraint_atoms(constraint)) {
+            for (index, constraint) in molecule.constraints().iter().enumerate() {
+                if spans(&roots, molecule.constraint_atoms(constraint)) {
                     return contradiction(ConnectivityContradiction::DisconnectedConstraint {
                         index,
                     });

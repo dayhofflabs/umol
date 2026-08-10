@@ -49,8 +49,8 @@ impl AromaticSystemConstraintKey {
 }
 
 impl AromaticSystemConstraintKey {
-    pub(crate) fn from_rust(ast: &GraphIrAromaticSystemConstraintKey) -> Self {
-        match ast {
+    pub(crate) fn from_rust(key: &GraphIrAromaticSystemConstraintKey) -> Self {
+        match key {
             GraphIrAromaticSystemConstraintKey::ElectronCount => Self::ElectronCount(),
         }
     }
@@ -114,9 +114,9 @@ impl_py_lattice!(
 impl AromaticSystemConstraintForm {
     pub(crate) fn from_rust(
         py: Python<'_>,
-        ast: &GraphIrAromaticSystemConstraintForm,
+        form: &GraphIrAromaticSystemConstraintForm,
     ) -> PyResult<Self> {
-        Ok(match ast {
+        Ok(match form {
             GraphIrAromaticSystemConstraintForm::ElectronCount(v) => {
                 Self::ElectronCount(into_py_variant(py, NumForm::from_rust(py, v)?)?)
             }
@@ -384,12 +384,12 @@ impl AromaticSystemConstraintsForm {
 }
 
 impl AromaticSystemConstraintsForm {
-    /// The wrapped AST constraints — read access for aromatic system construction.
+    /// The wrapped IR constraints — read access for aromatic system construction.
     pub(crate) fn to_rust(&self) -> &GraphIrAromaticSystemConstraintsForm {
         &self.0
     }
 
-    /// Wrap owned AST constraints.
+    /// Wrap owned IR constraints.
     pub(crate) fn from_rust(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
         AromaticSystemConstraintsForm(constraints)
     }
@@ -543,7 +543,7 @@ impl AromaticSystemConstraintsView {
     }
 
     /// Set one constraint on the backing system in place (last-wins per key).
-    pub(crate) fn set_ast(
+    pub(crate) fn set_form(
         &self,
         py: Python<'_>,
         constraint: GraphIrAromaticSystemConstraintForm,
@@ -552,7 +552,7 @@ impl AromaticSystemConstraintsView {
     }
 
     /// Remove one key from the backing system in place, returning the removed entry.
-    pub(crate) fn remove_ast(
+    pub(crate) fn remove_form(
         &self,
         py: Python<'_>,
         key: GraphIrAromaticSystemConstraintKey,
@@ -571,7 +571,7 @@ impl AromaticSystemConstraintsView {
     /// Insert `c` on the system in place, replacing any existing entry of the same key
     /// (last-wins).
     pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintForm>) -> PyResult<()> {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py))
+        self.set_form(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the system in place, returning it if
@@ -581,7 +581,7 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
     ) -> PyResult<Option<AromaticSystemConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust())?
+        self.remove_form(py, key.bind(py).borrow().to_rust())?
             .map(|c| AromaticSystemConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -593,7 +593,7 @@ impl AromaticSystemConstraintsView {
         key: Py<AromaticSystemConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust())?
+            .remove_form(py, key.bind(py).borrow().to_rust())?
             .is_some()
         {
             Ok(())
@@ -667,9 +667,9 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
     ) -> PyResult<AromaticSystemConstraintForm> {
-        let ast_key = key.bind(py).borrow().to_rust();
+        let rust_key = key.bind(py).borrow().to_rust();
         let found = self.read(py, |cs| {
-            cs.get(ast_key)
+            cs.get(rust_key)
                 .map(|constraint| AromaticSystemConstraintForm::from_rust(py, constraint))
                 .transpose()
         })?;
@@ -699,7 +699,7 @@ impl AromaticSystemConstraintsView {
 
     #[setter]
     pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.set_ast(
+        self.set_form(
             py,
             GraphIrAromaticSystemConstraintForm::electron_count(value.to_rust(py)),
         )

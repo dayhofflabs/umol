@@ -75,40 +75,40 @@ def test_pred_expr_recursive_not():
     assert PredExpr.Not(inner)._0 == inner
 
 
-def test_valueast_lit():
+def test_num_form_lit():
     assert NumForm.Lit(0)._0 == 0
 
 
-def test_valueast_undetermined_match():
+def test_num_form_undetermined_match():
     assert NumForm.Undetermined() == NumForm.Undetermined()
 
 
-def test_valueast_litset():
+def test_num_form_litset():
     assert NumForm.LitSet({1, 2, 3})._0 == {1, 2, 3}
 
 
-def test_valueast_arith_expr():
+def test_num_form_arith_expr():
     assert NumForm.ArithExpr(ArithExpr.Var("h"))._0 == ArithExpr.Var("h")
 
 
-def test_valueast_pred_expr():
+def test_num_form_pred_expr():
     pred = PredExpr.Rel(ArithExpr.Var("h"), RelOp.Le, ArithExpr.Lit(3))
     assert NumForm.PredExpr(pred)._0 == pred
 
 
-def test_valueast_eq():
+def test_num_form_eq():
     assert NumForm.Lit(1) == NumForm.Lit(1)
     assert NumForm.Lit(1) != NumForm.Lit(2)
     assert NumForm.Lit(1) != 5
 
 
-def test_valueast_hash():
+def test_num_form_hash():
     assert len({NumForm.Lit(1), NumForm.Lit(1)}) == 1
     d = {NumForm.Lit(1): "a"}
     assert d[NumForm.Lit(1)] == "a"
 
 
-def test_valueast_repr():
+def test_num_form_repr():
     assert repr(NumForm.Lit(1)) == "NumForm.Lit(1)"
     assert repr(NumForm.Undetermined()) == "NumForm.Undetermined()"
     x = NumForm.ArithExpr(ArithExpr.Var("h"))

@@ -41,9 +41,9 @@ fn raise(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> Molecule {
     input.clone().into_ir(defaults)
 }
 
-fn lower(ast: &Molecule) -> MoleculeDsl {
+fn lower(molecule: &Molecule) -> MoleculeDsl {
     let cfg = MoleculeDefaults::zeroed();
-    MoleculeDsl::from_ir(ast, &cfg)
+    MoleculeDsl::from_ir(molecule, &cfg)
 }
 
 fn resolve_test(
@@ -51,11 +51,11 @@ fn resolve_test(
     chemistry: &ChemistryModel,
     defaults: &MoleculeDefaults,
 ) -> ResolveResult {
-    let mut ast = raise(input, defaults);
-    match Resolver::new(chemistry).resolve(&mut ast) {
+    let mut molecule = raise(input, defaults);
+    match Resolver::new(chemistry).resolve(&mut molecule) {
         Ok(Solution::Determined(())) => ResolveResult {
             success: true,
-            output: Some(lower(&ast)),
+            output: Some(lower(&molecule)),
             error: None,
         },
         Ok(Solution::Underdetermined(())) => ResolveResult {

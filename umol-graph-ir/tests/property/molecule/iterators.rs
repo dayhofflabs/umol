@@ -39,8 +39,8 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_ast_view_iterators_exact_size(
-        molecule in molecule_ast_strategy(),
+    fn test_molecule_view_iterators_exact_size(
+        molecule in molecule_strategy(),
         prefix in any::<usize>(),
     ) {
         let atom_count = molecule.atoms().count();

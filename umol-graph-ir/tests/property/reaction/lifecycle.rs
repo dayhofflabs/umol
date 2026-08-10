@@ -18,14 +18,14 @@ proptest! {
     })]
 
     #[test]
-    fn test_reaction_ast_canonicalize(reaction in reaction_strategy()) {
+    fn test_reaction_canonicalize(reaction in reaction_strategy()) {
         if let Ok(canonical) = reaction.canonicalize() {
             prop_assert_eq!(canonical.clone().canonicalize(), Ok(canonical));
         }
     }
 
     #[test]
-    fn test_reaction_ast_apply_at(reaction in reaction_strategy()) {
+    fn test_reaction_apply_at(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs.atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(

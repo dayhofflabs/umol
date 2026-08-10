@@ -20,9 +20,9 @@ macro_rules! mol_dsl_ground {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MoleculeDsl =
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        let (ast, _meta) = dsl.into_parts();
+        let (molecule, _meta) = dsl.into_parts();
         <$crate::dsl::MoleculeDsl as $crate::ir::IntoIr<$crate::ir::Molecule>>::into_ir(
-            $crate::dsl::MoleculeDsl::new(ast, $crate::dsl::MoleculeMetadata::default())
+            $crate::dsl::MoleculeDsl::new(molecule, $crate::dsl::MoleculeMetadata::default())
                 .expect("empty metadata is coherent"),
             &$crate::dsl::MoleculeDefaults::ground(),
         )

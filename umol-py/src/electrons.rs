@@ -42,8 +42,8 @@ impl ElectronCountsForm {
 }
 
 impl ElectronCountsForm {
-    pub(crate) fn from_rust(ast: &GraphIrElectronCountsForm) -> Self {
-        match ast {
+    pub(crate) fn from_rust(form: &GraphIrElectronCountsForm) -> Self {
+        match form {
             GraphIrElectronCountsForm::Undetermined => Self::Undetermined(),
             GraphIrElectronCountsForm::Lit(counts) => Self::Lit(counts.clone()),
         }
@@ -72,7 +72,7 @@ impl_py_lattice!(
 /// `ElectronCountsForm` passthrough (matching `impl From<Vec<i64>>`).
 #[derive(FromPyObject)]
 pub(crate) enum ElectronCountsLike {
-    Ast(Py<ElectronCountsForm>),
+    Form(Py<ElectronCountsForm>),
     Lit(Vec<i64>),
 }
 
@@ -80,7 +80,7 @@ impl ElectronCountsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrElectronCountsForm {
         match self {
             ElectronCountsLike::Lit(counts) => GraphIrElectronCountsForm::Lit(counts.clone()),
-            ElectronCountsLike::Ast(a) => a.bind(py).borrow().to_rust(),
+            ElectronCountsLike::Form(a) => a.bind(py).borrow().to_rust(),
         }
     }
 }
@@ -95,18 +95,18 @@ mod tests {
     #[case(GraphIrElectronCountsForm::Undetermined)]
     #[case(GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1]))]
     #[case(GraphIrElectronCountsForm::Lit(vec![]))]
-    fn test_electron_counts_form_roundtrip(#[case] ast: GraphIrElectronCountsForm) {
-        assert_eq!(ElectronCountsForm::from_rust(&ast).to_rust(), ast);
+    fn test_electron_counts_form_roundtrip(#[case] form: GraphIrElectronCountsForm) {
+        assert_eq!(ElectronCountsForm::from_rust(&form).to_rust(), form);
     }
 
     #[rstest]
     #[case(GraphIrElectronCountsForm::Undetermined, None)]
     #[case(GraphIrElectronCountsForm::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
     fn test_electron_counts_form_as_lit(
-        #[case] ast: GraphIrElectronCountsForm,
+        #[case] form: GraphIrElectronCountsForm,
         #[case] expected: Option<Vec<i64>>,
     ) {
-        assert_eq!(ElectronCountsForm::from_rust(&ast).as_lit(), expected);
+        assert_eq!(ElectronCountsForm::from_rust(&form).as_lit(), expected);
     }
 
     #[rstest]
@@ -118,9 +118,9 @@ mod tests {
                 GraphIrElectronCountsForm::Lit(vec![1, 0, 1])
             );
             // an ElectronCountsForm passes through
-            let ast = Py::new(py, ElectronCountsForm::Lit(vec![2, 2])).unwrap();
+            let form = Py::new(py, ElectronCountsForm::Lit(vec![2, 2])).unwrap();
             assert_eq!(
-                ElectronCountsLike::Ast(ast).to_rust(py),
+                ElectronCountsLike::Form(form).to_rust(py),
                 GraphIrElectronCountsForm::Lit(vec![2, 2])
             );
         });

@@ -109,16 +109,16 @@ proptest! {
         let parsed = ReactionDsl::from_edn_str(&rendered)
             .map_err(|error| TestCaseError::fail(format!("parse failed: {error}")))?;
         let expected = parsed.clone();
-        let (ast, metadata) = parsed.into_parts();
+        let (reaction, metadata) = parsed.into_parts();
 
-        prop_assert_eq!(ReactionDsl::new(ast, metadata), Ok(expected));
+        prop_assert_eq!(ReactionDsl::new(reaction, metadata), Ok(expected));
     }
 
     #[test]
     fn test_reaction_dsl_new_error(
-        (ast, metadata, expected) in invalid_reaction_dsl_parts_strategy(),
+        (reaction, metadata, expected) in invalid_reaction_dsl_parts_strategy(),
     ) {
-        prop_assert_eq!(ReactionDsl::new(ast, metadata), Err(expected));
+        prop_assert_eq!(ReactionDsl::new(reaction, metadata), Err(expected));
     }
 
     #[test]
@@ -136,17 +136,17 @@ proptest! {
         let parsed = ReactionSpanDsl::from_edn_str(&rendered)
             .map_err(|error| TestCaseError::fail(format!("parse failed: {error}")))?;
         let expected = parsed.clone();
-        let (ast, metadata) = parsed.into_parts();
+        let (span, metadata) = parsed.into_parts();
 
-        prop_assert_eq!(ReactionSpanDsl::new(ast, metadata), Ok(expected));
+        prop_assert_eq!(ReactionSpanDsl::new(span, metadata), Ok(expected));
     }
 
     #[test]
     fn test_reaction_span_dsl_new_error(
-        (ast, metadata, entity) in invalid_reaction_span_dsl_parts_strategy(),
+        (span, metadata, entity) in invalid_reaction_span_dsl_parts_strategy(),
     ) {
         prop_assert_eq!(
-            ReactionSpanDsl::new(ast, metadata),
+            ReactionSpanDsl::new(span, metadata),
             Err(MetadataError::EntityOutOfRange(entity)),
         );
     }

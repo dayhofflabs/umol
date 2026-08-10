@@ -785,7 +785,7 @@ pub(crate) fn aromatic_system_form_strategy() -> impl Strategy<Value = AromaticS
     })
 }
 
-pub(crate) fn aromatic_system_patch_ast_strategy() -> impl Strategy<Value = AromaticSystemForm> {
+pub(crate) fn aromatic_system_patch_form_strategy() -> impl Strategy<Value = AromaticSystemForm> {
     (
         electron_counts_form_strategy(),
         value_basic(-2..=2),
@@ -845,7 +845,7 @@ pub(crate) fn multicenter_bond_form_strategy() -> impl Strategy<Value = Multicen
     )
 }
 
-pub(crate) fn multicenter_bond_patch_ast_strategy() -> impl Strategy<Value = MulticenterBondForm> {
+pub(crate) fn multicenter_bond_patch_form_strategy() -> impl Strategy<Value = MulticenterBondForm> {
     (
         electron_counts_form_strategy(),
         value_basic(-2..=2),
@@ -947,7 +947,7 @@ pub(crate) fn noncovalent_bond_form_strategy() -> impl Strategy<Value = Noncoval
         })
 }
 
-pub(crate) fn noncovalent_bond_patch_ast_strategy() -> impl Strategy<Value = NoncovalentBondForm> {
+pub(crate) fn noncovalent_bond_patch_form_strategy() -> impl Strategy<Value = NoncovalentBondForm> {
     (
         noncovalent_bond_kind_form_strategy(),
         noncovalent_bond_constraints_strategy(),
@@ -1616,7 +1616,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
         )
 }
 
-pub(crate) fn molecule_ast_strategy() -> impl Strategy<Value = Molecule> {
+pub(crate) fn molecule_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_strategy().prop_map(Molecule::from_entries)
 }
 
@@ -2129,7 +2129,7 @@ pub(crate) fn constraint_strategy(counts: ConstraintCounts) -> BoxedStrategy<Con
         .boxed()
 }
 
-pub(crate) fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = Molecule> {
+pub(crate) fn molecule_with_constraints_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_with_constraints_strategy().prop_map(Molecule::from_entries)
 }
 
@@ -2153,9 +2153,9 @@ pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Valu
     })
 }
 
-pub(crate) fn molecule_ast_with_atom_subset_strategy(
-) -> impl Strategy<Value = (Molecule, Vec<AtomId>)> {
-    molecule_ast_structurally_unambiguous_strategy().prop_flat_map(|molecule| {
+pub(crate) fn molecule_with_atom_subset_strategy() -> impl Strategy<Value = (Molecule, Vec<AtomId>)>
+{
+    molecule_structurally_unambiguous_strategy().prop_flat_map(|molecule| {
         let atom_count = molecule.atoms().count();
         (
             Just(molecule),
@@ -2172,9 +2172,9 @@ pub(crate) fn molecule_ast_with_atom_subset_strategy(
     })
 }
 
-pub(crate) fn molecule_ast_with_removals_strategy(
+pub(crate) fn molecule_with_removals_strategy(
 ) -> impl Strategy<Value = (Molecule, Vec<AtomId>, Vec<BondId>)> {
-    molecule_ast_strategy().prop_flat_map(|molecule| {
+    molecule_strategy().prop_flat_map(|molecule| {
         let atom_count = molecule.atoms().count();
         let bond_count = molecule.bonds().count();
         (
@@ -2198,7 +2198,7 @@ pub(crate) fn molecule_ast_with_removals_strategy(
     })
 }
 
-pub(crate) fn molecule_ast_structurally_unambiguous_strategy() -> impl Strategy<Value = Molecule> {
+pub(crate) fn molecule_structurally_unambiguous_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_structurally_unambiguous_strategy().prop_map(Molecule::from_entries)
 }
 
@@ -2270,7 +2270,7 @@ fn sorted_pair<T: Ord>([first, second]: [T; 2]) -> [T; 2] {
     }
 }
 
-/// Generate a `MoleculeMetadata` populated for an AST of the given counts. Entity
+/// Generate a `MoleculeMetadata` populated for a molecule of the given counts. Entity
 /// ids use deterministic prefixed names (`atom0`, `bond1`, ...) so that
 /// names are unique across kinds and disjoint from alias names. Atom
 /// aliases are capped at 3 and use a 3-element pool (`C`, `N`, `O`) for
@@ -2410,7 +2410,7 @@ pub(crate) fn invalid_metadata_for(
 }
 
 pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
-    molecule_ast_with_constraints_strategy().prop_flat_map(|molecule| {
+    molecule_with_constraints_strategy().prop_flat_map(|molecule| {
         let counts = ConstraintCounts::from_ir(&molecule);
         metadata_for(counts).prop_map(move |metadata| {
             MoleculeDsl::new(molecule.clone(), metadata).expect("generated metadata is coherent")
@@ -2420,7 +2420,7 @@ pub(crate) fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
 
 pub(crate) fn invalid_molecule_dsl_parts_strategy(
 ) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Entity)> {
-    molecule_ast_with_constraints_strategy().prop_flat_map(|molecule| {
+    molecule_with_constraints_strategy().prop_flat_map(|molecule| {
         let counts = ConstraintCounts::from_ir(&molecule);
         invalid_metadata_for(counts)
             .prop_map(move |(metadata, entity)| (molecule.clone(), metadata, entity))
@@ -2429,7 +2429,7 @@ pub(crate) fn invalid_molecule_dsl_parts_strategy(
 
 pub(crate) fn molecule_metadata_with_atom_subset_strategy(
 ) -> impl Strategy<Value = (Molecule, MoleculeMetadata, Vec<AtomId>)> {
-    molecule_ast_with_atom_subset_strategy().prop_flat_map(|(molecule, atoms)| {
+    molecule_with_atom_subset_strategy().prop_flat_map(|(molecule, atoms)| {
         metadata_for(ConstraintCounts::from_ir(&molecule))
             .prop_map(move |metadata| (molecule.clone(), metadata, atoms.clone()))
     })
@@ -4196,7 +4196,7 @@ pub(crate) fn reaction_strategy() -> impl Strategy<Value = Reaction> {
 }
 
 pub(crate) fn replacement_reaction_strategy() -> impl Strategy<Value = Reaction> {
-    (molecule_ast_strategy(), molecule_ast_strategy()).prop_map(|(lhs, rhs)| {
+    (molecule_strategy(), molecule_strategy()).prop_map(|(lhs, rhs)| {
         let correspondence =
             Correspondence::new(Vec::new(), lhs.atoms().count(), rhs.atoms().count())
                 .expect("correspondence producer preserves partial-bijection invariants");
@@ -4215,7 +4215,7 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
 
 /// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) plus
 /// stereo (tetrahedral atoms / cis-trans bonds) and no molecule constraints (orthogonal). 1–4 atoms;
-/// overlays generated as in `molecule_ast_strategy`, scoped.
+/// overlays generated as in `molecule_strategy`, scoped.
 fn overlay_molecule_strategy() -> impl Strategy<Value = Molecule> {
     (1usize..=4)
         .prop_flat_map(|atom_count| {

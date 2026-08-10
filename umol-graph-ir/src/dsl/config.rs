@@ -2,7 +2,7 @@
 
 use umol_edn::{FromEdn, ToEdn};
 
-/// Aggregated lowering/raising defaults for molecule DSL <-> AST interconversion. per-entity-kind
+/// Aggregated lowering/raising defaults for molecule DSL <-> IR interconversion. Per-entity-kind
 /// defaults bundle; consumed by the molecule-level `FromIr` / `IntoIr` implementations.
 #[derive(Debug, Clone, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MoleculeDefaults {
@@ -105,7 +105,7 @@ pub struct MoleculeOverrides {
     pub stereo_bond: StereoBondOverrides,
 }
 
-/// Defaults for reaction DSL <-> AST interconversion.
+/// Defaults for reaction DSL <-> IR interconversion.
 #[derive(Debug, Clone, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct ReactionDefaults {
     pub atom: AtomDefaults,
@@ -232,7 +232,7 @@ pub struct DeltaDefaults {
 }
 
 /// Lowering/raising defaults for atoms: describe how `AtomForm`
-/// struct fields and constraintsa are treated when converting between DSL and AST.
+/// struct fields and constraints are treated when converting between DSL and IR.
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AtomDefaults {
     pub isotope: IsotopeDefault,
@@ -287,9 +287,9 @@ impl AtomDefaults {
     }
 
     /// Grounds struct fields and sets the constraint defaults to their zero values.
-    /// Used as the omission threshold when *lowering* an AST to DSL (a constraint
+    /// Used as the omission threshold when *lowering* an IR value to DSL (a constraint
     /// equal to its zeroed value is omitted, keeping output compact). Raising
-    /// (DSL → AST) uses `ground()` plus an explicit per-constraint selection.
+    /// (DSL → IR) uses `ground()` plus an explicit per-constraint selection.
     pub fn zeroed() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
@@ -732,7 +732,7 @@ mod tests {
     #[case::verbatim(MoleculeDefaults::new())]
     #[case::ground(MoleculeDefaults::ground())]
     #[case::zeroed(MoleculeDefaults::zeroed())]
-    fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeDefaults) {
+    fn test_molecule_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();
         assert_eq!(back, cfg);

@@ -491,13 +491,13 @@ proptest! {
 
     /// `lift_constraints` followed by `inline_constraints` is idempotent:
     /// running the pair twice yields the same `Molecule` as running it
-    /// once. This holds even if the original AST has duplicate (entity, kind)
+    /// once. This holds even if the original molecule has duplicate (entity, kind)
     /// entries across the inline + molecule scopes — the first pass collapses
     /// them via the entity store's last-wins policy and the second pass is
     /// a fixpoint.
     #[test]
-    fn test_lift_inline_idempotent(ast in molecule_ast_with_constraints_strategy()) {
-        let mut once = ast.clone();
+    fn test_lift_inline_idempotent(molecule in molecule_with_constraints_strategy()) {
+        let mut once = molecule.clone();
         once.lift_constraints();
         once.inline_constraints();
 
@@ -510,8 +510,8 @@ proptest! {
 
     /// `lift_constraints` drains every entity's inline `constraints` store.
     #[test]
-    fn test_lift_drains_entity_stores(ast in molecule_ast_with_constraints_strategy()) {
-        let mut a = ast;
+    fn test_lift_drains_entity_stores(molecule in molecule_with_constraints_strategy()) {
+        let mut a = molecule;
         a.lift_constraints();
         for view in a.atoms().iter() {
             prop_assert!(view.attributes.constraints.is_empty());
@@ -750,8 +750,8 @@ proptest! {
     /// leaf from the molecule list. Combinator-nested entries, relational
     /// leaves, molecule-scope leaves are preserved.
     #[test]
-    fn test_inline_removes_top_level_leaves(ast in molecule_ast_with_constraints_strategy()) {
-        let mut a = ast;
+    fn test_inline_removes_top_level_leaves(molecule in molecule_with_constraints_strategy()) {
+        let mut a = molecule;
         a.inline_constraints();
         for c in a.constraints().iter() {
             prop_assert!(
@@ -776,7 +776,7 @@ proptest! {
     /// entry, the kind is still present after the call.
     #[test]
     fn test_inline_deposits_leaves_into_entities(
-        ast in molecule_ast_with_constraints_strategy(),
+        molecule in molecule_with_constraints_strategy(),
     ) {
         let mut atom_keys: HashSet<(AtomId, AtomConstraintKey)> = HashSet::new();
         let mut bond_keys: HashSet<(BondId, BondConstraintKey)> = HashSet::new();
@@ -785,7 +785,7 @@ proptest! {
             HashSet::new();
         let mut multicenter_keys: HashSet<(MulticenterBondId, MulticenterBondConstraintKey)> =
             HashSet::new();
-        for c in ast.constraints().iter() {
+        for c in molecule.constraints().iter() {
             match c {
                 Constraint::Atom(id, inner) => {
                     atom_keys.insert((*id, inner.key()));
@@ -806,7 +806,7 @@ proptest! {
             }
         }
 
-        let mut a = ast;
+        let mut a = molecule;
         a.inline_constraints();
 
         for (id, key) in atom_keys {

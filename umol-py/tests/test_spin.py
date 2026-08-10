@@ -110,7 +110,7 @@ def test_spin_state_assignment_error(attribute):
 
 
 @pytest.mark.parametrize(
-    ("ast", "expected"),
+    ("form", "expected"),
     [
         pytest.param(
             UnpairedElectronsForm(2, 3),
@@ -134,8 +134,8 @@ def test_spin_state_assignment_error(attribute):
         ),
     ],
 )
-def test_unpaired_electrons_form_as_lit(ast, expected):
-    assert ast.as_lit() == expected
+def test_unpaired_electrons_form_as_lit(form, expected):
+    assert form.as_lit() == expected
 
 
 @pytest.mark.parametrize(

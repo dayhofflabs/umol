@@ -2299,7 +2299,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_dsl_into_ast() {
+    fn test_stereo_atom_dsl_into_ir() {
         let form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined);
         assert_eq!(
             StereoAtomDsl(form.clone()).into_ir(&StereoAtomDefaults::default()),
@@ -2468,7 +2468,7 @@ mod tests {
     #[case::undetermined(StereoCoset::Undetermined)]
     #[case::lit_set(StereoCoset::lit_set([1, 2]))]
     #[case::term_swap(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(1))))]
-    fn test_stereo_coset_dsl_into_ast(#[case] coset: StereoCoset) {
+    fn test_stereo_coset_dsl_into_ir(#[case] coset: StereoCoset) {
         assert_eq!(StereoCosetDsl(coset.clone()).into_ir(&()), coset);
         assert_eq!(StereoCosetDsl::from_ir(&coset, &()), StereoCosetDsl(coset));
     }
@@ -2520,7 +2520,7 @@ mod tests {
     #[case::undetermined(TetrahedralStereoForm::Undetermined)]
     #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
     #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_dsl_into_ast(#[case] form: TetrahedralStereoForm) {
+    fn test_tetrahedral_stereo_dsl_into_ir(#[case] form: TetrahedralStereoForm) {
         assert_eq!(TetrahedralStereoDsl(form.clone()).into_ir(&()), form);
         assert_eq!(TetrahedralStereoDsl::from_ir(&form, &()), TetrahedralStereoDsl(form));
     }

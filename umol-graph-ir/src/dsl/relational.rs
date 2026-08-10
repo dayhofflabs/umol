@@ -26,10 +26,10 @@ use crate::ir::constraint::RelationalConstraint;
 use crate::ir::traits::{FromIr, IntoIr};
 
 /// Surface DSL wrapper around [`RelationalConstraint`]. Structural parallel
-/// to the AST enum — same 18 variants, with surface refs ([`AtomRef`],
+/// to the IR enum — same 18 variants, with surface refs ([`AtomRef`],
 /// [`DativeBondRef`], etc.) in place of raw `*Idx`. Each variant's EDN
 /// form is a flat single-key map `{:<entity>-<role> [<owner_ref> <target>]}`.
-/// See the AST enum for per-variant semantics.
+/// See the IR enum for per-variant semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraintDsl {
     /// EDN: `{:dative-bond-donors [<dative_ref> [<atom_ref>+]]}`.

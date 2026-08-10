@@ -26,11 +26,11 @@ impl BondsResolver {
         Self
     }
 
-    /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &Molecule) -> Edits {
+    /// Construct charge and unpaired-electron default edits without mutating `molecule`.
+    pub fn plan(&self, molecule: &Molecule) -> Edits {
         let mut edits = Edits::new();
-        for bond_id in ast.bonds().ids() {
-            let bond = ast.bond(bond_id).attributes;
+        for bond_id in molecule.bonds().ids() {
+            let bond = molecule.bond(bond_id).attributes;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = BondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
@@ -52,12 +52,12 @@ impl BondsResolver {
     /// Plan and atomically apply localized-bond defaults.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), BondsContradiction>, BondsError> {
-        let edits = self.plan(ast);
-        let mut editor = ast.edit();
+        let edits = self.plan(molecule);
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 }

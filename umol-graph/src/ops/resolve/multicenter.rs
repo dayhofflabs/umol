@@ -29,11 +29,15 @@ impl MulticenterBondsResolver {
         Self
     }
 
-    /// Construct charge and unpaired-electron default edits without mutating `ast`.
-    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, MulticenterBondsContradiction> {
-        for atom in ast.atoms().ids() {
+    /// Construct charge and unpaired-electron default edits without mutating `molecule`.
+    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, MulticenterBondsContradiction> {
+        for atom in molecule.atoms().ids() {
             match IncidenceConstraintValidator
-                .validate_molecule_atom_constraint(ast, atom, AtomConstraintKey::MulticenterValence)
+                .validate_molecule_atom_constraint(
+                    molecule,
+                    atom,
+                    AtomConstraintKey::MulticenterValence,
+                )
                 .expect("atom id came from the molecule atom store")
             {
                 Solution::Determined(()) => {}
@@ -47,8 +51,8 @@ impl MulticenterBondsResolver {
         }
 
         let mut edits = Edits::new();
-        for bond_id in ast.multicenter_bonds().ids() {
-            let bond = ast.multicenter_bond(bond_id).attributes;
+        for bond_id in molecule.multicenter_bonds().ids() {
+            let bond = molecule.multicenter_bond(bond_id).attributes;
             let mut selected_unpaired_electrons = bond.unpaired_electrons.clone();
             let mut update = MulticenterBondUpdate::default();
             if matches!(bond.charge, NumForm::Undetermined) {
@@ -70,18 +74,18 @@ impl MulticenterBondsResolver {
     /// Plan and atomically apply multicenter-bond defaults.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), MulticenterBondsContradiction>, MulticenterBondsError> {
-        let edits = match self.plan(ast) {
+        let edits = match self.plan(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 }

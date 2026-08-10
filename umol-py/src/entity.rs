@@ -12,9 +12,9 @@ pub trait EntityForm: PyClass {
 }
 
 /// A retained read-only Python form used as a field of an immutable delta or edit.
-pub struct ReadonlyForm<T: EntityForm>(Py<T>);
+pub struct Readonly<T: EntityForm>(Py<T>);
 
-impl<'a, 'py, T> FromPyObject<'a, 'py> for ReadonlyForm<T>
+impl<'a, 'py, T> FromPyObject<'a, 'py> for Readonly<T>
 where
     T: EntityForm,
 {
@@ -28,7 +28,7 @@ where
     }
 }
 
-impl<'py, T> IntoPyObject<'py> for &ReadonlyForm<T>
+impl<'py, T> IntoPyObject<'py> for &Readonly<T>
 where
     T: EntityForm,
 {
@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<T> ReadonlyForm<T>
+impl<T> Readonly<T>
 where
     T: EntityForm,
 {

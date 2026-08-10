@@ -161,19 +161,19 @@ mod tests {
     #[rstest]
     #[case::lit(ElectronCountsForm::Lit(vec![2, 0, 2]), Some(vec![2, 0, 2]))]
     #[case::undetermined(ElectronCountsForm::Undetermined, None)]
-    fn test_electron_counts_form_as_lit(#[case] ast: ElectronCountsForm, #[case] expected: Option<Vec<i64>>) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+    fn test_electron_counts_form_as_lit(#[case] form: ElectronCountsForm, #[case] expected: Option<Vec<i64>>) {
+        assert_eq!(form.as_lit(), expected);
+        assert_eq!(form.is_ground(), expected.is_some());
     }
 
     #[rstest]
     #[case::undetermined(ElectronCountsForm::Undetermined, true)]
     #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]), false)]
     fn test_electron_counts_form_is_undetermined(
-        #[case] ast: ElectronCountsForm,
+        #[case] form: ElectronCountsForm,
         #[case] expected: bool,
     ) {
-        assert_eq!(ast.is_undetermined(), expected);
+        assert_eq!(form.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]

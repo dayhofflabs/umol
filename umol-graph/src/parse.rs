@@ -60,7 +60,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{AromaticValenceForm, AtomId, NumForm};
     use umol_io::ctfile::config::CtfileIoConfig;
-    use umol_io::ctfile::parse_mol_to_ast;
+    use umol_io::ctfile::parse_mol_to_ir;
 
     use super::{parse_mol_bytes, parse_mol_bytes_with};
     use crate::ops::model::{
@@ -81,13 +81,13 @@ mod tests {
     #[rstest]
     #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s#v0#a!")]
     #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s#v2#a")]
-    fn test_parse_mol_to_ast_counts_resolve(
+    fn test_parse_mol_to_ir_counts_resolve(
         valence_table: &'static ValenceTable,
         #[case] input: &str,
         #[case] atom_count: u32,
         #[case] expected_atom: &str,
     ) {
-        let mut molecule = parse_mol_to_ast(input).unwrap();
+        let mut molecule = parse_mol_to_ir(input).unwrap();
         CountsValence::new(valence_table)
             .resolve(&mut molecule)
             .unwrap();

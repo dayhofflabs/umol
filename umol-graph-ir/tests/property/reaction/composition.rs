@@ -34,7 +34,7 @@ proptest! {
     /// Every composite is itself a valid reaction: applying it at its own `lhs` reproduces its
     /// `right()`. Catches frame-algebra errors in the composite construction.
     #[test]
-    fn test_reaction_ast_compose_well_formed(
+    fn test_reaction_compose_well_formed(
         a in reaction_strategy(),
         b in reaction_strategy(),
     ) {
@@ -55,7 +55,7 @@ proptest! {
     /// Soundness: every product of a composite applied to `A`'s reactant is also a product of
     /// applying B after A — `compose` invents no reactions.
     #[test]
-    fn test_reaction_ast_compose_sound(
+    fn test_reaction_compose_sound(
         a in reaction_strategy(),
         b in reaction_strategy(),
     ) {
@@ -108,7 +108,7 @@ proptest! {
     /// reason it once failed) `apply_at` removing multiple same-kind overlays: composites routinely
     /// remove ≥2 overlays of one kind, which the pre-batching single-id lowering mishandled.
     #[test]
-    fn test_reaction_ast_compose_well_formed_overlay(
+    fn test_reaction_compose_well_formed_overlay(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -129,7 +129,7 @@ proptest! {
     /// Soundness with overlays: every product of a composite applied to A's reactant is also a
     /// product of applying B after A — compose invents no reactions, overlays included.
     #[test]
-    fn test_reaction_ast_compose_sound_overlay(
+    fn test_reaction_compose_sound_overlay(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -182,7 +182,7 @@ proptest! {
     /// equality at `host = a.lhs`. Covers stereo: the reactants carry stereo overlays and the deltas
     /// stereo ops, glued and applied across ligand frames by `meet_pushout` / `apply_at`.
     #[test]
-    fn test_reaction_ast_compose_complete_overlay(
+    fn test_reaction_compose_complete_overlay(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -236,7 +236,7 @@ proptest! {
     /// Every composite is DPO-valid — no deleted atom leaves a dangling bond or overlay. Confirms
     /// the compose during-check yields dangling-free composites (via the tier-2 `DpoValidator`).
     #[test]
-    fn test_reaction_ast_compose_dangling_free(
+    fn test_reaction_compose_dangling_free(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -253,7 +253,7 @@ proptest! {
     /// P4 — determinism: `compose` returns the identical `Vec` on repeated calls and is invariant
     /// under pre-canonicalizing the inputs.
     #[test]
-    fn test_reaction_ast_compose_determinism(
+    fn test_reaction_compose_determinism(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -271,7 +271,7 @@ proptest! {
 
     /// P3 — every composite's deltas are in canonical normal form.
     #[test]
-    fn test_reaction_ast_compose_canonical_deltas(
+    fn test_reaction_compose_canonical_deltas(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
@@ -288,7 +288,7 @@ proptest! {
     /// P6 — no parallel overlays: within each kind a composite's overlays have distinct participant
     /// sets, so correspondence reuses an id and never duplicates (spec §4.1).
     #[test]
-    fn test_reaction_ast_compose_distinct_overlays(
+    fn test_reaction_compose_distinct_overlays(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {

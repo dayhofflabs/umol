@@ -106,14 +106,14 @@ def benzene():
     )
 
 
-def test_aromaticsystemast_new():
+def test_aromatic_system_form_new():
     system = AromaticSystemForm([1, 1, 1])
     assert system.electrons == ElectronCountsForm.Lit([1, 1, 1])
     assert system.charge == NumForm.Undetermined()
     assert len(system.constraints) == 0
 
 
-def test_aromaticsystemast_new_kwargs():
+def test_aromatic_system_form_new_kwargs():
     system = AromaticSystemForm(
         [1, 1, 1],
         charge=-1,
@@ -123,7 +123,7 @@ def test_aromaticsystemast_new_kwargs():
     assert system.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
-def test_aromaticsystemast_constraints_kwarg():
+def test_aromatic_system_form_constraints_kwarg():
     system = AromaticSystemForm(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsForm(
@@ -134,37 +134,37 @@ def test_aromaticsystemast_constraints_kwarg():
     assert system.constraints.electron_count == NumForm.Lit(6)
 
 
-def test_aromaticsystemast_electrons_setter():
+def test_aromatic_system_form_electrons_setter():
     system = AromaticSystemForm([1, 1, 1])
     system.electrons = [2, 2]
     assert system.electrons == ElectronCountsForm.Lit([2, 2])
 
 
-def test_aromaticsystemast_charge_setter():
+def test_aromatic_system_form_charge_setter():
     system = AromaticSystemForm([1, 1, 1])
     system.charge = -1
     assert system.charge == NumForm.Lit(-1)
 
 
-def test_aromaticsystemast_unpaired_electrons_setter():
+def test_aromatic_system_form_unpaired_electrons_setter():
     system = AromaticSystemForm([1, 1, 1])
     system.unpaired_electrons = UnpairedElectronsForm(0, 1)
     assert system.unpaired_electrons == UnpairedElectronsForm(0, 1)
 
 
 @pytest.mark.parametrize("dsl", ["*", "[1,1,1]#e6", "[1,1,1]#c-2"])
-def test_aromaticsystemast_parse_roundtrip(dsl):
+def test_aromatic_system_form_parse_roundtrip(dsl):
     system = AromaticSystemForm.parse(dsl)
     assert str(system) == dsl
     assert repr(system) == f"AromaticSystemForm.parse('{dsl}')"
 
 
-def test_aromaticsystemast_parse_error():
+def test_aromatic_system_form_parse_error():
     with pytest.raises(ParseError):
         AromaticSystemForm.parse("z")
 
 
-def test_aromaticsystemast_asdict():
+def test_aromatic_system_form_asdict():
     system = AromaticSystemForm(
         [1, 1, 1],
         constraints=AromaticSystemConstraintsForm(
@@ -182,7 +182,7 @@ def test_aromaticsystemast_asdict():
     assert d["constraints"]["electron_count"] == NumForm.Lit(6)
 
 
-def test_aromaticsystemast_set_constraints():
+def test_aromatic_system_form_set_constraints():
     system = AromaticSystemForm([1, 1, 1])
     system.constraints = AromaticSystemConstraintsForm(
         [AromaticSystemConstraintForm.ElectronCount(NumForm.Lit(6))]

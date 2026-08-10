@@ -353,7 +353,7 @@ proptest! {
     /// the span the delta path (`to_reaction_span`) builds. Recover `(L, R, C)` from the delta-path
     /// span and reassemble; a mismatch flags a diff-completeness or frame gap between the paths.
     #[test]
-    fn test_reaction_span_ast_superimpose_matches_delta_path(reaction in reaction_strategy()) {
+    fn test_reaction_span_superimpose_matches_delta_path(reaction in reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             let rebuilt =
                 ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
@@ -365,7 +365,7 @@ proptest! {
     /// directly must reproduce the span obtained by reversing the reaction, including the union
     /// frame chosen for entities unmatched on only one side.
     #[test]
-    fn test_reaction_ast_reverse_swaps_sides(reaction in reaction_strategy()) {
+    fn test_reaction_reverse_swaps_sides(reaction in reaction_strategy()) {
         if let (Ok(span), Ok(reverse)) = (reaction.to_reaction_span(), reaction.reverse()) {
             if let Ok(reverse_span) = reverse.to_reaction_span() {
                 let expected = ReactionSpan::superimpose(
@@ -381,7 +381,7 @@ proptest! {
     /// Cross-validate the two span constructions with overlays present: the direct `superimpose`
     /// reassembles the delta-path span across all overlay families, not just atoms/bonds.
     #[test]
-    fn test_reaction_span_ast_superimpose_matches_delta_path_overlay(
+    fn test_reaction_span_superimpose_matches_delta_path_overlay(
         reaction in overlay_reaction_strategy(),
     ) {
         if let Ok(span) = reaction.to_reaction_span() {
@@ -394,7 +394,7 @@ proptest! {
     /// Reaction → span → reaction may normalize relative deltas into absolute updates. The
     /// resulting reaction nevertheless materializes the same span, including all overlay families.
     #[test]
-    fn test_reaction_ast_span_roundtrip(reaction in comprehensive_reaction_strategy()) {
+    fn test_reaction_span_roundtrip(reaction in comprehensive_reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {
             if let Ok(rebuilt) = span.to_reaction().to_reaction_span() {
                 prop_assert_eq!(rebuilt, span);
@@ -405,7 +405,7 @@ proptest! {
     /// `from_sides` retains the lhs frame exactly. Its materialized rhs is the supplied rhs
     /// reindexed into that frame; a total induced correspondence establishes framed equivalence.
     #[test]
-    fn test_reaction_ast_from_sides_partial(sides in crossing_reaction_sides_strategy()) {
+    fn test_reaction_from_sides_partial(sides in crossing_reaction_sides_strategy()) {
         let reaction = Reaction::from_sides(
             sides.lhs.clone(),
             sides.rhs.clone(),
@@ -429,7 +429,7 @@ proptest! {
     /// Independently generated, structurally valid span entries converge through direct
     /// construction, DSL render/parse, and superimposition of the two projected sides.
     #[test]
-    fn test_reaction_span_ast_from_entries_roundtrip(
+    fn test_reaction_span_from_entries_roundtrip(
         entries in reaction_span_entries_strategy(),
     ) {
         let direct = ReactionSpan::try_from_entries(entries).map_err(|error| {

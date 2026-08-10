@@ -30,8 +30,8 @@ pub enum RelOp {
 }
 
 impl RelOp {
-    pub(crate) fn from_rust(ast: GraphIrRelOp) -> RelOp {
-        match ast {
+    pub(crate) fn from_rust(form: GraphIrRelOp) -> RelOp {
+        match form {
             GraphIrRelOp::Le => RelOp::Le,
             GraphIrRelOp::Ge => RelOp::Ge,
             GraphIrRelOp::Eq => RelOp::Eq,
@@ -62,8 +62,8 @@ pub enum MemOp {
 }
 
 impl MemOp {
-    pub(crate) fn from_rust(ast: GraphIrMemOp) -> MemOp {
-        match ast {
+    pub(crate) fn from_rust(form: GraphIrMemOp) -> MemOp {
+        match form {
             GraphIrMemOp::In => MemOp::In,
             GraphIrMemOp::NotIn => MemOp::NotIn,
         }
@@ -115,8 +115,8 @@ impl ArithExpr {
 
 impl ArithExpr {
     /// Build the Python value from the IR expression (one Python object per node).
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrArithExpr) -> PyResult<ArithExpr> {
-        Ok(match ast {
+    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrArithExpr) -> PyResult<ArithExpr> {
+        Ok(match form {
             GraphIrArithExpr::Lit(n) => ArithExpr::Lit(*n),
             GraphIrArithExpr::Var(name) => ArithExpr::Var(name.clone()),
             GraphIrArithExpr::Neg(t) => {
@@ -217,8 +217,8 @@ impl PredExpr {
 }
 
 impl PredExpr {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrPredExpr) -> PyResult<PredExpr> {
-        Ok(match ast {
+    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrPredExpr) -> PyResult<PredExpr> {
+        Ok(match form {
             GraphIrPredExpr::Rel(a, op, b) => PredExpr::Rel(
                 into_py_variant(py, ArithExpr::from_rust(py, a)?)?,
                 RelOp::from_rust(*op),
@@ -310,8 +310,8 @@ impl NumForm {
 }
 
 impl NumForm {
-    pub(crate) fn from_rust(py: Python<'_>, ast: &GraphIrNumForm) -> PyResult<NumForm> {
-        Ok(match ast {
+    pub(crate) fn from_rust(py: Python<'_>, form: &GraphIrNumForm) -> PyResult<NumForm> {
+        Ok(match form {
             GraphIrNumForm::Undetermined => NumForm::Undetermined(),
             GraphIrNumForm::Lit(n) => NumForm::Lit(*n),
             GraphIrNumForm::LitSet(members) => NumForm::LitSet((**members).clone()),
@@ -356,7 +356,7 @@ impl_py_lattice!(
 /// ring-membership count.
 #[derive(FromPyObject)]
 pub enum NumLike {
-    Ast(Py<NumForm>),
+    Form(Py<NumForm>),
     Lit(i64),
 }
 
@@ -364,7 +364,7 @@ impl NumLike {
     /// Coerce to the numeric form used by `impl Into<NumForm>` Rust builders.
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrNumForm {
         match self {
-            NumLike::Ast(value) => value.bind(py).borrow().to_rust(py),
+            NumLike::Form(value) => value.bind(py).borrow().to_rust(py),
             NumLike::Lit(number) => GraphIrNumForm::Lit(*number),
         }
     }
@@ -372,7 +372,7 @@ impl NumLike {
     /// Coerce to a `Py<NumForm>` (for value structs that store the value field).
     pub(crate) fn to_py(&self, py: Python<'_>) -> PyResult<Py<NumForm>> {
         match self {
-            NumLike::Ast(value) => Ok(value.clone_ref(py)),
+            NumLike::Form(value) => Ok(value.clone_ref(py)),
             NumLike::Lit(number) => into_py_variant(py, NumForm::Lit(*number)),
         }
     }
@@ -404,15 +404,15 @@ mod tests {
     #[case(GraphIrRelOp::Lt)]
     #[case(GraphIrRelOp::Gt)]
     #[case(GraphIrRelOp::Ne)]
-    fn test_rel_op_roundtrip(#[case] ast: GraphIrRelOp) {
-        assert_eq!(RelOp::from_rust(ast).to_rust(), ast);
+    fn test_rel_op_roundtrip(#[case] form: GraphIrRelOp) {
+        assert_eq!(RelOp::from_rust(form).to_rust(), form);
     }
 
     #[rstest]
     #[case(GraphIrMemOp::In)]
     #[case(GraphIrMemOp::NotIn)]
-    fn test_mem_op_roundtrip(#[case] ast: GraphIrMemOp) {
-        assert_eq!(MemOp::from_rust(ast).to_rust(), ast);
+    fn test_mem_op_roundtrip(#[case] form: GraphIrMemOp) {
+        assert_eq!(MemOp::from_rust(form).to_rust(), form);
     }
 
     #[rstest]
@@ -424,10 +424,10 @@ mod tests {
         Box::new(GraphIrArithExpr::Lit(6)),
         Box::new(GraphIrArithExpr::Lit(2))
     ))]
-    fn test_arith_expr_roundtrip(#[case] ast: GraphIrArithExpr) {
+    fn test_arith_expr_roundtrip(#[case] form: GraphIrArithExpr) {
         Python::attach(|py| {
-            let value = ArithExpr::from_rust(py, &ast).unwrap();
-            assert_eq!(value.to_rust(py), ast);
+            let value = ArithExpr::from_rust(py, &form).unwrap();
+            assert_eq!(value.to_rust(py), form);
         });
     }
 
@@ -443,10 +443,10 @@ mod tests {
         GraphIrPredExpr::Rel(GraphIrArithExpr::Lit(1), GraphIrRelOp::Lt, GraphIrArithExpr::Lit(2)),
         GraphIrPredExpr::Rel(GraphIrArithExpr::Lit(3), GraphIrRelOp::Gt, GraphIrArithExpr::Lit(2)),
     ]))]
-    fn test_pred_expr_roundtrip(#[case] ast: GraphIrPredExpr) {
+    fn test_pred_expr_roundtrip(#[case] form: GraphIrPredExpr) {
         Python::attach(|py| {
-            let value = PredExpr::from_rust(py, &ast).unwrap();
-            assert_eq!(value.to_rust(py), ast);
+            let value = PredExpr::from_rust(py, &form).unwrap();
+            assert_eq!(value.to_rust(py), form);
         });
     }
 
@@ -462,10 +462,10 @@ mod tests {
         GraphIrRelOp::Le,
         GraphIrArithExpr::Lit(3),
     ))))]
-    fn test_num_form_roundtrip(#[case] ast: GraphIrNumForm) {
+    fn test_num_form_roundtrip(#[case] form: GraphIrNumForm) {
         Python::attach(|py| {
-            let value = NumForm::from_rust(py, &ast).unwrap();
-            assert_eq!(value.to_rust(py), ast);
+            let value = NumForm::from_rust(py, &form).unwrap();
+            assert_eq!(value.to_rust(py), form);
         });
     }
 
@@ -475,9 +475,9 @@ mod tests {
     #[case(GraphIrNumForm::Undetermined, None)]
     #[case(GraphIrNumForm::RangeFrom(1), None)]
     #[case(GraphIrNumForm::LitSet(Box::new(BTreeSet::from([1, 2]))), None)]
-    fn test_num_form_as_lit(#[case] ast: GraphIrNumForm, #[case] expected: Option<i64>) {
+    fn test_num_form_as_lit(#[case] form: GraphIrNumForm, #[case] expected: Option<i64>) {
         Python::attach(|py| {
-            assert_eq!(NumForm::from_rust(py, &ast).unwrap().as_lit(py), expected);
+            assert_eq!(NumForm::from_rust(py, &form).unwrap().as_lit(py), expected);
         });
     }
 }

@@ -268,21 +268,21 @@ def test_stereoterm_apply():
     assert term == StereoTerm.Apply(StereoTerm.Lit(0), Permutation([1, 0, 2, 3]))
 
 
-def test_stereocosetast_term():
+def test_stereo_coset_term():
     assert StereoCoset.Term(StereoTerm.Lit(2)) == StereoCoset.Term(StereoTerm.Lit(2))
 
 
-def test_tetrahedralstereoast_stereo():
+def test_tetrahedral_stereo_form_stereo():
     assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)) == TetrahedralStereoForm.Stereo(
         StereoCoset.Lit(1)
     )
 
 
-def test_tetrahedralstereoast_not_stereo():
+def test_tetrahedral_stereo_form_not_stereo():
     assert TetrahedralStereoForm.NotStereo() == TetrahedralStereoForm.NotStereo()
 
 
-def test_tetrahedralstereoast_as_lit():
+def test_tetrahedral_stereo_form_as_lit():
     assert TetrahedralStereoForm.NotStereo().as_lit() == TetrahedralStereo.NotStereo()
     assert TetrahedralStereoForm.Stereo(StereoCoset.Lit(1)).as_lit() == (
         TetrahedralStereo.Stereo(1)
@@ -291,7 +291,7 @@ def test_tetrahedralstereoast_as_lit():
     assert TetrahedralStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
 
 
-def test_stereocosetast_eq_hash_repr():
+def test_stereo_coset_eq_hash_repr():
     assert StereoCoset.Lit(1) == StereoCoset.Lit(1)
     assert StereoCoset.Lit(1) != StereoCoset.Lit(0)
     assert len({StereoCoset.Lit(1), StereoCoset.Lit(1)}) == 1
@@ -306,30 +306,30 @@ def test_stereoterm_eq_repr():
     )
 
 
-def test_tetrahedralstereoast_stereo_repr():
+def test_tetrahedral_stereo_form_stereo_repr():
     assert repr(TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))) == (
         "TetrahedralStereoForm.Stereo(StereoCoset.Lit(1))"
     )
 
 
-def test_cistransstereoast_stereo():
+def test_cis_trans_stereo_form_stereo():
     assert CisTransStereoForm.Stereo(StereoCoset.Lit(1)) == CisTransStereoForm.Stereo(
         StereoCoset.Lit(1)
     )
 
 
-def test_cistransstereoast_not_stereo():
+def test_cis_trans_stereo_form_not_stereo():
     assert CisTransStereoForm.NotStereo() == CisTransStereoForm.NotStereo()
 
 
-def test_cistransstereoast_as_lit():
+def test_cis_trans_stereo_form_as_lit():
     assert CisTransStereoForm.NotStereo().as_lit() == CisTransStereo.NotStereo()
     assert CisTransStereoForm.Stereo(StereoCoset.Lit(0)).as_lit() == CisTransStereo.Stereo(0)
     assert CisTransStereoForm.Undetermined().as_lit() is None
     assert CisTransStereoForm.Stereo(StereoCoset.LitSet({0, 1})).as_lit() is None
 
 
-def test_cistransstereoast_stereo_repr():
+def test_cis_trans_stereo_form_stereo_repr():
     assert repr(CisTransStereoForm.Stereo(StereoCoset.Lit(1))) == (
         "CisTransStereoForm.Stereo(StereoCoset.Lit(1))"
     )
@@ -357,7 +357,7 @@ def stereo_atom_molecule():
     )
 
 
-def test_stereoatomast_new():
+def test_stereoatom_form_new():
     atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     assert str(atom) == "Th0"
     assert atom.configuration == StereoConfigurationForm.Kinded(
@@ -367,19 +367,19 @@ def test_stereoatomast_new():
 
 
 @pytest.mark.parametrize("dsl", ["Th0", "Th*", "Sp2"])
-def test_stereoatomast_parse_roundtrip(dsl):
+def test_stereoatom_form_parse_roundtrip(dsl):
     atom = StereoAtomForm.parse(dsl)
     assert str(atom) == dsl
     assert repr(atom) == f"StereoAtomForm.parse('{dsl}')"
 
 
-def test_stereoatomast_configuration_setter():
+def test_stereoatom_form_configuration_setter():
     atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     atom.configuration = TetrahedralConfiguration.Cw
     assert str(atom) == "Th1"
 
 
-def test_stereoatomast_constraints_kwarg():
+def test_stereoatom_form_constraints_kwarg():
     atom = StereoAtomForm(
         TetrahedralConfiguration.Ccw,
         constraints=StereoAtomConstraintsForm(
@@ -395,7 +395,7 @@ def test_stereoatomast_constraints_kwarg():
     )
 
 
-def test_stereoatomast_asdict():
+def test_stereoatom_form_asdict():
     atom = StereoAtomForm(TetrahedralConfiguration.Ccw)
     d = atom.asdict()
     assert set(d.keys()) == {"configuration", "constraints"}
@@ -405,7 +405,7 @@ def test_stereoatomast_asdict():
     assert d["constraints"] == []
 
 
-def test_stereobondast_parse_roundtrip():
+def test_stereobond_form_parse_roundtrip():
     bond = StereoBondForm.parse("Ct0")
     assert str(bond) == "Ct0"
     assert bond.configuration == StereoConfigurationForm.Kinded(

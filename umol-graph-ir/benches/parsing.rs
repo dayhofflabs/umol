@@ -94,7 +94,7 @@ fn bench_noncovalent_dsl(c: &mut Criterion) {
 // -- Constraint DSLs --------------------
 //
 // `ConstraintDsl` and `ConstraintsDsl` don't implement the `FromEdn` trait
-// with tree → (ast, metadata) resolution the way `MoleculeDsl` does; they're
+// with tree → (molecule, metadata) resolution the way `MoleculeDsl` does; they're
 // still round-trippable via `from_edn`/streaming for the DSL form itself.
 // Benchmarked directly via their `FromEdn` impls.
 

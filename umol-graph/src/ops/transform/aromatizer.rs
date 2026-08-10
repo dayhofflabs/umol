@@ -49,20 +49,23 @@ impl Aromatizer {
 impl Transformer for Aromatizer {
     type Error = AromatizerError;
 
-    fn transform_into(&self, ast: &mut Molecule) -> Result<(), AromatizerError> {
-        if ast.aromatic_systems().count() > 0 {
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizerError> {
+        if molecule.aromatic_systems().count() > 0 {
             return Ok(());
         }
         let systems = self
             .perception
-            .find_systems(ast, self.config, electrons_from_kekule)?
+            .find_systems(molecule, self.config, electrons_from_kekule)?
             .into_decisive(AromatizerError::Underdetermined)?;
-        self.perception.add_systems(ast, systems);
+        self.perception.add_systems(molecule, systems);
         Ok(())
     }
 
-    fn generate_all<'a>(&'a self, ast: &'a Molecule) -> Box<dyn Iterator<Item = Molecule> + 'a> {
-        Box::new(self.transform(ast).ok().into_iter())
+    fn generate_all<'a>(
+        &'a self,
+        molecule: &'a Molecule,
+    ) -> Box<dyn Iterator<Item = Molecule> + 'a> {
+        Box::new(self.transform(molecule).ok().into_iter())
     }
 }
 
@@ -137,7 +140,7 @@ mod tests {
 
     #[rstest]
     fn test_aromatizer_with_config() {
-        let ast = mol_dsl_ground!(
+        let molecule = mol_dsl_ground!(
             r#"{
                 :atoms ["C" "C" "C" "C" "C" "C"]
                 :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"]
@@ -145,7 +148,7 @@ mod tests {
             }"#
         );
         let expected = Aromatizer::new(&AromaticityModel::daylight())
-            .transform(&ast)
+            .transform(&molecule)
             .unwrap();
         let configured = Aromatizer::with_config(
             &AromaticityModel::daylight(),
@@ -158,22 +161,22 @@ mod tests {
                 maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
             },
         )
-        .transform(&ast);
+        .transform(&molecule);
 
         assert_eq!(configured, Ok(expected));
     }
 
     #[rstest]
     fn test_aromatizer_kekule_benzene_adds_aromatic_system() {
-        let mut ast = benzene_kekule();
+        let mut molecule = benzene_kekule();
         Aromatizer::new(&AromaticityModel::daylight())
-            .transform_into(&mut ast)
+            .transform_into(&mut molecule)
             .unwrap();
-        assert_eq!(ast.aromatic_systems().count(), 1);
-        let view = ast.aromatic_system(AromaticSystemId(0));
+        assert_eq!(molecule.aromatic_systems().count(), 1);
+        let view = molecule.aromatic_system(AromaticSystemId(0));
         let atoms: Vec<AtomId> = view.atom_ids().collect();
         assert_eq!(atoms.len(), 6);
-        let aromatic_bond_count = ast
+        let aromatic_bond_count = molecule
             .bonds()
             .iter()
             .filter(|view| {
@@ -188,11 +191,11 @@ mod tests {
     #[rstest]
     fn test_aromatizer_already_aromatic_is_noop() {
         let original = {
-            let mut ast = benzene_kekule();
+            let mut molecule = benzene_kekule();
             Aromatizer::new(&AromaticityModel::daylight())
-                .transform_into(&mut ast)
+                .transform_into(&mut molecule)
                 .unwrap();
-            ast
+            molecule
         };
         let mut second = original.clone();
         Aromatizer::new(&AromaticityModel::daylight())
@@ -202,20 +205,20 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatizer_transform_returns_new_ast() {
-        let ast = benzene_kekule();
+    fn test_aromatizer_transform() {
+        let molecule = benzene_kekule();
         let aromatized = Aromatizer::new(&AromaticityModel::daylight())
-            .transform(&ast)
+            .transform(&molecule)
             .unwrap();
-        assert_eq!(ast.aromatic_systems().count(), 0);
+        assert_eq!(molecule.aromatic_systems().count(), 0);
         assert_eq!(aromatized.aromatic_systems().count(), 1);
     }
 
     #[rstest]
     fn test_aromatizer_generate_all_yields_one() {
-        let ast = benzene_kekule();
+        let molecule = benzene_kekule();
         let transformer = Aromatizer::new(&AromaticityModel::daylight());
-        let results: Vec<Molecule> = transformer.generate_all(&ast).collect();
+        let results: Vec<Molecule> = transformer.generate_all(&molecule).collect();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].aromatic_systems().count(), 1);
     }

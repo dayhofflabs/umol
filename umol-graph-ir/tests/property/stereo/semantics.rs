@@ -18,7 +18,7 @@ proptest! {
     })]
     /// `StereoLigandPair::new` normalizes to `first <= second` and is symmetric.
     #[test]
-    fn test_ligand_pair_ast_normalization(a in 0u32..6, b in 0u32..6) {
+    fn test_ligand_pair_normalization(a in 0u32..6, b in 0u32..6) {
         let pair = StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b));
         prop_assert!(pair.first().0 <= pair.second().0);
         prop_assert_eq!(pair, StereoLigandPair::new(StereoLigandPosition(b), StereoLigandPosition(a)));
@@ -26,7 +26,7 @@ proptest! {
 
     /// Concrete (non-lattice) literal `matches` is exactly equality.
     #[test]
-    fn test_permutation_ast_matches_is_equality(
+    fn test_permutation_matches_is_equality(
         (a, b) in (2usize..=6).prop_flat_map(|d| (permutation_strategy(d), permutation_strategy(d))),
     ) {
         let (x, y) = (LigandPermutation(a), LigandPermutation(b));
@@ -130,13 +130,13 @@ proptest! {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let ast = StereoAtomForm::new(kind, coset);
-        let transformed = ast.transform_frame(&before, &after);
+        let form = StereoAtomForm::new(kind, coset);
+        let transformed = form.transform_frame(&before, &after);
 
-        prop_assert_eq!(transformed.as_ref(), Some(&ast.apply(permutation)));
+        prop_assert_eq!(transformed.as_ref(), Some(&form.apply(permutation)));
         prop_assert_eq!(
-            transformed.and_then(|ast| ast.transform_frame(&after, &before)),
-            Some(ast),
+            transformed.and_then(|form| form.transform_frame(&after, &before)),
+            Some(form),
         );
     }
 
@@ -149,13 +149,13 @@ proptest! {
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let ast = StereoBondForm::new(StereoKind::CisTrans, coset);
-        let transformed = ast.transform_frame(&before, &after);
+        let form = StereoBondForm::new(StereoKind::CisTrans, coset);
+        let transformed = form.transform_frame(&before, &after);
 
-        prop_assert_eq!(transformed.as_ref(), Some(&ast.apply(permutation)));
+        prop_assert_eq!(transformed.as_ref(), Some(&form.apply(permutation)));
         prop_assert_eq!(
-            transformed.and_then(|ast| ast.transform_frame(&after, &before)),
-            Some(ast),
+            transformed.and_then(|form| form.transform_frame(&after, &before)),
+            Some(form),
         );
     }
 }

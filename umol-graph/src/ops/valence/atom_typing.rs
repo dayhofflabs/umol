@@ -39,25 +39,25 @@ impl<'a> AtomTypingValence<'a> {
         Self { registry }
     }
 
-    /// Construct the complete edit plan without mutating `ast`.
+    /// Construct the complete edit plan without mutating `molecule`.
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, AtomTypingError> {
-        for atom in ast.atoms().iter() {
+    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, AtomTypingError> {
+        for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
                 return Solution::Underdetermined(Edits::new());
             }
         }
 
         let mut edits = Edits::new();
-        for id in ast.atoms().ids() {
-            let selected = match self.resolve_molecule_atom(ast, id) {
+        for id in molecule.atoms().ids() {
+            let selected = match self.resolve_molecule_atom(molecule, id) {
                 Ok(Some(selected)) => selected,
                 Ok(None) => continue,
                 Err(contradiction) => return Solution::Contradictory(contradiction),
             };
-            let current = ast.atom(id).attributes;
+            let current = molecule.atom(id).attributes;
             let update = current.difference_to(&selected);
             edits.update_atom(AtomHandle::Id(id), current, &update);
         }
@@ -67,28 +67,28 @@ impl<'a> AtomTypingValence<'a> {
     /// Plan and atomically apply atom-typing valence resolution.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), AtomTypingError>, TransactionError> {
-        let edits = match self.plan(ast) {
+        let edits = match self.plan(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 
     /// Compute the selected atom without mutating the molecule.
     fn resolve_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         id: AtomId,
     ) -> Result<Option<AtomForm>, AtomTypingError> {
-        let atom = ast.atom(id);
+        let atom = molecule.atom(id);
         if atom.is_ground() {
             return Ok(None);
         }
@@ -114,10 +114,10 @@ impl<'a> AtomTypingValence<'a> {
     /// if the atom is not ground.
     pub fn classify_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
     ) -> Solution<(), AtomTypingMismatch> {
-        let atom = ast.atom(atom_id);
+        let atom = molecule.atom(atom_id);
         if !atom.is_ground() {
             return Solution::Underdetermined(());
         }

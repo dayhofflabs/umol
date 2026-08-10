@@ -70,13 +70,13 @@ def ammonia_borane():
     )
 
 
-def test_dativebondast_new():
+def test_dativebond_form_new():
     bond = DativeBondForm(1)
     assert bond.order == NumForm.Lit(1)
     assert len(bond.constraints) == 0
 
 
-def test_dativebondast_constraints_kwarg():
+def test_dativebond_form_constraints_kwarg():
     bond = DativeBondForm(
         1,
         constraints=DativeBondConstraintsForm(
@@ -87,25 +87,25 @@ def test_dativebondast_constraints_kwarg():
     assert bond.constraints.aromatic == BooleanForm.Lit(True)
 
 
-def test_dativebondast_order_setter():
+def test_dativebond_form_order_setter():
     bond = DativeBondForm(1)
     bond.order = 2
     assert bond.order == NumForm.Lit(2)
 
 
 @pytest.mark.parametrize("dsl", ["1", "1#a", "1#R(6)"])
-def test_dativebondast_parse_roundtrip(dsl):
+def test_dativebond_form_parse_roundtrip(dsl):
     bond = DativeBondForm.parse(dsl)
     assert str(bond) == dsl
     assert repr(bond) == f"DativeBondForm.parse('{dsl}')"
 
 
-def test_dativebondast_parse_error():
+def test_dativebond_form_parse_error():
     with pytest.raises(ParseError):
         DativeBondForm.parse("x#")
 
 
-def test_dativebondast_asdict():
+def test_dativebond_form_asdict():
     bond = DativeBondForm(
         1,
         constraints=DativeBondConstraintsForm(
@@ -118,7 +118,7 @@ def test_dativebondast_asdict():
     assert d["constraints"]["aromatic"] == BooleanForm.Lit(True)
 
 
-def test_dativebondast_set_constraints():
+def test_dativebond_form_set_constraints():
     bond = DativeBondForm(1)
     bond.constraints = DativeBondConstraintsForm(
         [DativeBondConstraintForm.Aromatic(BooleanForm.Lit(True))]

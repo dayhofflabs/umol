@@ -471,7 +471,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `ConstraintRemove`; `id: Option<String>` is the created entity's `:id` name; refs unresolved,
   `:modify` RHS a partial AST; reuses `AtomRefDsl`/`BondRefDsl`/`ConstraintDsl`).
 - R1e — `#[derive(Debug)] struct ReactionInput { lhs: MoleculeInput, deltas: Vec<DeltaInput> }`
-  (`pub(crate)`; struct only, `into_ast` in R7).
+  (`pub(crate)`; struct only, `into_ir` in R7).
 - *Checkpoint:* compiles.
 
 **R2 — `ReactionDsl` boundary shell** [R1]: **Done**
@@ -483,12 +483,12 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 
 **R3 — AST↔DSL conversion** [R2]: **Done**
 - R3a — `FromAst<ReactionAst>` (`Ctx = ReactionDefaults` — atom/bond only): `lhs` via
-  `MoleculeDsl::from_ast` (with a `MoleculeDefaults` carrying the reaction's atom/bond policy, no-op for
+  `MoleculeDsl::from_ir` (with a `MoleculeDefaults` carrying the reaction's atom/bond policy, no-op for
   the rest); `deltas` via `lower_delta` (per-delta `lower_atom`/`lower_bond` on `Add`/`Remove` payloads);
   `metadata = ReactionMetadata::default()`.
-- R3b — `IntoAst<ReactionAst>`: inverse — `lhs` via `MoleculeDsl::into_ast`, `deltas` via `raise_delta`.
+- R3b — `IntoAst<ReactionAst>`: inverse — `lhs` via `MoleculeDsl::into_ir`, `deltas` via `raise_delta`.
 - R3c — test: DSL→AST→DSL round-trip under `ReactionDefaults::ground()` (wrap a `ReactionAst` as
-  `ReactionDsl`, `into_ast` then `from_ast`, assert `.ast()` equal) — covers lhs + atom add + bond add +
+  `ReactionDsl`, `into_ir` then `from_ir`, assert `.ast()` equal) — covers lhs + atom add + bond add +
   modify + constraint.
 - *Checkpoint (tested):* programmatic round-trip, no EDN.
 
@@ -538,16 +538,16 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 - *Checkpoint (tested):* reaction map parses. **Done.** (The dispatch chain stays dead-code until R8
   wires `read_/parse_reaction_input` into `ReactionDsl`'s `FromEdn`/`from_edn_str` — the public root.)
 
-**R7 — Resolution** [R1]: `ReactionInput::into_ast → (ReactionAst, ReactionMetadata)` **Done**
+**R7 — Resolution** [R1]: `ReactionInput::into_ir → (ReactionAst, ReactionMetadata)` **Done**
 (`dsl/reaction.rs`). Work items in dependency order:
-- R7a — **Done.** `into_ast(self) -> Result<(ReactionAst, ReactionMetadata), ParseError>` (no Ctx,
-  mirrors `MoleculeInput::into_ast` — display-form AST; raise is the separate `IntoAst` step). Resolves
+- R7a — **Done.** `into_ir(self) -> Result<(ReactionAst, ReactionMetadata), ParseError>` (no Ctx,
+  mirrors `MoleculeInput::into_ir` — display-form AST; raise is the separate `IntoAst` step). Resolves
   `lhs`, seeds `ReactionMetadata.lhs`. Single in-order pass over `:deltas` (no forward refs).
 - R7b — **Done.** Atom adds → fresh `AtomId` (lhs atom count + order), `:id` recorded via
   `set_atom_id`, `check_id_disjoint` against the id/alias namespace. `:add` spec resolves: `Bare` →
   `AtomDsl.0`; `Alias` → the **union** alias table (lhs aliases ∪ reaction `:atom-aliases`, bijective,
   collisions error), which is also seeded into `ReactionMetadata.atom_aliases`. Test:
-  `test_reaction_input_into_ast`.
+  `test_reaction_input_into_ir`.
 - R7c — **Done.** Atom namespace = lhs atom ids ∪ atom-add ids (`atom_id_to_idx` seeded from lhs,
   grown per add); atom refs resolve via `AtomRef::resolve` (unknown / out-of-range → error).
 - R7d — **Done.** Bond adds → fresh `BondId` (lhs bond count + order), `:id` via `set_bond_id`,
@@ -563,21 +563,21 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   `ModifyField` / `ModifyConstraint` deltas (a possibly-symbolic `ValueAst` stored unevaluated; an
   `Undetermined` constraint = removal). Modifying a same-reaction-added entity is an error.
 - R7h — **Done.** Constraint add/remove → `ConstraintDelta::Add` / `Remove`, each wrapping
-  `ConstraintDsl::into_ast(&counts, &namespace)` (the existing full constraint resolver — all entity
+  `ConstraintDsl::into_ir(&counts, &namespace)` (the existing full constraint resolver — all entity
   kinds + relational + molecule + And/Or/Not). Constraint `Remove` needs no lhs recovery; the DSL
   carries the whole constraint.
 - **Unified resolution namespace** (replaces the per-entity `IndexMap`s across R7c–h): a running
-  `EntityCounts` (`EntityCounts::from_ast(&lhs)` + `allocate_atom` / `allocate_bond` mutators) and a
+  `EntityCounts` (`EntityCounts::from_ir(&lhs)` + `allocate_atom` / `allocate_bond` mutators) and a
   running `MoleculeMetadata` (`metadata.lhs().clone()`), both seeded from lhs and grown in delta order
   as entities are defined; every ref — entity and constraint — resolves against this pair via
-  `Ref::into_ast(count, &namespace)` (linear id scan; O(count), parse-time). Disjointness uses
+  `Ref::into_ir(count, &namespace)` (linear id scan; O(count), parse-time). Disjointness uses
   `MoleculeMetadata::contains_id`. `metadata` (the output `ReactionMetadata`) keeps created ids
   separate for roundtrip. Generalizes to doc-134 overlays (each overlay add: `allocate_<kind>` +
   `set_<kind>_id` + `metadata.set_<kind>_id`, refs resolve against the same pair). Sub-linear is
   deferred: would make `MoleculeMetadata`'s id maps `BiBTreeMap` (O(log n) both ways), a separate
   shared-type change.
 - R7i — **Done.** Assembles `Deltas` + `ReactionMetadata` (`ReactionAst { lhs, deltas }`).
-- R7j — **Done.** `test_reaction_input_into_ast{,_alias_union}`,
+- R7j — **Done.** `test_reaction_input_into_ir{,_alias_union}`,
   `..._atom_{remove,remove_error,modify}`, `..._bond_{add,remove,remove_error,modify}`,
   `..._constraint_{add,remove,added_atom_ref}` (the last exercises a constraint ref naming a
   same-reaction-added atom), plus `test_{atom,bond}_ast_update`.
@@ -585,8 +585,8 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
 
 **R8 — `FromEdn` path** [R2, R6, R7]: **Done**
 - R8a — **Done.** `FromEdn` for `ReactionDsl`: `from_edn` → `parse_reaction_input` (tree) →
-  `into_ast` → `from_parts`; `from_edn_str` → `read_reaction_input` (streaming) + `expect_eof` →
-  `into_ast` → `from_parts`. `ParseError` mapped via `DeError::Custom`. Mirrors `MoleculeDsl`. Wires
+  `into_ir` → `from_parts`; `from_edn_str` → `read_reaction_input` (streaming) + `expect_eof` →
+  `into_ir` → `from_parts`. `ParseError` mapped via `DeError::Custom`. Mirrors `MoleculeDsl`. Wires
   up the previously-unused reaction parse fns.
 - R8b — **Done.** `FromStr for ReactionDsl` (`Err = ParseError`), delegating `from_edn_str` and
   mapping `EdnError` → `ParseError::EdnParse`. Mirrors `MoleculeDsl`.
@@ -631,7 +631,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
     render, while `#a+`/`#C+`/`#T+` (= `Stereo(Undetermined)`, "is a stereocenter, config unknown")
     are preserved. Cross-crate updates: `kekulizer`, `aromaticity`, `counts`, `table_ir/raise`.
 - R9c — **Done.** `render_deltas` constraint ops: `ConstraintDelta::Add`/`Remove` →
-  `{:constraint {:add|:remove <ConstraintDsl>}}` via `ConstraintDsl::from_ast(c, combined)`. Its
+  `{:constraint {:add|:remove <ConstraintDsl>}}` via `ConstraintDsl::from_ir(c, combined)`. Its
   entity refs span lhs ∪ created, so they resolve against `ReactionMetadata::combined_metadata()`
   (merges the lhs molecule metadata with the created-entity id bindings) — built once, lazily, only
   when a constraint delta is present. `render_deltas` renders deltas in their stored order (no
@@ -641,7 +641,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   :deltas … :atom-aliases …}` map: `:lhs` via the molecule renderer (`render_molecule_edn`, made
   `pub(super)`), `:deltas` via `render_deltas`, then `:atom-aliases` (reaction-level, only when
   present) — aliases last, matching the molecule surface. Key order is cosmetic (both parse paths
-  collect keys order-independently; alias resolution is deferred to `into_ast`).
+  collect keys order-independently; alias resolution is deferred to `into_ir`).
   Test: `test_render_reaction_edn` (render → reparse preserves the `ReactionDsl`, covering a modify
   and a reaction-level alias used by an `:add`).
 - R9e — **Done.** Per-op render table tests (`render_deltas`, shared `meta` fixture):
@@ -659,7 +659,7 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
   (`dsl.into_parts().0`); `Display` → `to_edn`; `ToEdn` renders with `ReactionMetadata::default()`
   (positional lhs + refs, no ids/aliases), mirroring `MoleculeAst::to_edn`.
 - R10d — **Done.** `test_reaction_dsl_from_edn_to_edn_roundtrip` (+molecule-`:connected` and entity-leaf
-  `:atom` constraint deltas); `test_reaction_ast_to_edn` (metadata-free positional round-trip: lhs modify,
+  `:atom` constraint deltas); `test_reaction_to_edn` (metadata-free positional round-trip: lhs modify,
   created-atom-as-bond-endpoint, molecule constraint, entity-leaf constraint).
 - *Checkpoint (tested):* full round-trip. **Done.**
 
@@ -691,7 +691,7 @@ Reuse the existing harness — `umol-ast/tests/property/{delta,reaction}.rs` and
   `test_partial_{atom,bond}_dsl_to_edn_from_edn_roundtrip` (`from_edn(to_edn(x)) == x`). The partial's
   EDN form is a string leaf; tree-vs-streaming parity is **not** asserted here — see the deferred note.
 - R12d — **Done.** Delta EDN round-trip in `property/reaction.rs`:
-  `test_reaction_ast_edn_roundtrip_stable` (render → parse reaches a fixpoint over `reaction_strategy`,
+  `test_reaction_edn_roundtrip_stable` (render → parse reaches a fixpoint over `reaction_strategy`,
   covering atom/bond add / remove / modify-field). modify-constraint ops are covered by the R9e unit
   tests, not generated here.
 - R12e — **Done.** `umol-ast/fuzz/fuzz_targets/fuzz_reaction.rs` (registered in `fuzz/Cargo.toml`):
@@ -772,9 +772,9 @@ green and tested. Prereqs in brackets.
 - C3c — **Done.** `#[derive(Debug)] pub(crate) struct SpanInput { atoms: Vec<(Option<String>,
   EntitySpan<AtomAst>)>, bonds: Vec<(Option<String>, [AtomRef; 2], EntitySpan<BondAst>)>, constraints:
   Vec<ConstraintSpanInput> }`. Plan's `AtomRefDsl` corrected to **`AtomRef`** (the real ref type from
-  `dsl/refs.rs`, as used for endpoints in `dsl/reaction.rs`). `into_ast` deferred to C8.
+  `dsl/refs.rs`, as used for endpoints in `dsl/reaction.rs`). `into_ir` deferred to C8.
 - *Checkpoint:* compiles. **Done** (two transient dead-code warnings — `ConstraintSpanInput` /
-  `SpanInput` unused until C6 parsing / C8 `into_ast`).
+  `SpanInput` unused until C6 parsing / C8 `into_ir`).
 
 **C4 — `ReactionSpanDsl` boundary shell** [C1, C3]: **Done**
 - C4a — **Done.** `pub struct ReactionSpanDsl { ast: ReactionSpanAst, metadata: MoleculeMetadata }`
@@ -787,13 +787,13 @@ green and tested. Prereqs in brackets.
 
 **C5 — AST↔DSL conversion** [C4]: **Done**
 - C5a — **Done.** `FromAst<ReactionSpanAst>` (`Ctx = MoleculeDefaults`): rebuilds the span via
-  `ReactionSpanAst::from_parts`, lowering each `EntitySpan` side with `AtomDsl/BondDsl::from_ast`
+  `ReactionSpanAst::from_parts`, lowering each `EntitySpan` side with `AtomDsl/BondDsl::from_ir`
   (`cfg.atom` / `cfg.bond`); constraints pass through (as in `MoleculeDsl`); `metadata =
   MoleculeMetadata::default()`. A private `map_span` helper applies the per-side converter across the
   four `EntitySpan` variants (used 4×; no `EntitySpan::map` on the AST type).
-- C5b — **Done.** `IntoAst<ReactionSpanAst>`: inverse raise via `AtomDsl/BondDsl(..).into_ast`, same
+- C5b — **Done.** `IntoAst<ReactionSpanAst>`: inverse raise via `AtomDsl/BondDsl(..).into_ir`, same
   `from_parts` rebuild (clones rather than `atoms_mut`, since `ReactionSpanAst` exposes only accessors).
-- C5c — **Done.** `test_reaction_span_dsl_from_ast` — `#[case]` table asserting `from_ast → into_ast`
+- C5c — **Done.** `test_reaction_span_dsl_from_ir` — `#[case]` table asserting `from_ir → into_ir`
   identity: `modify` (Modified bond + Unchanged atoms + Unchanged constraint) and `add_remove`
   (Unchanged/Removed/Added atoms & bonds + Added constraint).
 - *Checkpoint (tested):* programmatic `ReactionSpanAst` ↔ `ReactionSpanDsl`, no EDN. **Done** (full
@@ -844,31 +844,31 @@ frame is molecule-shaped and `atom_aliases` is a legitimate span field, so no de
 is needed. (Bond DSL keywords `:single`/`:double`/`:triple`/`:aromatic` flow through `BondDsl::from_edn`
 — the same `:type` leaf parser `parse_bond_entry` uses — and are covered by tests.)
 
-**C8 — Resolution** [C1, C3]: `SpanInput::into_ast → (ReactionSpanAst, MoleculeMetadata)`. **Done**
+**C8 — Resolution** [C1, C3]: `SpanInput::into_ir → (ReactionSpanAst, MoleculeMetadata)`. **Done**
 Work items in dependency order (no fresh-id assignment — union-frame; C8a also builds the bijective alias
 table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` sides resolve to `AtomAst` —
 `Bare → .0`, `Alias → table lookup`, unknown → error):
 - C8a — **Done.** Union namespace: positions are the ids, inline `:id`s set on `MoleculeMetadata`
   (unique via `contains_id` → `DuplicateId`); bijective alias table (→ `MoleculeMetadata.atom_aliases`).
-- C8b — **Done.** Each bond's `[AtomRef; 2]` resolved via `AtomRef::into_ast(atom_count, &metadata)`
+- C8b — **Done.** Each bond's `[AtomRef; 2]` resolved via `AtomRef::into_ir(atom_count, &metadata)`
   (out-of-range / unknown → `InvalidRef`).
 - C8c — **Done.** `Graph::new(atom_count, &edges)` over every bond's resolved endpoints.
-- C8d — **Done.** `ConstraintSpanInput` → `ConstraintSpan` via `ConstraintDsl::into_ast(&counts,
+- C8d — **Done.** `ConstraintSpanInput` → `ConstraintSpan` via `ConstraintDsl::into_ir(&counts,
   &metadata)`; `counts` is a directly-constructed `EntityCounts` (overlays 0).
 - C8e — **Done.** Per-side ref consistency: a bond present on a side requires both endpoint atoms
   present on that side (`EntitySpan::left()`/`right()`); else `InvalidValue`.
 - C8f — **Done.** `ReactionSpanAst::from_parts(graph, atoms, bonds, constraints)`.
-- C8g — **Done.** `test_span_input_into_ast` (`#[case]` table, full `(ReactionSpanAst,
-  MoleculeMetadata)` expected) + `test_span_input_into_ast_error` (`#[case]` table asserting the exact
+- C8g — **Done.** `test_span_input_into_ir` (`#[case]` table, full `(ReactionSpanAst,
+  MoleculeMetadata)` expected) + `test_span_input_into_ir_error` (`#[case]` table asserting the exact
   `ParseError`: unknown alias / out-of-range ref / left-side inconsistency).
 - *Refactor:* `resolve_atom_spec(spec, aliases) -> AtomAst` factored into `molecule.rs` (beside
-  `AtomSpecInput`) and shared by the molecule, reaction, **and** span `into_ast` paths (was inlined
+  `AtomSpecInput`) and shared by the molecule, reaction, **and** span `into_ir` paths (was inlined
   thrice).
 - *Checkpoint (tested):* `SpanInput` resolves. **Done.**
 
 **C9 — `FromEdn` path** [C4, C7, C8]: **Done**
-- C9a — **Done.** `FromEdn`: `from_edn` (tree `parse_span_input` → `into_ast` → `from_parts`) +
-  `from_edn_str` (streaming `read_span_input` + `expect_eof` → `into_ast` → `from_parts`).
+- C9a — **Done.** `FromEdn`: `from_edn` (tree `parse_span_input` → `into_ir` → `from_parts`) +
+  `from_edn_str` (streaming `read_span_input` + `expect_eof` → `into_ir` → `from_parts`).
 - C9b — **Done.** `FromStr` (`Err = ParseError`, delegates `from_edn_str`).
 - C9c — **Done.** `test_reaction_span_dsl_from_edn` (`#[case]` table: span map + plain molecule →
   all-`Unchanged`) asserting `from_edn` / `from_edn_str` / `from_str` all yield the same
@@ -885,7 +885,7 @@ table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` si
   render layer; `render_atom_ref` already lived there) and shared by molecule rendering + the span —
   same dedup as `resolve_atom_spec`. (`render_bond_frame` was a misnomer — it renders a bond *entry*.)
 - C10c — **Done.** `render_constraint_span_entry`: bare / `{:add c}` / `{:remove c}` via
-  `ConstraintDsl::from_ast(c, meta).to_edn()`.
+  `ConstraintDsl::from_ir(c, meta).to_edn()`.
 - C10d — **Done.** `render_span_edn`: `:atoms` (always) + `:bonds`/`:constraints`/`:atom-aliases`
   (when non-empty), endpoints read from `ast.graph()`.
 - C10e — **Done.** `test_render_{atom,bond,constraint}_span_entry` `#[case]` tables (per op + ids +
@@ -899,8 +899,8 @@ table and populates `MoleculeMetadata.atom_aliases`, and atom `AtomSpecInput` si
   metadata (`into_parts().0`); `Display` → `to_edn`; `ToEdn` renders with `MoleculeMetadata::default()`
   (positional, no ids/aliases), mirroring `ReactionAst`.
 - C11d — **Done.** `test_reaction_span_dsl_to_edn` (`#[case]` round-trip: plain-molecule / modify /
-  add_remove / constraint / aliases), `test_reaction_span_ast_to_edn` (positional AST round-trip), and
-  `test_reaction_span_ast_constraint_projection` (`:add` → right only, `:remove` → left only).
+  add_remove / constraint / aliases), `test_reaction_span_to_edn` (positional AST round-trip), and
+  `test_reaction_span_constraint_projection` (`:add` → right only, `:remove` → left only).
 - *Checkpoint (tested):* full round-trip. **Done** (54 reaction_span tests; full suite 3914).
 
 **C12 — Spec** [C11]: **Done**

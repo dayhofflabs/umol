@@ -15,21 +15,21 @@ proptest! {
 
     #[test]
     fn test_molecule_correspondence_reverse(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
+        let correspondence = molecule.induced_subgraph(&atoms);
         prop_assert_eq!(correspondence.reverse().reverse(), correspondence);
     }
 
     #[test]
     fn test_molecule_correspondence_induce(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
-        let extracted = ast.extract(&correspondence);
+        let correspondence = molecule.induced_subgraph(&atoms);
+        let extracted = molecule.extract(&correspondence);
         let induced = MoleculeCorrespondence::induce(
             &extracted,
-            &ast,
+            &molecule,
             correspondence.atoms().clone(),
         ).expect("extraction preserves unique entity incidence");
         prop_assert_eq!(induced, correspondence);
@@ -37,9 +37,9 @@ proptest! {
 
     #[test]
     fn test_molecule_correspondence_is_total(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
+        let correspondence = molecule.induced_subgraph(&atoms);
         let reverse = correspondence.reverse();
 
         prop_assert_eq!(
@@ -52,9 +52,9 @@ proptest! {
 
     #[test]
     fn test_molecule_correspondence_compose_identity(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
+        let correspondence = molecule.induced_subgraph(&atoms);
         let identity = correspondence.compose(&correspondence.reverse());
 
         prop_assert!(identity.is_total());
@@ -97,9 +97,9 @@ proptest! {
 
     #[test]
     fn test_molecule_correspondence_compose_associativity(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
+        let correspondence = molecule.induced_subgraph(&atoms);
         let reverse = correspondence.reverse();
 
         prop_assert_eq!(
@@ -110,9 +110,9 @@ proptest! {
 
     #[test]
     fn test_molecule_correspondence_compose_all(
-        (ast, atoms) in molecule_ast_with_atom_subset_strategy(),
+        (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {
-        let correspondence = ast.induced_subgraph(&atoms);
+        let correspondence = molecule.induced_subgraph(&atoms);
         let reverse = correspondence.reverse();
         let expected = correspondence.compose(&reverse).compose(&correspondence);
 

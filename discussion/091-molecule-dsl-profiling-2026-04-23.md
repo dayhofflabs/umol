@@ -260,11 +260,11 @@ Top frames under `MoleculeDsl::from_edn_str`:
 
 | Share | Frame                                                                |
 | ----- | -------------------------------------------------------------------- |
-| 73 %  | `MoleculeInput::into_ast`                                            |
+| 73 %  | `MoleculeInput::into_ir`                                            |
 | 24 %  | `read_molecule_input` (byte parsing)                                 |
 | 3 %   | `MoleculeDsl::drop`                                                  |
 
-Inside the 73 % `into_ast` slice:
+Inside the 73 % `into_ir` slice:
 
 | Share | Frame                                                                |
 | ----- | -------------------------------------------------------------------- |
@@ -277,7 +277,7 @@ Inside the 24 % byte-parsing slice: 11 % atoms, 9 % bonds, 3 % aromatic systems.
 
 ### 9.2 Root cause
 
-`MoleculeInput::into_ast` was calling `atom_only_metadata(&atom_ids)` inside
+`MoleculeInput::into_ir` was calling `atom_only_metadata(&atom_ids)` inside
 every ref-resolution site — 29 times per indole parse (20 bond endpoints,
 9 aromatic atoms). Each call cloned the full `atom_ids:
 IndexMap<AtomIdx, String>` into a throwaway `Metadata`, then dropped it.
@@ -290,9 +290,9 @@ map for the `Id(name)` case — while the reverse map
 
 - Added `$name::resolve(self, count, id_to_idx: &IndexMap<String, $idx>) -> Result<$idx, ParseError>` to the `define_ref!` macro
   (`constraint.rs:141`). O(1) `id_to_idx.get(&name)` instead of linear scan.
-  Existing `into_ast(self, count, &Metadata)` left intact for constraint
+  Existing `into_ir(self, count, &Metadata)` left intact for constraint
   resolution (which still uses `ResolveContext` / `Metadata`).
-- Updated 8 call sites in `MoleculeInput::into_ast` (bond endpoints, dative
+- Updated 8 call sites in `MoleculeInput::into_ir` (bond endpoints, dative
   donor/acceptor, aromatic atoms, multicenter atoms, noncovalent endpoints)
   to call `resolve(atom_count, &atom_id_to_idx)` — no `Metadata` constructed.
 - Removed the now-dead `atom_only_metadata` helper.
@@ -326,7 +326,7 @@ next target. Candidates still open from Section 0: #2 (drop `AtomDsl`
 intermediate in streaming), #4 (bimap replacement for aliases, likely
 minor impact now since alias resolution isn't in the entity-loop hot path),
 #6 (verify `read_vec` pre-reserves). Expect the share of byte-parsing
-(`read_vec` sites) to rise proportionally now that `into_ast` is cheaper.
+(`read_vec` sites) to rise proportionally now that `into_ir` is cheaper.
 
 ## 10. Iteration 3 — `parse_atom` fast path for bare element symbols
 
@@ -337,7 +337,7 @@ Total time: 7.71 µs. Two near-equal halves:
 | Share | Frame                                                                   |
 | ----- | ----------------------------------------------------------------------- |
 | 47 %  | `read_molecule_input` (byte parsing)                                    |
-| 47 %  | `MoleculeInput::into_ast` (resolution)                                  |
+| 47 %  | `MoleculeInput::into_ir` (resolution)                                  |
 | 3 %   | `MoleculeDsl::drop`                                                     |
 
 Inside `read_molecule_input`:
@@ -350,7 +350,7 @@ Inside `read_molecule_input`:
 | 20 %  | `read_vec BondEntryInput`                               |
 | 6 %   | `read_vec AromaticSystemEntryInput`                     |
 
-Inside `into_ast`, frames were all 4–8 % — no single dominant hotspot.
+Inside `into_ir`, frames were all 4–8 % — no single dominant hotspot.
 
 ### 10.2 Root cause
 
@@ -416,7 +416,7 @@ private `MetadataBuilder` used by the parser and test fixtures.
 Alias-path types changed from `AtomDsl` (336 B stack value) to
 `Box<AtomDsl>` (8 B pointer) — localized to alias storage
 (`Metadata.atom_aliases`, `MetadataBuilder.atom_aliases`,
-`MoleculeInput.atom_aliases`, local `alias_table` in `into_ast`).
+`MoleculeInput.atom_aliases`, local `alias_table` in `into_ir`).
 `MetadataBuilder::add_atom_alias(&mut self, name, Box<AtomDsl>) ->
 Result<(), ParseError>` replaces the earlier `try_add_atom_alias` that
 imitated `BiMap::insert_no_overwrite`'s `Result<(), (L, R)>` shape.
@@ -432,7 +432,7 @@ Re-profile indole stream after this change. Candidates still open:
 #2 (drop `AtomDsl` intermediate during streaming) — likely smaller
 payoff now that `parse_bare_element` skips the intermediate for the
 common case. #6 (verify `read_vec` pre-reserves from header count).
-Expect `read_molecule_input` share to drop below 47 % and `into_ast`
+Expect `read_molecule_input` share to drop below 47 % and `into_ir`
 to rise relatively.
 
 ## 11. Iteration 4 — Metadata id-storage experiment (negative result)
@@ -662,7 +662,7 @@ about to be overwritten. Pattern was:
 
 ```rust
 for atom in ast.atoms_mut() {
-    *atom = AtomDsl(atom.clone()).into_ast(&cfg.atom)?;
+    *atom = AtomDsl(atom.clone()).into_ir(&cfg.atom)?;
 }
 ```
 
@@ -670,7 +670,7 @@ for atom in ast.atoms_mut() {
 
 Added `benches/conversion.rs` covering the `FromAst` and `IntoAst`
 paths on `MoleculeDsl` — neither is exercised by the parse/render
-benches (those bypass the trait via `MoleculeInput::into_ast`).
+benches (those bypass the trait via `MoleculeInput::into_ir`).
 
 ### 13.3 Baselines (current code, before fix)
 
@@ -707,7 +707,7 @@ Replace `atom.clone()` with `std::mem::take(atom)` in the four entity
 loops of `IntoAst for MoleculeDsl`. The slot is owned exclusively and
 about to be overwritten, so moving out and leaving `Default::default()`
 in place is sound. `FromAst for MoleculeDsl` does not need the same
-treatment — its entity loop uses `AtomDsl::from_ast(&atom, cfg)` which
+treatment — its entity loop uses `AtomDsl::from_ir(&atom, cfg)` which
 takes `&atom` and has no inner clone.
 
 ### 13.5 Results

@@ -311,14 +311,14 @@ pub(super) fn read_stereo_coset_dsl(
 /// site value (`:undetermined`, `:not-stereo`, or `{:stereo <coset>}`) straight
 /// from the deserializer. `$kind` fixes the coset degree.
 macro_rules! read_stereo_site_dsl {
-    ($name:ident, $ast:ident, $kind:expr) => {
-        pub(super) fn $name(de: &mut EdnStreamDeserializer<'_>) -> Result<$ast, EdnError> {
+    ($name:ident, $form:ident, $kind:expr) => {
+        pub(super) fn $name(de: &mut EdnStreamDeserializer<'_>) -> Result<$form, EdnError> {
             match de.peek_byte()?.ok_or_else(eof_err)? {
                 b':' => {
                     let name = de.read_keyword_name()?;
                     match name.as_ref() {
-                        "undetermined" => Ok($ast::Undetermined),
-                        "not-stereo" => Ok($ast::NotStereo),
+                        "undetermined" => Ok($form::Undetermined),
+                        "not-stereo" => Ok($form::NotStereo),
                         other => Err(DeError::Custom(format!(
                             "unknown stereo-configuration keyword :{}",
                             other
@@ -332,7 +332,7 @@ macro_rules! read_stereo_site_dsl {
                         "stereo" => {
                             let coset = read_stereo_coset_dsl(de, $kind.degree())?.into_ir(&());
                             consume_single_key_map_close(de, "stereo-configuration")?;
-                            Ok($ast::Stereo(coset))
+                            Ok($form::Stereo(coset))
                         }
                         other => Err(DeError::UnknownField {
                             key: other.to_string(),
@@ -1674,7 +1674,7 @@ impl ToEdn for ConstraintsDsl {
 
 impl ConstraintsDsl {
     /// Vacuous constraints (per `Constraint::is_vacuous`) are dropped
-    /// during the AST → DSL lowering, matching the canonical-rendering
+    /// during IR → DSL lowering, matching the canonical-rendering
     /// rule: a constraint that asserts nothing does not appear in the
     /// canonical surface form.
     pub(crate) fn from_ir<M: Metadata>(cs: &Constraints, meta: &M) -> Result<Self, ParseError> {

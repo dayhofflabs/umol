@@ -47,15 +47,15 @@ impl<'a> ValenceResolver<'a> {
     ///
     /// A non-literal element makes the whole plan underdetermined and yields
     /// no edits.
-    pub fn plan(&self, ast: &Molecule) -> Solution<Edits, ValenceContradiction> {
-        for atom in ast.atoms().ids() {
+    pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, ValenceContradiction> {
+        for atom in molecule.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
                 AtomConstraintKey::DonatedPairs,
                 AtomConstraintKey::AcceptedPairs,
             ] {
                 match IncidenceConstraintValidator
-                    .validate_molecule_atom_constraint(ast, atom, key)
+                    .validate_molecule_atom_constraint(molecule, atom, key)
                     .expect("atom id came from the molecule atom store")
                 {
                     Solution::Determined(()) => {}
@@ -70,10 +70,10 @@ impl<'a> ValenceResolver<'a> {
         }
         match self {
             Self::AtomTyping(resolver) => resolver
-                .plan(ast)
+                .plan(molecule)
                 .map_contradiction(ValenceContradiction::from),
             Self::Counts(resolver) => resolver
-                .plan(ast)
+                .plan(molecule)
                 .map_contradiction(ValenceContradiction::from),
         }
     }
@@ -81,18 +81,18 @@ impl<'a> ValenceResolver<'a> {
     /// Plan and atomically apply the selected valence model.
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), ValenceContradiction>, ValenceError> {
-        let edits = match self.plan(ast) {
+        let edits = match self.plan(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         editor.transact(edits)?;
-        *ast = editor.build();
+        *molecule = editor.build();
         Ok(Solution::Determined(()))
     }
 }

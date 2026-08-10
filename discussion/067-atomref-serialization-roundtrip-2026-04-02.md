@@ -113,13 +113,13 @@ EdnDeserializer path) constructs the correct variant from the Edn type.
 ## Atom label preservation
 
 Currently `MoleculeBuilder` and `Molecule` discard atom labels during lowering.
-The `to_ast()` method cannot reconstruct `Atoms::Named` — it always emits
+The `to_ir()` method cannot reconstruct `Atoms::Named` — it always emits
 `Atoms::Indexed`.
 
 To support faithful roundtrip of named atoms:
 - `MoleculeBuilder` stores `atom_labels: Option<IndexMap<AtomIndex, String>>`
-- Populated during `from_ast()` when input is `Atoms::Named`; `None` for `Atoms::Indexed`
-- `to_ast()` emits `Atoms::Named` when labels exist, `Atoms::Indexed` otherwise
+- Populated during `from_ir()` when input is `Atoms::Named`; `None` for `Atoms::Indexed`
+- `to_ir()` emits `Atoms::Named` when labels exist, `Atoms::Indexed` otherwise
 - Labels transfer to `Molecule` during resolution
 
 ## Open question: mixed-key atom maps
@@ -170,7 +170,7 @@ instead of A, after examining `serde_json::RawValue` as prior art.
 
 - `MoleculeInput` adapter: stream-deserialized via `EdnStreamDeserializer`, no Edn tree.
 - `AtomEntryInput` enum: `Str(String)` | `Tagged(String, Box<AtomEntryInput>)`.
-- `into_ast()` pipeline: alias resolution via table lookup, tag extraction, validation.
+- `into_ir()` pipeline: alias resolution via table lookup, tag extraction, validation.
 - `:aliases` / `:atom-aliases` both accepted on read.
 
 ### `BondSpec` eliminated
@@ -178,12 +178,12 @@ instead of A, after examining `serde_json::RawValue` as prior art.
 - `BondSpec` enum removed. All bond fields are `BondAst` directly.
 - Built-in bond aliases (`:single` → order 1, etc.) handled via `builtin_bond_aliases()` `BiMap`.
 - `BondAst::Serialize` checks alias table, emits `EdnKeyword` for known aliases.
-- `lower_bond_spec` match arms in `from_ast` collapsed to `BondPattern::from_ast(bond, cfg)`.
+- `lower_bond_spec` match arms in `from_ir` collapsed to `BondPattern::from_ir(bond, cfg)`.
 
 ### `Metadata` struct
 
 - `Metadata { atom_tags, atom_aliases }` — formatting metadata separate from `Molecule`.
-- `from_ast_with_metadata()` returns `(MoleculeBuilder, Metadata)`.
+- `from_ir_with_metadata()` returns `(MoleculeBuilder, Metadata)`.
 - `to_ast_with_metadata(&meta)` reconstructs tags and aliases.
 - `Molecule` stays clean — no DSL formatting concerns.
 

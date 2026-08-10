@@ -5,23 +5,23 @@
 umol is a Rust workspace for explicit, algorithmically transparent molecular
 representations and operations, with Python bindings in `umol-py`.
 
-- `umol-graph-ir` defines the molecular and reaction DSLs and their semantic ASTs.
+- `umol-graph-ir` defines the molecular and reaction DSLs and their semantic graph IR.
 - `umol-graph-core` provides graph data structures and domain-independent graph
   algorithms.
-- `umol-graph` provides chemistry-aware operations over the AST model.
+- `umol-graph` provides chemistry-aware operations over the graph-IR model.
 - `umol-io` owns external-format boundary representations and parsers.
 - `umol-geometric*` provides geometric representations and their connection to
   the graph model.
 - `umol-py` exposes the supported high-level surface to Python.
 
-The AST, graph, geometric, and external-format representations are distinct
+The graph IR, graph views, geometric, and external-format representations are distinct
 models. Do not treat a format boundary type as the one true molecular model.
 
 ## Crate map
 
 | Crate | Responsibility |
 | --- | --- |
-| `umol-graph-ir`, `umol-graph-ir-macros` | Molecular and reaction DSLs, ASTs, constraints, edits, deltas, and validation vocabulary |
+| `umol-graph-ir`, `umol-graph-ir-macros` | Molecular and reaction DSLs, graph IR, constraints, edits, deltas, and validation vocabulary |
 | `umol-chem` | Elements, isotopes, spin, occupation, units, and other chemistry vocabulary |
 | `umol-edn`, `umol-edn-macros` | EDN parsing, formatting, and macros |
 | `umol-graph-core` | Graph storage, relations, rewriting primitives, and graph algorithms |
@@ -45,7 +45,7 @@ models. Do not treat a format boundary type as the one true molecular model.
   defaults in operation-specific config objects. Algorithm choices are
   operational config, not chemistry-model parameters.
 - Keep external formats behind explicit boundary types. Conversion from a
-  boundary representation to an AST may be lossy or model-dependent.
+  boundary representation to the graph IR may be lossy or model-dependent.
 - Rust-to-Python and Python-to-Rust boundary methods are named `from_rust` and
   `to_rust`. Rust imports in `umol-py` use the crate name without the `umol-`
   prefix when an import prefix is needed.
@@ -97,7 +97,7 @@ and follow only the references relevant to the task.
 
 | Work area | Start with |
 | --- | --- |
-| AST, DSL, constraints, entities, reactions | `umol-graph-ir`; docs 113, 131, 132, 164, 165 |
+| Graph IR, DSL, constraints, entities, reactions | `umol-graph-ir`; docs 113, 131, 132, 164, 165 |
 | Graph algorithms and rewriting primitives | `umol-graph-core`; docs 136, 157-162, 167 |
 | Chemistry-aware graph operations | `umol-graph`; docs 145-149, 166 |
 | SMILES, MOL, SDF, and TableIR | `umol-io`; docs 151-153, 155 |

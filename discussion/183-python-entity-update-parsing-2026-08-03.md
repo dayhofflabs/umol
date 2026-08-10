@@ -32,14 +32,14 @@ be designed or duplicated.
 The existing `*Ast` pattern is:
 
 ```text
-string -> *Dsl::from_str -> *Dsl::into_ast -> *Ast
+string -> *Dsl::from_str -> *Dsl::into_ir -> *Ast
 *Ast -> *Dsl -> Display -> string
 ```
 
 The `*Update` pattern should be identical:
 
 ```text
-string -> *UpdateDsl::from_str -> *UpdateDsl::into_ast -> *Update
+string -> *UpdateDsl::from_str -> *UpdateDsl::into_ir -> *Update
 *Update -> *UpdateDsl -> Display -> string
 ```
 

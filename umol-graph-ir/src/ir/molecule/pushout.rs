@@ -396,7 +396,7 @@ mod tests {
     #[rstest]
     #[case::top_meets_element(AtomForm::default(), AtomForm::from_element(Element::C), Element::C)]
     #[case::element_meets_top(AtomForm::from_element(Element::C), AtomForm::default(), Element::C)]
-    fn test_molecule_ast_meet_pushout(
+    fn test_molecule_meet_pushout(
         overlap: GraphCorrespondence,
         #[case] left_shared: AtomForm,
         #[case] right_shared: AtomForm,
@@ -478,7 +478,7 @@ mod tests {
             ..Default::default()
         }),
     )]
-    fn test_molecule_ast_meet_pushout_inadmissible(
+    fn test_molecule_meet_pushout_inadmissible(
         overlap: GraphCorrespondence,
         #[case] left: Molecule,
         #[case] right: Molecule,
@@ -490,7 +490,7 @@ mod tests {
     // follow their atoms into the canonical glue order; coincident overlays meet and disjoint
     // overlays remain as context.
     #[rstest]
-    fn test_molecule_ast_meet_pushout_overlays() {
+    fn test_molecule_meet_pushout_overlays() {
         let full_overlap = GraphCorrespondence::new(
             Correspondence::new(
                 vec![
@@ -581,7 +581,7 @@ mod tests {
     // through the embedding — `other`'s atom 1 becomes glue atom 2.
     #[rstest]
     #[case::atom_valences(4, 2)]
-    fn test_molecule_ast_meet_pushout_constraints(
+    fn test_molecule_meet_pushout_constraints(
         overlap: GraphCorrespondence,
         #[case] left_valence: i64,
         #[case] right_valence: i64,
@@ -643,7 +643,7 @@ mod tests {
     #[case::agree([2, 1, 3, 4], 1, true)]
     #[case::contradict([2, 1, 3, 4], 0, false)]
     #[case::ligand_set([2, 1, 3, 5], 1, false)]
-    fn test_molecule_ast_meet_pushout_stereo_atom(
+    fn test_molecule_meet_pushout_stereo_atom(
         #[case] other_ligands: [u32; 4],
         #[case] other_coset: u32,
         #[case] admissible: bool,
@@ -730,7 +730,7 @@ mod tests {
         1,
         false,
     )]
-    fn test_molecule_ast_meet_pushout_stereo_bond(
+    fn test_molecule_meet_pushout_stereo_bond(
         #[case] other_ligands: [StereoLigand; 4],
         #[case] other_coset: u32,
         #[case] admissible: bool,

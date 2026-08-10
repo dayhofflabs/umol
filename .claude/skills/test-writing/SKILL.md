@@ -1,5 +1,5 @@
 ---
-description: MANDATORY — load and apply before creating or editing ANY test in a umol-workspace crate, including tests written as part of implementing a feature, fixing a bug, or any larger change (not only when tests are explicitly requested). If you are about to write or edit a `#[test]`/`#[rstest]`/`#[case]`/`#[fixture]` or a test assertion, load this first. Apply on ANY task that adds, extends, revises, writes, updates, renames, restructures, splits, merges, or reviews tests in a umol-workspace crate — a new test, more or changed `#[case]` rows, a new `#[rstest]`/`#[fixture]`, fixing or renaming a test, reordering a `mod tests` block, or porting a `#[test]` to the conventions. Trigger whenever test code is created or edited, or whenever the request mentions tests, test cases, coverage, `#[test]`, `#[rstest]`, `#[case]`, `#[fixture]`, `mod tests`, or assertions in tests — including when test work is only part of a larger change (e.g. adding tests after implementing a feature). Covers the rstest table-test framework, fixture usage, naming rules (no behavior in test names; only `_error`/`_identity`/`_partial` qualifiers), inline-literal construction, assertion style, identity-comparison splits, circular-logic avoidance, ordering parallel to module definitions, and crate-specific patterns for macros, AST entities, and defaults configs. Consult before writing or editing any test, and re-check names and structure on every test edit.
+description: MANDATORY — load and apply before creating or editing ANY test in a umol-workspace crate, including tests written as part of implementing a feature, fixing a bug, or any larger change (not only when tests are explicitly requested). If you are about to write or edit a `#[test]`/`#[rstest]`/`#[case]`/`#[fixture]` or a test assertion, load this first. Apply on ANY task that adds, extends, revises, writes, updates, renames, restructures, splits, merges, or reviews tests in a umol-workspace crate — a new test, more or changed `#[case]` rows, a new `#[rstest]`/`#[fixture]`, fixing or renaming a test, reordering a `mod tests` block, or porting a `#[test]` to the conventions. Trigger whenever test code is created or edited, or whenever the request mentions tests, test cases, coverage, `#[test]`, `#[rstest]`, `#[case]`, `#[fixture]`, `mod tests`, or assertions in tests — including when test work is only part of a larger change (e.g. adding tests after implementing a feature). Covers the rstest table-test framework, fixture usage, naming rules (no behavior in test names; only `_error`/`_identity`/`_partial` qualifiers), inline-literal construction, assertion style, identity-comparison splits, circular-logic avoidance, ordering parallel to module definitions, and crate-specific patterns for macros, graph-IR entities, and defaults configs. Consult before writing or editing any test, and re-check names and structure on every test edit.
 ---
 
 # umol test-writing conventions
@@ -72,7 +72,7 @@ When the expected for a complex constructor is too verbose, prefer struct litera
 ## What not to do
 
 - No `// region:` / `// endregion:` markers or section divider comments.
-- No helper constructor functions (`fn ground_atom() -> AtomAst { ... }`). Inline the construction in each `#[case]`.
+- No helper constructor functions (`fn ground_atom() -> AtomForm { ... }`). Inline the construction in each `#[case]`.
 - No "smoke tests" — either write a real test with specific assertions or do not test.
 - No tautological tests (e.g., `assert_eq!(X::new(v), X::Variant(v))` with no other behavior to verify) when adding a `From` impl makes the constructor redundant — drop the `new`, drop the test.
 - No behavior in test names. Use `#[case::descriptive_label]` rows instead.
@@ -85,7 +85,7 @@ When the expected for a complex constructor is too verbose, prefer struct litera
 - Each fallible macro gets a separate `test_<macro>_macro_error` with `#[should_panic]`.
 - For macros that wrap `FromStr` plus a config (e.g., `mol_ground!`), test against an explicitly-constructed expected via `from_atoms_and_bonds` + `with_*` chains + `into_ground()`. This verifies the macro applies the correct config.
 
-### AST entity tests (`umol-graph-ir::ir::*`)
+### Entity-form tests (`umol-graph-ir::ir::*`)
 
 - Method order: `new`/`from_*` → `with_*` → `into_*` → `is_ground` → `matches` → `simplify_*`.
 - `with_*` methods consolidate into one `test_<entity>_with_methods` table.

@@ -12,7 +12,7 @@ Turn a **settled** design into an ordered build plan. Do not use this to make de
 
 **ii. Split into subitems.** Break each item into *subitems* at the granularity of a **single struct / enum / trait**, or a **cohesive group of related functions or methods**. One subitem = one reviewable, independently-committable unit that carries its own tests.
 
-**iii. Dependence order (bottom-up).** Order the subitems by dependence, foundation-first: a subitem precedes every subitem that uses its types or functions. Record each subitem's **explicit** dependencies. Foundation crates/modules precede their consumers precede the surface (e.g. graph-core → ast → dsl).
+**iii. Dependence order (bottom-up).** Order the subitems by dependence, foundation-first: a subitem precedes every subitem that uses its types or functions. Record each subitem's **explicit** dependencies. Foundation crates/modules precede their consumers precede the surface (e.g. graph-core → graph IR → DSL).
 
 **iv. Group into stages.** Batch the dependence-ordered subitems into stages in rough dependence order, under one invariant:
 - the tree **stays green after every subitem** wherever possible;

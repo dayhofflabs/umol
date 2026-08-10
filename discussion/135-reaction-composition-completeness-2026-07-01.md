@@ -352,7 +352,7 @@ new primitive is `meet_pushout`.
   - **D-b2b — retire the compose-local `reframe_stereo`. (refactor)** Delete it from `compose.rs`;
     revert `compose_overlap` to call `apply_at` directly and drop the imports it needed. `[dep: D-b2a]`
     **Done**
-  - **D-b2c — direct `apply` cross-frame test. (additive)** `test_reaction_ast_apply_stereo_cross_frame`
+  - **D-b2c — direct `apply` cross-frame test. (additive)** `test_reaction_apply_stereo_cross_frame`
     — an ascending-frame tetrahedral inversion rule applied to a host stating the same center in a
     swapped ligand order; the derivation inverts the host's coset in the host's own frame. Locks the
     behavior that was silently broken — the match succeeded (matcher's `coset_for`) but delta lowering
@@ -453,7 +453,7 @@ folded into D-a/D-b/D-c above.
 DPO + `Lattice::meet`), `Graph::pushout`/`pushout_complement`/`pullback` as methods, `compose_overlap`
 (span composite: `A⁻¹` then `B` at the glue, `from_sides`, canonicalize), and `compose_all` rewired to
 `EmbeddingKind::Monomorphism`. All compose properties pass (**sound**, well-formed, dangling-free,
-determinism, both `_overlay` soundness) **except** `test_reaction_ast_compose_complete_overlay`.
+determinism, both `_overlay` soundness) **except** `test_reaction_compose_complete_overlay`.
 
 **The completeness failure is a pre-existing `transact.rs` bug, NOT a compose bug.** Shrunk case: `a` =
 pure deletion (removes atom F, the H–F bond, and an F···Cl HydrogenBond); `b` = identity on a single Cl.
@@ -517,7 +517,7 @@ always identity). `EntitySpan<U>` (the `ReactionSpanAst` overlay payload) implem
 to `U` per present side. `ElectronCountsAst::permute` now no-ops on a length mismatch (a malformed count vector
 is left for structure validation to reject, rather than asserting at construct time).
 
-**Outcome.** `test_reaction_ast_compose_complete_overlay` **passes** for the non-stereo span (stereo reactants
+**Outcome.** `test_reaction_compose_complete_overlay` **passes** for the non-stereo span (stereo reactants
 are skipped via `prop_assume!` — the compose stereo phase is still deferred). `compose_sound_overlay` and the
 rest of the property + lib suites are green; graph-core 377, umol-ast property 109, lib 4269, clippy clean. The
 `Names/RelationData`/`on_permute` naming and the "explicit required coupling" were settled with the user. The

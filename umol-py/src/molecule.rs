@@ -45,7 +45,7 @@ use crate::stereo::{
 use crate::substructure::SubstructureSearchConfig;
 use crate::transaction::MoleculeEditor;
 
-/// A molecule: the owned graph-AST root.
+/// A molecule: the owned graph-IR root.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
 pub struct Molecule(GraphIrMolecule);
@@ -139,11 +139,11 @@ impl Molecule {
         stereo_bonds: Vec<(u32, Vec<StereoLigand>, Py<StereoBondForm>)>,
         constraints: Vec<Py<Constraint>>,
     ) -> PyResult<Self> {
-        let ast_atoms = atoms
+        let ir_atoms = atoms
             .iter()
             .map(|atom| atom.bind(py).borrow().to_rust().clone())
             .collect();
-        let ast_bonds = bonds
+        let ir_bonds = bonds
             .iter()
             .map(|(first, second, bond)| {
                 (
@@ -153,7 +153,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_dative = dative_bonds
+        let ir_dative = dative_bonds
             .iter()
             .map(|(donors, acceptor, bond)| {
                 (
@@ -163,7 +163,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_aromatic = aromatic_systems
+        let ir_aromatic = aromatic_systems
             .iter()
             .map(|(atoms, system)| {
                 (
@@ -172,7 +172,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_multicenter = multicenter_bonds
+        let ir_multicenter = multicenter_bonds
             .iter()
             .map(|(atoms, bond)| {
                 (
@@ -181,7 +181,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_noncovalent = noncovalent_bonds
+        let ir_noncovalent = noncovalent_bonds
             .iter()
             .map(|([first, second], bond)| {
                 (
@@ -191,7 +191,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_stereo_atoms = stereo_atoms
+        let ir_stereo_atoms = stereo_atoms
             .iter()
             .map(|(site, ligands, value)| {
                 (
@@ -201,7 +201,7 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_stereo_bonds = stereo_bonds
+        let ir_stereo_bonds = stereo_bonds
             .iter()
             .map(|(site, ligands, value)| {
                 (
@@ -211,20 +211,20 @@ impl Molecule {
                 )
             })
             .collect();
-        let ast_constraints = constraints
+        let ir_constraints = constraints
             .iter()
             .map(|constraint| constraint.bind(py).borrow().to_rust(py))
             .collect::<Vec<_>>();
         GraphIrMolecule::try_from_entries(GraphIrMoleculeEntries {
-            atoms: ast_atoms,
-            bonds: ast_bonds,
-            dative: ast_dative,
-            aromatic: ast_aromatic,
-            multicenter: ast_multicenter,
-            noncovalent: ast_noncovalent,
-            stereo_atoms: ast_stereo_atoms,
-            stereo_bonds: ast_stereo_bonds,
-            constraints: ast_constraints.into(),
+            atoms: ir_atoms,
+            bonds: ir_bonds,
+            dative: ir_dative,
+            aromatic: ir_aromatic,
+            multicenter: ir_multicenter,
+            noncovalent: ir_noncovalent,
+            stereo_atoms: ir_stereo_atoms,
+            stereo_bonds: ir_stereo_bonds,
+            constraints: ir_constraints.into(),
         })
         .map(Molecule)
         .map_err(|error| PyValueError::new_err(error.to_string()))
@@ -475,12 +475,12 @@ impl Molecule {
 }
 
 impl Molecule {
-    /// The wrapped AST molecule — read access for atom views.
+    /// The wrapped IR molecule — read access for atom views.
     pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
         &self.0
     }
 
-    /// Mutable access to the wrapped AST molecule — write access for the live
+    /// Mutable access to the wrapped IR molecule — write access for the live
     /// atom and constraint views (copy-on-write through `atom_mut`).
     pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrMolecule {
         &mut self.0
