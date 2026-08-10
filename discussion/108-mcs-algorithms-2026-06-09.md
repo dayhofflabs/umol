@@ -24,7 +24,7 @@ One algorithm is implemented now: **McGregor backtracking** (vertex-mapping vari
 the general solver covering the whole config space — the role VF2 plays for `subiso` and
 branch-and-bound plays for `mis`. The algorithm enums therefore ship single-variant
 (`McGregor`), matching `SubgraphIsomorphismAlgorithm::Vf2`,
-`MaximumIndependentSetAlgorithm::BranchAndBound`, `AutomorphismAlgorithm::Nauty`.
+`MaxIndependentSetAlgorithm::BranchAndBound`, `AutomorphismAlgorithm::Nauty`.
 
 ### Out of scope (named here so the enums have room to grow, not built now)
 

@@ -222,11 +222,11 @@ The two responsibilities remain separate:
   The `Edits` rustdoc must state both handle meanings and this ownership boundary explicitly:
   `Id(n)` names an initial-host entity, `New(n)` names a same-kind creation, and neither is rewritten
   inside the edit sequence when application compacts concrete ids.
-- The mutation surface of `Edits` is append-only. It exposes iteration, `append`, and `extend`, but
-  not mutable iteration, insertion, removal, or reordering. Extension has raw list semantics: entries
-  are appended in order and existing identifiers and `New` handles are not rebased or otherwise
-  rewritten. A `New(n)` in an independently constructed right-hand sequence therefore retains that
-  value and is interpreted in the resulting combined sequence exactly as written.
+- The mutation surface of `Edits` is append-only. It exposes iteration and appending operations that
+  preserve already-issued handles, but not mutable iteration, insertion, removal, or reordering that
+  could change the ordinal of an earlier creation. Two independently constructed `Edits` values are
+  not naively concatenated: the second sequence's `New` handles would need per-kind rebasing, and its
+  host ids may have been invalidated by structural edits in the first sequence.
 - `MoleculeEditor` allocates the concrete per-family ids while applying the sequence.
 - For each entity kind, the transaction applicator maintains an initial-host table indexed by
   `Id(n)` and a creation table indexed by `New(n)`. Each entry is either the entity's current concrete

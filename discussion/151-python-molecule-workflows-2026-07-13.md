@@ -481,9 +481,7 @@ algorithm's parameters. Binary versus counted output does not duplicate that
 configuration: it is an aggregation/result choice over the same featurization.
 The config argument is required because these algorithms are sibling fingerprint
 definitions, not optional capabilities layered over one minimal default. Each
-variant defines its own parameter requirements; named schemes and operational
-ring configuration may provide defaults without implying a default fingerprint
-radius or refinement depth.
+variant may still provide defaults for its own radius, rounds, or named scheme.
 
 The initial config exposes frozen named hash schemes, not raw hash seeds or
 aggregation controls. A named scheme defines the reproducible fingerprint
@@ -509,8 +507,8 @@ bird names into public compatibility commitments.
 The hashed config variants have the following parameter policy:
 
 - `Morgan(radius=2)` uses the conventional radius-2 default;
-- `Ecfp(radius, hashing_scheme=<frozen default>)` requires an explicit radius
-  and uses the frozen named ECFP scheme by default;
+- `Ecfp(radius=2, hashing_scheme=<frozen default>)` uses the conventional
+  radius-2 default and the frozen named ECFP scheme;
 - `Wl(rounds, hashing_scheme=<frozen default>)` requires an explicit
   `RefinementRounds` value because `Fixed(n)` and `ToFixpoint` define materially
   different fingerprints; its named scheme may have a workflow default.
@@ -1516,7 +1514,7 @@ S4 completes the configured resolved-SMILES Python deliverable.
   `[dep: S3a, S4a]`
 - **S5d — `HashedFingerprintConfig`**
   (`umol-py/src/fingerprint/config.rs`): bind `Morgan(radius=2)`,
-  `Ecfp(radius, hashing_scheme=<default>)`, and
+  `Ecfp(radius=2, hashing_scheme=<default>)`, and
   `Wl(rounds, hashing_scheme=<default>)`. The config is required by computation
   methods; conversion lowers each variant to an explicit Rust featurizer. Tests
   cover defaults, explicit parameters, every lowering path, equality, and repr.

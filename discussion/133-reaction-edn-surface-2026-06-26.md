@@ -631,13 +631,12 @@ may go red between work items inside a chunk; each chunk ends green and tested. 
     render, while `#a+`/`#C+`/`#T+` (= `Stereo(Undetermined)`, "is a stereocenter, config unknown")
     are preserved. Cross-crate updates: `kekulizer`, `aromaticity`, `counts`, `table_ir/raise`.
 - R9c — **Done.** `render_deltas` constraint ops: `ConstraintDelta::Add`/`Remove` →
-  `{:constraint {:add|:remove <ConstraintDsl>}}` via
-  `ConstraintDsl::from_ast(c, metadata)`. Its entity refs span lhs ∪ created,
-  so they resolve directly against the combined `Metadata` view implemented by
-  `ReactionMetadata`. `render_deltas` renders deltas in their stored order (no
-  ToEdn-side canonicalization). Test: `test_render_deltas_constraint`
-  (molecule `:connected` + entity-leaf `{:atom [:o …]}` referencing a created
-  atom + `:remove`).
+  `{:constraint {:add|:remove <ConstraintDsl>}}` via `ConstraintDsl::from_ast(c, combined)`. Its
+  entity refs span lhs ∪ created, so they resolve against `ReactionMetadata::combined_metadata()`
+  (merges the lhs molecule metadata with the created-entity id bindings) — built once, lazily, only
+  when a constraint delta is present. `render_deltas` renders deltas in their stored order (no
+  ToEdn-side canonicalization). Test: `test_render_deltas_constraint` (molecule `:connected` +
+  entity-leaf `{:atom [:o …]}` referencing a created atom + `:remove`).
 - R9d — **Done.** `render_reaction_edn(&ReactionAst, &ReactionMetadata)` builds the `{:lhs …
   :deltas … :atom-aliases …}` map: `:lhs` via the molecule renderer (`render_molecule_edn`, made
   `pub(super)`), `:deltas` via `render_deltas`, then `:atom-aliases` (reaction-level, only when

@@ -276,7 +276,7 @@ no-parallel-overlay enforcement, are independent and out of this plan's critical
 
 **Done 2026-07-01** — in `umol-ast/tests/property/reaction.rs` (feature `proptest`), on a new `overlay_reaction_strategy` (DAMN-overlay lhs via `from_parts`; `build_reaction` extended to co-remove a deleted atom's incident overlays, keeping the generated reactions DPO-valid). Properties landed and green: `compose_sound_overlay` (P1 soundness), `compose_dangling_free` (P3 dangling, via `DpoValidator`), `compose_rc_anchored_subset` (P2), `apply_reproduces_right_overlay` (probe: plain overlay reaction `apply == right()`), `span_roundtrip` (reaction↔span fidelity), and `compose_well_formed_overlay` (every composite's `apply == right()`). The last was `#[ignore]`d on the first cut (2026-06-30); it surfaced the three apply/remap bugs listed below, and is enabled and green now they are fixed. Coverage completed 2026-07-01 for the cheap properties: `compose_determinism` (P4), `compose_canonical_deltas` (P3), `compose_distinct_overlays` (P6), and deterministic `disjoint_sum` / `disjoint_rc_anchored` cases in `test_reaction_ast_compose` (P5). See the per-property coverage line under **Properties** below. **P1 completeness (`Full`: seq ⊆ composed) is the one deferred property**, tracked in doc 135 (needs monomorphism overlaps + `meet` interface + seam delta-rebasing); not blocking.
 
-**Overlap enumeration split + compose rewire — done; P1 completeness itself deferred to doc 135 (not blocking).** Root of P1 incompleteness: compose enumerated R_A ∩ L_B overlaps with Bron–Kerbosch *maximal*-clique enumeration, which drops every non-maximal partial overlap and the empty one — yet each distinct overlap is a distinct composite. graph-core now separates the two tasks (mirroring the MCS split): `maximal_common_subgraphs` + `MaximalCommonSubgraphAlgorithm::BronKerbosch` (former behaviour, renamed) and a new complete `enumerate_common_subgraphs` + `CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking` (every clique of the modular product; shared `modular_product` + `subgraphs_from_cliques`; materialized). Compose rewired to the complete one; `test_reaction_ast_compose` split — constructive cases assert *containment* of their specific composite, `test_reaction_ast_compose_disjoint` keeps the disjoint cases exact. All compose unit + property tests green. **P1 completeness (`seq ⊆ composed`) stays `#[ignore]`d** (`compose_complete_overlay`): closing it needs three coordinated compose changes (monomorphism overlaps, `meet` interface, seam delta-rebasing) that are genuine rule-composition design work, not I3-prop follow-through — **tracked in doc 135**. I3 is otherwise complete and this does not block the rest of 134.
+**Overlap enumeration split + compose rewire — done; P1 completeness itself deferred to doc 135 (not blocking).** Root of P1 incompleteness: compose enumerated R_A ∩ L_B overlaps with Bron–Kerbosch *maximal*-clique enumeration, which drops every non-maximal partial overlap and the empty one — yet each distinct overlap is a distinct composite. graph-core now separates the two tasks (mirroring the MCS split): `maximal_common_subgraphs` + `MaximalCommonSubgraphAlgorithm::BronKerbosch` (former behaviour, renamed) and a new complete `enumerate_common_subgraphs` + `CommonSubgraphEnumerationAlgorithm::Backtracking` (every clique of the modular product; shared `modular_product` + `subgraphs_from_cliques`; materialized). Compose rewired to the complete one; `test_reaction_ast_compose` split — constructive cases assert *containment* of their specific composite, `test_reaction_ast_compose_disjoint` keeps the disjoint cases exact. All compose unit + property tests green. **P1 completeness (`seq ⊆ composed`) stays `#[ignore]`d** (`compose_complete_overlay`): closing it needs three coordinated compose changes (monomorphism overlaps, `meet` interface, seam delta-rebasing) that are genuine rule-composition design work, not I3-prop follow-through — **tracked in doc 135**. I3 is otherwise complete and this does not block the rest of 134.
 
 **Bugs the property test surfaced:**
 1. **Overlay pushout-complement (fixed).** A context overlay whose overlap participant is A-created was placed into `lhs_c` referencing a non-`lhs_c` (created) atom → out-of-bounds in `apply`. Added the overlay analog of the context-bond `is_ra_created` admissibility in `compose_all` (skip the overlap).
@@ -429,30 +429,30 @@ The umol-ast **span** (`EntitySpan`, `ReactionSpanAst`) is *not* a fourth produc
 
 | correspondence (graph-core: valueless, undirected) | span (umol-ast: AST-valued, L→R) |
 |---|---|
-| matched pair `(l, r)` | `Unchanged` (values equal) / `Modified{left,right}` (differ) |
-| left-unmatched `l` | `Removed` |
-| right-unmatched `r` | `Added` |
+| mated pair `(l, r)` | `Unchanged` (values equal) / `Modified{left,right}` (differ) |
+| left-exposed `l` | `Removed` |
+| right-exposed `r` | `Added` |
 
-`align(L, R, corr)` = **lift** (refine each matched pair by comparing AST values, orient each unmatched node); `Sp::correspondence()` = **forget** (drop values, merge Unchanged/Modified back to matched). The correspondence is the transformation-free substrate; the span is its reaction-specific enrichment. This is why the span carries `Added`/`Removed` (a direction) and the correspondence must not.
+`align(L, R, corr)` = **lift** (refine each mated pair by comparing AST values, orient each exposed node); `Sp::correspondence()` = **forget** (drop values, merge Unchanged/Modified back to mated). The correspondence is the transformation-free substrate; the span is its reaction-specific enrichment. This is why the span carries `Added`/`Removed` (a direction) and the correspondence must not.
 
 ### 7.2 Vocabulary for the two-sided membership — matching-theoretic (settled)
 
 `Presence` / `classify` are too generic and lack two-sidedness. **Frame the correspondence as a matching in the bipartite graph `L ⊔ R`** (left nodes on one side, right nodes on the other, an edge per corresponding pair). Then the standard matching vocabulary names all three classes of `L ⊔ R`:
 
-- **matched** — paired with a partner on the other side (the DPO interface K);
-- **left-unmatched** / **right-unmatched** — unpaired, present on only one side. *Exposed* is the matching-theory term for an unmatched vertex, but the public API uses the more direct unmatched terminology.
+- **mated** — paired with a partner on the other side (the DPO interface K);
+- **left-exposed** / **right-exposed** — unpaired, present on only one side. *Exposed* is the matching-theory term for an unmatched vertex; the bipartite framing makes it read naturally.
 
-**Matching subsumes the partial-function view rather than competing with it.** A correspondence *is* a partial bijection `L ⇀ R`; `right_of(left)` and `left_of(right)` are its two directional partial-function reads — `Some` = matched, `None` = unmatched. `Matching::mate(node)` remains appropriate for the single-graph matching object but is not propagated to correspondence pairs.
+**Matching subsumes the partial-function view rather than competing with it.** A correspondence *is* a partial bijection `L ⇀ R`, and `mate(x) -> Option<NodeId>` *is* that partial function — `Some` = in the domain, `None` = exposed. So the natural "apply a partial map" intuition survives (via `mate`), and matching *adds* the two nouns partial-fn lacks (`exposed`, split by side); partial-fn would name only `domain`/`image` — two projections of the mated class — and force `L∖domain` / `R∖image` set-diffs for the two classes a diff most cares about. No tradeoff; matching dominates. Consistent with graph-core's existing `Matching` (`mate`/`is_matched`).
 
-**Excluded: `deleted` / `created`** (DPO). They name the same three classes but presuppose *direction* — they are the span's `Removed` / `Added`. The correspondence is transformation-free (§7.1), so its class names must be direction-free; `unmatched` says "unpaired," not "deleted."
+**Excluded: `deleted` / `created`** (DPO). They name the same three classes but presuppose *direction* — they are the span's `Removed` / `Added`. The correspondence is transformation-free (§7.1), so its class names must be direction-free; `exposed` says "unpaired," not "deleted."
 
-**Surface — three accessors, mapped 1:1 to the span build** (the primary form; `right_of` / `left_of` answer the secondary "what is this id's partner" query):
+**Surface — three accessors, mapped 1:1 to the span build** (the primary form; the per-element enum `{ Mated { left, right }, LeftExposed(NodeId), RightExposed(NodeId) }` / `mate(x)` is the secondary "what is this id" query):
 
 | accessor | yields | span lift (`align`) |
 |---|---|---|
-| `matched_pairs()` | `&[(left, right)]` | compare AST values → `Unchanged` / `Modified` |
-| `left_unmatched()` | `&[NodeId]` | `Removed` |
-| `right_unmatched()` | `&[NodeId]` | `Added` |
+| `mates()` | `&[(left, right)]` | compare AST values → `Unchanged` / `Modified` |
+| `left_exposed()` | `&[NodeId]` | `Removed` |
+| `right_exposed()` | `&[NodeId]` | `Added` |
 
 `classify` (the membership walk) is dropped in favor of these three accessors.
 
@@ -467,10 +467,10 @@ Two reusable additions, consumed by I5, I7 `induce`, and `verify_overlays`:
    - **Distinct from the reverse read** `incident_ids(node) → relations` (unordered union — removal cascades). Three directions total: `participants_1/2(rel) → nodes`, `incident_ids(node) → relations`, `find_by_participants(factors) → Option<RelationId>`.
 
    *Note (resolved):* `Ordered::canonicalize` is a no-op ("position is the datum", relation.rs), so the stereo relation set keys by exact ligand order rather than structurally enforcing §4.1 set-uniqueness — but that is not a problem: the multiset match is frame-order-independent (finds the center regardless of stored frame order), duplicate *explicit* ligands are a construction error, and duplicate *virtual* ligands (implicit H / lone pairs) are valid (vacuous in Th, not Ct).
-2. **`Correspondence` carrier + reads** — its own module (not limited to common subgraphs): the vertex-level partial bijection over two graphs, the §7.2 matched/unmatched membership, the induced edge correspondence (an edge is matched iff its endpoints are matched to an edge on the other side — `find_by_participants` under the node map), and derived reads `matched_pair_count()` and `shared_edge_count(&a, &b)` (edge count is a projection onto the graphs — line 767's loop — not stored). Producers:
-   - **subiso** → `Vec<Correspondence>` — the total-on-left, injective case (`left_unmatched()` empty, `right_unmatched()` = host outside the match);
-   - **MCIS**, **maximal / complete enumeration** → `Correspondence` / `Vec<Correspondence>` — objective is vertex count (`= matched_pairs().len()`, already on the correspondence) or none;
-   - **MCES** → `Mcs { correspondence, edge_count }` — the *only* producer whose objective isn't free on the correspondence; branch-and-bound already holds `edge_count`, so `Mcs` caches it (delegates `matched_pairs()`/`node_count()`, adds `edge_count()`);
+2. **`Correspondence` carrier + reads** — its own module (not limited to common subgraphs): the vertex-level partial bijection over two graphs, the §7.2 mated/exposed membership, the induced edge correspondence (an edge is mated iff its endpoints are mated to an edge on the other side — `find_by_participants` under the node map), and derived reads `node_count() = mates().len()`, `shared_edge_count(&a, &b)` (edge count is a projection onto the graphs — line 767's loop — not stored). Producers:
+   - **subiso** → `Vec<Correspondence>` — the total-on-left, injective case (`left_exposed()` empty, `right_exposed()` = host outside the match);
+   - **MCIS**, **maximal / complete enumeration** → `Correspondence` / `Vec<Correspondence>` — objective is vertex count (`= mates().len()`, already on the correspondence) or none;
+   - **MCES** → `Mcs { correspondence, edge_count }` — the *only* producer whose objective isn't free on the correspondence; branch-and-bound already holds `edge_count`, so `Mcs` caches it (delegates `mates()`/`node_count()`, adds `edge_count()`);
    - an MCS-based atom-map derivation → `Correspondence`.
 
    `CommonSubgraph` **retires** — split into `Correspondence` (the general common subgraph) and `Mcs` (the MCES objective-result). `Matching` is *not* a producer — a single-graph matching (`edges()`, `is_perfect`), vocabulary donor only. Keep `Correspondence` lightweight (pairing + derived-on-demand reads) so subiso emits one per match on the hot enumeration path.
@@ -484,22 +484,22 @@ Name: `MoleculeCorrespondence`.
 **One type, three cases** (point iv — combine, don't fork; point v — a marker wrapper, not a type per case, per the MoleculeAst-wrapper experience):
 
 - `MoleculeCorrespondence` — general, partial on both sides.
-- **Total is a predicate, not a wrapper** (settled 2026-07-02). `Correspondence::is_total()` — `matched_pair_count == left_count == right_count`, no unmatched ids on either side, O(1) — marks the balanced case: same atoms, so a diff needs **no union frame** (R's atoms map 1:1 into L's; bonds/overlays still move within the shared frame — de-aromatization, doc 131). The general path subsumes it (the unmatched branches are O(1) dead checks); the union-frame skip is a fast-path branch keyed on `atoms().is_total()`. A `Total(_)` wrapper would add only a *compile-time* no-Add/Remove guarantee for a caller that needs it — none does yet, so a predicate suffices; add the wrapper later if one appears.
+- **Total is a predicate, not a wrapper** (settled 2026-07-02). `Correspondence::is_total()` — `mate_count == left_count == right_count`, no exposed on either side, O(1) — marks the balanced case: same atoms, so a diff needs **no union frame** (R's atoms map 1:1 into L's; bonds/overlays still move within the shared frame — de-aromatization, doc 131). The general path subsumes it (the exposed branches are O(1) dead checks); the union-frame skip is a fast-path branch keyed on `atoms().is_total()`. A `Total(_)` wrapper would add only a *compile-time* no-Add/Remove guarantee for a caller that needs it — none does yet, so a predicate suffices; add the wrapper later if one appears.
 - the **embedding** (injective, total-on-one-side) case is what `MoleculeEmbedding` already is; it folds in as a view/wrapper, retiring the standalone struct (subiso + `verify_overlays` build a `MoleculeCorrespondence` directly).
 
 **Constructors.**
 - `induce(L, R, atom_map) -> MoleculeCorrespondence` — derive the seven entity maps from the atom pairs by structural match (the I5 / `verify_overlays` kernel). SMIRKS / GML / map-number **import entry point**.
 - `from_maps(…)` — the fully-explicit per-entity form `induce` materializes.
 
-**Surface syntax (settled).** EDN-shaped (top-level key), following the span precedent but collapsing to **atom matched-pairs only**:
+**Surface syntax (settled).** EDN-shaped (top-level key), following the span precedent but collapsing to **atom mated-pairs only**:
 
 ```clojure
 {:correspondence {:atoms [[0 3] [1 1] [:c4 :c9]]}}
 ```
 
-- A vec of `[left-ref right-ref]` **matched** pairs; each ref is the standard `<entity>-ref` (`int | keyword`, mixable). The `:atoms` wrapper is kept (explicit, room to grow) even though the surface is atoms-only.
-- **No unmatched entries, no per-family keys, no `nil`.** The whole surface is the atom map because everything else is derived at resolution: unmatched atoms are inferred, and bond/overlay maps are `induce`d (determined by the atom map — a bond matches iff its mapped endpoints match).
-- **Two-phase, dissolving the parse-time L/R dependence** (the `*Input` pattern, cf. `SpanInput::into_ast`): parse → `MoleculeCorrespondenceInput { atoms: Vec<(AtomRef, AtomRef)> }` (no L/R needed) → `resolve(L, R)` does keyword→id, infers unmatched ids, and induces every entity map. Resolution is where L/R legitimately enter.
+- A vec of `[left-ref right-ref]` **mated** pairs; each ref is the standard `<entity>-ref` (`int | keyword`, mixable). The `:atoms` wrapper is kept (explicit, room to grow) even though the surface is atoms-only.
+- **No exposed entries, no per-family keys, no `nil`.** The whole surface is the atom map because everything else is derived at resolution: exposed atoms are inferred (every non-mated atom *is* exposed), and bond/overlay maps are `induce`d (determined by the atom map — a bond mates iff its mapped endpoints mate).
+- **Two-phase, dissolving the parse-time L/R dependence** (the `*Input` pattern, cf. `SpanInput::into_ast`): parse → `MoleculeCorrespondenceInput { atoms: Vec<(AtomRef, AtomRef)> }` (no L/R needed) → `resolve(L, R)` does keyword→id, infers exposed, and induces every entity map. Resolution is where L/R legitimately enter.
 - **Structural-ref pairs (once I5) are allowed but tautological.** Atoms are the base (no structural form), so a structural-map ref could only name an *entity-level* pair (bond/overlay by constituents) — which `induce` already derives, and which (endpoints being unordered) can't even fix the atom bijection, only restate it. If written, `resolve` treats it as a **consistency assertion** against the induced correspondence (a contradicting one is an error), never a silent override. Nothing to build beyond the uniform ref grammar.
 
 ### 7.5 The primitive set and its operations (point iii)
@@ -511,7 +511,7 @@ Six objects:
 - **`Deltas`** `D` — the difference: self-contained, invertible, canonical.
 - **`ReactionAst`** `Rx` = `(lhs: M, deltas: D)` — the lhs-anchored operational store.
 - **`ReactionSpanAst`** `Sp` — the hub / generalized CGR: the superimposed union graph with `EntitySpan` columns.
-- **`ReactionDerivation`** `Der` = `(lhs: M, rhs: M, comap: C)` — a production fired once; `apply`'s fully owned codomain (§7.7 #5).
+- **`ReactionDerivation<'a>`** `Der` = `(host: &'a M, product: M, comap: C)` — a production fired once; `apply`'s codomain (§7.7 #5). Host borrowed, product/comap owned.
 
 Names: `superimpose` / `difference_to` are proposed (2026-07-02, §7.5 review); `atom_map` was a placeholder for the atom `Correspondence`.
 
@@ -529,7 +529,7 @@ Names: `superimpose` / `difference_to` are proposed (2026-07-02, §7.5 review); 
 | reverse | `Rx::reverse() → Rx` = `Sp` swap sides → read-off | (131) |
 | compose (rule∘rule) | `Rx::compose(&Rx) → impl Iterator<Rx>` | (131) — via the hub; the *reserved* `compose` |
 | inverse / compose | `D::inverse()`, `D::compose` (`D∘D`) | done |
-| derivation accessors | `Der::lhs() → M`, `Der::rhs() → M`, `Der::comap() → C` | new |
+| derivation accessors | `Der::product() → M`, `Der::comap() → C` | new |
 | derivation abstract | `Der::to_reaction() → Rx` (= `difference_to` under `comap`) | new |
 | correspondence compose | `C::compose(&C) → C` | new — relational `A⇌B` ∘ `B⇌C`; substrate for `Der::chain`; receiver disambiguates from `Rx::compose` |
 | derivation chain | `Der::chain(Der) → Der` (comaps `compose` = pathway atom-map) | new |
@@ -552,7 +552,7 @@ The three distinctions among the other kinds are semantic and firm: **Correspond
 
 This **keeps all five** — the `ReactionAst`/`ReactionSpanAst` split is justified operationally (131: apply-native store vs compose/CGR working form) — but the seam is that that split is representational, not semantic; if operational needs ever changed, demoting `ReactionSpanAst` to a non-public transient is where the pressure would legitimately land. If *direction* is taken as semantic (a reaction *means* reactants→products), `ReactionAst` = *oriented* production and `ReactionSpanAst` = *symmetric* production — but even then one is the other decorated with a side, not an independent kind.
 
-**The other direction — what's missing is `apply`'s discarded output.** A correspondence sits on *both* sides of the algebra: supplied to `diff` (`diff(L, R, C) → Deltas`), and *produced* by `apply` (`apply(P, host, match) → product` **plus the host↔product comap** — preserved atoms matched, deleted left-unmatched, created right-unmatched). The set makes the input side first-class (`MoleculeCorrespondence` feeds `diff`) but **drops the output side**: `apply` returns a bare `MoleculeAst`, discarding the comap it just built. That comap *is* the per-step atom map; 131 recomputes atom maps lazily "from (educts, rule, match)", but they are produced *during* `apply` (like MCES's `edge_count` during search) — re-deriving is the same waste.
+**The other direction — what's missing is `apply`'s discarded output.** A correspondence sits on *both* sides of the algebra: supplied to `diff` (`diff(L, R, C) → Deltas`), and *produced* by `apply` (`apply(P, host, match) → product` **plus the host↔product comap** — preserved atoms mated, deleted left-exposed, created right-exposed). The set makes the input side first-class (`MoleculeCorrespondence` feeds `diff`) but **drops the output side**: `apply` returns a bare `MoleculeAst`, discarding the comap it just built. That comap *is* the per-step atom map; 131 recomputes atom maps lazily "from (educts, rule, match)", but they are produced *during* `apply` (like MCES's `edge_count` during search) — re-deriving is the same waste.
 
 So the missing representation is a **`Derivation` = `(product: MoleculeAst, comap: MoleculeCorrespondence)`** — the DPO direct derivation `G⇒H` reduced to its externally-useful data. It is the **instance** of a `Production` (rule : derivation ∷ function : one evaluation): a production is a matchable schema, a derivation is one concrete firing carrying its *ground-truth* map (its value over a post-hoc `diff(host, product)` is that `apply` *knows* the exact map — it created the atoms — where a later diff would have to reconstruct the correspondence). Its data is a *composition* of two existing kinds (State + Correspondence), but it denotes a role the four kinds don't name (the applied-rule 2-cell). It round-trips the rule layer: `ReactionAst::apply → Derivation` instantiates, `Derivation::to_reaction → ReactionAst` abstracts back (host as lhs, `diff(host, product, comap)`).
 
@@ -570,20 +570,20 @@ The §7.1 producers share one primitive — a structure-preserving node map, lif
 | a set of embeddings | subiso | `Vec<embedding>` | no |
 | a group | automorphism (`auto.rs`, nauty) | `Automorphism` (generators, orbits, canonical labeling, order) | no |
 
-**Automorphism** is the group aggregation over `L = L`. A single element is the endomorphic, total, structure-preserving special case of a correspondence (`Total` + endo + iso), and its `Vec<NodeId>` image is the `(i, perm[i])` pair form — but `Automorphism` deliberately stores the *group* (generators + orbits), not a bag of elements; folding it into the correspondence carrier would discard that. It stays its own type. It **reuses the kernel** — the `find_by_participants` induction lifts an atom permutation to a consistent bond/overlay permutation, needed the day symmetry must act on overlays (stereo coset frames, a full-molecule canonical key; `auto.rs` is node/edge-only today) — but **not** `align`/diff: a structure-preserving map has ∅ self-diff, and the §7.2 matched/unmatched membership degenerates (one id space, all matched).
+**Automorphism** is the group aggregation over `L = L`. A single element is the endomorphic, total, structure-preserving special case of a correspondence (`Total` + endo + iso), and its `Vec<NodeId>` image is the `(i, perm[i])` pair form — but `Automorphism` deliberately stores the *group* (generators + orbits), not a bag of elements; folding it into the correspondence carrier would discard that. It stays its own type. It **reuses the kernel** — the `find_by_participants` induction lifts an atom permutation to a consistent bond/overlay permutation, needed the day symmetry must act on overlays (stereo coset frames, a full-molecule canonical key; `auto.rs` is node/edge-only today) — but **not** `align`/diff: a structure-preserving map has ∅ self-diff, and the §7.2 mated/exposed membership degenerates (one id space, all mated).
 
 Shared model: **the node-map + induction kernel is common; the correspondence carrier, the embedding set, and the automorphism group are three aggregations over it, and only the correspondence carries a transformation (the span).**
 
 ### 7.7 Open decisions
 
-1. ~~graph-core carrier~~ **settled** (§7.3): `CommonSubgraph` retires → `Correspondence` (its own module; subiso / MCIS / maximal / complete enumeration emit it) + `Mcs { correspondence, edge_count }` (MCES only, caching its objective). `edge_count`/`node_count` are derived `Correspondence` reads; kept lightweight for the enumeration path; `Matching` donates vocabulary only. Membership uses matched/unmatched (§7.2).
+1. ~~graph-core carrier~~ **settled** (§7.3): `CommonSubgraph` retires → `Correspondence` (its own module; subiso / MCIS / maximal / complete enumeration emit it) + `Mcs { correspondence, edge_count }` (MCES only, caching its objective). `edge_count`/`node_count` are derived `Correspondence` reads; kept lightweight for the enumeration path; `Matching` donates vocabulary only. Membership matching-theoretic mated/exposed (§7.2).
 2. ~~`align` / import names~~ **settled** (§7.5): `superimpose` (span constructor), `difference_to` (diff, receiver = source), `from_sides` (import), `Correspondence::compose`, `Der::chain`.
-3. ~~`MoleculeCorrespondence` surface syntax~~ **settled** (§7.4): atom matched-pair vec under `:atoms` (`int | keyword` refs); `MoleculeCorrespondenceInput` → `resolve(L, R)` (keyword→id, infer unmatched ids, induce entities); structural-ref pairs allowed-but-tautological (consistency-checked).
+3. ~~`MoleculeCorrespondence` surface syntax~~ **settled** (§7.4): atom mated-pair vec under `:atoms` (`int | keyword` refs); `MoleculeCorrespondenceInput` → `resolve(L, R)` (keyword→id, infer exposed, induce entities); structural-ref pairs allowed-but-tautological (consistency-checked).
 4. ~~`MoleculeEmbedding` retirement~~ **settled**: yes — it retires into the injective `MoleculeCorrespondence` view (subiso emits a graph-core `Correspondence`; `verify_overlays` becomes the entity-map induction). No standalone `MoleculeEmbedding` struct.
 5. ~~`ReactionDerivation`~~ **settled** — added; `apply`'s codomain is `ReactionDerivation`, not a bare product (the comap is computed during `apply` regardless — 131's lazy-map storage is orthogonal).
    - **name — `ReactionDerivation`**, no `Ast` (the `Ast` discriminator is **lattice structure**, not DSL-presence — `MoleculeAst` is lattice-valued, `Deltas`/`MoleculeCorrespondence`/`ReactionDerivation` are not; which of the six keep `Ast` is a separate audit pass). *Not* `ProductDerivation` (misweights the product half).
-   - **shape — owned** `ReactionDerivation { lhs: MoleculeAst, rhs: MoleculeAst, comap: MoleculeCorrespondence }`. Both molecule sides and the correspondence are owned, so the result is independent of the host passed to `apply`; `reverse`, `chain`, and `to_reaction` return ordinary owned values.
-   - **API beyond accessors** (`lhs()`/`rhs()`/`comap()`/`atom_map()`): `chain` (`G⇒H` ∘ `H⇒J` → `G⇒J`, comaps `compose` = pathway atom-map propagation), `reverse` (`H⇒G`, comap inverse), `to_reaction`/`to_reaction_span` (abstract back to the rule layer).
+   - **shape — borrowed** `ReactionDerivation<'a> { host: &'a MoleculeAst, product: MoleculeAst, comap: MoleculeCorrespondence }` (the `MoleculeEmbedding<'a>` precedent). Only the host borrows; `product`/`comap` are owned, so `reverse`/`to_reaction` are self-contained while the borrow lives, and persisting past the host is a drop to owned `(product, comap)`. Lifetime-bound — fits the transient-right-after-`apply` pattern; the network stores the `(educts, rule, match)` hyperedge and recomputes, so it never holds a `ReactionDerivation` long-term.
+   - **API beyond accessors** (`product()`/`comap()`/`atom_map()`): `chain` (`G⇒H` ∘ `H⇒J` → `G⇒J`, comaps `compose` = pathway atom-map propagation), `reverse` (`H⇒G`, comap inverse), `to_reaction`/`to_reaction_span` (abstract back to the rule layer).
 
 ### 7.8 Naming principle (settled)
 
@@ -609,14 +609,14 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 
 **S0 — graph-core foundation** (additive) **Done**
 - **S0a** graph-core: `find_by_participants` on `FixedRelationSet` / `VarRelationSet` / `FixedVarBirelationSet` — per-factor (`&[P]` / `&[P1], &[P2]`), unordered-multiset via sort-both-compare (§7.3.1). `[dep: —]` **Done**
-- **S0b** graph-core: `Correspondence` module — struct + `matched_pairs` / `left_unmatched` / `right_unmatched` / `matched_pair_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]` **Done**
+- **S0b** graph-core: `Correspondence` module — struct + `mates` / `left_exposed` / `right_exposed` / `node_count` / `shared_edge_count` / induced-edge reads (§7.2, §7.3.2). `[dep: —]` **Done**
 
 **S1 — `MoleculeCorrespondence` + constructors** (additive) **Done**
 - **S1a** ast: `MoleculeCorrespondence` struct (8 families) + `atom_correspondence()` + reads. `[dep: S0b]` **Done**
 - **S1b** ast: `induce(L, R, atom: Correspondence)` — entity-map induction via `find_by_participants`. `[dep: S1a, S0a, S0b]` **Done**
 - **S1c** ast: `from_maps`. `[dep: S1a]` **Skipped**
 - **S1d** ast: `MoleculeCorrespondence::compose`. `[dep: S1a]` **Done**
-- **S1e** graph-core: `Correspondence::is_total()` predicate (`matched_pair_count == left_count == right_count`) instead of a `Total(_)` wrapper — the fast path branches on `atoms().is_total()`; union-frame skip is a later optimization. `[dep: S0b]` **Done**
+- **S1e** graph-core: `Correspondence::is_total()` predicate (`mate_count == left_count == right_count`) instead of a `Total(_)` wrapper — the fast path branches on `atoms().is_total()`; union-frame skip is a later optimization. `[dep: S0b]` **Done**
 
 **S2 — diff / span / import ops** (additive) **Done**
 - **S2a** ast: `ReactionSpanAst::superimpose(L, R, C)` — build the union-frame span from a pair + correspondence. `[dep: S1a]` **Done**
@@ -626,360 +626,19 @@ Modules top-down: **graph-core** (foundation) → **umol-ast `ast`** → **umol-
 - **S2e** ast (property test, feature `proptest`): cross-validate the two span constructions — `superimpose(L, R, C)` (Strategy A, direct) **==** the delta path (`to_reaction_span` of the deltas). Off a generated reaction span take `L = lhs`, `R = right()`, `C = correspondence()`, and assert `superimpose(L, R, C) == span`. A mismatch flags a `diff`-completeness or frame gap — the whole point of building A independently (two paths, assert equality; cf. doc 135, where testing an unrelated method surfaced a real compose gap). `[dep: S2a, S2b]` **Done** — plain + overlay variants (`test_reaction_span_ast_superimpose_matches_delta_path{,_overlay}`); both paths agree on all generated reactions, no gap surfaced.
 
 **S3 — `ReactionDerivation` + `apply` codomain**
-- **S3a** ast: owned `ReactionDerivation` struct + `lhs` / `rhs` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]` **Done** — new `reaction_derivation.rs`; needed `Correspondence::reverse` (graph-core) + `MoleculeCorrespondence::reverse` (comap inversion).
+- **S3a** ast: `ReactionDerivation<'a>` struct + `lhs` / `rhs` / `comap` / `atom_map` + `to_reaction` / `reverse` / `chain`. Additive. `[dep: S1a, S1d, S2c]` **Done** — new `reaction_derivation.rs`; needed `Correspondence::reverse` (graph-core) + `MoleculeCorrespondence::reverse` (comap inversion).
 - **S3b** ast: change `ReactionAst::apply` / `apply_at` codomain `M → ReactionDerivation`; migrate callers to `.rhs()`. **red→green**. `[dep: S3a]` **Done** — `apply_at` builds the `lhs↔rhs` comap during transform (host→product atom map by survivor-rank, then `induce` for bonds/overlays); all `apply`/`apply_at` callers read `.rhs()`.
 
-**Naming resolution (during S3, 2026-07-02): the two reaction sides are `lhs` / `rhs` throughout.** `ReactionDerivation` owns both `lhs` and `rhs` — *not* `host` / `product` (a graph-nomenclature + chemistry chimera; chemical `educt`/`product` was declined too since a side is one *graph* that may hold several species, so species-plural names are awkward). Carried to `ReactionSpanAst::lhs()` / `rhs()` (was `left()`/`right()`), `EntitySpan` `Modified { lhs, rhs }` + `lhs()`/`rhs()` (was `left`/`right`), `ConstraintSpan`, `EntityPatch::diff*` args, and the `superimpose`/`difference_to`/`induce`/`from_sides` molecule args. Graph-core `Correspondence` keeps `left`/`right` (domain-neutral: it serves subiso/MCS/enumeration, not just reactions).
+**Naming resolution (during S3, 2026-07-02): the two reaction sides are `lhs` / `rhs` throughout.** `ReactionDerivation` fields/accessors are `lhs` (borrowed) / `rhs` (owned) — *not* `host` / `product` (a graph-nomenclature + chemistry chimera; chemical `educt`/`product` was declined too since a side is one *graph* that may hold several species, so species-plural names are awkward). Carried to `ReactionSpanAst::lhs()` / `rhs()` (was `left()`/`right()`), `EntitySpan` `Modified { lhs, rhs }` + `lhs()`/`rhs()` (was `left`/`right`), `ConstraintSpan`, `EntityPatch::diff*` args, and the `superimpose`/`difference_to`/`induce`/`from_sides` molecule args. Graph-core `Correspondence` keeps `left`/`right` (domain-neutral: it serves subiso/MCS/enumeration, not just reactions).
 
 **S4 — retire `MoleculeEmbedding`** **Done**
-- **S4a** ast: `MoleculeCorrespondence` is the one injective-view type — a subiso match and an induced subgraph are the *same* object (host↔sub injective map), not two things. So both `verify_overlays`/`substructure_matches` **and** `induced_subgraph` return `MoleculeCorrespondence`; `apply_at(&self, host, &MoleculeCorrespondence)` (host threaded explicitly — the correspondence carries no host ref; `host_atom(id)` → `atoms().right_of(…).expect(total-on-pattern)`); `extract` / `edits` become ops over (host, correspondence) on `MoleculeAst` (they only need the atom subset — `extract` ignores the overlay maps today). Drop the `MoleculeEmbedding` struct; migrate `substructure.rs` + `reaction.rs` + `molecule.rs` (`induced_subgraph`) + tests. **red→green**. `[dep: S1b, S3b]` **Done** — added `Correspondence::from_images(images, right_count)` to graph-core (dense-left constructor a match/embedding induces); `induced_subgraph`/`substructure_matches`/`verify_overlays` all build it; `MoleculeAst::{extract,edits}(&sub)`; `apply_at(host, &corr)`. Scope was larger than "test-only": umol-graph's `hmo.rs`/`kekulizer.rs`/`fingerprint/pattern.rs` also consumed it — migrated their `host_atoms`/`host_bonds`/`sub_atom` reads to the native `Correspondence` API (`.atoms().matched_pairs()` / `.left_of()`), no `host_*` accessors added to the general type.
-- **S4b** graph-core (sequence after S4a lands): same unification one layer down, but graph-core's subgraph is node **and** edge (`edge_induced_subgraph` selects an explicit edge set — chords excluded — that a bare `Correspondence<NodeId>` can't hold; consumers read `host_edge()` too). So the mirror is a **two-family bundle** `GraphCorrespondence { nodes: Correspondence<NodeId>, edges: Correspondence<EdgeId> }` — the graph-core base that `MoleculeCorrespondence` (atoms + bonds + 6 overlays) extends. `induced_subgraph` (edges = all among the node set) and `edge_induced_subgraph` (edges = the explicit set) both return it; `Graph::extract(&self, sub) -> Graph`; `host_node`/`host_edge` reads become `sub.nodes()/.edges()` `right_of`/`left_of`. Retire `Embedding`; migrate `cycles.rs` (graph-core), `ring.rs` (umol-ast), `fingerprint/substructure.rs` (umol-graph). Graph-core `Correspondence` stays `left`/`right`. **red→green**. `[dep: S4a]` **Done** — `GraphCorrespondence { nodes, edges }` + `Graph::extract(&self, sub)`; both producers return it; consumers read `.nodes()/.edges()` `matched_pairs()`/`right_of`/`left_of`. This is also the S6 target (see S6a): every graph-core subgraph producer converges on `GraphCorrespondence`.
+- **S4a** ast: `MoleculeCorrespondence` is the one injective-view type — a subiso match and an induced subgraph are the *same* object (host↔sub injective map), not two things. So both `verify_overlays`/`substructure_matches` **and** `induced_subgraph` return `MoleculeCorrespondence`; `apply_at(&self, host, &MoleculeCorrespondence)` (host threaded explicitly — the correspondence carries no host ref; `host_atom(id)` → `atoms().right_of(…).expect(total-on-pattern)`); `extract` / `edits` become ops over (host, correspondence) on `MoleculeAst` (they only need the atom subset — `extract` ignores the overlay maps today). Drop the `MoleculeEmbedding` struct; migrate `substructure.rs` + `reaction.rs` + `molecule.rs` (`induced_subgraph`) + tests. **red→green**. `[dep: S1b, S3b]` **Done** — added `Correspondence::from_images(images, right_count)` to graph-core (dense-left constructor a match/embedding induces); `induced_subgraph`/`substructure_matches`/`verify_overlays` all build it; `MoleculeAst::{extract,edits}(&sub)`; `apply_at(host, &corr)`. Scope was larger than "test-only": umol-graph's `hmo.rs`/`kekulizer.rs`/`fingerprint/pattern.rs` also consumed it — migrated their `host_atoms`/`host_bonds`/`sub_atom` reads to the native `Correspondence` API (`.atoms().mates()` / `.left_of()`), no `host_*` accessors added to the general type.
+- **S4b** graph-core (sequence after S4a lands): same unification one layer down, but graph-core's subgraph is node **and** edge (`edge_induced_subgraph` selects an explicit edge set — chords excluded — that a bare `Correspondence<NodeId>` can't hold; consumers read `host_edge()` too). So the mirror is a **two-family bundle** `GraphCorrespondence { nodes: Correspondence<NodeId>, edges: Correspondence<EdgeId> }` — the graph-core base that `MoleculeCorrespondence` (atoms + bonds + 6 overlays) extends. `induced_subgraph` (edges = all among the node set) and `edge_induced_subgraph` (edges = the explicit set) both return it; `Graph::extract(&self, sub) -> Graph`; `host_node`/`host_edge` reads become `sub.nodes()/.edges()` `right_of`/`left_of`. Retire `Embedding`; migrate `cycles.rs` (graph-core), `ring.rs` (umol-ast), `fingerprint/substructure.rs` (umol-graph). Graph-core `Correspondence` stays `left`/`right`. **red→green**. `[dep: S4a]` **Done** — `GraphCorrespondence { nodes, edges }` + `Graph::extract(&self, sub)`; both producers return it; consumers read `.nodes()/.edges()` `mates`/`right_of`/`left_of`. This is also the S6 target (see S6a): every graph-core subgraph producer converges on `GraphCorrespondence`.
 
 **S5 — DSL surface** (additive) **Dropped 2026-07-03** — a `MoleculeCorrespondence` never serializes standalone. It is a *computational intermediary* (produced by `induce` / `substructure_matches` / `ReactionSpanAst::correspondence()`; consumed by `superimpose` / `difference_to` / `apply_at` / `from_sides`), same serde-free status as graph-core `Correspondence` / `GraphCorrespondence`. Its round-trip surface **is the span**: `superimpose(L, R, C) → ReactionSpanAst` fuses both molecules + the pairing + values, and `ReactionSpanDsl` (I4) already serializes it losslessly (`lhs()`/`rhs()`/`correspondence()` recover the three parts). Foreign-format import (SMIRKS/GML map numbers) feeds `induce(L, R, atom_map)` programmatically inside the umol-io reader — the map lives in the *foreign* syntax, not a native `:correspondence` EDN. A standalone `:correspondence` form would only add a redundant second way to author a both-sides reaction (which entities are `Unchanged`/`Modified`/`Added`/`Removed` **is** the pairing) — against not proliferating surfaces.
 - ~~**S5a** dsl: `MoleculeCorrespondenceInput { atoms }` + `FromEdn` / `ToEdn` + `resolve(L, R)`; `:correspondence {:atoms […]}`.~~ Dropped (see above).
 
 **S6 — graph-core producer unification** **Done**
-- **S6a** graph-core: subgraph producers converge on the two carriers. **Done 2026-07-03.** MCIS / MCES / maximal / complete→`GraphCorrespondence` (the search builds it directly — no interim `CommonSubgraph` twin, node/edge counts come from the two graphs it holds); this **subsumes the `Mces { correspondence, edge_count }` wrapper** — each objective is a family `matched_pair_count()` (MCES = `edges().matched_pair_count()`, MCIS = `nodes().matched_pair_count()`), no separate `edge_count`. **subiso→`Vec<Correspondence<NodeId>>`** (node-only; edges are derived on demand via `GraphCorrespondence::induced(left, right, nodes)`, which runs `edge_matched_pairs` — kept off the hot enumeration path). Added `GraphCorrespondence::induced`; retired `CommonSubgraph`, `Mces`, the three singular `maximum_common_*_subgraph` methods (a plural + `.into_iter().next()` covers them), and the `Enumerate` enum (the search always enumerates all maxima). ast side: per-family `induced_{bonds,dative_bonds,aromatic_systems,multicenter_bonds,noncovalent_bonds}` in `correspondence.rs` feed both `MoleculeCorrespondence::induce` and `substructure::verify_overlays` (now taking `Correspondence<NodeId>`, layering the predicate + pattern-total gate over the inducer pairing, stereo bespoke coset); the `GraphView` adapter keeps its `Vec<Vec<AtomId>>` public contract, adapted internally. Migrated callers: `common_subgraph.rs`/`subiso.rs`/`lib.rs` (graph-core), `substructure.rs`/`compose.rs`/`view/graph.rs` (umol-ast). `[dep: S0b, S4b; sequence after S4]`
+- **S6a** graph-core: subgraph producers converge on the two carriers. **Done 2026-07-03.** MCIS / MCES / maximal / complete→`GraphCorrespondence` (the search builds it directly — no interim `CommonSubgraph` twin, node/edge counts come from the two graphs it holds); this **subsumes the `Mces { correspondence, edge_count }` wrapper** — each objective is a family `mate_count()` (MCES = `edges().mate_count()`, MCIS = `nodes().mate_count()`), no separate `edge_count`. **subiso→`Vec<Correspondence<NodeId>>`** (node-only; edges are derived on demand via `GraphCorrespondence::induced(left, right, nodes)`, which runs `edge_mates` — kept off the hot enumeration path). Added `GraphCorrespondence::induced`; retired `CommonSubgraph`, `Mces`, the three singular `maximum_common_*_subgraph` methods (a plural + `.into_iter().next()` covers them), and the `Enumerate` enum (the search always enumerates all maxima). ast side: per-family `induced_{bonds,dative_bonds,aromatic_systems,multicenter_bonds,noncovalent_bonds}` in `correspondence.rs` feed both `MoleculeCorrespondence::induce` and `substructure::verify_overlays` (now taking `Correspondence<NodeId>`, layering the predicate + pattern-total gate over the inducer pairing, stereo bespoke coset); the `GraphView` adapter keeps its `Vec<Vec<AtomId>>` public contract, adapted internally. Migrated callers: `common_subgraph.rs`/`subiso.rs`/`lib.rs` (graph-core), `substructure.rs`/`compose.rs`/`view/graph.rs` (umol-ast). `[dep: S0b, S4b; sequence after S4]`
 
 Critical path **S0 → S1 → S2 → S3 → S4**. S5 rides after S1 (parallel to S2–S4). S6 is graph-core-only; place last.
-
-## Structural entity refs (I5)
-
-Reopened from 134 §3 — genuinely not built. Today every `<entity>-ref` in the reaction / constraint
-surface is `int | keyword` (position or id): a bond or overlay with no `:id` can only be named by
-position. **Want:** name a non-atom entity by its *constituents* — a bond by its endpoints, an
-aromatic / multicenter system by its members, a dative bond by donors + acceptor, a stereo element by
-site + ligands (atoms are the base; no structural form).
-
-**Form** — a uniform structural-map variant, the §4-entry form minus `:type`/`:id`:
-`<entity>-ref ::= int | keyword | <structural-map>`, where the map is `{:atoms [..]}` (bond,
-noncovalent, aromatic, multicenter), `{:donors [..] :acceptor _}` (dative), or
-`{:site _ [:ligands [..]]}` (stereo). Map form (not a bare vector) keeps it self-delimiting where refs
-nest inside other vectors (anchor pairs, relational `[ref target]`).
-
-**What exists.** The resolution kernel is done: `find_by_participants` (graph-core, S0a) / the
-`<collection>.connecting(participants)` matchers, already driving `induce` and
-`substructure::verify_overlays`. §4.1 uniqueness (no two same-constituent entries — extended to
-noncovalent + multicenter, decided 2026-06-29) makes each structural match ≤1 hit.
-
-**What remains** — the DSL surface + resolver. Extend the ref grammar with the structural-map variant
-in one shared production so it reaches every non-atom ref site at once (reaction `:remove`/`:modify`,
-entity + relational constraints, `:bond-order-sum :bonds`, anchor pairs, stereo-bond `:site`), and
-resolve the structural variant per entity by its constituent payload (`[AtomRef; 2]` /
-`Vec<AtomRef>` / donors + acceptor / site + ligands) through the kernel above. Not a `define_ref`
-tweak — the structural variant carries a per-entity payload and a per-entity resolution, so the code
-shape is the work.
-
-Structural refs used as an *atom-map* input are tautological — a bond/overlay pair, endpoints being
-unordered, only restates the atom bijection `induce` already derives — so `resolve` treats such a
-pair as a consistency assertion against the induced correspondence (a contradicting one is an error),
-never an override. The useful surface is naming an id-less entity by its parts.
-
-### Resolution — the growing entity namespace
-
-Refs resolve during `*Input` → AST conversion, and at that point **there is no built `MoleculeAst`**:
-`molecule.rs`'s `into_ast` collects entities into `Vec<(participants, ast)>` and calls `from_parts`
-*last*, after constraints resolve; reaction deltas resolve against evolving state (lhs + deltas so
-far), held as counts + metadata, not a queryable structure. So structural resolution can't call the
-AST-level `find_by_participants` on a finished molecule — it resolves against the state built so far.
-
-`EntityCounts` (per-kind running counts, already grown by the delta loop via `allocate_*`) reshapes
-into an **`MoleculeNamespace`**: per kind a running count + name→id map + a **participant lookup**, grown
-incrementally during molecule parsing (unifying with the delta loop). This also enables index-range
-checks *as you parse* rather than only at the end. Structural resolution = resolve the inner
-atom/bond refs → form the participant key → look up (≤1 hit).
-
-Cost splits by kind, so the hot path stays cheap:
-
-| kind | count | structural lookup | cost |
-|---|---|---|---|
-| **atom** | many | none — no structural form (base) | free, untouched |
-| **bond** | many | `(min,max) → BondId` endpoint map, one insert per bond | O(1) insert, O(1) query |
-| **overlays** (D/A/M/N/S) | few | `find_by_participants` over the small collection | O(few) |
-
-The only numerous kind that takes a structural ref is the bond, and a bond is named by its endpoints —
-an O(1) endpoint map, never a scan. Atoms have no structural form. Overlays are few, so they reuse the
-`find_by_participants` kernel directly. Growing + querying is compatible because refs only ever point
-**backward** (atoms before bonds before overlays before constraints; deltas at current state), so a
-query always sees its target already registered; removal in the delta loop rides the existing
-`IdCompaction`. The one honest asymmetry: bonds use a parse-time endpoint map (a bond is a graph edge,
-not a relation set) while overlays call `find_by_participants`.
-
-The resolution context unifies onto `&MoleculeNamespace`: `resolve(&namespace)` replaces today's
-`resolve(count, id_to_idx)` / `into_ast(count, metadata)` at every ref site, which is what makes all
-sites light up from one change. `Structural` is **input-only** — the AST stores the resolved id with
-no memory of structural authoring, so `ToEdn`/`from_ast` still render `Index`/`Id` (same lossiness as
-writing index `3` for an entity that has an `:id`).
-
-### Precondition — noncovalent uniqueness by endpoints alone
-
-For a noncovalent structural ref to be unambiguous, noncovalent bonds must be disambiguated by their
-**endpoints alone** — no two parallel noncovalent bonds of different kinds on the same pair (dropping
-the current §4.1 allowance). The tier-1 entity-structure validator's `noncovalent_structure_check`
-currently keys the parallel check on `(pair, kind)`; it must key on the unordered pair alone, and
-`NoncovalentBondsParallel` drops its `kind` field. This is the doc-134 §3 decision (2026-06-29) and a
-hard precondition. (`:electrons` is independent — structural refs read only participant keys, so the
-electron-encoding relocation is an orthogonal cleanup, not a blocker.)
-
-### Ref-emission priority (roundtrip normalization) — to formalize
-
-A use-site ref is not stored as authored; it is re-derived on render from its target (`render_atom_ref`
-→ `Ref::from_ast` = the target's `:id` keyword if it has one, else its positional index). So ref
-*form* is normalized on roundtrip: index-vs-keyword already collapses to keyword-if-named-else-index,
-and mixed positional/keyword usage does not roundtrip to its authored mix. This is a designed
-normalization, not a bug — but it is currently implicit and untested.
-
-Formalize it as one rule: **a use site is emitted in the highest-priority form its target supports,
-`keyword > positional > structural`** — descending specificity of what the ref denotes (a deliberate
-label on *this* entity > *this* entity by slot > its participants, not the entity itself). Positional
-is universal, so the emitted form is always keyword-else-positional; **structural, being lowest, is
-never emitted — it is input-only** (this is *why* structural refs don't roundtrip, not a carve-out).
-Consequence: I5 needs zero render/roundtrip work — structural is a parse-side-only input form.
-
-**S-notation** (independent of the I5 dependency chain; pins existing behavior now, the structural row
-lights up with S3):
-- **Sn** spec + tests: state the use-site emission priority in `umol-ast/spec/umol-dsl-spec.md` (the
-  ref-grammar section), and add a roundtrip test asserting the collapse — an entity referenced by a
-  mix of positional + keyword renders to the keyword (extend with a structural ref once S3 lands). No
-  `render_structural` path — it is dead by construction.
-
-### Implementation plan
-
-Modules: **ast** (precondition) → **dsl foundation** (namespace, parsers) → **dsl surface** (refs).
-Green after every stage; the sole breaking surfaces are S0a (validator) and S3 (resolve signature).
-
-**S0 — precondition (ast)** — independent, land by S3b **Done**
-- **S0a** `ast/validate/entity.rs`: `noncovalent_structure_check` keys on the unordered atom pair
-  alone (drop `kind`); `NoncovalentBondsParallel` drops its `kind` field; update the §4.1 tier-1 note.
-  **breaking (red→green)** — deliberate semantic change, migrate its `#[case]`s. `[dep: —]`
-
-**S1 — shared participant parsers (dsl)** — additive **Done**
-- **S1a** `dsl`: extract the participant-key readers from the entry parsers — `:atoms [..]`
-  (bond/noncovalent/aromatic/multicenter), `:donors [..] :acceptor _` (dative), `:site _ :ligands [..]`
-  (stereo) — into shared `read_*` fns; entry parsers delegate. **additive (green)**,
-  behavior-preserving. `[dep: —]`
-
-**S2 — entity namespace (dsl)** — additive + internal restructure
-- **S2a** `dsl`: `MoleculeNamespace` — a **new** type in `dsl/namespace.rs` (not an in-place `EntityCounts`
-  rename, which would break the molecule end-of-parse struct literal). Per kind: running count, name→id
-  map, participant lookup (bond `(min,max)→BondId`; overlays index their small collections), via
-  private `NamedRegistry`/`KeyedRegistry`. `register_<entity>(name?, participants) -> Id`,
-  `<entity>_by_participants(..)`, count/name accessors. Introduced alongside `EntityCounts`; the latter
-  retires in S3 when resolution moves onto the namespace. **additive (green)** — module `#[allow(dead_code)]`
-  until wired. `[dep: —]` **Done**
-- **S2b** `dsl`: grow the namespace's participant data incrementally in `MoleculeInput::into_ast`
-  (register each entity as parsed, so mid-build sites see it). Counts/results unchanged. **green.**
-  `[dep: S2a]` **Done**
-- **S2c** `dsl`: make the namespace the **source of truth for naming**, `MoleculeMetadata` a derived
-  view (metadata ⊂ namespace — see the note below). Registry gains the **atom-alias table** (aliases and
-  entity ids share one namespace, enforced by `check_id_disjoint`); add `MoleculeMetadata::from(&MoleculeNamespace)`
-  (id→name by inverting `by_name`; aliases read directly). Change `MoleculeInput::into_ast →
-  (MoleculeAst, MoleculeNamespace)` (an internal method, no trait constraint); `MoleculeDsl` formation
-  derives the metadata via the projection. **breaking (into_ast return + MoleculeDsl formation),
-  internal.** `[dep: S2b]` **Done**
-- **S2d** `dsl`: reaction delta loop (`ReactionInput::into_ast`) — **phase A: grow `delta_namespace`,
-  additively. Done.** `lhs_namespace` (returned by `into_ast`, S2c) stays as the lhs namespace,
-  immutable through the deltas; build `delta_namespace = MoleculeNamespace::continuation(&lhs_namespace)` —
-  a new ctor that copies the lhs per-kind counts (via `NamedRegistry`/`KeyedRegistry::with_count`) so
-  `register_*` hands out **global** ids continuing the lhs id space, with empty name/participant/alias
-  maps, so it holds only the delta-created entities. Grow it on each `Add` arm
-  (`delta_namespace.register_<entity>(name, participants)`), monotonically — `Remove`/`Modify` never
-  shrink it (the DSL delta pass never compacts — that's apply-time). **Purely additive/green** —
-  `delta_namespace` is grown in parallel to everything else and read by nothing yet; `EntityCounts`,
-  `from_ast`, the reaction's `namespace`, and the incremental `ReactionMetadata` are all left untouched.
-  **Handoff to S3d + S3e (explicit, survives compaction):** S2d leaves in place, unchanged, the live
-  `counts` (`EntityCounts`, still the id allocator + resolution bound), the reaction's `namespace` (a
-  `MoleculeMetadata` clone grown on `Add`, still what resolution uses), and the **incremental
-  `ReactionMetadata` building** (still the roundtrip artifact). `delta_namespace` is grown but read by
-  nothing. **S3e** eliminates `EntityCounts` (below). **S3d** does one delta-loop rewrite: sole counter →
-  `delta_namespace`, resolution → the two-namespace pair (drop `namespace`), `ReactionMetadata` → derived.
-  The single-counter rewire is deliberately *not* done in S2d — it means reordering every `Add` arm to
-  take its id from `register_*` and is the same delta-loop surgery S3d does for resolution, so folding it
-  into S3d rewrites the loop once, not twice. `[dep: S2c]` **Done**
-- **S2e** `dsl`: reaction-span build (`SpanInput::into_ast`) is molecule-shaped and **self-contained**
-  (ids are molecule-shaped; it embeds no lhs molecule parse), so it builds its **own** namespace —
-  **purely additive/green, done** (like S2d): grow it in parallel (register each atom/alias/bond/overlay
-  as resolved), leaving the span's incremental `MoleculeMetadata` and its `EntityCounts` untouched. The
-  namespace is grown but read by nothing yet. S3 resolves the span's structural refs (stereo-bond
-  `:site`, constraints) against it, derives its metadata as its roundtrip projection
-  (`MoleculeMetadata::from`), and drops its `EntityCounts` (S3e). `[dep: S2b]` **Done**
-
-  *Note (metadata ⊂ namespace).* `MoleculeMetadata` is the roundtrip-relevant subset of the namespace:
-  its eight `id→name` maps are the exact inverse of the namespace's `by_name`, and `atom_aliases` moves
-  into the namespace. Everything else the namespace holds (name→id, participant indexes, counts) is
-  parse-only and derivable from `ast + metadata`, so it never belongs in the persistent public type.
-  Hence the namespace is the source and metadata a boundary projection — not a merged union, and not
-  rebuilt from metadata.
-
-**S3 — resolution & render on the `Namespace` / `Metadata` traits (dsl)** — the rewire that gives
-molecule, reaction, and sub-pattern a *single* resolution and a *single* render, so the three can never
-diverge. This supersedes the earlier "one grown namespace + stashed counts" sketch, which failed on the
-reaction: it could not separate lhs from created at render without either a parallel structure or a
-loose-counts boundary. The trait removes the tension entirely.
-
-### The model — the parse/render asymmetry (settled 2026-07-03)
-
-The DSL reads like a program: **a name is defined before it is used** — refs resolve in document order
-against what already exists (no forward refs). Render is the inverse and is **order-agnostic** — it
-substitutes an `id` by its keyword through the `id ↔ keyword` bijection, recording no provenance. Two
-directions of the same bijection, so two matched traits:
-
-| method | direction | trait | reads |
-|---|---|---|---|
-| `ref::resolve` | keyword / index / participants → id | **`Namespace`** | `<kind>_count`, `find_<kind>_by_keyword`, `find_<kind>_by_participants`, `contains_id`, `find_atom_alias` |
-| `ref::from_ast` | id → keyword / index | **`Metadata`** | `<kind>_keyword(id)` (id→keyword) |
-
-`from_ast` never emits `Structural`, so `Metadata` needs no participant index — that asymmetry *is* the
-"metadata is a subset of the namespace" you noted. Both traits and the concrete `*Namespace` types are
-**`pub`** — they are general lookup tools, not crate-private plumbing.
-
-Three arrangements of the same two traits — resolution and render each written once, generic:
-- **Molecule** — one `MoleculeNamespace` / `MoleculeMetadata`.
-- **Reaction** — `ReactionNamespace { lhs, delta }` / `ReactionMetadata { lhs, created }`. `delta =
-  MoleculeNamespace::continuation(&lhs)` (created-only, counts continuing lhs). Each trait method is
-  delta-then-lhs (ids are unique across the reaction, so at most one hit); `<kind>_count` is `delta`'s
-  (continuation carries the running total). **Provenance is intrinsic** — lhs entities live in `lhs`,
-  created in `delta` — so the boundary needs no stashed counts and roundtrip needs no set-difference; the
-  loop grows exactly one structure (`delta`).
-- **Sub-pattern** — a molecule inside a constraint, so a *pair* of namespaces used per-side:
-  `into_ast_pair(host: &impl Namespace, pattern: &impl Namespace)` resolves the target ref against the
-  enclosing `host` (itself generic — `MoleculeNamespace` or `ReactionNamespace`) and the pattern ref
-  against the pattern's. **Patterns are anonymous** (no `:id`, no `:atom-aliases`), so the pattern's
-  namespace is derived on demand as `MoleculeNamespace::from_ast(&pattern_ast)` (counts + participants,
-  no keyword map) and render is index-only against an empty `Metadata` — nothing to carry upward, no
-  recursive metadata. Anonymity is a *stated rule*: the pattern parses through the molecule parser, then
-  its namespace must have empty keyword maps and no aliases, else `ParseError::InvalidValue` ("a
-  sub-pattern must not name entities (`:id`) or define `:atom-aliases`"). This turns today's silent drop
-  of pattern `:id`s into a loud rejection; no new error variant.
-
-### Subitems
-
-- **S3a — done (2026-07-03).** `dsl/refs.rs`: `Structural(payload)` on the 7 non-atom refs via a single
-  `define_ref!` arm with an optional `structural = <payload>, <parse>, <resolve>` tail (`AtomRef`
-  unchanged); payloads mirror each entry's participant portion — `[AtomRef; 2]` (bond, noncovalent),
-  `Vec<AtomRef>` (aromatic, multicenter), and the named `DativeBondParticipants` /
-  `StereoAtomParticipants` / `StereoBondParticipants` (stereo ligands = `StereoLigandRef`, moved into
-  `refs.rs` from molecule.rs). `FromEdn` gains the `Edn::Map` arm (reuses S1a `atoms_pair`/`atoms_vec`,
-  rejects `:type`/`:id`). `resolve(&MoleculeNamespace)` implemented — `Index` via `<kind>_count`, `Id`
-  via `find_<kind>_by_keyword`, `Structural` via a per-kind `resolve_<e>_structural` (resolve inner refs
-  → `find_<kind>_by_participants`; `StereoBondRef` nests a `BondRef`). The molecule.rs entity loops
-  migrate off `resolve(count, id_to_idx)`; the `id_to_idx` maps stay only for `check_id_disjoint`
-  (folded away in S3h). `resolve` becomes trait-generic in S3b. Green. `[dep: S1a, S2a, S2b]`
-  Also done alongside: `MoleculeNamespace` rename — `NamedRegistry`→`KeywordRegistry`,
-  `KeyedRegistry`→`EntityRegistry` (flat, no wrap), `by_name`→`find_by_keyword`, `by_participants`→
-  `find_by_participants`, `names`→`keywords`, `with_count`→`from_count`, `<kind>_by_name`→
-  `find_<kind>_by_keyword`, `iter_atom_aliases`→`atom_aliases`; `MoleculeNamespace` moved to file top.
-
-- **S3b — done (2026-07-03).** The two traits, green/transparent. `dsl/namespace.rs`,
-  `dsl/molecule.rs`, `dsl/refs.rs`.
-  - `pub trait Namespace` (namespace.rs): the 25-method query surface — per kind `<kind>_count`,
-    `find_<kind>_by_keyword`, `find_<kind>_by_participants`, plus `contains_id(&str)` (id-uniqueness
-    across all eight kinds + alias names) and `find_atom_alias(&str) -> Option<&AtomDsl>`.
-    `impl Namespace for MoleculeNamespace` **delegates** to the existing inherent methods (inherent
-    methods shadow trait methods, so `self.foo()` in the impl hits the inherent — no recursion); the two
-    new members are direct over the maps. `MoleculeNamespace` is now `pub`.
-  - `pub trait Metadata` (molecule.rs): `<kind>_id(&self, id) -> Option<&str>` per kind (the render
-    surface). `impl Metadata for MoleculeMetadata` delegates.
-  - `ref::resolve` → `pub fn resolve<N: Namespace>(self, &N)` (its structural resolvers `<N: Namespace>`
-    too); `ref::from_ast` → `pub fn from_ast<M: Metadata>(id, &M)`. `into_ast` (metadata-scan) left
-    concrete — deleted in S3f (it is the last caller — the `SubPattern` stopgap — that keeps it alive).
-    Transparent: callers pass `MoleculeNamespace`/`MoleculeMetadata`.
-  - **Deferred (not S3b):** renaming `MoleculeMetadata`'s `<kind>_id` accessors → `<kind>_keyword` and
-    retiring `set_*_id`. Attempted; it cascades far past the trait work — `ReactionMetadata` carries
-    parallel `<kind>_id` getters (delegating to `.lhs()`), and reaction/span render + the property tests
-    call them pervasively, tangled with AST-view `.<kind>_id()` methods of the *same spelling*. Split out
-    as **S3m** (below); the `Metadata` trait keeps the current `<kind>_id` names until then. `[dep: S3a]`
-
-- **S3c — molecule-side resolution + render onto the traits (breaking → green).** `constraint.rs`,
-  `relational.rs`, `molecule.rs`. Redo of the reverted S3b-a/b, now generic. Resolution methods
-  (`MoleculeConstraintDsl`/`ConstraintDsl`/`ConstraintsDsl`/`RelationalConstraintDsl::into_ast`, the
-  `atom_subset`/`bond_subset` helpers) drop `(counts, meta)` for a single `namespace: &impl Namespace`;
-  leaf `ref.into_ast(count, meta)` → `ref.resolve(namespace)`. Render methods (`*::from_ast`,
-  `*_subset_from_ast`) take `&impl Metadata`. `molecule.rs` resolves constraints against its
-  `MoleculeNamespace`, renders against `MoleculeMetadata`; drop the mid-parse `EntityCounts` literal +
-  metadata. `ref::into_ast` (metadata-scan resolution) is *not* deleted here — the `SubPattern`
-  pattern-side stopgap (`into_ast_pair` resolving pattern refs via `into_ast`) keeps it alive; it goes in
-  S3f. `constraint.rs`/`relational.rs` test fixtures build a `MoleculeNamespace`. Reaction/span callers
-  break here, restored in S3d/e. `[dep: S3b]` **Done**
-
-- **S3d — reaction (breaking → green).** `dsl/reaction.rs`. `ReactionNamespace { lhs: MoleculeNamespace,
-  delta: MoleculeNamespace }` `impl Namespace` (delta-then-lhs, count = delta's); `ReactionMetadata { lhs:
-  MoleculeMetadata, created: MoleculeMetadata }` `impl Metadata` (created-then-lhs). The delta loop: seed
-  `delta = continuation(lhs_namespace)`; per `Add`, resolve participants against the `ReactionNamespace`
-  then `delta.register_<kind>(...)` (the register return is the id — retire `counts.allocate_*`); dup-check
-  via `ReactionNamespace::contains_id`. **Delete** the resolution `MoleculeMetadata` clone (the
-  `metadata.set_*_id` grow) and `EntityCounts`. At the boundary: `ReactionMetadata.lhs =
-  MoleculeMetadata::from(&lhs_namespace)`, `.created = MoleculeMetadata::from(&delta)` — both projected
-  once, no incremental writes; reaction aliases are `delta`'s, lhs aliases render inside `.lhs`. `[dep:
-  S3c]` **Done**
-
-- **S3e — reaction-span (breaking → green).** `dsl/reaction_span.rs`. Same shape over its own
-  `ReactionNamespace`/`ReactionMetadata` (or `MoleculeNamespace`/`MoleculeMetadata` where a span side is a
-  plain molecule — settle when implementing). `[dep: S3d]` **Done**
-
-- **S3f — sub-pattern (breaking → green).** `constraint.rs`, `dsl/namespace.rs`.
-  `MoleculeNamespace::from_ast(&MoleculeAst)` — walk the AST entities, register each anonymously (counts +
-  participants, empty keyword maps). `into_ast_pair(host: &impl Namespace, pattern: &impl Namespace)`
-  (pattern = `from_ast(&pattern_ast)`); `from_ast_pair(host: &impl Metadata, …)` renders the pattern side
-  index-only (empty `Metadata`). Add the anonymity check at the sub-pattern parse (pattern namespace must
-  have empty keyword maps + no aliases → `InvalidValue`). Delete the S3c stopgap **and `ref::into_ast`
-  itself (+ its tests)** — the stopgap was its last caller. In the same `define_ref!` edit, **rename the
-  render leaf `ref::from_ast` → `ref::denote`** (the macro's `id → ref`, all eight refs — co-located with
-  `into_ast`/`resolve`) and its render call sites. This is *not* `MoleculeNamespace::from_ast` (the
-  pattern-namespace ctor above, a distinct AST→namespace constructor) nor/te value-DSL `FromAst`
-  `from_ast` — those keep their names. `[dep: S3c]` **Done**
-
-- **S3g — eliminate `EntityCounts` (cleanup, green).** Every remaining count reads the `Namespace`
-  trait's `<kind>_count`; delete the struct + `from_ast` + `allocate_*` from `constraint.rs`. (Most users
-  already gone in S3c/d/e/f.) `[dep: S3d, S3e, S3f]` **Done**
- 
-- **S3h — id-uniqueness on the namespace (cleanup, green).** Molecule build's scattered locals
-  (`check_id_disjoint`, `entry_ids`, `atom_id_to_idx`/`bond_id_to_idx`) collapse onto
-  `Namespace::contains_id` (or a register-time check returning `Err(DuplicateId)`); remove the
-  `id_to_idx` maps (last use). Minor error-ordering change (check at register-time, after participant
-  resolution). `[dep: S3c]` **Done**
-
-- **S3i — proptest: structural refs resolve (feature `proptest`).** Off a generated molecule / reaction,
-  pick each non-atom entity and form a *structural* ref to it (its constituent atom/bond refs) beside the
-  positional ref; assert both resolve to the same id, and that a structural ref over the wrong constituent
-  set fails. Cross-checks the `resolve_<e>_structural` path against positional resolution across all seven
-  kinds (incl. the stereo `(site, ligand-multiset)` key). `[dep: S3c, S3d]` **Done**
-
-- **S3j — proptest: `keyword > positional > structural` emission on roundtrip (feature `proptest`).** The
-  render priority: a ref to a *named* entity re-emits as its keyword, to an unnamed entity as its index,
-  and a *structural* ref is **never** re-emitted as structural (input-only — `from_ast` produces only
-  `Index`/`Id`). Property: parse a DSL form with mixed positional / keyword / structural refs, roundtrip
-  (parse → resolve → `from_ast` → render), and assert the rendered refs follow keyword-else-positional and
-  carry no `Structural`. `[dep: S3c, S3d]` **Done** as unit test
-
-- **S3k — fuzz seeds with structural refs.** Add corpus seeds exercising the `{:atoms […]}` /
-  `{:donors … :acceptor …}` / `{:site … :ligands […]}` structural forms to the `umol-ast` targets whose
-  grammar admits them — `fuzz_molecule`, `fuzz_reaction`, `fuzz_reaction_span`, `fuzz_constraints` — so the
-  full parse→resolve path is fuzzed on the new arm. `[dep: S3c, S3d, S3e]` **Done** — surfaced that S3c
-  had wired the structural arm into the **tree** parser only; the streaming reader (`refs.rs` `$reader`)
-  gained a `{` arm + per-kind streaming structural parsers (`read_<e>_structural`), so molecule / reaction /
-  span stream-parse structural refs too (streaming == tree, covered by a consistency test).
-
-- **S3m — rename the keyword-returning metadata accessors `<kind>_id` → `<kind>_keyword`.** Deferred out
-  of S3b (it cascades past the trait work). Scope: the eight getters on `MoleculeMetadata` **and**
-  `ReactionMetadata` that return `Option<&str>` (a keyword), their callers (molecule / reaction / span
-  render fns, the property tests), the `Metadata` trait methods, and the `define_ref!` `$accessor`. The
-  `set_<kind>_id` setters follow (either renamed `set_<kind>_keyword` or retired once `From`/boundary
-  projection is the only builder). **Do not touch** the AST-view `.<kind>_id()` methods
-  (`atom.aromatic_system_id()`, `neighbor.bond_id()`, `StereoLigand.atom_id()`, …) — those return actual
-  ids and are correctly named; distinguish by the argument (metadata getters take an id, view methods
-  don't). Green (pure rename). `[dep: S3d]` **Done**
-
-- **S3l — update `umol-ast/spec/umol-dsl-spec.md`.** Document: the structural ref forms per kind and that
-  they are accepted wherever a ref is (entries, entity/relational/molecule constraints, sub-pattern
-  anchors, reaction deltas); the `keyword > positional > structural` emission rule with structural
-  input-only; and anonymous sub-patterns (no `:id`, no `:atom-aliases`, rejected with `InvalidValue`).
-  `[dep: S3c–S3f]` **Done**
-
-**Critical path** S2a → S2b → {S2d, S2e} → S3a → S3b → S3c → {S3d, S3f, S3h} → S3e → S3g. S3b is a green,
-transparent foundation; S3c is the first breaking cut (molecule green, reaction/span red until S3d/e).
-
-**Stereo structural refs (settled 2026-07-03):** resolved by **(site, ligand multiset)** — both part of
-the resolution, matching `connecting_id` (same site + same ligand multiset, frame order not matched,
-repeats significant). The namespace keys stereo elements by `(site, Vec<StereoLigand>)` (sorted), and the
-`:ligands` are required in the structural form, not an assertion tacked on after a site-only lookup.

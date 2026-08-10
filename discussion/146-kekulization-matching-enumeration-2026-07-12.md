@@ -260,7 +260,7 @@ under relabeling, and validated for fixed/mobile one-hole graph formulations.
 
 ### S4a — Add and validate an explicit planar embedding carrier
 
-**Module:** new `umol-graph-core/src/algorithms/matching_count.rs`, algorithms module exports,
+**Module:** new `umol-graph-core/src/algorithms/planar_matching_count.rs`, algorithms module exports,
 and shared planar fixtures
 
 **Kind:** additive API foundation (green)
@@ -281,7 +281,7 @@ shape. Keep embedding tests independent of matching enumeration.
 
 ### S4b — Implement exact Kasteleyn signing and Pfaffian arithmetic
 
-**Module:** `umol-graph-core/src/algorithms/matching_count.rs` and
+**Module:** `umol-graph-core/src/algorithms/planar_matching_count.rs` and
 `umol-graph-core/Cargo.toml`
 
 **Kind:** additive algorithm (green)
@@ -438,8 +438,7 @@ the corrected enumerator.
   Experiment A oracle and chemical fixtures.
 - FKT acceleration through modular arithmetic/CRT, rank-one monomer updates, or reused factorizations
   is deferrable until counting benchmarks justify it.
-- Full layered Hopcroft–Karp was deferred from this plan and was implemented in
-  `151-python-molecule-workflows-2026-07-13.md`, S9h, with Edmonds retained as the correctness oracle.
+- Full layered Hopcroft–Karp is deferrable; Edmonds supplies the correctness oracle.
 - Symmetry-inequivalent counting via Burnside's lemma is deferrable and must not alter labeled counts.
 - Uno 1997/2001, general maximal matching, chemical `MatchingDemand`, charge localization, and the
   kekulizer migration belong to later experiments/stages.

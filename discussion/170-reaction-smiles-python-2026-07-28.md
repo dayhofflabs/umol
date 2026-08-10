@@ -235,14 +235,6 @@ an explicit config, and the Rust operation continues to require a selector.
 The config name, Python-only placement, keyword-only method argument, and
 `DirectBacktracking()` default are settled.
 
-This is also the binding rule for additional algorithm-selecting operations
-from `umol-ast`: as those operations gain Python bindings, each receives a
-dedicated Python operation-config wrapper instead of exposing a bare algorithm
-keyword. The Rust APIs remain algorithmically transparent and continue to
-require every selector explicitly, either as a direct argument or, when selectors compound, in a
-mandatory config without an AST-layer default. No config is added to `umol-ast` solely for Python
-uniformity.
-
 ## Verification requirements
 
 The reaction ingestion work must cover:
