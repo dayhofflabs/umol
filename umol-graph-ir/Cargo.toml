@@ -77,6 +77,10 @@ harness = false
 name = "ground"
 harness = false
 
+[[bench]]
+name = "canonicalization"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

@@ -1,4 +1,4 @@
-# 186 - Molecule AST canonicalization
+# 186 - Molecule canonicalization
 
 Status: In Progress
 Date: 2026-08-05
@@ -8,23 +8,23 @@ Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [185](185-python-reaction-span-2026-08-04.md),
 [188](188-inchi-migration-2026-08-09.md)
 
-`MoleculeAst` does not provide a canonical representation with respect to entity renumbering.
+`Molecule` does not provide a canonical representation with respect to entity renumbering.
 `Graph::canonical_key` and canonical labels are available in
 `umol-graph-core::algorithms::automorphism`; the molecule-level incidence (Levi) graph is available
-in `umol-ast::ast::incidence`. Canonicalization must derive a canonical frame and apply it through
-the ordinary end-to-end molecule-remapping operation. Consult doc 156 for the relation between
-`equiv`, frame changes, and canonical equality.
+in `umol-graph-ir::ir::incidence`. Canonicalization must derive a canonical frame and apply it
+through the ordinary end-to-end molecule-remapping operation. Consult doc 156 for the relation
+between `equiv`, frame changes, and canonical equality.
 
 ## Normalization, canonicalization, and equality
 
-The existing `Canonicalize` trait actually performs intrinsic, fixed-frame AST normalization. It
-folds lattice expressions, fields, constraints, entity ASTs, and `Deltas` without changing entity
+The existing `Canonicalize` trait actually performs intrinsic, fixed-frame form normalization. It
+folds lattice expressions, fields, constraints, entity forms, and `Deltas` without changing entity
 ids or participant frames. It is context-free and returns `Contradiction` when the represented value
 is unsatisfiable. This operation will be renamed to `Normalize`; its by-value operation becomes
 `normalize`, its borrowed normal-form projection becomes `normalized`, and `Canonical<T>` becomes
 `Normalized<T>`. `Lattice` depends on `Normalize`, not on aggregate canonicalization.
 
-Canonical representative selection for `MoleculeAst`, `ReactionAst`, and `ReactionSpanAst` is the
+Canonical representative selection for `Molecule`, `Reaction`, and `ReactionSpan` is the
 operation that retains the conventional name `Canonicalize`. It selects an entity-id and participant
 frame modulo structural isomorphism, uses a graph canonical-labeling algorithm, and depends on an
 explicit canonicalization context. These aggregate types do not implement `Lattice` and do not
@@ -42,7 +42,7 @@ The equality API follows the same separation:
 
 Thus `equiv` and `equiv_under` are one semantic-equivalence family, not two additional equality
 relations. Aggregate `canonical_eq` is the search-based extension of `equiv_under`: for inputs in
-the operation domain, it holds exactly when canonicalization produces the same complete AST form,
+the operation domain, it holds exactly when canonicalization produces the same complete IR form,
 and equivalently when an admissible remapping exists under which `equiv_under` holds. The current
 fixed-frame `Canonicalize::canonical_eq` becomes `Equiv::equiv`; no fourth equality relation is
 introduced.
@@ -67,7 +67,7 @@ pub trait Canonicalize: Sized {
 ```
 
 The context is concrete rather than an associated type unless the implementations establish a
-real need for different context types. `MoleculeAst`, `ReactionSpanAst`, and `ReactionAst` share the
+real need for different context types. `Molecule`, `ReactionSpan`, and `Reaction` share the
 same canonicalization semantics and context. Canonical-form construction is fallible; equality is
 not. A caller that needs a diagnostic invokes `canonicalize` directly rather than using equality as
 an error-reporting operation.
@@ -86,7 +86,7 @@ contradiction failures. The reaction and span errors preserve their own integrit
 boundaries rather than exposing an accidental internal call path. Their exact variants are fixed
 after the integrity-error migration establishes those underlying error types.
 
-`ReactionAst` currently implements the old `Canonicalize` by normalizing only its deltas while
+`Reaction` currently implements the old `Canonicalize` by normalizing only its deltas while
 preserving the LHS frame. That partial aggregate implementation conflates the two domains and must
 be removed during the rename. `Deltas` continues to implement `Normalize`; callers that require
 fixed-frame delta normalization invoke it explicitly.
@@ -109,24 +109,24 @@ semantics so that the implementation can be reviewed against them.
 
 ## Crate boundary
 
-Aggregate canonicalization belongs in `umol-ast`, beside the representation whose complete internal
-shape it must inspect and remap. The crate responsibilities are:
+Aggregate canonicalization belongs in `umol-graph-ir`, beside the representation whose complete
+internal shape it must inspect and remap. The crate responsibilities are:
 
 - `umol-graph-core` supplies automorphism groups, canonical labels, and the explicit algorithm
   selector;
-- `umol-ast` owns the aggregate trait, typed incidence encoding, stereo coset and frame handling,
-  complete entity remapping, and post-hoc canonical placement of constraints; and
-- `umol-graph` may translate higher-level model and operation configuration into the public AST
-  context, but does not inspect, reorder, or reconstruct AST internals.
+- `umol-graph-ir` owns the aggregate trait, typed incidence encoding, stereo coset and frame
+  handling, complete entity remapping, and post-hoc canonical placement of constraints; and
+- `umol-graph` may translate higher-level model and operation configuration into the public graph-IR
+  context, but does not inspect, reorder, or reconstruct graph-IR internals.
 
 The aggregate context does not require the complete `StereoModel`. Its `kind_models` and element
 scopes govern which stereo entities perception attempts to derive, while fluxionality belongs to
 the chemical interpretation of that perception. Canonicalization neither perceives nor validates
-stereo: every stereo entity already stored in the AST participates regardless of whether a
+stereo: every stereo entity already stored in the IR participates regardless of whether a
 perception model would have generated it. Of the current model parameters, only `para_stereo`
 affects canonicalization by enabling iterative stereo-sensitive symmetry refinement.
 
-The AST-level context therefore needs only the following inputs at present:
+The graph-IR context therefore needs only the following inputs at present:
 
 ```rust
 pub struct CanonicalizationContext {
@@ -135,11 +135,12 @@ pub struct CanonicalizationContext {
 }
 ```
 
-`CanonicalizationContext` is the explicit low-level carrier needed by `umol-ast`; it is not itself a
-model or config. At the `umol-graph` layer, the semantic and operational sources remain separate:
-`StereoModel::para_stereo` supplies the semantic choice and `CanonicalizationConfig` contains the
-`automorphism_algorithm`. The graph layer constructs the AST context from those two inputs. Do not
-add a one-field `CanonicalizationModel` that merely duplicates the projection of `StereoModel`.
+`CanonicalizationContext` is the explicit low-level carrier needed by `umol-graph-ir`; it is not
+itself a model or config. At the `umol-graph` layer, the semantic and operational sources remain
+separate: `StereoModel::para_stereo` supplies the semantic choice and `CanonicalizationConfig`
+contains the `automorphism_algorithm`. The graph layer constructs the graph-IR context from those
+two inputs. Do not add a one-field `CanonicalizationModel` that merely duplicates the projection of
+`StereoModel`.
 
 Stored stereo entities participate under either `para_stereo` setting. When it is false,
 canonicalization performs one stereo-sensitive refinement from the constitution-level partition
@@ -151,18 +152,18 @@ condition.
 
 ### Domain and failure semantics
 
-Aggregate canonicalization supports non-ground AST values; groundness is not a precondition.
-Intrinsic fixed-frame normalization is applied to every carried AST value, and an intrinsic
+Aggregate canonicalization supports non-ground form values; groundness is not a precondition.
+Intrinsic fixed-frame normalization is applied to every carried form value, and an intrinsic
 `Contradiction` remains an error of the aggregate operation rather than being ignored or repaired.
 
-Aggregate canonicalization is likewise partial for `ReactionAst`. After representation integrity
+Aggregate canonicalization is likewise partial for `Reaction`. After representation integrity
 has been established, it reports `Contradiction` when intrinsic normalization of an LHS or delta
 value fails, when the deltas cannot be normalized into a coherent before/after transition against
 the LHS, or when the normalized transition cannot materialize two referentially intact sides of a
 reaction span. The last case is reaction consistency or span materializability, not a DPO
 condition. Canonicalization does not test chemistry invariants or conformance and does not test the
 host- and match-dependent DPO dangling or identification conditions. A constructed
-`ReactionSpanAst` has already established side integrity and can fail aggregate canonicalization
+`ReactionSpan` has already established side integrity and can fail aggregate canonicalization
 only through its defensive integrity check or intrinsic normalization of a carried value.
 
 Valid stereo ligand frames may be reordered as part of canonical frame selection only when the
@@ -177,7 +178,7 @@ stereo configuration that canonicalization could preserve. Checked molecule cons
 public mutation or conversion producing a molecule must reject them. Aggregate canonicalization
 returns a typed integrity error, rather than a canonical representative or a panic, if a compromised
 or unchecked value nevertheless reaches it. This error is distinct from the intrinsic lattice
-`Contradiction` returned for a validly represented but unsatisfiable AST value.
+`Contradiction` returned for a validly represented but unsatisfiable form value.
 
 The stereo checks divide across the validation tiers as follows:
 
@@ -211,18 +212,18 @@ panic while extracting one.
 
 The same representation-shape rule is already relevant outside stereo. Aromatic systems and
 multicenter bonds store electron-count vectors positionally alongside their participant lists. The
-reference traversal used by `MoleculeAst::try_from_entries` verifies that every participant atom
+reference traversal used by `Molecule::try_from_entries` verifies that every participant atom
 exists, but it does not compare the two lengths. `EntityStructureValidator` does perform both length
 checks for literal electron-count vectors. These are representation-integrity checks, not chemistry
 contradictions: an undetermined vector is valid, while a concrete vector of a different length
 cannot assign one contribution to each participant. They must move into the same shared
 representation-integrity gate as the stereo shape checks.
 
-The current implementation does not yet establish this contract. `MoleculeAst::try_from_entries`
+The current implementation does not yet establish this contract. `Molecule::try_from_entries`
 checks entity and constraint references only. `EntityStructureValidator` separately mixes the two
 electron-vector shape checks with semantic entity-structure checks such as graph simplicity and
 relation uniqueness, so invoking that validator wholesale is not the construction fix. Molecule
-construction, molecule-DSL raise, and editor publication need one AST-owned
+construction, molecule-DSL raise, and editor publication need one graph-IR-owned
 representation-integrity implementation containing the reference, parallel-collection, and stereo
 shape checks. Model-independent constraint satisfaction remains an explicit tier-2 validation pass,
 and source-format-specific stereo interpretation remains in the source-format layer.
@@ -237,7 +238,7 @@ same integrity implementation defensively rather than add a second partial imple
 
 ### Required integrity-check and validator restructuring
 
-Tier 1 and semantic validation must use different operation families. `umol-ast` owns integrity
+Tier 1 and semantic validation must use different operation families. `umol-graph-ir` owns integrity
 checks, named `check_integrity`, with `*IntegrityError` failures. These checks return
 `Result<(), *IntegrityError>` and never return `Solution`, `Underdetermined`, or `Contradictory`.
 There is no `*Checker` object. `umol-graph` owns validators: `*InvariantsValidator` for tier 2 and
@@ -245,10 +246,10 @@ There is no `*Checker` object. `umol-graph` owns validators: `*InvariantsValidat
 `Result<Solution<_, _>, _>` because a coherent non-ground value may leave a semantic question
 underdetermined.
 
-The AST-side restructuring is:
+The graph-IR restructuring is:
 
-- add `MoleculeAst::check_integrity`, `ReactionAst::check_integrity`, and the corresponding operation
-  for `ReactionSpanAst`, with `MoleculeIntegrityError`, `ReactionIntegrityError`, and the analogous
+- add `Molecule::check_integrity`, `Reaction::check_integrity`, and the corresponding operation
+  for `ReactionSpan`, with `MoleculeIntegrityError`, `ReactionIntegrityError`, and the analogous
   span error;
 - make checked entry construction, molecule and reaction DSL raise, TableIR raise, Python entry
   construction, builder/editor finalization, reaction-side materialization, and aggregate
@@ -259,11 +260,11 @@ The AST-side restructuring is:
 - move aromatic and multicenter electron-vector length checks out of
   `EntityStructureValidator` and into molecule integrity, together with the stereo representation
   checks listed above; and
-- replace `ReactionIntegrityValidator` with `ReactionAst::check_integrity`. Its invalid-reference
+- replace `ReactionIntegrityValidator` with `Reaction::check_integrity`. Its invalid-reference
   and incidence-mismatch cases become integrity errors rather than semantic contradictions.
 
-After this migration, `umol-ast` must not define `*Validator` types. Existing AST validators split by
-tier rather than moving as one block:
+After this migration, `umol-graph-ir` must not define `*Validator` types. Existing graph-IR
+validators split by tier rather than moving as one block:
 
 - the remaining model-independent entity-structure checks move to an invariants validator in
   `umol-graph`;
@@ -280,7 +281,7 @@ The existing graph validators then need the following cleanup:
 
 - remove `validate_integrity`, `EntityStructureValidator`, and `ConstraintValidator` from the
   composite `Validator`. The composite runs `validate_invariants` followed by
-  `validate_conformance`; successful AST construction is its integrity precondition;
+  `validate_conformance`; successful graph-IR construction is its integrity precondition;
 - rename `Validator::validate_atom`, which currently runs only valence and spin invariants, so its
   tier is explicit;
 - remove `LigandArity`, `CosetOutOfRange`, `ImproperOnAchiral`, `MissingStereoAtom`, and
@@ -303,13 +304,13 @@ visibility to avoid the decision.
 
 The integrity and validator migration proceeds in four green stages:
 
-1. Add the three AST-owned `check_integrity` operations and `*IntegrityError` types. Molecule
+1. Add the three graph-IR-owned `check_integrity` operations and `*IntegrityError` types. Molecule
    integrity consolidates reference checks, aromatic and multicenter electron-vector lengths,
    stereo ligand arity, explicit coset domains, and explicit permutation degree. Route checked and
    asserted construction, DSL and external-format raise, Python construction, and builder/editor
    publication through the shared checks.
-2. Replace `ReactionIntegrityValidator` with `ReactionAst::check_integrity`, and unify
-   `ReactionSpanAst` checked construction with its integrity operation. Preserve the distinction
+2. Replace `ReactionIntegrityValidator` with `Reaction::check_integrity`, and unify
+   `ReactionSpan` checked construction with its integrity operation. Preserve the distinction
    between a permissive lhs-plus-deltas reaction and a span whose two projections are molecules.
 3. Move every semantic validator to `umol-graph`: the non-integrity portion of
    `EntityStructureValidator`, the aggregate and focused constraint validators, and connectivity.
@@ -317,11 +318,11 @@ The integrity and validator migration proceeds in four green stages:
    validators are public.
 4. Rewire the composite `Validator`, reaction application, resolvers, transformers, substructure
    operations, Rust and Python callers, tests, property tests, specifications, and rustdoc. Remove
-   the old AST validator modules and exports only after every consumer has moved and the workspace
-   is green.
+   the old graph-IR validator modules and exports only after every consumer has moved and the
+   workspace is green.
 
 The phrase *non-simple input* is too narrow for the current reaction-application precondition.
-`ReactionAst::apply` presently runs the whole `EntityStructureValidator` over both the reaction LHS
+`Reaction::apply` presently runs the whole `EntityStructureValidator` over both the reaction LHS
 and the host. In addition to localized-bond self-loops and parallel bonds, that validator rejects
 duplicate or role-conflicting dative participants, parallel dative and noncovalent relations,
 duplicate or overlapping aromatic participants, duplicate or identical multicenter participant
@@ -341,7 +342,7 @@ other cases in which constitution and stereo symmetry interact must be included 
 corpus.
 
 The construction of a canonical Kekule form and aromaticity or stereo perception are outside this
-work. Canonicalization preserves and renumbers the structure represented by the input AST; it does
+work. Canonicalization preserves and renumbers the structure represented by the input IR; it does
 not perceive, resolve, or replace that structure.
 
 Previous benchmarks found the full incidence graph comparatively slow next to the graph-and-
@@ -422,24 +423,24 @@ entity-level and molecule-level constraints select a canonical placement among t
 equivalent frames. The resulting remapping transports every constraint reference together with the
 entities it names.
 
-Derived `==` is exact equality of the stored AST and therefore includes constraints, ids, ordering,
-and non-normal value encodings. `canonical_eq` compares complete canonical AST forms and also
+Derived `==` is exact equality of the stored IR and therefore includes constraints, ids, ordering,
+and non-normal value encodings. `canonical_eq` compares complete canonical IR forms and also
 includes constraints. This is required for patterns, where constraints are not redundant with the
 structural description. The constraints' post-hoc participation in selecting a complete canonical
 form does not make them structural colors or allow them to alter the underlying structural orbits.
 
 ## Canonical comparison order
 
-For a fixed aggregate-canonicalization context, consider every complete `MoleculeAst` obtained by a
+For a fixed aggregate-canonicalization context, consider every complete `Molecule` obtained by a
 valid dense remapping of all eight entity families and every corresponding participant-frame action.
 Before comparison, every carried entity and constraint value undergoes intrinsic, fixed-frame
 normalization. Unordered aromatic-system and multicenter-bond participant reorders
 permute their participant-indexed electron counts. Stereo ligand frames may likewise be reordered,
 provided that the stereo coset is transported through the same frame permutation. The canonical
-form is the minimum resulting complete AST under a specified typed total order.
+form is the minimum resulting complete IR under a specified typed total order.
 
 The typed order, rather than a rendered DSL string, is normative. A canonical DSL rendering is a
-derived representation of the canonical AST; parsing, rendering, whitespace, shorthand, or other
+derived representation of the canonical IR; parsing, rendering, whitespace, shorthand, or other
 surface-syntax changes must not alter the selected entity numbering. The implementation may use a
 collision-free comparison key or another optimized representation, but it must agree with the typed
 order and must not replace it with a hash.
@@ -447,7 +448,7 @@ order and must not replace it with a hash.
 The comparison key is a private typed data object with explicit ordering semantics, not a rendered
 encoding and not a tuple-of-vectors public contract. A straightforward implementation may contain a
 vector block for each of the eight entity families followed by constraints, with typed row keys for
-participants, frames, and normalized AST values. Its storage shape is private; its comparison order
+participants, frames, and normalized form values. Its storage shape is private; its comparison order
 is the contract. The choice among valid total orders is mathematically arbitrary, like choosing a
 fixed seed, but becomes a public compatibility contract once published. For the same input and
 semantic context, canonical numbering must remain stable across library releases, platforms, and
@@ -498,7 +499,7 @@ described in doc 117 while keeping already representable molecules stable. It ap
 canonical representative; an internal comparison-key encoding may change provided it reproduces
 that representative.
 
-The architectural requirement is that `MoleculeAst::incidence_graph` remains the single
+The architectural requirement is that `Molecule::incidence_graph` remains the single
 molecule-to-incidence facility used by symmetry, substructure, and canonicalization. The facility
 may need to expose a compact graph-and-overlays form and explicit adapters, rather than requiring
 all consumers to start from a fully subdivided graph.
@@ -511,7 +512,7 @@ for canonicalization rather than invoking stereo perception.
 ## External precedents and points of comparison
 
 The source trees under `materials/codes` are references for particular parts of the design, not
-drop-in specifications. Their chemical models and canonical outputs differ from `MoleculeAst`, so
+drop-in specifications. Their chemical models and canonical outputs differ from `Molecule`, so
 literal canonical numbers need not agree. The useful comparisons are invariance under renumbering,
 symmetry partitions, treatment of selected features, stereo behavior, and representation cost.
 
@@ -527,7 +528,7 @@ algorithmic distinctions:
 
 The first distinction parallels the separation between an orbit/equivalence partition used during
 refinement and the final canonical frame. The second is a precedent for the parameterized ordering
-operation, while `MoleculeAst::canonical_eq` remains the unparameterized complete comparison.
+operation, while `Molecule::canonical_eq` remains the unparameterized complete comparison.
 RDKit's stereo regression corpus is also useful for meso and symmetry-dependent stereo cases. Its
 canonical numbers are implementation-specific and are not an oracle for umol's numbering.
 
@@ -556,7 +557,7 @@ duplication mode. Element, connection count, hydrogen, isotope, and tautomer inf
 enters through initial atom invariants and additional canonicalization layers. InChI therefore
 demonstrates that a McKay-style chemical canonicalizer need not subdivide every bond. It does not,
 however, show that umol can simply omit bond values: InChI canonicalizes its own normalized,
-layered representation, whereas `MoleculeAst` must preserve explicit localized bonds and all other
+layered representation, whereas `Molecule` must preserve explicit localized bonds and all other
 selected structural distinctions.
 
 This precedent reinforces the need to benchmark the canonicalization carrier before committing to
@@ -647,7 +648,7 @@ excluded from the structural levels. Para-stereo is not a fourth level: both one
 refinement and the para-stereo fixpoint operate at `Full`, with the behavior selected by
 `CanonicalizationContext::para_stereo`.
 
-The parameterized operation returns the complete original `MoleculeAst` in the frame selected under
+The parameterized operation returns the complete original `Molecule` in the frame selected under
 the requested relation. Every entity, field, stereo assignment, and constraint is retained and
 transported through the resulting remapping. The operation performs no projection, stripping,
 resolution, or normalization. When excluded features distinguish entities tied by the selected
@@ -669,7 +670,7 @@ frame selected at `level`; the second compares only the selected structural laye
 implemented by comparing the complete outputs of `canonicalize_by`, because excluded features may
 remain differently ordered within an automorphism class of the selected level.
 
-These operations are distinct from `MoleculeAst::canonical_eq`, whose name and semantics are not
+These operations are distinct from `Molecule::canonical_eq`, whose name and semantics are not
 parameterized by a structural level. `canonical_eq` compares the complete set of available entity
 kinds, including stereo entities. It must not adopt the reduced equality relation supplied to the
 ordering operation or use the coarser result as its canonical representative.
@@ -716,18 +717,18 @@ path:
   by removing their host-relative stereo branches;
 - establish that reaction/span conversion preserves the match domain and application result of the
   normalized reaction, in addition to reproducing the same materialized span; and
-- canonicalize `ReactionAst` through `ReactionSpanAst` after the molecule and span operations are
+- canonicalize `Reaction` through `ReactionSpan` after the molecule and span operations are
   complete. A direct action-level canonicalizer for relative delta variants is no longer needed.
 
-`ReactionAst` currently implements only the partial fixed-frame normalization described above, and
-`ReactionSpanAst` has no canonicalization operation. Numbering-invariant reaction canonicalization
+`Reaction` currently implements only the partial fixed-frame normalization described above, and
+`ReactionSpan` has no canonicalization operation. Numbering-invariant reaction canonicalization
 cannot in general be implemented by
 canonicalizing the bare LHS and then remapping the deltas, because a transformation can distinguish
 entities that are symmetric in the LHS and added entities do not occur in the LHS at all. The
 reaction change structure must therefore participate in canonical labeling.
 
-`ReactionSpanAst` is the primary aggregate to canonicalize. It has the same eight entity families
-and typed incidence structure as `MoleculeAst`, expressed in the union frame of the two sides, while
+`ReactionSpan` is the primary aggregate to canonicalize. It has the same eight entity families
+and typed incidence structure as `Molecule`, expressed in the union frame of the two sides, while
 each entity value is lifted into an `EntitySpan<T>`. Its collision-free structural comparison key
 therefore extends the corresponding molecule entity key as follows:
 
@@ -754,15 +755,15 @@ to the reaction or span canonical form. `ConstraintDelta` normalization must use
 difference: repeated equal additions or removals collapse, and an equal addition/removal pair
 cancels. Materialization against the LHS then enforces continuity: adding a canonical constraint
 already present on the LHS or removing one absent from it is a `Contradiction`, not an idempotent
-no-op. Occurrence counts must not survive merely to reproduce redundant raw AST storage.
+no-op. Occurrence counts must not survive merely to reproduce redundant raw constraint storage.
 
-The numbering-invariant canonical form of `ReactionAst` is obtained through the span:
+The numbering-invariant canonical form of `Reaction` is obtained through the span:
 
-1. `ReactionAst::to_reaction_span` normalizes and materializes the before/after state, retaining its
+1. `Reaction::to_reaction_span` normalizes and materializes the before/after state, retaining its
    existing `Contradiction` result for intrinsically contradictory values, incoherent delta
    transitions, or a product that cannot form a reaction span;
-2. aggregate canonicalization selects the canonical union frame of the `ReactionSpanAst`; and
-3. `ReactionSpanAst::to_reaction` infallibly derives the LHS and deltas in delta normal form.
+2. aggregate canonicalization selects the canonical union frame of the `ReactionSpan`; and
+3. `ReactionSpan::to_reaction` infallibly derives the LHS and deltas in delta normal form.
 
 This is an explicit partial canonicalization contract. Failure to materialize the span is not
 silently repaired and is not reported as DPO invalidity. A valid span may still fail a
@@ -781,13 +782,13 @@ the same match domain and produce the same result for every accepted match.
 Removing relative stereo deltas does not change the conversion signatures:
 
 ```rust
-ReactionAst::to_reaction_span(&self) -> Result<ReactionSpanAst, Contradiction>
-ReactionSpanAst::to_reaction(&self) -> ReactionAst
+Reaction::to_reaction_span(&self) -> Result<ReactionSpan, Contradiction>
+ReactionSpan::to_reaction(&self) -> Reaction
 ```
 
 `to_reaction_span` remains fallible because an absolute delta collection may still be intrinsically
 contradictory, inconsistent with its LHS, or unable to materialize a referentially intact right
-side. `to_reaction` remains infallible because construction of `ReactionSpanAst` establishes both
+side. `to_reaction` remains infallible because construction of `ReactionSpan` establishes both
 side projections as part of representation integrity. Removing host-relative operations changes
 neither boundary.
 
@@ -883,16 +884,16 @@ on a mismatch. The analogous removal-driven operation is `compact`: it drops rel
 removed participants and relabels every survivor into the compacted id space. These names must not
 change transport, participant-order, payload-permutation, dropping, or failure semantics.
 
-AST values transported through `IdRemapping` retain the existing `remap` spelling. The end-to-end
-`MoleculeAst` operation follows the same pair: `remap` is the asserted route for a producer-known
-dense correspondence, while `try_remap` checks an independently supplied correspondence. The
-argument type identifies whether graph ids, typed molecule ids, or the complete molecule namespace
-are being transported.
+Graph-IR values transported through `IdRemapping` retain the existing `remap` spelling. The
+end-to-end `Molecule` operation follows the same pair: `remap` is the asserted route for a
+producer-known dense correspondence, while `try_remap` checks an independently supplied
+correspondence. The argument type identifies whether graph ids, typed molecule ids, or the complete
+molecule namespace are being transported.
 
 ## Required molecule-remapping operation
 
-Canonicalization requires a general end-to-end `MoleculeAst` remapping operation. This is a public
-AST transformation rather than a canonicalization-specific helper: canonicalization derives a
+Canonicalization requires a general end-to-end `Molecule` remapping operation. This is a public
+graph-IR transformation rather than a canonicalization-specific helper: canonicalization derives a
 canonical labeling, represents it as a `MoleculeCorrespondence`, and applies the same operation that
 other callers can use to transport a standalone molecule between dense id spaces. Its asserted and
 checked routes are `remap` and `try_remap`, respectively.
@@ -902,7 +903,7 @@ The operation has the following contract:
 - the correspondence source counts equal the molecule's counts for all eight entity families;
 - every component correspondence is total on both sides and therefore defines a bijection onto a
   dense target id space;
-- topology, relation participants, position-sensitive relation data, stereo frames, entity ASTs,
+- topology, relation participants, position-sensitive relation data, stereo frames, entity forms,
   and all references in constraints are transported together;
 - it performs no chemistry validation, resolution, attribute canonicalization, repair, compaction,
   or entity removal; and
@@ -912,7 +913,7 @@ The operation has the following contract:
 The implementation coordinates `umol_graph_core::Remapping`, which owns topology and relation
 participant transport, with `IdRemapping`, which owns typed references across all eight entity
 families. It must not reimplement relation participant sorting or payload permutation at the
-`MoleculeAst` layer. The graph-core relation-remapping correction and its immediate reaction-span
+`Molecule` layer. The graph-core relation-remapping correction and its immediate reaction-span
 consumer remain in doc 185, S3c; this work consumes that corrected facility.
 
 Required properties are:
@@ -932,16 +933,14 @@ derived from the canonical labeling produces the canonical representative.
 
 This operation does not replace embedding into an ambient union namespace. A reaction-side mapping
 may target a sparse or larger union id space and can transport entries into that space, but it cannot
-produce a standalone dense `MoleculeAst` without a separate dense reindexing.
+produce a standalone dense `Molecule` without a separate dense reindexing.
 
 ## Staged implementation plan
 
-Doc 176's aggregate-type rename should land before this work so that the new public canonicalization
-surface is introduced on `Molecule`, `ReactionSpan`, and `Reaction` rather than renamed immediately
-afterward. The plan below retains the current `*Ast` spellings where they make a dependency on
-existing code easier to find. Doc 185 is complete; its corrected reaction-span and relation-remapping
-semantics are prerequisites rather than work repeated here. The trait and crate renames excluded by
-doc 176 remain outside this plan.
+Doc 176's aggregate-type and crate renames are complete, so the public canonicalization surface
+below uses `Molecule`, `ReactionSpan`, and `Reaction` in `umol-graph-ir`. Doc 185 is complete; its
+corrected reaction-span and relation-remapping semantics are prerequisites rather than work
+repeated here. The broader trait renames excluded by doc 176 remain outside this plan.
 
 Every subitem ends green unless it is explicitly marked breaking; a breaking subitem includes its
 complete caller migration and ends green. New and changed tests follow the test-writing conventions.
@@ -950,18 +949,20 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S0 — Baselines and selector vocabulary
 
-- **S0a — Canonicalization benchmark baseline.** In the existing AST benchmark target, add a fixed
-  corpus covering ordinary, disconnected, overlay-heavy, stereo, meso, and para-stereo structures.
-  Measure incidence construction and canonical-labeling time separately for the compact
-  graph-and-overlays carrier and the materialized incidence graph, and record node and edge counts at
-  topology, constitution, and full levels. This is additive and establishes the baseline before a
-  carrier is changed. [dep: doc 176]
+- **S0a — Canonicalization benchmark baseline.** Add a dedicated graph-IR canonicalization benchmark
+  target with a fixed corpus covering ordinary, disconnected, overlay-heavy, stereo, meso, and
+  para-stereo structures. Measure raw atom/bond topology canonical labeling, then separately measure
+  incidence construction and canonical labeling at topology, constitution, and full levels. Record
+  raw and incidence node and edge counts in the benchmark ids. The raw and incidence paths are not
+  semantic parity beyond topology: the exact compact overlay-aware path does not yet exist, so its
+  comparison with incidence remains S5d. This is additive and establishes the measurable baseline
+  before a carrier is changed. [dep: doc 176] **Done.**
 - **S0b — Canonicalization correctness corpus.** Add checked-in exact cases derived from the RDKit,
   CDK, and InChI precedents plus bounded internal DAMNSS cases. Record expected orbit partitions and
   renumbering invariance rather than requiring another library's canonical numbers. Keep external
   programs out of the test dependencies. This is additive. [dep: S0a]
 - **S0c — Coloring-feature terminology.** Rename `ConstitutionFeatures` to
-  `MoleculeColoringFeatures` throughout `umol-ast` and its callers, preserving the independent
+  `MoleculeColoringFeatures` throughout `umol-graph-ir` and its callers, preserving the independent
   bitflag semantics and the existing coloring behavior. Update imports, rustdoc, unit tests, and
   benchmarks in the same breaking red-to-green subitem. [dep: S0a]
 - **S0d — Structural-level terminology.** Replace the bitflag-shaped `IncidenceNodeSelection` with
@@ -989,14 +990,14 @@ and the semantic properties validated by the corresponding property tests.
   breaking red-to-green. [dep: S1a]
 - **S1c — Boundary and documentation migration.** Update the existing Python lattice operations,
   DSL and EDN tests, specifications, examples, fuzz targets, and current rustdoc to the normalization
-  vocabulary. Remove the old fixed-frame `Canonicalize` implementation on `ReactionAst`; `Deltas`
+  vocabulary. Remove the old fixed-frame `Canonicalize` implementation on `Reaction`; `Deltas`
   implements `Normalize`. Do not introduce aggregate canonicalization until S4. This is breaking
   red-to-green. [dep: S1b]
 
 ### S2 — Representation integrity and public validators
 
 - **S2a — Molecule integrity contract.** Add `MoleculeIntegrityError` and the authoritative
-  `MoleculeAst::check_integrity`. Consolidate reference resolution, aromatic and multicenter
+  `Molecule::check_integrity`. Consolidate reference resolution, aromatic and multicenter
   participant/electron-vector shape, stereo ligand arity, explicit coset domains, topicity ligand
   positions, permitted stereo entity kinds, and explicit permutation degree. Route checked and
   asserted entry construction through the same implementation and add exact success and error cases
@@ -1011,7 +1012,7 @@ and the semantic properties validated by the corresponding property tests.
   breaking red-to-green. [dep: S2a]
 - **S2c — Public invariants validators.** Move the non-integrity portion of
   `EntityStructureValidator` and the aggregate, incidence, ring, relational, and molecule-scope
-  constraint validators from `umol-ast` to `umol-graph`. Apply the approved public
+  constraint validators from `umol-graph-ir` to `umol-graph`. Apply the approved public
   `*InvariantsValidator` names and keep every aggregate and focused validator public. Preserve
   `Result<Solution<_, _>, _>` and non-ground `Underdetermined` behavior. This is breaking
   red-to-green; the exact public domain stems must be approved before this subitem starts. [dep: S2a]
@@ -1023,11 +1024,11 @@ and the semantic properties validated by the corresponding property tests.
   aromaticity and stereo contradiction/error names. All resulting validators are public. This is
   breaking red-to-green. [dep: S2b, S2c]
 - **S2e — Composite validation and operation callers.** Remove `validate_integrity` and the moved
-  AST validators from the composite `Validator`; run invariants and then conformance. Rename the
-  atom-only invariants entry point so its tier is explicit. Rewire resolvers, transformers,
+  graph-IR validators from the composite `Validator`; run invariants and then conformance. Rename
+  the atom-only invariants entry point so its tier is explicit. Rewire resolvers, transformers,
   substructure operations, Rust and Python callers, specifications, and rustdoc. This is breaking
   red-to-green. [dep: S2c, S2d]
-- **S2f — Reaction-application preconditions.** Replace `ReactionAst::apply`'s wholesale use of
+- **S2f — Reaction-application preconditions.** Replace `Reaction::apply`'s wholesale use of
   `EntityStructureValidator` with integrity checks and the explicitly approved operation-specific
   preconditions. Decide separately for localized-bond simplicity, dative role and uniqueness,
   noncovalent uniqueness, aromatic overlap, multicenter participant-set uniqueness, and repeated
@@ -1044,7 +1045,7 @@ and the semantic properties validated by the corresponding property tests.
   checked `None`, removal-driven relation dropping, participant canonical ordering, and
   `RelationData`/`BiRelationData` permutation behavior. This is breaking red-to-green.
   [dep: doc 176] **Done.**
-- **S3b — Dense molecule remapping.** Add public `MoleculeAst::remap` and `try_remap` over a complete
+- **S3b — Dense molecule remapping.** Add public `Molecule::remap` and `try_remap` over a complete
   `MoleculeCorrespondence`. The checked route returns `None` unless source counts agree and every
   entity-family mapping is a bijection onto a dense target. Rebuild topology and every entity table
   through graph-core remapping plus `IdRemapping`; transport all constraint references and reuse
@@ -1069,9 +1070,9 @@ and the semantic properties validated by the corresponding property tests.
   hashes, rendered DSL, or protocol bytes. Add exact ordering and append-only compatibility cases,
   including values with future-extension positions absent. This is additive. [dep: S1a]
 - **S4c — Graph-layer operation inputs.** Add `CanonicalizationConfig` in `umol-graph` containing the
-  automorphism algorithm and construct the AST `CanonicalizationContext` from that config plus
-  `StereoModel::para_stereo`. Do not add a duplicate one-field canonicalization model or move AST
-  reconstruction into `umol-graph`. This is additive. [dep: S4a]
+  automorphism algorithm and construct the graph-IR `CanonicalizationContext` from that config plus
+  `StereoModel::para_stereo`. Do not add a duplicate one-field canonicalization model or move
+  graph-IR reconstruction into `umol-graph`. This is additive. [dep: S4a]
 
 ### S5 — Exact common incidence encoding
 
@@ -1146,7 +1147,7 @@ and the semantic properties validated by the corresponding property tests.
   remaining structurally equivalent frames. Constraints do not alter structural orbits. Preserve
   set-like conjunction semantics and transport every reference. This is additive. [dep: S4b, S9a]
 - **S9c — `Canonicalize` for molecules.** Implement unqualified `canonicalize` and total
-  `canonical_eq` for `MoleculeAst`, using `Full` plus the context's para-stereo behavior and S9b's
+  `canonical_eq` for `Molecule`, using `Full` plus the context's para-stereo behavior and S9b's
   complete-key selection. Add contradiction and integrity totalization cases, exact canonical-number
   fixtures, full idempotence, renumbering invariance, `canonical_eq` equivalence laws, and
   cross-algorithm identity. This is additive. [dep: S4a, S9b]
@@ -1181,7 +1182,7 @@ and the semantic properties validated by the corresponding property tests.
   [dep: S4b, S10c]
 - **S11b — Span remapping and canonical frame.** Reuse the molecule incidence, exact class ranking,
   and remapping facilities for `EntitySpan<T>` values in the union namespace. Implement aggregate
-  `Canonicalize` and the three level-specific operations for `ReactionSpanAst`; do not canonicalize
+  `Canonicalize` and the three level-specific operations for `ReactionSpan`; do not canonicalize
   either side independently. This is additive. [dep: S9c, S11a]
 - **S11c — Span properties.** Validate exact canonical idempotence, invariance under every valid
   dense union-frame renumbering, preservation of lhs/rhs projections under induced side remappings,
@@ -1191,12 +1192,12 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S12 — Reaction canonicalization
 
-- **S12a — Canonicalize through the span.** Implement `ReactionAst::canonicalize` as
+- **S12a — Canonicalize through the span.** Implement `Reaction::canonicalize` as
   `to_reaction_span`, span canonicalization, then infallible `to_reaction`. Preserve the existing
   materialization contradiction boundary and wrap integrity/conversion causes in
   `ReactionCanonicalizationError`; do not add a direct LHS-only canonicalizer. This is additive.
   [dep: S11c]
-- **S12b — Total reaction equality.** Implement total `ReactionAst::canonical_eq` with the agreed
+- **S12b — Total reaction equality.** Implement total `Reaction::canonical_eq` with the agreed
   structural-equality, successful-form, contradiction, and operational/integrity-failure semantics.
   Ensure it compares complete reaction canonical forms rather than canonicalized LHS values. This is
   additive. [dep: S12a]
@@ -1214,12 +1215,13 @@ and the semantic properties validated by the corresponding property tests.
   surfaces changed by the migrations above; a new Python canonicalization API requires its own
   explicit binding design if it has not already been approved. This is additive or a final
   red-to-green export migration. [dep: S2f, S9c, S12c]
-- **S13b — Repository-wide verification.** Run formatting, clippy, workspace tests, the full AST and
-  graph property targets at the agreed larger case count, conformance targets, affected fuzz builds,
-  and the canonicalization benchmarks. Confirm that no old `Canonicalize` normalization names,
-  relative stereo delta variants, `IncidenceNodeSelection`, `ConstitutionFeatures`, AST validator
-  modules, or `apply_remapping`/`try_apply_remapping`/`apply_compaction` spellings remain. This is
-  additive. [dep: S13a]
+- **S13b — Repository-wide verification.** Run formatting, clippy, workspace tests, the full
+  graph-IR and graph property targets at the agreed larger case count, conformance targets, affected
+  fuzz builds, and the canonicalization benchmarks. Confirm that no old `Canonicalize`
+  normalization names, relative stereo delta variants, `IncidenceNodeSelection`,
+  `ConstitutionFeatures`, graph-IR validator modules, or
+  `apply_remapping`/`try_apply_remapping`/`apply_compaction` spellings remain. This is additive.
+  [dep: S13a]
 - **S13c — Permanent documentation and status.** Update the DSL specification, current examples,
   nomenclature, data-type, and property-test guides to the implemented API; remove the dated doc-186
   TODO markers; record benchmark results and exact compatibility promises; then mark this document
