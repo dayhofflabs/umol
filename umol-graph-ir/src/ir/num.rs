@@ -8,7 +8,7 @@ use umol_chem::spin::SpinMultiplicity;
 
 use super::error::{Contradiction, NoJoin};
 use super::operators::{MemOp, RelOp};
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Lattice, Normalize};
 
 /// Integer-valued atom/bond field: undetermined (pattern wildcard), a literal,
 /// a finite literal set, an arithmetic expression over variables, or a predicate
@@ -16,7 +16,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// mass, valence, bond order, etc.
 ///
 /// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
-/// tree"); semantic equality is `Canonicalize::canonical_eq`, which compares canonical
+/// tree"); semantic equality is `Normalize::equiv`, which compares canonical
 /// forms.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NumForm {
@@ -117,8 +117,8 @@ impl From<BTreeSet<i64>> for NumForm {
     }
 }
 
-impl Canonicalize for NumForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for NumForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             NumForm::Undetermined => NumForm::Undetermined,
             NumForm::Lit(n) => NumForm::Lit(n),
@@ -134,16 +134,16 @@ impl Canonicalize for NumForm {
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
             NumForm::Undetermined | NumForm::Lit(_) => Ok(Cow::Borrowed(self)),
-            _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
+            _ => Ok(Cow::Owned(self.clone().normalize()?)),
         }
     }
 }
 
-impl Canonicalize for ArithExpr {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for ArithExpr {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(canon_arith_expr(self))
     }
 }
@@ -447,7 +447,7 @@ impl AsLit for NumForm {
 
     /// The single integer this value denotes, only when it is a literal.
     /// Non-canonicalizing: an `ArithExpr` or `LitSet` that would fold to a literal
-    /// still returns `None` (canonicalize first if folding is wanted).
+    /// still returns `None` (normalize first if folding is wanted).
     #[inline]
     fn as_lit(&self) -> Option<i64> {
         match self {
@@ -474,8 +474,8 @@ impl Lattice for NumForm {
     /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
     /// canonical; symbolic versus concrete is rejected.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         use NumForm::*;
         Some(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) => b.as_ref().clone(),
@@ -533,10 +533,10 @@ impl Lattice for NumForm {
     /// Least upper bound, canonicalizing both operands and the result.
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
         let a = self
-            .canonical()
+            .normalized()
             .unwrap_or(Cow::Owned(NumForm::Undetermined));
         let b = other
-            .canonical()
+            .normalized()
             .unwrap_or(Cow::Owned(NumForm::Undetermined));
         use NumForm::*;
         Ok(match (a.as_ref(), b.as_ref()) {
@@ -574,7 +574,7 @@ impl Lattice for NumForm {
         match (self, target) {
             (Self::ArithExpr(_) | Self::PredExpr(_), _)
             | (_, Self::ArithExpr(_) | Self::PredExpr(_)) => {
-                match (self.meet(target), target.canonical()) {
+                match (self.meet(target), target.normalized()) {
                     (Some(meet), Ok(target)) => meet == *target,
                     _ => false,
                 }
@@ -731,11 +731,11 @@ mod tests {
     #[case::pred_not_le(NumForm::pred_expr(PredExpr::Not(Box::new(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Le, ArithExpr::Lit(3))))), Ok(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(3), RelOp::Lt, ArithExpr::Var("x".to_string())))))]
     #[case::pred_rel_orient_gt(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Gt, ArithExpr::Lit(1))), Ok(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Lt, ArithExpr::Var("x".to_string())))))]
     #[case::pred_mem_notin_singleton(NumForm::pred_expr(PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([5]))), Ok(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(5), RelOp::Ne, ArithExpr::Var("x".to_string())))))]
-    fn test_num_form_canonicalize(
+    fn test_num_form_normalize(
         #[case] input: NumForm,
         #[case] expected: Result<NumForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -744,8 +744,8 @@ mod tests {
     #[case::lit(NumForm::Lit(3))]
     #[case::litset(NumForm::lit_set([1, 2, 3]))]
     #[case::term_var(NumForm::arith_expr(ArithExpr::Var("x".to_string())))]
-    fn test_num_form_canonicalize_identity(#[case] input: NumForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_num_form_normalize_identity(#[case] input: NumForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -754,9 +754,9 @@ mod tests {
     #[case::product(NumForm::arith_expr(ArithExpr::Product(vec![ArithExpr::Var("b".to_string()), ArithExpr::Var("a".to_string())])))]
     #[case::rel(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("x".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
     #[case::or(NumForm::pred_expr(PredExpr::Or(vec![PredExpr::Mem(ArithExpr::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), PredExpr::Mem(ArithExpr::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
-    fn test_num_form_canonicalize_idempotent(#[case] input: NumForm) {
-        let once = input.canonicalize().unwrap();
-        let twice = once.clone().canonicalize().unwrap();
+    fn test_num_form_normalize_idempotent(#[case] input: NumForm) {
+        let once = input.normalize().unwrap();
+        let twice = once.clone().normalize().unwrap();
         assert_eq!(once, twice);
     }
 

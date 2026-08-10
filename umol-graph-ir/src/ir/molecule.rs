@@ -34,7 +34,7 @@ use super::noncovalent::NoncovalentBondForm;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoBondForm};
-use super::traits::{BiEquiv, Canonicalize, Equiv, Lattice};
+use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -485,12 +485,12 @@ impl Molecule {
             .atoms
             .iter()
             .zip(other.atoms.iter())
-            .all(|(left, right)| left.canonical_eq(right))
+            .all(|(left, right)| left.equiv(right))
             || !self
                 .bonds
                 .iter()
                 .zip(other.bonds.iter())
-                .all(|(left, right)| left.canonical_eq(right))
+                .all(|(left, right)| left.equiv(right))
         {
             return false;
         }
@@ -557,7 +557,7 @@ impl Molecule {
                 return false;
             }
         }
-        self.constraints.canonical_eq(&other.constraints)
+        self.constraints.equiv(&other.constraints)
     }
 
     /// Complete semantic equality under a total correspondence from `self` to `other`.
@@ -630,7 +630,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !left_attributes.canonical_eq(right_attributes) {
+            if !left_attributes.equiv(right_attributes) {
                 return false;
             }
         }
@@ -655,7 +655,7 @@ impl Molecule {
                 return false;
             };
             if other.graph.find_edge(mapped_first, mapped_second) != Some(EdgeId::from(right))
-                || !left_attributes.canonical_eq(right_attributes)
+                || !left_attributes.equiv(right_attributes)
             {
                 return false;
             }
@@ -923,7 +923,7 @@ impl Molecule {
             .into_iter()
             .map(|constraint| constraint.remap(&remapping))
             .collect();
-        mapped_constraints.canonical_eq(&other.constraints)
+        mapped_constraints.equiv(&other.constraints)
     }
 
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.

@@ -39,7 +39,7 @@ proptest! {
     ) {
         let pattern_atom = AtomForm::default();
         let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
-        let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
+        let expected_atom = host_atom.update(&effective_update).normalize().unwrap();
         let atom_deltas = AtomDelta::for_update(AtomId(0), &pattern_atom, &effective_update);
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
@@ -78,7 +78,7 @@ proptest! {
     ) {
         let pattern_bond = BondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
-        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let expected_bond = host_bond.update(&effective_update).normalize().unwrap();
         let bond_deltas = BondDelta::for_update(BondId(0), &pattern_bond, &effective_update);
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
@@ -120,7 +120,7 @@ proptest! {
     ) {
         let pattern_bond = DativeBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
-        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let expected_bond = host_bond.update(&effective_update).normalize().unwrap();
         let dative_deltas = DativeBondDelta::for_update(
             DativeBondId(0),
             &pattern_bond,
@@ -167,7 +167,7 @@ proptest! {
         host_system.unpaired_electrons = UnpairedElectronsForm::from((2_u8, 3_u8));
         let pattern_system = AromaticSystemForm::default();
         let effective_update = pattern_system.difference_to(&pattern_system.update(&update));
-        let expected_system = host_system.update(&effective_update).canonicalize().unwrap();
+        let expected_system = host_system.update(&effective_update).normalize().unwrap();
         let aromatic_deltas = AromaticSystemDelta::for_update(
             AromaticSystemId(0),
             &pattern_system,
@@ -226,7 +226,7 @@ proptest! {
         host_bond.unpaired_electrons = UnpairedElectronsForm::from((2_u8, 3_u8));
         let pattern_bond = MulticenterBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
-        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let expected_bond = host_bond.update(&effective_update).normalize().unwrap();
         let multicenter_deltas = MulticenterBondDelta::for_update(
             MulticenterBondId(0),
             &pattern_bond,
@@ -284,7 +284,7 @@ proptest! {
     ) {
         let pattern_bond = NoncovalentBondForm::default();
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
-        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let expected_bond = host_bond.update(&effective_update).normalize().unwrap();
         let noncovalent_deltas = NoncovalentBondDelta::for_update(
             NoncovalentBondId(0),
             &pattern_bond,
@@ -343,7 +343,7 @@ proptest! {
         let host_atom = StereoAtomForm::new(StereoKind::Tetrahedral, host_coset)
             .with_constraints(host_constraints);
         let effective_update = pattern_atom.difference_to(&pattern_atom.update(&update));
-        let expected_atom = host_atom.update(&effective_update).canonicalize().unwrap();
+        let expected_atom = host_atom.update(&effective_update).normalize().unwrap();
         let stereo_atom_deltas =
             StereoAtomDelta::for_update(StereoAtomId(0), &pattern_atom, &effective_update);
         let atoms = vec![
@@ -405,7 +405,7 @@ proptest! {
         let host_bond = StereoBondForm::new(StereoKind::CisTrans, host_coset)
             .with_constraints(host_constraints);
         let effective_update = pattern_bond.difference_to(&pattern_bond.update(&update));
-        let expected_bond = host_bond.update(&effective_update).canonicalize().unwrap();
+        let expected_bond = host_bond.update(&effective_update).normalize().unwrap();
         let stereo_bond_deltas =
             StereoBondDelta::for_update(StereoBondId(0), &pattern_bond, &effective_update);
         let atoms = vec![

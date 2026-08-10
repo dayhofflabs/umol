@@ -4,19 +4,19 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use umol_chem::element::{Element, MAX_ATOMIC_NUMBER};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AtomConstraintForm, AtomConstraintsForm};
 use super::error::{Contradiction, NoJoin};
 use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Equiv, Lattice, Normalize};
 
 /// Atom form: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct AtomForm {
     pub element: ElementForm,
     pub isotope_mass: IsotopeMassForm,
@@ -142,7 +142,7 @@ impl AtomForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -153,15 +153,13 @@ impl AtomForm {
             }
         }
         AtomUpdate {
-            element: (!self.element.canonical_eq(&other.element)).then(|| other.element.clone()),
-            isotope_mass: (!self.isotope_mass.canonical_eq(&other.isotope_mass))
+            element: (!self.element.equiv(&other.element)).then(|| other.element.clone()),
+            isotope_mass: (!self.isotope_mass.equiv(&other.isotope_mass))
                 .then(|| other.isotope_mass.clone()),
-            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
-            implicit_hydrogens: (!self
-                .implicit_hydrogens
-                .canonical_eq(&other.implicit_hydrogens))
-            .then(|| other.implicit_hydrogens.clone()),
-            lone_pairs: (!self.lone_pairs.canonical_eq(&other.lone_pairs))
+            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
+            implicit_hydrogens: (!self.implicit_hydrogens.equiv(&other.implicit_hydrogens))
+                .then(|| other.implicit_hydrogens.clone()),
+            lone_pairs: (!self.lone_pairs.equiv(&other.lone_pairs))
                 .then(|| other.lone_pairs.clone()),
             unpaired_electrons: self
                 .unpaired_electrons
@@ -283,8 +281,8 @@ impl From<Element> for ElementForm {
     }
 }
 
-impl Canonicalize for ElementForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for ElementForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             ElementForm::Undetermined => ElementForm::Undetermined,
             ElementForm::Lit(e) => ElementForm::Lit(e),
@@ -301,10 +299,10 @@ impl Canonicalize for ElementForm {
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
             ElementForm::Undetermined | ElementForm::Lit(_) => Ok(Cow::Borrowed(self)),
-            _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
+            _ => Ok(Cow::Owned(self.clone().normalize()?)),
         }
     }
 }
@@ -317,7 +315,7 @@ fn complement(s: &BTreeSet<Element>) -> BTreeSet<Element> {
         .collect()
 }
 
-/// Canonicalize a set given its polarity (`negated` = the set is a complement,
+/// Normalize a set given its polarity (`negated` = the set is a complement,
 /// denoting `U∖s`). The semantic set is stored on its smaller side: `≤ ⌊|U|/2⌋`
 /// → positive (`Lit`/`LitSet`), else `NotSet` of its complement (tiebreak
 /// positive). Empty semantic set → `Err`; full → `Undetermined`.
@@ -346,7 +344,7 @@ fn canon_set(s: BTreeSet<Element>, negated: bool) -> Result<ElementForm, Contrad
     }
 }
 
-/// Canonicalize a `Var` membership domain by the same cardinality polarity.
+/// Normalize a `Var` membership domain by the same cardinality polarity.
 /// Vacuous (`In U` / `NotIn ∅`) → `None` (free); empty admissible set → `Err`.
 fn canon_var_domain(
     op: MemOp,
@@ -430,8 +428,8 @@ impl Lattice for ElementForm {
     /// Greatest lower bound (set intersection), canonicalizing operands and
     /// result. `Var` meets only an equal `Var`; `Var` vs concrete → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         use ElementForm::*;
         match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) => Some(b.as_ref().clone()),
@@ -452,15 +450,15 @@ impl Lattice for ElementForm {
                 } else {
                     LitSet(Box::new(set))
                 };
-                raw.canonicalize().ok()
+                raw.normalize().ok()
             }
         }
     }
 
     /// Least upper bound (set union), canonicalizing operands and result.
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         use ElementForm::*;
         Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
@@ -480,7 +478,7 @@ impl Lattice for ElementForm {
                 } else {
                     LitSet(Box::new(set))
                 };
-                raw.canonicalize().unwrap_or(Undetermined)
+                raw.normalize().unwrap_or(Undetermined)
             }
         })
     }
@@ -491,7 +489,7 @@ impl Lattice for ElementForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::NotSet(_) | Self::Var(_), _) | (_, Self::NotSet(_) | Self::Var(_)) => {
-                match (self.meet(target), target.canonical()) {
+                match (self.meet(target), target.normalized()) {
                     (Some(meet), Ok(target)) => meet == *target,
                     _ => false,
                 }
@@ -572,8 +570,8 @@ impl From<IsotopeMass> for IsotopeMassForm {
     }
 }
 
-impl Canonicalize for IsotopeMassForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for IsotopeMassForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             IsotopeMassForm::Undetermined => IsotopeMassForm::Undetermined,
             IsotopeMassForm::Natural => IsotopeMassForm::Natural,
@@ -595,17 +593,17 @@ impl Canonicalize for IsotopeMassForm {
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
             IsotopeMassForm::Undetermined | IsotopeMassForm::Natural | IsotopeMassForm::Lit(_) => {
                 Ok(Cow::Borrowed(self))
             }
-            _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
+            _ => Ok(Cow::Owned(self.clone().normalize()?)),
         }
     }
 }
 
-/// Canonicalize a mass set: empty → `Err`; singleton → `Lit`; else `LitSet`.
+/// Normalize a mass set: empty → `Err`; singleton → `Lit`; else `LitSet`.
 fn canon_mass_set(s: BTreeSet<u32>) -> Result<IsotopeMassForm, Contradiction> {
     match s.len() {
         0 => Err(Contradiction),
@@ -655,8 +653,8 @@ impl Lattice for IsotopeMassForm {
     /// ground (meets only itself); mass sets meet by intersection (empty →
     /// `None`). `Var` meets only an equal `Var`; `Var` vs concrete → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         use IsotopeMassForm::*;
         match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) => Some(b.as_ref().clone()),
@@ -669,7 +667,7 @@ impl Lattice for IsotopeMassForm {
                 let sa = mass_set_view(a.as_ref()).unwrap();
                 let sb = mass_set_view(b.as_ref()).unwrap();
                 let intersection: BTreeSet<u32> = sa.intersection(&sb).copied().collect();
-                LitSet(Box::new(intersection)).canonicalize().ok()
+                LitSet(Box::new(intersection)).normalize().ok()
             }
         }
     }
@@ -677,8 +675,8 @@ impl Lattice for IsotopeMassForm {
     /// Least upper bound. `Undetermined` absorbs; `Natural` joins only
     /// itself (else `Undetermined`); mass sets join by union.
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         use IsotopeMassForm::*;
         Ok(match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
@@ -690,9 +688,7 @@ impl Lattice for IsotopeMassForm {
                 let sa = mass_set_view(a.as_ref()).unwrap();
                 let sb = mass_set_view(b.as_ref()).unwrap();
                 let union: BTreeSet<u32> = sa.union(&sb).copied().collect();
-                LitSet(Box::new(union))
-                    .canonicalize()
-                    .unwrap_or(Undetermined)
+                LitSet(Box::new(union)).normalize().unwrap_or(Undetermined)
             }
         })
     }
@@ -703,7 +699,7 @@ impl Lattice for IsotopeMassForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Var(_), _) | (_, Self::Var(_)) => {
-                match (self.meet(target), target.canonical()) {
+                match (self.meet(target), target.normalized()) {
                     (Some(meet), Ok(target)) => meet == *target,
                     _ => false,
                 }
@@ -900,11 +896,11 @@ mod tests {
         AtomForm::from_element(Element::C).with_charge(NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction),
     )]
-    fn test_atom_form_canonicalize(
+    fn test_atom_form_normalize(
         #[case] input: AtomForm,
         #[case] expected: Result<AtomForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1013,11 +1009,11 @@ mod tests {
     #[case::notset_empty(ElementForm::not_set([]), Ok(ElementForm::Undetermined))]
     #[case::var_in_empty(ElementForm::var_in("x", []), Err(Contradiction))]
     #[case::var_not_in_vacuous(ElementForm::var_not_in("x", []), Ok(ElementForm::var("x")))]
-    fn test_element_form_canonicalize(
+    fn test_element_form_normalize(
         #[case] input: ElementForm,
         #[case] expected: Result<ElementForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1028,14 +1024,14 @@ mod tests {
     #[case::notset(ElementForm::not(Element::H))]
     #[case::var_free(ElementForm::var("x"))]
     #[case::var_in(ElementForm::var_in("x", [Element::C]))]
-    fn test_element_form_canonicalize_identity(#[case] input: ElementForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_element_form_normalize_identity(#[case] input: ElementForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     /// Cardinality polarity + universe boundaries (need the 118-element universe,
     /// so expected sets are computed from `Element::all()`, not hardcoded).
     #[rstest]
-    fn test_element_form_canonicalize_cardinality() {
+    fn test_element_form_normalize_cardinality() {
         let take =
             |n: usize| -> BTreeSet<Element> { Element::all().iter().take(n).copied().collect() };
         let skip =
@@ -1043,34 +1039,34 @@ mod tests {
 
         // Tiebreak: 59 stays positive; 60 flips to the complement.
         assert_eq!(
-            ElementForm::LitSet(Box::new(take(59))).canonicalize(),
+            ElementForm::LitSet(Box::new(take(59))).normalize(),
             Ok(ElementForm::LitSet(Box::new(take(59))))
         );
         assert_eq!(
-            ElementForm::LitSet(Box::new(take(60))).canonicalize(),
+            ElementForm::LitSet(Box::new(take(60))).normalize(),
             Ok(ElementForm::NotSet(Box::new(skip(60))))
         );
         // Full positive set → Undetermined; NotSet of the full set → Err.
         assert_eq!(
-            ElementForm::LitSet(Box::new(take(118))).canonicalize(),
+            ElementForm::LitSet(Box::new(take(118))).normalize(),
             Ok(ElementForm::Undetermined)
         );
         assert_eq!(
-            ElementForm::NotSet(Box::new(take(118))).canonicalize(),
+            ElementForm::NotSet(Box::new(take(118))).normalize(),
             Err(Contradiction)
         );
         // Large NotSet flips to a positive LitSet of its (small) complement.
         assert_eq!(
-            ElementForm::NotSet(Box::new(take(60))).canonicalize(),
+            ElementForm::NotSet(Box::new(take(60))).normalize(),
             Ok(ElementForm::LitSet(Box::new(skip(60))))
         );
         // Var In over a large domain flips to NotIn of the complement; full domain → free.
         assert_eq!(
-            ElementForm::var_in("x", take(60)).canonicalize(),
+            ElementForm::var_in("x", take(60)).normalize(),
             Ok(ElementForm::var_not_in("x", skip(60)))
         );
         assert_eq!(
-            ElementForm::var_in("x", take(118)).canonicalize(),
+            ElementForm::var_in("x", take(118)).normalize(),
             Ok(ElementForm::var("x"))
         );
     }
@@ -1214,11 +1210,11 @@ mod tests {
     #[case::litset_singleton(IsotopeMassForm::lit_set([12]), Ok(IsotopeMassForm::Lit(12)))]
     #[case::litset_empty(IsotopeMassForm::lit_set([]), Err(Contradiction))]
     #[case::var_in_empty(IsotopeMassForm::var_in("m", []), Err(Contradiction))]
-    fn test_isotope_mass_form_canonicalize(
+    fn test_isotope_mass_form_normalize(
         #[case] input: IsotopeMassForm,
         #[case] expected: Result<IsotopeMassForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1230,8 +1226,8 @@ mod tests {
     #[case::var_free(IsotopeMassForm::var("m"))]
     #[case::var_in(IsotopeMassForm::var_in("m", [12, 13]))]
     #[case::var_in_singleton(IsotopeMassForm::var_in("m", [12]))]
-    fn test_isotope_mass_form_canonicalize_identity(#[case] input: IsotopeMassForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_isotope_mass_form_normalize_identity(#[case] input: IsotopeMassForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]

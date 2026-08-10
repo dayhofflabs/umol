@@ -15,7 +15,7 @@ proptest! {
         c in any_num_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -25,13 +25,13 @@ proptest! {
         c in prop_oneof![Just(BooleanForm::Undetermined), any::<bool>().prop_map(BooleanForm::Lit)],
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
-    /// The universal (input-canonicality-independent) laws on raw, non-canonical
-    /// inputs — `canonical()` fold path, `equiv`, `matches`↔meet, and meet/join
-    /// canonicality — which the canonicalized strategies above never reach. One
-    /// per `canonical()`-overriding leaf with a fold path.
+    /// The universal normalization-independent laws on raw, non-normal inputs —
+    /// the `normalized()` fold path, `equiv`, `matches`↔meet, and meet/join
+    /// normality — which the normalized strategies above never reach. One per
+    /// `normalized()`-overriding leaf with a fold path.
     #[test]
     fn test_num_form_lattice_laws_raw(
         a in raw_num_form_strategy(),
@@ -120,8 +120,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -134,8 +134,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -148,8 +148,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -172,8 +172,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -186,8 +186,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -200,8 +200,8 @@ proptest! {
     ) {
         prop_assert_eq!(a.is_ground(), a.as_lit().is_some());
         prop_assert_eq!(b.is_ground(), b.as_lit().is_some());
-        let a = a.canonicalize().unwrap();
-        let b = b.canonicalize().unwrap();
+        let a = a.normalize().unwrap();
+        let b = b.normalize().unwrap();
         if a.is_ground() && b.is_ground() && a != b {
             prop_assert_ne!(a.as_lit(), b.as_lit());
         }
@@ -232,7 +232,7 @@ proptest! {
         c in element_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -242,7 +242,7 @@ proptest! {
         c in isotope_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -252,7 +252,7 @@ proptest! {
         c in unpaired_electrons_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -262,7 +262,7 @@ proptest! {
         c in aromatic_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -272,7 +272,7 @@ proptest! {
         c in multicenter_valence_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -282,7 +282,7 @@ proptest! {
         c in noncovalent_bond_kind_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -292,7 +292,7 @@ proptest! {
         c in electron_counts_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -302,7 +302,7 @@ proptest! {
         c in stereo_configuration_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -312,7 +312,7 @@ proptest! {
         c in tetrahedral_stereo_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -322,7 +322,7 @@ proptest! {
         c in cis_trans_stereo_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -335,7 +335,7 @@ proptest! {
         let b = rb;
         let c = rc;
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -345,7 +345,7 @@ proptest! {
         c in dative_bond_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -355,7 +355,7 @@ proptest! {
         c in multicenter_bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -365,7 +365,7 @@ proptest! {
         c in aromatic_system_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -375,27 +375,27 @@ proptest! {
         c in noncovalent_bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_stereo_atom_form_lattice_laws(
-        a in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in stereo_atom_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        a in stereo_atom_form_strategy().prop_map(|value| value.normalize().unwrap()),
+        b in stereo_atom_form_strategy().prop_map(|value| value.normalize().unwrap()),
+        c in stereo_atom_form_strategy().prop_map(|value| value.normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_stereo_bond_form_lattice_laws(
-        a in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in stereo_bond_form_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        a in stereo_bond_form_strategy().prop_map(|value| value.normalize().unwrap()),
+        b in stereo_bond_form_strategy().prop_map(|value| value.normalize().unwrap()),
+        c in stereo_bond_form_strategy().prop_map(|value| value.normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -405,17 +405,17 @@ proptest! {
         c in atom_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_atom_constraint_form_lattice_laws(
-        a in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in atom_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        a in atom_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        b in atom_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        c in atom_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -425,17 +425,17 @@ proptest! {
         c in bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_bond_constraint_form_lattice_laws(
-        a in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        a in bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        b in bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        c in bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -445,17 +445,17 @@ proptest! {
         c in optional_aromatic_electron_count(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_aromatic_system_constraint_form_lattice_laws(
-        a in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
-        b in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
-        c in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        a in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).normalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).normalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| AromaticSystemConstraintForm::ElectronCount(value).normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -465,17 +465,17 @@ proptest! {
         c in dative_bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_dative_bond_constraint_form_lattice_laws(
-        a in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        b in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
-        c in dative_bond_constraint_strategy().prop_map(|value| value.canonicalize().unwrap()),
+        a in dative_bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        b in dative_bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
+        c in dative_bond_constraint_strategy().prop_map(|value| value.normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -485,17 +485,17 @@ proptest! {
         c in optional_multicenter_electron_count(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
     fn test_multicenter_bond_constraint_form_lattice_laws(
-        a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
-        b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
-        c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).canonicalize().unwrap()),
+        a in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).normalize().unwrap()),
+        b in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).normalize().unwrap()),
+        c in constraint_value_strategy(0..=8).prop_map(|value| MulticenterBondConstraintForm::ElectronCount(value).normalize().unwrap()),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -505,7 +505,7 @@ proptest! {
         c in noncovalent_bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -515,7 +515,7 @@ proptest! {
         c in noncovalent_bond_constraint_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -525,7 +525,7 @@ proptest! {
         c in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -535,7 +535,7 @@ proptest! {
         c in stereo_atom_constraint_strategy(StereoKind::Tetrahedral),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -545,7 +545,7 @@ proptest! {
         c in stereo_bond_constraints_strategy(StereoKind::CisTrans),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -555,7 +555,7 @@ proptest! {
         c in stereo_bond_constraint_strategy(StereoKind::CisTrans),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -565,7 +565,7 @@ proptest! {
         c in topicity_relation_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     // Keyed value semilattices: the strategies vary the sub-key (scope /
@@ -578,7 +578,7 @@ proptest! {
         c in ring_membership_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -588,7 +588,7 @@ proptest! {
         c in ligand_symmetry_strategy(4),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -598,7 +598,7 @@ proptest! {
         c in fluxionality_strategy(4),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -608,7 +608,7 @@ proptest! {
         c in topicity_strategy(4),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -618,7 +618,7 @@ proptest! {
         c in atom_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -628,7 +628,7 @@ proptest! {
         c in bond_form_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
-        assert_canonical_lattice_laws(&a, &b, &c)?;
+        assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
 }

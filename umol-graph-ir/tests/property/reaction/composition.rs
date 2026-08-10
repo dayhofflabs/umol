@@ -261,7 +261,7 @@ proptest! {
             a.compose(&b, COMPOSITION_ALGORITHM),
             a.compose(&b, COMPOSITION_ALGORITHM)
         );
-        if let (Ok(ac), Ok(bc)) = (a.clone().canonicalize(), b.clone().canonicalize()) {
+        if let (Ok(ac), Ok(bc)) = (a.clone().normalize(), b.clone().normalize()) {
             prop_assert_eq!(
                 a.compose(&b, COMPOSITION_ALGORITHM),
                 ac.compose(&bc, COMPOSITION_ALGORITHM)
@@ -279,7 +279,7 @@ proptest! {
             let canonical = c
                 .deltas
                 .clone()
-                .canonicalize()
+                .normalize()
                 .map_err(|e| TestCaseError::fail(format!("composite deltas not canonical: {e:?}")))?;
             prop_assert_eq!(canonical, c.deltas);
         }

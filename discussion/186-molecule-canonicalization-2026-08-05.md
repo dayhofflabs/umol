@@ -91,8 +91,8 @@ preserving the LHS frame. That partial aggregate implementation conflates the tw
 be removed during the rename. `Deltas` continues to implement `Normalize`; callers that require
 fixed-frame delta normalization invoke it explicitly.
 
-As an adjacent nomenclature migration, rename the associated type `Ctx` to `Context` on `FromAst`,
-`IntoAst`, `TryFromAst`, and `TryIntoAst`, and use `context` in their public trait signatures. This
+As an adjacent nomenclature migration, rename the associated type `Ctx` to `Context` on `FromIr`,
+`IntoIr`, `TryFromIr`, and `TryIntoIr`, and use `context` in their public trait signatures. This
 does not belong to the normalization/canonicalization semantics, but it shares the terminology and
 should land with the trait-surface cleanup. Public identifiers and associated types use complete
 words rather than clipped abbreviations; the permanent rule is recorded in the nomenclature guide.
@@ -982,12 +982,12 @@ and the semantic properties validated by the corresponding property tests.
   fixed-frame `canonical_eq` operation to `Equiv::equiv`. Keep `Lattice: Normalize`. Migrate every
   leaf, entity, constraint, update, delta, and container implementation together with exact and
   property tests for idempotence, contradictions, and equality on normal forms. This is breaking
-  red-to-green. [dep: S0e]
-- **S1b — Frame-aware equivalence and callers.** Rebase `equiv_under`, `BiEquiv`, relation-data
-  permutation actions, molecule comparisons, edit continuity checks, and transaction checks on
-  `Equiv` without introducing another comparison protocol. Migrate every Rust caller and preserve
-  the current participant-order actions for aromatic and multicenter electron counts. This is
-  breaking red-to-green. [dep: S1a]
+  red-to-green. [dep: S0e] **Done.**
+- **S1b — Frame-aware equivalence and callers.** Rebase `RelationEquiv::equiv_under`,
+  `BiRelationEquiv::equiv_under`, relation-data permutation actions, molecule comparisons, edit
+  continuity checks, and transaction checks on `Equiv` without introducing another comparison
+  protocol. Migrate every Rust caller and preserve the current participant-order actions for
+  aromatic and multicenter electron counts. This is breaking red-to-green. [dep: S1a]
 - **S1c — Boundary and documentation migration.** Update the existing Python lattice operations,
   DSL and EDN tests, specifications, examples, fuzz targets, and current rustdoc to the normalization
   vocabulary. Remove the old fixed-frame `Canonicalize` implementation on `Reaction`; `Deltas`

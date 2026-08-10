@@ -1,16 +1,16 @@
 //! Dative bond form.
 
 use umol_graph_core::{BiRelationData, ParticipantPosition};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::num::NumForm;
-use super::traits::Canonicalize;
+use super::traits::Equiv;
 
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct DativeBondForm {
     /// Bond order — number of electron pairs donated.
     pub order: NumForm,
@@ -86,7 +86,7 @@ impl DativeBondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -97,7 +97,7 @@ impl DativeBondForm {
             }
         }
         DativeBondUpdate {
-            order: (!self.order.canonical_eq(&other.order)).then(|| other.order.clone()),
+            order: (!self.order.equiv(&other.order)).then(|| other.order.clone()),
             constraints,
         }
     }
@@ -132,7 +132,7 @@ mod tests {
     use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
-    use crate::ir::traits::{Canonicalize, Lattice};
+    use crate::ir::traits::{Lattice, Normalize};
 
     #[rustfmt::skip]
     #[rstest]
@@ -263,11 +263,11 @@ mod tests {
         DativeBondForm::new(NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction),
     )]
-    fn test_dative_bond_form_canonicalize(
+    fn test_dative_bond_form_normalize(
         #[case] input: DativeBondForm,
         #[case] expected: Result<DativeBondForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]

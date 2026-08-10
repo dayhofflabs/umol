@@ -44,7 +44,7 @@ use super::noncovalent::NoncovalentBondForm;
 use super::reaction::Reaction;
 use super::remap::IdRemapping;
 use super::stereo::{StereoAtomForm, StereoBondForm};
-use super::traits::{Canonicalize, EntityPatch};
+use super::traits::{EntityPatch, Equiv, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
@@ -527,9 +527,9 @@ fn validate_reaction_span_entries(
     Ok(())
 }
 
-fn normalize_entity_span<T: Canonicalize + Clone>(span: &mut EntitySpan<T>) {
+fn normalize_entity_span<T: Normalize + Clone>(span: &mut EntitySpan<T>) {
     let unchanged = match span {
-        EntitySpan::Modified { lhs, rhs } if lhs.canonical_eq(rhs) => Some(lhs.clone()),
+        EntitySpan::Modified { lhs, rhs } if lhs.equiv(rhs) => Some(lhs.clone()),
         _ => None,
     };
     if let Some(value) = unchanged {
@@ -1453,7 +1453,7 @@ impl Reaction {
     /// right value is its left value with the entity's field/constraint changes applied.
     /// `Err(Contradiction)` if the deltas are inconsistent (or inconsistent with `lhs`).
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
-        let deltas = self.deltas.clone().canonicalize()?;
+        let deltas = self.deltas.clone().normalize()?;
         let lhs = &self.lhs;
         let atom_count = lhs.atoms().count();
         let bond_count = lhs.bonds().count();
@@ -1987,7 +1987,7 @@ impl Reaction {
     /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
     pub fn reverse(&self) -> Result<Reaction, Contradiction> {
-        let deltas = self.deltas.clone().canonicalize()?;
+        let deltas = self.deltas.clone().normalize()?;
         let new_lhs = self.to_reaction_span()?.rhs();
         let atom_count = self.lhs.atoms().count();
         let bond_count = self.lhs.bonds().count();

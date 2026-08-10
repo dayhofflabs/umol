@@ -5,7 +5,7 @@
 
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::traits::{Canonicalize, Lattice};
+use super::super::traits::{Lattice, Normalize};
 
 /// `All` = total ring count; `Size(s)` = count of size-`s` rings. `All` sorts first.
 ///
@@ -33,9 +33,9 @@ impl RingMembershipForm {
     }
 }
 
-impl Canonicalize for RingMembershipForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
-        Ok(Self::new(self.scope, self.count.canonicalize()?))
+impl Normalize for RingMembershipForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
+        Ok(Self::new(self.scope, self.count.normalize()?))
     }
 }
 
@@ -91,11 +91,11 @@ mod tests {
         RingMembershipForm::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction)
     )]
-    fn test_ring_membership_form_canonicalize(
+    fn test_ring_membership_form_normalize(
         #[case] input: RingMembershipForm,
         #[case] expected: Result<RingMembershipForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]

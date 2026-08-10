@@ -45,7 +45,7 @@ use super::stereo::{
     CosetOp, StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate,
     StereoConfigurationForm, StereoKind,
 };
-use super::traits::{Canonicalize, EntityPatch, Lattice};
+use super::traits::{EntityPatch, Equiv, Lattice, Normalize};
 
 /// A resolved edit to a single atom.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -91,7 +91,7 @@ impl AtomDelta {
     pub fn for_update(id: AtomId, current: &AtomForm, update: &AtomUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.element {
-            if !current.element.canonical_eq(new) {
+            if !current.element.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::Element {
@@ -102,7 +102,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.isotope_mass {
-            if !current.isotope_mass.canonical_eq(new) {
+            if !current.isotope_mass.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::IsotopeMass {
@@ -113,7 +113,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.canonical_eq(new) {
+            if !current.charge.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::Charge {
@@ -124,7 +124,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.implicit_hydrogens {
-            if !current.implicit_hydrogens.canonical_eq(new) {
+            if !current.implicit_hydrogens.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::ImplicitHydrogens {
@@ -135,7 +135,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.lone_pairs {
-            if !current.lone_pairs.canonical_eq(new) {
+            if !current.lone_pairs.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::LonePairs {
@@ -148,10 +148,7 @@ impl AtomDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current
-            .unpaired_electrons
-            .canonical_eq(&new_unpaired_electrons)
-        {
+        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
             deltas.push(Self::ModifyField {
                 id,
                 change: AtomFieldChange::UnpairedElectrons {
@@ -163,7 +160,7 @@ impl AtomDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -232,7 +229,7 @@ impl BondDelta {
     pub fn for_update(id: BondId, current: &BondForm, update: &BondUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.order {
-            if !current.order.canonical_eq(new) {
+            if !current.order.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: BondFieldChange::Order {
@@ -243,7 +240,7 @@ impl BondDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.canonical_eq(new) {
+            if !current.charge.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: BondFieldChange::Charge {
@@ -256,10 +253,7 @@ impl BondDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current
-            .unpaired_electrons
-            .canonical_eq(&new_unpaired_electrons)
-        {
+        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
             deltas.push(Self::ModifyField {
                 id,
                 change: BondFieldChange::UnpairedElectrons {
@@ -271,7 +265,7 @@ impl BondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -351,7 +345,7 @@ impl DativeBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.order {
-            if !current.order.canonical_eq(new) {
+            if !current.order.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: DativeBondFieldChange::Order {
@@ -364,7 +358,7 @@ impl DativeBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -438,7 +432,7 @@ impl AromaticSystemDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.electrons {
-            if !current.electrons.canonical_eq(new) {
+            if !current.electrons.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AromaticSystemFieldChange::Electrons {
@@ -449,7 +443,7 @@ impl AromaticSystemDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.canonical_eq(new) {
+            if !current.charge.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AromaticSystemFieldChange::Charge {
@@ -462,10 +456,7 @@ impl AromaticSystemDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current
-            .unpaired_electrons
-            .canonical_eq(&new_unpaired_electrons)
-        {
+        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
             deltas.push(Self::ModifyField {
                 id,
                 change: AromaticSystemFieldChange::UnpairedElectrons {
@@ -477,7 +468,7 @@ impl AromaticSystemDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -551,7 +542,7 @@ impl MulticenterBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.electrons {
-            if !current.electrons.canonical_eq(new) {
+            if !current.electrons.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: MulticenterBondFieldChange::Electrons {
@@ -562,7 +553,7 @@ impl MulticenterBondDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.canonical_eq(new) {
+            if !current.charge.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: MulticenterBondFieldChange::Charge {
@@ -575,10 +566,7 @@ impl MulticenterBondDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current
-            .unpaired_electrons
-            .canonical_eq(&new_unpaired_electrons)
-        {
+        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
             deltas.push(Self::ModifyField {
                 id,
                 change: MulticenterBondFieldChange::UnpairedElectrons {
@@ -590,7 +578,7 @@ impl MulticenterBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -664,7 +652,7 @@ impl NoncovalentBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.kind {
-            if !current.kind.canonical_eq(new) {
+            if !current.kind.equiv(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: NoncovalentBondFieldChange::Kind {
@@ -677,7 +665,7 @@ impl NoncovalentBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -711,7 +699,7 @@ pub enum StereoAtomDelta {
         id: StereoAtomId,
         /// Serialization context: the geometry kind the constraint renders/parses against (its
         /// permutation degree, `~` shortcut). `None` for a kind-free constraint on an
-        /// `Undetermined`-geometry center. Not read by apply/canonicalize/diff.
+        /// `Undetermined`-geometry center. Not read by apply/normalize/diff.
         kind: Option<StereoKind>,
         old: Option<StereoAtomConstraintForm>,
         new: Option<StereoAtomConstraintForm>,
@@ -800,7 +788,7 @@ impl StereoAtomDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         let updated = current.update(update);
-        if !current.configuration.canonical_eq(&updated.configuration) {
+        if !current.configuration.equiv(&updated.configuration) {
             deltas.push(Self::ModifyField {
                 id,
                 change: StereoAtomFieldChange::Configuration {
@@ -817,7 +805,7 @@ impl StereoAtomDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, kind, old, new });
             }
         }
@@ -936,7 +924,7 @@ impl StereoBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         let updated = current.update(update);
-        if !current.configuration.canonical_eq(&updated.configuration) {
+        if !current.configuration.equiv(&updated.configuration) {
             deltas.push(Self::ModifyField {
                 id,
                 change: StereoBondFieldChange::Configuration {
@@ -953,7 +941,7 @@ impl StereoBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_canonical_eq(&old, &new) {
+            if !options_equiv(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, kind, old, new });
             }
         }
@@ -1031,7 +1019,7 @@ macro_rules! diff_field_ops {
             match change {
                 $(
                     $change::$variant { old, new } => {
-                        if !attributes.$field.canonical_eq(&old) {
+                        if !attributes.$field.equiv(&old) {
                             return Err(Contradiction);
                         }
                         attributes.$field = new;
@@ -1044,7 +1032,7 @@ macro_rules! diff_field_ops {
         fn diff_field(lhs: &$attributes, rhs: &$attributes) -> Vec<$change> {
             let mut out = Vec::new();
             $(
-                if !lhs.$field.canonical_eq(&rhs.$field) {
+                if !lhs.$field.equiv(&rhs.$field) {
                     out.push($change::$variant {
                         old: lhs.$field.clone(),
                         new: rhs.$field.clone(),
@@ -1073,7 +1061,7 @@ macro_rules! diff_field_ops {
             for key in keys {
                 let l = lhs_by_key.get(&key).cloned();
                 let r = rhs_by_key.get(&key).cloned();
-                if !options_canonical_eq(&l, &r) {
+                if !options_equiv(&l, &r) {
                     out.push((l, r));
                 }
             }
@@ -1083,11 +1071,11 @@ macro_rules! diff_field_ops {
 }
 
 /// Canonical equivalence over optional payloads: both absent is equal, both present compares by
-/// `canonical_eq`, presence mismatch is unequal.
-fn options_canonical_eq<T: Canonicalize>(l: &Option<T>, r: &Option<T>) -> bool {
+/// `equiv`, presence mismatch is unequal.
+fn options_equiv<T: Normalize>(l: &Option<T>, r: &Option<T>) -> bool {
     match (l, r) {
         (None, None) => true,
-        (Some(a), Some(b)) => a.canonical_eq(b),
+        (Some(a), Some(b)) => a.equiv(b),
         _ => false,
     }
 }
@@ -1102,7 +1090,7 @@ macro_rules! fold_field_ops {
                     (
                         $change::$variant { old, new: prev_new },
                         $change::$variant { old: next_old, new },
-                    ) if prev_new.canonical_eq(&next_old) => Some($change::$variant { old, new }),
+                    ) if prev_new.equiv(&next_old) => Some($change::$variant { old, new }),
                 )+
                 #[allow(unreachable_patterns)]
                 _ => None,
@@ -1111,7 +1099,7 @@ macro_rules! fold_field_ops {
 
         fn field_is_identity(change: &$change) -> bool {
             match change {
-                $( $change::$variant { old, new } => old.canonical_eq(new), )+
+                $( $change::$variant { old, new } => old.equiv(new), )+
             }
         }
     };
@@ -1193,13 +1181,13 @@ impl<U: BiRelationData> BiRelationData for EntitySpan<U> {
     }
 }
 
-impl<T: Canonicalize> EntitySpan<T> {
+impl<T: Normalize> EntitySpan<T> {
     /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
     /// `ReactionSpan::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
     /// lhs-only to `Removed`, rhs-only to `Added`, neither to `None`.
     pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
         match (lhs, rhs) {
-            (Some(lhs), Some(rhs)) if lhs.canonical_eq(&rhs) => Some(Self::Unchanged(lhs)),
+            (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => Some(Self::Unchanged(lhs)),
             (Some(lhs), Some(rhs)) => Some(Self::Modified { lhs, rhs }),
             (Some(lhs), None) => Some(Self::Removed(lhs)),
             (None, Some(rhs)) => Some(Self::Added(rhs)),
@@ -1256,7 +1244,7 @@ pub(crate) enum EntityOp<F: EntityFold> {
     },
 }
 
-/// The canonicalize-fold extension of `EntityPatch` — the `EntityOp` deconstruction
+/// The normalize-fold extension of `EntityPatch` — the `EntityOp` deconstruction
 /// (`split`/`rebuild`), per-field/constraint fold helpers, and span→deltas recovery.
 /// Crate-internal: only the fold and span lowering use it.
 pub(crate) trait EntityFold: EntityPatch {
@@ -1397,7 +1385,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_canonical_eq(&prev_new, &old) {
+                        if !options_equiv(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -1428,7 +1416,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
     }
     for (_key, (old, new)) in constraints {
-        if !options_canonical_eq(&old, &new) {
+        if !options_equiv(&old, &new) {
             out.push(EntityOp::ModifyConstraint { old, new });
         }
     }
@@ -2069,7 +2057,7 @@ impl EntityFold for NoncovalentBondDelta {
 }
 
 // Stereo entities impl only `EntityPatch` (diff / apply of the four DAMN arms), not `EntityFold`:
-// the relative ops `Apply`/`Swap`/`Mirror` have no `EntityOp` image, so `canonicalize` folds stereo
+// the relative ops `Apply`/`Swap`/`Mirror` have no `EntityOp` image, so `normalize` folds stereo
 // on a bespoke path (the four arms still route through these `diff`/`apply` methods).
 impl EntityPatch for StereoAtomDelta {
     type Id = StereoAtomId;
@@ -2155,7 +2143,7 @@ impl EntityPatch for StereoBondDelta {
 }
 
 /// Apply a resolved per-entity change to a form, reusing the `EntityPatch` apply that
-/// `canonicalize` uses. `ModifyField` / `ModifyConstraint` mutate the attributes; `Add` / `Remove` are
+/// `normalize` uses. `ModifyField` / `ModifyConstraint` mutate the attributes; `Add` / `Remove` are
 /// no-ops (they carry a whole attributes, not a change). Materializes the rhs-hand value of a
 /// preserved entity for a `ReactionSpan`.
 pub(crate) fn apply_atom_change(
@@ -2347,7 +2335,7 @@ fn fold_stereo_config(
                 new: new.apply(p),
             },
             (State::Set { old, new }, StereoConfigOp::Set { old: o2, new: n2 }) => {
-                if new.clone().canonicalize()? != o2.clone().canonicalize()? {
+                if new.clone().normalize()? != o2.clone().normalize()? {
                     return Err(Contradiction);
                 }
                 State::Set { old, new: n2 }
@@ -2360,7 +2348,7 @@ fn fold_stereo_config(
             Some(_) => StereoConfigFold::Relative(sigma),
         },
         State::Set { old, new } => {
-            if old.clone().canonicalize()? == new.clone().canonicalize()? {
+            if old.clone().normalize()? == new.clone().normalize()? {
                 StereoConfigFold::Identity
             } else {
                 StereoConfigFold::Set { old, new }
@@ -2473,7 +2461,7 @@ fn fold_stereo_atom_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_canonical_eq(&prev_new, &old) {
+                        if !options_equiv(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2502,7 +2490,7 @@ fn fold_stereo_atom_group(
             StereoConfigFold::Identity => {}
             StereoConfigFold::Relative(sigma) => attributes = attributes.apply(sigma.inverse()),
             StereoConfigFold::Set { old, new } => {
-                if attributes.configuration.clone().canonicalize()? != new.clone().canonicalize()? {
+                if attributes.configuration.clone().normalize()? != new.clone().normalize()? {
                     return Err(Contradiction);
                 }
                 attributes.configuration = old;
@@ -2540,7 +2528,7 @@ fn fold_stereo_atom_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if !options_canonical_eq(&old, &new) {
+        if !options_equiv(&old, &new) {
             out.push(StereoAtomDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -2649,7 +2637,7 @@ fn fold_stereo_bond_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_canonical_eq(&prev_new, &old) {
+                        if !options_equiv(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2678,7 +2666,7 @@ fn fold_stereo_bond_group(
             StereoConfigFold::Identity => {}
             StereoConfigFold::Relative(sigma) => attributes = attributes.apply(sigma.inverse()),
             StereoConfigFold::Set { old, new } => {
-                if attributes.configuration.clone().canonicalize()? != new.clone().canonicalize()? {
+                if attributes.configuration.clone().normalize()? != new.clone().normalize()? {
                     return Err(Contradiction);
                 }
                 attributes.configuration = old;
@@ -2716,7 +2704,7 @@ fn fold_stereo_bond_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if !options_canonical_eq(&old, &new) {
+        if !options_equiv(&old, &new) {
             out.push(StereoBondDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -2778,7 +2766,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             },
         }),
         Delta::DativeBond(d) => Delta::DativeBond(match d {
-            // Donors are the unordered factor with no per-participant attributes data, so canonicalize the
+            // Donors are the unordered factor with no per-participant attributes data, so normalize the
             // order after remap (acceptor is the single ordered factor). No permutation to track.
             DativeBondDelta::Add {
                 id,
@@ -2906,7 +2894,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
         }),
         Delta::NoncovalentBond(n) => Delta::NoncovalentBond(match n {
             // Both participants are the unordered factor with no per-participant attributes data, so
-            // canonicalize the order after remap. No permutation to track.
+            // normalize the order after remap. No permutation to track.
             NoncovalentBondDelta::Add {
                 id,
                 atoms,
@@ -3079,7 +3067,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
 /// an addition must precede modifications to that addition, and successive field changes must
 /// connect through their `old` and `new` values. Cross-entity source order is not semantic because
 /// deltas refer to entities directly through ids in the reaction-owned frame.
-/// [`Canonicalize::canonicalize`] folds each entity's chain, rejects contradictions, and sorts the
+/// [`Normalize::normalize`] folds each entity's chain, rejects contradictions, and sorts the
 /// normalized result. Unlike an edit sequence, the canonical form retains no incidental source
 /// ordering.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -3130,13 +3118,13 @@ impl IntoIterator for Deltas {
     }
 }
 
-impl Canonicalize for Deltas {
+impl Normalize for Deltas {
     /// Per-entity fold to the normal form, then a stable sort. Different entities are
     /// independent and each entity's fold is deterministic over input order, so the result is
     /// a unique normal form; sequence order is not stored. `Err(Contradiction)` on an
     /// inconsistent set.
     #[allow(clippy::mutable_key_type)]
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         let mut atoms: HashMap<AtomId, Vec<AtomDelta>> = HashMap::new();
         let mut bonds: HashMap<BondId, Vec<BondDelta>> = HashMap::new();
         let mut dative: HashMap<DativeBondId, Vec<DativeBondDelta>> = HashMap::new();
@@ -4095,12 +4083,12 @@ mod tests {
             attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         }],
     )]
-    fn test_deltas_canonicalize_stereo_atom(
+    fn test_deltas_normalize_stereo_atom(
         #[case] input: Vec<StereoAtomDelta>,
         #[case] expected: Vec<StereoAtomDelta>,
     ) {
         let canon = Deltas::from_iter(input.into_iter().map(Delta::StereoAtom))
-            .canonicalize()
+            .normalize()
             .unwrap();
         assert_eq!(
             canon,
@@ -4352,22 +4340,22 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_field_fusion() {
+    fn test_deltas_normalize_field_fusion() {
         let deltas = Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 2)]);
         assert_eq!(
-            deltas.canonicalize().unwrap(),
+            deltas.normalize().unwrap(),
             Deltas::from_iter([charge_set(0, 0, 2)]),
         );
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_field_noop_dropped() {
+    fn test_deltas_normalize_field_noop_dropped() {
         let deltas = Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 0)]);
-        assert_eq!(deltas.canonicalize().unwrap(), Deltas::new());
+        assert_eq!(deltas.normalize().unwrap(), Deltas::new());
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_created_absorbs_field() {
+    fn test_deltas_normalize_created_absorbs_field() {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
@@ -4376,7 +4364,7 @@ mod tests {
             charge_set(0, 0, 1),
         ]);
         assert_eq!(
-            deltas.canonicalize().unwrap(),
+            deltas.normalize().unwrap(),
             Deltas::from_iter([Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
                 attributes: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1)),
@@ -4385,7 +4373,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_created_then_removed_cancels() {
+    fn test_deltas_normalize_created_then_removed_cancels() {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
@@ -4396,12 +4384,12 @@ mod tests {
                 attributes: AtomForm::from_element(Element::C),
             }),
         ]);
-        assert_eq!(deltas.canonicalize().unwrap(), Deltas::new());
+        assert_eq!(deltas.normalize().unwrap(), Deltas::new());
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_remove_subsumes_field() {
-        // ModifyField then Remove must canonicalize to a Remove carrying the original value.
+    fn test_deltas_normalize_remove_subsumes_field() {
+        // ModifyField then Remove must normalize to a Remove carrying the original value.
         let deltas = Deltas::from_iter([
             charge_set(0, 0, 1),
             Delta::Atom(AtomDelta::Remove {
@@ -4410,7 +4398,7 @@ mod tests {
             }),
         ]);
         assert_eq!(
-            deltas.canonicalize().unwrap(),
+            deltas.normalize().unwrap(),
             Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::from_element(Element::C).with_charge(NumForm::Lit(0)),
@@ -4419,7 +4407,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_constraint_chain() {
+    fn test_deltas_normalize_constraint_chain() {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
@@ -4433,7 +4421,7 @@ mod tests {
             }),
         ]);
         assert_eq!(
-            deltas.canonicalize().unwrap(),
+            deltas.normalize().unwrap(),
             Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: None,
@@ -4443,7 +4431,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_order_independent() {
+    fn test_deltas_normalize_order_independent() {
         let order_set = Delta::Bond(BondDelta::ModifyField {
             id: BondId(0),
             change: BondFieldChange::Order {
@@ -4453,22 +4441,19 @@ mod tests {
         });
         let forward = Deltas::from_iter([charge_set(0, 0, 1), order_set.clone()]);
         let reverse = Deltas::from_iter([order_set, charge_set(0, 0, 1)]);
-        assert_eq!(
-            forward.canonicalize().unwrap(),
-            reverse.canonicalize().unwrap()
-        );
+        assert_eq!(forward.normalize().unwrap(), reverse.normalize().unwrap());
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_idempotent() {
+    fn test_deltas_normalize_idempotent() {
         let once = Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 2)])
-            .canonicalize()
+            .normalize()
             .unwrap();
-        assert_eq!(once.clone().canonicalize().unwrap(), once);
+        assert_eq!(once.clone().normalize().unwrap(), once);
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_dangling_bond_error() {
+    fn test_deltas_normalize_dangling_bond_error() {
         let deltas = Deltas::from_iter([
             Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
@@ -4480,13 +4465,13 @@ mod tests {
                 attributes: BondForm::default(),
             }),
         ]);
-        assert!(matches!(deltas.canonicalize(), Err(Contradiction)));
+        assert!(matches!(deltas.normalize(), Err(Contradiction)));
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_discontinuous_chain_error() {
+    fn test_deltas_normalize_discontinuous_chain_error() {
         let deltas = Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 2, 3)]);
-        assert!(matches!(deltas.canonicalize(), Err(Contradiction)));
+        assert!(matches!(deltas.normalize(), Err(Contradiction)));
     }
 
     fn charge_sum(sum: i64) -> Constraint {
@@ -4497,16 +4482,16 @@ mod tests {
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_molecule_constraint_cancels() {
+    fn test_deltas_normalize_molecule_constraint_cancels() {
         let deltas = Deltas::from_iter([
             Delta::Constraint(ConstraintDelta::Add(charge_sum(0))),
             Delta::Constraint(ConstraintDelta::Remove(charge_sum(0))),
         ]);
-        assert_eq!(deltas.canonicalize().unwrap(), Deltas::new());
+        assert_eq!(deltas.normalize().unwrap(), Deltas::new());
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_molecule_constraint_multiplicity() {
+    fn test_deltas_normalize_molecule_constraint_multiplicity() {
         // Two adds and one remove net to one add — multiset, not dedup.
         let deltas = Deltas::from_iter([
             Delta::Constraint(ConstraintDelta::Add(charge_sum(0))),
@@ -4514,7 +4499,7 @@ mod tests {
             Delta::Constraint(ConstraintDelta::Remove(charge_sum(0))),
         ]);
         assert_eq!(
-            deltas.canonicalize().unwrap(),
+            deltas.normalize().unwrap(),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(charge_sum(0)))]),
         );
     }

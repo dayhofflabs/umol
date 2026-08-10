@@ -3,16 +3,16 @@
 use std::borrow::Cow;
 
 use umol_graph_core::{ParticipantPosition, RelationData};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::error::{Contradiction, NoJoin};
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Equiv, Lattice, Normalize};
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
 /// to noncovalent interactions.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct NoncovalentBondForm {
     pub kind: NoncovalentBondKindForm,
     pub constraints: NoncovalentBondConstraintsForm,
@@ -104,7 +104,7 @@ impl NoncovalentBondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -115,7 +115,7 @@ impl NoncovalentBondForm {
             }
         }
         NoncovalentBondUpdate {
-            kind: (!self.kind.canonical_eq(&other.kind)).then(|| other.kind.clone()),
+            kind: (!self.kind.equiv(&other.kind)).then(|| other.kind.clone()),
             constraints,
         }
     }
@@ -145,13 +145,13 @@ impl From<NoncovalentBondKind> for NoncovalentBondKindForm {
     }
 }
 
-impl Canonicalize for NoncovalentBondKindForm {
+impl Normalize for NoncovalentBondKindForm {
     /// Both variants are already canonical — nothing folds.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         Ok(Cow::Borrowed(self))
     }
 }
@@ -344,8 +344,8 @@ mod tests {
     #[rstest]
     #[case::ground(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
     #[case::undetermined(NoncovalentBondForm::default())]
-    fn test_noncovalent_bond_form_canonicalize_identity(#[case] input: NoncovalentBondForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_noncovalent_bond_form_normalize_identity(#[case] input: NoncovalentBondForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -387,10 +387,8 @@ mod tests {
     #[rstest]
     #[case::undetermined(NoncovalentBondKindForm::Undetermined)]
     #[case::lit(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_kind_form_canonicalize_identity(
-        #[case] input: NoncovalentBondKindForm,
-    ) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_noncovalent_bond_kind_form_normalize_identity(#[case] input: NoncovalentBondKindForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]

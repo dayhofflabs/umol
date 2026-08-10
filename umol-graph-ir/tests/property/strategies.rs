@@ -31,27 +31,26 @@ pub(crate) use umol_graph_ir::ir::{
     AromaticSystemUpdate, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
     AtomConstraintKey, AtomConstraintsForm, AtomDelta, AtomFieldChange, AtomForm, AtomHandle,
     AtomId, AtomUpdate, BondConstraintForm, BondConstraintKey, BondConstraintsForm, BondDelta,
-    BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, Canonicalize,
-    CisTransStereoForm, Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm,
-    DativeBondConstraintKey, DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange,
-    DativeBondForm, DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator,
-    Edit, Edits, ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind,
-    FluxionalityForm, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
-    LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
-    MoleculeEntries, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsForm, MulticenterBondDelta, MulticenterBondFieldChange,
-    MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
-    MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm,
-    NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
-    NumForm, OrientedLigandPermutation, PredExpr, Reaction, ReactionSpan, RelOp,
-    RelationalConstraint, RingMembershipForm, RingScope, StereoAtomConstraintForm,
-    StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
-    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
-    StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
+    BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm,
+    Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm, DativeBondConstraintKey,
+    DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange, DativeBondForm,
+    DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits,
+    ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, Equiv, FluxionalityForm,
+    FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryForm, MemOp,
+    Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
+    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
+    MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondHandle,
+    MulticenterBondId, MulticenterBondUpdate, MulticenterValenceForm,
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm, NoncovalentBondDelta,
+    NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle, NoncovalentBondId,
+    NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate, Normalize, NumForm,
+    OrientedLigandPermutation, PredExpr, Reaction, ReactionSpan, RelOp, RelationalConstraint,
+    RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoAtomConstraintsForm,
+    StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm, StereoAtomHandle, StereoAtomId,
+    StereoAtomUpdate, StereoBondConstraintForm, StereoBondConstraintsForm, StereoBondDelta,
+    StereoBondFieldChange, StereoBondForm, StereoBondHandle, StereoBondId, StereoBondUpdate,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind, StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
     TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
@@ -97,7 +96,7 @@ pub(crate) fn element_form_strategy() -> impl Strategy<Value = ElementForm> {
         1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
             .prop_map(|(id, set)| ElementForm::var_not_in(id, set)),
     ]
-    .prop_map(|e| e.canonicalize().unwrap_or(ElementForm::Undetermined))
+    .prop_map(|e| e.normalize().unwrap_or(ElementForm::Undetermined))
 }
 
 pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = NumForm> {
@@ -108,11 +107,11 @@ pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = N
         2 => arith_expr_strategy().prop_map(NumForm::arith_expr),
         2 => pred_expr_strategy().prop_map(NumForm::pred_expr),
     ]
-    .prop_map(canonicalize_value)
+    .prop_map(normalize_value)
 }
 
 /// Full `ArithExpr` grammar: `Lit`/`Var` leaves under `Neg`, n-ary `Sum`/
-/// `Product`, and binary `Div`/`Rem`. Generated raw; `value_basic` canonicalizes.
+/// `Product`, and binary `Div`/`Rem`. Generated raw; `value_basic` normalizes.
 fn arith_expr_strategy() -> BoxedStrategy<ArithExpr> {
     let leaf = prop_oneof![
         (-10i64..=10).prop_map(ArithExpr::Lit),
@@ -134,7 +133,7 @@ fn arith_expr_strategy() -> BoxedStrategy<ArithExpr> {
 }
 
 /// Full `PredExpr` grammar: `Rel`/`Mem` leaves over arithmetic expressions, under `Not`,
-/// `And`, `Or`. Generated raw; `value_basic` canonicalizes (folding/NNF).
+/// `And`, `Or`. Generated raw; `value_basic` normalizes (folding/NNF).
 fn pred_expr_strategy() -> BoxedStrategy<PredExpr> {
     let term = arith_expr_strategy();
     let leaf = prop_oneof![
@@ -170,20 +169,20 @@ fn rel_op_strategy() -> impl Strategy<Value = RelOp> {
     ]
 }
 
-/// Canonicalize a generated value so the property suite operates on canonical
+/// Normalize a generated value so the property suite operates on normal
 /// forms: the lattice laws and the render/parse identity compare against the
-/// generated value itself, so a non-canonical input would spuriously fail.
+/// generated value itself, so a non-normal input would spuriously fail.
 /// The unsatisfiable case is unreachable for these generators.
-fn canonicalize_value(v: NumForm) -> NumForm {
-    v.canonicalize().unwrap_or(NumForm::Undetermined)
+fn normalize_value(v: NumForm) -> NumForm {
+    v.normalize().unwrap_or(NumForm::Undetermined)
 }
 
 pub(crate) fn any_num_form_strategy() -> BoxedStrategy<NumForm> {
     value_basic(-10..=10).boxed()
 }
 
-/// Possibly **non-canonical** (but satisfiable) `NumForm`: unlike `value_basic`
-/// it does not canonicalize, so it exercises the input-canonicality-independent
+/// Possibly **non-normal** (but satisfiable) `NumForm`: unlike `value_basic`
+/// it does not normalize, so it exercises the normalization-independent
 /// lattice laws on raw `ArithExpr`/`PredExpr` forms. Unsatisfiable draws are filtered
 /// out — on an unsatisfiable target the `matches` law's meet-derived RHS only
 /// agrees with the default for satisfiable targets.
@@ -194,14 +193,14 @@ pub(crate) fn raw_num_form_strategy() -> BoxedStrategy<NumForm> {
         3 => arith_expr_strategy().prop_map(NumForm::arith_expr),
         3 => pred_expr_strategy().prop_map(NumForm::pred_expr),
     ]
-    .prop_filter("satisfiable", |v| v.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |v| v.clone().normalize().is_ok())
     .boxed()
 }
 
-// Raw (non-canonical, satisfiable) generators for the remaining
-// `canonical()`-overriding leaves, to fuzz the *fold* path of the universal
-// lattice laws (the canonicalizing strategies only ever reach the borrow path).
-// Each mixes deliberately non-canonical draws with the canonical strategy, then
+// Raw (non-normal, satisfiable) generators for the remaining
+// `normalized()`-overriding leaves, to fuzz the *fold* path of the universal
+// lattice laws (the normalizing strategies only ever reach the borrow path).
+// Each mixes deliberately non-normal draws with the normalized strategy, then
 // filters to satisfiable values (the `matches` law's RHS only agrees with the
 // default on satisfiable targets).
 
@@ -211,7 +210,7 @@ pub(crate) fn raw_element_form_strategy() -> BoxedStrategy<ElementForm> {
         3 => id_strategy().prop_map(|id| ElementForm::var_in(id, Element::all().to_vec())),
         2 => element_form_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -220,7 +219,7 @@ pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassForm> {
         3 => (0u32..=250).prop_map(|m| IsotopeMassForm::lit_set(vec![m])),
         2 => isotope_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -229,7 +228,7 @@ pub(crate) fn raw_aromatic_valence_form_strategy() -> BoxedStrategy<AromaticVale
         3 => raw_num_form_strategy().prop_map(AromaticValenceForm::Aromatic),
         2 => aromatic_valence_form_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -238,7 +237,7 @@ pub(crate) fn raw_multicenter_valence_form_strategy() -> BoxedStrategy<Multicent
         3 => raw_num_form_strategy().prop_map(MulticenterValenceForm::Multicenter),
         2 => multicenter_valence_form_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -248,7 +247,7 @@ pub(crate) fn raw_tetrahedral_stereo_strategy() -> BoxedStrategy<TetrahedralSter
         Just(TetrahedralStereoForm::NotStereo),
         stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -258,7 +257,7 @@ pub(crate) fn raw_cis_trans_stereo_strategy() -> BoxedStrategy<CisTransStereoFor
         Just(CisTransStereoForm::NotStereo),
         stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -268,7 +267,7 @@ pub(crate) fn raw_stereo_configuration_strategy() -> BoxedStrategy<StereoConfigu
         (stereo_atom_kind_strategy(), stereo_coset_strategy())
             .prop_map(|(kind, coset)| StereoConfigurationForm::kinded(kind, coset)),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -278,7 +277,7 @@ pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelation
         2 => Just(TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Diastereotopic]))),
         3 => topicity_relation_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -288,7 +287,7 @@ pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<Stereogeni
         2 => Just(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
         3 => stereogenicity_relation_strategy(),
     ]
-    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .prop_filter("satisfiable", |x| x.clone().normalize().is_ok())
     .boxed()
 }
 
@@ -302,7 +301,7 @@ pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassForm> {
         1 => (id_strategy(), prop::collection::vec(0u32..=250, 1..=3))
             .prop_map(|(id, v)| IsotopeMassForm::var_in(id, v)),
     ]
-    .prop_map(|i| i.canonicalize().unwrap_or(IsotopeMassForm::Undetermined))
+    .prop_map(|i| i.normalize().unwrap_or(IsotopeMassForm::Undetermined))
 }
 
 pub(crate) fn unpaired_electrons_strategy() -> impl Strategy<Value = UnpairedElectronsForm> {
@@ -411,10 +410,7 @@ pub(crate) fn aromatic_valence_form_strategy() -> impl Strategy<Value = Aromatic
         Just(AromaticValenceForm::NotAromatic),
         constraint_value_strategy(0..=6).prop_map(AromaticValenceForm::Aromatic),
     ]
-    .prop_map(|v| {
-        v.canonicalize()
-            .unwrap_or(AromaticValenceForm::Undetermined)
-    })
+    .prop_map(|v| v.normalize().unwrap_or(AromaticValenceForm::Undetermined))
 }
 
 pub(crate) fn multicenter_valence_form_strategy() -> impl Strategy<Value = MulticenterValenceForm> {
@@ -423,7 +419,7 @@ pub(crate) fn multicenter_valence_form_strategy() -> impl Strategy<Value = Multi
         constraint_value_strategy(0..=6).prop_map(MulticenterValenceForm::Multicenter),
     ]
     .prop_map(|v| {
-        v.canonicalize()
+        v.normalize()
             .unwrap_or(MulticenterValenceForm::Undetermined)
     })
 }
@@ -460,7 +456,7 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -493,7 +489,7 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -527,7 +523,7 @@ pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = Dative
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -701,7 +697,7 @@ pub(crate) fn optional_aromatic_electron_count(
         if let Some(v) = opt {
             cs.set(AromaticSystemConstraintForm::ElectronCount(v));
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -729,7 +725,7 @@ pub(crate) fn optional_multicenter_electron_count(
         if let Some(v) = opt {
             cs.set(MulticenterBondConstraintForm::ElectronCount(v));
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -912,7 +908,7 @@ pub(crate) fn noncovalent_bond_constraints_strategy(
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -992,10 +988,7 @@ pub(crate) fn tetrahedral_stereo_strategy() -> impl Strategy<Value = Tetrahedral
         Just(TetrahedralStereoForm::NotStereo),
         stereo_coset_strategy().prop_map(TetrahedralStereoForm::Stereo),
     ]
-    .prop_map(|s| {
-        s.canonicalize()
-            .unwrap_or(TetrahedralStereoForm::Undetermined)
-    })
+    .prop_map(|s| s.normalize().unwrap_or(TetrahedralStereoForm::Undetermined))
 }
 
 pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = TetrahedralStereoForm>
@@ -1011,7 +1004,7 @@ pub(crate) fn cis_trans_stereo_strategy() -> impl Strategy<Value = CisTransStere
         Just(CisTransStereoForm::NotStereo),
         stereo_coset_strategy().prop_map(CisTransStereoForm::Stereo),
     ]
-    .prop_map(|s| s.canonicalize().unwrap_or(CisTransStereoForm::Undetermined))
+    .prop_map(|s| s.normalize().unwrap_or(CisTransStereoForm::Undetermined))
 }
 
 pub(crate) fn cis_trans_stereo_lattice_strategy() -> impl Strategy<Value = CisTransStereoForm> {
@@ -1031,7 +1024,7 @@ pub(crate) fn stereo_configuration_lattice_strategy(
             .prop_map(|(kind, coset)| StereoConfigurationForm::kinded(kind, coset)),
     ]
     .prop_map(|c| {
-        c.canonicalize()
+        c.normalize()
             .unwrap_or(StereoConfigurationForm::Undetermined)
     })
 }
@@ -1166,7 +1159,7 @@ pub(crate) fn topicity_strategy(degree: usize) -> impl Strategy<Value = Topicity
         .prop_map(|(pair, relation)| TopicityForm { pair, relation })
 }
 
-/// Canonical, fiber-spanning `RingMembershipForm`: the `scope` varies (`All` and
+/// Normalized, fiber-spanning `RingMembershipForm`: the `scope` varies (`All` and
 /// `Size(3..=10)`) so a value triple lands in different fibers, exercising the
 /// cross-scope `meet` → `None` / `join` → `Err(NoJoin)` path.
 pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMembershipForm> {
@@ -1178,14 +1171,14 @@ pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMe
     ]
     .prop_map(|membership| {
         membership
-            .canonicalize()
+            .normalize()
             .expect("non-empty count strategy never contradicts")
     })
 }
 
-/// Universal lattice laws — hold for **any** inputs (canonical or not): meet/join
+/// Universal lattice laws — hold for **any** inputs (normalized or not): meet/join
 /// commutativity and associativity, `matches` ⇔ meet-derived, and the
-/// Lattice→Canonicalize correspondence that `meet`/`join` land in canonical form.
+/// Lattice→Normalize correspondence that `meet`/`join` land in normal form.
 pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     a: &L,
     b: &L,
@@ -1201,37 +1194,37 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         a.join(b).and_then(|ab| ab.join(c)),
         b.join(c).and_then(|bc| a.join(&bc))
     );
-    prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().canonicalize().ok());
+    prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().normalize().ok());
     if let Some(m) = a.meet(b) {
-        prop_assert_eq!(m.clone().canonicalize(), Ok(m));
+        prop_assert_eq!(m.clone().normalize(), Ok(m));
     }
     if let Ok(j) = a.join(b) {
-        prop_assert_eq!(j.clone().canonicalize(), Ok(j));
+        prop_assert_eq!(j.clone().normalize(), Ok(j));
     }
-    // `canonical()` (the borrow fast-path) agrees with `canonicalize()`.
+    // `normalized()` (the borrow fast-path) agrees with `normalize()`.
     prop_assert_eq!(
-        a.canonical().map(|c| c.into_owned()),
-        a.clone().canonicalize()
+        a.normalized().map(|c| c.into_owned()),
+        a.clone().normalize()
     );
-    // `canonical_eq` is canonical equality.
+    // `equiv` is equality of normal forms.
     prop_assert_eq!(
-        a.canonical_eq(b),
-        a.clone().canonicalize().ok() == b.clone().canonicalize().ok()
+        a.equiv(b),
+        a.clone().normalize().ok() == b.clone().normalize().ok()
     );
     Ok(())
 }
 
-/// Lattice laws that assume **canonical** inputs: each input is a `canonicalize`
+/// Lattice laws that assume **normalized** inputs: each input is a `normalize`
 /// fixpoint, plus idempotence and absorption (whose RHS is the input verbatim,
-/// which only holds when the input is already canonical).
-pub(crate) fn assert_canonical_lattice_laws<L: Lattice + Debug>(
+/// which only holds when the input is already normalized).
+pub(crate) fn assert_normalized_lattice_laws<L: Lattice + Debug>(
     a: &L,
     b: &L,
     c: &L,
 ) -> Result<(), TestCaseError> {
-    prop_assert_eq!(a.clone().canonicalize(), Ok(a.clone()));
-    prop_assert_eq!(b.clone().canonicalize(), Ok(b.clone()));
-    prop_assert_eq!(c.clone().canonicalize(), Ok(c.clone()));
+    prop_assert_eq!(a.clone().normalize(), Ok(a.clone()));
+    prop_assert_eq!(b.clone().normalize(), Ok(b.clone()));
+    prop_assert_eq!(c.clone().normalize(), Ok(c.clone()));
     prop_assert_eq!(a.meet(a), Some(a.clone()));
     prop_assert_eq!(a.join(a), Ok(a.clone()));
     if let Ok(ab) = a.join(b) {
@@ -1288,7 +1281,7 @@ pub(crate) fn stereo_atom_constraints_strategy(
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 
@@ -1300,7 +1293,7 @@ pub(crate) fn stereo_bond_constraints_strategy(
         for c in list {
             cs.set(c);
         }
-        cs.canonicalize().unwrap_or_default()
+        cs.normalize().unwrap_or_default()
     })
 }
 

@@ -4,14 +4,14 @@
 //! A configuration value is a dense coset index per stereo kind, corresponds to OpenSMILES
 //! numbering for SP, TB, and OH.
 //! `~` and `^` are group actions on the index; the owning configuration's
-//! `canonicalize` folds closed operator-expressions against the coset algebra.
+//! `normalize` folds closed operator-expressions against the coset algebra.
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use strum::VariantArray;
 use umol_graph_core::{BiRelationData, ParticipantPosition};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
 
 use super::constraint::{
@@ -20,7 +20,7 @@ use super::constraint::{
 };
 use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Equiv, Lattice, Normalize};
 
 /// Defines the stereo entity forms.
 macro_rules! stereo_element {
@@ -29,7 +29,7 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
         pub struct $name {
             pub configuration: StereoConfigurationForm,
             pub constraints: $constraints,
@@ -212,7 +212,7 @@ impl StereoAtomForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -222,7 +222,7 @@ impl StereoAtomForm {
                 constraints.set(old.as_undetermined());
             }
         }
-        let configuration = if self.configuration.canonical_eq(&other.configuration) {
+        let configuration = if self.configuration.equiv(&other.configuration) {
             match self.configuration.kind() {
                 Some(kind) if !constraints.is_empty() => {
                     StereoConfigurationUpdate::Kinded { kind, coset: None }
@@ -263,7 +263,7 @@ impl StereoBondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -273,7 +273,7 @@ impl StereoBondForm {
                 constraints.set(old.as_undetermined());
             }
         }
-        let configuration = if self.configuration.canonical_eq(&other.configuration) {
+        let configuration = if self.configuration.equiv(&other.configuration) {
             match self.configuration.kind() {
                 Some(kind) if !constraints.is_empty() => {
                     StereoConfigurationUpdate::Kinded { kind, coset: None }
@@ -377,7 +377,7 @@ impl StereoKind {
         (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
     }
 
-    /// Canonicalize coset permutation, priority `Mirror > Swap > Apply`; `None`
+    /// Normalize coset permutation, priority `Mirror > Swap > Apply`; `None`
     /// when it acts as the identity on cosets.
     pub fn canonicalize_permutation(self, g: Permutation) -> Option<CosetOp> {
         if self.coset_action_eq(g, Permutation::identity(self.degree())) {
@@ -419,7 +419,7 @@ pub enum Stereogenicity {
 /// Element-side stereo configuration: either undetermined (geometry not yet
 /// known, so no coset) or `Kinded` — a concrete geometry bound to a coset that
 /// may still be open. `*` (`Undetermined`) and `Th*` (`Kinded(Tetrahedral,
-/// Undetermined)`) are distinct. `canonicalize` folds the coset under the kind;
+/// Undetermined)`) are distinct. `normalize` folds the coset under the kind;
 /// no physical range-check (tier-2; the validator does it).
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoConfigurationForm {
@@ -503,17 +503,17 @@ impl From<(StereoKind, u32)> for StereoConfigurationForm {
     }
 }
 
-impl Canonicalize for StereoConfigurationForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for StereoConfigurationForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Kinded(kind, coset) => Self::Kinded(kind, canon_coset(coset, kind)?),
             Self::Undetermined => Self::Undetermined,
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            Self::Kinded(..) => Ok(Cow::Owned(self.clone().canonicalize()?)),
+            Self::Kinded(..) => Ok(Cow::Owned(self.clone().normalize()?)),
             Self::Undetermined => Ok(Cow::Borrowed(self)),
         }
     }
@@ -542,8 +542,8 @@ impl Lattice for StereoConfigurationForm {
     }
 
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
@@ -556,8 +556,8 @@ impl Lattice for StereoConfigurationForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
@@ -638,17 +638,17 @@ macro_rules! stereo_site {
             }
         }
 
-        impl Canonicalize for $name {
-            fn canonicalize(self) -> Result<Self, Contradiction> {
+        impl Normalize for $name {
+            fn normalize(self) -> Result<Self, Contradiction> {
                 Ok(match self {
                     Self::Stereo(coset) => Self::Stereo(canon_coset(coset, $kind)?),
                     other => other,
                 })
             }
 
-            fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+            fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
                 match self {
-                    Self::Stereo(_) => Ok(Cow::Owned(self.clone().canonicalize()?)),
+                    Self::Stereo(_) => Ok(Cow::Owned(self.clone().normalize()?)),
                     _ => Ok(Cow::Borrowed(self)),
                 }
             }
@@ -681,8 +681,8 @@ macro_rules! stereo_site {
             }
 
             fn meet(&self, other: &Self) -> Option<Self> {
-                let a = self.canonical().ok()?;
-                let b = other.canonical().ok()?;
+                let a = self.normalized().ok()?;
+                let b = other.normalized().ok()?;
                 match (a.as_ref(), b.as_ref()) {
                     (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
                     (Self::NotStereo, Self::NotStereo) => Some(Self::NotStereo),
@@ -694,8 +694,8 @@ macro_rules! stereo_site {
             }
 
             fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-                let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-                let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+                let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+                let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
                 Ok(match (a.as_ref(), b.as_ref()) {
                     (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
                     (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
@@ -763,7 +763,7 @@ impl From<CisTransConfiguration> for CisTransStereoForm {
 /// Operator-expression term: a `Var` (with optional finite domain), a literal
 /// `Lit`/`LitSet` base, or one of these under the permutation-action operators
 /// `~` (swap), `'` (mirror), `^` (apply). Kind-relative — **no
-/// `Lattice`/`Canonicalize`** (structural `Eq` only); the owning configuration
+/// `Lattice`/`Normalize`** (structural `Eq` only); the owning configuration
 /// normalizes it under its concrete kind. Canonicalization composes the operator
 /// word into one net permutation: over a literal base it folds to a concrete
 /// coset; over a `Var` it leaves at most one operator layer.
@@ -811,7 +811,7 @@ impl StereoTerm {
 
 /// Dense coset-index expression (0-indexed per stereo kind): undetermined, a
 /// single index, a finite set, or an operator `Term` over a variable.
-/// Kind-relative — no `Lattice` or `Canonicalize`; the owning configuration or
+/// Kind-relative — no `Lattice` or `Normalize`; the owning configuration or
 /// site normalizes it under its kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoCoset {
@@ -928,7 +928,7 @@ fn compose_term(term: &StereoTerm, kind: StereoKind) -> (&StereoTerm, Permutatio
     }
 }
 
-/// Canonicalize a coset under `kind`. A `Term` over a `Var` renders by priority
+/// Normalize a coset under `kind`. A `Term` over a `Var` renders by priority
 /// Mirror > Swap > Apply (canonicalizing the domain); every other form reduces to
 /// a literal index set that folds: ∅ → `Err` (the bottom `meet` uses to signal
 /// incompatible cosets), singleton → `Lit`, else `LitSet`. No universe folding
@@ -1130,8 +1130,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::term_swap_folds_to_lit(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)))]
-    fn test_stereo_configuration_form_canonicalize(#[case] input: StereoConfigurationForm, #[case] expected: StereoConfigurationForm) {
-        assert_eq!(input.canonicalize(), Ok(expected));
+    fn test_stereo_configuration_form_normalize(#[case] input: StereoConfigurationForm, #[case] expected: StereoConfigurationForm) {
+        assert_eq!(input.normalize(), Ok(expected));
     }
 
     #[rstest]
@@ -1147,10 +1147,8 @@ mod tests {
     // Multi-element / full coset sets are preserved (no complement or full→Undetermined fold).
     #[case::multi_element_set(StereoConfigurationForm::Kinded(StereoKind::SquarePlanar, StereoCoset::lit_set([0, 1])))]
     #[case::full_set(StereoConfigurationForm::Kinded(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])))]
-    fn test_stereo_configuration_form_canonicalize_identity(
-        #[case] input: StereoConfigurationForm,
-    ) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_stereo_configuration_form_normalize_identity(#[case] input: StereoConfigurationForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rstest]
@@ -1158,8 +1156,8 @@ mod tests {
         StereoKind::SquarePlanar,
         StereoCoset::LitSet(BTreeSet::new())
     ))]
-    fn test_stereo_configuration_form_canonicalize_error(#[case] input: StereoConfigurationForm) {
-        assert_eq!(input.canonicalize(), Err(Contradiction));
+    fn test_stereo_configuration_form_normalize_error(#[case] input: StereoConfigurationForm) {
+        assert_eq!(input.normalize(), Err(Contradiction));
     }
 
     #[rustfmt::skip]
@@ -1283,8 +1281,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::term_swap_folds(TetrahedralStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_tetrahedral_stereo_form_canonicalize(#[case] input: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
-        assert_eq!(input.canonicalize(), Ok(expected));
+    fn test_tetrahedral_stereo_form_normalize(#[case] input: TetrahedralStereoForm, #[case] expected: TetrahedralStereoForm) {
+        assert_eq!(input.normalize(), Ok(expected));
     }
 
     #[rstest]
@@ -1292,8 +1290,8 @@ mod tests {
     #[case::not_stereo(TetrahedralStereoForm::NotStereo)]
     #[case::stereo_lit(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))]
     #[case::stereo_open(TetrahedralStereoForm::Stereo(StereoCoset::Undetermined))]
-    fn test_tetrahedral_stereo_form_canonicalize_identity(#[case] input: TetrahedralStereoForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_tetrahedral_stereo_form_normalize_identity(#[case] input: TetrahedralStereoForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -1376,8 +1374,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::term_swap_folds(CisTransStereoForm::Stereo(StereoCoset::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoForm::Stereo(StereoCoset::Lit(1)))]
-    fn test_cis_trans_stereo_form_canonicalize(#[case] input: CisTransStereoForm, #[case] expected: CisTransStereoForm) {
-        assert_eq!(input.canonicalize(), Ok(expected));
+    fn test_cis_trans_stereo_form_normalize(#[case] input: CisTransStereoForm, #[case] expected: CisTransStereoForm) {
+        assert_eq!(input.normalize(), Ok(expected));
     }
 
     #[rustfmt::skip]
@@ -1691,11 +1689,11 @@ mod tests {
         StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set(Vec::<u32>::new())),
         Err(Contradiction),
     )]
-    fn test_stereo_atom_form_canonicalize(
+    fn test_stereo_atom_form_normalize(
         #[case] input: StereoAtomForm,
         #[case] expected: Result<StereoAtomForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]
@@ -1731,11 +1729,11 @@ mod tests {
         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set(Vec::<u32>::new())),
         Err(Contradiction),
     )]
-    fn test_stereo_bond_form_canonicalize(
+    fn test_stereo_bond_form_normalize(
         #[case] input: StereoBondForm,
         #[case] expected: Result<StereoBondForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]

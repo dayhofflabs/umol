@@ -1,4 +1,4 @@
-//! Proc macros for `umol-graph-ir`: `#[derive(Lattice)]` and `#[derive(Canonicalize)]`,
+//! Proc macros for `umol-graph-ir`: `#[derive(Lattice)]` and `#[derive(Normalize)]`,
 //! each generated field-wise over a struct's named fields (every field type must
 //! itself implement the trait).
 
@@ -108,24 +108,24 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Derive `Canonicalize` by canonicalizing each named field. Every field type
-/// must itself implement `Canonicalize`. `canonical` uses the trait default
+/// Derive `Normalize` by normalizing each named field. Every field type
+/// must itself implement `Normalize`. `normalized` uses the trait default
 /// (the fast-path borrow is a per-type override, not generated here).
-#[proc_macro_derive(Canonicalize)]
-pub fn derive_canonicalize(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Normalize)]
+pub fn derive_normalize(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let fields = match named_struct_fields(&input, "Canonicalize") {
+    let fields = match named_struct_fields(&input, "Normalize") {
         Ok(f) => f,
         Err(e) => return e,
     };
     let name = &input.ident;
-    let canon = quote!(crate::ir::Canonicalize);
+    let normalize = quote!(crate::ir::Normalize);
     let contradiction = quote!(crate::ir::Contradiction);
     quote! {
-        impl #canon for #name {
-            fn canonicalize(self) -> ::core::result::Result<Self, #contradiction> {
+        impl #normalize for #name {
+            fn normalize(self) -> ::core::result::Result<Self, #contradiction> {
                 ::core::result::Result::Ok(Self {
-                    #( #fields: #canon::canonicalize(self.#fields)?, )*
+                    #( #fields: #normalize::normalize(self.#fields)?, )*
                 })
             }
         }

@@ -1,15 +1,15 @@
 //! Multicenter bond form.
 
 use umol_graph_core::{ParticipantPosition, RelationData};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
 use super::electrons::ElectronCountsForm;
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Canonicalize, Lattice};
+use super::traits::{Equiv, Lattice};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct MulticenterBondForm {
     pub electrons: ElectronCountsForm,
     pub charge: NumForm,
@@ -128,7 +128,7 @@ impl MulticenterBondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -139,9 +139,8 @@ impl MulticenterBondForm {
             }
         }
         MulticenterBondUpdate {
-            electrons: (!self.electrons.canonical_eq(&other.electrons))
-                .then(|| other.electrons.clone()),
-            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
+            electrons: (!self.electrons.equiv(&other.electrons)).then(|| other.electrons.clone()),
+            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
             unpaired_electrons: self
                 .unpaired_electrons
                 .difference_to(&other.unpaired_electrons),
@@ -163,7 +162,7 @@ mod tests {
 
     use super::*;
     use crate::ir::error::Contradiction;
-    use crate::ir::traits::Canonicalize;
+    use crate::ir::traits::Normalize;
 
     #[rustfmt::skip]
     #[rstest]
@@ -374,11 +373,11 @@ mod tests {
         MulticenterBondForm::default().with_charge(NumForm::lit_set(Vec::<i64>::new())),
         Err(Contradiction),
     )]
-    fn test_multicenter_bond_form_canonicalize(
+    fn test_multicenter_bond_form_normalize(
         #[case] input: MulticenterBondForm,
         #[case] expected: Result<MulticenterBondForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]

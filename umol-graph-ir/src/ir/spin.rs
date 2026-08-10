@@ -1,13 +1,13 @@
 //! Unpaired-electron form and component updates.
 
 use umol_chem::spin::{SpinState, UnpairedElectrons};
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::num::NumForm;
-use super::traits::{AsLit, Canonicalize};
+use super::traits::{AsLit, Equiv};
 
 /// Unpaired-electron count and multiplicity as independent `NumForm` fields.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Canonicalize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Normalize)]
 pub struct UnpairedElectronsForm {
     pub count: NumForm,
     pub multiplicity: NumForm,
@@ -36,8 +36,8 @@ impl UnpairedElectronsForm {
     /// Derive the minimal canonical component update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> UnpairedElectronsUpdate {
         UnpairedElectronsUpdate {
-            count: (!self.count.canonical_eq(&other.count)).then(|| other.count.clone()),
-            multiplicity: (!self.multiplicity.canonical_eq(&other.multiplicity))
+            count: (!self.count.equiv(&other.count)).then(|| other.count.clone()),
+            multiplicity: (!self.multiplicity.equiv(&other.multiplicity))
                 .then(|| other.multiplicity.clone()),
         }
     }
@@ -122,7 +122,7 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::num::ArithExpr;
-    use crate::ir::traits::{Canonicalize, Lattice};
+    use crate::ir::traits::{Lattice, Normalize};
 
     #[rstest]
     fn test_unpaired_electrons_form_closed_shell() {
@@ -212,11 +212,11 @@ mod tests {
         UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) },
         Ok(UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) }),
     )]
-    fn test_unpaired_electrons_form_canonicalize(
+    fn test_unpaired_electrons_form_normalize(
         #[case] input: UnpairedElectronsForm,
         #[case] expected: Result<UnpairedElectronsForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -224,8 +224,8 @@ mod tests {
     #[case::both_undetermined(UnpairedElectronsForm::default())]
     #[case::valid_triplet(UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Lit(3) })]
     #[case::parity_invalid(UnpairedElectronsForm { count: NumForm::Lit(1), multiplicity: NumForm::Lit(1) })]
-    fn test_unpaired_electrons_form_canonicalize_identity(#[case] input: UnpairedElectronsForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_unpaired_electrons_form_normalize_identity(#[case] input: UnpairedElectronsForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]

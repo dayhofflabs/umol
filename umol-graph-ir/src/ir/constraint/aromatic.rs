@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::{Canonicalize, Lattice};
+use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
 /// `AromaticSystemConstraintsForm`.
@@ -49,11 +49,11 @@ impl AromaticSystemConstraintForm {
     }
 }
 
-impl Canonicalize for AromaticSystemConstraintForm {
-    /// Canonicalize the inner value; the kind is preserved.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for AromaticSystemConstraintForm {
+    /// Normalize the inner value; the kind is preserved.
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::ElectronCount(v) => Self::ElectronCount(v.canonicalize()?),
+            Self::ElectronCount(v) => Self::ElectronCount(v.normalize()?),
         })
     }
 }
@@ -147,7 +147,7 @@ impl AromaticSystemConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `canonical_eq` `old` (both absent
+    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -169,7 +169,7 @@ impl AromaticSystemConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.canonical_eq(old),
+            (Some(current), Some(old)) => current.equiv(old),
             _ => false,
         };
         if !matches {
@@ -234,15 +234,15 @@ impl AromaticSystemConstraintsForm {
     }
 }
 
-impl Canonicalize for AromaticSystemConstraintsForm {
-    /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
+impl Normalize for AromaticSystemConstraintsForm {
+    /// Normalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         let mut entries = self
             .0
             .into_iter()
-            .map(Canonicalize::canonicalize)
+            .map(Normalize::normalize)
             .collect::<Result<Vec<AromaticSystemConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
@@ -427,11 +427,11 @@ mod tests {
     #[rstest]
     #[case::electron_count_litset_singleton(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([6])), Ok(AromaticSystemConstraintForm::electron_count(6)))]
     #[case::empty_litset_contradiction(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
-    fn test_aromatic_system_constraint_form_canonicalize(
+    fn test_aromatic_system_constraint_form_normalize(
         #[case] constraint: AromaticSystemConstraintForm,
         #[case] expected: Result<AromaticSystemConstraintForm, Contradiction>,
     ) {
-        assert_eq!(constraint.canonicalize(), expected);
+        assert_eq!(constraint.normalize(), expected);
     }
 
     #[rstest]
@@ -659,7 +659,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::canonicalizes_value(
+    #[case::normalizes_value(
         AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set([6]))),
         Ok(AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6))))]
     #[case::drop_vacuous(
@@ -668,11 +668,11 @@ mod tests {
     #[case::contradiction(
         AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::ElectronCount(NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
-    fn test_aromatic_system_constraints_form_canonicalize(
+    fn test_aromatic_system_constraints_form_normalize(
         #[case] constraints: AromaticSystemConstraintsForm,
         #[case] expected: Result<AromaticSystemConstraintsForm, Contradiction>,
     ) {
-        assert_eq!(constraints.canonicalize(), expected);
+        assert_eq!(constraints.normalize(), expected);
     }
 
     #[rustfmt::skip]

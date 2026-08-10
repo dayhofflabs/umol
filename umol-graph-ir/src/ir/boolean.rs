@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use super::error::{Contradiction, NoJoin};
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Lattice, Normalize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BooleanForm {
@@ -28,12 +28,12 @@ impl From<bool> for BooleanForm {
     }
 }
 
-impl Canonicalize for BooleanForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for BooleanForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         Ok(Cow::Borrowed(self))
     }
 }
@@ -151,7 +151,7 @@ mod tests {
     #[rstest]
     #[case::lit(BooleanForm::Lit(true))]
     #[case::undetermined(BooleanForm::Undetermined)]
-    fn test_boolean_form_canonicalize(#[case] b: BooleanForm) {
-        assert_eq!(b.canonicalize(), Ok(b));
+    fn test_boolean_form_normalize(#[case] b: BooleanForm) {
+        assert_eq!(b.normalize(), Ok(b));
     }
 }

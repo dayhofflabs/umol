@@ -11,7 +11,7 @@ use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::TetrahedralStereoForm;
-use super::super::traits::{AsLit, Canonicalize, Lattice};
+use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -142,23 +142,23 @@ impl AtomConstraintForm {
     }
 }
 
-impl Canonicalize for AtomConstraintForm {
-    /// Canonicalize the inner value; kind and sub-key are preserved.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for AtomConstraintForm {
+    /// Normalize the inner value; kind and sub-key are preserved.
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Valence(v) => Self::Valence(v.canonicalize()?),
-            Self::DonatedPairs(v) => Self::DonatedPairs(v.canonicalize()?),
-            Self::AcceptedPairs(v) => Self::AcceptedPairs(v.canonicalize()?),
-            Self::AromaticValence(c) => Self::AromaticValence(c.canonicalize()?),
-            Self::MulticenterValence(c) => Self::MulticenterValence(c.canonicalize()?),
-            Self::TetrahedralStereo(c) => Self::TetrahedralStereo(c.canonicalize()?),
-            Self::Degree(v) => Self::Degree(v.canonicalize()?),
-            Self::TotalDegree(v) => Self::TotalDegree(v.canonicalize()?),
-            Self::TotalValence(v) => Self::TotalValence(v.canonicalize()?),
-            Self::RingDegree(v) => Self::RingDegree(v.canonicalize()?),
-            Self::RingValence(v) => Self::RingValence(v.canonicalize()?),
-            Self::TotalHydrogens(v) => Self::TotalHydrogens(v.canonicalize()?),
-            Self::RingMembership(m) => Self::RingMembership(m.canonicalize()?),
+            Self::Valence(v) => Self::Valence(v.normalize()?),
+            Self::DonatedPairs(v) => Self::DonatedPairs(v.normalize()?),
+            Self::AcceptedPairs(v) => Self::AcceptedPairs(v.normalize()?),
+            Self::AromaticValence(c) => Self::AromaticValence(c.normalize()?),
+            Self::MulticenterValence(c) => Self::MulticenterValence(c.normalize()?),
+            Self::TetrahedralStereo(c) => Self::TetrahedralStereo(c.normalize()?),
+            Self::Degree(v) => Self::Degree(v.normalize()?),
+            Self::TotalDegree(v) => Self::TotalDegree(v.normalize()?),
+            Self::TotalValence(v) => Self::TotalValence(v.normalize()?),
+            Self::RingDegree(v) => Self::RingDegree(v.normalize()?),
+            Self::RingValence(v) => Self::RingValence(v.normalize()?),
+            Self::TotalHydrogens(v) => Self::TotalHydrogens(v.normalize()?),
+            Self::RingMembership(m) => Self::RingMembership(m.normalize()?),
         })
     }
 }
@@ -466,7 +466,7 @@ impl AtomConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value equals `old` (by `canonical_eq`;
+    /// Transactional write at one key: verify the current value equals `old` (by `equiv`;
     /// both absent is a match), then apply `new` (`Some` sets, `None` removes).
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors.
     pub fn compare_and_set(
@@ -487,7 +487,7 @@ impl AtomConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.canonical_eq(old),
+            (Some(current), Some(old)) => current.equiv(old),
             _ => false,
         };
         if !matches {
@@ -550,15 +550,15 @@ impl AtomConstraintsForm {
     }
 }
 
-impl Canonicalize for AtomConstraintsForm {
-    /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
+impl Normalize for AtomConstraintsForm {
+    /// Normalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         let mut entries = self
             .entries
             .into_iter()
-            .map(Canonicalize::canonicalize)
+            .map(Normalize::normalize)
             .collect::<Result<SmallVec<[AtomConstraintForm; 2]>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self { entries })
@@ -817,19 +817,19 @@ impl From<AromaticValence> for AromaticValenceForm {
     }
 }
 
-impl Canonicalize for AromaticValenceForm {
+impl Normalize for AromaticValenceForm {
     /// Delegate to the inner `NumForm`; `NotAromatic`/`Undetermined` identity.
     /// No cross-variant fold (`Aromatic(Lit(0))` stays distinct from `NotAromatic`).
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Aromatic(v) => Self::Aromatic(v.canonicalize()?),
+            Self::Aromatic(v) => Self::Aromatic(v.normalize()?),
             other => other,
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            Self::Aromatic(v) => Ok(match v.canonical()? {
+            Self::Aromatic(v) => Ok(match v.normalized()? {
                 Cow::Borrowed(_) => Cow::Borrowed(self),
                 Cow::Owned(cv) => Cow::Owned(Self::Aromatic(cv)),
             }),
@@ -854,8 +854,8 @@ impl Lattice for AromaticValenceForm {
 
     /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotAromatic, Self::NotAromatic) => Some(Self::NotAromatic),
@@ -865,8 +865,8 @@ impl Lattice for AromaticValenceForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotAromatic, Self::NotAromatic) => Self::NotAromatic,
@@ -882,7 +882,7 @@ impl Lattice for AromaticValenceForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotAromatic) => true,
-            (Self::Undetermined, Self::Aromatic(v)) => v.canonical().is_ok(),
+            (Self::Undetermined, Self::Aromatic(v)) => v.normalized().is_ok(),
             (Self::NotAromatic, Self::NotAromatic) => true,
             (Self::Aromatic(p), Self::Aromatic(q)) => p.matches(q),
             _ => false,
@@ -975,18 +975,18 @@ impl From<MulticenterValence> for MulticenterValenceForm {
     }
 }
 
-impl Canonicalize for MulticenterValenceForm {
+impl Normalize for MulticenterValenceForm {
     /// Delegate to the inner `NumForm`; `NotMulticenter`/`Undetermined` identity.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Multicenter(v) => Self::Multicenter(v.canonicalize()?),
+            Self::Multicenter(v) => Self::Multicenter(v.normalize()?),
             other => other,
         })
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            Self::Multicenter(v) => Ok(match v.canonical()? {
+            Self::Multicenter(v) => Ok(match v.normalized()? {
                 Cow::Borrowed(_) => Cow::Borrowed(self),
                 Cow::Owned(cv) => Cow::Owned(Self::Multicenter(cv)),
             }),
@@ -1011,8 +1011,8 @@ impl Lattice for MulticenterValenceForm {
 
     /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        let a = self.canonical().ok()?;
-        let b = other.canonical().ok()?;
+        let a = self.normalized().ok()?;
+        let b = other.normalized().ok()?;
         match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotMulticenter, Self::NotMulticenter) => Some(Self::NotMulticenter),
@@ -1023,8 +1023,8 @@ impl Lattice for MulticenterValenceForm {
     }
 
     fn join(&self, other: &Self) -> Result<Self, NoJoin> {
-        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let a = self.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.normalized().unwrap_or(Cow::Owned(Self::Undetermined));
         Ok(match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotMulticenter, Self::NotMulticenter) => Self::NotMulticenter,
@@ -1039,7 +1039,7 @@ impl Lattice for MulticenterValenceForm {
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, Self::Undetermined | Self::NotMulticenter) => true,
-            (Self::Undetermined, Self::Multicenter(v)) => v.canonical().is_ok(),
+            (Self::Undetermined, Self::Multicenter(v)) => v.normalized().is_ok(),
             (Self::NotMulticenter, Self::NotMulticenter) => true,
             (Self::Multicenter(p), Self::Multicenter(q)) => p.matches(q),
             _ => false,
@@ -1132,11 +1132,11 @@ mod tests {
         AtomConstraintForm::RingMembership(RingMembershipForm::new(RingScope::Size(6), NumForm::lit_set([2]))),
         Ok(AtomConstraintForm::ring_membership(RingScope::Size(6), 2)))]
     #[case::empty_litset_contradiction(AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())), Err(Contradiction))]
-    fn test_atom_constraint_form_canonicalize(
+    fn test_atom_constraint_form_normalize(
         #[case] constraint: AtomConstraintForm,
         #[case] expected: Result<AtomConstraintForm, Contradiction>,
     ) {
-        assert_eq!(constraint.canonicalize(), expected);
+        assert_eq!(constraint.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1294,11 +1294,11 @@ mod tests {
         AromaticValenceForm::aromatic(0),
         Ok(AromaticValenceForm::aromatic(0))
     )]
-    fn test_aromatic_valence_form_canonicalize(
+    fn test_aromatic_valence_form_normalize(
         #[case] input: AromaticValenceForm,
         #[case] expected: Result<AromaticValenceForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]
@@ -1306,8 +1306,8 @@ mod tests {
     #[case::not_aromatic(AromaticValenceForm::NotAromatic)]
     #[case::aromatic_lit(AromaticValenceForm::aromatic(1))]
     #[case::aromatic_zero(AromaticValenceForm::aromatic(0))]
-    fn test_aromatic_valence_form_canonicalize_identity(#[case] input: AromaticValenceForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_aromatic_valence_form_normalize_identity(#[case] input: AromaticValenceForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -1483,11 +1483,11 @@ mod tests {
         MulticenterValenceForm::multicenter(0),
         Ok(MulticenterValenceForm::multicenter(0))
     )]
-    fn test_multicenter_valence_form_canonicalize(
+    fn test_multicenter_valence_form_normalize(
         #[case] input: MulticenterValenceForm,
         #[case] expected: Result<MulticenterValenceForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]
@@ -1495,8 +1495,8 @@ mod tests {
     #[case::not_multicenter(MulticenterValenceForm::NotMulticenter)]
     #[case::multicenter_lit(MulticenterValenceForm::multicenter(1))]
     #[case::multicenter_zero(MulticenterValenceForm::multicenter(0))]
-    fn test_multicenter_valence_form_canonicalize_identity(#[case] input: MulticenterValenceForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_multicenter_valence_form_normalize_identity(#[case] input: MulticenterValenceForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -1621,17 +1621,17 @@ mod tests {
             AtomConstraintForm::degree(3),
         ]),
         Ok(AtomConstraintsForm::from_iter([AtomConstraintForm::degree(3)])))]
-    #[case::canonicalizes_values(
+    #[case::normalizes_values(
         AtomConstraintsForm::from_iter([
             AtomConstraintForm::Degree(NumForm::lit_set([3])),
             AtomConstraintForm::Valence(NumForm::lit_set([4])),
         ]),
         Ok(AtomConstraintsForm::from_iter([AtomConstraintForm::valence(4), AtomConstraintForm::degree(3)])))]
-    fn test_atom_constraints_form_canonicalize(
+    fn test_atom_constraints_form_normalize(
         #[case] constraints: AtomConstraintsForm,
         #[case] expected: Result<AtomConstraintsForm, Contradiction>,
     ) {
-        assert_eq!(constraints.canonicalize(), expected);
+        assert_eq!(constraints.normalize(), expected);
     }
 
     #[rustfmt::skip]

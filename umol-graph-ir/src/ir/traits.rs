@@ -4,8 +4,8 @@
 //! `TryFromIr` / `TryIntoIr` are fallible, reject invalid boundary inputs.
 //! `AsLit` extracts a literal value from a form.
 //! `Lattice` defines the refinement lattice on forms.
-//! `Canonicalize` puts a form into canonical fixed-frame representation.
-//! `Canonical` is a value carrying the guarantee that it is canonical.
+//! `Normalize` puts a form into normal fixed-frame representation.
+//! `Normalized` is a value carrying the guarantee that it is normalized.
 
 use std::borrow::Cow;
 use std::hash::Hash;
@@ -56,7 +56,7 @@ pub trait TryIntoIr<A>: Sized {
 ///
 /// For a type implementing both `Lattice` and `AsLit`, projection is total
 /// exactly on structurally ground values:
-/// `value.is_ground() == value.as_lit().is_some()`. It does not canonicalize,
+/// `value.is_ground() == value.as_lit().is_some()`. It does not normalize,
 /// apply defaults, validate domain invariants, or identify distinct canonical
 /// ground values that happen to have the same downstream numerical effect.
 pub trait AsLit {
@@ -78,9 +78,9 @@ pub trait AsLit {
 /// and `join`; both return `true` iff `self` actually changed.
 ///
 /// `matches` is the partial-order check: `pattern.matches(target)` is true
-/// iff `target` refines `pattern`, i.e. `pattern.meet(target) == canonical(target)`.
+/// iff `target` refines `pattern`, i.e. `pattern.meet(target) == normalized(target)`.
 /// It has a `meet`-derived default; impls override it only as a cheaper shortcut.
-pub trait Lattice: Canonicalize {
+pub trait Lattice: Normalize {
     /// Top of the lattice — `self` carries no value information.
     fn is_undetermined(&self) -> bool;
 
@@ -99,10 +99,10 @@ pub trait Lattice: Canonicalize {
 
     /// Partial-order check: `self` (pattern) is true on `target` iff every
     /// value `target` admits is also admitted by `self` — i.e. the meet refines
-    /// to `target`'s canonical form. Default is `meet`-derived; override only as
+    /// to `target`'s normal form. Default is `meet`-derived; override only as
     /// a cheaper shortcut that yields the same result.
     fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
+        match (self.meet(target), target.normalized()) {
             (Some(meet), Ok(target)) => meet == *target,
             _ => false,
         }
@@ -141,61 +141,56 @@ pub trait Lattice: Canonicalize {
     }
 }
 
-/// Normal (canonical) form of a graph-IR value. The per-type `canonicalize` puts a
-/// value into its one canonical form — sorted/deduped sets, singleton collapse,
+/// Normal form of a graph-IR value. The per-type `normalize` puts a
+/// value into its one normal form — sorted/deduped sets, singleton collapse,
 /// folded decidable expressions — returning `Err(Contradiction)` for an
 /// unsatisfiable value (e.g. an empty set).
 ///
 /// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
-/// tree"); semantic equality is `canonical_eq`, comparing canonical forms. The hot
-/// path is cheap — `canonical` borrows values that are already canonical.
-pub trait Canonicalize: Sized + Clone + PartialEq {
-    /// By-value canonical form (the folding lives here). Idempotent.
-    fn canonicalize(self) -> Result<Self, Contradiction>;
+/// tree"); semantic equality is [`Equiv::equiv`], comparing normal forms. The hot
+/// path is cheap — `normalized` borrows values that are already normalized.
+pub trait Normalize: Sized + Clone + PartialEq {
+    /// By-value normal form (the folding lives here). Idempotent.
+    fn normalize(self) -> Result<Self, Contradiction>;
 
-    /// By-reference canonical form: `Cow::Borrowed` when already canonical (the
-    /// fast path), else clone + `canonicalize`. `Err` = unsatisfiable. The
+    /// By-reference normal form: `Cow::Borrowed` when already normalized (the
+    /// fast path), else clone + `normalize`. `Err` = unsatisfiable. The
     /// default always clones; override to borrow the trivial variants.
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Owned(self.clone().canonicalize()?))
-    }
-
-    /// Semantic equality: equal canonical forms (two unsatisfiable values count
-    /// as equal). Structural short-circuit first, then compare canonical forms
-    /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
-    fn canonical_eq(&self, other: &Self) -> bool {
-        self == other || self.canonical() == other.canonical()
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
+        Ok(Cow::Owned(self.clone().normalize()?))
     }
 }
 
-/// Framed value equivalence for a single-factor relation payload: the value axis (`canonical_eq`)
-/// composed with the position axis (`on_permutation`). `equiv` is the frameless case; `equiv_under`
-/// reindexes `self` into `other`'s frame first, skipping the work when the payload is permutation-invariant.
-pub trait Equiv: RelationData + Canonicalize {
+/// Semantic equality of graph-IR values in their current id and participant frame.
+pub trait Equiv: Normalize {
+    /// Equal normal forms. Two unsatisfiable values count as equal.
+    /// Structural equality short-circuits normalization; otherwise the normal forms
+    /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
     fn equiv(&self, other: &Self) -> bool {
-        self.canonical_eq(other)
+        self == other || self.normalized() == other.normalized()
     }
+}
 
+/// Frame-aware equivalence for a single-factor relation payload.
+pub trait RelationEquiv: RelationData + Equiv {
+    /// Reindex a single-factor relation value into `other`'s participant frame before comparison.
     fn equiv_under(&self, other: &Self, order: &[ParticipantPosition]) -> bool {
         if self.is_permutation_invariant() {
-            self.canonical_eq(other)
+            self.equiv(other)
         } else {
             let mut probe = self.clone();
             probe.on_permutation(order);
-            probe.canonical_eq(other)
+            probe.equiv(other)
         }
     }
 }
 
-impl<T: RelationData + Canonicalize> Equiv for T {}
+impl<T: Normalize> Equiv for T {}
+impl<T: RelationData + Equiv> RelationEquiv for T {}
 
-/// Two-factor analog of [`Equiv`] for a birelation payload: `equiv_under` reindexes `self` per factor
-/// before comparing canonical forms.
-pub trait BiEquiv: BiRelationData + Canonicalize {
-    fn equiv(&self, other: &Self) -> bool {
-        self.canonical_eq(other)
-    }
-
+/// Two-factor analog of [`RelationEquiv`] for a birelation payload: `equiv_under` reindexes `self`
+/// per factor before comparing normal forms.
+pub trait BiRelationEquiv: BiRelationData + Equiv {
     fn equiv_under(
         &self,
         other: &Self,
@@ -203,27 +198,27 @@ pub trait BiEquiv: BiRelationData + Canonicalize {
         order_2: &[ParticipantPosition],
     ) -> bool {
         if self.is_permutation_invariant() {
-            self.canonical_eq(other)
+            self.equiv(other)
         } else {
             let mut probe = self.clone();
             probe.on_permutation(order_1, order_2);
-            probe.canonical_eq(other)
+            probe.equiv(other)
         }
     }
 }
 
-impl<T: BiRelationData + Canonicalize> BiEquiv for T {}
+impl<T: BiRelationData + Equiv> BiRelationEquiv for T {}
 
-/// A value carrying the guarantee that it is canonical. Built via `new` (which
-/// canonicalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore
+/// A value carrying the guarantee that it is normalized. Built via `new` (which
+/// normalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore
 /// *semantic*, so it can key a `HashMap` / `BiBTreeMap` for semantic dedup.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Canonical<T>(T);
+pub struct Normalized<T>(T);
 
-impl<T: Canonicalize> Canonical<T> {
-    /// Canonicalize `value` once; `Err` if it is unsatisfiable.
+impl<T: Normalize> Normalized<T> {
+    /// Normalize `value` once; `Err` if it is unsatisfiable.
     pub fn new(value: T) -> Result<Self, Contradiction> {
-        Ok(Self(value.canonicalize()?))
+        Ok(Self(value.normalize()?))
     }
 
     pub fn get(&self) -> &T {
@@ -243,7 +238,7 @@ pub trait EntityPatch: Sized {
     type Id: Copy + Eq + Hash + From<usize>;
     type Attributes: Clone;
     type FieldChange;
-    type Constraint: Canonicalize;
+    type Constraint: Normalize;
 
     fn modify_field(id: Self::Id, change: Self::FieldChange) -> Self;
     fn modify_constraint(

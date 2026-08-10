@@ -1,15 +1,15 @@
 //! Bond forms and updates shared across crates.
 
-use umol_graph_ir_macros::{Canonicalize, Lattice};
+use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Canonicalize, Lattice};
+use super::traits::{Equiv, Lattice};
 
 /// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct BondForm {
     pub order: NumForm,
     pub charge: NumForm,
@@ -99,7 +99,7 @@ impl BondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.canonical_eq(new))
+                .is_none_or(|old| !old.equiv(new))
             {
                 constraints.set(new.clone());
             }
@@ -110,8 +110,8 @@ impl BondForm {
             }
         }
         BondUpdate {
-            order: (!self.order.canonical_eq(&other.order)).then(|| other.order.clone()),
-            charge: (!self.charge.canonical_eq(&other.charge)).then(|| other.charge.clone()),
+            order: (!self.order.equiv(&other.order)).then(|| other.order.clone()),
+            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
             unpaired_electrons: self
                 .unpaired_electrons
                 .difference_to(&other.unpaired_electrons),
@@ -148,7 +148,7 @@ mod tests {
     use super::*;
     use crate::ir::constraint::RingScope;
     use crate::ir::error::Contradiction;
-    use crate::ir::traits::{Canonicalize, Lattice};
+    use crate::ir::traits::{Lattice, Normalize};
     use crate::ir::{BooleanForm, CisTransStereoForm};
 
     #[rustfmt::skip]
@@ -323,11 +323,11 @@ mod tests {
         BondForm { order: NumForm::lit_set(Vec::<i64>::new()), charge: NumForm::Undetermined, unpaired_electrons: UnpairedElectronsForm::default(), constraints: BondConstraintsForm::new() },
         Err(Contradiction),
     )]
-    fn test_bond_form_canonicalize(
+    fn test_bond_form_normalize(
         #[case] input: BondForm,
         #[case] expected: Result<BondForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]

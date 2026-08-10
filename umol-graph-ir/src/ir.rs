@@ -113,8 +113,8 @@ pub use stereo::{
 pub use substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
-    AsLit, BiEquiv, Canonical, Canonicalize, EntityPatch, Equiv, FromIr, IntoIr, Lattice,
-    TryFromIr, TryIntoIr,
+    AsLit, BiRelationEquiv, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized,
+    RelationEquiv, TryFromIr, TryIntoIr,
 };
 pub use validate::{
     ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,

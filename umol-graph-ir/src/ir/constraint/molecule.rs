@@ -15,7 +15,7 @@ use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
-use super::super::traits::{Canonicalize, Lattice};
+use super::super::traits::{Lattice, Normalize};
 use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
@@ -171,48 +171,48 @@ impl Constraint {
     }
 }
 
-impl Canonicalize for Constraint {
-    /// Canonicalize the inner predicate of each leaf; for `And`/`Or`, recurse,
+impl Normalize for Constraint {
+    /// Normalize the inner predicate of each leaf; for `And`/`Or`, recurse,
     /// flatten the same combinator, drop empty `And`/`Or`, then sort + dedup
     /// children by the `Constraint` order. `Not` canonicalizes its inner node.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Atom(id, c) => Self::Atom(id, c.canonicalize()?),
-            Self::Bond(id, c) => Self::Bond(id, c.canonicalize()?),
-            Self::DativeBond(id, c) => Self::DativeBond(id, c.canonicalize()?),
-            Self::AromaticSystem(id, c) => Self::AromaticSystem(id, c.canonicalize()?),
-            Self::MulticenterBond(id, c) => Self::MulticenterBond(id, c.canonicalize()?),
-            Self::NoncovalentBond(id, c) => Self::NoncovalentBond(id, c.canonicalize()?),
-            Self::StereoAtom(id, kind, c) => Self::StereoAtom(id, kind, c.canonicalize()?),
-            Self::StereoBond(id, kind, c) => Self::StereoBond(id, kind, c.canonicalize()?),
-            Self::Relational(r) => Self::Relational(r.canonicalize()?),
-            Self::Molecule(m) => Self::Molecule(m.canonicalize()?),
-            Self::And(xs) => Self::And(canonicalize_logical_constraints(xs, true)?),
-            Self::Or(xs) => Self::Or(canonicalize_logical_constraints(xs, false)?),
-            Self::Not(c) => Self::Not(Box::new((*c).canonicalize()?)),
+            Self::Atom(id, c) => Self::Atom(id, c.normalize()?),
+            Self::Bond(id, c) => Self::Bond(id, c.normalize()?),
+            Self::DativeBond(id, c) => Self::DativeBond(id, c.normalize()?),
+            Self::AromaticSystem(id, c) => Self::AromaticSystem(id, c.normalize()?),
+            Self::MulticenterBond(id, c) => Self::MulticenterBond(id, c.normalize()?),
+            Self::NoncovalentBond(id, c) => Self::NoncovalentBond(id, c.normalize()?),
+            Self::StereoAtom(id, kind, c) => Self::StereoAtom(id, kind, c.normalize()?),
+            Self::StereoBond(id, kind, c) => Self::StereoBond(id, kind, c.normalize()?),
+            Self::Relational(r) => Self::Relational(r.normalize()?),
+            Self::Molecule(m) => Self::Molecule(m.normalize()?),
+            Self::And(xs) => Self::And(normalize_logical_constraints(xs, true)?),
+            Self::Or(xs) => Self::Or(normalize_logical_constraints(xs, false)?),
+            Self::Not(c) => Self::Not(Box::new((*c).normalize()?)),
         })
     }
 }
 
-impl Canonicalize for Constraints {
+impl Normalize for Constraints {
     /// The store is an implicit conjunction, so it canonicalizes like an `And`:
     /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
-        Ok(Self(canonicalize_logical_constraints(self.0, true)?))
+    fn normalize(self) -> Result<Self, Contradiction> {
+        Ok(Self(normalize_logical_constraints(self.0, true)?))
     }
 }
 
-/// Canonicalize each child, splice same-combinator children (flatten), drop
+/// Normalize each child, splice same-combinator children (flatten), drop
 /// empty `And`/`Or`, then sort + dedup. `is_and` selects which combinator is the
 /// parent: `true` flattens nested `And` (and the conjunctive top-level store),
 /// `false` flattens nested `Or`.
-fn canonicalize_logical_constraints(
+fn normalize_logical_constraints(
     constraints: Vec<Constraint>,
     is_and: bool,
 ) -> Result<Vec<Constraint>, Contradiction> {
     let mut out = Vec::new();
     for child in constraints {
-        match child.canonicalize()? {
+        match child.normalize()? {
             Constraint::And(inner) if is_and => out.extend(inner),
             Constraint::Or(inner) if !is_and => out.extend(inner),
             Constraint::And(inner) | Constraint::Or(inner) if inner.is_empty() => {}
@@ -430,17 +430,17 @@ impl MoleculeConstraint {
     }
 }
 
-impl Canonicalize for MoleculeConstraint {
-    /// Canonicalize the value payload (`sum` / `unpaired_electrons`) and sort
+impl Normalize for MoleculeConstraint {
+    /// Normalize the value payload (`sum` / `unpaired_electrons`) and sort
     /// each atom/bond subset; refs are otherwise unchanged.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atoms.map(|mut v| {
                     v.sort_unstable();
                     v
                 }),
-                sum: sum.canonicalize()?,
+                sum: sum.normalize()?,
             },
             Self::UnpairedElectronCoupling {
                 atoms,
@@ -450,14 +450,14 @@ impl Canonicalize for MoleculeConstraint {
                     v.sort_unstable();
                     v
                 }),
-                unpaired_electrons: unpaired_electrons.canonicalize()?,
+                unpaired_electrons: unpaired_electrons.normalize()?,
             },
             Self::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: bonds.map(|mut v| {
                     v.sort_unstable();
                     v
                 }),
-                sum: sum.canonicalize()?,
+                sum: sum.normalize()?,
             },
             Self::Connected { atoms } => Self::Connected {
                 atoms: atoms.map(|mut v| {
@@ -641,11 +641,11 @@ mod tests {
         Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())))]),
         Err(Contradiction),
     )]
-    fn test_constraint_canonicalize(
+    fn test_constraint_normalize(
         #[case] input: Constraint,
         #[case] expected: Result<Constraint, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1085,11 +1085,11 @@ mod tests {
         Constraints::from(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())))]),
         Err(Contradiction),
     )]
-    fn test_constraints_canonicalize(
+    fn test_constraints_normalize(
         #[case] input: Constraints,
         #[case] expected: Result<Constraints, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1131,17 +1131,17 @@ mod tests {
         MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::lit_set(Vec::<i64>::new()) },
         Err(Contradiction),
     )]
-    fn test_molecule_constraint_canonicalize(
+    fn test_molecule_constraint_normalize(
         #[case] input: MoleculeConstraint,
         #[case] expected: Result<MoleculeConstraint, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]
     #[case::connected_none(MoleculeConstraint::Connected { atoms: None })]
-    fn test_molecule_constraint_canonicalize_identity(#[case] input: MoleculeConstraint) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_molecule_constraint_normalize_identity(#[case] input: MoleculeConstraint) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]

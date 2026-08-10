@@ -9,10 +9,10 @@
 use proptest::prelude::*;
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
-    BondFieldChange, BondId, Canonicalize, Constraint, ConstraintDelta, DativeBondDelta,
-    DativeBondId, Delta, Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta,
-    MulticenterBondId, NoncovalentBondDelta, NoncovalentBondId, NumForm, StereoAtomDelta,
-    StereoAtomId, StereoBondDelta, StereoBondId,
+    BondFieldChange, BondId, Constraint, ConstraintDelta, DativeBondDelta, DativeBondId, Delta,
+    Deltas, EntityPatch, Equiv, MoleculeConstraint, MulticenterBondDelta, MulticenterBondId,
+    NoncovalentBondDelta, NoncovalentBondId, Normalize, NumForm, StereoAtomDelta, StereoAtomId,
+    StereoBondDelta, StereoBondId,
 };
 
 use crate::strategies::*;
@@ -246,13 +246,13 @@ fn deltas_strategy() -> impl Strategy<Value = Deltas> {
 }
 
 proptest! {
-    /// Canonicalize is idempotent: re-canonicalizing a canonical `Deltas` is a fixpoint.
+    /// Normalize is idempotent: normalizing a normalized `Deltas` is a fixpoint.
     /// This is the confluence check — the normal form is unique, independent of the
     /// order the deltas arrived in.
     #[test]
-    fn test_deltas_canonicalize_idempotent(deltas in deltas_strategy()) {
-        if let Ok(once) = deltas.canonicalize() {
-            prop_assert_eq!(once.clone().canonicalize().unwrap(), once);
+    fn test_deltas_normalize_idempotent(deltas in deltas_strategy()) {
+        if let Ok(once) = deltas.normalize() {
+            prop_assert_eq!(once.clone().normalize().unwrap(), once);
         }
     }
 
@@ -278,11 +278,11 @@ proptest! {
         prop_assert_eq!(apply_atom_diff(atom.clone(), diff), atom);
     }
 
-    /// Applying the directed atom update recovers the target up to canonical equality.
+    /// Applying the directed atom update recovers the target up to normalized equivalence.
     #[test]
     fn test_atom_form_difference_to(lhs in atom_form_strategy(), rhs in atom_form_strategy()) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -309,11 +309,11 @@ proptest! {
         prop_assert_eq!(apply_bond_diff(bond.clone(), diff), bond);
     }
 
-    /// Applying the directed bond update recovers the target up to canonical equality.
+    /// Applying the directed bond update recovers the target up to normalized equivalence.
     #[test]
     fn test_bond_form_difference_to(lhs in bond_form_strategy(), rhs in bond_form_strategy()) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -338,7 +338,7 @@ proptest! {
         rhs in dative_bond_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -363,7 +363,7 @@ proptest! {
         rhs in aromatic_system_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -388,7 +388,7 @@ proptest! {
         rhs in multicenter_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -413,7 +413,7 @@ proptest! {
         rhs in noncovalent_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -422,7 +422,7 @@ proptest! {
         rhs in stereo_atom_form_strategy(),
     ) {
         let diff = StereoAtomDelta::diff(StereoAtomId(0), &lhs, &rhs);
-        prop_assert!(apply_stereo_atom_diff(lhs, diff).canonical_eq(&rhs));
+        prop_assert!(apply_stereo_atom_diff(lhs, diff).equiv(&rhs));
     }
 
     #[test]
@@ -438,7 +438,7 @@ proptest! {
         rhs in stereo_atom_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 
     #[test]
@@ -447,7 +447,7 @@ proptest! {
         rhs in stereo_bond_form_strategy(),
     ) {
         let diff = StereoBondDelta::diff(StereoBondId(0), &lhs, &rhs);
-        prop_assert!(apply_stereo_bond_diff(lhs, diff).canonical_eq(&rhs));
+        prop_assert!(apply_stereo_bond_diff(lhs, diff).equiv(&rhs));
     }
 
     #[test]
@@ -463,6 +463,6 @@ proptest! {
         rhs in stereo_bond_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).canonical_eq(&rhs));
+        prop_assert!(lhs.update(&update).equiv(&rhs));
     }
 }

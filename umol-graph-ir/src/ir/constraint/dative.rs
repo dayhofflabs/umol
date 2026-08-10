@@ -10,7 +10,7 @@ use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::{Canonicalize, Lattice};
+use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Dative-bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -59,12 +59,12 @@ impl DativeBondConstraintForm {
     }
 }
 
-impl Canonicalize for DativeBondConstraintForm {
-    /// Canonicalize the inner value; kind and sub-key are preserved.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for DativeBondConstraintForm {
+    /// Normalize the inner value; kind and sub-key are preserved.
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Aromatic(b) => Self::Aromatic(b.canonicalize()?),
-            Self::RingMembership(m) => Self::RingMembership(m.canonicalize()?),
+            Self::Aromatic(b) => Self::Aromatic(b.normalize()?),
+            Self::RingMembership(m) => Self::RingMembership(m.normalize()?),
         })
     }
 }
@@ -193,7 +193,7 @@ impl DativeBondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `canonical_eq` `old` (both absent
+    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -215,7 +215,7 @@ impl DativeBondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.canonical_eq(old),
+            (Some(current), Some(old)) => current.equiv(old),
             _ => false,
         };
         if !matches {
@@ -275,15 +275,15 @@ impl DativeBondConstraintsForm {
     }
 }
 
-impl Canonicalize for DativeBondConstraintsForm {
-    /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
+impl Normalize for DativeBondConstraintsForm {
+    /// Normalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         let mut entries = self
             .0
             .into_iter()
-            .map(Canonicalize::canonicalize)
+            .map(Normalize::normalize)
             .collect::<Result<Vec<DativeBondConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
@@ -473,11 +473,11 @@ mod tests {
     #[case::empty_litset_contradiction(
         DativeBondConstraintForm::RingMembership(RingMembershipForm::new(RingScope::All, NumForm::lit_set(Vec::<i64>::new()))),
         Err(Contradiction))]
-    fn test_dative_bond_constraint_form_canonicalize(
+    fn test_dative_bond_constraint_form_normalize(
         #[case] constraint: DativeBondConstraintForm,
         #[case] expected: Result<DativeBondConstraintForm, Contradiction>,
     ) {
-        assert_eq!(constraint.canonicalize(), expected);
+        assert_eq!(constraint.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -743,16 +743,16 @@ mod tests {
             DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::Undetermined),
         ]),
         Ok(DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))])))]
-    #[case::canonicalizes_values(
+    #[case::normalizes_values(
         DativeBondConstraintsForm::from_iter([
             DativeBondConstraintForm::ring_membership(RingScope::All, NumForm::lit_set([2])),
         ]),
         Ok(DativeBondConstraintsForm::from_iter([DativeBondConstraintForm::ring_membership(RingScope::All, 2)])))]
-    fn test_dative_bond_constraints_form_canonicalize(
+    fn test_dative_bond_constraints_form_normalize(
         #[case] constraints: DativeBondConstraintsForm,
         #[case] expected: Result<DativeBondConstraintsForm, Contradiction>,
     ) {
-        assert_eq!(constraints.canonicalize(), expected);
+        assert_eq!(constraints.normalize(), expected);
     }
 
     #[rustfmt::skip]

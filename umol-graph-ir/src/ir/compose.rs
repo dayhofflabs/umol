@@ -1,6 +1,6 @@
 //! Sequential reaction composition (A;B): the reaction whose application equals applying A then
 //! B. Per overlap of A's product `R_A` with B's reactant `L_B`, the composite is built in one
-//! id space and `canonicalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
+//! id space and `normalize`d; overlaps with no `B.apply(A.apply(H))` witness (the DPO gluing
 //! conditions) are rejected.
 
 use std::ops::ControlFlow;
@@ -12,7 +12,7 @@ use umol_graph_core::{
 
 use super::id::{AtomId, BondId};
 use super::reaction::Reaction;
-use super::traits::{Canonicalize, Lattice};
+use super::traits::{Lattice, Normalize};
 
 impl Reaction {
     /// Sequential composites of `self` (A) then `other` (B): one per admissible overlap of A's
@@ -50,7 +50,7 @@ fn compose_overlap(
     )?;
     Some(Reaction::new(
         composite.lhs,
-        composite.deltas.canonicalize().ok()?,
+        composite.deltas.normalize().ok()?,
     ))
 }
 

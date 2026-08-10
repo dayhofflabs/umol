@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::{Canonicalize, Lattice};
+use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -49,11 +49,11 @@ impl NoncovalentBondConstraintForm {
     }
 }
 
-impl Canonicalize for NoncovalentBondConstraintForm {
-    /// Canonicalize the inner value; the kind is preserved.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for NoncovalentBondConstraintForm {
+    /// Normalize the inner value; the kind is preserved.
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
-            Self::Intramolecular(b) => Self::Intramolecular(b.canonicalize()?),
+            Self::Intramolecular(b) => Self::Intramolecular(b.normalize()?),
         })
     }
 }
@@ -151,7 +151,7 @@ impl NoncovalentBondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `canonical_eq` `old` (both absent
+    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -173,7 +173,7 @@ impl NoncovalentBondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.canonical_eq(old),
+            (Some(current), Some(old)) => current.equiv(old),
             _ => false,
         };
         if !matches {
@@ -238,15 +238,15 @@ impl NoncovalentBondConstraintsForm {
     }
 }
 
-impl Canonicalize for NoncovalentBondConstraintsForm {
-    /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
+impl Normalize for NoncovalentBondConstraintsForm {
+    /// Normalize each value and drop the vacuous ones. Keys are already unique and
     /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
     /// canonicalizing a value never changes its `key()`.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         let mut entries = self
             .0
             .into_iter()
-            .map(Canonicalize::canonicalize)
+            .map(Normalize::normalize)
             .collect::<Result<Vec<NoncovalentBondConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
@@ -432,11 +432,11 @@ mod tests {
         NoncovalentBondConstraintForm::intramolecular(true),
         Ok(NoncovalentBondConstraintForm::intramolecular(true))
     )]
-    fn test_noncovalent_bond_constraint_form_canonicalize(
+    fn test_noncovalent_bond_constraint_form_normalize(
         #[case] constraint: NoncovalentBondConstraintForm,
         #[case] expected: Result<NoncovalentBondConstraintForm, Contradiction>,
     ) {
-        assert_eq!(constraint.canonicalize(), expected);
+        assert_eq!(constraint.normalize(), expected);
     }
 
     #[rstest]
@@ -680,11 +680,11 @@ mod tests {
     #[case::keeps_lit(
         NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(true)),
         Ok(NoncovalentBondConstraintsForm::from(NoncovalentBondConstraintForm::intramolecular(true))))]
-    fn test_noncovalent_bond_constraints_form_canonicalize(
+    fn test_noncovalent_bond_constraints_form_normalize(
         #[case] constraints: NoncovalentBondConstraintsForm,
         #[case] expected: Result<NoncovalentBondConstraintsForm, Contradiction>,
     ) {
-        assert_eq!(constraints.canonicalize(), expected);
+        assert_eq!(constraints.normalize(), expected);
     }
 
     #[rustfmt::skip]

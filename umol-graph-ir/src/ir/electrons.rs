@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use umol_graph_core::ParticipantPosition;
 
 use super::error::{Contradiction, NoJoin};
-use super::traits::{AsLit, Canonicalize, Lattice};
+use super::traits::{AsLit, Lattice, Normalize};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
 /// concrete vector. The vector is positional (cell = member atom), so it is
@@ -49,13 +49,13 @@ impl From<Vec<i64>> for ElectronCountsForm {
     }
 }
 
-impl Canonicalize for ElectronCountsForm {
+impl Normalize for ElectronCountsForm {
     /// Positional vector — both variants are already canonical (no sort/dedup).
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }
 
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+    fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         Ok(Cow::Borrowed(self))
     }
 }
@@ -153,8 +153,8 @@ mod tests {
     #[rstest]
     #[case::undetermined(ElectronCountsForm::Undetermined)]
     #[case::lit(ElectronCountsForm::Lit(vec![1, 1, 1]))]
-    fn test_electron_counts_form_canonicalize_identity(#[case] input: ElectronCountsForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_electron_counts_form_normalize_identity(#[case] input: ElectronCountsForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]

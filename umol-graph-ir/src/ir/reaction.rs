@@ -42,7 +42,7 @@ use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
-use super::traits::Canonicalize;
+use super::traits::Normalize;
 use super::validate::{
     DpoValidator, EntityStructureValidator, ReactionIntegrityContradiction,
     ReactionIntegrityValidator,
@@ -362,7 +362,7 @@ impl Reaction {
             }
         }
 
-        let deltas = self.deltas.clone().canonicalize()?;
+        let deltas = self.deltas.clone().normalize()?;
         self.apply_at_canonical(host, correspondence, deltas)
     }
 
@@ -1404,7 +1404,7 @@ impl Reaction {
         let deltas = self
             .deltas
             .clone()
-            .canonicalize()
+            .normalize()
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
 
         let reaction_integrity = match ReactionIntegrityValidator.validate(&self.lhs, &deltas) {
@@ -1604,15 +1604,15 @@ fn reframe_stereo(
     Ok(())
 }
 
-impl Canonicalize for Reaction {
+impl Normalize for Reaction {
     /// Value-level in a fixed atom id space: `deltas` are canonicalized;
     /// `lhs` is passed through (`Molecule` has no whole-molecule canonical form — its
     /// equality is structural). Equality up to atom renumbering is a separate `umol-graph`
     /// operation.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self {
             lhs: self.lhs,
-            deltas: self.deltas.canonicalize()?,
+            deltas: self.deltas.normalize()?,
         })
     }
 }
@@ -1693,14 +1693,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_canonicalize() {
+    fn test_reaction_normalize() {
         // The delta chain fuses; the lhs is passed through unchanged.
         let reaction = Reaction::new(
             Molecule::default(),
             Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 2)]),
         );
         assert_eq!(
-            reaction.canonicalize().unwrap(),
+            reaction.normalize().unwrap(),
             Reaction::new(
                 Molecule::default(),
                 Deltas::from_iter([charge_set(0, 0, 2)])

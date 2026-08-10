@@ -33,7 +33,7 @@ use super::super::id::{
 };
 use super::super::ligand::StereoLigand;
 use super::super::remap::{IdCompaction, UndoCompaction};
-use super::super::traits::Canonicalize;
+use super::super::traits::Equiv;
 use super::MoleculeEditor;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -1511,37 +1511,37 @@ impl MoleculeEditor {
         let atom = self.atom_mut(id);
         match change {
             AtomFieldChange::Element { old, new } => {
-                if !atom.attributes.element.canonical_eq(&old) {
+                if !atom.attributes.element.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.element = new;
             }
             AtomFieldChange::IsotopeMass { old, new } => {
-                if !atom.attributes.isotope_mass.canonical_eq(&old) {
+                if !atom.attributes.isotope_mass.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.isotope_mass = new;
             }
             AtomFieldChange::Charge { old, new } => {
-                if !atom.attributes.charge.canonical_eq(&old) {
+                if !atom.attributes.charge.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.charge = new;
             }
             AtomFieldChange::ImplicitHydrogens { old, new } => {
-                if !atom.attributes.implicit_hydrogens.canonical_eq(&old) {
+                if !atom.attributes.implicit_hydrogens.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.implicit_hydrogens = new;
             }
             AtomFieldChange::LonePairs { old, new } => {
-                if !atom.attributes.lone_pairs.canonical_eq(&old) {
+                if !atom.attributes.lone_pairs.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.lone_pairs = new;
             }
             AtomFieldChange::UnpairedElectrons { old, new } => {
-                if !atom.attributes.unpaired_electrons.canonical_eq(&old) {
+                if !atom.attributes.unpaired_electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.unpaired_electrons = new;
@@ -1558,19 +1558,19 @@ impl MoleculeEditor {
         let bond = self.bond_mut(id);
         match change {
             BondFieldChange::Order { old, new } => {
-                if !bond.attributes.order.canonical_eq(&old) {
+                if !bond.attributes.order.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.order = new;
             }
             BondFieldChange::Charge { old, new } => {
-                if !bond.attributes.charge.canonical_eq(&old) {
+                if !bond.attributes.charge.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.charge = new;
             }
             BondFieldChange::UnpairedElectrons { old, new } => {
-                if !bond.attributes.unpaired_electrons.canonical_eq(&old) {
+                if !bond.attributes.unpaired_electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.unpaired_electrons = new;
@@ -1587,7 +1587,7 @@ impl MoleculeEditor {
         let dat = self.dative_bond_mut(id);
         match change {
             DativeBondFieldChange::Order { old, new } => {
-                if !dat.attributes.order.canonical_eq(&old) {
+                if !dat.attributes.order.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 dat.attributes.order = new;
@@ -1604,19 +1604,19 @@ impl MoleculeEditor {
         let ar = self.aromatic_system_mut(id);
         match change {
             AromaticSystemFieldChange::Electrons { old, new } => {
-                if !ar.attributes.electrons.canonical_eq(&old) {
+                if !ar.attributes.electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.electrons = new;
             }
             AromaticSystemFieldChange::Charge { old, new } => {
-                if !ar.attributes.charge.canonical_eq(&old) {
+                if !ar.attributes.charge.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.charge = new;
             }
             AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
-                if !ar.attributes.unpaired_electrons.canonical_eq(&old) {
+                if !ar.attributes.unpaired_electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.unpaired_electrons = new;
@@ -1633,19 +1633,19 @@ impl MoleculeEditor {
         let mc = self.multicenter_bond_mut(id);
         match change {
             MulticenterBondFieldChange::Electrons { old, new } => {
-                if !mc.attributes.electrons.canonical_eq(&old) {
+                if !mc.attributes.electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.electrons = new;
             }
             MulticenterBondFieldChange::Charge { old, new } => {
-                if !mc.attributes.charge.canonical_eq(&old) {
+                if !mc.attributes.charge.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.charge = new;
             }
             MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
-                if !mc.attributes.unpaired_electrons.canonical_eq(&old) {
+                if !mc.attributes.unpaired_electrons.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.unpaired_electrons = new;
@@ -1662,7 +1662,7 @@ impl MoleculeEditor {
         let nc = self.noncovalent_bond_mut(id);
         match change {
             NoncovalentBondFieldChange::Kind { old, new } => {
-                if !nc.attributes.kind.canonical_eq(&old) {
+                if !nc.attributes.kind.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 nc.attributes.kind = new;
@@ -1679,7 +1679,7 @@ impl MoleculeEditor {
         let sa = self.stereo_atom_mut(id);
         match change {
             StereoAtomFieldChange::Configuration { old, new } => {
-                if !sa.attributes.configuration.canonical_eq(&old) {
+                if !sa.attributes.configuration.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sa.attributes.configuration = new;
@@ -1696,7 +1696,7 @@ impl MoleculeEditor {
         let sb = self.stereo_bond_mut(id);
         match change {
             StereoBondFieldChange::Configuration { old, new } => {
-                if !sb.attributes.configuration.canonical_eq(&old) {
+                if !sb.attributes.configuration.equiv(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sb.attributes.configuration = new;

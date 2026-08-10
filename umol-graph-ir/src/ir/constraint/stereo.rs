@@ -16,7 +16,7 @@ use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::{Stereogenicity, Topicity};
-use super::super::traits::{AsLit, Canonicalize, Lattice};
+use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
 
 /// Stereo atom and bond constraints.
 macro_rules! stereo_constraint {
@@ -81,14 +81,14 @@ macro_rules! stereo_constraint {
             }
         }
 
-        impl Canonicalize for $constraint {
-            /// Canonicalize each value in its own fiber; the key is preserved.
-            fn canonicalize(self) -> Result<Self, Contradiction> {
+        impl Normalize for $constraint {
+            /// Normalize each value in its own fiber; the key is preserved.
+            fn normalize(self) -> Result<Self, Contradiction> {
                 Ok(match self {
-                    Self::LigandSymmetry(ls) => Self::LigandSymmetry(ls.canonicalize()?),
-                    Self::Fluxionality(f) => Self::Fluxionality(f.canonicalize()?),
-                    Self::Topicity(t) => Self::Topicity(t.canonicalize()?),
-                    Self::Stereogenicity(g) => Self::Stereogenicity(g.canonicalize()?),
+                    Self::LigandSymmetry(ls) => Self::LigandSymmetry(ls.normalize()?),
+                    Self::Fluxionality(f) => Self::Fluxionality(f.normalize()?),
+                    Self::Topicity(t) => Self::Topicity(t.normalize()?),
+                    Self::Stereogenicity(g) => Self::Stereogenicity(g.normalize()?),
                 })
             }
         }
@@ -268,7 +268,7 @@ macro_rules! stereo_constraint {
                 }
             }
 
-            /// Transactional write at one key: verify the current value `canonical_eq` `old` (both
+            /// Transactional write at one key: verify the current value `equiv` `old` (both
             /// absent matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address
             /// the same key. `Err` on a key or old-value mismatch; the store is unchanged when it
             /// errors. The delta apply/undo primitive.
@@ -290,7 +290,7 @@ macro_rules! stereo_constraint {
                 };
                 let matches = match (self.get(key), old.as_ref()) {
                     (None, None) => true,
-                    (Some(current), Some(old)) => current.canonical_eq(old),
+                    (Some(current), Some(old)) => current.equiv(old),
                     _ => false,
                 };
                 if !matches {
@@ -353,15 +353,15 @@ macro_rules! stereo_constraint {
             }
         }
 
-        impl Canonicalize for $constraints {
-            /// Canonicalize each value and drop the vacuous ones. Keys are already unique and
+        impl Normalize for $constraints {
+            /// Normalize each value and drop the vacuous ones. Keys are already unique and
             /// key-sorted (every write goes through `set`), so no dedup or re-sort is needed —
             /// canonicalizing a value never changes its `key()`.
-            fn canonicalize(self) -> Result<Self, Contradiction> {
+            fn normalize(self) -> Result<Self, Contradiction> {
                 let mut entries = self
                     .entries
                     .into_iter()
-                    .map(Canonicalize::canonicalize)
+                    .map(Normalize::normalize)
                     .collect::<Result<SmallVec<[$constraint; 2]>, _>>()?;
                 entries.retain(|c| !c.is_undetermined());
                 Ok(Self { entries })
@@ -618,11 +618,11 @@ macro_rules! relation_form {
             }
         }
 
-        impl Canonicalize for $name {
+        impl Normalize for $name {
             /// Finite-domain canonical form over `to_set`: empty → `Err`, full →
             /// `Undetermined`, singleton → `Lit`, else the smaller of positive /
             /// complement (tiebreak positive).
-            fn canonicalize(self) -> Result<Self, Contradiction> {
+            fn normalize(self) -> Result<Self, Contradiction> {
                 let set = self.to_set();
                 let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
                     .iter()
@@ -644,10 +644,10 @@ macro_rules! relation_form {
                 }
             }
 
-            fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+            fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
                 match self {
                     Self::Undetermined | Self::Lit(_) => Ok(Cow::Borrowed(self)),
-                    _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
+                    _ => Ok(Cow::Owned(self.clone().normalize()?)),
                 }
             }
         }
@@ -661,7 +661,7 @@ macro_rules! relation_form {
                 matches!(self, Self::Lit(_))
             }
 
-            /// Intersection of the admissible sets, folded by `canonicalize` (∅ → `None`).
+            /// Intersection of the admissible sets, folded by `normalize` (∅ → `None`).
             fn meet(&self, other: &Self) -> Option<Self> {
                 Self::LitSet(
                     self.to_set()
@@ -669,14 +669,14 @@ macro_rules! relation_form {
                         .copied()
                         .collect(),
                 )
-                .canonicalize()
+                .normalize()
                 .ok()
             }
 
             fn join(&self, other: &Self) -> Result<Self, NoJoin> {
                 Ok(
                     Self::LitSet(self.to_set().union(&other.to_set()).copied().collect())
-                        .canonicalize()
+                        .normalize()
                         .unwrap_or(Self::Undetermined),
                 )
             }
@@ -710,11 +710,11 @@ pub struct LigandSymmetryForm {
     pub invariant: BooleanForm,
 }
 
-impl Canonicalize for LigandSymmetryForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for LigandSymmetryForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self {
             permutation: self.permutation,
-            invariant: self.invariant.canonicalize()?,
+            invariant: self.invariant.normalize()?,
         })
     }
 }
@@ -768,11 +768,11 @@ pub struct FluxionalityForm {
     pub active: BooleanForm,
 }
 
-impl Canonicalize for FluxionalityForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for FluxionalityForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self {
             permutation: self.permutation,
-            active: self.active.canonicalize()?,
+            active: self.active.normalize()?,
         })
     }
 }
@@ -825,11 +825,11 @@ pub struct TopicityForm {
     pub relation: TopicityRelationForm,
 }
 
-impl Canonicalize for TopicityForm {
-    fn canonicalize(self) -> Result<Self, Contradiction> {
+impl Normalize for TopicityForm {
+    fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self {
             pair: self.pair,
-            relation: self.relation.canonicalize()?,
+            relation: self.relation.normalize()?,
         })
     }
 }
@@ -973,19 +973,19 @@ mod tests {
     #[case::notset_complement_to_lit(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationForm::Lit(Topicity::Diastereotopic)))]
     #[case::empty_notset_to_undetermined(TopicityRelationForm::NotSet(BTreeSet::new()), Ok(TopicityRelationForm::Undetermined))]
     #[case::full_notset_err(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Err(Contradiction))]
-    fn test_topicity_relation_form_canonicalize(
+    fn test_topicity_relation_form_normalize(
         #[case] input: TopicityRelationForm,
         #[case] expected: Result<TopicityRelationForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rstest]
     #[case::undetermined(TopicityRelationForm::Undetermined)]
     #[case::lit(TopicityRelationForm::Lit(Topicity::Homotopic))]
     #[case::notset(TopicityRelationForm::NotSet(BTreeSet::from([Topicity::Diastereotopic])))]
-    fn test_topicity_relation_form_canonicalize_identity(#[case] input: TopicityRelationForm) {
-        assert_eq!(input.clone().canonicalize(), Ok(input));
+    fn test_topicity_relation_form_normalize_identity(#[case] input: TopicityRelationForm) {
+        assert_eq!(input.clone().normalize(), Ok(input));
     }
 
     #[rustfmt::skip]
@@ -1055,7 +1055,7 @@ mod tests {
     }
 
     // `StereogenicityForm` is the second `relation_form!` instantiation; the macro's
-    // full lattice/canonicalize logic is covered by the `TopicityRelationForm` tests
+    // full lattice/normalize logic is covered by the `TopicityRelationForm` tests
     // above. These confirm the instantiation over the `Stereogenicity` domain.
     #[rustfmt::skip]
     #[rstest]
@@ -1072,11 +1072,11 @@ mod tests {
     #[case::singleton_to_lit(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), Ok(StereogenicityForm::Lit(Stereogenicity::Stereogenic)))]
     #[case::full_to_undetermined(StereogenicityForm::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), Ok(StereogenicityForm::Undetermined))]
     #[case::empty_err(StereogenicityForm::LitSet(BTreeSet::new()), Err(Contradiction))]
-    fn test_stereogenicity_form_canonicalize(
+    fn test_stereogenicity_form_normalize(
         #[case] input: StereogenicityForm,
         #[case] expected: Result<StereogenicityForm, Contradiction>,
     ) {
-        assert_eq!(input.canonicalize(), expected);
+        assert_eq!(input.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1315,11 +1315,11 @@ mod tests {
     #[case::fluxionality_identity(
         StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(true) }),
         Ok(StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::identity(4)), active: BooleanForm::Lit(true) })))]
-    fn test_stereo_atom_constraint_form_canonicalize(
+    fn test_stereo_atom_constraint_form_normalize(
         #[case] c: StereoAtomConstraintForm,
         #[case] expected: Result<StereoAtomConstraintForm, Contradiction>,
     ) {
-        assert_eq!(c.canonicalize(), expected);
+        assert_eq!(c.normalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1610,16 +1610,16 @@ mod tests {
             StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
         ]),
         Ok(StereoAtomConstraintsForm::from_iter([StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))])))]
-    #[case::canonicalizes_values(
+    #[case::normalizes_values(
         StereoAtomConstraintsForm::from_iter([
             StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::LitSet(BTreeSet::from([Topicity::Homotopic])) }),
         ]),
         Ok(StereoAtomConstraintsForm::from_iter([StereoAtomConstraintForm::Topicity(TopicityForm { pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)), relation: TopicityRelationForm::Lit(Topicity::Homotopic) })])))]
-    fn test_stereo_atom_constraints_form_canonicalize(
+    fn test_stereo_atom_constraints_form_normalize(
         #[case] constraints: StereoAtomConstraintsForm,
         #[case] expected: Result<StereoAtomConstraintsForm, Contradiction>,
     ) {
-        assert_eq!(constraints.canonicalize(), expected);
+        assert_eq!(constraints.normalize(), expected);
     }
 
     #[rustfmt::skip]

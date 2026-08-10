@@ -36,7 +36,7 @@ use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::{IdCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
-use super::super::traits::{BiEquiv, Equiv};
+use super::super::traits::{BiRelationEquiv, RelationEquiv};
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
     BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
