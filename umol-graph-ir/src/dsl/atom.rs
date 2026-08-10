@@ -102,20 +102,20 @@ impl ToEdn for AtomDsl {
 }
 
 impl FromIr<AtomForm> for AtomDsl {
-    type Ctx = AtomDefaults;
+    type Context = AtomDefaults;
 
-    fn from_ir(form: &AtomForm, cfg: &Self::Ctx) -> Self {
+    fn from_ir(form: &AtomForm, context: &Self::Context) -> Self {
         let mut out = form.clone();
-        lower_atom(&mut out, cfg);
+        lower_atom(&mut out, context);
         AtomDsl(out)
     }
 }
 
 impl IntoIr<AtomForm> for AtomDsl {
-    type Ctx = AtomDefaults;
+    type Context = AtomDefaults;
 
-    fn into_ir(mut self, cfg: &Self::Ctx) -> AtomForm {
-        raise_atom(&mut self.0, cfg);
+    fn into_ir(mut self, context: &Self::Context) -> AtomForm {
+        raise_atom(&mut self.0, context);
         self.0
     }
 }
@@ -198,17 +198,17 @@ impl AtomUpdateDsl {
 }
 
 impl FromIr<AtomUpdate> for AtomUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &AtomUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &AtomUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<AtomUpdate> for AtomUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> AtomUpdate {
+    fn into_ir(self, _context: &Self::Context) -> AtomUpdate {
         self.0
     }
 }
@@ -1072,17 +1072,17 @@ impl ToEdn for AromaticValenceDsl {
 }
 
 impl FromIr<AromaticValenceForm> for AromaticValenceDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &AromaticValenceForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &AromaticValenceForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<AromaticValenceForm> for AromaticValenceDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> AromaticValenceForm {
+    fn into_ir(self, _context: &Self::Context) -> AromaticValenceForm {
         self.0
     }
 }
@@ -1146,17 +1146,17 @@ impl ToEdn for MulticenterValenceDsl {
 }
 
 impl FromIr<MulticenterValenceForm> for MulticenterValenceDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &MulticenterValenceForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &MulticenterValenceForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<MulticenterValenceForm> for MulticenterValenceDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> MulticenterValenceForm {
+    fn into_ir(self, _context: &Self::Context) -> MulticenterValenceForm {
         self.0
     }
 }
@@ -1277,17 +1277,17 @@ impl ToEdn for AtomConstraintDsl {
 }
 
 impl FromIr<AtomConstraintForm> for AtomConstraintDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &AtomConstraintForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &AtomConstraintForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<AtomConstraintForm> for AtomConstraintDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> AtomConstraintForm {
+    fn into_ir(self, _context: &Self::Context) -> AtomConstraintForm {
         self.0
     }
 }

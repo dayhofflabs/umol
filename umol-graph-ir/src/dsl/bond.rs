@@ -151,20 +151,20 @@ fn bond_keyword_for(form: &BondForm) -> Option<&'static str> {
 }
 
 impl FromIr<BondForm> for BondDsl {
-    type Ctx = BondDefaults;
+    type Context = BondDefaults;
 
-    fn from_ir(form: &BondForm, cfg: &Self::Ctx) -> Self {
+    fn from_ir(form: &BondForm, context: &Self::Context) -> Self {
         let mut out = form.clone();
-        lower_bond(&mut out, cfg);
+        lower_bond(&mut out, context);
         BondDsl(out)
     }
 }
 
 impl IntoIr<BondForm> for BondDsl {
-    type Ctx = BondDefaults;
+    type Context = BondDefaults;
 
-    fn into_ir(mut self, cfg: &Self::Ctx) -> BondForm {
-        raise_bond(&mut self.0, cfg);
+    fn into_ir(mut self, context: &Self::Context) -> BondForm {
+        raise_bond(&mut self.0, context);
         self.0
     }
 }
@@ -228,17 +228,17 @@ impl BondUpdateDsl {
 }
 
 impl FromIr<BondUpdate> for BondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &BondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &BondUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<BondUpdate> for BondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> BondUpdate {
+    fn into_ir(self, _context: &Self::Context) -> BondUpdate {
         self.0
     }
 }
@@ -569,17 +569,17 @@ fn lower_bond_constraints(constraints: &mut BondConstraintsForm, cfg: &BondDefau
 pub struct BondConstraintDsl(pub BondConstraintForm);
 
 impl FromIr<BondConstraintForm> for BondConstraintDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &BondConstraintForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &BondConstraintForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<BondConstraintForm> for BondConstraintDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> BondConstraintForm {
+    fn into_ir(self, _context: &Self::Context) -> BondConstraintForm {
         self.0
     }
 }

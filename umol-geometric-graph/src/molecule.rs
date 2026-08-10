@@ -50,13 +50,13 @@ impl PerceivedMolecule {
 }
 
 impl IntoIr<Molecule> for PerceivedMolecule {
-    type Ctx = ();
+    type Context = ();
 
     /// Each atom carries only its element; hydrogens, per-atom charge, and per-atom
     /// spin are left undetermined for the caller's resolver. The total charge and
     /// spin become molecule-scope `ChargeSum` / `UnpairedElectronCoupling`
     /// constraints over the whole molecule.
-    fn into_ir(self, _ctx: &Self::Ctx) -> Molecule {
+    fn into_ir(self, _context: &Self::Context) -> Molecule {
         let atoms: Vec<AtomForm> = self
             .elements
             .iter()

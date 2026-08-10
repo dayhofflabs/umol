@@ -17,17 +17,17 @@ use crate::ir::traits::{FromIr, IntoIr};
 pub struct BooleanDsl(pub BooleanForm);
 
 impl FromIr<BooleanForm> for BooleanDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &BooleanForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &BooleanForm, _context: &Self::Context) -> Self {
         Self(*form)
     }
 }
 
 impl IntoIr<BooleanForm> for BooleanDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> BooleanForm {
+    fn into_ir(self, _context: &Self::Context) -> BooleanForm {
         self.0
     }
 }

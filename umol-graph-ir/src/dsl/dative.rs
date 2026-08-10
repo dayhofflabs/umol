@@ -136,17 +136,17 @@ fn dative_keyword_for(form: &DativeBondForm) -> Option<&'static str> {
 }
 
 impl FromIr<DativeBondForm> for DativeBondDsl {
-    type Ctx = DativeBondDefaults;
+    type Context = DativeBondDefaults;
 
-    fn from_ir(form: &DativeBondForm, _cfg: &Self::Ctx) -> Self {
+    fn from_ir(form: &DativeBondForm, _context: &Self::Context) -> Self {
         DativeBondDsl(form.clone())
     }
 }
 
 impl IntoIr<DativeBondForm> for DativeBondDsl {
-    type Ctx = DativeBondDefaults;
+    type Context = DativeBondDefaults;
 
-    fn into_ir(self, _cfg: &Self::Ctx) -> DativeBondForm {
+    fn into_ir(self, _context: &Self::Context) -> DativeBondForm {
         self.0
     }
 }
@@ -165,17 +165,17 @@ impl DativeBondUpdateDsl {
 }
 
 impl FromIr<DativeBondUpdate> for DativeBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &DativeBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &DativeBondUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<DativeBondUpdate> for DativeBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> DativeBondUpdate {
+    fn into_ir(self, _context: &Self::Context) -> DativeBondUpdate {
         self.0
     }
 }

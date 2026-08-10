@@ -575,27 +575,28 @@ impl ToEdn for MoleculeDsl {
 }
 
 impl FromIr<Molecule> for MoleculeDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn from_ir(molecule: &Molecule, cfg: &Self::Ctx) -> Self {
+    fn from_ir(molecule: &Molecule, context: &Self::Context) -> Self {
         let mut dsl_molecule = molecule.clone();
-        dsl_molecule.modify_atoms(|atom| AtomDsl::from_ir(&atom, &cfg.atom).0);
-        dsl_molecule.modify_bonds(|bond| BondDsl::from_ir(&bond, &cfg.bond).0);
+        dsl_molecule.modify_atoms(|atom| AtomDsl::from_ir(&atom, &context.atom).0);
+        dsl_molecule.modify_bonds(|bond| BondDsl::from_ir(&bond, &context.bond).0);
         dsl_molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl::from_ir(&system, &cfg.aromatic_system).0
+            AromaticSystemDsl::from_ir(&system, &context.aromatic_system).0
         });
         dsl_molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl::from_ir(&bond, &cfg.multicenter_bond).0
+            MulticenterBondDsl::from_ir(&bond, &context.multicenter_bond).0
         });
-        dsl_molecule.modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &cfg.dative_bond).0);
+        dsl_molecule
+            .modify_dative_bonds(|bond| DativeBondDsl::from_ir(&bond, &context.dative_bond).0);
         dsl_molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl::from_ir(&bond, &cfg.noncovalent_bond).0
+            NoncovalentBondDsl::from_ir(&bond, &context.noncovalent_bond).0
         });
         dsl_molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl::from_ir(&stereo_atom, &cfg.stereo_atom).0
+            StereoAtomDsl::from_ir(&stereo_atom, &context.stereo_atom).0
         });
         dsl_molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl::from_ir(&stereo_bond, &cfg.stereo_bond).0
+            StereoBondDsl::from_ir(&stereo_bond, &context.stereo_bond).0
         });
         MoleculeDsl {
             molecule: dsl_molecule,
@@ -605,27 +606,27 @@ impl FromIr<Molecule> for MoleculeDsl {
 }
 
 impl IntoIr<Molecule> for MoleculeDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn into_ir(self, cfg: &Self::Ctx) -> Molecule {
+    fn into_ir(self, context: &Self::Context) -> Molecule {
         let mut molecule = self.molecule;
-        molecule.modify_atoms(|atom| AtomDsl(atom).into_ir(&cfg.atom));
-        molecule.modify_bonds(|bond| BondDsl(bond).into_ir(&cfg.bond));
-        molecule.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&cfg.dative_bond));
+        molecule.modify_atoms(|atom| AtomDsl(atom).into_ir(&context.atom));
+        molecule.modify_bonds(|bond| BondDsl(bond).into_ir(&context.bond));
+        molecule.modify_dative_bonds(|bond| DativeBondDsl(bond).into_ir(&context.dative_bond));
         molecule.modify_aromatic_systems(|system| {
-            AromaticSystemDsl(system).into_ir(&cfg.aromatic_system)
+            AromaticSystemDsl(system).into_ir(&context.aromatic_system)
         });
         molecule.modify_multicenter_bonds(|bond| {
-            MulticenterBondDsl(bond).into_ir(&cfg.multicenter_bond)
+            MulticenterBondDsl(bond).into_ir(&context.multicenter_bond)
         });
         molecule.modify_noncovalent_bonds(|bond| {
-            NoncovalentBondDsl(bond).into_ir(&cfg.noncovalent_bond)
+            NoncovalentBondDsl(bond).into_ir(&context.noncovalent_bond)
         });
         molecule.modify_stereo_atoms(|stereo_atom| {
-            StereoAtomDsl(stereo_atom).into_ir(&cfg.stereo_atom)
+            StereoAtomDsl(stereo_atom).into_ir(&context.stereo_atom)
         });
         molecule.modify_stereo_bonds(|stereo_bond| {
-            StereoBondDsl(stereo_bond).into_ir(&cfg.stereo_bond)
+            StereoBondDsl(stereo_bond).into_ir(&context.stereo_bond)
         });
         molecule
     }

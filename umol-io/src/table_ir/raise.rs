@@ -56,16 +56,16 @@ impl UmolError for RaiseError {
 }
 
 impl TryIntoIr<Molecule> for &TableMolecule {
-    type Ctx = ();
+    type Context = ();
     type Error = RaiseError;
 
-    fn try_into_ir(self, ctx: &Self::Ctx) -> Result<Molecule, RaiseError> {
+    fn try_into_ir(self, context: &Self::Context) -> Result<Molecule, RaiseError> {
         let atoms: Vec<AtomForm> = self
             .atoms
             .iter()
             .enumerate()
             .map(|(atom_idx, table_atom)| {
-                let mut atom = table_atom.try_into_ir(ctx)?;
+                let mut atom = table_atom.try_into_ir(context)?;
                 if let Some(constraint) = raise_tetrahedral_stereo(self, atom_idx)? {
                     atom.constraints.set(constraint);
                 }
@@ -87,14 +87,14 @@ impl TryIntoIr<Molecule> for &TableMolecule {
                     TableBondDonation::Donating => (a_idx, b_idx),
                     TableBondDonation::Accepting => (b_idx, a_idx),
                     _ => {
-                        bonds.push((a_idx, b_idx, b.try_into_ir(ctx)?));
+                        bonds.push((a_idx, b_idx, b.try_into_ir(context)?));
                         continue;
                     }
                 };
                 let dative_bond = DativeBondForm::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
-                let mut bond_form = b.try_into_ir(ctx)?;
+                let mut bond_form = b.try_into_ir(context)?;
                 if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx)? {
                     bond_form.constraints.set(constraint);
                 }
@@ -133,10 +133,10 @@ impl TryIntoIr<Molecule> for &TableMolecule {
 }
 
 impl TryIntoIr<AtomForm> for &TableAtom {
-    type Ctx = ();
+    type Context = ();
     type Error = RaiseError;
 
-    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<AtomForm, RaiseError> {
+    fn try_into_ir(self, _context: &Self::Context) -> Result<AtomForm, RaiseError> {
         let mut atom = AtomForm {
             element: match self.element {
                 Some(element) => ElementForm::Lit(element),
@@ -206,10 +206,10 @@ impl TryIntoIr<AtomForm> for &TableAtom {
 }
 
 impl TryIntoIr<BondForm> for &TableBond {
-    type Ctx = ();
+    type Context = ();
     type Error = RaiseError;
 
-    fn try_into_ir(self, _ctx: &Self::Ctx) -> Result<BondForm, RaiseError> {
+    fn try_into_ir(self, _context: &Self::Context) -> Result<BondForm, RaiseError> {
         let mut bond = BondForm::new(raise_bond_order(self.order));
         bond.charge = match self.charge {
             Some(c) => NumForm::Lit(c as i64),

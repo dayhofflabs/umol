@@ -214,13 +214,13 @@ impl ToEdn for EditsDsl {
 }
 
 impl FromIr<Edits> for EditsDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn from_ir(edits: &Edits, defaults: &Self::Ctx) -> Self {
+    fn from_ir(edits: &Edits, context: &Self::Context) -> Self {
         let mut inputs = Vec::new();
         for edit in edits.iter() {
             inputs.extend(
-                EditInput::from_edit(edit, defaults)
+                EditInput::from_edit(edit, context)
                     .expect("Edit variants satisfy their representational invariants"),
             );
         }
@@ -229,13 +229,13 @@ impl FromIr<Edits> for EditsDsl {
 }
 
 impl IntoIr<Edits> for EditsDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn into_ir(self, defaults: &Self::Ctx) -> Edits {
+    fn into_ir(self, context: &Self::Context) -> Edits {
         let mut edits = Edits::new();
         for input in self.inputs {
             input
-                .append_to(&mut edits, defaults)
+                .append_to(&mut edits, context)
                 .expect("EditsDsl stores only validated edit inputs");
         }
         edits

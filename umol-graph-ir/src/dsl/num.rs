@@ -24,17 +24,17 @@ use crate::ir::traits::{FromIr, IntoIr};
 pub struct NumDsl(pub NumForm);
 
 impl FromIr<NumForm> for NumDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &NumForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &NumForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<NumForm> for NumDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> NumForm {
+    fn into_ir(self, _context: &Self::Context) -> NumForm {
         self.0
     }
 }

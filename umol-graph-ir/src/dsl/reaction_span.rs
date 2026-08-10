@@ -115,15 +115,15 @@ fn map_span<T, U>(span: &EntitySpan<T>, f: impl Fn(&T) -> U) -> EntitySpan<U> {
 }
 
 impl FromIr<ReactionSpan> for ReactionSpanDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn from_ir(span: &ReactionSpan, cfg: &Self::Ctx) -> Self {
+    fn from_ir(span: &ReactionSpan, context: &Self::Context) -> Self {
         let lowered = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: span
                 .atoms()
                 .iter()
                 .map(|entity_span| {
-                    map_span(entity_span, |atom| AtomDsl::from_ir(atom, &cfg.atom).0)
+                    map_span(entity_span, |atom| AtomDsl::from_ir(atom, &context.atom).0)
                 })
                 .collect(),
             bonds: span
@@ -135,7 +135,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                     (
                         AtomId::from(first),
                         AtomId::from(second),
-                        map_span(entity_span, |bond| BondDsl::from_ir(bond, &cfg.bond).0),
+                        map_span(entity_span, |bond| BondDsl::from_ir(bond, &context.bond).0),
                     )
                 })
                 .collect(),
@@ -152,7 +152,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                             .collect(),
                         AtomId::from(span.dative_bonds().participants_1(id)[0]),
                         map_span(span.dative_bonds().data(id), |bond| {
-                            DativeBondDsl::from_ir(bond, &cfg.dative_bond).0
+                            DativeBondDsl::from_ir(bond, &context.dative_bond).0
                         }),
                     )
                 })
@@ -169,7 +169,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(span.aromatic_systems().data(id), |system| {
-                            AromaticSystemDsl::from_ir(system, &cfg.aromatic_system).0
+                            AromaticSystemDsl::from_ir(system, &context.aromatic_system).0
                         }),
                     )
                 })
@@ -186,7 +186,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(span.multicenter_bonds().data(id), |bond| {
-                            MulticenterBondDsl::from_ir(bond, &cfg.multicenter_bond).0
+                            MulticenterBondDsl::from_ir(bond, &context.multicenter_bond).0
                         }),
                     )
                 })
@@ -200,7 +200,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                         AtomId::from(first),
                         AtomId::from(second),
                         map_span(span.noncovalent_bonds().data(id), |bond| {
-                            NoncovalentBondDsl::from_ir(bond, &cfg.noncovalent_bond).0
+                            NoncovalentBondDsl::from_ir(bond, &context.noncovalent_bond).0
                         }),
                     )
                 })
@@ -213,7 +213,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                         AtomId::from(span.stereo_atoms().participants_1(id)[0]),
                         span.stereo_atoms().participants_2(id).to_vec(),
                         map_span(span.stereo_atoms().data(id), |stereo| {
-                            StereoAtomDsl::from_ir(stereo, &cfg.stereo_atom).0
+                            StereoAtomDsl::from_ir(stereo, &context.stereo_atom).0
                         }),
                     )
                 })
@@ -226,7 +226,7 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                         BondId::from(span.stereo_bonds().participants_1(id)[0]),
                         span.stereo_bonds().participants_2(id).to_vec(),
                         map_span(span.stereo_bonds().data(id), |stereo| {
-                            StereoBondDsl::from_ir(stereo, &cfg.stereo_bond).0
+                            StereoBondDsl::from_ir(stereo, &context.stereo_bond).0
                         }),
                     )
                 })
@@ -238,16 +238,18 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
 }
 
 impl IntoIr<ReactionSpan> for ReactionSpanDsl {
-    type Ctx = MoleculeDefaults;
+    type Context = MoleculeDefaults;
 
-    fn into_ir(self, cfg: &Self::Ctx) -> ReactionSpan {
+    fn into_ir(self, context: &Self::Context) -> ReactionSpan {
         let span = self.span;
         ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: span
                 .atoms()
                 .iter()
                 .map(|entity_span| {
-                    map_span(entity_span, |atom| AtomDsl(atom.clone()).into_ir(&cfg.atom))
+                    map_span(entity_span, |atom| {
+                        AtomDsl(atom.clone()).into_ir(&context.atom)
+                    })
                 })
                 .collect(),
             bonds: span
@@ -259,7 +261,9 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                     (
                         AtomId::from(first),
                         AtomId::from(second),
-                        map_span(entity_span, |bond| BondDsl(bond.clone()).into_ir(&cfg.bond)),
+                        map_span(entity_span, |bond| {
+                            BondDsl(bond.clone()).into_ir(&context.bond)
+                        }),
                     )
                 })
                 .collect(),
@@ -276,7 +280,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                             .collect(),
                         AtomId::from(span.dative_bonds().participants_1(id)[0]),
                         map_span(span.dative_bonds().data(id), |bond| {
-                            DativeBondDsl(bond.clone()).into_ir(&cfg.dative_bond)
+                            DativeBondDsl(bond.clone()).into_ir(&context.dative_bond)
                         }),
                     )
                 })
@@ -293,7 +297,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(span.aromatic_systems().data(id), |system| {
-                            AromaticSystemDsl(system.clone()).into_ir(&cfg.aromatic_system)
+                            AromaticSystemDsl(system.clone()).into_ir(&context.aromatic_system)
                         }),
                     )
                 })
@@ -310,7 +314,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                             .map(AtomId::from)
                             .collect(),
                         map_span(span.multicenter_bonds().data(id), |bond| {
-                            MulticenterBondDsl(bond.clone()).into_ir(&cfg.multicenter_bond)
+                            MulticenterBondDsl(bond.clone()).into_ir(&context.multicenter_bond)
                         }),
                     )
                 })
@@ -324,7 +328,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                         AtomId::from(first),
                         AtomId::from(second),
                         map_span(span.noncovalent_bonds().data(id), |bond| {
-                            NoncovalentBondDsl(bond.clone()).into_ir(&cfg.noncovalent_bond)
+                            NoncovalentBondDsl(bond.clone()).into_ir(&context.noncovalent_bond)
                         }),
                     )
                 })
@@ -337,7 +341,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                         AtomId::from(span.stereo_atoms().participants_1(id)[0]),
                         span.stereo_atoms().participants_2(id).to_vec(),
                         map_span(span.stereo_atoms().data(id), |stereo| {
-                            StereoAtomDsl(stereo.clone()).into_ir(&cfg.stereo_atom)
+                            StereoAtomDsl(stereo.clone()).into_ir(&context.stereo_atom)
                         }),
                     )
                 })
@@ -350,7 +354,7 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                         BondId::from(span.stereo_bonds().participants_1(id)[0]),
                         span.stereo_bonds().participants_2(id).to_vec(),
                         map_span(span.stereo_bonds().data(id), |stereo| {
-                            StereoBondDsl(stereo.clone()).into_ir(&cfg.stereo_bond)
+                            StereoBondDsl(stereo.clone()).into_ir(&context.stereo_bond)
                         }),
                     )
                 })

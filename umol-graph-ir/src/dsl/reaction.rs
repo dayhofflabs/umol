@@ -159,13 +159,13 @@ impl ReactionDsl {
 }
 
 impl FromIr<Reaction> for ReactionDsl {
-    type Ctx = ReactionDefaults;
+    type Context = ReactionDefaults;
 
-    fn from_ir(reaction: &Reaction, cfg: &Self::Ctx) -> Self {
-        let lhs = MoleculeDsl::from_ir(&reaction.lhs, &cfg.molecule_defaults())
+    fn from_ir(reaction: &Reaction, context: &Self::Context) -> Self {
+        let lhs = MoleculeDsl::from_ir(&reaction.lhs, &context.molecule_defaults())
             .into_parts()
             .0;
-        let delta_cfg = cfg.delta_defaults();
+        let delta_cfg = context.delta_defaults();
         let mut deltas = reaction.deltas.clone();
         for delta in deltas.iter_mut() {
             lower_delta(delta, &delta_cfg);
@@ -178,14 +178,14 @@ impl FromIr<Reaction> for ReactionDsl {
 }
 
 impl IntoIr<Reaction> for ReactionDsl {
-    type Ctx = ReactionDefaults;
+    type Context = ReactionDefaults;
 
-    fn into_ir(self, cfg: &Self::Ctx) -> Reaction {
+    fn into_ir(self, context: &Self::Context) -> Reaction {
         let Reaction { lhs, mut deltas } = self.reaction;
         let lhs = MoleculeDsl::new(lhs, MoleculeMetadata::default())
             .expect("empty metadata is coherent")
-            .into_ir(&cfg.molecule_defaults());
-        let delta_cfg = cfg.delta_defaults();
+            .into_ir(&context.molecule_defaults());
+        let delta_cfg = context.delta_defaults();
         for delta in deltas.iter_mut() {
             raise_delta(delta, &delta_cfg);
         }

@@ -79,17 +79,17 @@ impl ToEdn for NoncovalentBondDsl {
 }
 
 impl FromIr<NoncovalentBondForm> for NoncovalentBondDsl {
-    type Ctx = NoncovalentBondDefaults;
+    type Context = NoncovalentBondDefaults;
 
-    fn from_ir(form: &NoncovalentBondForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &NoncovalentBondForm, _context: &Self::Context) -> Self {
         NoncovalentBondDsl(form.clone())
     }
 }
 
 impl IntoIr<NoncovalentBondForm> for NoncovalentBondDsl {
-    type Ctx = NoncovalentBondDefaults;
+    type Context = NoncovalentBondDefaults;
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> NoncovalentBondForm {
+    fn into_ir(self, _context: &Self::Context) -> NoncovalentBondForm {
         self.0
     }
 }
@@ -277,17 +277,17 @@ impl NoncovalentBondUpdateDsl {
 }
 
 impl FromIr<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &NoncovalentBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &NoncovalentBondUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<NoncovalentBondUpdate> for NoncovalentBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> NoncovalentBondUpdate {
+    fn into_ir(self, _context: &Self::Context) -> NoncovalentBondUpdate {
         self.0
     }
 }

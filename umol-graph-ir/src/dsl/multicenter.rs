@@ -83,20 +83,20 @@ impl ToEdn for MulticenterBondDsl {
 }
 
 impl FromIr<MulticenterBondForm> for MulticenterBondDsl {
-    type Ctx = MulticenterBondDefaults;
+    type Context = MulticenterBondDefaults;
 
-    fn from_ir(form: &MulticenterBondForm, cfg: &Self::Ctx) -> Self {
+    fn from_ir(form: &MulticenterBondForm, context: &Self::Context) -> Self {
         let mut out = form.clone();
-        lower_multicenter_bond(&mut out, cfg);
+        lower_multicenter_bond(&mut out, context);
         MulticenterBondDsl(out)
     }
 }
 
 impl IntoIr<MulticenterBondForm> for MulticenterBondDsl {
-    type Ctx = MulticenterBondDefaults;
+    type Context = MulticenterBondDefaults;
 
-    fn into_ir(mut self, cfg: &Self::Ctx) -> MulticenterBondForm {
-        raise_multicenter_bond(&mut self.0, cfg);
+    fn into_ir(mut self, context: &Self::Context) -> MulticenterBondForm {
+        raise_multicenter_bond(&mut self.0, context);
         self.0
     }
 }
@@ -269,17 +269,17 @@ impl MulticenterBondUpdateDsl {
 }
 
 impl FromIr<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &MulticenterBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &MulticenterBondUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<MulticenterBondUpdate> for MulticenterBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> MulticenterBondUpdate {
+    fn into_ir(self, _context: &Self::Context) -> MulticenterBondUpdate {
         self.0
     }
 }

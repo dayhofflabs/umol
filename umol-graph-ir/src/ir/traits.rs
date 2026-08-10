@@ -18,33 +18,37 @@ use super::error::{Contradiction, NoJoin};
 /// IR → DSL direction. Infallible.
 pub trait FromIr<A>: Sized {
     /// Configuration consumed during conversion (e.g. entity defaults).
-    type Ctx;
-    fn from_ir(ir: &A, ctx: &Self::Ctx) -> Self;
+    type Context;
+    fn from_ir(ir: &A, context: &Self::Context) -> Self;
 }
 
 /// Consume `self` to produce an IR value of type `A` plus a configuration context.
 /// DSL → IR direction. Infallible.
 pub trait IntoIr<A>: Sized {
     /// Configuration consumed during conversion (e.g. entity defaults).
-    type Ctx;
-    fn into_ir(self, ctx: &Self::Ctx) -> A;
+    type Context;
+    fn into_ir(self, context: &Self::Context) -> A;
 }
 
 /// Build `Self` from a borrowed IR value of type `A` plus a configuration context.
 /// Fallible variant: the conversion can reject the input.
 pub trait TryFromIr<A>: Sized {
-    type Ctx;
+    /// Configuration consumed during conversion.
+    type Context;
+    /// Error returned when the source cannot be represented as `Self`.
     type Error;
-    fn try_from_ir(ir: &A, ctx: &Self::Ctx) -> Result<Self, Self::Error>;
+    fn try_from_ir(ir: &A, context: &Self::Context) -> Result<Self, Self::Error>;
 }
 
 /// Consume `self` to produce an IR value of type `A` plus a configuration context.
 /// Fallible variant: used by raising paths whose source carries information
 /// without a faithful IR representation (e.g. TableIR Sgroups).
 pub trait TryIntoIr<A>: Sized {
-    type Ctx;
+    /// Configuration consumed during conversion.
+    type Context;
+    /// Error returned when `self` cannot be represented as `A`.
     type Error;
-    fn try_into_ir(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
+    fn try_into_ir(self, context: &Self::Context) -> Result<A, Self::Error>;
 }
 
 /// Exact literal projection for graph-IR forms whose value space includes an

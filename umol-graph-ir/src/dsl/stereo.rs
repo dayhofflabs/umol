@@ -146,18 +146,18 @@ fn stereo_atom_keyword_for(form: &StereoAtomForm) -> Option<&'static str> {
 }
 
 impl FromIr<StereoAtomForm> for StereoAtomDsl {
-    type Ctx = StereoAtomDefaults;
+    type Context = StereoAtomDefaults;
 
-    fn from_ir(form: &StereoAtomForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &StereoAtomForm, _context: &Self::Context) -> Self {
         let form = form.clone();
         StereoAtomDsl(form.clone())
     }
 }
 
 impl IntoIr<StereoAtomForm> for StereoAtomDsl {
-    type Ctx = StereoAtomDefaults;
+    type Context = StereoAtomDefaults;
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereoAtomForm {
+    fn into_ir(self, _context: &Self::Context) -> StereoAtomForm {
         self.0
     }
 }
@@ -338,17 +338,17 @@ fn stereo_bond_keyword_for(form: &StereoBondForm) -> Option<&'static str> {
 }
 
 impl FromIr<StereoBondForm> for StereoBondDsl {
-    type Ctx = StereoBondDefaults;
+    type Context = StereoBondDefaults;
 
-    fn from_ir(form: &StereoBondForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &StereoBondForm, _context: &Self::Context) -> Self {
         StereoBondDsl(form.clone())
     }
 }
 
 impl IntoIr<StereoBondForm> for StereoBondDsl {
-    type Ctx = StereoBondDefaults;
+    type Context = StereoBondDefaults;
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereoBondForm {
+    fn into_ir(self, _context: &Self::Context) -> StereoBondForm {
         self.0
     }
 }
@@ -868,17 +868,17 @@ impl StereoAtomUpdateDsl {
 }
 
 impl FromIr<StereoAtomUpdate> for StereoAtomUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &StereoAtomUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &StereoAtomUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<StereoAtomUpdate> for StereoAtomUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereoAtomUpdate {
+    fn into_ir(self, _context: &Self::Context) -> StereoAtomUpdate {
         self.0
     }
 }
@@ -1012,17 +1012,17 @@ impl StereoBondUpdateDsl {
 }
 
 impl FromIr<StereoBondUpdate> for StereoBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &StereoBondUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &StereoBondUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<StereoBondUpdate> for StereoBondUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereoBondUpdate {
+    fn into_ir(self, _context: &Self::Context) -> StereoBondUpdate {
         self.0
     }
 }
@@ -1435,17 +1435,17 @@ impl<'de> FromEdn<'de> for StereogenicityDsl {
 }
 
 impl FromIr<StereogenicityForm> for StereogenicityDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &StereogenicityForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &StereogenicityForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<StereogenicityForm> for StereogenicityDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereogenicityForm {
+    fn into_ir(self, _context: &Self::Context) -> StereogenicityForm {
         self.0
     }
 }
@@ -1523,17 +1523,17 @@ impl<'de> FromEdn<'de> for TopicityDsl {
 }
 
 impl FromIr<TopicityForm> for TopicityDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(form: &TopicityForm, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(form: &TopicityForm, _context: &Self::Context) -> Self {
         Self(form.clone())
     }
 }
 
 impl IntoIr<TopicityForm> for TopicityDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> TopicityForm {
+    fn into_ir(self, _context: &Self::Context) -> TopicityForm {
         self.0
     }
 }
@@ -1754,17 +1754,17 @@ macro_rules! stereo_constraint_dsl {
         }
 
         impl FromIr<$constraint> for $dsl {
-            type Ctx = StereoKind;
+            type Context = StereoKind;
 
-            fn from_ir(form: &$constraint, ctx: &Self::Ctx) -> Self {
-                Self(*ctx, form.clone())
+            fn from_ir(form: &$constraint, context: &Self::Context) -> Self {
+                Self(*context, form.clone())
             }
         }
 
         impl IntoIr<$constraint> for $dsl {
-            type Ctx = ();
+            type Context = ();
 
-            fn into_ir(self, _ctx: &Self::Ctx) -> $constraint {
+            fn into_ir(self, _context: &Self::Context) -> $constraint {
                 self.1
             }
         }
@@ -1793,17 +1793,17 @@ pub(crate) fn coset_lit(n: i64) -> Result<u32, DeError> {
 pub struct StereoCosetDsl(pub StereoCoset);
 
 impl FromIr<StereoCoset> for StereoCosetDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(coset: &StereoCoset, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(coset: &StereoCoset, _context: &Self::Context) -> Self {
         Self(coset.clone())
     }
 }
 
 impl IntoIr<StereoCoset> for StereoCosetDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> StereoCoset {
+    fn into_ir(self, _context: &Self::Context) -> StereoCoset {
         self.0
     }
 }
@@ -1896,17 +1896,17 @@ macro_rules! stereo_site_dsl {
         pub struct $dsl(pub $form);
 
         impl FromIr<$form> for $dsl {
-            type Ctx = ();
+            type Context = ();
 
-            fn from_ir(form: &$form, _ctx: &Self::Ctx) -> Self {
+            fn from_ir(form: &$form, _context: &Self::Context) -> Self {
                 Self(form.clone())
             }
         }
 
         impl IntoIr<$form> for $dsl {
-            type Ctx = ();
+            type Context = ();
 
-            fn into_ir(self, _ctx: &Self::Ctx) -> $form {
+            fn into_ir(self, _context: &Self::Context) -> $form {
                 self.0
             }
         }

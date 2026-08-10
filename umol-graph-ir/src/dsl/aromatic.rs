@@ -81,20 +81,20 @@ impl ToEdn for AromaticSystemDsl {
 }
 
 impl FromIr<AromaticSystemForm> for AromaticSystemDsl {
-    type Ctx = AromaticSystemDefaults;
+    type Context = AromaticSystemDefaults;
 
-    fn from_ir(form: &AromaticSystemForm, cfg: &Self::Ctx) -> Self {
+    fn from_ir(form: &AromaticSystemForm, context: &Self::Context) -> Self {
         let mut out = form.clone();
-        lower_aromatic_system(&mut out, cfg);
+        lower_aromatic_system(&mut out, context);
         AromaticSystemDsl(out)
     }
 }
 
 impl IntoIr<AromaticSystemForm> for AromaticSystemDsl {
-    type Ctx = AromaticSystemDefaults;
+    type Context = AromaticSystemDefaults;
 
-    fn into_ir(mut self, cfg: &Self::Ctx) -> AromaticSystemForm {
-        raise_aromatic_system(&mut self.0, cfg);
+    fn into_ir(mut self, context: &Self::Context) -> AromaticSystemForm {
+        raise_aromatic_system(&mut self.0, context);
         self.0
     }
 }
@@ -265,17 +265,17 @@ impl AromaticSystemUpdateDsl {
 }
 
 impl FromIr<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn from_ir(update: &AromaticSystemUpdate, _ctx: &Self::Ctx) -> Self {
+    fn from_ir(update: &AromaticSystemUpdate, _context: &Self::Context) -> Self {
         Self(update.clone())
     }
 }
 
 impl IntoIr<AromaticSystemUpdate> for AromaticSystemUpdateDsl {
-    type Ctx = ();
+    type Context = ();
 
-    fn into_ir(self, _ctx: &Self::Ctx) -> AromaticSystemUpdate {
+    fn into_ir(self, _context: &Self::Context) -> AromaticSystemUpdate {
         self.0
     }
 }

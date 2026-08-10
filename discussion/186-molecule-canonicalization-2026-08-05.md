@@ -970,9 +970,9 @@ and the semantic properties validated by the corresponding property tests.
   substructure, test, and benchmark caller. Verify the exact entity-kind membership of each level;
   do not retain a second bitflag route. This is breaking red-to-green. [dep: S0c] **Done.**
 - **S0e — Conversion-context terminology.** Rename the `Ctx` associated type to `Context` on
-  `FromAst`, `IntoAst`, `TryFromAst`, and `TryIntoAst`, migrate every implementation and caller, and
+  `FromIr`, `IntoIr`, `TryFromIr`, and `TryIntoIr`, migrate every implementation and caller, and
   update public rustdoc. This is a mechanical breaking red-to-green migration and does not rename the
-  traits or crate. [dep: doc 176]
+  traits or crate. [dep: doc 176] **Done.**
 
 ### S1 — Fixed-frame normalization vocabulary
 
