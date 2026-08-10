@@ -1,0 +1,4 @@
+interface:
+  display_name: "Discussion Doc Writing"
+  short_description: "Write and maintain repository discussion records"
+  default_prompt: "Use $discussion-doc-writing to create or revise a repository discussion document."
