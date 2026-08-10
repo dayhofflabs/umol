@@ -3,8 +3,8 @@
 use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
+use super::num::NumForm;
 use super::traits::{AsLit, Canonicalize};
-use super::value::NumForm;
 
 /// Unpaired-electron count and multiplicity as independent `NumForm` fields.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Canonicalize)]
@@ -121,8 +121,8 @@ mod tests {
 
     use super::*;
     use crate::ir::error::Contradiction;
+    use crate::ir::num::ArithExpr;
     use crate::ir::traits::{Canonicalize, Lattice};
-    use crate::ir::value::ArithExpr;
 
     #[rstest]
     fn test_unpaired_electrons_form_closed_shell() {

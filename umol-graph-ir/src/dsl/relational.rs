@@ -1053,7 +1053,7 @@ mod tests {
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };
-    use crate::ir::value::NumForm;
+    use crate::ir::num::NumForm;
 
     #[fixture]
     fn meta() -> MoleculeMetadata {

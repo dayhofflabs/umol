@@ -2876,9 +2876,9 @@ mod tests {
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
+    use crate::ir::num::NumForm;
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, Stereogenicity};
-    use crate::ir::value::NumForm;
     use crate::mol_dsl;
 
     #[fixture]

@@ -19,6 +19,7 @@ use super::config::{
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
+use super::num::{fmt_num, fmt_set, num, terminator, variable_name, NumDsl};
 use super::operators::{mem_op, mem_op_str};
 use super::predicate::{
     apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_ring_membership,
@@ -28,16 +29,15 @@ use super::predicate::{
 use super::stereo::{
     fmt_tetrahedral_stereo_config, tetrahedral_stereo_config, TetrahedralStereoDsl,
 };
-use super::value::{fmt_set, fmt_value, terminator, value, variable_name, ValueDsl};
 use crate::ir::atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMassForm};
 use crate::ir::constraint::{
     AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
     MulticenterValenceForm, RingScope,
 };
+use crate::ir::num::NumForm;
 use crate::ir::operators::MemOp;
 use crate::ir::stereo::TetrahedralStereoForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
-use crate::ir::value::NumForm;
 
 /// Surface DSL wrapper around `AtomForm`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -606,7 +606,7 @@ fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceForm> {
             // distinct from the outer Undetermined; canonical form is
             // Aromatic(Undetermined).
             "+".value(AromaticValenceForm::Aromatic(NumForm::Undetermined)),
-            value.map(AromaticValenceForm::Aromatic),
+            num.map(AromaticValenceForm::Aromatic),
             empty.value(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
         )),
     )
@@ -622,7 +622,7 @@ fn multicenter_valence(i: &mut &str) -> PResult<MulticenterValenceForm> {
             "!".value(MulticenterValenceForm::NotMulticenter),
             // `#m+` mirrors `#a+` — "multicenter, count unspecified".
             "+".value(MulticenterValenceForm::Multicenter(NumForm::Undetermined)),
-            value.map(MulticenterValenceForm::Multicenter),
+            num.map(MulticenterValenceForm::Multicenter),
             empty.value(MulticenterValenceForm::Multicenter(NumForm::Lit(1))),
         )),
     )
@@ -682,8 +682,8 @@ fn fmt_atom_form(f: &mut fmt::Formatter<'_>, form: &AtomForm) -> fmt::Result {
     fmt_element(f, &form.element)?;
     fmt_isotope_mass(f, &form.isotope_mass)?;
     fmt_charge(f, &form.charge)?;
-    fmt_value_field(f, "#h", &form.implicit_hydrogens)?;
-    fmt_value_field(f, "#n", &form.lone_pairs)?;
+    fmt_num_field(f, "#h", &form.implicit_hydrogens)?;
+    fmt_num_field(f, "#n", &form.lone_pairs)?;
     fmt_unpaired_electrons(f, &form.unpaired_electrons)
 }
 
@@ -752,14 +752,14 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassForm) -> fmt::R
 /// Format a value field with `Lit(1)` sugared as the bare prefix. Only
 /// `Undetermined` elides; every literal (including `Lit(0)`) must render so
 /// parsing recovers it.
-fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm) -> fmt::Result {
+fn fmt_num_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm) -> fmt::Result {
     match v {
         NumForm::Undetermined => Ok(()),
         NumForm::Lit(1) => write!(f, "{}", prefix),
         NumForm::Lit(n) => write!(f, "{}{}", prefix, n),
         v => {
             write!(f, "{}", prefix)?;
-            fmt_value(f, v)
+            fmt_num(f, v)
         }
     }
 }
@@ -768,30 +768,30 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
     if v.is_undetermined() {
         write!(f, "{}*", prefix)
     } else {
-        fmt_value_field(f, prefix, v)
+        fmt_num_field(f, prefix, v)
     }
 }
 
 /// Format an inline-constraint value field. Per the canonical-rendering
 /// rules in `dsl::predicates`, vacuous constraints (`Undetermined`) elide.
 /// `Lit(0)` is a meaningful constraint and renders.
-fn fmt_value_field_required(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm) -> fmt::Result {
+fn fmt_num_field_required(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm) -> fmt::Result {
     match v {
         NumForm::Undetermined => Ok(()),
         NumForm::Lit(1) => write!(f, "{}", prefix),
         NumForm::Lit(n) => write!(f, "{}{}", prefix, n),
         v => {
             write!(f, "{}", prefix)?;
-            fmt_value(f, v)
+            fmt_num(f, v)
         }
     }
 }
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintForm) -> fmt::Result {
     match c {
-        AtomConstraintForm::Valence(v) => fmt_value_field_required(f, "#v", v),
-        AtomConstraintForm::DonatedPairs(v) => fmt_value_field_required(f, "#d", v),
-        AtomConstraintForm::AcceptedPairs(v) => fmt_value_field_required(f, "#t", v),
+        AtomConstraintForm::Valence(v) => fmt_num_field_required(f, "#v", v),
+        AtomConstraintForm::DonatedPairs(v) => fmt_num_field_required(f, "#d", v),
+        AtomConstraintForm::AcceptedPairs(v) => fmt_num_field_required(f, "#t", v),
         AtomConstraintForm::MulticenterValence(c) => match c {
             MulticenterValenceForm::Undetermined => Ok(()),
             MulticenterValenceForm::NotMulticenter => write!(f, "#m!"),
@@ -800,7 +800,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintForm) -> fmt::Re
             MulticenterValenceForm::Multicenter(NumForm::Lit(n)) => write!(f, "#m{}", n),
             MulticenterValenceForm::Multicenter(v) => {
                 write!(f, "#m")?;
-                fmt_value(f, v)
+                fmt_num(f, v)
             }
         },
         AtomConstraintForm::AromaticValence(c) => match c {
@@ -811,15 +811,15 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraintForm) -> fmt::Re
             AromaticValenceForm::Aromatic(NumForm::Lit(n)) => write!(f, "#a{}", n),
             AromaticValenceForm::Aromatic(v) => {
                 write!(f, "#a")?;
-                fmt_value(f, v)
+                fmt_num(f, v)
             }
         },
-        AtomConstraintForm::Degree(v) => fmt_value_field_required(f, "#D", v),
-        AtomConstraintForm::TotalDegree(v) => fmt_value_field_required(f, "#X", v),
-        AtomConstraintForm::RingDegree(v) => fmt_value_field_required(f, "#x", v),
-        AtomConstraintForm::RingValence(v) => fmt_value_field_required(f, "#y", v),
-        AtomConstraintForm::TotalValence(v) => fmt_value_field_required(f, "#V", v),
-        AtomConstraintForm::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
+        AtomConstraintForm::Degree(v) => fmt_num_field_required(f, "#D", v),
+        AtomConstraintForm::TotalDegree(v) => fmt_num_field_required(f, "#X", v),
+        AtomConstraintForm::RingDegree(v) => fmt_num_field_required(f, "#x", v),
+        AtomConstraintForm::RingValence(v) => fmt_num_field_required(f, "#y", v),
+        AtomConstraintForm::TotalValence(v) => fmt_num_field_required(f, "#V", v),
+        AtomConstraintForm::TotalHydrogens(v) => fmt_num_field_required(f, "#H", v),
         AtomConstraintForm::RingMembership(m) => fmt_ring_membership(f, m),
         AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::Undetermined) => Ok(()),
         AtomConstraintForm::TetrahedralStereo(c) => {
@@ -1038,7 +1038,7 @@ impl<'de> FromEdn<'de> for AromaticValenceDsl {
                 };
                 match key.name() {
                     "aromatic" => Ok(Self(AromaticValenceForm::Aromatic(
-                        ValueDsl::from_edn(v)?.into_ir(&()),
+                        NumDsl::from_edn(v)?.into_ir(&()),
                     ))),
                     other => Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -1065,7 +1065,7 @@ impl ToEdn for AromaticValenceDsl {
                 Edn::Keyword(EdnKeyword::owned("not-aromatic".into()))
             }
             AromaticValenceForm::Aromatic(v) => {
-                single_key_map("aromatic", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("aromatic", NumDsl::from_ir(v, &()).to_edn())
             }
         }
     }
@@ -1112,7 +1112,7 @@ impl<'de> FromEdn<'de> for MulticenterValenceDsl {
                 };
                 match key.name() {
                     "multicenter" => Ok(Self(MulticenterValenceForm::Multicenter(
-                        ValueDsl::from_edn(v)?.into_ir(&()),
+                        NumDsl::from_edn(v)?.into_ir(&()),
                     ))),
                     other => Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -1139,7 +1139,7 @@ impl ToEdn for MulticenterValenceDsl {
                 Edn::Keyword(EdnKeyword::owned("not-multicenter".into()))
             }
             MulticenterValenceForm::Multicenter(v) => {
-                single_key_map("multicenter", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("multicenter", NumDsl::from_ir(v, &()).to_edn())
             }
         }
     }
@@ -1191,28 +1191,24 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             });
         };
         let c = match key.name() {
-            "valence" => AtomConstraintForm::Valence(ValueDsl::from_edn(v)?.into_ir(&())),
-            "total-valence" => {
-                AtomConstraintForm::TotalValence(ValueDsl::from_edn(v)?.into_ir(&()))
-            }
+            "valence" => AtomConstraintForm::Valence(NumDsl::from_edn(v)?.into_ir(&())),
+            "total-valence" => AtomConstraintForm::TotalValence(NumDsl::from_edn(v)?.into_ir(&())),
             "aromatic-valence" => {
                 AtomConstraintForm::AromaticValence(AromaticValenceDsl::from_edn(v)?.into_ir(&()))
             }
             "multicenter-valence" => AtomConstraintForm::MulticenterValence(
                 MulticenterValenceDsl::from_edn(v)?.into_ir(&()),
             ),
-            "donated-pairs" => {
-                AtomConstraintForm::DonatedPairs(ValueDsl::from_edn(v)?.into_ir(&()))
-            }
+            "donated-pairs" => AtomConstraintForm::DonatedPairs(NumDsl::from_edn(v)?.into_ir(&())),
             "accepted-pairs" => {
-                AtomConstraintForm::AcceptedPairs(ValueDsl::from_edn(v)?.into_ir(&()))
+                AtomConstraintForm::AcceptedPairs(NumDsl::from_edn(v)?.into_ir(&()))
             }
-            "degree" => AtomConstraintForm::Degree(ValueDsl::from_edn(v)?.into_ir(&())),
-            "total-degree" => AtomConstraintForm::TotalDegree(ValueDsl::from_edn(v)?.into_ir(&())),
-            "ring-degree" => AtomConstraintForm::RingDegree(ValueDsl::from_edn(v)?.into_ir(&())),
-            "ring-valence" => AtomConstraintForm::RingValence(ValueDsl::from_edn(v)?.into_ir(&())),
+            "degree" => AtomConstraintForm::Degree(NumDsl::from_edn(v)?.into_ir(&())),
+            "total-degree" => AtomConstraintForm::TotalDegree(NumDsl::from_edn(v)?.into_ir(&())),
+            "ring-degree" => AtomConstraintForm::RingDegree(NumDsl::from_edn(v)?.into_ir(&())),
+            "ring-valence" => AtomConstraintForm::RingValence(NumDsl::from_edn(v)?.into_ir(&())),
             "total-hydrogens" => {
-                AtomConstraintForm::TotalHydrogens(ValueDsl::from_edn(v)?.into_ir(&()))
+                AtomConstraintForm::TotalHydrogens(NumDsl::from_edn(v)?.into_ir(&()))
             }
             "ring-membership" => {
                 AtomConstraintForm::RingMembership(RingMembershipDsl::from_edn(v)?.0)
@@ -1235,10 +1231,10 @@ impl ToEdn for AtomConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             AtomConstraintForm::Valence(v) => {
-                single_key_map("valence", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("valence", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::TotalValence(v) => {
-                single_key_map("total-valence", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("total-valence", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::AromaticValence(c) => single_key_map(
                 "aromatic-valence",
@@ -1249,25 +1245,25 @@ impl ToEdn for AtomConstraintDsl {
                 MulticenterValenceDsl::from_ir(c, &()).to_edn(),
             ),
             AtomConstraintForm::DonatedPairs(v) => {
-                single_key_map("donated-pairs", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("donated-pairs", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::AcceptedPairs(v) => {
-                single_key_map("accepted-pairs", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("accepted-pairs", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::Degree(v) => {
-                single_key_map("degree", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("degree", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::TotalDegree(v) => {
-                single_key_map("total-degree", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("total-degree", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::RingDegree(v) => {
-                single_key_map("ring-degree", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("ring-degree", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::RingValence(v) => {
-                single_key_map("ring-valence", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("ring-valence", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::TotalHydrogens(v) => {
-                single_key_map("total-hydrogens", ValueDsl::from_ir(v, &()).to_edn())
+                single_key_map("total-hydrogens", NumDsl::from_ir(v, &()).to_edn())
             }
             AtomConstraintForm::RingMembership(m) => {
                 single_key_map("ring-membership", RingMembershipDsl(m.clone()).to_edn())
@@ -1307,10 +1303,10 @@ mod tests {
 
     use super::*;
     use crate::ir::constraint::RingScope;
+    use crate::ir::num::{ArithExpr, PredExpr};
     use crate::ir::operators::{MemOp, RelOp};
     use crate::ir::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
     use crate::ir::stereo::{StereoCoset, StereoTerm};
-    use crate::ir::value::{ArithExpr, PredExpr};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomForm::new(ElementForm::Lit(Element::C))))]

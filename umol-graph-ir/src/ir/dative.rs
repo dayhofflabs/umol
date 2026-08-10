@@ -4,8 +4,8 @@ use umol_graph_core::{BiRelationData, ParticipantPosition};
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
+use super::num::NumForm;
 use super::traits::Canonicalize;
-use super::value::NumForm;
 
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the

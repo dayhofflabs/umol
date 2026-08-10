@@ -23,11 +23,11 @@ mod entity;
 mod lattice;
 #[path = "property/molecule.rs"]
 mod molecule;
+#[path = "property/num.rs"]
+mod num;
 #[path = "property/reaction.rs"]
 mod reaction;
 #[path = "property/stereo.rs"]
 mod stereo;
 #[path = "property/substructure.rs"]
 mod substructure;
-#[path = "property/value.rs"]
-mod value;

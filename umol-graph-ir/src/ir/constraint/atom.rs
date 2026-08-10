@@ -8,10 +8,10 @@ use smallvec::SmallVec;
 
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
+use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Canonicalize, Lattice};
-use super::super::value::NumForm;
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1068,7 +1068,7 @@ mod tests {
     use umol_graph_core::Compaction;
 
     use super::*;
-    use crate::ir::value::ArithExpr;
+    use crate::ir::num::ArithExpr;
 
     #[rustfmt::skip]
     #[rstest]

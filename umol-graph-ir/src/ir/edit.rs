@@ -33,6 +33,7 @@ use super::id::{
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
+use super::num::NumForm;
 use super::remap::{IdCompaction, IdRemapping, UndoCompaction};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
@@ -40,7 +41,6 @@ use super::stereo::{
     StereoKind,
 };
 use super::traits::{Canonicalize, Lattice};
-use super::value::NumForm;
 
 /// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded attributes.
 pub type StereoAtomRemoval = (

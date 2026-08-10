@@ -3,9 +3,9 @@
 use umol_graph_ir_macros::{Canonicalize, Lattice};
 
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
+use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Canonicalize, Lattice};
-use super::value::NumForm;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).

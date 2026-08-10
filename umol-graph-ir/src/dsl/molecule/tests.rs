@@ -10,8 +10,8 @@ use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
 use crate::ir::electrons::ElectronCountsForm;
+use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
-use crate::ir::value::NumForm;
 use crate::mol_dsl;
 
 #[fixture]

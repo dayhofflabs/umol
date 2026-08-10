@@ -11,11 +11,11 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::NumForm;
 use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
@@ -525,8 +525,8 @@ mod tests {
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
+    use crate::ir::num::{ArithExpr, NumForm};
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::value::{ArithExpr, NumForm};
     use crate::ir::BooleanForm;
 
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdCompaction {

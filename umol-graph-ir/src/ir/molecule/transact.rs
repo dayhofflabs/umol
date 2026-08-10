@@ -2350,11 +2350,11 @@ mod tests {
     use super::super::super::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
+    use super::super::super::num::NumForm;
     use super::super::super::stereo::{
         CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
         StereoKind,
     };
-    use super::super::super::value::NumForm;
     use super::super::Molecule;
     use super::*;
     use crate::ir::BooleanForm;

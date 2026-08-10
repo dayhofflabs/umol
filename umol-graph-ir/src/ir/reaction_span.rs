@@ -2127,8 +2127,8 @@ mod tests {
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
+    use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
-    use super::super::value::NumForm;
     use super::*;
 
     #[rstest]

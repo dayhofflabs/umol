@@ -10,8 +10,8 @@ use super::super::super::constraint::MoleculeConstraint;
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId};
 use super::super::super::molecule::Molecule;
+use super::super::super::num::NumForm;
 use super::super::super::traits::Lattice;
-use super::super::super::value::NumForm;
 use super::{ConstraintError, ConstraintValidateConfig};
 
 /// Evaluates one molecule-scope aggregate or connectivity constraint.

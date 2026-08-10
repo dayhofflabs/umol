@@ -1674,8 +1674,8 @@ mod tests {
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::num::NumForm;
     use crate::ir::reaction::Reaction;
-    use crate::ir::value::NumForm;
     use crate::ir::MoleculeCorrespondence;
 
     #[fixture]

@@ -9,9 +9,9 @@ use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::Molecule;
 use super::super::multicenter::MulticenterBondForm;
+use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
-use super::super::value::NumForm;
 use super::atom::AtomView;
 
 /// Namespace accessor for multicenter-bond views on a `Molecule`.
@@ -326,7 +326,7 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::value::NumForm;
+    use crate::ir::num::NumForm;
 
     #[fixture]
     fn molecule() -> Molecule {

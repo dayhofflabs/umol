@@ -18,9 +18,9 @@ proptest! {
     /// `canonicalize` completes the canonicalization on both sides.
     #[test]
     fn test_num_form_render_parse_equals_canonicalize(v in any_num_form_strategy()) {
-        let dsl = ValueDsl(v.clone());
+        let dsl = NumDsl(v.clone());
         let rendered = dsl.to_string();
-        let parsed = parse_value(&rendered).map_err(|e| {
+        let parsed = parse_num(&rendered).map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered:?}"))
         })?;
         prop_assert_eq!(parsed.canonicalize(), v.canonicalize());

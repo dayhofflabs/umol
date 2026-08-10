@@ -10,9 +10,9 @@ use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::Molecule;
+use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
-use super::super::value::NumForm;
 use super::atom::AtomView;
 use super::bond::BondView;
 
@@ -366,7 +366,7 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::value::NumForm;
+    use crate::ir::num::NumForm;
 
     #[fixture]
     fn molecule() -> Molecule {

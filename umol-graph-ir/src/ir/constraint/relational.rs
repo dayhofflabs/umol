@@ -668,7 +668,7 @@ mod tests {
     use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
-    use crate::ir::value::NumForm;
+    use crate::ir::num::NumForm;
 
     #[allow(clippy::too_many_arguments)]
     fn remapping(

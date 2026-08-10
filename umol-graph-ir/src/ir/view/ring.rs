@@ -3,8 +3,8 @@
 use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::Molecule;
+use super::super::num::NumForm;
 use super::super::ring::{intersection, RingId, RingSet, RingSetKind};
-use super::super::value::NumForm;
 
 /// Molecule ring views: owned ring set plus borrow of molecule.
 #[derive(Debug)]

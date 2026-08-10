@@ -133,9 +133,9 @@ mod tests {
     use super::super::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
+    use super::super::num::NumForm;
     use super::super::stereo::{StereoAtomForm, StereoConfigurationForm, StereoCoset, StereoKind};
     use super::super::substructure::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
-    use super::super::value::NumForm;
     use super::*;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {

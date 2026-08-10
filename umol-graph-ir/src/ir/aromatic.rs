@@ -5,9 +5,9 @@ use umol_graph_ir_macros::{Canonicalize, Lattice};
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
 use super::electrons::ElectronCountsForm;
+use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Canonicalize, Lattice};
-use super::value::NumForm;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct AromaticSystemForm {

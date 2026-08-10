@@ -8,8 +8,8 @@ use super::super::constraint::DativeBondConstraintsForm;
 use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::Molecule;
+use super::super::num::NumForm;
 use super::super::traits::Lattice;
-use super::super::value::NumForm;
 use super::atom::AtomView;
 
 /// Namespace accessor for dative-bond views on a `Molecule`.

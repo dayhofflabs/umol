@@ -1634,10 +1634,10 @@ mod tests {
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
     use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use super::super::num::NumForm;
     use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::super::validate::{DpoContradiction, EntityStructureContradiction};
-    use super::super::value::NumForm;
     use super::*;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {

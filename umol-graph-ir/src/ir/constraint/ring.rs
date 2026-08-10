@@ -4,8 +4,8 @@
 //! through size 22. `RingScope` selects a count; it does not select ring-set semantics.
 
 use super::super::error::{Contradiction, NoJoin};
+use super::super::num::NumForm;
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::NumForm;
 
 /// `All` = total ring count; `Size(s)` = count of size-`s` rings. `All` sorts first.
 ///

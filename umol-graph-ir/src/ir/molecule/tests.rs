@@ -38,10 +38,10 @@ use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::{
     NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
 };
+use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
-use super::super::value::NumForm;
 use super::{Molecule, MoleculeEntries, MoleculeEntriesError, TransactionError};
 use crate::{mol_dsl, mol_dsl_ground};
 

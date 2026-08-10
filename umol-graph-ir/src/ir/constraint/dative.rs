@@ -8,9 +8,9 @@ use std::vec::IntoIter;
 use super::super::boolean::BooleanForm;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
+use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::NumForm;
 
 /// Dative-bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

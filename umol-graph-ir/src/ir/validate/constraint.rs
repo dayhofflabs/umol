@@ -30,10 +30,10 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::molecule::Molecule;
+use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel};
 use super::super::stereo::StereoKind;
 use super::super::traits::Lattice;
-use super::super::value::NumForm;
 use super::super::view::RingViews;
 
 /// Algorithm selectors used by complete model-independent constraint validation.

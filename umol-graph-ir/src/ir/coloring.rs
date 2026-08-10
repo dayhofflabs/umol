@@ -220,9 +220,9 @@ mod tests {
     use crate::ir::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::num::NumForm;
     use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
-    use crate::ir::value::NumForm;
 
     #[fixture]
     fn ethanol_fragment() -> Molecule {

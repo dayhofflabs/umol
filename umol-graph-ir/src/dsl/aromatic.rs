@@ -14,15 +14,15 @@ use winnow::Parser;
 use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
+use super::num::{fmt_num, NumDsl};
 use super::predicate::{
     apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_unpaired_electrons,
     lower_unpaired_electrons, optional_value, raise_unpaired_electrons, UnpairedElectronsPredicate,
 };
-use super::value::{fmt_value, ValueDsl};
 use crate::ir::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use crate::ir::constraint::AromaticSystemConstraintForm;
+use crate::ir::num::NumForm;
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::NumForm;
 
 /// Surface DSL wrapper around `AromaticSystemForm`.
 #[repr(transparent)]
@@ -246,7 +246,7 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result {
         NumForm::Lit(n) => write!(f, "#e{}", n),
         v => {
             write!(f, "#e")?;
-            fmt_value(f, v)
+            fmt_num(f, v)
         }
     }
 }
@@ -428,7 +428,7 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
         NumForm::Lit(n) => write!(f, "{}{}", prefix, n),
         value => {
             write!(f, "{}", prefix)?;
-            fmt_value(f, value)
+            fmt_num(f, value)
         }
     }
 }
@@ -519,7 +519,7 @@ impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
         };
         match kw {
             "electron-count" => {
-                let v = ValueDsl::from_edn(value)?;
+                let v = NumDsl::from_edn(value)?;
                 Ok(Self::ElectronCount(v.0))
             }
             other => Err(DeError::Custom(format!(
@@ -534,7 +534,7 @@ impl ToEdn for AromaticSystemConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match self {
             Self::ElectronCount(v) => {
-                let value_edn = ValueDsl(v.clone()).to_edn();
+                let value_edn = NumDsl(v.clone()).to_edn();
                 let mut map = EdnMap::with_capacity(1);
                 map.insert(
                     Edn::Keyword(EdnKeyword::owned("electron-count".to_string())),

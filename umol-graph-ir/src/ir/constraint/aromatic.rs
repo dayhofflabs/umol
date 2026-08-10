@@ -6,9 +6,9 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::error::{Contradiction, NoJoin};
+use super::super::num::NumForm;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::traits::{Canonicalize, Lattice};
-use super::super::value::NumForm;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
 /// `AromaticSystemConstraintsForm`.

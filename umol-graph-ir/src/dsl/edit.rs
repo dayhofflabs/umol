@@ -20,11 +20,11 @@ use super::multicenter::{
 use super::noncovalent::{
     NoncovalentBondConstraintDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
 };
+use super::num::NumDsl;
 use super::stereo::{
     StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondConstraintDsl,
     StereoBondDsl, StereoBondUpdateDsl,
 };
-use super::value::ValueDsl;
 use crate::ir::aromatic::AromaticSystemUpdate;
 use crate::ir::atom::AtomUpdate;
 use crate::ir::bond::BondUpdate;
@@ -3486,7 +3486,7 @@ fn parse_molecule_constraint(
             let atoms = helper
                 .optional::<Vec<AtomHandle>>("atoms")?
                 .map(|atoms| atoms.into_iter().map(|atom| handles.atom(atom)).collect());
-            let sum: ValueDsl = helper.required("sum")?;
+            let sum: NumDsl = helper.required("sum")?;
             helper.finalize()?;
             MoleculeConstraint::ChargeSum {
                 atoms,
@@ -3517,7 +3517,7 @@ fn parse_molecule_constraint(
             let bonds = helper
                 .optional::<Vec<BondHandle>>("bonds")?
                 .map(|bonds| bonds.into_iter().map(|bond| handles.bond(bond)).collect());
-            let sum: ValueDsl = helper.required("sum")?;
+            let sum: NumDsl = helper.required("sum")?;
             helper.finalize()?;
             MoleculeConstraint::BondOrderSum {
                 bonds,
@@ -3554,7 +3554,7 @@ fn render_molecule_constraint(
                     ),
                 );
             }
-            map.insert(Edn::keyword("sum"), ValueDsl::from_ir(sum, &()).to_edn());
+            map.insert(Edn::keyword("sum"), NumDsl::from_ir(sum, &()).to_edn());
             single_key_map("charge-sum", Edn::Map(map))
         }
         MoleculeConstraint::UnpairedElectronCoupling {
@@ -3592,7 +3592,7 @@ fn render_molecule_constraint(
                     ),
                 );
             }
-            map.insert(Edn::keyword("sum"), ValueDsl::from_ir(sum, &()).to_edn());
+            map.insert(Edn::keyword("sum"), NumDsl::from_ir(sum, &()).to_edn());
             single_key_map("bond-order-sum", Edn::Map(map))
         }
         MoleculeConstraint::Connected { atoms } => {
@@ -4170,10 +4170,10 @@ mod tests {
     use crate::ir::noncovalent::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm,
     };
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{
         StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, Stereogenicity,
     };
-    use crate::ir::value::NumForm;
     use crate::mol_dsl;
 
     #[rstest]

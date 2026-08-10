@@ -15,14 +15,14 @@ pub(crate) use umol_chem::element::Element;
 pub(crate) use umol_edn::{read_string, Edn, FromEdn, ToEdn};
 use umol_graph_core::{Correspondence, EdgeId};
 pub(crate) use umol_graph_ir::dsl::{
-    parse_value, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
+    parse_num, AromaticSystemDsl, AromaticSystemUpdateDsl, AtomDsl, AtomUpdateDsl, BondDsl,
     BondUpdateDsl, DativeBondDsl, DativeBondParticipants, DativeBondUpdateDsl, EditsDsl,
     MetadataError, MoleculeContext, MoleculeDefaults, MoleculeDsl, MoleculeMetadata,
     MulticenterBondDsl, MulticenterBondUpdateDsl, NoncovalentBondDsl, NoncovalentBondUpdateDsl,
-    ParseError, ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl,
+    NumDsl, ParseError, ReactionDefaults, ReactionDsl, ReactionMetadata, ReactionSpanDsl,
     StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomParticipants, StereoAtomUpdateDsl,
     StereoBondConstraintDsl, StereoBondDsl, StereoBondParticipants, StereoBondUpdateDsl,
-    StereoLigandRef, ValueDsl,
+    StereoLigandRef,
 };
 pub(crate) use umol_graph_ir::ir::{
     aromatic_covalence, AddBond, ArithExpr, AromaticSystemConstraintForm,
@@ -368,7 +368,7 @@ pub(crate) fn non_vacuous_unpaired_electrons_strategy(
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
 /// `Lit`, and `LitSet`. No symbolic `ArithExpr`/`PredExpr` — the constraint
-/// formatters route to `fmt_value_field_required` / `fmt_ring_count` / the
+/// formatters route to `fmt_num_field_required` / `fmt_ring_count` / the
 /// various `#r` blocks, and an `ArithExpr(Lit(n))` would render to a pure integer
 /// that the parser then re-reads as a plain `Lit`, breaking roundtrip. The
 /// molecule-level EDN tests cover symbolic values on constraint values through
@@ -428,7 +428,7 @@ pub(crate) fn multicenter_valence_form_strategy() -> impl Strategy<Value = Multi
     })
 }
 
-/// Atom constraints route through `fmt_value_field_required` (or
+/// Atom constraints route through `fmt_num_field_required` (or
 /// `fmt_ring_count` for `#R`), which elide vacuous (Undetermined) payloads
 /// per the canonical-rendering rule. Generators excluding `Undetermined`
 /// keep the render → reparse identity intact.

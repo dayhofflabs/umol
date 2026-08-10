@@ -22,6 +22,7 @@ pub(crate) mod molecule;
 pub(crate) mod multicenter;
 pub(crate) mod namespace;
 pub(crate) mod noncovalent;
+pub(crate) mod num;
 pub(crate) mod operators;
 mod predicate;
 pub(crate) mod reaction;
@@ -29,7 +30,6 @@ pub(crate) mod reaction_span;
 pub(crate) mod refs;
 pub(crate) mod relational;
 pub(crate) mod stereo;
-pub(crate) mod value;
 
 pub use aromatic::{
     parse_aromatic_system, parse_aromatic_system_update, AromaticSystemConstraintDsl,
@@ -70,6 +70,7 @@ pub use noncovalent::{
     parse_noncovalent_bond, parse_noncovalent_bond_update, NoncovalentBondConstraintDsl,
     NoncovalentBondDsl, NoncovalentBondUpdateDsl,
 };
+pub use num::{parse_num, NumDsl};
 pub use reaction::{ReactionContext, ReactionDsl};
 pub use reaction_span::ReactionSpanDsl;
 pub use refs::{
@@ -83,4 +84,3 @@ pub use stereo::{
     StereoAtomConstraintDsl, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondConstraintDsl,
     StereoBondDsl, StereoBondUpdateDsl,
 };
-pub use value::{parse_value, ValueDsl};

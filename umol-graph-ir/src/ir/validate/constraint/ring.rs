@@ -10,9 +10,9 @@ use super::super::super::constraint::{
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId, DativeBondId};
 use super::super::super::molecule::Molecule;
+use super::super::super::num::NumForm;
 use super::super::super::ring::{RingConfig, RingModel};
 use super::super::super::traits::Lattice;
-use super::super::super::value::NumForm;
 use super::super::super::view::{RingAtomView, RingBondView};
 use super::ConstraintError;
 

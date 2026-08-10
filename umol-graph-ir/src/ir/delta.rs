@@ -3294,7 +3294,7 @@ mod tests {
 
     use super::super::constraint::{MoleculeConstraint, RelationalConstraint};
     use super::super::noncovalent::NoncovalentBondKind;
-    use super::super::value::NumForm;
+    use super::super::num::NumForm;
     use super::*;
     use crate::ir::{
         AromaticSystemConstraintsForm, AtomConstraintsForm, BondConstraintsForm, BooleanForm,

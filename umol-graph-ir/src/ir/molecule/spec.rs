@@ -563,8 +563,8 @@ mod tests {
         StereoBondId,
     };
     use crate::ir::noncovalent::NoncovalentBondKind;
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{StereoCoset, StereoKind};
-    use crate::ir::value::NumForm;
 
     #[rstest]
     #[case::element(

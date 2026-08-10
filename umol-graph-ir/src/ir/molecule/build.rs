@@ -203,8 +203,8 @@ mod tests {
     use super::*;
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::noncovalent::NoncovalentBondKind;
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{StereoCoset, StereoKind};
-    use crate::ir::value::NumForm;
 
     #[rstest]
     fn test_molecule_builder() {

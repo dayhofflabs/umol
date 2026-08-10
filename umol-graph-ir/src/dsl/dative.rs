@@ -16,13 +16,13 @@ use super::config::DativeBondDefaults;
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
+use super::num::{fmt_num, num};
 use super::predicate::{fmt_ring_membership, ring_membership};
-use super::value::{fmt_value, value};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{DativeBondConstraintForm, RingMembershipForm, RingScope};
 use crate::ir::dative::{DativeBondForm, DativeBondUpdate};
+use crate::ir::num::NumForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
-use crate::ir::value::NumForm;
 
 /// Surface DSL wrapper around `DativeBondForm`. The string form is the order
 /// (number of donated electron pairs) followed by `#…` predicates,
@@ -280,7 +280,7 @@ pub fn parse_dative_bond_update(input: &str) -> Result<DativeBondUpdateDsl, Pars
 }
 
 fn dative_bond_update(i: &mut &str) -> PResult<DativeBondUpdateDsl> {
-    let order = preceded(multispace0, terminated(opt(value), multispace0)).parse_next(i)?;
+    let order = preceded(multispace0, terminated(opt(num), multispace0)).parse_next(i)?;
     let preds: Vec<DativeBondPredicate> =
         repeat(0.., terminated(dative_bond_predicate, multispace0)).parse_next(i)?;
     let mut update = DativeBondUpdate {
@@ -292,7 +292,7 @@ fn dative_bond_update(i: &mut &str) -> PResult<DativeBondUpdateDsl> {
 }
 
 pub(crate) fn dative_bond(i: &mut &str) -> PResult<DativeBondDsl> {
-    let order = preceded(multispace0, terminated(value, multispace0)).parse_next(i)?;
+    let order = preceded(multispace0, terminated(num, multispace0)).parse_next(i)?;
     let preds: Vec<DativeBondPredicate> =
         repeat(0.., terminated(dative_bond_predicate, multispace0)).parse_next(i)?;
     let mut form = DativeBondDsl(DativeBondForm::new(order));
@@ -368,7 +368,7 @@ fn fmt_order(f: &mut fmt::Formatter<'_>, order: &NumForm) -> fmt::Result {
     match order {
         NumForm::Lit(n) => write!(f, "{}", n),
         NumForm::Undetermined => write!(f, "*"),
-        v => fmt_value(f, v),
+        v => fmt_num(f, v),
     }
 }
 

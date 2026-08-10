@@ -22,6 +22,7 @@ use super::metadata::Metadata;
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::namespace::Namespace;
 use super::noncovalent::NoncovalentBondConstraintDsl;
+use super::num::{parse_num, NumDsl};
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
     read_multicenter_bond_ref, read_noncovalent_bond_ref, read_stereo_atom_ref,
@@ -34,7 +35,6 @@ use super::stereo::{
     stereo_kind_from_name, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
     StereoCosetDsl,
 };
-use super::value::{parse_value, ValueDsl};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     AromaticValenceForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
@@ -44,27 +44,26 @@ use crate::ir::constraint::{
     TopicityForm,
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
+use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::{CisTransStereoForm, StereoCoset, StereoKind, TetrahedralStereoForm};
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::NumForm;
 
-pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
+pub(super) fn read_num_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<NumDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'"' => {
             let s = de.read_string()?;
-            let v: NumForm =
-                parse_value(s.as_ref()).map_err(|e| DeError::subgrammar("value", e))?;
-            Ok(ValueDsl(v))
+            let v: NumForm = parse_num(s.as_ref()).map_err(|e| DeError::subgrammar("num", e))?;
+            Ok(NumDsl(v))
         }
         b'[' => {
             let items = read_vec(de, |d| Ok(d.read_i64()?))?;
-            Ok(ValueDsl(NumForm::lit_set(items)))
+            Ok(NumDsl(NumForm::lit_set(items)))
         }
         b':' => {
             let name = de.read_keyword_name()?;
             if name.as_ref() == "undetermined" {
-                Ok(ValueDsl(NumForm::Undetermined))
+                Ok(NumDsl(NumForm::Undetermined))
             } else {
                 Err(
                     DeError::Custom(format!("unexpected keyword :{} in value position", name))
@@ -72,7 +71,7 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
                 )
             }
         }
-        _ => Ok(ValueDsl(NumForm::Lit(de.read_i64()?))),
+        _ => Ok(NumDsl(NumForm::Lit(de.read_i64()?))),
     }
 }
 
@@ -83,8 +82,8 @@ pub(super) fn read_unpaired_electrons(
     let mut multiplicity = None;
     read_map(de, |d, key| {
         match key {
-            "count" => count = Some(read_value_dsl(d)?.into_ir(&())),
-            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ir(&())),
+            "count" => count = Some(read_num_dsl(d)?.into_ir(&())),
+            "multiplicity" => multiplicity = Some(read_num_dsl(d)?.into_ir(&())),
             _ => d.read_skip_value()?,
         }
         Ok(())
@@ -115,7 +114,7 @@ pub(super) fn read_aromatic_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "aromatic" => {
-                    let v = read_value_dsl(de)?.into_ir(&());
+                    let v = read_num_dsl(de)?.into_ir(&());
                     consume_single_key_map_close(de, "aromatic-valence")?;
                     Ok(AromaticValenceDsl(AromaticValenceForm::Aromatic(v)))
                 }
@@ -157,7 +156,7 @@ pub(super) fn read_multicenter_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "multicenter" => {
-                    let v = read_value_dsl(de)?.into_ir(&());
+                    let v = read_num_dsl(de)?.into_ir(&());
                     consume_single_key_map_close(de, "multicenter-valence")?;
                     Ok(MulticenterValenceDsl(MulticenterValenceForm::Multicenter(
                         v,
@@ -188,7 +187,7 @@ fn read_ring_membership_dsl(
     read_map(de, |de, key| {
         match key {
             "size" => size = Some(de.read_i64()? as u8),
-            "count" => count = Some(read_value_dsl(de)?.into_ir(&())),
+            "count" => count = Some(read_num_dsl(de)?.into_ir(&())),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -221,7 +220,7 @@ impl ToEdn for RingMembershipDsl {
         }
         m.insert(
             Edn::Keyword(EdnKeyword::owned("count".into())),
-            ValueDsl::from_ir(&self.0.count, &()).to_edn(),
+            NumDsl::from_ir(&self.0.count, &()).to_edn(),
         );
         Edn::Map(m)
     }
@@ -257,7 +256,7 @@ impl<'de> FromEdn<'de> for RingMembershipDsl {
                     };
                     scope = RingScope::Size(*n as u8);
                 }
-                "count" => count = Some(ValueDsl::from_edn(v)?.into_ir(&())),
+                "count" => count = Some(NumDsl::from_edn(v)?.into_ir(&())),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -361,21 +360,21 @@ pub(super) fn read_atom_constraint_dsl(
 ) -> Result<AtomConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "valence" => AtomConstraintForm::Valence(read_value_dsl(de)?.into_ir(&())),
-        "total-valence" => AtomConstraintForm::TotalValence(read_value_dsl(de)?.into_ir(&())),
+        "valence" => AtomConstraintForm::Valence(read_num_dsl(de)?.into_ir(&())),
+        "total-valence" => AtomConstraintForm::TotalValence(read_num_dsl(de)?.into_ir(&())),
         "aromatic-valence" => {
             AtomConstraintForm::AromaticValence(read_aromatic_valence_dsl(de)?.into_ir(&()))
         }
         "multicenter-valence" => {
             AtomConstraintForm::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ir(&()))
         }
-        "donated-pairs" => AtomConstraintForm::DonatedPairs(read_value_dsl(de)?.into_ir(&())),
-        "accepted-pairs" => AtomConstraintForm::AcceptedPairs(read_value_dsl(de)?.into_ir(&())),
-        "degree" => AtomConstraintForm::Degree(read_value_dsl(de)?.into_ir(&())),
-        "total-degree" => AtomConstraintForm::TotalDegree(read_value_dsl(de)?.into_ir(&())),
-        "ring-degree" => AtomConstraintForm::RingDegree(read_value_dsl(de)?.into_ir(&())),
-        "ring-valence" => AtomConstraintForm::RingValence(read_value_dsl(de)?.into_ir(&())),
-        "total-hydrogens" => AtomConstraintForm::TotalHydrogens(read_value_dsl(de)?.into_ir(&())),
+        "donated-pairs" => AtomConstraintForm::DonatedPairs(read_num_dsl(de)?.into_ir(&())),
+        "accepted-pairs" => AtomConstraintForm::AcceptedPairs(read_num_dsl(de)?.into_ir(&())),
+        "degree" => AtomConstraintForm::Degree(read_num_dsl(de)?.into_ir(&())),
+        "total-degree" => AtomConstraintForm::TotalDegree(read_num_dsl(de)?.into_ir(&())),
+        "ring-degree" => AtomConstraintForm::RingDegree(read_num_dsl(de)?.into_ir(&())),
+        "ring-valence" => AtomConstraintForm::RingValence(read_num_dsl(de)?.into_ir(&())),
+        "total-hydrogens" => AtomConstraintForm::TotalHydrogens(read_num_dsl(de)?.into_ir(&())),
         "ring-membership" => AtomConstraintForm::RingMembership(read_ring_membership_dsl(de)?),
         "tetrahedral-stereo" => {
             AtomConstraintForm::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
@@ -463,7 +462,7 @@ pub(super) fn read_aromatic_system_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "electron-count" => {
-            AromaticSystemConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ir(&()))
+            AromaticSystemConstraintDsl::ElectronCount(read_num_dsl(de)?.into_ir(&()))
         }
         other => {
             return Err(DeError::UnknownField {
@@ -483,7 +482,7 @@ pub(super) fn read_multicenter_bond_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "electron-count" => {
-            MulticenterBondConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ir(&()))
+            MulticenterBondConstraintDsl::ElectronCount(read_num_dsl(de)?.into_ir(&()))
         }
         other => {
             return Err(DeError::UnknownField {
@@ -933,7 +932,7 @@ pub(super) fn read_molecule_constraint_dsl(
             read_map(de, |d, k| {
                 match k {
                     "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
-                    "sum" => sum = Some(read_value_dsl(d)?),
+                    "sum" => sum = Some(read_num_dsl(d)?),
                     _ => d.read_skip_value()?,
                 }
                 Ok(())
@@ -966,7 +965,7 @@ pub(super) fn read_molecule_constraint_dsl(
             read_map(de, |d, k| {
                 match k {
                     "bonds" => bonds = Some(read_vec(d, read_bond_ref)?),
-                    "sum" => sum = Some(read_value_dsl(d)?),
+                    "sum" => sum = Some(read_num_dsl(d)?),
                     _ => d.read_skip_value()?,
                 }
                 Ok(())
@@ -1116,7 +1115,7 @@ pub(super) fn read_constraints_dsl(
 pub enum MoleculeConstraintDsl {
     ChargeSum {
         atoms: Option<Vec<AtomRef>>,
-        sum: ValueDsl,
+        sum: NumDsl,
     },
     UnpairedElectronCoupling {
         atoms: Option<Vec<AtomRef>>,
@@ -1124,7 +1123,7 @@ pub enum MoleculeConstraintDsl {
     },
     BondOrderSum {
         bonds: Option<Vec<BondRef>>,
-        sum: ValueDsl,
+        sum: NumDsl,
     },
     Connected {
         atoms: Option<Vec<AtomRef>>,
@@ -1177,7 +1176,7 @@ impl MoleculeConstraintDsl {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: denote_atom_subset(atoms, meta),
-                sum: ValueDsl::from_ir(sum, &()),
+                sum: NumDsl::from_ir(sum, &()),
             },
             MoleculeConstraint::UnpairedElectronCoupling {
                 atoms,
@@ -1188,7 +1187,7 @@ impl MoleculeConstraintDsl {
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: denote_bond_subset(bonds, meta),
-                sum: ValueDsl::from_ir(sum, &()),
+                sum: NumDsl::from_ir(sum, &()),
             },
             MoleculeConstraint::Connected { atoms } => Self::Connected {
                 atoms: denote_atom_subset(atoms, meta),
@@ -1366,7 +1365,7 @@ fn parse_sum_map<R>(
     edn: &Edn<'_>,
     context: &'static str,
     refs_key: &'static str,
-) -> Result<(Option<Vec<R>>, ValueDsl), DeError>
+) -> Result<(Option<Vec<R>>, NumDsl), DeError>
 where
     R: for<'de> FromEdn<'de>,
 {
@@ -1376,10 +1375,10 @@ where
         key: "sum".into(),
         path: vec![context.into()],
     })?;
-    Ok((refs, ValueDsl::from_edn(sum_edn)?))
+    Ok((refs, NumDsl::from_edn(sum_edn)?))
 }
 
-fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDsl) -> Edn<'static> {
+fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &NumDsl) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     if let Some(v) = refs {
         m.insert(
@@ -1406,8 +1405,8 @@ pub(super) fn parse_unpaired_electrons(edn: &Edn<'_>) -> Result<UnpairedElectron
             path: vec!["unpaired-electrons".into()],
         })?;
     Ok(UnpairedElectronsForm {
-        count: ValueDsl::from_edn(count)?.into_ir(&()),
-        multiplicity: ValueDsl::from_edn(multiplicity)?.into_ir(&()),
+        count: NumDsl::from_edn(count)?.into_ir(&()),
+        multiplicity: NumDsl::from_edn(multiplicity)?.into_ir(&()),
     })
 }
 
@@ -1417,11 +1416,11 @@ pub(super) fn render_unpaired_electrons(
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("count"),
-        ValueDsl::from_ir(&unpaired_electrons.count, &()).to_edn(),
+        NumDsl::from_ir(&unpaired_electrons.count, &()).to_edn(),
     );
     m.insert(
         Edn::keyword("multiplicity"),
-        ValueDsl::from_ir(&unpaired_electrons.multiplicity, &()).to_edn(),
+        NumDsl::from_ir(&unpaired_electrons.multiplicity, &()).to_edn(),
     );
     Edn::Map(m)
 }
@@ -1771,11 +1770,11 @@ mod tests {
     use crate::ir::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
     };
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{
         CisTransStereoForm, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoForm,
         Topicity,
     };
-    use crate::ir::value::NumForm;
     use crate::ir::BooleanForm;
 
     /// Every `fuzz_constraints` seed must parse as a `ConstraintDsl` or a `ConstraintsDsl` (tree) —

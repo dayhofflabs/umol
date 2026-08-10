@@ -13,10 +13,10 @@ use super::super::id::{
     StereoAtomId,
 };
 use super::super::molecule::Molecule;
+use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{StereoKind, TetrahedralStereoForm};
 use super::super::traits::Lattice;
-use super::super::value::NumForm;
 use super::aromatic::AromaticSystemView;
 use super::dative::DativeBondView;
 use super::multicenter::MulticenterBondView;
@@ -485,8 +485,8 @@ mod tests {
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
+    use crate::ir::num::NumForm;
     use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind, TetrahedralStereoForm};
-    use crate::ir::value::NumForm;
     use crate::mol_dsl;
 
     #[fixture]

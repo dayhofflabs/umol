@@ -1,4 +1,4 @@
-//! Value DSL: parser, `Display`, EDN boundary. The canonicalization is run lazily.
+//! Numeric DSL: parser, `Display`, and EDN boundary.
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -13,17 +13,17 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::operators::{mem_op, mem_op_str, rel_op, rel_op_str};
+use crate::ir::num::{ArithExpr, NumForm, PredExpr};
 use crate::ir::traits::{FromIr, IntoIr};
-use crate::ir::value::{ArithExpr, NumForm, PredExpr};
 
 /// Surface DSL wrapper around `NumForm`. EDN form is hybrid: `Lit` → `Int`,
 /// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `ArithExpr`/
-/// `PredExpr` → string via the value subgrammar (EDN has no native form for
+/// `PredExpr` → string via the numeric subgrammar (EDN has no native form for
 /// the arithmetic/boolean grammar and round-trip fidelity is mandatory).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ValueDsl(pub NumForm);
+pub struct NumDsl(pub NumForm);
 
-impl FromIr<NumForm> for ValueDsl {
+impl FromIr<NumForm> for NumDsl {
     type Ctx = ();
 
     fn from_ir(ast: &NumForm, _ctx: &Self::Ctx) -> Self {
@@ -31,7 +31,7 @@ impl FromIr<NumForm> for ValueDsl {
     }
 }
 
-impl IntoIr<NumForm> for ValueDsl {
+impl IntoIr<NumForm> for NumDsl {
     type Ctx = ();
 
     fn into_ir(self, _ctx: &Self::Ctx) -> NumForm {
@@ -39,13 +39,13 @@ impl IntoIr<NumForm> for ValueDsl {
     }
 }
 
-impl Display for ValueDsl {
+impl Display for NumDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_value(f, &self.0)
+        fmt_num(f, &self.0)
     }
 }
 
-impl<'de> FromEdn<'de> for ValueDsl {
+impl<'de> FromEdn<'de> for NumDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let v = match edn {
             Edn::Int(n) => NumForm::Lit(*n),
@@ -55,7 +55,7 @@ impl<'de> FromEdn<'de> for ValueDsl {
                 for e in xs.iter() {
                     let Edn::Int(n) = e else {
                         return Err(DeError::TypeMismatch {
-                            expected: "int (value-set element)",
+                            expected: "int (numeric-set element)",
                             got: e.kind(),
                             path: Vec::new(),
                         });
@@ -64,10 +64,10 @@ impl<'de> FromEdn<'de> for ValueDsl {
                 }
                 NumForm::from(out)
             }
-            Edn::Str(s) => parse_value(s).map_err(|e| DeError::subgrammar("value", e))?,
+            Edn::Str(s) => parse_num(s).map_err(|e| DeError::subgrammar("num", e))?,
             other => {
                 return Err(DeError::TypeMismatch {
-                    expected: "value (int, :undetermined, vector, or string)",
+                    expected: "numeric form (int, :undetermined, vector, or string)",
                     got: other.kind(),
                     path: Vec::new(),
                 });
@@ -77,7 +77,7 @@ impl<'de> FromEdn<'de> for ValueDsl {
     }
 }
 
-impl ToEdn for ValueDsl {
+impl ToEdn for NumDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             NumForm::Lit(n) => Edn::Int(*n),
@@ -106,7 +106,7 @@ const PREC_PRODUCT: u8 = 6;
 const PREC_NEG: u8 = 7;
 const PREC_ATOM: u8 = 8;
 
-pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result {
+pub(crate) fn fmt_num(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result {
     match v {
         NumForm::Undetermined => f.write_char('*'),
         NumForm::Lit(n) => write!(f, "{}", n),
@@ -248,18 +248,18 @@ fn fmt_pred_expr(f: &mut fmt::Formatter<'_>, p: &PredExpr, parent: u8) -> fmt::R
     Ok(())
 }
 
-/// Parse a complete value-string into a `NumForm`.
-pub fn parse_value(input: &str) -> Result<NumForm, ParseError> {
-    value.parse(input).map_err(|e| e.into_inner())
+/// Parse a complete numeric DSL string into a `NumForm`.
+pub fn parse_num(input: &str) -> Result<NumForm, ParseError> {
+    num.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn value(i: &mut &str) -> PResult<NumForm> {
+pub(crate) fn num(i: &mut &str) -> PResult<NumForm> {
     alt((
         terminated(signed_int, (multispace0, terminator)).map(NumForm::Lit),
         "*".value(NumForm::Undetermined),
         set.map(|v: Vec<i64>| NumForm::lit_set(v)),
         range,
-        or_expr.map(parsed_to_value),
+        or_expr.map(parsed_to_num),
     ))
     .parse_next(i)
 }
@@ -284,7 +284,7 @@ enum Parsed {
     PredExpr(PredExpr),
 }
 
-fn parsed_to_value(parsed: Parsed) -> NumForm {
+fn parsed_to_num(parsed: Parsed) -> NumForm {
     match parsed {
         Parsed::ArithExpr(expression) => NumForm::arith_expr(expression),
         Parsed::PredExpr(expression) => NumForm::pred_expr(expression),
@@ -516,6 +516,7 @@ fn base_expr(i: &mut &str) -> PResult<Parsed> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::{FromEdn, ToEdn};
 
     use super::*;
     use crate::ir::operators::{MemOp, RelOp};
@@ -560,8 +561,8 @@ mod tests {
         ArithExpr::Sum(vec![ArithExpr::Lit(0), ArithExpr::Lit(1)]),
         ArithExpr::Lit(1),
     ])))]
-    fn test_value(#[case] input: &str, #[case] expected: NumForm) {
-        let result = value.parse(input);
+    fn test_parse_num(#[case] input: &str, #[case] expected: NumForm) {
+        let result = num.parse(input);
         assert!(result.is_ok(), "{:?} error: {:?}", input, result.clone().unwrap_err());
         assert_eq!(result.unwrap(), expected);
     }
@@ -582,8 +583,8 @@ mod tests {
     #[case::finite_range("(1..3)")]
     #[case::unclosed_paren_add("(0 + 1")]
     #[case::not_term("!?h")]
-    fn test_value_error(#[case] input: &str) {
-        let res = value.parse(input);
+    fn test_parse_num_error(#[case] input: &str) {
+        let res = num.parse(input);
         assert!(
             res.is_err(),
             "{input:?} should fail, got {:?}",
@@ -619,8 +620,8 @@ mod tests {
         ]),
         PredExpr::Rel(ArithExpr::Var("c".to_string()), RelOp::Eq, ArithExpr::Lit(0)),
     ])), "(?a == 0 | ?b == 0) & ?c == 0")]
-    fn test_value_display(#[case] input: NumForm, #[case] expected: &str) {
-        assert_eq!(ValueDsl::from_ir(&input, &()).to_string(), expected);
+    fn test_num_dsl_display(#[case] input: NumForm, #[case] expected: &str) {
+        assert_eq!(NumDsl::from_ir(&input, &()).to_string(), expected);
     }
 
     #[rustfmt::skip]
@@ -648,10 +649,10 @@ mod tests {
     #[case::mem_notin("?h !: {0,1}")]
     #[case::range_from("(1..)")]
     #[case::range_to("(..3)")]
-    fn test_value_display_roundtrip(#[case] input: &str) {
-        let parsed = value.parse(input).unwrap();
-        let rendered = ValueDsl::from_ir(&parsed, &()).to_string();
-        let reparsed = value.parse(&rendered).unwrap();
+    fn test_num_dsl_display_roundtrip(#[case] input: &str) {
+        let parsed = num.parse(input).unwrap();
+        let rendered = NumDsl::from_ir(&parsed, &()).to_string();
+        let reparsed = num.parse(&rendered).unwrap();
         assert_eq!(parsed, reparsed, "input={input:?} rendered={rendered:?}");
     }
 
@@ -666,9 +667,8 @@ mod tests {
         NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
-    fn test_value_dsl_to_edn(#[case] v: NumForm, #[case] expected: Edn<'static>) {
-        use umol_edn::ToEdn;
-        assert_eq!(ValueDsl::from_ir(&v, &()).to_edn(), expected);
+    fn test_num_dsl_to_edn(#[case] v: NumForm, #[case] expected: Edn<'static>) {
+        assert_eq!(NumDsl::from_ir(&v, &()).to_edn(), expected);
     }
 
     #[rustfmt::skip]
@@ -683,15 +683,13 @@ mod tests {
         Edn::Str(Cow::Borrowed("?h == 0")),
         NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Eq, ArithExpr::Lit(0))),
     )]
-    fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: NumForm) {
-        use umol_edn::FromEdn;
-        assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ir(&()), expected);
+    fn test_num_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: NumForm) {
+        assert_eq!(NumDsl::from_edn(&input).unwrap().into_ir(&()), expected);
     }
 
     #[rstest]
-    fn test_value_dsl_from_edn_error() {
-        use umol_edn::FromEdn;
-        let err = ValueDsl::from_edn(&Edn::Nil).unwrap_err();
+    fn test_num_dsl_from_edn_error() {
+        let err = NumDsl::from_edn(&Edn::Nil).unwrap_err();
         assert!(matches!(err, DeError::TypeMismatch { .. }));
     }
 
@@ -703,10 +701,9 @@ mod tests {
     #[case::range_from(NumForm::RangeFrom(1))]
     #[case::range_to(NumForm::RangeTo(3))]
     #[case::pred(NumForm::pred_expr(PredExpr::Rel(ArithExpr::Var("h".to_string()), RelOp::Ge, ArithExpr::Lit(1))))]
-    fn test_value_dsl_edn_roundtrip(#[case] v: NumForm) {
-        use umol_edn::{FromEdn, ToEdn};
-        let edn = ValueDsl::from_ir(&v, &()).to_edn();
-        let back = ValueDsl::from_edn(&edn).unwrap().into_ir(&());
+    fn test_num_dsl_edn_roundtrip(#[case] v: NumForm) {
+        let edn = NumDsl::from_ir(&v, &()).to_edn();
+        let back = NumDsl::from_edn(&edn).unwrap().into_ir(&());
         assert_eq!(back, v);
     }
 }

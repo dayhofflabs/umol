@@ -8,10 +8,10 @@ use umol_graph_ir_macros::{Canonicalize, Lattice};
 
 use super::constraint::{AtomConstraintForm, AtomConstraintsForm};
 use super::error::{Contradiction, NoJoin};
+use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{AsLit, Canonicalize, Lattice};
-use super::value::NumForm;
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern

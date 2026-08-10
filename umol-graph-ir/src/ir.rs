@@ -21,6 +21,7 @@ pub(crate) mod matching;
 pub(crate) mod molecule;
 pub(crate) mod multicenter;
 pub(crate) mod noncovalent;
+pub(crate) mod num;
 pub(crate) mod operators;
 pub(crate) mod reaction;
 pub(crate) mod reaction_derivation;
@@ -33,7 +34,6 @@ pub(crate) mod substructure;
 pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod validate;
-pub(crate) mod value;
 pub(crate) mod view;
 
 pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
@@ -94,6 +94,7 @@ pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 pub use noncovalent::{
     NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
 };
+pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
 pub use reaction::Reaction;
 pub use reaction_derivation::ReactionDerivation;
@@ -124,7 +125,6 @@ pub use validate::{
     ReactionIntegrityError, ReactionIntegrityValidator, RelationalConstraintContradiction,
     RelationalConstraintValidator, RingConstraintContradiction, RingConstraintValidator,
 };
-pub use value::{ArithExpr, NumForm, PredExpr};
 pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,

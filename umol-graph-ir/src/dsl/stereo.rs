@@ -19,7 +19,7 @@ use super::boolean::{boolean, fmt_boolean, BooleanDsl};
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
-use super::value::variable_name;
+use super::num::variable_name;
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,

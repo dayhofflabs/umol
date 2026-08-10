@@ -9,26 +9,22 @@ use winnow::Parser;
 
 use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
-use super::value::{fmt_value, value};
+use super::num::{fmt_num, num};
 use crate::ir::constraint::{RingMembershipForm, RingScope};
+use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
-use crate::ir::value::NumForm;
 
 pub(crate) fn charge(i: &mut &str) -> PResult<NumForm> {
     preceded(
         multispace0,
-        alt((
-            value,
-            "+".value(NumForm::Lit(1)),
-            "-".value(NumForm::Lit(-1)),
-        )),
+        alt((num, "+".value(NumForm::Lit(1)), "-".value(NumForm::Lit(-1)))),
     )
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
 
 pub(crate) fn optional_value(i: &mut &str) -> PResult<NumForm> {
-    preceded(multispace0, alt((value, empty.value(NumForm::Lit(1)))))
+    preceded(multispace0, alt((num, empty.value(NumForm::Lit(1)))))
         .parse_next(i)
         .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
@@ -37,7 +33,7 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<NumForm> {
     preceded(
         multispace0,
         alt((
-            value,
+            num,
             "+".value(NumForm::RangeFrom(1)),
             "!".value(NumForm::Lit(0)),
             empty.value(NumForm::Lit(1)),
@@ -98,7 +94,7 @@ pub(crate) fn fmt_charge(f: &mut fmt::Formatter<'_>, v: &NumForm) -> fmt::Result
         NumForm::Lit(n) => write!(f, "#c{}", n),
         v => {
             write!(f, "#c")?;
-            fmt_value(f, v)
+            fmt_num(f, v)
         }
     }
 }
@@ -113,7 +109,7 @@ pub(crate) fn fmt_unpaired_electrons(
         NumForm::Lit(n) => write!(f, "#u{}", n)?,
         v => {
             write!(f, "#u")?;
-            fmt_value(f, v)?;
+            fmt_num(f, v)?;
         }
     }
     match &unpaired_electrons.multiplicity {
@@ -122,7 +118,7 @@ pub(crate) fn fmt_unpaired_electrons(
         NumForm::Lit(n) => write!(f, "#s{}", n)?,
         v => {
             write!(f, "#s")?;
-            fmt_value(f, v)?;
+            fmt_num(f, v)?;
         }
     }
     Ok(())
@@ -163,7 +159,7 @@ pub(crate) fn fmt_ring_membership(
         NumForm::Lit(0) => write!(f, "!"),
         NumForm::Lit(1) => Ok(()),
         NumForm::Lit(n) => write!(f, "{}", n),
-        v => fmt_value(f, v),
+        v => fmt_num(f, v),
     }
 }
 

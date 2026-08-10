@@ -519,7 +519,7 @@ mod tests {
         AromaticSystemId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
         StereoBondId,
     };
-    use crate::ir::value::NumForm;
+    use crate::ir::num::NumForm;
     use crate::mol_dsl;
 
     #[fixture]

@@ -16,22 +16,22 @@ use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
+use super::num::{fmt_num, num};
 use super::predicate::{
     apply_unpaired_electrons_predicate, charge, fmt_charge, fmt_ring_membership,
     fmt_unpaired_electrons, lower_unpaired_electrons, optional_value, raise_unpaired_electrons,
     ring_membership, UnpairedElectronsPredicate,
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
-use super::value::{fmt_value, value};
 use crate::ir::bond::{BondForm, BondUpdate};
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{
     BondConstraintForm, BondConstraintKey, BondConstraintsForm, RingScope,
 };
+use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::CisTransStereoForm;
 use crate::ir::traits::{FromIr, IntoIr, Lattice};
-use crate::ir::value::NumForm;
 
 /// Surface DSL wrapper around `BondForm`.
 #[repr(transparent)]
@@ -206,7 +206,7 @@ pub fn parse_bond(input: &str) -> Result<BondDsl, ParseError> {
 
 /// Bond-string parser (does not require consuming all input).
 fn bond(i: &mut &str) -> PResult<BondDsl> {
-    let order = delimited(multispace0, value, multispace0).parse_next(i)?;
+    let order = delimited(multispace0, num, multispace0).parse_next(i)?;
     let preds: Vec<BondPredicate> =
         repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
     let mut form = BondDsl(BondForm::new(order));
@@ -272,7 +272,7 @@ impl Display for BondUpdateDsl {
             match order {
                 NumForm::Undetermined => write!(f, "*")?,
                 NumForm::Lit(n) => write!(f, "{}", n)?,
-                value => fmt_value(f, value)?,
+                value => fmt_num(f, value)?,
             }
         }
         if let Some(charge) = &update.charge {
@@ -323,7 +323,7 @@ pub fn parse_bond_update(input: &str) -> Result<BondUpdateDsl, ParseError> {
 }
 
 fn bond_update(i: &mut &str) -> PResult<BondUpdateDsl> {
-    let order = delimited(multispace0, opt(value), multispace0).parse_next(i)?;
+    let order = delimited(multispace0, opt(num), multispace0).parse_next(i)?;
     let preds: Vec<BondPredicate> =
         repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
     let mut update = BondUpdate {
@@ -392,7 +392,7 @@ fn fmt_update_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &NumForm)
             NumForm::Lit(n) => write!(f, "{}{}", prefix, n),
             value => {
                 write!(f, "{}", prefix)?;
-                fmt_value(f, value)
+                fmt_num(f, value)
             }
         }
     }
@@ -476,7 +476,7 @@ fn fmt_bond_form(f: &mut fmt::Formatter<'_>, form: &BondForm) -> fmt::Result {
     match &form.order {
         NumForm::Lit(n) => write!(f, "{}", n)?,
         NumForm::Undetermined => write!(f, "*")?,
-        v => fmt_value(f, v)?,
+        v => fmt_num(f, v)?,
     }
 
     fmt_charge(f, &form.charge)?;

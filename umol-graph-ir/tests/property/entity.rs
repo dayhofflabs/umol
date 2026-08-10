@@ -424,7 +424,7 @@ proptest! {
 /// Vacuous-payload `AtomConstraintForm` variants render to nothing in the
 /// canonical entity-string form. The proptest generator excludes these from
 /// roundtrip strategies; this asserts the elision invariant directly so a
-/// regression in `fmt_value_field_required` / `fmt_ring_count` / the
+/// regression in `fmt_num_field_required` / `fmt_ring_count` / the
 /// AromaticValence / MulticenterValence formatters can't slip through.
 #[rstest]
 #[case::valence(AtomConstraintForm::Valence(NumForm::Undetermined))]
