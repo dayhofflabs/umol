@@ -45,7 +45,7 @@ impl AromaticSystemUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -95,7 +95,7 @@ impl AromaticSystemUpdate {
 
     #[getter]
     fn constraints(&self) -> AromaticSystemConstraintsForm {
-        AromaticSystemConstraintsForm::from_inner(self.0.constraints.clone())
+        AromaticSystemConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -104,8 +104,8 @@ impl AromaticSystemUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrAromaticSystemUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrAromaticSystemUpdate {
+        &self.0
     }
 }
 
@@ -146,16 +146,16 @@ impl AromaticSystemForm {
             system = system.with_unpaired_electrons(unpaired_electrons.to_rust(py));
         }
         if let Some(constraints) = constraints {
-            system.constraints = constraints.bind(py).borrow().inner().clone();
+            system.constraints = constraints.bind(py).borrow().to_rust().clone();
         }
-        AromaticSystemForm::from_inner(system)
+        AromaticSystemForm::from_rust(system)
     }
 
     /// Parse an aromatic-system-DSL string (e.g. `"[1,1,1]#e6"`) into an `AromaticSystemForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrAromaticSystemForm::from_str(s)
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(parse_error)
     }
 
@@ -175,7 +175,7 @@ impl AromaticSystemForm {
 
     #[setter]
     fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
-        self.try_inner_mut()?.electrons = value.to_rust(py);
+        self.to_rust_mut()?.electrons = value.to_rust(py);
         Ok(())
     }
 
@@ -186,7 +186,7 @@ impl AromaticSystemForm {
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.try_inner_mut()?.charge = value.to_rust(py);
+        self.to_rust_mut()?.charge = value.to_rust(py);
         Ok(())
     }
 
@@ -201,7 +201,7 @@ impl AromaticSystemForm {
         py: Python<'_>,
         value: PyRef<'_, UnpairedElectronsForm>,
     ) -> PyResult<()> {
-        self.try_inner_mut()?.unpaired_electrons = value.to_rust(py);
+        self.to_rust_mut()?.unpaired_electrons = value.to_rust(py);
         Ok(())
     }
 
@@ -223,7 +223,7 @@ impl AromaticSystemForm {
         value: AromaticSystemConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
+        slf.borrow_mut(py).to_rust_mut()?.constraints = snapshot;
         Ok(())
     }
 
@@ -233,7 +233,7 @@ impl AromaticSystemForm {
     }
 
     fn copy(&self) -> Self {
-        Self::from_inner(self.inner().clone())
+        Self::from_rust(self.to_rust().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -252,13 +252,13 @@ impl AromaticSystemForm {
 
 impl AromaticSystemForm {
     /// The wrapped AST system — read access for the system-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrAromaticSystemForm {
         &self.value
     }
 
     /// Mutable access to the wrapped AST system — write access for the system-backed
     /// constraints view.
-    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrAromaticSystemForm> {
+    pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrAromaticSystemForm> {
         if self.readonly {
             Err(PyTypeError::new_err("read-only entity form"))
         } else {
@@ -267,7 +267,7 @@ impl AromaticSystemForm {
     }
 
     /// Wrap an owned Rust aromatic-system AST.
-    pub(crate) fn from_inner(system: GraphIrAromaticSystemForm) -> Self {
+    pub(crate) fn from_rust(system: GraphIrAromaticSystemForm) -> Self {
         Self {
             value: system,
             readonly: false,
@@ -277,8 +277,8 @@ impl AromaticSystemForm {
 
 impl EntityForm for AromaticSystemForm {
     type RustForm = GraphIrAromaticSystemForm;
-    fn clone_rust(&self) -> Self::RustForm {
-        self.inner().clone()
+    fn to_rust(&self) -> &Self::RustForm {
+        &self.value
     }
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
         Py::new(
@@ -295,10 +295,10 @@ impl_py_lattice!(
     AromaticSystemForm,
     GraphIrAromaticSystemForm,
     |value: &AromaticSystemForm, _py: Python<'_>| -> PyResult<GraphIrAromaticSystemForm> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrAromaticSystemForm| -> PyResult<AromaticSystemForm> {
-        Ok(AromaticSystemForm::from_inner(value))
+        Ok(AromaticSystemForm::from_rust(value))
     }
 );
 
@@ -337,7 +337,7 @@ impl AromaticSystemView {
     fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let molecule = self.owner.bind(py).borrow();
         let atom_ids: Vec<u32> = self
-            .aromatic_system(molecule.inner())?
+            .aromatic_system(molecule.to_rust())?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -353,7 +353,10 @@ impl AromaticSystemView {
     fn electrons(&self, py: Python<'_>) -> PyResult<ElectronCountsForm> {
         let molecule = self.owner.bind(py).borrow();
         Ok(ElectronCountsForm::from_rust(
-            &self.aromatic_system(molecule.inner())?.attributes.electrons,
+            &self
+                .aromatic_system(molecule.to_rust())?
+                .attributes
+                .electrons,
         ))
     }
 
@@ -361,7 +364,7 @@ impl AromaticSystemView {
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes
             .electrons = value.to_rust(py);
@@ -372,7 +375,7 @@ impl AromaticSystemView {
         let molecule = self.owner.bind(py).borrow();
         NumForm::from_rust(
             py,
-            &self.aromatic_system(molecule.inner())?.attributes.charge,
+            &self.aromatic_system(molecule.to_rust())?.attributes.charge,
         )
     }
 
@@ -380,7 +383,7 @@ impl AromaticSystemView {
     fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes
             .charge = value.to_rust(py);
@@ -392,7 +395,7 @@ impl AromaticSystemView {
         UnpairedElectronsForm::from_rust(
             py,
             &self
-                .aromatic_system(molecule.inner())?
+                .aromatic_system(molecule.to_rust())?
                 .attributes
                 .unpaired_electrons,
         )
@@ -402,7 +405,7 @@ impl AromaticSystemView {
     fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes
             .unpaired_electrons = value.to_rust(py);
@@ -430,7 +433,7 @@ impl AromaticSystemView {
     ) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .aromatic_system_mut(self.id)
             .attributes
             .constraints = value.to_rust(py)?;
@@ -441,7 +444,7 @@ impl AromaticSystemView {
     /// symmetric with `AromaticSystemForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let system = self.aromatic_system(molecule.inner())?.attributes;
+        let system = self.aromatic_system(molecule.to_rust())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item(
             "electrons",
@@ -496,7 +499,7 @@ impl AromaticSystemViews {
         self.owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .aromatic_systems()
             .count()
     }
@@ -507,7 +510,7 @@ impl AromaticSystemViews {
             self.owner
                 .bind(py)
                 .borrow()
-                .inner()
+                .to_rust()
                 .aromatic_systems()
                 .count()
         )
@@ -515,7 +518,7 @@ impl AromaticSystemViews {
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<AromaticSystemView> {
         let molecule = self.owner.bind(py).borrow();
-        let id = resolve_aromatic_system_index(molecule.inner(), index)?;
+        let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
         Ok(AromaticSystemView {
             owner: self.owner.clone_ref(py),
             id,
@@ -530,8 +533,8 @@ impl AromaticSystemViews {
         system: PyRef<'_, AromaticSystemForm>,
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
-        let id = resolve_aromatic_system_index(molecule.inner(), index)?;
-        *molecule.inner_mut().aromatic_system_mut(id).attributes = system.inner().clone();
+        let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
+        *molecule.to_rust_mut().aromatic_system_mut(id).attributes = system.to_rust().clone();
         Ok(())
     }
 
@@ -539,7 +542,7 @@ impl AromaticSystemViews {
     fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<AromaticSystemView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .aromatic_systems()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| AromaticSystemView {
@@ -552,7 +555,7 @@ impl AromaticSystemViews {
     fn incident(&self, py: Python<'_>, atom: u32) -> Vec<AromaticSystemView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .aromatic_systems()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| AromaticSystemView {
@@ -567,7 +570,7 @@ impl AromaticSystemViews {
             .owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .aromatic_systems()
             .ids()
             .collect::<Vec<_>>();
@@ -661,11 +664,11 @@ mod tests {
                 None,
             );
             assert_eq!(
-                system.inner().electrons,
+                system.to_rust().electrons,
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
-            assert_eq!(system.inner().charge, GraphIrNumForm::Lit(-2));
-            assert_eq!(system.inner().unpaired_electrons, unpaired_electrons_form);
+            assert_eq!(system.to_rust().charge, GraphIrNumForm::Lit(-2));
+            assert_eq!(system.to_rust().unpaired_electrons, unpaired_electrons_form);
         });
     }
 
@@ -691,7 +694,7 @@ mod tests {
                 Some(constraints),
             );
             assert_eq!(
-                system.inner().constraints.electron_count(),
+                system.to_rust().constraints.electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -719,7 +722,7 @@ mod tests {
     fn test_aromatic_system_form_electrons() {
         Python::attach(|py| {
             let mut system =
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             assert_eq!(
@@ -740,7 +743,7 @@ mod tests {
     fn test_aromatic_system_form_charge() {
         Python::attach(|py| {
             let mut system =
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             system.set_charge(py, NumLike::Lit(-1)).unwrap();
@@ -761,7 +764,7 @@ mod tests {
             )
             .unwrap();
             let mut system =
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             system
@@ -779,7 +782,7 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                AromaticSystemForm::from_inner(
+                AromaticSystemForm::from_rust(
                     GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintForm::electron_count(6)),
                 ),
@@ -794,7 +797,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -806,7 +809,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().inner().constraints.electron_count(),
+                dst.bind(py).borrow().to_rust().constraints.electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -815,7 +818,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_form_asdict() {
         Python::attach(|py| {
-            let system = AromaticSystemForm::from_inner(
+            let system = AromaticSystemForm::from_rust(
                 GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                     .with_constraint(GraphIrAromaticSystemConstraintForm::electron_count(6)),
             );
@@ -1019,7 +1022,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     2, 2, 2, 2, 2, 2,
                 ])),
             )
@@ -1044,7 +1047,7 @@ mod tests {
             let views = AromaticSystemViews { owner: benzene(py) };
             let replacement = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1241,7 +1244,7 @@ mod tests {
                 constraints.clone_ref(py),
                 py,
                 AromaticSystemConstraintsUpdate::Container(
-                    Py::new(py, AromaticSystemConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, AromaticSystemConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1323,7 +1326,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(
+                AromaticSystemForm::from_rust(
                     GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintForm::electron_count(6)),
                 ),
@@ -1346,7 +1349,7 @@ mod tests {
                 system
                     .bind(py)
                     .borrow()
-                    .inner()
+                    .to_rust()
                     .constraints
                     .electron_count(),
                 GraphIrNumForm::Lit(6)
@@ -1361,7 +1364,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(
+                AromaticSystemForm::from_rust(
                     GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintForm::electron_count(6)),
                 ),
@@ -1383,7 +1386,7 @@ mod tests {
                 system
                     .bind(py)
                     .borrow()
-                    .inner()
+                    .to_rust()
                     .constraints
                     .electron_count(),
                 GraphIrNumForm::Lit(6)
@@ -1597,7 +1600,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1632,7 +1635,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(
+                AromaticSystemForm::from_rust(
                     GraphIrAromaticSystemForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrAromaticSystemConstraintForm::electron_count(6)),
                 ),
@@ -1665,7 +1668,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1678,7 +1681,7 @@ mod tests {
             view.update(
                 py,
                 AromaticSystemConstraintsUpdate::Container(
-                    Py::new(py, AromaticSystemConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, AromaticSystemConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1698,7 +1701,7 @@ mod tests {
         Python::attach(|py| {
             let system = Py::new(
                 py,
-                AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
+                AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )

@@ -635,7 +635,7 @@ macro_rules! stereo_constraints {
             pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<$resolved> {
                 Ok(match self {
                     $update::Container(c) => {
-                        $resolved::Overlay(c.bind(py).borrow().inner().clone())
+                        $resolved::Overlay(c.bind(py).borrow().to_rust().clone())
                     }
                     $update::View(v) => {
                         $resolved::Overlay(v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?)
@@ -680,7 +680,7 @@ macro_rules! stereo_constraints {
         impl $like {
             pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<$ast_constraints> {
                 match self {
-                    $like::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+                    $like::Container(c) => Ok(c.bind(py).borrow().to_rust().clone()),
                     $like::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
                 }
             }
@@ -901,11 +901,11 @@ macro_rules! stereo_constraints {
         }
 
         impl $constraints {
-            pub(crate) fn inner(&self) -> &$ast_constraints {
+            pub(crate) fn to_rust(&self) -> &$ast_constraints {
                 &self.0
             }
 
-            pub(crate) fn from_inner(constraints: $ast_constraints) -> Self {
+            pub(crate) fn from_rust(constraints: $ast_constraints) -> Self {
                 $constraints(constraints)
             }
         }
@@ -914,7 +914,7 @@ macro_rules! stereo_constraints {
             $constraints,
             $ast_constraints,
             |value: &$constraints, _py: Python<'_>| -> PyResult<$ast_constraints> {
-                Ok(value.inner().clone())
+                Ok(value.to_rust().clone())
             },
             |_py: Python<'_>, value: $ast_constraints| -> PyResult<$constraints> {
                 Ok($constraints(value))
@@ -995,7 +995,7 @@ macro_rules! stereo_constraints {
                     $backing::Molecule { owner, id } => {
                         let molecule = owner.bind(py).borrow();
                         let view = molecule
-                            .inner()
+                            .to_rust()
                             .$namespace()
                             .get(*id)
                             .ok_or_else(|| PyIndexError::new_err($id_error))?;
@@ -1003,7 +1003,7 @@ macro_rules! stereo_constraints {
                     }
                     $backing::Value(entity) => {
                         let entity = entity.bind(py).borrow();
-                        f(&entity.inner().constraints)
+                        f(&entity.to_rust().constraints)
                     }
                 }
             }
@@ -1017,12 +1017,12 @@ macro_rules! stereo_constraints {
                 match &self.backing {
                     $backing::Molecule { owner, id } => Ok(f(&mut owner
                         .borrow_mut(py)
-                        .inner_mut()
+                        .to_rust_mut()
                         .$entity_mut(*id)
                         .attributes
                         .constraints)),
                     $backing::Value(entity) => {
-                        Ok(f(&mut entity.borrow_mut(py).try_inner_mut()?.constraints))
+                        Ok(f(&mut entity.borrow_mut(py).to_rust_mut()?.constraints))
                     }
                 }
             }

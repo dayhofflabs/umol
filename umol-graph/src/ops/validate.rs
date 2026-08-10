@@ -139,15 +139,15 @@ impl<'a> Validator<'a> {
     /// Integrity: entity-structure shape and constraint cross-checks.
     pub fn validate_integrity(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
-        match self.entity_structure.validate(ast)? {
+        match self.entity_structure.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.constraint.validate(ast)? {
+        match self.constraint.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
@@ -158,15 +158,15 @@ impl<'a> Validator<'a> {
     /// Invariants: electron count and spin coupling.
     pub fn validate_invariants(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
-        match self.valence_invariants.validate(ast)? {
+        match self.valence_invariants.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.spin_invariants.validate(ast)? {
+        match self.spin_invariants.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
@@ -178,20 +178,20 @@ impl<'a> Validator<'a> {
     /// aromaticity, and stereo.
     pub fn validate_conformance(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
-        match self.valence_conformance.validate(ast)? {
+        match self.valence_conformance.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.aromaticity.validate(ast)? {
+        match self.aromaticity.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.stereo.validate(ast)? {
+        match self.stereo.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
@@ -202,20 +202,20 @@ impl<'a> Validator<'a> {
     /// All validators in order: integrity → invariants → conformance.
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
-        match self.validate_integrity(ast)? {
+        match self.validate_integrity(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
         }
-        match self.validate_invariants(ast)? {
+        match self.validate_invariants(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
         }
-        match self.validate_conformance(ast)? {
+        match self.validate_conformance(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),

@@ -56,7 +56,7 @@ impl HmoAromaticity {
 
     pub fn find_from_rings<F>(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         rings: &RingSet,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
         electrons_at: &F,
@@ -64,7 +64,7 @@ impl HmoAromaticity {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let pi_atoms: Vec<AtomId> = ast
+        let pi_atoms: Vec<AtomId> = molecule
             .atoms()
             .iter()
             .filter_map(|view| {
@@ -83,8 +83,8 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let subgraph = ast.induced_subgraph(&pi_atoms);
-        let extracted = ast.extract(&subgraph);
+        let subgraph = molecule.induced_subgraph(&pi_atoms);
+        let extracted = molecule.extract(&subgraph);
         let mut sorted_host: Vec<AtomId> = subgraph
             .atoms()
             .matched_pairs()
@@ -106,7 +106,9 @@ impl HmoAromaticity {
                 continue;
             }
 
-            let result = self.build_calculator(ast, component, electrons_at)?.solve();
+            let result = self
+                .build_calculator(molecule, component, electrons_at)?
+                .solve();
 
             let de_per_electron = if result.electron_count > 0 {
                 result.delocalization_energy / result.electron_count as f64
@@ -120,7 +122,7 @@ impl HmoAromaticity {
 
                 let electrons: Vec<i64> = atoms
                     .iter()
-                    .map(|&atom| electrons_at(&ast.atom(atom)).unwrap_or(0) as i64)
+                    .map(|&id| electrons_at(&molecule.atom(id)).unwrap_or(0) as i64)
                     .collect();
 
                 candidates.push((
@@ -137,20 +139,20 @@ impl HmoAromaticity {
 
     pub(crate) fn build_calculator<F>(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         pi_atoms: &[AtomId],
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let subgraph = ast.induced_subgraph(pi_atoms);
+        let subgraph = molecule.induced_subgraph(pi_atoms);
         let n = pi_atoms.len();
         let mut hamiltonian = DMatrix::zeros(n, n);
         let mut electron_count: u32 = 0;
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(n);
         for (i, &atom) in pi_atoms.iter().enumerate() {
-            let view = ast.atom(atom);
+            let view = molecule.atom(atom);
             let element = match view.attributes.element {
                 ElementForm::Lit(e) => e,
                 _ => {
@@ -175,7 +177,7 @@ impl HmoAromaticity {
 
         let mut bond_positions = Vec::with_capacity(subgraph.bonds().matched_pair_count());
         for &(_, bid) in subgraph.bonds().matched_pairs() {
-            let [ha, hb] = ast.bond(bid).atom_ids();
+            let [ha, hb] = molecule.bond(bid).atom_ids();
             let i = subgraph.atoms().left_of(ha).unwrap().index();
             let j = subgraph.atoms().left_of(hb).unwrap().index();
             let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(|| {
@@ -361,10 +363,10 @@ mod tests {
         })
     }
 
-    fn solve_hmo(model: &HmoAromaticity, ast: &Molecule) -> HmoOutput {
-        let atoms: Vec<AtomId> = ast.atoms().ids().collect();
+    fn solve_hmo(model: &HmoAromaticity, molecule: &Molecule) -> HmoOutput {
+        let atoms: Vec<AtomId> = molecule.atoms().ids().collect();
         model
-            .build_calculator(ast, &atoms, &|v| match v
+            .build_calculator(molecule, &atoms, &|v| match v
                 .attributes
                 .constraints
                 .aromatic_valence()
@@ -450,10 +452,10 @@ mod tests {
     #[case::pyrrole(pyrrole(), 2.200)]
     fn test_hmo_aromaticity_delocalization_energy(
         hmo_model: HmoAromaticity,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected_de: f64,
     ) {
-        let result = solve_hmo(&hmo_model, &ast);
+        let result = solve_hmo(&hmo_model, &molecule);
         assert!(approx_eq!(
             f64,
             result.delocalization_energy,
@@ -467,12 +469,12 @@ mod tests {
     #[case::azulene(azulene(), 11, 0.401, 0.664)]
     fn test_hmo_aromaticity_bond_orders(
         hmo_model: HmoAromaticity,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected_count: usize,
         #[case] expected_min: f64,
         #[case] expected_max: f64,
     ) {
-        let result = solve_hmo(&hmo_model, &ast);
+        let result = solve_hmo(&hmo_model, &molecule);
         assert_eq!(result.bond_orders.len(), expected_count);
         let min = result
             .bond_orders
@@ -494,11 +496,11 @@ mod tests {
     #[case::cyclobutadiene(cyclobutadiene(), 0, None)]
     fn test_hmo_aromaticity_find_from_rings(
         hmo_model: HmoAromaticity,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info = ast
+        let ring_info = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -509,7 +511,7 @@ mod tests {
             .into_ring_set();
         let systems = hmo_model
             .find_from_rings(
-                &ast,
+                &molecule,
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
                 &|v| match v

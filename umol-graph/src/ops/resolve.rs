@@ -132,12 +132,12 @@ impl<'a> Resolver<'a> {
 
     pub fn resolve(
         &self,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Result<Solution<(), ResolverContradiction>, ResolverError> {
-        let mut editor = ast.edit();
+        let mut editor = molecule.edit();
         let mut journal = Transaction::default();
 
-        let edits = match self.valence.plan(ast) {
+        let edits = match self.valence.plan(molecule) {
             Solution::Determined(edits) => edits,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => {
@@ -148,7 +148,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
@@ -162,7 +162,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         }
@@ -179,7 +179,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         };
@@ -192,7 +192,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Underdetermined(()));
             }
             Solution::Contradictory(contradiction) => {
@@ -203,7 +203,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
@@ -217,7 +217,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         }
@@ -234,7 +234,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         };
@@ -247,7 +247,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Underdetermined(()));
             }
             Solution::Contradictory(contradiction) => {
@@ -258,7 +258,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
@@ -272,7 +272,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         }
@@ -290,7 +290,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         }
@@ -306,7 +306,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Underdetermined(()));
             }
             Solution::Contradictory(contradiction) => {
@@ -317,7 +317,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Ok(Solution::Contradictory(contradiction));
             }
         };
@@ -333,7 +333,7 @@ impl<'a> Resolver<'a> {
                         rollback,
                     });
                 }
-                *ast = editor.build();
+                *molecule = editor.build();
                 return Err(error);
             }
         }
@@ -344,7 +344,7 @@ impl<'a> Resolver<'a> {
         } else {
             Solution::Underdetermined(())
         };
-        *ast = resolved;
+        *molecule = resolved;
         Ok(solution)
     }
 }

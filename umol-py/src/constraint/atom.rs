@@ -580,7 +580,7 @@ impl AtomConstraintsUpdate {
     pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedAtomConstraintsUpdate> {
         Ok(match self {
             AtomConstraintsUpdate::Container(c) => {
-                ResolvedAtomConstraintsUpdate::Overlay(c.bind(py).borrow().inner().clone())
+                ResolvedAtomConstraintsUpdate::Overlay(c.bind(py).borrow().to_rust().clone())
             }
             AtomConstraintsUpdate::View(v) => ResolvedAtomConstraintsUpdate::Overlay(
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
@@ -630,7 +630,7 @@ pub(crate) enum AtomConstraintsLike {
 impl AtomConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrAtomConstraintsForm> {
         match self {
-            AtomConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AtomConstraintsLike::Container(c) => Ok(c.bind(py).borrow().to_rust().clone()),
             AtomConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
         }
     }
@@ -1011,17 +1011,17 @@ impl AtomConstraintsForm {
 
 impl AtomConstraintsForm {
     /// The wrapped AST constraints — read access for atom construction.
-    pub(crate) fn inner(&self) -> &GraphIrAtomConstraintsForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrAtomConstraintsForm {
         &self.0
     }
 
     /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrAtomConstraintsForm {
+    pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrAtomConstraintsForm {
         &mut self.0
     }
 
     /// Wrap owned AST constraints.
-    pub(crate) fn from_inner(constraints: GraphIrAtomConstraintsForm) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrAtomConstraintsForm) -> Self {
         AtomConstraintsForm(constraints)
     }
 }
@@ -1030,7 +1030,7 @@ impl_py_lattice!(
     AtomConstraintsForm,
     GraphIrAtomConstraintsForm,
     |value: &AtomConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrAtomConstraintsForm> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrAtomConstraintsForm| -> PyResult<AtomConstraintsForm> {
         Ok(AtomConstraintsForm(value))
@@ -1174,7 +1174,7 @@ impl AtomConstraintsView {
             AtomConstraintsBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
@@ -1182,7 +1182,7 @@ impl AtomConstraintsView {
             }
             AtomConstraintsBacking::Atom(atom) => {
                 let atom = atom.bind(py).borrow();
-                f(&atom.inner().constraints)
+                f(&atom.to_rust().constraints)
             }
         }
     }
@@ -1196,12 +1196,12 @@ impl AtomConstraintsView {
         match &self.backing {
             AtomConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .atom_mut(*id)
                 .attributes
                 .constraints)),
             AtomConstraintsBacking::Atom(atom) => {
-                Ok(f(&mut atom.borrow_mut(py).try_inner_mut()?.constraints))
+                Ok(f(&mut atom.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }
@@ -1639,14 +1639,14 @@ impl AtomRingSizeCounts {
             AtomRingSizeBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .atoms()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("atom id out of range"))?;
                 f(&view.attributes.constraints)
             }
-            AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().inner().constraints),
-            AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
+            AtomRingSizeBacking::Atom(atom) => f(&atom.bind(py).borrow().to_rust().constraints),
+            AtomRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),
         }
     }
 
@@ -1659,14 +1659,14 @@ impl AtomRingSizeCounts {
         match &self.backing {
             AtomRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .atom_mut(*id)
                 .attributes
                 .constraints),
             AtomRingSizeBacking::Atom(atom) => {
-                f(&mut atom.borrow_mut(py).try_inner_mut()?.constraints)
+                f(&mut atom.borrow_mut(py).to_rust_mut()?.constraints)
             }
-            AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
+            AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
         }
         Ok(())
     }

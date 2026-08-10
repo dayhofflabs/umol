@@ -84,12 +84,12 @@ impl AromaticityResolver {
         }
     }
 
-    /// Construct the complete aromaticity edit plan without mutating `ast`.
+    /// Construct the complete aromaticity edit plan without mutating `molecule`.
     pub fn plan(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
     ) -> Result<Solution<Edits, AromaticityContradiction>, AromaticityError> {
-        let outcome = self.perception.derive(ast, self.config.perception)?;
+        let outcome = self.perception.derive(molecule, self.config.perception)?;
 
         match outcome {
             Solution::Determined(derivation) => {
@@ -115,7 +115,7 @@ impl AromaticityResolver {
                     }
                 }
 
-                let existing: BTreeSet<Vec<AtomId>> = ast
+                let existing: BTreeSet<Vec<AtomId>> = molecule
                     .aromatic_systems()
                     .iter()
                     .map(|system| {
@@ -135,7 +135,7 @@ impl AromaticityResolver {
                     match inconsistency {
                         AromaticityInconsistency::AromaticValenceMismatch { atom, system } => {
                             let existing_members: BTreeSet<AtomId> =
-                                ast.aromatic_system(system).atom_ids().collect();
+                                molecule.aromatic_system(system).atom_ids().collect();
                             let candidate = derivation.systems.iter().position(|(atoms, _)| {
                                 atoms.iter().copied().collect::<BTreeSet<_>>() == existing_members
                             });
@@ -177,7 +177,7 @@ impl AromaticityResolver {
                     let removes = replacements
                         .iter()
                         .map(|&(system, _)| {
-                            let view = ast.aromatic_system(system);
+                            let view = molecule.aromatic_system(system);
                             (
                                 AromaticSystemHandle::Id(system),
                                 view.atom_ids().map(AtomHandle::Id).collect(),
@@ -188,19 +188,23 @@ impl AromaticityResolver {
                     edits.remove_aromatic_systems(removes);
                 }
 
-                for atom in remove_constraints {
+                for id in remove_constraints {
                     let mut update = AtomUpdate::default();
                     update.constraints.set(AtomConstraintForm::AromaticValence(
                         AromaticValenceForm::Undetermined,
                     ));
-                    edits.update_atom(AtomHandle::Id(atom), ast.atom(atom).attributes, &update);
+                    edits.update_atom(AtomHandle::Id(id), molecule.atom(id).attributes, &update);
                 }
                 for bond in remove_bond_constraints {
                     let mut update = BondUpdate::default();
                     update
                         .constraints
                         .set(BondConstraintForm::Aromatic(BooleanForm::Undetermined));
-                    edits.update_bond(BondHandle::Id(bond), ast.bond(bond).attributes, &update);
+                    edits.update_bond(
+                        BondHandle::Id(bond),
+                        molecule.bond(bond).attributes,
+                        &update,
+                    );
                 }
 
                 let replaced_candidates: BTreeSet<usize> = replacements
@@ -209,7 +213,7 @@ impl AromaticityResolver {
                     .collect();
                 let replaced_entities: BTreeSet<AromaticSystemId> =
                     replacements.iter().map(|&(system, _)| system).collect();
-                let retained_existing: BTreeSet<Vec<AtomId>> = ast
+                let retained_existing: BTreeSet<Vec<AtomId>> = molecule
                     .aromatic_systems()
                     .iter()
                     .filter(|system| !replaced_entities.contains(&system.id))
@@ -228,7 +232,7 @@ impl AromaticityResolver {
                             && !existing.contains(&key)
                             && !retained_existing.contains(&key))
                     {
-                        for edit in self.plan_system(ast, atoms, system) {
+                        for edit in self.plan_system(molecule, atoms, system) {
                             edits.push(edit);
                         }
                     }

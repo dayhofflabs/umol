@@ -31,7 +31,7 @@ impl HueckelRuleAromaticity {
 
     pub fn find_from_rings<F>(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         rings: &RingSet,
         electrons_at: &F,
     ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
@@ -43,7 +43,7 @@ impl HueckelRuleAromaticity {
             .filter(|&i| {
                 rings
                     .get(i)
-                    .is_some_and(|r| self.filter_ring(ast, r, electrons_at))
+                    .is_some_and(|r| self.filter_ring(molecule, r, electrons_at))
             })
             .collect();
 
@@ -54,7 +54,7 @@ impl HueckelRuleAromaticity {
                 continue;
             };
             let ring_atoms: Vec<AtomId> = ring.atoms().to_vec();
-            if let Some(electrons) = ring_electron_count(ast, &ring_atoms, electrons_at) {
+            if let Some(electrons) = ring_electron_count(molecule, &ring_atoms, electrons_at) {
                 if check_4n_plus_2(electrons) {
                     aromatic_atom_sets.push(ring_atoms.into_iter().collect());
                 }
@@ -65,7 +65,7 @@ impl HueckelRuleAromaticity {
             let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
             for atoms in fused_systems {
                 let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
-                if let Some(electrons) = ring_electron_count(ast, &atom_vec, electrons_at) {
+                if let Some(electrons) = ring_electron_count(molecule, &atom_vec, electrons_at) {
                     if check_4n_plus_2(electrons) {
                         aromatic_atom_sets.push(atoms);
                     }
@@ -83,7 +83,7 @@ impl HueckelRuleAromaticity {
             let mut electrons: Vec<i64> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
-                if let Some(e) = electrons_at(&ast.atom(atom)) {
+                if let Some(e) = electrons_at(&molecule.atom(atom)) {
                     electrons.push(e as i64);
                 } else {
                     valid = false;
@@ -105,11 +105,11 @@ impl HueckelRuleAromaticity {
         candidates
     }
 
-    fn is_atom_eligible<F>(&self, ast: &Molecule, atom: AtomId, electrons_at: &F) -> bool
+    fn is_atom_eligible<F>(&self, molecule: &Molecule, id: AtomId, electrons_at: &F) -> bool
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let view = ast.atom(atom);
+        let view = molecule.atom(id);
         let element = match view.attributes.element {
             ElementForm::Lit(e) => e,
             _ => return false,
@@ -120,7 +120,7 @@ impl HueckelRuleAromaticity {
         electrons_at(&view).is_some()
     }
 
-    fn filter_ring<F>(&self, ast: &Molecule, ring: RingView<'_>, electrons_at: &F) -> bool
+    fn filter_ring<F>(&self, molecule: &Molecule, ring: RingView<'_>, electrons_at: &F) -> bool
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
@@ -130,7 +130,7 @@ impl HueckelRuleAromaticity {
         }
         ring.atoms()
             .iter()
-            .all(|&a| self.is_atom_eligible(ast, a, electrons_at))
+            .all(|&a| self.is_atom_eligible(molecule, a, electrons_at))
     }
 
     fn enumerate_fused_combinations(
@@ -201,13 +201,13 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
     (electron_count - 2).is_multiple_of(4)
 }
 
-fn ring_electron_count<F>(ast: &Molecule, atoms: &[AtomId], electrons_at: &F) -> Option<u32>
+fn ring_electron_count<F>(molecule: &Molecule, ids: &[AtomId], electrons_at: &F) -> Option<u32>
 where
     F: Fn(&AtomView<'_>) -> Option<u8>,
 {
     let mut total: u32 = 0;
-    for &atom in atoms {
-        total += electrons_at(&ast.atom(atom))? as u32;
+    for &id in ids {
+        total += electrons_at(&molecule.atom(id))? as u32;
     }
     Some(total)
 }
@@ -228,15 +228,16 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
         }
     }
 
+    // TODO: Check if usize-typed indices are correct.
     let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
     for i in 0..n {
         groups.entry(uf.find(i)).or_default().push(i);
     }
 
     let mut result = Vec::new();
-    for (_, members) in groups {
+    for (_, indices) in groups {
         let mut merged_atoms: HashSet<AtomId> = HashSet::new();
-        for &idx in &members {
+        for &idx in &indices {
             merged_atoms.extend(aromatic_systems[idx].iter());
         }
         result.push(merged_atoms);
@@ -523,11 +524,11 @@ mod tests {
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 6)]
     fn test_hueckel_rule_find_from_rings_aromatic(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected_atoms: usize,
         #[case] expected_electrons: i64,
     ) {
-        let rings = ast
+        let rings = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -537,7 +538,7 @@ mod tests {
             )
             .into_ring_set();
         let model = daylight_model();
-        let systems = model.find_from_rings(&ast, &rings, &|v| match v
+        let systems = model.find_from_rings(&molecule, &rings, &|v| match v
             .attributes
             .constraints
             .aromatic_valence()
@@ -558,10 +559,10 @@ mod tests {
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
     fn test_hueckel_rule_find_from_rings_non_aromatic(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings = ast
+        let rings = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -570,7 +571,7 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = model.find_from_rings(&ast, &rings, &|v| match v
+        let systems = model.find_from_rings(&molecule, &rings, &|v| match v
             .attributes
             .constraints
             .aromatic_valence()

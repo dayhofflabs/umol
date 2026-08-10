@@ -65,10 +65,10 @@ impl ReactionSpanAst {
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
         let span = GraphIrReactionSpanDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ir(&defaults);
+            .into_ir(defaults.to_rust());
         Ok(Self::from_rust(span))
     }
 
@@ -80,18 +80,18 @@ impl ReactionSpanAst {
         text: &str,
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<(Self, MoleculeMetadata)> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
         let dsl = GraphIrReactionSpanDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_rust(dsl.into_ir(&defaults)), metadata))
+        Ok((Self::from_rust(dsl.into_ir(defaults.to_rust())), metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
     /// keywords or atom aliases.
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrReactionSpanDsl::from_ir(&self.0, &defaults).to_string()
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
+        GraphIrReactionSpanDsl::from_ir(&self.0, defaults.to_rust()).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -104,11 +104,11 @@ impl ReactionSpanAst {
         metadata: &MoleculeMetadata,
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let lowered = GraphIrReactionSpanDsl::from_ir(&self.0, &defaults)
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
+        let lowered = GraphIrReactionSpanDsl::from_ir(&self.0, defaults.to_rust())
             .into_parts()
             .0;
-        GraphIrReactionSpanDsl::new(lowered, metadata.to_rust())
+        GraphIrReactionSpanDsl::new(lowered, metadata.to_rust().clone())
             .map(|dsl| dsl.to_string())
             .map_err(metadata_error)
     }
@@ -141,8 +141,8 @@ impl ReactionSpanAst {
             .into_iter()
             .map(|(lhs, rhs)| {
                 entity_span(
-                    lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                    rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                    lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                    rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                 )
             })
             .collect::<PyResult<Vec<_>>>()?;
@@ -153,8 +153,8 @@ impl ReactionSpanAst {
                     GraphIrAtomId(first),
                     GraphIrAtomId(second),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -166,8 +166,8 @@ impl ReactionSpanAst {
                     donors.into_iter().map(GraphIrAtomId).collect(),
                     GraphIrAtomId(acceptor),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -178,8 +178,8 @@ impl ReactionSpanAst {
                 Ok((
                     atoms.into_iter().map(GraphIrAtomId).collect(),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -190,8 +190,8 @@ impl ReactionSpanAst {
                 Ok((
                     atoms.into_iter().map(GraphIrAtomId).collect(),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -203,8 +203,8 @@ impl ReactionSpanAst {
                     GraphIrAtomId(first),
                     GraphIrAtomId(second),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -216,8 +216,8 @@ impl ReactionSpanAst {
                     GraphIrAtomId(site),
                     ligands.into_iter().map(StereoLigand::to_rust).collect(),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -229,8 +229,8 @@ impl ReactionSpanAst {
                     GraphIrBondId(site),
                     ligands.into_iter().map(StereoLigand::to_rust).collect(),
                     entity_span(
-                        lhs.map(|value| value.bind(py).borrow().inner().clone()),
-                        rhs.map(|value| value.bind(py).borrow().inner().clone()),
+                        lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
+                        rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                     )?,
                 ))
             })
@@ -285,8 +285,8 @@ impl ReactionSpanAst {
     }
 
     #[cfg(test)]
-    pub(crate) fn to_rust(&self) -> GraphIrReactionSpan {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrReactionSpan {
+        &self.0
     }
 }
 
@@ -348,7 +348,7 @@ mod tests {
     ) {
         assert_eq!(
             ReactionSpanAst::parse(text, defaults).unwrap().to_rust(),
-            expected
+            &expected
         );
     }
 
@@ -376,7 +376,7 @@ mod tests {
 
         assert_eq!(
             span.to_rust(),
-            GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
+            &GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
                 ))],
@@ -566,36 +566,36 @@ mod tests {
                 py,
                 vec![
                     (
-                        Some(Py::new(py, AtomForm::from_inner(canonical_lhs.clone())).unwrap()),
-                        Some(Py::new(py, AtomForm::from_inner(canonical_rhs)).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(canonical_lhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(canonical_rhs)).unwrap()),
                     ),
                     (
-                        Some(Py::new(py, AtomForm::from_inner(modified_lhs.clone())).unwrap()),
-                        Some(Py::new(py, AtomForm::from_inner(modified_rhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(modified_lhs.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(modified_rhs.clone())).unwrap()),
                     ),
                     (
-                        Some(Py::new(py, AtomForm::from_inner(removed_atom.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(removed_atom.clone())).unwrap()),
                         None,
                     ),
                     (
                         None,
-                        Some(Py::new(py, AtomForm::from_inner(added_atom.clone())).unwrap()),
+                        Some(Py::new(py, AtomForm::from_rust(added_atom.clone())).unwrap()),
                     ),
                 ],
                 vec![(
                     0,
                     1,
                     (
-                        Some(Py::new(py, BondForm::from_inner(unchanged_bond.clone())).unwrap()),
-                        Some(Py::new(py, BondForm::from_inner(unchanged_bond.clone())).unwrap()),
+                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
                     ),
                 )],
                 vec![(
                     vec![1],
                     0,
                     (
-                        Some(Py::new(py, DativeBondForm::from_inner(dative_lhs.clone())).unwrap()),
-                        Some(Py::new(py, DativeBondForm::from_inner(dative_rhs.clone())).unwrap()),
+                        Some(Py::new(py, DativeBondForm::from_rust(dative_lhs.clone())).unwrap()),
+                        Some(Py::new(py, DativeBondForm::from_rust(dative_rhs.clone())).unwrap()),
                     ),
                 )],
                 vec![(
@@ -603,7 +603,7 @@ mod tests {
                     (
                         None,
                         Some(
-                            Py::new(py, AromaticSystemForm::from_inner(added_aromatic.clone()))
+                            Py::new(py, AromaticSystemForm::from_rust(added_aromatic.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -614,7 +614,7 @@ mod tests {
                         Some(
                             Py::new(
                                 py,
-                                MulticenterBondForm::from_inner(removed_multicenter.clone()),
+                                MulticenterBondForm::from_rust(removed_multicenter.clone()),
                             )
                             .unwrap(),
                         ),
@@ -627,14 +627,14 @@ mod tests {
                         Some(
                             Py::new(
                                 py,
-                                NoncovalentBondForm::from_inner(unchanged_noncovalent.clone()),
+                                NoncovalentBondForm::from_rust(unchanged_noncovalent.clone()),
                             )
                             .unwrap(),
                         ),
                         Some(
                             Py::new(
                                 py,
-                                NoncovalentBondForm::from_inner(unchanged_noncovalent.clone()),
+                                NoncovalentBondForm::from_rust(unchanged_noncovalent.clone()),
                             )
                             .unwrap(),
                         ),
@@ -645,11 +645,11 @@ mod tests {
                     vec![StereoLigand::from_rust(ligand)],
                     (
                         Some(
-                            Py::new(py, StereoAtomForm::from_inner(stereo_atom_lhs.clone()))
+                            Py::new(py, StereoAtomForm::from_rust(stereo_atom_lhs.clone()))
                                 .unwrap(),
                         ),
                         Some(
-                            Py::new(py, StereoAtomForm::from_inner(stereo_atom_rhs.clone()))
+                            Py::new(py, StereoAtomForm::from_rust(stereo_atom_rhs.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -660,7 +660,7 @@ mod tests {
                     (
                         None,
                         Some(
-                            Py::new(py, StereoBondForm::from_inner(added_stereo_bond.clone()))
+                            Py::new(py, StereoBondForm::from_rust(added_stereo_bond.clone()))
                                 .unwrap(),
                         ),
                     ),
@@ -724,7 +724,7 @@ mod tests {
 
             assert_eq!(
                 span.to_rust(),
-                GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
+                &GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
                     atoms: vec![
                         GraphIrEntitySpan::Unchanged(canonical_lhs),
                         GraphIrEntitySpan::Modified {
@@ -824,14 +824,14 @@ mod tests {
                 first_on_lhs.then(|| {
                     Py::new(
                         py,
-                        AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                        AtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
                 first_on_rhs.then(|| {
                     Py::new(
                         py,
-                        AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                        AtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::C)),
                     )
                     .unwrap()
                 }),
@@ -841,14 +841,14 @@ mod tests {
                     Some(
                         Py::new(
                             py,
-                            AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
+                            AtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
                     Some(
                         Py::new(
                             py,
-                            AtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::O)),
+                            AtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::O)),
                         )
                         .unwrap(),
                     ),
@@ -862,11 +862,11 @@ mod tests {
                     1,
                     (
                         Some(
-                            Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1)))
+                            Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1)))
                                 .unwrap(),
                         ),
                         Some(
-                            Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1)))
+                            Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1)))
                                 .unwrap(),
                         ),
                     ),
@@ -898,7 +898,7 @@ mod tests {
         );
 
         assert_eq!(
-            span.lhs().inner(),
+            span.lhs().to_rust(),
             &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
@@ -923,7 +923,7 @@ mod tests {
         );
 
         assert_eq!(
-            span.rhs().inner(),
+            span.rhs().to_rust(),
             &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
                     GraphIrAtomForm::from_element(ChemElement::C),
@@ -965,7 +965,7 @@ mod tests {
                 .expect("correspondence producer preserves partial-bijection invariants"),
         );
 
-        assert_eq!(span.correspondence().inner(), &expected);
+        assert_eq!(span.correspondence().to_rust(), &expected);
     }
 
     #[rstest]

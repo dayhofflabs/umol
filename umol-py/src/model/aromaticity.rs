@@ -137,8 +137,8 @@ impl RingLimits {
         dead_code,
         reason = "Python-to-Rust conversion API for aggregate model configuration"
     )]
-    pub(crate) fn to_rust(&self) -> GraphRingLimits {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphRingLimits {
+        &self.0
     }
 }
 
@@ -235,7 +235,7 @@ impl AromaticityModel {
         match self {
             Self::HueckelRule { scope, ring_limits } => GraphAromaticityModel::HueckelRule {
                 scope: scope.to_rust(),
-                ring_limits: ring_limits.to_rust(),
+                ring_limits: ring_limits.to_rust().clone(),
             },
             Self::Hmo {
                 scope,
@@ -246,7 +246,7 @@ impl AromaticityModel {
             },
             Self::Clar { scope, ring_limits } => GraphAromaticityModel::Clar {
                 scope: scope.to_rust(),
-                ring_limits: ring_limits.to_rust(),
+                ring_limits: ring_limits.to_rust().clone(),
             },
         }
     }
@@ -367,7 +367,7 @@ mod tests {
     #[case::default(RingLimits::new(3, 22, true, 6, 10_000))]
     #[case::nondefault(RingLimits::new(5, 18, false, 4, 2_500))]
     fn test_ring_limits_to_rust(#[case] limits: RingLimits) {
-        assert_eq!(limits.to_rust(), limits.0);
+        assert_eq!(limits.to_rust(), &limits.0);
     }
 
     #[rstest]

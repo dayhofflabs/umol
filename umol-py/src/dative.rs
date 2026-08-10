@@ -44,7 +44,7 @@ impl DativeBondUpdate {
         Self::from_rust(&GraphIrDativeBondUpdate {
             order: order.map(|value| value.to_rust(py)),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -84,7 +84,7 @@ impl DativeBondUpdate {
 
     #[getter]
     fn constraints(&self) -> DativeBondConstraintsForm {
-        DativeBondConstraintsForm::from_inner(self.0.constraints.clone())
+        DativeBondConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -93,8 +93,8 @@ impl DativeBondUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrDativeBondUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrDativeBondUpdate {
+        &self.0
     }
 }
 
@@ -124,16 +124,16 @@ impl DativeBondForm {
     ) -> Self {
         let mut bond = GraphIrDativeBondForm::new(order.to_rust(py));
         if let Some(constraints) = constraints {
-            bond.constraints = constraints.bind(py).borrow().inner().clone();
+            bond.constraints = constraints.bind(py).borrow().to_rust().clone();
         }
-        DativeBondForm::from_inner(bond)
+        DativeBondForm::from_rust(bond)
     }
 
     /// Parse a dative-bond-DSL string (e.g. `"1#R(6)"`) into a `DativeBondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrDativeBondForm::from_str(s)
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(parse_error)
     }
 
@@ -152,7 +152,7 @@ impl DativeBondForm {
 
     #[setter]
     fn set_order(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.try_inner_mut()?.order = value.to_rust(py);
+        self.to_rust_mut()?.order = value.to_rust(py);
         Ok(())
     }
 
@@ -174,7 +174,7 @@ impl DativeBondForm {
         value: DativeBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
+        slf.borrow_mut(py).to_rust_mut()?.constraints = snapshot;
         Ok(())
     }
 
@@ -184,7 +184,7 @@ impl DativeBondForm {
     }
 
     fn copy(&self) -> Self {
-        Self::from_inner(self.inner().clone())
+        Self::from_rust(self.to_rust().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -201,13 +201,13 @@ impl DativeBondForm {
 
 impl DativeBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrDativeBondForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrDativeBondForm {
         &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrDativeBondForm> {
+    pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrDativeBondForm> {
         if self.readonly {
             Err(PyTypeError::new_err("read-only entity form"))
         } else {
@@ -216,7 +216,7 @@ impl DativeBondForm {
     }
 
     /// Wrap an owned Rust dative-bond AST.
-    pub(crate) fn from_inner(bond: GraphIrDativeBondForm) -> Self {
+    pub(crate) fn from_rust(bond: GraphIrDativeBondForm) -> Self {
         Self {
             value: bond,
             readonly: false,
@@ -227,8 +227,8 @@ impl DativeBondForm {
 impl EntityForm for DativeBondForm {
     type RustForm = GraphIrDativeBondForm;
 
-    fn clone_rust(&self) -> Self::RustForm {
-        self.inner().clone()
+    fn to_rust(&self) -> &Self::RustForm {
+        &self.value
     }
 
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
@@ -246,10 +246,10 @@ impl_py_lattice!(
     DativeBondForm,
     GraphIrDativeBondForm,
     |value: &DativeBondForm, _py: Python<'_>| -> PyResult<GraphIrDativeBondForm> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrDativeBondForm| -> PyResult<DativeBondForm> {
-        Ok(DativeBondForm::from_inner(value))
+        Ok(DativeBondForm::from_rust(value))
     }
 );
 
@@ -287,7 +287,7 @@ impl DativeBondView {
     #[getter]
     fn acceptor(&self, py: Python<'_>) -> PyResult<u32> {
         let molecule = self.owner.bind(py).borrow();
-        Ok(self.dative_bond(molecule.inner())?.acceptor_id().0)
+        Ok(self.dative_bond(molecule.to_rust())?.acceptor_id().0)
     }
 
     /// The donor atom indices (read-only).
@@ -295,7 +295,7 @@ impl DativeBondView {
     fn donors(&self, py: Python<'_>) -> PyResult<Vec<u32>> {
         let molecule = self.owner.bind(py).borrow();
         Ok(self
-            .dative_bond(molecule.inner())?
+            .dative_bond(molecule.to_rust())?
             .donor_ids()
             .map(|donor| donor.0)
             .collect())
@@ -307,7 +307,7 @@ impl DativeBondView {
     fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let molecule = self.owner.bind(py).borrow();
         let atom_ids: Vec<u32> = self
-            .dative_bond(molecule.inner())?
+            .dative_bond(molecule.to_rust())?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -321,14 +321,14 @@ impl DativeBondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.dative_bond(molecule.inner())?.attributes.order)
+        NumForm::from_rust(py, &self.dative_bond(molecule.to_rust())?.attributes.order)
     }
 
     #[setter]
     fn set_order(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .dative_bond_mut(self.id)
             .attributes
             .order = value.to_rust(py);
@@ -352,7 +352,7 @@ impl DativeBondView {
     fn set_constraints(&self, py: Python<'_>, value: DativeBondConstraintsLike) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .dative_bond_mut(self.id)
             .attributes
             .constraints = value.to_rust(py)?;
@@ -363,7 +363,7 @@ impl DativeBondView {
     /// symmetric with `DativeBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.dative_bond(molecule.inner())?.attributes;
+        let bond = self.dative_bond(molecule.to_rust())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item(
@@ -407,19 +407,29 @@ pub struct DativeBondViews {
 #[pymethods]
 impl DativeBondViews {
     fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner.bind(py).borrow().inner().dative_bonds().count()
+        self.owner
+            .bind(py)
+            .borrow()
+            .to_rust()
+            .dative_bonds()
+            .count()
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
         format!(
             "DativeBondViews(len={})",
-            self.owner.bind(py).borrow().inner().dative_bonds().count()
+            self.owner
+                .bind(py)
+                .borrow()
+                .to_rust()
+                .dative_bonds()
+                .count()
         )
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<DativeBondView> {
         let molecule = self.owner.bind(py).borrow();
-        let id = resolve_dative_bond_index(molecule.inner(), index)?;
+        let id = resolve_dative_bond_index(molecule.to_rust(), index)?;
         Ok(DativeBondView {
             owner: self.owner.clone_ref(py),
             id,
@@ -434,8 +444,8 @@ impl DativeBondViews {
         bond: PyRef<'_, DativeBondForm>,
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
-        let id = resolve_dative_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().dative_bond_mut(id).attributes = bond.inner().clone();
+        let id = resolve_dative_bond_index(molecule.to_rust(), index)?;
+        *molecule.to_rust_mut().dative_bond_mut(id).attributes = bond.to_rust().clone();
         Ok(())
     }
 
@@ -444,7 +454,7 @@ impl DativeBondViews {
         let molecule = self.owner.bind(py).borrow();
         let donor_ids: Vec<GraphIrAtomId> = donors.into_iter().map(GraphIrAtomId).collect();
         molecule
-            .inner()
+            .to_rust()
             .dative_bonds()
             .of_id(GraphIrAtomId(acceptor), &donor_ids)
             .map(|id| DativeBondView {
@@ -457,7 +467,7 @@ impl DativeBondViews {
     fn incident(&self, py: Python<'_>, atom: u32) -> Vec<DativeBondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .dative_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| DativeBondView {
@@ -472,7 +482,7 @@ impl DativeBondViews {
             .owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .dative_bonds()
             .ids()
             .collect::<Vec<_>>();
@@ -562,11 +572,10 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_form_constraints() {
-        let bond =
-            DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
-                GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
-            ));
-        assert_eq!(bond.inner().constraints.len(), 1);
+        let bond = DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1).with_constraint(
+            GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
+        ));
+        assert_eq!(bond.to_rust().constraints.len(), 1);
     }
 
     #[rstest]
@@ -574,7 +583,7 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -588,7 +597,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(2)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             DativeBondForm::set_constraints(
@@ -598,7 +607,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().inner().constraints.aromatic(),
+                dst.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -687,7 +696,7 @@ mod tests {
             };
             let single = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(2)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
@@ -707,7 +716,7 @@ mod tests {
             };
             let single = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(2)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(2)),
             )
             .unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
@@ -1054,7 +1063,7 @@ mod tests {
                 constraints.clone_ref(py),
                 py,
                 DativeBondConstraintsUpdate::Container(
-                    Py::new(py, DativeBondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, DativeBondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1136,7 +1145,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1155,7 +1164,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.aromatic(),
+                bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1168,7 +1177,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1186,7 +1195,7 @@ mod tests {
             view.update(py, DativeBondConstraintsUpdate::View(other))
                 .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.aromatic(),
+                bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1244,7 +1253,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1285,7 +1294,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1).with_constraint(
                     GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1317,7 +1326,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1334,7 +1343,7 @@ mod tests {
             view.update(
                 py,
                 DativeBondConstraintsUpdate::Container(
-                    Py::new(py, DativeBondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, DativeBondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1350,7 +1359,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {
@@ -1391,7 +1400,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
+                DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1)),
             )
             .unwrap();
             let view = DativeBondConstraintsView {

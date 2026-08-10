@@ -67,18 +67,18 @@ impl StereoPerception {
     }
 
     /// Derive stereo relations and compare them with every existing relation.
-    pub fn derive(&self, ast: &Molecule) -> StereoDerivation {
+    pub fn derive(&self, molecule: &Molecule) -> StereoDerivation {
         let mut atoms = Vec::new();
         let mut bonds = Vec::new();
         let mut inconsistencies = BTreeSet::new();
 
-        for atom in ast.atoms().ids() {
-            let relations: Vec<_> = ast
+        for atom in molecule.atoms().ids() {
+            let relations: Vec<_> = molecule
                 .stereo_atoms()
                 .iter()
                 .filter(|relation| relation.site_id() == atom)
                 .collect();
-            let assertion = ast
+            let assertion = molecule
                 .atom(atom)
                 .attributes
                 .constraints
@@ -87,7 +87,7 @@ impl StereoPerception {
 
             let constraint_candidate = match assertion {
                 TetrahedralStereoForm::Stereo(coset) => {
-                    let candidate = self.derive_stereo_atom(ast, atom, coset);
+                    let candidate = self.derive_stereo_atom(molecule, atom, coset);
                     if candidate.is_none() {
                         inconsistencies
                             .insert(StereoInconsistency::TetrahedralStereoFailure { atom });
@@ -104,7 +104,7 @@ impl StereoPerception {
             for relation in relations {
                 let entity_candidate =
                     if relation.attributes.configuration.kind() == Some(StereoKind::Tetrahedral) {
-                        self.derive_stereo_atom(ast, atom, &StereoCoset::Undetermined)
+                        self.derive_stereo_atom(molecule, atom, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
                                 Some((ligands, StereoAtomForm::new(StereoKind::Tetrahedral, coset)))
@@ -150,13 +150,13 @@ impl StereoPerception {
             }
         }
 
-        for bond in ast.bonds().ids() {
-            let relations: Vec<_> = ast
+        for bond in molecule.bonds().ids() {
+            let relations: Vec<_> = molecule
                 .stereo_bonds()
                 .iter()
                 .filter(|relation| relation.site_id() == bond)
                 .collect();
-            let assertion = ast
+            let assertion = molecule
                 .bond(bond)
                 .attributes
                 .constraints
@@ -165,7 +165,7 @@ impl StereoPerception {
 
             let constraint_candidate = match assertion {
                 CisTransStereoForm::Stereo(coset) => {
-                    let candidate = self.derive_stereo_bond(ast, bond, coset);
+                    let candidate = self.derive_stereo_bond(molecule, bond, coset);
                     if candidate.is_none() {
                         inconsistencies.insert(StereoInconsistency::CisTransStereoFailure { bond });
                     }
@@ -181,7 +181,7 @@ impl StereoPerception {
             for relation in relations {
                 let entity_candidate =
                     if relation.attributes.configuration.kind() == Some(StereoKind::CisTrans) {
-                        self.derive_stereo_bond(ast, bond, &StereoCoset::Undetermined)
+                        self.derive_stereo_bond(molecule, bond, &StereoCoset::Undetermined)
                             .and_then(|(ligands, _)| {
                                 let coset = relation.coset_for(ligands.iter().copied())?;
                                 Some((ligands, StereoBondForm::new(StereoKind::CisTrans, coset)))
@@ -238,11 +238,11 @@ impl StereoPerception {
     /// Derive a tetrahedral stereo atom in the canonical neighbor frame.
     pub fn derive_stereo_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom: AtomId,
         coset: &StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoAtomForm)> {
-        let view = ast.atom(atom);
+        let view = molecule.atom(atom);
         if view.is_in_aromatic_system() {
             return None;
         }
@@ -277,33 +277,37 @@ impl StereoPerception {
     /// Derive a cis-trans stereo bond in the canonical endpoint and side frames.
     pub fn derive_stereo_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond: BondId,
         coset: &StereoCoset,
     ) -> Option<(Vec<StereoLigand>, StereoBondForm)> {
-        let view = ast.bond(bond);
+        let view = molecule.bond(bond);
         let kind = StereoKind::CisTrans;
         let model = self.model.kind_model(kind)?;
         let [first, second] = view.atom_ids();
-        if !model.scope.contains(ast.atom(first).element().as_lit()?)
-            || !model.scope.contains(ast.atom(second).element().as_lit()?)
+        if !model
+            .scope
+            .contains(molecule.atom(first).element().as_lit()?)
+            || !model
+                .scope
+                .contains(molecule.atom(second).element().as_lit()?)
         {
             return None;
         }
 
-        let first_side = self.bond_side_ligands(ast, first, second)?;
-        let second_side = self.bond_side_ligands(ast, second, first)?;
+        let first_side = self.bond_side_ligands(molecule, first, second)?;
+        let second_side = self.bond_side_ligands(molecule, second, first)?;
         let ligands = vec![first_side[0], first_side[1], second_side[0], second_side[1]];
         Some((ligands, StereoBondForm::new(kind, coset.clone())))
     }
 
     fn bond_side_ligands(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom: AtomId,
         partner: AtomId,
     ) -> Option<[StereoLigand; 2]> {
-        let view = ast.atom(atom);
+        let view = molecule.atom(atom);
         let mut substituents = view
             .neighbors()
             .map(|neighbor| neighbor.atom_id())
@@ -520,9 +524,12 @@ mod tests {
             ],
         },
     )]
-    fn test_stereo_perception_derive(#[case] ast: Molecule, #[case] expected: StereoDerivation) {
+    fn test_stereo_perception_derive(
+        #[case] molecule: Molecule,
+        #[case] expected: StereoDerivation,
+    ) {
         assert_eq!(
-            StereoPerception::new(&StereoModel::default()).derive(&ast),
+            StereoPerception::new(&StereoModel::default()).derive(&molecule),
             expected
         );
     }
@@ -590,12 +597,15 @@ mod tests {
     )]
     fn test_stereo_perception_derive_stereo_atom(
         #[case] model: StereoModel,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoAtomForm)>,
     ) {
         assert_eq!(
-            StereoPerception::new(&model)
-                .derive_stereo_atom(&ast, AtomId(1), &StereoCoset::Lit(1),),
+            StereoPerception::new(&model).derive_stereo_atom(
+                &molecule,
+                AtomId(1),
+                &StereoCoset::Lit(1),
+            ),
             expected
         );
     }
@@ -654,12 +664,15 @@ mod tests {
     )]
     fn test_stereo_perception_derive_stereo_bond(
         #[case] model: StereoModel,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Option<(Vec<StereoLigand>, StereoBondForm)>,
     ) {
         assert_eq!(
-            StereoPerception::new(&model)
-                .derive_stereo_bond(&ast, BondId(1), &StereoCoset::Lit(1),),
+            StereoPerception::new(&model).derive_stereo_bond(
+                &molecule,
+                BondId(1),
+                &StereoCoset::Lit(1),
+            ),
             expected
         );
     }

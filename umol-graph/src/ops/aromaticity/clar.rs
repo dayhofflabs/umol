@@ -27,7 +27,7 @@ pub struct ClarAromaticity;
 impl ClarAromaticity {
     pub fn find_from_rings<F>(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         rings: &RingSet,
         maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm,
         electrons_at: &F,
@@ -35,7 +35,7 @@ impl ClarAromaticity {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let has_non_benzenoid = ast.atoms().iter().any(|view| {
+        let has_non_benzenoid = molecule.atoms().iter().any(|view| {
             !matches!(view.attributes.element, ElementForm::Lit(Element::C))
                 && electrons_at(&view).is_some()
         });
@@ -53,8 +53,8 @@ impl ClarAromaticity {
                     return false;
                 };
                 cycle.len() == 6
-                    && cycle.atoms().iter().all(|&atom| {
-                        let a = ast.atom(atom);
+                    && cycle.atoms().iter().all(|&id| {
+                        let a = molecule.atom(id);
                         matches!(a.attributes.element, ElementForm::Lit(Element::C))
                             && electrons_at(&a).is_some()
                     })
@@ -82,7 +82,7 @@ impl ClarAromaticity {
 
         let electrons: Vec<i64> = atoms
             .iter()
-            .map(|&atom| electrons_at(&ast.atom(atom)).unwrap_or(0) as i64)
+            .map(|&id| electrons_at(&molecule.atom(id)).unwrap_or(0) as i64)
             .collect();
 
         Ok(vec![(
@@ -196,7 +196,7 @@ mod tests {
         })
     }
 
-    fn hex_ring_indices(ast: &Molecule, ring_info: &RingSet) -> Vec<RingId> {
+    fn hex_ring_indices(molecule: &Molecule, ring_info: &RingSet) -> Vec<RingId> {
         ring_info
             .ids()
             .filter(|&i| {
@@ -204,7 +204,7 @@ mod tests {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
                             matches!(
-                                ast.atom(atom).attributes.element,
+                                molecule.atom(atom).attributes.element,
                                 ElementForm::Lit(Element::C)
                             )
                         })
@@ -242,8 +242,11 @@ mod tests {
     #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
-    fn test_clar_aromaticity_sextet_count(#[case] ast: Molecule, #[case] expected_sextets: usize) {
-        let ring_info = ast
+    fn test_clar_aromaticity_sextet_count(
+        #[case] molecule: Molecule,
+        #[case] expected_sextets: usize,
+    ) {
+        let ring_info = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -252,7 +255,7 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let candidates = hex_ring_indices(&ast, &ring_info);
+        let candidates = hex_ring_indices(&molecule, &ring_info);
         let sextets = select_disjoint_sextets(
             &ring_info,
             &candidates,
@@ -267,11 +270,11 @@ mod tests {
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
     #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let rings = ast
+        let rings = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -283,7 +286,7 @@ mod tests {
         let model = ClarAromaticity;
         let systems = model
             .find_from_rings(
-                &ast,
+                &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| match v
@@ -303,11 +306,11 @@ mod tests {
             let system_atoms: HashSet<AtomId> = system_atoms_vec.iter().copied().collect();
             let expected_atoms: HashSet<AtomId> = select_disjoint_sextets(
                 &rings,
-                &hex_ring_indices(&ast, &rings),
+                &hex_ring_indices(&molecule, &rings),
                 MaximumIndependentSetAlgorithm::BranchAndBound,
             )
             .into_iter()
-            .filter_map(|idx| rings.get(idx))
+            .filter_map(|id| rings.get(id))
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
             assert_eq!(system_atoms, expected_atoms);
@@ -337,8 +340,8 @@ mod tests {
         aromatic(Element::C, 1),
         aromatic(Element::C, 1),
     ]))]
-    fn test_clar_aromaticity_find_from_rings_error(#[case] ast: Molecule) {
-        let rings = ast
+    fn test_clar_aromaticity_find_from_rings_error(#[case] molecule: Molecule) {
+        let rings = molecule
             .rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -350,7 +353,7 @@ mod tests {
         let model = ClarAromaticity;
         assert!(model
             .find_from_rings(
-                &ast,
+                &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| {
@@ -380,14 +383,14 @@ mod tests {
             )
             .into_ring_set();
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
-        let sextets = select_disjoint_sextets(
+        let sextet_ids = select_disjoint_sextets(
             &ring_info,
             &candidates,
             MaximumIndependentSetAlgorithm::BranchAndBound,
         );
-        assert_eq!(sextets.len(), 2);
-        for &sextet_idx in &sextets {
-            let ring = ring_info.get(sextet_idx).unwrap();
+        assert_eq!(sextet_ids.len(), 2);
+        for &sextet_id in &sextet_ids {
+            let ring = ring_info.get(sextet_id).unwrap();
             assert_eq!(ring.len(), 6);
         }
     }

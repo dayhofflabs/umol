@@ -1,4 +1,4 @@
-//! Parse a SMILES (or MOL) to a molecule AST and lower it to DSL — parse + lower
+//! Parse a SMILES (or MOL) to a molecule IR and lower it to DSL — parse + lower
 //! only (no resolve, no perception), so the output is exactly the inline `#T` /
 //! `#C` stereo cosets Phase B produces. Used to generate the stereo resolution
 //! conformance inputs (`umol-graph/tests/resolution/data/stereo_*`): pick a
@@ -157,20 +157,20 @@ fn read_input(arg: &str) -> Vec<u8> {
     }
 }
 
-/// Lower an AST to DSL with **zeroed** defaults — fully explicit (nothing elided),
+/// Lower an IR to DSL with **zeroed** defaults — fully explicit (nothing elided),
 /// matching how the resolution harness lowers its output.
-fn lower(ast: &Molecule) -> String {
-    MoleculeDsl::from_ir(ast, &MoleculeDefaults::zeroed()).to_string()
+fn lower(molecule: &Molecule) -> String {
+    MoleculeDsl::from_ir(molecule, &MoleculeDefaults::zeroed()).to_string()
 }
 
-/// Parse the SMILES to an AST, then lower the AST to DSL.
+/// Parse the SMILES to an IR, then lower the IR to DSL.
 fn parse_and_lower(smiles: &str) -> Result<String, String> {
     let smiles = Smiles::parse(smiles.trim()).map_err(|error| error.to_string())?;
-    let ast: Molecule = smiles
+    let molecule: Molecule = smiles
         .as_table_ir()
         .try_into_ir(&())
         .map_err(|error| error.to_string())?;
-    Ok(lower(&ast))
+    Ok(lower(&molecule))
 }
 
 fn print_table() {
@@ -227,11 +227,11 @@ fn main() {
             }
         }
         Some("mol") if args.len() == 3 => {
-            let ast = parse_mol_bytes_to_ast(&read_input(&args[2])).unwrap_or_else(|e| {
+            let molecule = parse_mol_bytes_to_ast(&read_input(&args[2])).unwrap_or_else(|e| {
                 eprintln!("parse error: {e}");
                 process::exit(1);
             });
-            println!("{}", lower(&ast));
+            println!("{}", lower(&molecule));
         }
         _ => {
             eprintln!("usage: verify_stereo <smiles <input|file|-> | mol <input|file|-> | table>");

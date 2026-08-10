@@ -135,7 +135,7 @@ impl MoleculeMetadata {
 
     /// Move entity keywords through a molecule correspondence.
     fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        Self(self.0.clone().remap(correspondence.inner()))
+        Self(self.0.clone().remap(correspondence.to_rust()))
     }
 
     fn __repr__(&self) -> String {
@@ -148,8 +148,8 @@ impl MoleculeMetadata {
         Self(metadata)
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrMoleculeMetadata {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrMoleculeMetadata {
+        &self.0
     }
 
     fn repr(&self) -> String {
@@ -229,8 +229,8 @@ impl ReactionMetadata {
         Self(metadata)
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrReactionMetadata {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrReactionMetadata {
+        &self.0
     }
 }
 
@@ -505,14 +505,20 @@ mod tests {
             .add_atom_alias("nitrogen", AtomDsl(AtomForm::from_element(Element::N)))
             .unwrap();
 
-        let metadata = ReactionMetadata::from_rust(metadata).to_rust();
+        let metadata = ReactionMetadata::from_rust(metadata);
 
         assert_eq!(
-            metadata.atom_alias("carbon").map(|alias| alias.0.clone()),
+            metadata
+                .to_rust()
+                .atom_alias("carbon")
+                .map(|alias| alias.0.clone()),
             Some(AtomForm::from_element(Element::C))
         );
         assert_eq!(
-            metadata.atom_alias("nitrogen").map(|alias| alias.0.clone()),
+            metadata
+                .to_rust()
+                .atom_alias("nitrogen")
+                .map(|alias| alias.0.clone()),
             Some(AtomForm::from_element(Element::N))
         );
     }

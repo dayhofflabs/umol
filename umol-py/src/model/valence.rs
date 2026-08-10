@@ -36,7 +36,7 @@ impl AtomTypeRegistry {
         let mut rust_atoms = Vec::with_capacity(atoms.len());
         for (index, atom) in atoms.iter().enumerate() {
             let atom = atom.bind(py).borrow();
-            let atom = atom.inner();
+            let atom = atom.to_rust();
             if !matches!(&atom.element, GraphIrElementForm::Lit(_)) {
                 return Err(PyValueError::new_err(format!(
                     "atom type registry entry {index} must have a literal element"
@@ -83,7 +83,7 @@ impl AtomTypeRegistry {
             .patterns_for_element(ChemElement::from(&element))
             .iter()
             .cloned()
-            .map(AtomForm::from_inner)
+            .map(AtomForm::from_rust)
             .collect()
     }
 
@@ -93,7 +93,7 @@ impl AtomTypeRegistry {
             .patterns_for_element_and_charge(ChemElement::from(&element), charge)
             .iter()
             .cloned()
-            .map(AtomForm::from_inner)
+            .map(AtomForm::from_rust)
             .collect()
     }
 
@@ -121,8 +121,8 @@ impl AtomTypeRegistry {
         dead_code,
         reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
-    pub(crate) fn to_rust(&self) -> GraphAtomTypeRegistry {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphAtomTypeRegistry {
+        &self.0
     }
 }
 
@@ -169,8 +169,8 @@ impl ValenceEntry {
         Self(entry.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphValenceEntry {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphValenceEntry {
+        &self.0
     }
 }
 
@@ -186,7 +186,7 @@ impl ValenceTable {
     fn new(entries: BTreeMap<Element, ValenceEntry>) -> Self {
         let mut table = GraphValenceTable::empty();
         for (element, entry) in entries {
-            table.insert(ChemElement::from(&element), entry.to_rust());
+            table.insert(ChemElement::from(&element), entry.to_rust().clone());
         }
         Self(table)
     }
@@ -256,8 +256,8 @@ impl ValenceTable {
         dead_code,
         reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
-    pub(crate) fn to_rust(&self) -> GraphValenceTable {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphValenceTable {
+        &self.0
     }
 }
 
@@ -306,10 +306,10 @@ impl ValenceModel {
     pub(crate) fn to_rust(&self) -> GraphValenceModel {
         match self {
             Self::AtomTyping { registry } => GraphValenceModel::AtomTyping {
-                registry: Cow::Owned(registry.to_rust()),
+                registry: Cow::Owned(registry.to_rust().clone()),
             },
             Self::Counts { table } => GraphValenceModel::Counts {
-                table: Cow::Owned(table.to_rust()),
+                table: Cow::Owned(table.to_rust().clone()),
             },
         }
     }
@@ -344,7 +344,7 @@ mod tests {
             let python_atoms = atoms
                 .iter()
                 .cloned()
-                .map(|atom| Py::new(py, AtomForm::from_inner(atom)).unwrap())
+                .map(|atom| Py::new(py, AtomForm::from_rust(atom)).unwrap())
                 .collect();
 
             assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
-            let atom = Py::new(py, AtomForm::from_inner(atom)).unwrap();
+            let atom = Py::new(py, AtomForm::from_rust(atom)).unwrap();
             let error = AtomTypeRegistry::from_atoms(py, vec![atom]).unwrap_err();
 
             assert!(error.is_instance_of::<PyValueError>(py));
@@ -426,7 +426,7 @@ mod tests {
             registry
                 .patterns_for_element(Element::from(ChemElement::C))
                 .into_iter()
-                .map(|atom| atom.inner().clone())
+                .map(|atom| atom.to_rust().clone())
                 .collect::<Vec<_>>(),
             registry.0.patterns_for_element(ChemElement::C)
         );
@@ -446,7 +446,7 @@ mod tests {
             registry
                 .patterns_for_element_and_charge(Element::from(ChemElement::C), charge)
                 .into_iter()
-                .map(|atom| atom.inner().clone())
+                .map(|atom| atom.to_rust().clone())
                 .collect::<Vec<_>>(),
             expected
         );
@@ -477,7 +477,7 @@ mod tests {
     #[case::default(AtomTypeRegistry::default())]
     #[case::custom(AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]))]
     fn test_atom_type_registry_to_rust(#[case] registry: AtomTypeRegistry) {
-        assert_eq!(registry.to_rust(), registry.0);
+        assert_eq!(registry.to_rust(), &registry.0);
     }
 
     #[rstest]
@@ -574,7 +574,7 @@ mod tests {
     #[case::empty(ValenceEntry::new(Vec::new(), Vec::new()))]
     #[case::multi_state(ValenceEntry::new(vec![6, 2, 4], vec![4, 2]))]
     fn test_valence_entry_to_rust(#[case] entry: ValenceEntry) {
-        assert_eq!(entry.to_rust(), entry.0);
+        assert_eq!(entry.to_rust(), &entry.0);
     }
 
     #[rstest]
@@ -681,7 +681,7 @@ mod tests {
     #[case::default(ValenceTable::default())]
     #[case::custom(ValenceTable(valence_table![C => [4, 2], O => [2]]))]
     fn test_valence_table_to_rust(#[case] table: ValenceTable) {
-        assert_eq!(table.to_rust(), table.0);
+        assert_eq!(table.to_rust(), &table.0);
     }
 
     #[rstest]

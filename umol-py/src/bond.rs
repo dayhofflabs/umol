@@ -47,7 +47,7 @@ impl BondUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -101,7 +101,7 @@ impl BondUpdate {
 
     #[getter]
     fn constraints(&self) -> BondConstraintsForm {
-        BondConstraintsForm::from_inner(self.0.constraints.clone())
+        BondConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -110,8 +110,8 @@ impl BondUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrBondUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrBondUpdate {
+        &self.0
     }
 }
 
@@ -149,40 +149,40 @@ impl BondForm {
             bond = bond.with_unpaired_electrons(unpaired_electrons.to_rust(py));
         }
         if let Some(constraints) = constraints {
-            bond.constraints = constraints.bind(py).borrow().inner().clone();
+            bond.constraints = constraints.bind(py).borrow().to_rust().clone();
         }
-        BondForm::from_inner(bond)
+        BondForm::from_rust(bond)
     }
 
     /// Construct the canonical `:single` bond shape.
     #[staticmethod]
     fn single() -> Self {
-        Self::from_inner(GraphIrBondForm::from_order(1))
+        Self::from_rust(GraphIrBondForm::from_order(1))
     }
 
     /// Construct the canonical `:double` bond shape.
     #[staticmethod]
     fn double() -> Self {
-        Self::from_inner(GraphIrBondForm::from_order(2))
+        Self::from_rust(GraphIrBondForm::from_order(2))
     }
 
     /// Construct the canonical `:triple` bond shape.
     #[staticmethod]
     fn triple() -> Self {
-        Self::from_inner(GraphIrBondForm::from_order(3))
+        Self::from_rust(GraphIrBondForm::from_order(3))
     }
 
     /// Construct the canonical `:quadruple` bond shape.
     #[staticmethod]
     fn quadruple() -> Self {
-        Self::from_inner(GraphIrBondForm::from_order(4))
+        Self::from_rust(GraphIrBondForm::from_order(4))
     }
 
     /// Construct the canonical `:aromatic` shape: an order-1 localized bond
     /// carrying the aromatic constraint, not an aromatic bond order.
     #[staticmethod]
     fn aromatic() -> Self {
-        Self::from_inner(
+        Self::from_rust(
             GraphIrBondForm::from_order(1)
                 .with_constraint(GraphIrBondConstraintForm::aromatic(true)),
         )
@@ -192,7 +192,7 @@ impl BondForm {
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrBondForm::from_str(s)
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(parse_error)
     }
 
@@ -211,7 +211,7 @@ impl BondForm {
 
     #[setter]
     fn set_order(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.try_inner_mut()?.order = value.to_rust(py);
+        self.to_rust_mut()?.order = value.to_rust(py);
         Ok(())
     }
 
@@ -222,7 +222,7 @@ impl BondForm {
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.try_inner_mut()?.charge = value.to_rust(py);
+        self.to_rust_mut()?.charge = value.to_rust(py);
         Ok(())
     }
 
@@ -237,7 +237,7 @@ impl BondForm {
         py: Python<'_>,
         value: PyRef<'_, UnpairedElectronsForm>,
     ) -> PyResult<()> {
-        self.try_inner_mut()?.unpaired_electrons = value.to_rust(py);
+        self.to_rust_mut()?.unpaired_electrons = value.to_rust(py);
         Ok(())
     }
 
@@ -257,7 +257,7 @@ impl BondForm {
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: BondConstraintsLike) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
+        slf.borrow_mut(py).to_rust_mut()?.constraints = snapshot;
         Ok(())
     }
 
@@ -267,7 +267,7 @@ impl BondForm {
     }
 
     fn copy(&self) -> Self {
-        Self::from_inner(self.inner().clone())
+        Self::from_rust(self.to_rust().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -286,13 +286,13 @@ impl BondForm {
 
 impl BondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrBondForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrBondForm {
         &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrBondForm> {
+    pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrBondForm> {
         if self.readonly {
             Err(PyTypeError::new_err("read-only entity form"))
         } else {
@@ -300,9 +300,8 @@ impl BondForm {
         }
     }
 
-    /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
-    /// `inner`).
-    pub(crate) fn from_inner(bond: GraphIrBondForm) -> Self {
+    /// Wrap an owned Rust bond form.
+    pub(crate) fn from_rust(bond: GraphIrBondForm) -> Self {
         Self {
             value: bond,
             readonly: false,
@@ -313,8 +312,8 @@ impl BondForm {
 impl EntityForm for BondForm {
     type RustForm = GraphIrBondForm;
 
-    fn clone_rust(&self) -> Self::RustForm {
-        self.inner().clone()
+    fn to_rust(&self) -> &Self::RustForm {
+        &self.value
     }
 
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
@@ -331,9 +330,11 @@ impl EntityForm for BondForm {
 impl_py_lattice!(
     BondForm,
     GraphIrBondForm,
-    |value: &BondForm, _py: Python<'_>| -> PyResult<GraphIrBondForm> { Ok(value.inner().clone()) },
+    |value: &BondForm, _py: Python<'_>| -> PyResult<GraphIrBondForm> {
+        Ok(value.to_rust().clone())
+    },
     |_py: Python<'_>, value: GraphIrBondForm| -> PyResult<BondForm> {
-        Ok(BondForm::from_inner(value))
+        Ok(BondForm::from_rust(value))
     }
 );
 
@@ -368,7 +369,7 @@ impl BondView {
     fn atom_ids(&self, py: Python<'_>) -> PyResult<(u32, u32)> {
         let molecule = self.owner.bind(py).borrow();
         let view = molecule
-            .inner()
+            .to_rust()
             .bonds()
             .get(self.id)
             .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -383,14 +384,14 @@ impl BondView {
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.bond(molecule.inner())?.order)
+        NumForm::from_rust(py, &self.bond(molecule.to_rust())?.order)
     }
 
     #[setter]
     fn set_order(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .bond_mut(self.id)
             .attributes
             .order = value.to_rust(py);
@@ -399,14 +400,14 @@ impl BondView {
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
         let molecule = self.owner.bind(py).borrow();
-        NumForm::from_rust(py, &self.bond(molecule.inner())?.charge)
+        NumForm::from_rust(py, &self.bond(molecule.to_rust())?.charge)
     }
 
     #[setter]
     fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .bond_mut(self.id)
             .attributes
             .charge = value.to_rust(py);
@@ -415,14 +416,14 @@ impl BondView {
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
         let molecule = self.owner.bind(py).borrow();
-        UnpairedElectronsForm::from_rust(py, &self.bond(molecule.inner())?.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.bond(molecule.to_rust())?.unpaired_electrons)
     }
 
     #[setter]
     fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .bond_mut(self.id)
             .attributes
             .unpaired_electrons = value.to_rust(py);
@@ -446,7 +447,7 @@ impl BondView {
     fn set_constraints(&self, py: Python<'_>, value: BondConstraintsLike) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .bond_mut(self.id)
             .attributes
             .constraints = value.to_rust(py)?;
@@ -457,7 +458,7 @@ impl BondView {
     /// symmetric with `BondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.bond(molecule.inner())?;
+        let bond = self.bond(molecule.to_rust())?;
         let dict = PyDict::new(py);
         dict.set_item("order", NumForm::from_rust(py, &bond.order)?)?;
         dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
@@ -502,19 +503,19 @@ pub struct BondViews {
 #[pymethods]
 impl BondViews {
     fn __len__(&self, py: Python<'_>) -> usize {
-        self.owner.bind(py).borrow().inner().bonds().count()
+        self.owner.bind(py).borrow().to_rust().bonds().count()
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
         format!(
             "BondViews(len={})",
-            self.owner.bind(py).borrow().inner().bonds().count()
+            self.owner.bind(py).borrow().to_rust().bonds().count()
         )
     }
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<BondView> {
         let molecule = self.owner.bind(py).borrow();
-        let id = resolve_bond_index(molecule.inner(), index)?;
+        let id = resolve_bond_index(molecule.to_rust(), index)?;
         Ok(BondView {
             owner: self.owner.clone_ref(py),
             id,
@@ -524,8 +525,8 @@ impl BondViews {
     /// Replace the whole bond value at `index` in place (endpoints unchanged).
     fn __setitem__(&self, py: Python<'_>, index: isize, bond: PyRef<'_, BondForm>) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
-        let id = resolve_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().bond_mut(id).attributes = bond.inner().clone();
+        let id = resolve_bond_index(molecule.to_rust(), index)?;
+        *molecule.to_rust_mut().bond_mut(id).attributes = bond.to_rust().clone();
         Ok(())
     }
 
@@ -533,7 +534,7 @@ impl BondViews {
     fn of(&self, py: Python<'_>, first: u32, second: u32) -> Option<BondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .bonds()
             .of_id(GraphIrAtomId(first), GraphIrAtomId(second))
             .map(|id| BondView {
@@ -547,7 +548,7 @@ impl BondViews {
             .owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .bonds()
             .ids()
             .collect::<Vec<_>>();
@@ -639,10 +640,10 @@ mod tests {
 
     #[rstest]
     fn test_bond_form_constraints() {
-        let bond = BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+        let bond = BondForm::from_rust(GraphIrBondForm::from_order(1).with_constraint(
             GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
         ));
-        assert_eq!(bond.inner().constraints.len(), 1);
+        assert_eq!(bond.to_rust().constraints.len(), 1);
     }
 
     #[rstest]
@@ -650,7 +651,7 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_rust(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -662,11 +663,11 @@ mod tests {
                 },
             )
             .unwrap();
-            let dst = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(2))).unwrap();
+            let dst = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(2))).unwrap();
             BondForm::set_constraints(dst.clone_ref(py), py, BondConstraintsLike::View(view))
                 .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().inner().constraints.aromatic(),
+                dst.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -950,7 +951,7 @@ mod tests {
                 constraints.clone_ref(py),
                 py,
                 BondConstraintsUpdate::Container(
-                    Py::new(py, BondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, BondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1032,7 +1033,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_rust(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1047,7 +1048,7 @@ mod tests {
             BondForm::set_constraints(bond.clone_ref(py), py, BondConstraintsLike::View(own_view))
                 .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.aromatic(),
+                bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1061,7 +1062,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_rust(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1078,7 +1079,7 @@ mod tests {
             .unwrap();
             view.update(py, BondConstraintsUpdate::View(other)).unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.aromatic(),
+                bond.bind(py).borrow().to_rust().constraints.aromatic(),
                 GraphIrBooleanForm::Lit(true)
             );
         });
@@ -1170,7 +1171,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1209,7 +1210,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                BondForm::from_inner(GraphIrBondForm::from_order(1).with_constraint(
+                BondForm::from_rust(GraphIrBondForm::from_order(1).with_constraint(
                     GraphIrBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
                 )),
             )
@@ -1239,7 +1240,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_update() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1254,7 +1255,7 @@ mod tests {
             view.update(
                 py,
                 BondConstraintsUpdate::Container(
-                    Py::new(py, BondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, BondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1268,7 +1269,7 @@ mod tests {
     #[rstest]
     fn test_bond_constraints_view_set_aromatic() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1305,7 +1306,7 @@ mod tests {
     #[rstest]
     fn test_bond_ring_size_counts_bond_backed() {
         Python::attach(|py| {
-            let bond = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let bond = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             let view = BondConstraintsView {
                 backing: BondConstraintsBacking::Bond(bond.clone_ref(py)),
             };
@@ -1505,7 +1506,7 @@ mod tests {
             let views = BondViews {
                 owner: owner.clone_ref(py),
             };
-            let single = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let single = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             views.__setitem__(py, 0, single.bind(py).borrow()).unwrap();
             let view = views.__getitem__(py, 0).unwrap();
             // value replaced, endpoints preserved
@@ -1518,7 +1519,7 @@ mod tests {
     fn test_bond_views_setitem_error() {
         Python::attach(|py| {
             let views = BondViews { owner: ethene(py) };
-            let single = Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap();
+            let single = Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap();
             assert!(views.__setitem__(py, 5, single.bind(py).borrow()).is_err());
         });
     }

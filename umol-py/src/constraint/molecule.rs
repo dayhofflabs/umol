@@ -308,7 +308,7 @@ impl ConstraintsUpdate {
     pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedConstraintsUpdate> {
         Ok(match self {
             Self::Container(container) => {
-                ResolvedConstraintsUpdate::Overlay(container.bind(py).borrow().inner().clone())
+                ResolvedConstraintsUpdate::Overlay(container.bind(py).borrow().to_rust().clone())
             }
             Self::View(view) => ResolvedConstraintsUpdate::Overlay(
                 view.bind(py)
@@ -359,7 +359,7 @@ pub(crate) enum ConstraintsLike {
 impl ConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrConstraints> {
         match self {
-            Self::Container(container) => Ok(container.bind(py).borrow().inner().clone()),
+            Self::Container(container) => Ok(container.bind(py).borrow().to_rust().clone()),
             Self::View(view) => view
                 .bind(py)
                 .borrow()
@@ -408,7 +408,7 @@ impl Constraints {
     /// Append another container, live view, or iterable after snapshotting the RHS.
     fn update(slf: Py<Self>, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        resolved.apply(slf.borrow_mut(py).inner_mut());
+        resolved.apply(slf.borrow_mut(py).to_rust_mut());
         Ok(())
     }
 
@@ -427,15 +427,15 @@ impl Constraints {
 }
 
 impl Constraints {
-    pub(crate) fn inner(&self) -> &GraphIrConstraints {
+    pub(crate) fn to_rust(&self) -> &GraphIrConstraints {
         &self.0
     }
 
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrConstraints {
+    pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrConstraints {
         &mut self.0
     }
 
-    pub(crate) fn from_inner(constraints: GraphIrConstraints) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrConstraints) -> Self {
         Self(constraints)
     }
 }
@@ -444,10 +444,10 @@ impl_py_canonicalize!(
     Constraints,
     GraphIrConstraints,
     |value: &Constraints, _py: Python<'_>| -> PyResult<GraphIrConstraints> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrConstraints| -> PyResult<Constraints> {
-        Ok(Constraints::from_inner(value))
+        Ok(Constraints::from_rust(value))
     }
 );
 
@@ -469,7 +469,7 @@ impl ConstraintsView {
         f: impl FnOnce(&GraphIrConstraints) -> PyResult<R>,
     ) -> PyResult<R> {
         let molecule = self.owner.bind(py).borrow();
-        f(molecule.inner().constraints())
+        f(molecule.to_rust().constraints())
     }
 
     /// Mutate the molecule's constraint store in place through `f`.
@@ -478,7 +478,7 @@ impl ConstraintsView {
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrConstraints) -> R,
     ) -> R {
-        f(self.owner.borrow_mut(py).inner_mut().constraints_mut())
+        f(self.owner.borrow_mut(py).to_rust_mut().constraints_mut())
     }
 }
 
@@ -1420,7 +1420,7 @@ match node:
         ]);
 
         Python::attach(|py| {
-            let container = Py::new(py, Constraints::from_inner(expected.clone())).unwrap();
+            let container = Py::new(py, Constraints::from_rust(expected.clone())).unwrap();
             let arg = ConstraintsLike::Container(container);
 
             assert_eq!(arg.to_rust(py).unwrap(), expected);
@@ -1461,7 +1461,7 @@ match node:
                 .collect();
             let constraints = Constraints::new(py, values);
 
-            assert_eq!(constraints.inner().as_slice(), entries.as_slice());
+            assert_eq!(constraints.to_rust().as_slice(), entries.as_slice());
         });
     }
 
@@ -1482,7 +1482,7 @@ match node:
         #[case] expected: bool,
     ) {
         assert_eq!(
-            Constraints::from_inner(left) == Constraints::from_inner(right),
+            Constraints::from_rust(left) == Constraints::from_rust(right),
             expected
         );
     }
@@ -1490,7 +1490,7 @@ match node:
     #[rstest]
     fn test_constraints_repr() {
         Python::attach(|py| {
-            let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+            let constraints = Constraints::from_rust(GraphIrConstraints::from(vec![
                 GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2)),
                 GraphIrConstraint::Or(Vec::new()),
             ]));
@@ -1508,14 +1508,14 @@ match node:
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
         Python::attach(|py| {
             let mut constraints =
-                Constraints::from_inner(GraphIrConstraints::from(vec![constraint.clone()]));
+                Constraints::from_rust(GraphIrConstraints::from(vec![constraint.clone()]));
             let value =
                 into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
             constraints.append(py, value);
 
             assert_eq!(
-                constraints.inner().as_slice(),
+                constraints.to_rust().as_slice(),
                 &[constraint.clone(), constraint]
             );
         });
@@ -1524,13 +1524,13 @@ match node:
     #[rstest]
     fn test_constraints_clear() {
         let mut constraints =
-            Constraints::from_inner(GraphIrConstraints::from(vec![GraphIrConstraint::And(
+            Constraints::from_rust(GraphIrConstraints::from(vec![GraphIrConstraint::And(
                 Vec::new(),
             )]));
 
         constraints.clear();
 
-        assert_eq!(constraints.inner(), &GraphIrConstraints::new());
+        assert_eq!(constraints.to_rust(), &GraphIrConstraints::new());
     }
 
     #[rstest]
@@ -1544,12 +1544,12 @@ match node:
         Python::attach(|py| {
             let target = Py::new(
                 py,
-                Constraints::from_inner(GraphIrConstraints::from(vec![initial.clone()])),
+                Constraints::from_rust(GraphIrConstraints::from(vec![initial.clone()])),
             )
             .unwrap();
             let container = Py::new(
                 py,
-                Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
+                Constraints::from_rust(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
             let mut molecule = GraphIrMolecule::new();
@@ -1577,7 +1577,7 @@ match node:
             .unwrap();
 
             assert_eq!(
-                target.bind(py).borrow().inner().as_slice(),
+                target.bind(py).borrow().to_rust().as_slice(),
                 &[initial, from_container, from_view, from_entries]
             );
         });
@@ -1590,7 +1590,7 @@ match node:
         Python::attach(|py| {
             let target = Py::new(
                 py,
-                Constraints::from_inner(GraphIrConstraints::from(vec![entry.clone()])),
+                Constraints::from_rust(GraphIrConstraints::from(vec![entry.clone()])),
             )
             .unwrap();
 
@@ -1602,7 +1602,7 @@ match node:
             .unwrap();
 
             assert_eq!(
-                target.bind(py).borrow().inner().as_slice(),
+                target.bind(py).borrow().to_rust().as_slice(),
                 &[entry.clone(), entry]
             );
         });
@@ -1614,8 +1614,8 @@ match node:
         GraphIrConstraint::And(Vec::new()),
         GraphIrConstraint::Or(Vec::new()),
     ]), 2)]
-    fn test_constraints_len(#[case] inner: GraphIrConstraints, #[case] expected: usize) {
-        assert_eq!(Constraints::from_inner(inner).__len__(), expected);
+    fn test_constraints_len(#[case] constraints: GraphIrConstraints, #[case] expected: usize) {
+        assert_eq!(Constraints::from_rust(constraints).__len__(), expected);
     }
 
     #[rstest]
@@ -1628,7 +1628,7 @@ match node:
     ))]
     fn test_constraints_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
         Python::attach(|py| {
-            let constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+            let constraints = Constraints::from_rust(GraphIrConstraints::from(vec![
                 GraphIrConstraint::Atom(GraphIrAtomId(1), GraphIrAtomConstraintForm::degree(2)),
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
             ]));
@@ -1644,7 +1644,7 @@ match node:
     fn test_constraints_getitem_error(#[case] index: isize) {
         Python::attach(|py| {
             let constraints =
-                Constraints::from_inner(GraphIrConstraints::from(vec![GraphIrConstraint::And(
+                Constraints::from_rust(GraphIrConstraints::from(vec![GraphIrConstraint::And(
                     Vec::new(),
                 )]));
 
@@ -1663,7 +1663,7 @@ match node:
     fn test_constraints_iter() {
         let first = GraphIrConstraint::And(Vec::new());
         let second = GraphIrConstraint::Or(Vec::new());
-        let mut constraints = Constraints::from_inner(GraphIrConstraints::from(vec![
+        let mut constraints = Constraints::from_rust(GraphIrConstraints::from(vec![
             first.clone(),
             second.clone(),
         ]));
@@ -1671,7 +1671,7 @@ match node:
         Python::attach(|py| {
             let mut iter = constraints.__iter__(py).unwrap();
             constraints
-                .inner_mut()
+                .to_rust_mut()
                 .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
                     Vec::new(),
                 ))));
@@ -1689,12 +1689,12 @@ match node:
     }
 
     #[rstest]
-    fn test_constraints_from_inner() {
+    fn test_constraints_from_rust() {
         let entries = vec![GraphIrConstraint::Or(Vec::new())];
 
         assert_eq!(
-            Constraints::from_inner(GraphIrConstraints::from(entries.clone()))
-                .inner()
+            Constraints::from_rust(GraphIrConstraints::from(entries.clone()))
+                .to_rust()
                 .as_slice(),
             entries.as_slice()
         );
@@ -1734,7 +1734,7 @@ match node:
             view.append(py, value);
 
             assert_eq!(
-                owner.bind(py).borrow().inner().constraints().as_slice(),
+                owner.bind(py).borrow().to_rust().constraints().as_slice(),
                 &[constraint.clone(), constraint]
             );
         });
@@ -1754,7 +1754,7 @@ match node:
             view.clear(py);
 
             assert_eq!(
-                owner.bind(py).borrow().inner().constraints(),
+                owner.bind(py).borrow().to_rust().constraints(),
                 &GraphIrConstraints::new()
             );
         });
@@ -1775,7 +1775,7 @@ match node:
             let target = ConstraintsView::new(target_owner.clone_ref(py));
             let container = Py::new(
                 py,
-                Constraints::from_inner(GraphIrConstraints::from(vec![from_container.clone()])),
+                Constraints::from_rust(GraphIrConstraints::from(vec![from_container.clone()])),
             )
             .unwrap();
             let mut source_molecule = GraphIrMolecule::new();
@@ -1802,7 +1802,7 @@ match node:
                 target_owner
                     .bind(py)
                     .borrow()
-                    .inner()
+                    .to_rust()
                     .constraints()
                     .as_slice(),
                 &[initial, from_container, from_view, from_entries]
@@ -1826,7 +1826,7 @@ match node:
                 .unwrap();
 
             assert_eq!(
-                owner.bind(py).borrow().inner().constraints().as_slice(),
+                owner.bind(py).borrow().to_rust().constraints().as_slice(),
                 &[entry.clone(), entry]
             );
         });
@@ -1841,7 +1841,7 @@ match node:
 
             owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .constraints_mut()
                 .push(GraphIrConstraint::And(Vec::new()));
 
@@ -1909,7 +1909,7 @@ match node:
             let mut iter = view.__iter__(py).unwrap();
             owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .constraints_mut()
                 .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
                     Vec::new(),

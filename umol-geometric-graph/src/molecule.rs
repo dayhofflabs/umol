@@ -1,7 +1,7 @@
 //! The perceived-molecule boundary type. Bond perception over a geometric
 //! `Molecule` yields per-atom elements, perceived bond orders, and the geometry's
 //! total charge and multiplicity; the type lifts into a `Molecule` via [`IntoIr`].
-//! Resolution of the lifted AST (hydrogens, per-atom valence, aromaticity) is the
+//! Resolution of the lifted molecule (hydrogens, per-atom valence, aromaticity) is the
 //! caller's job.
 
 use umol_chem::element::Element;
@@ -16,7 +16,7 @@ use crate::bond_perception::{perceive_bonds, BondPerceptionConfig};
 
 /// A molecule perceived from 3D geometry: the per-atom elements, the perceived
 /// bonds, and the geometry's total charge and multiplicity. This is the boundary between
-/// the geometric model and the AST — it lifts into a `Molecule` via [`IntoIr`].
+/// the geometric model and the molecule — it lifts into a `Molecule` via [`IntoIr`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct PerceivedMolecule {
     /// Element per atom, in geometric-atom order.

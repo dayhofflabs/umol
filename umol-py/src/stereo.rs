@@ -77,11 +77,11 @@ impl Permutation {
 }
 
 impl Permutation {
-    pub(crate) fn inner(&self) -> PermPermutation {
+    pub(crate) fn to_rust(self) -> PermPermutation {
         self.0
     }
 
-    pub(crate) fn from_inner(permutation: PermPermutation) -> Self {
+    pub(crate) fn from_rust(permutation: PermPermutation) -> Self {
         Permutation(permutation)
     }
 }
@@ -138,7 +138,7 @@ impl StereoTerm {
             }
             GraphIrStereoTerm::Apply(inner, permutation) => StereoTerm::Apply(
                 into_py_variant(py, StereoTerm::from_rust(py, inner)?)?,
-                Permutation::from_inner(*permutation),
+                Permutation::from_rust(*permutation),
             ),
         })
     }
@@ -158,7 +158,7 @@ impl StereoTerm {
             }
             StereoTerm::Apply(inner, permutation) => GraphIrStereoTerm::Apply(
                 Box::new(inner.bind(py).borrow().to_rust(py)),
-                permutation.inner(),
+                permutation.to_rust(),
             ),
         }
     }
@@ -772,7 +772,7 @@ impl StereoAtomUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -808,7 +808,7 @@ impl StereoAtomUpdate {
 
     #[getter]
     fn constraints(&self) -> StereoAtomConstraintsForm {
-        StereoAtomConstraintsForm::from_inner(self.0.constraints.clone())
+        StereoAtomConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -817,8 +817,8 @@ impl StereoAtomUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrStereoAtomUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrStereoAtomUpdate {
+        &self.0
     }
 }
 
@@ -841,7 +841,7 @@ impl StereoBondUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -877,7 +877,7 @@ impl StereoBondUpdate {
 
     #[getter]
     fn constraints(&self) -> StereoBondConstraintsForm {
-        StereoBondConstraintsForm::from_inner(self.0.constraints.clone())
+        StereoBondConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -886,8 +886,8 @@ impl StereoBondUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrStereoBondUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrStereoBondUpdate {
+        &self.0
     }
 }
 
@@ -1055,12 +1055,12 @@ impl LigandPermutation {
 impl LigandPermutation {
     pub(crate) fn from_rust(ast: GraphIrLigandPermutation) -> Self {
         LigandPermutation {
-            permutation: Permutation::from_inner(ast.0),
+            permutation: Permutation::from_rust(ast.0),
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphIrLigandPermutation {
-        GraphIrLigandPermutation(self.permutation.inner())
+        GraphIrLigandPermutation(self.permutation.to_rust())
     }
 }
 
@@ -1173,18 +1173,18 @@ use crate::constraint::stereo::{
 /// Per-entity stereo element value pyclass — `StereoAtomForm` / `StereoBondForm`
 /// `{configuration, constraints}` — macro-generated for the two stereo entities.
 macro_rules! stereo_value {
-    (@from_inner production, $value:ident, $ast_value:ident) => {
+    (@from_rust production, $value:ident, $ast_value:ident) => {
         /// Wrap an owned Rust stereo-entity AST.
-        pub(crate) fn from_inner(value: $ast_value) -> Self {
+        pub(crate) fn from_rust(value: $ast_value) -> Self {
             Self {
                 value,
                 readonly: false,
             }
         }
     };
-    (@from_inner test, $value:ident, $ast_value:ident) => {
+    (@from_rust test, $value:ident, $ast_value:ident) => {
         #[cfg(test)]
-        pub(crate) fn from_inner(value: $ast_value) -> Self {
+        pub(crate) fn from_rust(value: $ast_value) -> Self {
             Self {
                 value,
                 readonly: false,
@@ -1193,7 +1193,7 @@ macro_rules! stereo_value {
     };
     (
         $value:ident, $ast_value:ident, $constraint:ident, $constraints:ident, $like:ident,
-        $view:ident, $backing:ident, $from_inner:ident $(,)?
+        $view:ident, $backing:ident, $from_rust:ident $(,)?
     ) => {
         #[pyclass]
         pub struct $value {
@@ -1213,9 +1213,9 @@ macro_rules! stereo_value {
                 constraints: Option<Py<$constraints>>,
             ) -> Self {
                 let constraints = constraints
-                    .map(|c| c.bind(py).borrow().inner().clone())
+                    .map(|c| c.bind(py).borrow().to_rust().clone())
                     .unwrap_or_default();
-                $value::from_inner($ast_value {
+                $value::from_rust($ast_value {
                     configuration: configuration.to_rust(py),
                     constraints,
                 })
@@ -1224,7 +1224,7 @@ macro_rules! stereo_value {
             /// Parse a stereo-DSL string (e.g. `"Th0"`) into the value.
             #[staticmethod]
             fn parse(s: &str) -> PyResult<Self> {
-                $ast_value::from_str(s).map(Self::from_inner).map_err(parse_error)
+                $ast_value::from_str(s).map(Self::from_rust).map_err(parse_error)
             }
 
             fn __str__(&self) -> String {
@@ -1243,7 +1243,7 @@ macro_rules! stereo_value {
 
             #[setter]
             fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationLike) -> PyResult<()> {
-                self.try_inner_mut()?.configuration = value.to_rust(py);
+                self.to_rust_mut()?.configuration = value.to_rust(py);
                 Ok(())
             }
 
@@ -1263,14 +1263,14 @@ macro_rules! stereo_value {
             #[setter]
             fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $like) -> PyResult<()> {
                 let snapshot = value.to_rust(py)?;
-                slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
+                slf.borrow_mut(py).to_rust_mut()?.constraints = snapshot;
                 Ok(())
             }
 
             #[getter]
             fn readonly(&self) -> bool { self.readonly }
 
-            fn copy(&self) -> Self { Self::from_inner(self.inner().clone()) }
+            fn copy(&self) -> Self { Self::from_rust(self.to_rust().clone()) }
 
             /// The fields as a dict: `configuration` plus a `constraints` list of the entries.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -1289,12 +1289,12 @@ macro_rules! stereo_value {
 
         impl $value {
             /// The wrapped AST entity — read access for the entity-backed constraints view.
-            pub(crate) fn inner(&self) -> &$ast_value {
+            pub(crate) fn to_rust(&self) -> &$ast_value {
                 &self.value
             }
 
             /// Mutable access to the wrapped AST entity — write access for the view.
-            pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut $ast_value> {
+            pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut $ast_value> {
                 if self.readonly {
                     Err(PyTypeError::new_err("read-only entity form"))
                 } else {
@@ -1302,13 +1302,13 @@ macro_rules! stereo_value {
                 }
             }
 
-            stereo_value!(@from_inner $from_inner, $value, $ast_value);
+            stereo_value!(@from_rust $from_rust, $value, $ast_value);
         }
 
         impl EntityForm for $value {
             type RustForm = $ast_value;
 
-            fn clone_rust(&self) -> Self::RustForm { self.inner().clone() }
+            fn to_rust(&self) -> &Self::RustForm { &self.value }
 
             fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
                 Py::new(
@@ -1325,10 +1325,10 @@ macro_rules! stereo_value {
             $value,
             $ast_value,
             |value: &$value, _py: Python<'_>| -> PyResult<$ast_value> {
-                Ok(value.inner().clone())
+                Ok(value.to_rust().clone())
             },
             |_py: Python<'_>, value: $ast_value| -> PyResult<$value> {
-                Ok($value::from_inner(value))
+                Ok($value::from_rust(value))
             }
         );
     };
@@ -1386,7 +1386,7 @@ macro_rules! stereo_view {
             #[getter]
             fn site_id(&self, py: Python<'_>) -> PyResult<u32> {
                 let molecule = self.owner.bind(py).borrow();
-                Ok(self.view(molecule.inner())?.site_id().0)
+                Ok(self.view(molecule.to_rust())?.site_id().0)
             }
 
             /// The ligands in frame order (read-only topology).
@@ -1394,7 +1394,7 @@ macro_rules! stereo_view {
             fn ligands(&self, py: Python<'_>) -> PyResult<Vec<StereoLigand>> {
                 let molecule = self.owner.bind(py).borrow();
                 Ok(self
-                    .view(molecule.inner())?
+                    .view(molecule.to_rust())?
                     .ligand_frame()
                     .into_iter()
                     .map(StereoLigand::from_rust)
@@ -1405,14 +1405,14 @@ macro_rules! stereo_view {
             #[getter]
             fn kind(&self, py: Python<'_>) -> PyResult<StereoKind> {
                 let molecule = self.owner.bind(py).borrow();
-                Ok(StereoKind::from_rust(self.view(molecule.inner())?.kind()))
+                Ok(StereoKind::from_rust(self.view(molecule.to_rust())?.kind()))
             }
 
             /// The coset (from the configuration).
             #[getter]
             fn coset(&self, py: Python<'_>) -> PyResult<StereoCoset> {
                 let molecule = self.owner.bind(py).borrow();
-                StereoCoset::from_rust(py, self.view(molecule.inner())?.coset())
+                StereoCoset::from_rust(py, self.view(molecule.to_rust())?.coset())
             }
 
             /// The stereo configuration (geometry + coset).
@@ -1421,7 +1421,7 @@ macro_rules! stereo_view {
                 let molecule = self.owner.bind(py).borrow();
                 StereoConfigurationForm::from_rust(
                     py,
-                    &self.view(molecule.inner())?.attributes.configuration,
+                    &self.view(molecule.to_rust())?.attributes.configuration,
                 )
             }
 
@@ -1429,7 +1429,7 @@ macro_rules! stereo_view {
             fn set_configuration(&self, py: Python<'_>, value: StereoConfigurationLike) {
                 self.owner
                     .borrow_mut(py)
-                    .inner_mut()
+                    .to_rust_mut()
                     .$entity_mut(self.id)
                     .attributes
                     .configuration = value.to_rust(py);
@@ -1453,7 +1453,7 @@ macro_rules! stereo_view {
             fn set_constraints(&self, py: Python<'_>, value: $like) -> PyResult<()> {
                 self.owner
                     .borrow_mut(py)
-                    .inner_mut()
+                    .to_rust_mut()
                     .$entity_mut(self.id)
                     .attributes
                     .constraints = value.to_rust(py)?;
@@ -1464,7 +1464,7 @@ macro_rules! stereo_view {
             /// entries — symmetric with the value pyclass's `asdict`, read through the view.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                 let molecule = self.owner.bind(py).borrow();
-                let ast = self.view(molecule.inner())?.attributes;
+                let ast = self.view(molecule.to_rust())?.attributes;
                 let dict = PyDict::new(py);
                 dict.set_item(
                     "configuration",
@@ -1530,20 +1530,20 @@ macro_rules! stereo_views {
         #[pymethods]
         impl $views {
             fn __len__(&self, py: Python<'_>) -> usize {
-                self.owner.bind(py).borrow().inner().$namespace().count()
+                self.owner.bind(py).borrow().to_rust().$namespace().count()
             }
 
             fn __repr__(&self, py: Python<'_>) -> String {
                 format!(
                     "{}(len={})",
                     stringify!($views),
-                    self.owner.bind(py).borrow().inner().$namespace().count()
+                    self.owner.bind(py).borrow().to_rust().$namespace().count()
                 )
             }
 
             fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<$view> {
                 let molecule = self.owner.bind(py).borrow();
-                let id = $resolve_index(molecule.inner(), index)?;
+                let id = $resolve_index(molecule.to_rust(), index)?;
                 Ok($view {
                     owner: self.owner.clone_ref(py),
                     id,
@@ -1559,8 +1559,8 @@ macro_rules! stereo_views {
                 value: PyRef<'_, $value>,
             ) -> PyResult<()> {
                 let mut molecule = self.owner.borrow_mut(py);
-                let id = $resolve_index(molecule.inner(), index)?;
-                *molecule.inner_mut().$entity_mut(id).attributes = value.inner().clone();
+                let id = $resolve_index(molecule.to_rust(), index)?;
+                *molecule.to_rust_mut().$entity_mut(id).attributes = value.to_rust().clone();
                 Ok(())
             }
 
@@ -1569,7 +1569,7 @@ macro_rules! stereo_views {
             fn at(&self, py: Python<'_>, site: u32) -> Option<$view> {
                 let molecule = self.owner.bind(py).borrow();
                 molecule
-                    .inner()
+                    .to_rust()
                     .$namespace()
                     .at_id($site_id(site))
                     .map(|id| $view {
@@ -1584,7 +1584,7 @@ macro_rules! stereo_views {
                     ligands.into_iter().map(StereoLigand::to_rust).collect();
                 let molecule = self.owner.bind(py).borrow();
                 molecule
-                    .inner()
+                    .to_rust()
                     .$namespace()
                     .of_id($site_id(site), &ligands)
                     .map(|id| $view {
@@ -1598,7 +1598,7 @@ macro_rules! stereo_views {
                     .owner
                     .bind(py)
                     .borrow()
-                    .inner()
+                    .to_rust()
                     .$namespace()
                     .ids()
                     .collect::<Vec<_>>();
@@ -2390,7 +2390,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoAtomConstraintsForm::new();
             ast_cs.extend([stereogenicity.clone()]);
-            let constraints = StereoAtomConstraintsForm::from_inner(ast_cs);
+            let constraints = StereoAtomConstraintsForm::from_rust(ast_cs);
             assert_eq!(constraints.__len__(), 1);
 
             let present = into_py_variant(py, StereoAtomConstraintKey::Stereogenicity()).unwrap();
@@ -2471,7 +2471,7 @@ mod tests {
                     GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
-            let constraints = StereoAtomConstraintsForm::from_inner(ast_cs);
+            let constraints = StereoAtomConstraintsForm::from_rust(ast_cs);
 
             assert_eq!(
                 constraints.stereogenicity().to_rust(),
@@ -2506,7 +2506,7 @@ mod tests {
                     GraphIrStereogenicity::Stereogenic,
                 )),
             ]);
-            let constraints = StereoAtomConstraintsForm::from_inner(ast_cs);
+            let constraints = StereoAtomConstraintsForm::from_rust(ast_cs);
 
             let keys: Vec<GraphIrStereoAtomConstraintKey> = constraints
                 .keys(py)
@@ -2595,7 +2595,7 @@ mod tests {
 
     // `StereoBondConstraintsForm` is the second `stereo_constraints!` instantiation; the shared
     // macro is covered by the `StereoAtom` tests above. This confirms the bond instantiation
-    // and exercises its `from_inner` / `Arg::to_rust`.
+    // and exercises its `from_rust` / `Arg::to_rust`.
     #[rstest]
     fn test_stereo_bond_constraints_form() {
         Python::attach(|py| {
@@ -2604,7 +2604,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoBondConstraintsForm::new();
             ast_cs.extend([stereogenicity.clone()]);
-            let constraints = StereoBondConstraintsForm::from_inner(ast_cs);
+            let constraints = StereoBondConstraintsForm::from_rust(ast_cs);
             assert_eq!(constraints.__len__(), 1);
             assert_eq!(
                 constraints.stereogenicity().to_rust(),
@@ -2614,7 +2614,7 @@ mod tests {
             let mut container_ast = GraphIrStereoBondConstraintsForm::new();
             container_ast.extend([stereogenicity.clone()]);
             let container =
-                Py::new(py, StereoBondConstraintsForm::from_inner(container_ast)).unwrap();
+                Py::new(py, StereoBondConstraintsForm::from_rust(container_ast)).unwrap();
             let arg = StereoBondConstraintsLike::Container(container);
             let mut expected = GraphIrStereoBondConstraintsForm::new();
             expected.extend([stereogenicity]);
@@ -2627,7 +2627,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2649,7 +2649,7 @@ mod tests {
             .unwrap();
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
-                value.borrow(py).inner().constraints.stereogenicity(),
+                value.borrow(py).to_rust().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -2664,7 +2664,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2684,7 +2684,7 @@ mod tests {
                     GraphIrStereogenicity::Stereogenic
                 ))
             );
-            assert_eq!(value.borrow(py).inner().constraints.len(), 0);
+            assert_eq!(value.borrow(py).to_rust().constraints.len(), 0);
         });
     }
 
@@ -2697,7 +2697,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2748,7 +2748,7 @@ mod tests {
             ]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2786,7 +2786,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2809,7 +2809,7 @@ mod tests {
             view.update(py, StereoAtomConstraintsUpdate::Entries(vec![entry]))
                 .unwrap();
             assert_eq!(
-                value.borrow(py).inner().constraints.stereogenicity(),
+                value.borrow(py).to_rust().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -2833,7 +2833,7 @@ mod tests {
             ]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2863,7 +2863,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2883,7 +2883,7 @@ mod tests {
             .unwrap();
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
-                value.borrow(py).inner().constraints.stereogenicity(),
+                value.borrow(py).to_rust().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -2898,7 +2898,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2915,7 +2915,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                value.borrow(py).inner().constraints.stereogenicity(),
+                value.borrow(py).to_rust().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -2930,7 +2930,7 @@ mod tests {
             )]);
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
                         GraphIrStereoCoset::Lit(0),
@@ -2948,7 +2948,7 @@ mod tests {
                 StereoAtomConstraintsUpdate::View(Py::new(py, own).unwrap()),
             )
             .unwrap();
-            assert_eq!(value.borrow(py).inner().constraints.len(), 1);
+            assert_eq!(value.borrow(py).to_rust().constraints.len(), 1);
         });
     }
 
@@ -2957,7 +2957,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoBondForm::from_inner(GraphIrStereoBondForm::new(
+                StereoBondForm::from_rust(GraphIrStereoBondForm::new(
                     GraphIrStereoKind::CisTrans,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -2979,7 +2979,7 @@ mod tests {
             .unwrap();
             view.set(py, stereogenicity).unwrap();
             assert_eq!(
-                value.borrow(py).inner().constraints.stereogenicity(),
+                value.borrow(py).to_rust().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
             );
         });
@@ -3000,7 +3000,7 @@ mod tests {
     ) {
         Python::attach(|py| {
             let value = StereoAtomForm::new(py, configuration, None);
-            assert_eq!(*value.inner(), expected);
+            assert_eq!(*value.to_rust(), expected);
         });
     }
 
@@ -3012,7 +3012,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoAtomConstraintsForm::new();
             ast_cs.extend([stereogenicity.clone()]);
-            let container = Py::new(py, StereoAtomConstraintsForm::from_inner(ast_cs)).unwrap();
+            let container = Py::new(py, StereoAtomConstraintsForm::from_rust(ast_cs)).unwrap();
             let value = StereoAtomForm::new(
                 py,
                 StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Ccw),
@@ -3021,7 +3021,7 @@ mod tests {
             let mut expected_cs = GraphIrStereoAtomConstraintsForm::new();
             expected_cs.extend([stereogenicity]);
             assert_eq!(
-                *value.inner(),
+                *value.to_rust(),
                 GraphIrStereoAtomForm {
                     configuration: GraphIrStereoConfigurationForm::Kinded(
                         GraphIrStereoKind::Tetrahedral,
@@ -3053,7 +3053,7 @@ mod tests {
         #[case] expected: GraphIrStereoConfigurationForm,
     ) {
         let value = StereoAtomForm::parse(input).unwrap();
-        assert_eq!(value.inner().configuration, expected);
+        assert_eq!(value.to_rust().configuration, expected);
     }
 
     #[rstest]
@@ -3071,13 +3071,13 @@ mod tests {
         "Sp2"
     )]
     fn test_stereo_atom_form_str(#[case] ast: GraphIrStereoAtomForm, #[case] expected: &str) {
-        let value = StereoAtomForm::from_inner(ast);
+        let value = StereoAtomForm::from_rust(ast);
         assert_eq!(value.__str__(), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_form_repr() {
-        let value = StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+        let value = StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
             GraphIrStereoKind::Tetrahedral,
             GraphIrStereoCoset::Lit(0),
         ));
@@ -3087,7 +3087,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_form_configuration() {
         Python::attach(|py| {
-            let value = StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+            let value = StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ));
@@ -3104,7 +3104,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_form_set_configuration() {
         Python::attach(|py| {
-            let mut value = StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+            let mut value = StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ));
@@ -3115,7 +3115,7 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(
-                value.inner().configuration,
+                value.to_rust().configuration,
                 GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1)
@@ -3129,7 +3129,7 @@ mod tests {
         Python::attach(|py| {
             let value = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
                 )),
@@ -3140,7 +3140,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoAtomConstraintsForm::new();
             ast_cs.extend([stereogenicity.clone()]);
-            let container = Py::new(py, StereoAtomConstraintsForm::from_inner(ast_cs)).unwrap();
+            let container = Py::new(py, StereoAtomConstraintsForm::from_rust(ast_cs)).unwrap();
             StereoAtomForm::set_constraints(
                 value.clone_ref(py),
                 py,
@@ -3149,7 +3149,7 @@ mod tests {
             .unwrap();
             let mut expected_cs = GraphIrStereoAtomConstraintsForm::new();
             expected_cs.extend([stereogenicity]);
-            assert_eq!(value.borrow(py).inner().constraints, expected_cs);
+            assert_eq!(value.borrow(py).to_rust().constraints, expected_cs);
         });
     }
 
@@ -3161,7 +3161,7 @@ mod tests {
             );
             let mut ast_cs = GraphIrStereoAtomConstraintsForm::new();
             ast_cs.extend([stereogenicity]);
-            let value = StereoAtomForm::from_inner(GraphIrStereoAtomForm {
+            let value = StereoAtomForm::from_rust(GraphIrStereoAtomForm {
                 configuration: GraphIrStereoConfigurationForm::Kinded(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(0),
@@ -3197,7 +3197,7 @@ mod tests {
                 None,
             );
             assert_eq!(
-                *value.inner(),
+                *value.to_rust(),
                 GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0))
             );
             assert_eq!(value.__str__(), "Ct0");
@@ -3215,12 +3215,12 @@ mod tests {
     )]
     fn test_stereo_bond_form_parse(#[case] input: &str, #[case] expected: GraphIrStereoBondForm) {
         let value = StereoBondForm::parse(input).unwrap();
-        assert_eq!(*value.inner(), expected);
+        assert_eq!(*value.to_rust(), expected);
     }
 
     #[rstest]
     fn test_stereo_bond_form_str() {
-        let value = StereoBondForm::from_inner(GraphIrStereoBondForm::new(
+        let value = StereoBondForm::from_rust(GraphIrStereoBondForm::new(
             GraphIrStereoKind::CisTrans,
             GraphIrStereoCoset::Lit(1),
         ));
@@ -3428,7 +3428,7 @@ mod tests {
             ast_cs.extend([GraphIrStereoAtomConstraintForm::Stereogenicity(
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
             )]);
-            let container = Py::new(py, StereoAtomConstraintsForm::from_inner(ast_cs)).unwrap();
+            let container = Py::new(py, StereoAtomConstraintsForm::from_rust(ast_cs)).unwrap();
             view.set_constraints(py, StereoAtomConstraintsLike::Container(container))
                 .unwrap();
             assert_eq!(
@@ -3543,7 +3543,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                StereoAtomForm::from_inner(GraphIrStereoAtomForm::new(
+                StereoAtomForm::from_rust(GraphIrStereoAtomForm::new(
                     GraphIrStereoKind::Tetrahedral,
                     GraphIrStereoCoset::Lit(1),
                 )),

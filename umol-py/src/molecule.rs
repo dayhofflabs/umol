@@ -62,10 +62,10 @@ impl MoleculeAst {
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
         let molecule = GraphIrMoleculeDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ir(&defaults);
+            .into_ir(defaults.to_rust());
         Ok(Self::from_rust(molecule))
     }
 
@@ -77,18 +77,18 @@ impl MoleculeAst {
         text: &str,
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<(Self, MoleculeMetadata)> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
         let dsl = GraphIrMoleculeDsl::from_str(text).map_err(parse_error)?;
         let metadata = MoleculeMetadata::from_rust(dsl.metadata().clone());
-        Ok((Self::from_rust(dsl.into_ir(&defaults)), metadata))
+        Ok((Self::from_rust(dsl.into_ir(defaults.to_rust())), metadata))
     }
 
     /// Render a canonical positional DSL representation without entity
     /// keywords or atom aliases.
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrMoleculeDsl::from_ir(&self.0, &defaults).to_string()
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
+        GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust()).to_string()
     }
 
     /// Render a canonical DSL representation with persistent metadata.
@@ -101,11 +101,11 @@ impl MoleculeAst {
         metadata: &MoleculeMetadata,
         defaults: Option<MoleculeDefaults>,
     ) -> PyResult<String> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        let lowered = GraphIrMoleculeDsl::from_ir(&self.0, &defaults)
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
+        let lowered = GraphIrMoleculeDsl::from_ir(&self.0, defaults.to_rust())
             .into_parts()
             .0;
-        GraphIrMoleculeDsl::new(lowered, metadata.to_rust())
+        GraphIrMoleculeDsl::new(lowered, metadata.to_rust().clone())
             .map(|dsl| dsl.to_string())
             .map_err(metadata_error)
     }
@@ -141,7 +141,7 @@ impl MoleculeAst {
     ) -> PyResult<Self> {
         let ast_atoms = atoms
             .iter()
-            .map(|atom| atom.bind(py).borrow().inner().clone())
+            .map(|atom| atom.bind(py).borrow().to_rust().clone())
             .collect();
         let ast_bonds = bonds
             .iter()
@@ -149,7 +149,7 @@ impl MoleculeAst {
                 (
                     GraphIrAtomId(*first),
                     GraphIrAtomId(*second),
-                    bond.bind(py).borrow().inner().clone(),
+                    bond.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -159,7 +159,7 @@ impl MoleculeAst {
                 (
                     donors.iter().map(|&donor| GraphIrAtomId(donor)).collect(),
                     GraphIrAtomId(*acceptor),
-                    bond.bind(py).borrow().inner().clone(),
+                    bond.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -168,7 +168,7 @@ impl MoleculeAst {
             .map(|(atoms, system)| {
                 (
                     atoms.iter().map(|&atom| GraphIrAtomId(atom)).collect(),
-                    system.bind(py).borrow().inner().clone(),
+                    system.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -177,7 +177,7 @@ impl MoleculeAst {
             .map(|(atoms, bond)| {
                 (
                     atoms.iter().map(|&atom| GraphIrAtomId(atom)).collect(),
-                    bond.bind(py).borrow().inner().clone(),
+                    bond.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -187,7 +187,7 @@ impl MoleculeAst {
                 (
                     GraphIrAtomId(*first),
                     GraphIrAtomId(*second),
-                    bond.bind(py).borrow().inner().clone(),
+                    bond.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -197,7 +197,7 @@ impl MoleculeAst {
                 (
                     GraphIrAtomId(*site),
                     ligands.iter().copied().map(StereoLigand::to_rust).collect(),
-                    value.bind(py).borrow().inner().clone(),
+                    value.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -207,7 +207,7 @@ impl MoleculeAst {
                 (
                     GraphIrBondId(*site),
                     ligands.iter().copied().map(StereoLigand::to_rust).collect(),
-                    value.bind(py).borrow().inner().clone(),
+                    value.bind(py).borrow().to_rust().clone(),
                 )
             })
             .collect();
@@ -260,7 +260,7 @@ impl MoleculeAst {
     /// Apply a checked edit batch without modifying this molecule.
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.0
-            .apply(edits.bind(py).borrow().to_rust())
+            .apply(edits.bind(py).borrow().to_rust().clone())
             .map(Self::from_rust)
             .map_err(transaction_error)
     }
@@ -278,8 +278,8 @@ impl MoleculeAst {
     /// Append `other` by disjoint concatenation. Existing ids in this molecule remain stable; the
     /// returned correspondence maps `other` into this molecule.
     fn combine_from(slf: Py<Self>, py: Python<'_>, other: Py<Self>) -> MoleculeCorrespondence {
-        let other = other.bind(py).borrow().inner().clone();
-        let correspondence = slf.borrow_mut(py).inner_mut().combine_from(&other);
+        let other = other.bind(py).borrow().to_rust().clone();
+        let correspondence = slf.borrow_mut(py).to_rust_mut().combine_from(&other);
         MoleculeCorrespondence::from_rust(correspondence)
     }
 
@@ -301,7 +301,7 @@ impl MoleculeAst {
             .map(|molecule| molecule.bind(py).borrow())
             .collect::<Vec<_>>();
         let (combined, correspondences) =
-            GraphIrMolecule::combine_all(borrowed.iter().map(|molecule| molecule.inner()));
+            GraphIrMolecule::combine_all(borrowed.iter().map(|molecule| molecule.to_rust()));
         Ok((
             Self::from_rust(combined),
             correspondences
@@ -448,7 +448,7 @@ impl MoleculeAst {
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
         let constraints = value.to_rust(py)?;
-        *slf.borrow_mut(py).inner_mut().constraints_mut() = constraints;
+        *slf.borrow_mut(py).to_rust_mut().constraints_mut() = constraints;
         Ok(())
     }
 
@@ -478,13 +478,13 @@ impl MoleculeAst {
 
 impl MoleculeAst {
     /// The wrapped AST molecule — read access for atom views.
-    pub(crate) fn inner(&self) -> &GraphIrMolecule {
+    pub(crate) fn to_rust(&self) -> &GraphIrMolecule {
         &self.0
     }
 
     /// Mutable access to the wrapped AST molecule — write access for the live
     /// atom and constraint views (copy-on-write through `atom_mut`).
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrMolecule {
+    pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrMolecule {
         &mut self.0
     }
 
@@ -555,7 +555,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_ast_new() {
-        assert_eq!(MoleculeAst::new().inner().atoms().count(), 0);
+        assert_eq!(MoleculeAst::new().to_rust().atoms().count(), 0);
     }
 
     #[rstest]
@@ -575,7 +575,7 @@ mod tests {
         #[case] expected: GraphIrMolecule,
     ) {
         assert_eq!(
-            MoleculeAst::parse(text, defaults).unwrap().inner(),
+            MoleculeAst::parse(text, defaults).unwrap().to_rust(),
             &expected
         );
     }
@@ -602,7 +602,7 @@ mod tests {
         .unwrap();
         let metadata = metadata.to_rust();
 
-        assert_eq!(molecule.inner(), &mol_dsl!(r#"{:atoms ["C"]}"#));
+        assert_eq!(molecule.to_rust(), &mol_dsl!(r#"{:atoms ["C"]}"#));
         assert_eq!(
             metadata.keyword(GraphIrEntity::Atom(GraphIrAtomId(0))),
             Some("carbon")
@@ -624,7 +624,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            molecule.inner(),
+            molecule.to_rust(),
             &mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#)
         );
         assert_eq!(
@@ -708,31 +708,31 @@ mod tests {
             let atoms = vec![
                 Py::new(
                     py,
-                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::C)),
+                    PyAtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::C)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::B)),
+                    PyAtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::B)),
                 )
                 .unwrap(),
                 Py::new(
                     py,
-                    PyAtomForm::from_inner(GraphIrAtomForm::from_element(ChemElement::N)),
+                    PyAtomForm::from_rust(GraphIrAtomForm::from_element(ChemElement::N)),
                 )
                 .unwrap(),
             ];
             let bonds = vec![(
                 0,
                 1,
-                Py::new(py, BondForm::from_inner(GraphIrBondForm::from_order(1))).unwrap(),
+                Py::new(py, BondForm::from_rust(GraphIrBondForm::from_order(1))).unwrap(),
             )];
             let dative = vec![(
                 vec![2],
                 1,
                 Py::new(
                     py,
-                    DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1)),
+                    DativeBondForm::from_rust(GraphIrDativeBondForm::from_order(1)),
                 )
                 .unwrap(),
             )];
@@ -740,9 +740,9 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(
-                        vec![1, 1, 1],
-                    )),
+                    AromaticSystemForm::from_rust(GraphIrAromaticSystemForm::from_electrons(vec![
+                        1, 1, 1,
+                    ])),
                 )
                 .unwrap(),
             )];
@@ -750,7 +750,7 @@ mod tests {
                 vec![0, 1, 2],
                 Py::new(
                     py,
-                    MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(
+                    MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(
                         vec![1, 1, 1],
                     )),
                 )
@@ -760,7 +760,7 @@ mod tests {
                 [0, 2],
                 Py::new(
                     py,
-                    NoncovalentBondForm::from_inner(GraphIrNoncovalentBondForm::from_kind(
+                    NoncovalentBondForm::from_rust(GraphIrNoncovalentBondForm::from_kind(
                         GraphIrNoncovalentBondKind::HydrogenBond,
                     )),
                 )
@@ -784,9 +784,9 @@ mod tests {
                 constraints,
             )
             .unwrap();
-            assert_eq!(molecule.inner().atoms().count(), 3);
-            assert_eq!(molecule.inner().bonds().count(), 1);
-            let dative_bonds = molecule.inner().dative_bonds();
+            assert_eq!(molecule.to_rust().atoms().count(), 3);
+            assert_eq!(molecule.to_rust().bonds().count(), 1);
+            let dative_bonds = molecule.to_rust().dative_bonds();
             assert_eq!(dative_bonds.count(), 1);
             let dative_view = dative_bonds.get(GraphIrDativeBondId(0)).unwrap();
             assert_eq!(dative_view.acceptor_id(), GraphIrAtomId(1));
@@ -794,28 +794,28 @@ mod tests {
                 dative_view.donor_ids().collect::<Vec<_>>(),
                 vec![GraphIrAtomId(2)]
             );
-            let aromatic_systems = molecule.inner().aromatic_systems();
+            let aromatic_systems = molecule.to_rust().aromatic_systems();
             assert_eq!(aromatic_systems.count(), 1);
             let aromatic_view = aromatic_systems.get(GraphIrAromaticSystemId(0)).unwrap();
             assert_eq!(
                 aromatic_view.atom_ids().collect::<Vec<_>>(),
                 vec![GraphIrAtomId(0), GraphIrAtomId(1), GraphIrAtomId(2)]
             );
-            let multicenter_bonds = molecule.inner().multicenter_bonds();
+            let multicenter_bonds = molecule.to_rust().multicenter_bonds();
             assert_eq!(multicenter_bonds.count(), 1);
             let multicenter_view = multicenter_bonds.get(GraphIrMulticenterBondId(0)).unwrap();
             assert_eq!(
                 multicenter_view.atom_ids().collect::<Vec<_>>(),
                 vec![GraphIrAtomId(0), GraphIrAtomId(1), GraphIrAtomId(2)]
             );
-            let noncovalent_bonds = molecule.inner().noncovalent_bonds();
+            let noncovalent_bonds = molecule.to_rust().noncovalent_bonds();
             assert_eq!(noncovalent_bonds.count(), 1);
             let noncovalent_view = noncovalent_bonds.get(GraphIrNoncovalentBondId(0)).unwrap();
             assert_eq!(
                 noncovalent_view.atom_ids(),
                 [GraphIrAtomId(0), GraphIrAtomId(2)]
             );
-            assert_eq!(molecule.inner().constraints().as_slice(), &[constraint]);
+            assert_eq!(molecule.to_rust().constraints().as_slice(), &[constraint]);
         });
     }
 
@@ -874,7 +874,7 @@ mod tests {
                 .extract::<Py<MoleculeAst>>()
                 .unwrap();
 
-            assert_eq!(snapshot.bind(py).borrow().inner(), &expected);
+            assert_eq!(snapshot.bind(py).borrow().to_rust(), &expected);
         });
     }
 
@@ -905,10 +905,10 @@ mod tests {
             let result = molecule.apply(py, edits).unwrap();
 
             assert_eq!(
-                result.inner(),
+                result.to_rust(),
                 &mol_dsl!(r#"{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}"#)
             );
-            assert_eq!(molecule.inner(), &initial);
+            assert_eq!(molecule.to_rust(), &initial);
         });
     }
 
@@ -936,7 +936,7 @@ mod tests {
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "atom handle 7 is out of range for 1 entries"
             );
-            assert_eq!(molecule.inner(), &initial);
+            assert_eq!(molecule.to_rust(), &initial);
         });
     }
 
@@ -946,13 +946,13 @@ mod tests {
         let host = MoleculeAst::from_rust(mol_dsl!(
             r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ));
-        let pattern_before = pattern.inner().clone();
-        let host_before = host.inner().clone();
+        let pattern_before = pattern.to_rust().clone();
+        let host_before = host.to_rust().clone();
         let expected = vec![
             MoleculeCorrespondence::from_rust(
                 GraphIrMoleculeCorrespondence::induce(
-                    pattern.inner(),
-                    host.inner(),
+                    pattern.to_rust(),
+                    host.to_rust(),
                     GraphCoreCorrespondence::new(
                         vec![
                             (GraphIrAtomId(0), GraphIrAtomId(0)),
@@ -967,8 +967,8 @@ mod tests {
             ),
             MoleculeCorrespondence::from_rust(
                 GraphIrMoleculeCorrespondence::induce(
-                    pattern.inner(),
-                    host.inner(),
+                    pattern.to_rust(),
+                    host.to_rust(),
                     GraphCoreCorrespondence::new(
                         vec![
                             (GraphIrAtomId(0), GraphIrAtomId(1)),
@@ -984,8 +984,8 @@ mod tests {
         ];
 
         assert_eq!(pattern.substructure_matches(&host, None), expected);
-        assert_eq!(pattern.inner(), &pattern_before);
-        assert_eq!(host.inner(), &host_before);
+        assert_eq!(pattern.to_rust(), &pattern_before);
+        assert_eq!(host.to_rust(), &host_before);
     }
 
     #[rstest]
@@ -1006,8 +1006,8 @@ mod tests {
         ));
         let expected = vec![MoleculeCorrespondence::from_rust(
             GraphIrMoleculeCorrespondence::induce(
-                pattern.inner(),
-                host.inner(),
+                pattern.to_rust(),
+                host.to_rust(),
                 GraphCoreCorrespondence::new(
                     vec![
                         (GraphIrAtomId(0), GraphIrAtomId(0)),
@@ -1424,7 +1424,7 @@ mod tests {
             atoms,
             ..Default::default()
         }));
-        assert_eq!(molecule.inner().atoms().count(), expected);
+        assert_eq!(molecule.to_rust().atoms().count(), expected);
     }
 
     #[rstest]
@@ -1437,7 +1437,12 @@ mod tests {
             view.with_mut(py, |constraints| constraints.push(constraint.clone()));
 
             assert_eq!(
-                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                molecule
+                    .bind(py)
+                    .borrow()
+                    .to_rust()
+                    .constraints()
+                    .as_slice(),
                 &[constraint]
             );
         });
@@ -1452,7 +1457,7 @@ mod tests {
             });
             let constraints = Py::new(
                 py,
-                Constraints::from_inner(GraphIrConstraints::from(vec![constraint.clone()])),
+                Constraints::from_rust(GraphIrConstraints::from(vec![constraint.clone()])),
             )
             .unwrap();
 
@@ -1464,7 +1469,12 @@ mod tests {
             .unwrap();
 
             assert_eq!(
-                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                molecule
+                    .bind(py)
+                    .borrow()
+                    .to_rust()
+                    .constraints()
+                    .as_slice(),
                 &[constraint]
             );
         });
@@ -1493,7 +1503,12 @@ mod tests {
             .unwrap();
 
             assert_eq!(
-                molecule.bind(py).borrow().inner().constraints().as_slice(),
+                molecule
+                    .bind(py)
+                    .borrow()
+                    .to_rust()
+                    .constraints()
+                    .as_slice(),
                 &[constraint]
             );
         });

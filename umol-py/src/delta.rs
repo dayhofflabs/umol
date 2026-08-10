@@ -1388,7 +1388,7 @@ impl StereoAtomDelta {
             } => Self::Apply {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
-                permutation: Permutation::from_inner(*permutation),
+                permutation: Permutation::from_rust(*permutation),
             },
             GraphIrStereoAtomDelta::Swap { id, kind } => Self::Swap {
                 id: id.0,
@@ -1448,7 +1448,7 @@ impl StereoAtomDelta {
             } => GraphIrStereoAtomDelta::Apply {
                 id: GraphIrStereoAtomId(*id),
                 kind: kind.to_rust(),
-                permutation: permutation.inner(),
+                permutation: permutation.to_rust(),
             },
             Self::Swap { id, kind } => GraphIrStereoAtomDelta::Swap {
                 id: GraphIrStereoAtomId(*id),
@@ -1582,7 +1582,7 @@ impl StereoBondDelta {
             } => Self::Apply {
                 id: id.0,
                 kind: StereoKind::from_rust(*kind),
-                permutation: Permutation::from_inner(*permutation),
+                permutation: Permutation::from_rust(*permutation),
             },
             GraphIrStereoBondDelta::Swap { id, kind } => Self::Swap {
                 id: id.0,
@@ -1637,7 +1637,7 @@ impl StereoBondDelta {
             } => GraphIrStereoBondDelta::Apply {
                 id: GraphIrStereoBondId(*id),
                 kind: kind.to_rust(),
-                permutation: permutation.inner(),
+                permutation: permutation.to_rust(),
             },
             Self::Swap { id, kind } => GraphIrStereoBondDelta::Swap {
                 id: GraphIrStereoBondId(*id),
@@ -1924,7 +1924,7 @@ impl Deltas {
     /// Append another container or iterable after snapshotting the complete RHS.
     fn extend(slf: Py<Self>, py: Python<'_>, other: DeltasExtend) {
         let resolved = other.resolve(py);
-        resolved.apply(slf.borrow_mut(py).inner_mut());
+        resolved.apply(slf.borrow_mut(py).to_rust_mut());
     }
 
     fn __len__(&self) -> usize {
@@ -1944,7 +1944,7 @@ impl Deltas {
 impl_py_canonicalize!(
     Deltas,
     GraphIrDeltas,
-    |value: &Deltas, _py: Python<'_>| -> PyResult<GraphIrDeltas> { Ok(value.to_rust()) },
+    |value: &Deltas, _py: Python<'_>| -> PyResult<GraphIrDeltas> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>, value: GraphIrDeltas| -> PyResult<Deltas> { Ok(Deltas::from_rust(value)) }
 );
 
@@ -1953,11 +1953,11 @@ impl Deltas {
         Self(deltas)
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrDeltas {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrDeltas {
+        &self.0
     }
 
-    fn inner_mut(&mut self) -> &mut GraphIrDeltas {
+    fn to_rust_mut(&mut self) -> &mut GraphIrDeltas {
         &mut self.0
     }
 }
@@ -4900,10 +4900,8 @@ mod tests {
                 .iter()
                 .map(|entry| into_py_variant(py, Delta::from_rust(py, entry).unwrap()).unwrap())
                 .collect();
-            assert_eq!(
-                Deltas::new(py, python_entries).to_rust(),
-                entries.into_iter().collect()
-            );
+            let expected: GraphIrDeltas = entries.into_iter().collect();
+            assert_eq!(Deltas::new(py, python_entries).to_rust(), &expected);
         });
     }
 
@@ -5175,13 +5173,14 @@ mod tests {
         #[case] expected: Vec<GraphIrDelta>,
     ) {
         let source = Deltas::from_rust(input.into_iter().collect());
-        let before = source.to_rust();
+        let before = source.to_rust().clone();
 
         Python::attach(|py| {
             let canonical = source.canonicalize(py).unwrap();
 
-            assert_eq!(canonical.to_rust(), expected.into_iter().collect());
-            assert_eq!(source.to_rust(), before);
+            let expected: GraphIrDeltas = expected.into_iter().collect();
+            assert_eq!(canonical.to_rust(), &expected);
+            assert_eq!(source.to_rust(), &before);
             assert_eq!(canonical.canonicalize(py).unwrap(), canonical);
         });
     }
@@ -5324,6 +5323,6 @@ mod tests {
     })])]
     fn test_deltas_roundtrip(#[case] entries: Vec<GraphIrDelta>) {
         let rust: GraphIrDeltas = entries.into_iter().collect();
-        assert_eq!(Deltas::from_rust(rust.clone()).to_rust(), rust);
+        assert_eq!(Deltas::from_rust(rust.clone()).to_rust(), &rust);
     }
 }

@@ -46,7 +46,7 @@ impl MoleculeEditor {
     fn transact(&mut self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Transaction> {
         let editor = self.inner.as_mut().ok_or_else(consumed_editor_error)?;
         editor
-            .transact(edits.bind(py).borrow().to_rust())
+            .transact(edits.bind(py).borrow().to_rust().clone())
             .map(|transaction| Transaction {
                 inner: Some(transaction),
             })
@@ -129,8 +129,8 @@ mod tests {
             .add_atom(GraphIrAtomForm::from_element(ChemElement::N));
         let second = editor.snapshot().unwrap();
 
-        assert_eq!(first.inner(), &initial);
-        assert_eq!(second.inner(), &mol_dsl!(r#"{:atoms ["C" "N"]}"#));
+        assert_eq!(first.to_rust(), &initial);
+        assert_eq!(second.to_rust(), &mol_dsl!(r#"{:atoms ["C" "N"]}"#));
         assert_eq!(editor.snapshot().unwrap(), second);
     }
 
@@ -143,13 +143,13 @@ mod tests {
         let snapshot = editor.snapshot().unwrap();
 
         let mut built = editor.build().unwrap();
-        *built.inner_mut().atom_mut(GraphIrAtomId(0)).attributes =
+        *built.to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
             GraphIrAtomForm::from_element(ChemElement::N);
         let snapshot_error = editor.snapshot().unwrap_err();
         let build_error = editor.build().unwrap_err();
 
-        assert_eq!(snapshot.inner(), &initial);
-        assert_eq!(built.inner(), &mol_dsl!(r#"{:atoms ["N"]}"#));
+        assert_eq!(snapshot.to_rust(), &initial);
+        assert_eq!(built.to_rust(), &mol_dsl!(r#"{:atoms ["N"]}"#));
         Python::attach(|py| {
             assert!(snapshot_error.is_instance_of::<PyRuntimeError>(py));
             assert_eq!(
@@ -182,7 +182,7 @@ mod tests {
             let _transaction = carbon_editor.transact(py, edits).unwrap();
 
             assert_eq!(
-                carbon_editor.snapshot().unwrap().inner(),
+                carbon_editor.snapshot().unwrap().to_rust(),
                 &mol_dsl!(r#"{:atoms ["C" "N"]}"#)
             );
         });
@@ -222,7 +222,7 @@ mod tests {
             let edits = Py::new(py, add_nitrogen).unwrap();
             let mut transaction = editor.bind(py).borrow_mut().transact(py, edits).unwrap();
             assert_eq!(
-                editor.bind(py).borrow().snapshot().unwrap().inner(),
+                editor.bind(py).borrow().snapshot().unwrap().to_rust(),
                 &mol_dsl!(r#"{:atoms ["C" "N"]}"#)
             );
 
@@ -230,7 +230,7 @@ mod tests {
             let second_error = transaction.rollback(py, editor.clone_ref(py)).unwrap_err();
 
             assert_eq!(
-                editor.bind(py).borrow().snapshot().unwrap().inner(),
+                editor.bind(py).borrow().snapshot().unwrap().to_rust(),
                 &mol_dsl!(r#"{:atoms ["C"]}"#)
             );
             assert!(second_error.is_instance_of::<PyRuntimeError>(py));

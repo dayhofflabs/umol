@@ -311,8 +311,8 @@ impl ConstraintEdit {
         Self(constraint.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrConstraintEdit {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrConstraintEdit {
+        &self.0
     }
 }
 
@@ -1298,11 +1298,11 @@ impl Edit {
                 }
             }
             Self::AddMoleculeConstraint { constraint } => GraphIrEdit::AddMoleculeConstraint {
-                constraint: constraint.bind(py).borrow().to_rust(),
+                constraint: constraint.bind(py).borrow().to_rust().clone(),
             },
             Self::RemoveMoleculeConstraint { constraint } => {
                 GraphIrEdit::RemoveMoleculeConstraint {
-                    constraint: constraint.bind(py).borrow().to_rust(),
+                    constraint: constraint.bind(py).borrow().to_rust().clone(),
                 }
             }
         }
@@ -1390,17 +1390,17 @@ impl Edits {
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
     fn parse(text: &str, defaults: Option<MoleculeDefaults>) -> PyResult<Self> {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
         let edits = GraphIrEditsDsl::from_str(text)
             .map_err(parse_error)?
-            .into_ir(&defaults);
+            .into_ir(defaults.to_rust());
         Ok(Self::from_rust(edits))
     }
 
     #[pyo3(signature = (*, defaults=None))]
     fn render(&self, defaults: Option<MoleculeDefaults>) -> String {
-        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new).to_rust();
-        GraphIrEditsDsl::from_ir(&self.0, &defaults).to_string()
+        let defaults = defaults.unwrap_or_else(MoleculeDefaults::new);
+        GraphIrEditsDsl::from_ir(&self.0, defaults.to_rust()).to_string()
     }
 
     /// Append one detached raw edit and account for every entity it creates.
@@ -1433,7 +1433,7 @@ impl Edits {
     fn add_atom(&mut self, py: Python<'_>, attributes: Py<AtomForm>) -> New {
         New::from_rust(GraphIrEntityHandle::Atom(
             self.0
-                .add_atom(attributes.bind(py).borrow().inner().clone()),
+                .add_atom(attributes.bind(py).borrow().to_rust().clone()),
         ))
     }
 
@@ -1442,7 +1442,7 @@ impl Edits {
             .add_atoms(
                 atoms
                     .into_iter()
-                    .map(|attributes| attributes.bind(py).borrow().inner().clone()),
+                    .map(|attributes| attributes.bind(py).borrow().to_rust().clone()),
             )
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::Atom(handle)))
@@ -1459,7 +1459,7 @@ impl Edits {
         New::from_rust(GraphIrEntityHandle::Bond(self.0.add_bond(
             first.to_atom_handle(),
             second.to_atom_handle(),
-            attributes.bind(py).borrow().inner().clone(),
+            attributes.bind(py).borrow().to_rust().clone(),
         )))
     }
 
@@ -1470,7 +1470,7 @@ impl Edits {
                     .into_iter()
                     .map(|((first, second), attributes)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                        attributes: attributes.bind(py).borrow().inner().clone(),
+                        attributes: attributes.bind(py).borrow().to_rust().clone(),
                     }),
             )
             .into_iter()
@@ -1486,7 +1486,7 @@ impl Edits {
     ) -> New {
         New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
             atoms.iter().map(HandleLike::to_atom_handle).collect(),
-            attributes.bind(py).borrow().inner().clone(),
+            attributes.bind(py).borrow().to_rust().clone(),
         )))
     }
 
@@ -1495,7 +1495,7 @@ impl Edits {
             .add_dative_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1512,7 +1512,7 @@ impl Edits {
         New::from_rust(GraphIrEntityHandle::AromaticSystem(
             self.0.add_aromatic_system(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                attributes.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().to_rust().clone(),
             ),
         ))
     }
@@ -1526,7 +1526,7 @@ impl Edits {
             .add_aromatic_systems(systems.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1543,7 +1543,7 @@ impl Edits {
         New::from_rust(GraphIrEntityHandle::MulticenterBond(
             self.0.add_multicenter_bond(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                attributes.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().to_rust().clone(),
             ),
         ))
     }
@@ -1557,7 +1557,7 @@ impl Edits {
             .add_multicenter_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1574,7 +1574,7 @@ impl Edits {
         New::from_rust(GraphIrEntityHandle::NoncovalentBond(
             self.0.add_noncovalent_bond(
                 [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                attributes.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().to_rust().clone(),
             ),
         ))
     }
@@ -1588,7 +1588,7 @@ impl Edits {
             .add_noncovalent_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1610,7 +1610,7 @@ impl Edits {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                attributes.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().to_rust().clone(),
             ),
         ))
     }
@@ -1624,7 +1624,7 @@ impl Edits {
                         .iter()
                         .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                         .collect(),
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1646,7 +1646,7 @@ impl Edits {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                attributes.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().to_rust().clone(),
             ),
         ))
     }
@@ -1660,7 +1660,7 @@ impl Edits {
                         .iter()
                         .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                         .collect(),
-                    attributes.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().to_rust().clone(),
                 )
             }))
             .into_iter()
@@ -1683,7 +1683,7 @@ impl Edits {
                     (
                         id.to_dative_bond_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1698,7 +1698,7 @@ impl Edits {
                     (
                         id.to_aromatic_system_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1713,7 +1713,7 @@ impl Edits {
                     (
                         id.to_multicenter_bond_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1728,7 +1728,7 @@ impl Edits {
                     (
                         id.to_noncovalent_bond_handle(),
                         [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1747,7 +1747,7 @@ impl Edits {
                             .iter()
                             .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                             .collect(),
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1766,7 +1766,7 @@ impl Edits {
                             .iter()
                             .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                             .collect(),
-                        attributes.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().to_rust().clone(),
                     )
                 })
                 .collect(),
@@ -1775,12 +1775,12 @@ impl Edits {
 
     fn add_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
         self.0
-            .add_molecule_constraint(constraint.bind(py).borrow().to_rust());
+            .add_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
     }
 
     fn remove_molecule_constraint(&mut self, py: Python<'_>, constraint: Py<ConstraintEdit>) {
         self.0
-            .remove_molecule_constraint(constraint.bind(py).borrow().to_rust());
+            .remove_molecule_constraint(constraint.bind(py).borrow().to_rust().clone());
     }
 
     fn update_atom(
@@ -1791,9 +1791,9 @@ impl Edits {
         update: Py<AtomUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
+        let update = update.bind(py).borrow();
         self.0
-            .update_atom(id.to_atom_handle(), current.inner(), &update);
+            .update_atom(id.to_atom_handle(), current.to_rust(), update.to_rust());
     }
 
     fn update_bond(
@@ -1804,9 +1804,9 @@ impl Edits {
         update: Py<BondUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
+        let update = update.bind(py).borrow();
         self.0
-            .update_bond(id.to_bond_handle(), current.inner(), &update);
+            .update_bond(id.to_bond_handle(), current.to_rust(), update.to_rust());
     }
 
     fn update_dative_bond(
@@ -1817,9 +1817,12 @@ impl Edits {
         update: Py<DativeBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_dative_bond(id.to_dative_bond_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_dative_bond(
+            id.to_dative_bond_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 
     fn update_aromatic_system(
@@ -1830,9 +1833,12 @@ impl Edits {
         update: Py<AromaticSystemUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_aromatic_system(id.to_aromatic_system_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_aromatic_system(
+            id.to_aromatic_system_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 
     fn update_multicenter_bond(
@@ -1843,9 +1849,12 @@ impl Edits {
         update: Py<MulticenterBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_multicenter_bond(id.to_multicenter_bond_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_multicenter_bond(
+            id.to_multicenter_bond_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 
     fn update_noncovalent_bond(
@@ -1856,9 +1865,12 @@ impl Edits {
         update: Py<NoncovalentBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_noncovalent_bond(id.to_noncovalent_bond_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_noncovalent_bond(
+            id.to_noncovalent_bond_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 
     fn update_stereo_atom(
@@ -1869,9 +1881,12 @@ impl Edits {
         update: Py<StereoAtomUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_stereo_atom(id.to_stereo_atom_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_stereo_atom(
+            id.to_stereo_atom_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 
     fn update_stereo_bond(
@@ -1882,9 +1897,12 @@ impl Edits {
         update: Py<StereoBondUpdate>,
     ) {
         let current = current.bind(py).borrow();
-        let update = update.bind(py).borrow().to_rust();
-        self.0
-            .update_stereo_bond(id.to_stereo_bond_handle(), current.inner(), &update);
+        let update = update.bind(py).borrow();
+        self.0.update_stereo_bond(
+            id.to_stereo_bond_handle(),
+            current.to_rust(),
+            update.to_rust(),
+        );
     }
 }
 
@@ -1893,8 +1911,8 @@ impl Edits {
         Self(edits)
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrEdits {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrEdits {
+        &self.0
     }
 }
 
@@ -2020,7 +2038,7 @@ mod tests {
     fn test_constraint_edit_roundtrip(#[case] expected: GraphIrConstraintEdit) {
         let constraint = ConstraintEdit::from_rust(&expected);
 
-        assert_eq!(constraint.to_rust(), expected);
+        assert_eq!(constraint.to_rust(), &expected);
     }
 
     #[rstest]

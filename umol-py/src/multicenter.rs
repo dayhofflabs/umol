@@ -54,7 +54,7 @@ impl MulticenterBondUpdate {
                 .map(|value| value.to_rust(py))
                 .unwrap_or_default(),
             constraints: constraints
-                .map(|value| value.bind(py).borrow().inner().clone())
+                .map(|value| value.bind(py).borrow().to_rust().clone())
                 .unwrap_or_default(),
         })
     }
@@ -104,7 +104,7 @@ impl MulticenterBondUpdate {
 
     #[getter]
     fn constraints(&self) -> MulticenterBondConstraintsForm {
-        MulticenterBondConstraintsForm::from_inner(self.0.constraints.clone())
+        MulticenterBondConstraintsForm::from_rust(self.0.constraints.clone())
     }
 }
 
@@ -113,8 +113,8 @@ impl MulticenterBondUpdate {
         Self(update.clone())
     }
 
-    pub(crate) fn to_rust(&self) -> GraphIrMulticenterBondUpdate {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrMulticenterBondUpdate {
+        &self.0
     }
 }
 
@@ -155,16 +155,16 @@ impl MulticenterBondForm {
             bond = bond.with_unpaired_electrons(unpaired_electrons.to_rust(py));
         }
         if let Some(constraints) = constraints {
-            bond.constraints = constraints.bind(py).borrow().inner().clone();
+            bond.constraints = constraints.bind(py).borrow().to_rust().clone();
         }
-        MulticenterBondForm::from_inner(bond)
+        MulticenterBondForm::from_rust(bond)
     }
 
     /// Parse a multicenter-bond-DSL string (e.g. `"[1,1,1]#e6"`) into a `MulticenterBondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrMulticenterBondForm::from_str(s)
-            .map(Self::from_inner)
+            .map(Self::from_rust)
             .map_err(parse_error)
     }
 
@@ -184,7 +184,7 @@ impl MulticenterBondForm {
 
     #[setter]
     fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
-        self.try_inner_mut()?.electrons = value.to_rust(py);
+        self.to_rust_mut()?.electrons = value.to_rust(py);
         Ok(())
     }
 
@@ -195,7 +195,7 @@ impl MulticenterBondForm {
 
     #[setter]
     fn set_charge(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
-        self.try_inner_mut()?.charge = value.to_rust(py);
+        self.to_rust_mut()?.charge = value.to_rust(py);
         Ok(())
     }
 
@@ -210,7 +210,7 @@ impl MulticenterBondForm {
         py: Python<'_>,
         value: PyRef<'_, UnpairedElectronsForm>,
     ) -> PyResult<()> {
-        self.try_inner_mut()?.unpaired_electrons = value.to_rust(py);
+        self.to_rust_mut()?.unpaired_electrons = value.to_rust(py);
         Ok(())
     }
 
@@ -232,7 +232,7 @@ impl MulticenterBondForm {
         value: MulticenterBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
+        slf.borrow_mut(py).to_rust_mut()?.constraints = snapshot;
         Ok(())
     }
 
@@ -242,7 +242,7 @@ impl MulticenterBondForm {
     }
 
     fn copy(&self) -> Self {
-        Self::from_inner(self.inner().clone())
+        Self::from_rust(self.to_rust().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -261,13 +261,13 @@ impl MulticenterBondForm {
 
 impl MulticenterBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
-    pub(crate) fn inner(&self) -> &GraphIrMulticenterBondForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrMulticenterBondForm {
         &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrMulticenterBondForm> {
+    pub(crate) fn to_rust_mut(&mut self) -> PyResult<&mut GraphIrMulticenterBondForm> {
         if self.readonly {
             Err(PyTypeError::new_err("read-only entity form"))
         } else {
@@ -276,7 +276,7 @@ impl MulticenterBondForm {
     }
 
     /// Wrap an owned Rust multicenter-bond AST.
-    pub(crate) fn from_inner(bond: GraphIrMulticenterBondForm) -> Self {
+    pub(crate) fn from_rust(bond: GraphIrMulticenterBondForm) -> Self {
         Self {
             value: bond,
             readonly: false,
@@ -286,8 +286,8 @@ impl MulticenterBondForm {
 
 impl EntityForm for MulticenterBondForm {
     type RustForm = GraphIrMulticenterBondForm;
-    fn clone_rust(&self) -> Self::RustForm {
-        self.inner().clone()
+    fn to_rust(&self) -> &Self::RustForm {
+        &self.value
     }
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
         Py::new(
@@ -304,10 +304,10 @@ impl_py_lattice!(
     MulticenterBondForm,
     GraphIrMulticenterBondForm,
     |value: &MulticenterBondForm, _py: Python<'_>| -> PyResult<GraphIrMulticenterBondForm> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrMulticenterBondForm| -> PyResult<MulticenterBondForm> {
-        Ok(MulticenterBondForm::from_inner(value))
+        Ok(MulticenterBondForm::from_rust(value))
     }
 );
 
@@ -346,7 +346,7 @@ impl MulticenterBondView {
     fn atom_ids<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let molecule = self.owner.bind(py).borrow();
         let atom_ids: Vec<u32> = self
-            .multicenter_bond(molecule.inner())?
+            .multicenter_bond(molecule.to_rust())?
             .atom_ids()
             .map(|atom| atom.0)
             .collect();
@@ -363,7 +363,7 @@ impl MulticenterBondView {
         let molecule = self.owner.bind(py).borrow();
         Ok(ElectronCountsForm::from_rust(
             &self
-                .multicenter_bond(molecule.inner())?
+                .multicenter_bond(molecule.to_rust())?
                 .attributes
                 .electrons,
         ))
@@ -373,7 +373,7 @@ impl MulticenterBondView {
     fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .multicenter_bond_mut(self.id)
             .attributes
             .electrons = value.to_rust(py);
@@ -384,7 +384,7 @@ impl MulticenterBondView {
         let molecule = self.owner.bind(py).borrow();
         NumForm::from_rust(
             py,
-            &self.multicenter_bond(molecule.inner())?.attributes.charge,
+            &self.multicenter_bond(molecule.to_rust())?.attributes.charge,
         )
     }
 
@@ -392,7 +392,7 @@ impl MulticenterBondView {
     fn set_charge(&self, py: Python<'_>, value: NumLike) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .multicenter_bond_mut(self.id)
             .attributes
             .charge = value.to_rust(py);
@@ -404,7 +404,7 @@ impl MulticenterBondView {
         UnpairedElectronsForm::from_rust(
             py,
             &self
-                .multicenter_bond(molecule.inner())?
+                .multicenter_bond(molecule.to_rust())?
                 .attributes
                 .unpaired_electrons,
         )
@@ -414,7 +414,7 @@ impl MulticenterBondView {
     fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .multicenter_bond_mut(self.id)
             .attributes
             .unpaired_electrons = value.to_rust(py);
@@ -442,7 +442,7 @@ impl MulticenterBondView {
     ) -> PyResult<()> {
         self.owner
             .borrow_mut(py)
-            .inner_mut()
+            .to_rust_mut()
             .multicenter_bond_mut(self.id)
             .attributes
             .constraints = value.to_rust(py)?;
@@ -453,7 +453,7 @@ impl MulticenterBondView {
     /// symmetric with `MulticenterBondForm.asdict`, read through the view.
     fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let molecule = self.owner.bind(py).borrow();
-        let bond = self.multicenter_bond(molecule.inner())?.attributes;
+        let bond = self.multicenter_bond(molecule.to_rust())?.attributes;
         let dict = PyDict::new(py);
         dict.set_item("electrons", ElectronCountsForm::from_rust(&bond.electrons))?;
         dict.set_item("charge", NumForm::from_rust(py, &bond.charge)?)?;
@@ -505,7 +505,7 @@ impl MulticenterBondViews {
         self.owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .multicenter_bonds()
             .count()
     }
@@ -516,7 +516,7 @@ impl MulticenterBondViews {
             self.owner
                 .bind(py)
                 .borrow()
-                .inner()
+                .to_rust()
                 .multicenter_bonds()
                 .count()
         )
@@ -524,7 +524,7 @@ impl MulticenterBondViews {
 
     fn __getitem__(&self, py: Python<'_>, index: isize) -> PyResult<MulticenterBondView> {
         let molecule = self.owner.bind(py).borrow();
-        let id = resolve_multicenter_bond_index(molecule.inner(), index)?;
+        let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
         Ok(MulticenterBondView {
             owner: self.owner.clone_ref(py),
             id,
@@ -539,8 +539,8 @@ impl MulticenterBondViews {
         bond: PyRef<'_, MulticenterBondForm>,
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
-        let id = resolve_multicenter_bond_index(molecule.inner(), index)?;
-        *molecule.inner_mut().multicenter_bond_mut(id).attributes = bond.inner().clone();
+        let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
+        *molecule.to_rust_mut().multicenter_bond_mut(id).attributes = bond.to_rust().clone();
         Ok(())
     }
 
@@ -548,7 +548,7 @@ impl MulticenterBondViews {
     fn of(&self, py: Python<'_>, atoms: Vec<u32>) -> Option<MulticenterBondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .multicenter_bonds()
             .of_id(atoms.into_iter().map(GraphIrAtomId))
             .map(|id| MulticenterBondView {
@@ -561,7 +561,7 @@ impl MulticenterBondViews {
     fn incident(&self, py: Python<'_>, atom: u32) -> Vec<MulticenterBondView> {
         let molecule = self.owner.bind(py).borrow();
         molecule
-            .inner()
+            .to_rust()
             .multicenter_bonds()
             .incident_ids(GraphIrAtomId(atom))
             .map(|id| MulticenterBondView {
@@ -576,7 +576,7 @@ impl MulticenterBondViews {
             .owner
             .bind(py)
             .borrow()
-            .inner()
+            .to_rust()
             .multicenter_bonds()
             .ids()
             .collect::<Vec<_>>();
@@ -661,11 +661,11 @@ mod tests {
                 None,
             );
             assert_eq!(
-                bond.inner().electrons,
+                bond.to_rust().electrons,
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
-            assert_eq!(bond.inner().charge, GraphIrNumForm::Lit(-2));
-            assert_eq!(bond.inner().unpaired_electrons, unpaired_electrons_form);
+            assert_eq!(bond.to_rust().charge, GraphIrNumForm::Lit(-2));
+            assert_eq!(bond.to_rust().unpaired_electrons, unpaired_electrons_form);
         });
     }
 
@@ -691,7 +691,7 @@ mod tests {
                 Some(constraints),
             );
             assert_eq!(
-                bond.inner().constraints.electron_count(),
+                bond.to_rust().constraints.electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -719,7 +719,7 @@ mod tests {
     fn test_multicenter_bond_form_electrons() {
         Python::attach(|py| {
             let mut bond =
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             assert_eq!(
@@ -739,7 +739,7 @@ mod tests {
     fn test_multicenter_bond_form_charge() {
         Python::attach(|py| {
             let mut bond =
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             bond.set_charge(py, NumLike::Lit(-1)).unwrap();
@@ -760,7 +760,7 @@ mod tests {
             )
             .unwrap();
             let mut bond =
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
             bond.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
@@ -777,7 +777,7 @@ mod tests {
         Python::attach(|py| {
             let src = Py::new(
                 py,
-                MulticenterBondForm::from_inner(
+                MulticenterBondForm::from_rust(
                     GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrMulticenterBondConstraintForm::electron_count(6)),
                 ),
@@ -792,7 +792,7 @@ mod tests {
             .unwrap();
             let dst = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -804,7 +804,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                dst.bind(py).borrow().inner().constraints.electron_count(),
+                dst.bind(py).borrow().to_rust().constraints.electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -813,7 +813,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_form_asdict() {
         Python::attach(|py| {
-            let bond = MulticenterBondForm::from_inner(
+            let bond = MulticenterBondForm::from_rust(
                 GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1])
                     .with_constraint(GraphIrMulticenterBondConstraintForm::electron_count(6)),
             );
@@ -1020,7 +1020,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     2, 2, 2,
                 ])),
             )
@@ -1047,7 +1047,7 @@ mod tests {
             };
             let replacement = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1248,7 +1248,7 @@ mod tests {
                 constraints.clone_ref(py),
                 py,
                 MulticenterBondConstraintsUpdate::Container(
-                    Py::new(py, MulticenterBondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, MulticenterBondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1330,7 +1330,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(
+                MulticenterBondForm::from_rust(
                     GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrMulticenterBondConstraintForm::electron_count(6)),
                 ),
@@ -1350,7 +1350,11 @@ mod tests {
             )
             .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.electron_count(),
+                bond.bind(py)
+                    .borrow()
+                    .to_rust()
+                    .constraints
+                    .electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -1363,7 +1367,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(
+                MulticenterBondForm::from_rust(
                     GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrMulticenterBondConstraintForm::electron_count(6)),
                 ),
@@ -1382,7 +1386,11 @@ mod tests {
             view.update(py, MulticenterBondConstraintsUpdate::View(other))
                 .unwrap();
             assert_eq!(
-                bond.bind(py).borrow().inner().constraints.electron_count(),
+                bond.bind(py)
+                    .borrow()
+                    .to_rust()
+                    .constraints
+                    .electron_count(),
                 GraphIrNumForm::Lit(6)
             );
         });
@@ -1594,7 +1602,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1629,7 +1637,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(
+                MulticenterBondForm::from_rust(
                     GraphIrMulticenterBondForm::from_electrons(vec![1, 1, 1])
                         .with_constraint(GraphIrMulticenterBondConstraintForm::electron_count(6)),
                 ),
@@ -1662,7 +1670,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )
@@ -1675,7 +1683,7 @@ mod tests {
             view.update(
                 py,
                 MulticenterBondConstraintsUpdate::Container(
-                    Py::new(py, MulticenterBondConstraintsForm::from_inner(other)).unwrap(),
+                    Py::new(py, MulticenterBondConstraintsForm::from_rust(other)).unwrap(),
                 ),
             )
             .unwrap();
@@ -1695,7 +1703,7 @@ mod tests {
         Python::attach(|py| {
             let bond = Py::new(
                 py,
-                MulticenterBondForm::from_inner(GraphIrMulticenterBondForm::from_electrons(vec![
+                MulticenterBondForm::from_rust(GraphIrMulticenterBondForm::from_electrons(vec![
                     1, 1, 1,
                 ])),
             )

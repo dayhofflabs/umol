@@ -293,7 +293,7 @@ impl MoleculeCorrespondence {
         Self(correspondence)
     }
 
-    pub(crate) fn inner(&self) -> &GraphIrMoleculeCorrespondence {
+    pub(crate) fn to_rust(&self) -> &GraphIrMoleculeCorrespondence {
         &self.0
     }
 }

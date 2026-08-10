@@ -44,9 +44,9 @@ pub fn parse_mol_bytes_with(
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: Molecule = (&table_mol).try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
-        Solution::Determined(()) => Ok(ast),
+    let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
+        Solution::Determined(()) => Ok(molecule),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
         Solution::Contradictory(c) => Err(Box::new(c)),
     }
@@ -87,11 +87,16 @@ mod tests {
         #[case] atom_count: u32,
         #[case] expected_atom: &str,
     ) {
-        let mut ast = parse_mol_to_ast(input).unwrap();
-        CountsValence::new(valence_table).resolve(&mut ast).unwrap();
-        assert_eq!(ast.atoms().count(), atom_count as usize);
+        let mut molecule = parse_mol_to_ast(input).unwrap();
+        CountsValence::new(valence_table)
+            .resolve(&mut molecule)
+            .unwrap();
+        assert_eq!(molecule.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
-            assert_eq!(ast.atom(AtomId(i)).attributes.to_string(), expected_atom);
+            assert_eq!(
+                molecule.atom(AtomId(i)).attributes.to_string(),
+                expected_atom
+            );
         }
     }
 
@@ -132,9 +137,10 @@ mod tests {
         #[case] resolve_config: ResolveConfig,
         #[case] expected: &str,
     ) {
-        let ast = parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
-            .unwrap();
-        assert_eq!(ast.atom(AtomId(0)).attributes.to_string(), expected);
+        let molecule =
+            parse_mol_bytes_with(METHANE_MOL.as_bytes(), &io_config, &model, &resolve_config)
+                .unwrap();
+        assert_eq!(molecule.atom(AtomId(0)).attributes.to_string(), expected);
     }
 
     #[rstest]
@@ -162,7 +168,7 @@ mod tests {
         #[case] resolve_config: ResolveConfig,
         #[case] expected: Vec<Option<AromaticValenceForm>>,
     ) {
-        let ast = parse_mol_bytes_with(
+        let molecule = parse_mol_bytes_with(
             BENZENE_AROMATIC_MOL.as_bytes(),
             &io_config,
             &model,
@@ -171,7 +177,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            ast.atoms()
+            molecule
+                .atoms()
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),

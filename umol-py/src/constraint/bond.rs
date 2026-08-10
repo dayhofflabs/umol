@@ -162,7 +162,7 @@ impl BondConstraintsUpdate {
     pub(crate) fn resolve(&self, py: Python<'_>) -> PyResult<ResolvedBondConstraintsUpdate> {
         Ok(match self {
             BondConstraintsUpdate::Container(c) => {
-                ResolvedBondConstraintsUpdate::Overlay(c.bind(py).borrow().inner().clone())
+                ResolvedBondConstraintsUpdate::Overlay(c.bind(py).borrow().to_rust().clone())
             }
             BondConstraintsUpdate::View(v) => ResolvedBondConstraintsUpdate::Overlay(
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))?,
@@ -212,7 +212,7 @@ pub(crate) enum BondConstraintsLike {
 impl BondConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrBondConstraintsForm> {
         match self {
-            BondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            BondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().to_rust().clone()),
             BondConstraintsLike::View(v) => v.bind(py).borrow().read(py, |cs| Ok(cs.clone())),
         }
     }
@@ -422,18 +422,18 @@ impl BondConstraintsForm {
 
 impl BondConstraintsForm {
     /// The wrapped AST constraints — read access for bond construction.
-    pub(crate) fn inner(&self) -> &GraphIrBondConstraintsForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrBondConstraintsForm {
         &self.0
     }
 
     /// Mutable access to the wrapped AST constraints — for the value-backed proxy.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrBondConstraintsForm {
+    pub(crate) fn to_rust_mut(&mut self) -> &mut GraphIrBondConstraintsForm {
         &mut self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
+    /// Wrap AST constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `BondConstraintsForm(..)` directly.
-    pub(crate) fn from_inner(constraints: GraphIrBondConstraintsForm) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrBondConstraintsForm) -> Self {
         BondConstraintsForm(constraints)
     }
 }
@@ -442,7 +442,7 @@ impl_py_lattice!(
     BondConstraintsForm,
     GraphIrBondConstraintsForm,
     |value: &BondConstraintsForm, _py: Python<'_>| -> PyResult<GraphIrBondConstraintsForm> {
-        Ok(value.inner().clone())
+        Ok(value.to_rust().clone())
     },
     |_py: Python<'_>, value: GraphIrBondConstraintsForm| -> PyResult<BondConstraintsForm> {
         Ok(BondConstraintsForm(value))
@@ -554,7 +554,7 @@ impl BondConstraintsView {
             BondConstraintsBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
@@ -562,7 +562,7 @@ impl BondConstraintsView {
             }
             BondConstraintsBacking::Bond(bond) => {
                 let bond = bond.bind(py).borrow();
-                f(&bond.inner().constraints)
+                f(&bond.to_rust().constraints)
             }
         }
     }
@@ -576,12 +576,12 @@ impl BondConstraintsView {
         match &self.backing {
             BondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .bond_mut(*id)
                 .attributes
                 .constraints)),
             BondConstraintsBacking::Bond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
+                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }
@@ -829,14 +829,14 @@ impl BondRingSizeCounts {
             BondRingSizeBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("bond id out of range"))?;
                 f(&view.attributes.constraints)
             }
-            BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().inner().constraints),
-            BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().inner()),
+            BondRingSizeBacking::Bond(bond) => f(&bond.bind(py).borrow().to_rust().constraints),
+            BondRingSizeBacking::Value(value) => f(value.bind(py).borrow().to_rust()),
         }
     }
 
@@ -849,14 +849,14 @@ impl BondRingSizeCounts {
         match &self.backing {
             BondRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .bond_mut(*id)
                 .attributes
                 .constraints),
             BondRingSizeBacking::Bond(bond) => {
-                f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints)
+                f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints)
             }
-            BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
+            BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).to_rust_mut()),
         }
         Ok(())
     }

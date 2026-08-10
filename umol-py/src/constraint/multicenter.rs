@@ -153,7 +153,7 @@ impl MulticenterBondConstraintsUpdate {
         Ok(match self {
             MulticenterBondConstraintsUpdate::Container(c) => {
                 ResolvedMulticenterBondConstraintsUpdate::Overlay(
-                    c.bind(py).borrow().inner().clone(),
+                    c.bind(py).borrow().to_rust().clone(),
                 )
             }
             MulticenterBondConstraintsUpdate::View(v) => {
@@ -211,7 +211,9 @@ impl MulticenterBondConstraintsLike {
         py: Python<'_>,
     ) -> PyResult<GraphIrMulticenterBondConstraintsForm> {
         match self {
-            MulticenterBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            MulticenterBondConstraintsLike::Container(c) => {
+                Ok(c.bind(py).borrow().to_rust().clone())
+            }
             MulticenterBondConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
@@ -386,13 +388,13 @@ impl MulticenterBondConstraintsForm {
 
 impl MulticenterBondConstraintsForm {
     /// The wrapped AST constraints — read access for multicenter bond construction.
-    pub(crate) fn inner(&self) -> &GraphIrMulticenterBondConstraintsForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrMulticenterBondConstraintsForm {
         &self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
+    /// Wrap AST constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `MulticenterBondConstraintsForm(..)` directly.
-    pub(crate) fn from_inner(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrMulticenterBondConstraintsForm) -> Self {
         MulticenterBondConstraintsForm(constraints)
     }
 }
@@ -402,7 +404,7 @@ impl_py_lattice!(
     GraphIrMulticenterBondConstraintsForm,
     |value: &MulticenterBondConstraintsForm,
      _py: Python<'_>|
-     -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrMulticenterBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrMulticenterBondConstraintsForm|
      -> PyResult<MulticenterBondConstraintsForm> { Ok(MulticenterBondConstraintsForm(value)) }
@@ -518,7 +520,7 @@ impl MulticenterBondConstraintsView {
             MulticenterBondConstraintsBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .multicenter_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("multicenter bond id out of range"))?;
@@ -526,7 +528,7 @@ impl MulticenterBondConstraintsView {
             }
             MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
                 let bond = bond.bind(py).borrow();
-                f(&bond.inner().constraints)
+                f(&bond.to_rust().constraints)
             }
         }
     }
@@ -540,12 +542,12 @@ impl MulticenterBondConstraintsView {
         match &self.backing {
             MulticenterBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .multicenter_bond_mut(*id)
                 .attributes
                 .constraints)),
             MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
+                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }

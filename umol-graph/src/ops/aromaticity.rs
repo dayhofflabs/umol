@@ -2,11 +2,11 @@
 //!
 //! [`AromaticityPerception`] dispatches to one of three algorithms (Hückel
 //! rule, HMO, Clar) selected by [`AromaticityModel`] and runs perception
-//! against an AST. It is the shared core used by three top-level entities:
+//! against an IR. It is the shared core used by three top-level entities:
 //! the resolver (validates `#a` hints filled in by atom-typing), the
 //! aromatizer (discovers aromatic systems from a Kekulé bond-order layout),
 //! and the validator (verifies pre-existing aromatic systems against the
-//! model). [`AromaticityPerception::derive`] is the standard AST-facing
+//! model). [`AromaticityPerception::derive`] is the standard IR-facing
 //! operation; [`AromaticityPerception::find_systems`] remains available when
 //! the caller supplies another per-atom electron source.
 //!
@@ -131,7 +131,7 @@ impl AromaticityPerception {
     #[allow(clippy::complexity)]
     pub fn find_systems<F>(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         config: AromaticityConfig,
         electrons_at: F,
     ) -> Result<
@@ -142,12 +142,12 @@ impl AromaticityPerception {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let model = self.ring_request();
-        let rings = ast.rings(model, config.ring_config).into_ring_set();
+        let rings = molecule.rings(model, config.ring_config).into_ring_set();
 
         let systems = match self {
-            Self::HueckelRule(m) => m.find_from_rings(ast, &rings, &electrons_at),
+            Self::HueckelRule(m) => m.find_from_rings(molecule, &rings, &electrons_at),
             Self::Hmo(m) => match m.find_from_rings(
-                ast,
+                molecule,
                 &rings,
                 config.connected_components_algorithm,
                 &electrons_at,
@@ -166,7 +166,7 @@ impl AromaticityPerception {
                 }
             },
             Self::Clar(m) => match m.find_from_rings(
-                ast,
+                molecule,
                 &rings,
                 config.maximum_independent_set_algorithm,
                 &electrons_at,
@@ -189,16 +189,16 @@ impl AromaticityPerception {
     /// systems from their electron contributions, and classify their relationship.
     pub fn derive(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         config: AromaticityConfig,
     ) -> Result<Solution<AromaticityDerivation, AromaticityContradiction>, AromaticityError> {
-        if ast.atoms().iter().any(|atom| {
+        if molecule.atoms().iter().any(|atom| {
             matches!(
                 atom.attributes.constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(valence))
                     if valence.as_lit().is_none()
             )
-        }) || ast.aromatic_systems().iter().any(|system| {
+        }) || molecule.aromatic_systems().iter().any(|system| {
             matches!(
                 system.attributes.electrons,
                 ElectronCountsForm::Undetermined
@@ -207,7 +207,7 @@ impl AromaticityPerception {
             return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
         }
 
-        let systems = match self.find_systems(ast, config, |atom| {
+        let systems = match self.find_systems(molecule, config, |atom| {
             match atom.attributes.constraints.aromatic_valence() {
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
                     u8::try_from(*valence).ok()
@@ -237,7 +237,7 @@ impl AromaticityPerception {
         let accepted_atoms: BTreeSet<AtomId> = system_members.iter().flatten().copied().collect();
         let mut inconsistencies = BTreeSet::new();
 
-        for atom in ast.atoms().iter() {
+        for atom in molecule.atoms().iter() {
             if matches!(
                 atom.attributes.constraints.aromatic_valence(),
                 Some(AromaticValenceForm::Aromatic(_))
@@ -249,7 +249,7 @@ impl AromaticityPerception {
         }
 
         let mut valid_existing = Vec::new();
-        for existing in ast.aromatic_systems().iter() {
+        for existing in molecule.aromatic_systems().iter() {
             let ElectronCountsForm::Lit(existing_electrons) = &existing.attributes.electrons else {
                 return Ok(Solution::Underdetermined(AromaticityDerivation::default()));
             };
@@ -267,7 +267,7 @@ impl AromaticityPerception {
                 .zip(existing_electrons.iter().copied())
                 .collect();
 
-            let perceived = match self.find_systems(ast, config, |atom| {
+            let perceived = match self.find_systems(molecule, config, |atom| {
                 existing_contributions
                     .iter()
                     .find_map(|&(candidate, electrons)| {
@@ -323,7 +323,7 @@ impl AromaticityPerception {
             let members: BTreeSet<AtomId> = contributions.iter().map(|&(atom, _)| atom).collect();
             let has_matching_candidate =
                 system_members.iter().any(|candidate| candidate == &members);
-            for atom in ast.atoms().iter() {
+            for atom in molecule.atoms().iter() {
                 let Some(constraint) = atom.attributes.constraints.aromatic_valence() else {
                     continue;
                 };
@@ -349,7 +349,7 @@ impl AromaticityPerception {
                 }
             }
 
-            for bond in ast.aromatic_system(system).bonds() {
+            for bond in molecule.aromatic_system(system).bonds() {
                 if matches!(
                     bond.attributes.constraints.aromatic(),
                     BooleanForm::Lit(false)
@@ -370,24 +370,28 @@ impl AromaticityPerception {
         }))
     }
 
-    /// Add perceived systems to the AST.
-    pub fn add_systems(&self, ast: &mut Molecule, systems: Vec<(Vec<AtomId>, AromaticSystemForm)>) {
+    /// Add perceived systems to the IR.
+    pub fn add_systems(
+        &self,
+        molecule: &mut Molecule,
+        systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+    ) {
         if systems.is_empty() {
             return;
         }
-        let mut builder = ast.edit();
+        let mut builder = molecule.edit();
         let new_indices: Vec<AromaticSystemId> = systems
             .into_iter()
             .map(|(atoms, system_ast)| builder.add_aromatic_system(atoms, system_ast))
             .collect();
-        *ast = builder.build();
+        *molecule = builder.build();
 
         let bond_ids: Vec<BondId> = new_indices
             .iter()
-            .flat_map(|&idx| ast.aromatic_system(idx).bond_ids().collect::<Vec<_>>())
+            .flat_map(|&id| molecule.aromatic_system(id).bond_ids().collect::<Vec<_>>())
             .collect();
         for bond_id in bond_ids {
-            let bond = ast.bond_mut(bond_id);
+            let bond = molecule.bond_mut(bond_id);
             bond.attributes
                 .constraints
                 .set(BondConstraintForm::Aromatic(BooleanForm::Lit(true)));
@@ -444,9 +448,9 @@ mod tests {
         })
     }
 
-    fn aromatic_valence_lit(ast: &Molecule, idx: AtomId) -> Option<i64> {
-        match ast
-            .atom(idx)
+    fn aromatic_valence_lit(molecule: &Molecule, id: AtomId) -> Option<i64> {
+        match molecule
+            .atom(id)
             .attributes
             .constraints
             .get(AtomConstraintKey::AromaticValence)?
@@ -500,10 +504,10 @@ mod tests {
 
     fn run_full(
         perception: &AromaticityPerception,
-        ast: &mut Molecule,
+        molecule: &mut Molecule,
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
-            .find_systems(ast, AromaticityConfig::default(), |v| {
+            .find_systems(molecule, AromaticityConfig::default(), |v| {
                 match v
                     .attributes
                     .constraints
@@ -517,7 +521,7 @@ mod tests {
             .unwrap();
         match outcome {
             Solution::Determined(systems) => {
-                perception.add_systems(ast, systems);
+                perception.add_systems(molecule, systems);
                 Solution::Determined(())
             }
             Solution::Underdetermined(_) => Solution::Underdetermined(()),
@@ -721,12 +725,12 @@ mod tests {
     )]
     fn test_aromaticity_perception_derive(
         #[case] model: AromaticityModel,
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: Solution<AromaticityDerivation, AromaticityContradiction>,
     ) {
         assert_eq!(
             AromaticityPerception::new(&model)
-                .derive(&ast, AromaticityConfig::default())
+                .derive(&molecule, AromaticityConfig::default())
                 .unwrap(),
             expected
         );
@@ -738,14 +742,14 @@ mod tests {
             scope: ElementScope::AllowList(vec![Element::C]),
             ring_limits: RingLimits::default(),
         });
-        let mut ast = benzene();
-        let solution = run_full(&perception, &mut ast);
+        let mut molecule = benzene();
+        let solution = run_full(&perception, &mut molecule);
         assert!(matches!(solution, Solution::Determined(())));
-        assert_eq!(ast.aromatic_systems().count(), 1);
-        let system = ast.aromatic_system(AromaticSystemId(0));
+        assert_eq!(molecule.aromatic_systems().count(), 1);
+        let system = molecule.aromatic_system(AromaticSystemId(0));
         let atoms: Vec<AtomId> = system.atom_ids().collect();
         assert_eq!(atoms.len(), 6);
-        let aromatic_bond_count = ast
+        let aromatic_bond_count = molecule
             .bonds()
             .iter()
             .filter(|view| {
@@ -763,8 +767,8 @@ mod tests {
             scope: ElementScope::Any,
             ring_limits: RingLimits::default(),
         });
-        let mut ast = pyrrole();
-        let solution = run_full(&perception, &mut ast);
+        let mut molecule = pyrrole();
+        let solution = run_full(&perception, &mut molecule);
         assert!(matches!(
             solution,
             Solution::Contradictory(AromaticityContradiction::ClarNonBenzenoid(_))
@@ -826,14 +830,14 @@ mod tests {
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     fn test_aromaticity_perception_add_systems(
-        #[case] mut ast: Molecule,
+        #[case] mut molecule: Molecule,
         #[case] system_charge: i64,
         #[case] electrons: Vec<i64>,
         #[case] atom_charges: Vec<i64>,
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&ast, AromaticityConfig::default(), |v| {
+            .find_systems(&molecule, AromaticityConfig::default(), |v| {
                 match v
                     .attributes
                     .constraints
@@ -848,9 +852,9 @@ mod tests {
         let Solution::Determined(systems) = outcome else {
             panic!("expected Determined, got {outcome:?}");
         };
-        any_hueckel().add_systems(&mut ast, systems);
+        any_hueckel().add_systems(&mut molecule, systems);
 
-        let system = ast.aromatic_system(AromaticSystemId(0));
+        let system = molecule.aromatic_system(AromaticSystemId(0));
         assert_eq!(system.attributes.charge, NumForm::Lit(system_charge));
         assert_eq!(
             system.attributes.electrons,
@@ -861,9 +865,9 @@ mod tests {
             .zip(aromatic_valences.iter())
             .enumerate()
         {
-            let idx = AtomId(i as u32);
-            assert_eq!(ast.atom(idx).attributes.charge, NumForm::Lit(*q));
-            assert_eq!(aromatic_valence_lit(&ast, idx), Some(*k));
+            let id = AtomId(i as u32);
+            assert_eq!(molecule.atom(id).attributes.charge, NumForm::Lit(*q));
+            assert_eq!(aromatic_valence_lit(&molecule, id), Some(*k));
         }
     }
 
@@ -877,15 +881,15 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondForm::from_order(1)))
             .collect();
-        let mut ast = Molecule::from_entries(MoleculeEntries {
+        let mut molecule = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
             ..Default::default()
         });
-        let solution = run_full(&perception, &mut ast);
+        let solution = run_full(&perception, &mut molecule);
         assert!(matches!(solution, Solution::Determined(())));
-        assert_eq!(ast.aromatic_systems().count(), 0);
-        let any_aromatic = ast.bonds().iter().any(|view| {
+        assert_eq!(molecule.aromatic_systems().count(), 0);
+        let any_aromatic = molecule.bonds().iter().any(|view| {
             view.attributes
                 .constraints
                 .contains(BondConstraintKey::Aromatic)

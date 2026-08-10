@@ -32,9 +32,9 @@ impl ValenceInvariants {
     /// Molecule-wide verdict: `Underdetermined` if any atom has a non-`Lit`
     /// field the check can't fire on, `Contradictory` on the first orbital !=
     /// electron mismatch, else `Determined`.
-    pub fn check(ast: &Molecule) -> Solution<(), ValenceMismatch> {
-        for id in ast.atoms().ids() {
-            match Self::check_molecule_atom(ast, id) {
+    pub fn check(molecule: &Molecule) -> Solution<(), ValenceMismatch> {
+        for id in molecule.atoms().ids() {
+            match Self::check_molecule_atom(molecule, id) {
                 Solution::Determined(()) => {}
                 Solution::Underdetermined(()) => return Solution::Underdetermined(()),
                 Solution::Contradictory(mismatch) => return Solution::Contradictory(mismatch),
@@ -143,8 +143,8 @@ impl ValenceInvariants {
     /// Per-atom verdict reading the atom in its molecule context: each valence
     /// is taken from a literal constraint, else the topology-derived value.
     /// `Underdetermined` when any required field is non-`Lit`.
-    fn check_molecule_atom(ast: &Molecule, atom_id: AtomId) -> Solution<(), ValenceMismatch> {
-        let atom = ast.atom(atom_id);
+    fn check_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Solution<(), ValenceMismatch> {
+        let atom = molecule.atom(atom_id);
         let Some(element) = atom.element().as_lit() else {
             return Solution::Underdetermined(());
         };
@@ -267,8 +267,8 @@ impl ValenceInvariants {
     /// Structural inputs read from the atom (constraint, else topology):
     /// `valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`, `multicenter_valence`.
     ///
-    pub fn enumerate_atom(ast: &Molecule, atom_id: AtomId) -> Vec<AtomForm> {
-        let atom = ast.atom(atom_id);
+    pub fn enumerate_atom(molecule: &Molecule, atom_id: AtomId) -> Vec<AtomForm> {
+        let atom = molecule.atom(atom_id);
         let Some(element) = atom.element().as_lit() else {
             return Vec::new();
         };
@@ -531,11 +531,11 @@ mod tests {
         Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
     )]
     fn test_valence_invariants_check_molecule_atom(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] atom_id: AtomId,
         #[case] expected: Solution<(), ValenceMismatch>,
     ) {
-        assert_eq!(ValenceInvariants::check_molecule_atom(&ast, atom_id), expected);
+        assert_eq!(ValenceInvariants::check_molecule_atom(&molecule, atom_id), expected);
     }
 
     #[rustfmt::skip]
@@ -619,8 +619,11 @@ mod tests {
             ..Default::default()
         }], bonds: vec![], ..Default::default() }),
     )]
-    fn test_valence_invariants_check(#[case] ast: Molecule) {
-        assert_eq!(ValenceInvariants::check(&ast), Solution::Determined(()));
+    fn test_valence_invariants_check(#[case] molecule: Molecule) {
+        assert_eq!(
+            ValenceInvariants::check(&molecule),
+            Solution::Determined(())
+        );
     }
 
     #[rstest]
@@ -801,10 +804,13 @@ mod tests {
         }],
     )]
     fn test_valence_invariants_enumerate_atom(
-        #[case] ast: Molecule,
+        #[case] molecule: Molecule,
         #[case] atom_id: AtomId,
         #[case] expected: Vec<AtomForm>,
     ) {
-        assert_eq!(ValenceInvariants::enumerate_atom(&ast, atom_id), expected);
+        assert_eq!(
+            ValenceInvariants::enumerate_atom(&molecule, atom_id),
+            expected
+        );
     }
 }

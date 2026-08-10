@@ -34,8 +34,8 @@ impl MoleculeDefaults {
 }
 
 impl MoleculeDefaults {
-    pub(crate) fn to_rust(&self) -> GraphIrMoleculeDefaults {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrMoleculeDefaults {
+        &self.0
     }
 }
 
@@ -68,8 +68,8 @@ impl ReactionDefaults {
 }
 
 impl ReactionDefaults {
-    pub(crate) fn to_rust(&self) -> GraphIrReactionDefaults {
-        self.0.clone()
+    pub(crate) fn to_rust(&self) -> &GraphIrReactionDefaults {
+        &self.0
     }
 }
 
@@ -83,7 +83,7 @@ mod tests {
     fn test_molecule_defaults_new() {
         let defaults = MoleculeDefaults::new();
 
-        assert_eq!(defaults.to_rust(), GraphIrMoleculeDefaults::new());
+        assert_eq!(defaults.to_rust(), &GraphIrMoleculeDefaults::new());
         assert_eq!(defaults.__repr__(), "MoleculeDefaults()");
     }
 
@@ -91,7 +91,7 @@ mod tests {
     fn test_molecule_defaults_ground() {
         let defaults = MoleculeDefaults::ground();
 
-        assert_eq!(defaults.to_rust(), GraphIrMoleculeDefaults::ground());
+        assert_eq!(defaults.to_rust(), &GraphIrMoleculeDefaults::ground());
         assert_eq!(defaults.__repr__(), "MoleculeDefaults.ground()");
     }
 
@@ -99,7 +99,7 @@ mod tests {
     fn test_reaction_defaults_new() {
         let defaults = ReactionDefaults::new();
 
-        assert_eq!(defaults.to_rust(), GraphIrReactionDefaults::new());
+        assert_eq!(defaults.to_rust(), &GraphIrReactionDefaults::new());
         assert_eq!(defaults.__repr__(), "ReactionDefaults()");
     }
 
@@ -107,7 +107,7 @@ mod tests {
     fn test_reaction_defaults_ground() {
         let defaults = ReactionDefaults::ground();
 
-        assert_eq!(defaults.to_rust(), GraphIrReactionDefaults::ground());
+        assert_eq!(defaults.to_rust(), &GraphIrReactionDefaults::ground());
         assert_eq!(defaults.__repr__(), "ReactionDefaults.ground()");
     }
 }

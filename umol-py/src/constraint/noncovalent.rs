@@ -154,7 +154,7 @@ impl NoncovalentBondConstraintsUpdate {
         Ok(match self {
             NoncovalentBondConstraintsUpdate::Container(c) => {
                 ResolvedNoncovalentBondConstraintsUpdate::Overlay(
-                    c.bind(py).borrow().inner().clone(),
+                    c.bind(py).borrow().to_rust().clone(),
                 )
             }
             NoncovalentBondConstraintsUpdate::View(v) => {
@@ -366,13 +366,13 @@ impl NoncovalentBondConstraintsForm {
 
 impl NoncovalentBondConstraintsForm {
     /// The wrapped AST constraints — read access for noncovalent bond construction.
-    pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondConstraintsForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrNoncovalentBondConstraintsForm {
         &self.0
     }
 
-    /// Wrap AST constraints (the hold-the-value `from_inner` bridge). Test-only —
+    /// Wrap AST constraints (the hold-the-value `from_rust` bridge). Test-only —
     /// in-crate construction wraps `NoncovalentBondConstraintsForm(..)` directly.
-    pub(crate) fn from_inner(constraints: GraphIrNoncovalentBondConstraintsForm) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrNoncovalentBondConstraintsForm) -> Self {
         NoncovalentBondConstraintsForm(constraints)
     }
 }
@@ -382,7 +382,7 @@ impl_py_lattice!(
     GraphIrNoncovalentBondConstraintsForm,
     |value: &NoncovalentBondConstraintsForm,
      _py: Python<'_>|
-     -> PyResult<GraphIrNoncovalentBondConstraintsForm> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrNoncovalentBondConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrNoncovalentBondConstraintsForm|
      -> PyResult<NoncovalentBondConstraintsForm> { Ok(NoncovalentBondConstraintsForm(value)) }
@@ -538,7 +538,9 @@ impl NoncovalentBondConstraintsLike {
         py: Python<'_>,
     ) -> PyResult<GraphIrNoncovalentBondConstraintsForm> {
         match self {
-            NoncovalentBondConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            NoncovalentBondConstraintsLike::Container(c) => {
+                Ok(c.bind(py).borrow().to_rust().clone())
+            }
             NoncovalentBondConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
@@ -576,7 +578,7 @@ impl NoncovalentBondConstraintsView {
             NoncovalentBondConstraintsBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .noncovalent_bonds()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("noncovalent bond id out of range"))?;
@@ -584,7 +586,7 @@ impl NoncovalentBondConstraintsView {
             }
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
                 let bond = bond.bind(py).borrow();
-                f(&bond.inner().constraints)
+                f(&bond.to_rust().constraints)
             }
         }
     }
@@ -598,12 +600,12 @@ impl NoncovalentBondConstraintsView {
         match &self.backing {
             NoncovalentBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .noncovalent_bond_mut(*id)
                 .attributes
                 .constraints)),
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
-                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
+                Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }

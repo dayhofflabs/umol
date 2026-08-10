@@ -153,7 +153,7 @@ impl AromaticSystemConstraintsUpdate {
         Ok(match self {
             AromaticSystemConstraintsUpdate::Container(c) => {
                 ResolvedAromaticSystemConstraintsUpdate::Overlay(
-                    c.bind(py).borrow().inner().clone(),
+                    c.bind(py).borrow().to_rust().clone(),
                 )
             }
             AromaticSystemConstraintsUpdate::View(v) => {
@@ -208,7 +208,9 @@ pub(crate) enum AromaticSystemConstraintsLike {
 impl AromaticSystemConstraintsLike {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> PyResult<GraphIrAromaticSystemConstraintsForm> {
         match self {
-            AromaticSystemConstraintsLike::Container(c) => Ok(c.bind(py).borrow().inner().clone()),
+            AromaticSystemConstraintsLike::Container(c) => {
+                Ok(c.bind(py).borrow().to_rust().clone())
+            }
             AromaticSystemConstraintsLike::View(v) => {
                 v.bind(py).borrow().read(py, |cs| Ok(cs.clone()))
             }
@@ -383,12 +385,12 @@ impl AromaticSystemConstraintsForm {
 
 impl AromaticSystemConstraintsForm {
     /// The wrapped AST constraints — read access for aromatic system construction.
-    pub(crate) fn inner(&self) -> &GraphIrAromaticSystemConstraintsForm {
+    pub(crate) fn to_rust(&self) -> &GraphIrAromaticSystemConstraintsForm {
         &self.0
     }
 
     /// Wrap owned AST constraints.
-    pub(crate) fn from_inner(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
+    pub(crate) fn from_rust(constraints: GraphIrAromaticSystemConstraintsForm) -> Self {
         AromaticSystemConstraintsForm(constraints)
     }
 }
@@ -398,7 +400,7 @@ impl_py_lattice!(
     GraphIrAromaticSystemConstraintsForm,
     |value: &AromaticSystemConstraintsForm,
      _py: Python<'_>|
-     -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.inner().clone()) },
+     -> PyResult<GraphIrAromaticSystemConstraintsForm> { Ok(value.to_rust().clone()) },
     |_py: Python<'_>,
      value: GraphIrAromaticSystemConstraintsForm|
      -> PyResult<AromaticSystemConstraintsForm> { Ok(AromaticSystemConstraintsForm(value)) }
@@ -508,7 +510,7 @@ impl AromaticSystemConstraintsView {
             AromaticSystemConstraintsBacking::Molecule { owner, id } => {
                 let molecule = owner.bind(py).borrow();
                 let view = molecule
-                    .inner()
+                    .to_rust()
                     .aromatic_systems()
                     .get(*id)
                     .ok_or_else(|| PyIndexError::new_err("aromatic system id out of range"))?;
@@ -516,7 +518,7 @@ impl AromaticSystemConstraintsView {
             }
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 let system = system.bind(py).borrow();
-                f(&system.inner().constraints)
+                f(&system.to_rust().constraints)
             }
         }
     }
@@ -530,12 +532,12 @@ impl AromaticSystemConstraintsView {
         match &self.backing {
             AromaticSystemConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
-                .inner_mut()
+                .to_rust_mut()
                 .aromatic_system_mut(*id)
                 .attributes
                 .constraints)),
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
-                Ok(f(&mut system.borrow_mut(py).try_inner_mut()?.constraints))
+                Ok(f(&mut system.borrow_mut(py).to_rust_mut()?.constraints))
             }
         }
     }

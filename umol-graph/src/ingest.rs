@@ -126,9 +126,9 @@ fn interpret_molecule(
     model: &ChemistryModel,
     resolve_config: &ResolveConfig,
 ) -> Result<Molecule, MoleculeInterpretationError> {
-    let mut ast: Molecule = molecule.try_into_ir(&())?;
-    match Resolver::with_config(model, *resolve_config).resolve(&mut ast)? {
-        Solution::Determined(()) => Ok(ast),
+    let mut molecule: Molecule = molecule.try_into_ir(&())?;
+    match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
+        Solution::Determined(()) => Ok(molecule),
         Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
         Solution::Contradictory(error) => Err(error.into()),
     }
@@ -800,18 +800,22 @@ mod tests {
         #[case] expected_atom_charges: Vec<NumForm>,
         #[case] expected_system_charge: NumForm,
     ) {
-        let ast =
+        let molecule =
             ingest_smiles_with("[cH+]1[cH][cH]1", &io_config, &model, &resolve_config).unwrap();
 
         assert_eq!(
-            ast.atoms()
+            molecule
+                .atoms()
                 .iter()
                 .map(|atom| atom.attributes.charge.clone())
                 .collect::<Vec<_>>(),
             expected_atom_charges
         );
         assert_eq!(
-            ast.aromatic_system(AromaticSystemId(0)).attributes.charge,
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .attributes
+                .charge,
             expected_system_charge
         );
     }
@@ -841,10 +845,11 @@ mod tests {
         #[case] resolve_config: ResolveConfig,
         #[case] expected: Vec<Option<AromaticValenceForm>>,
     ) {
-        let ast = ingest_smiles_with("c1ccccc1", &io_config, &model, &resolve_config).unwrap();
+        let molecule = ingest_smiles_with("c1ccccc1", &io_config, &model, &resolve_config).unwrap();
 
         assert_eq!(
-            ast.atoms()
+            molecule
+                .atoms()
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
@@ -887,14 +892,14 @@ mod tests {
             aromaticity,
             ..ChemistryModel::default()
         };
-        let ast = ingest_smiles_with(
+        let molecule = ingest_smiles_with(
             input,
             &SmilesIoConfig::opensmiles(),
             &model,
             &ResolveConfig::default(),
         )
         .unwrap();
-        let system = ast.aromatic_system(AromaticSystemId(0));
+        let system = molecule.aromatic_system(AromaticSystemId(0));
 
         assert_eq!(
             system.atom_ids().collect::<Vec<_>>(),
@@ -907,7 +912,7 @@ mod tests {
             &ElectronCountsForm::Lit(expected_electrons)
         );
         assert_eq!(
-            ast.aromatic_systems().ids().collect::<Vec<_>>(),
+            molecule.aromatic_systems().ids().collect::<Vec<_>>(),
             vec![AromaticSystemId(0)]
         );
     }
@@ -921,7 +926,7 @@ mod tests {
             aromaticity: AromaticityModel::mdl(),
             ..ChemistryModel::default()
         };
-        let ast = ingest_smiles_with(
+        let molecule = ingest_smiles_with(
             input,
             &SmilesIoConfig::opensmiles(),
             &model,
@@ -936,7 +941,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            ast.atoms()
+            molecule
+                .atoms()
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
@@ -949,14 +955,15 @@ mod tests {
             ]
         );
         assert_eq!(
-            ast.bonds()
+            molecule
+                .bonds()
                 .iter()
                 .map(|bond| bond.attributes.constraints.aromatic())
                 .collect::<Vec<_>>(),
             vec![BooleanForm::Lit(true); 5]
         );
         assert_eq!(
-            ast.aromatic_systems().ids().collect::<Vec<_>>(),
+            molecule.aromatic_systems().ids().collect::<Vec<_>>(),
             Vec::<AromaticSystemId>::new()
         );
     }
@@ -986,17 +993,19 @@ mod tests {
         #[case] resolve_config: ResolveConfig,
         #[case] expected: Option<TetrahedralStereoForm>,
     ) {
-        let ast = ingest_smiles_with("C[C@H](N)O", &io_config, &model, &resolve_config).unwrap();
+        let molecule =
+            ingest_smiles_with("C[C@H](N)O", &io_config, &model, &resolve_config).unwrap();
 
         assert_eq!(
-            ast.atom(AtomId(1))
+            molecule
+                .atom(AtomId(1))
                 .attributes
                 .constraints
                 .tetrahedral_stereo()
                 .cloned(),
             expected
         );
-        assert!(ast.stereo_atoms().is_at(AtomId(1)));
+        assert!(molecule.stereo_atoms().is_at(AtomId(1)));
     }
 
     #[rstest]

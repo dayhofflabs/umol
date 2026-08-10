@@ -7,7 +7,7 @@ use pyo3::PyClass;
 pub trait EntityForm: PyClass {
     type RustForm: Clone;
 
-    fn clone_rust(&self) -> Self::RustForm;
+    fn to_rust(&self) -> &Self::RustForm;
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>>;
 }
 
@@ -22,7 +22,7 @@ where
 
     fn extract(obj: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         let source = obj.extract::<PyRef<'_, T>>()?;
-        let value = source.clone_rust();
+        let value = source.to_rust().clone();
         drop(source);
         Ok(Self(T::new_readonly(obj.py(), value)?))
     }
@@ -50,6 +50,6 @@ where
     }
 
     pub(crate) fn to_rust(&self, py: Python<'_>) -> T::RustForm {
-        self.0.bind(py).borrow().clone_rust()
+        self.0.bind(py).borrow().to_rust().clone()
     }
 }
