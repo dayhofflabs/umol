@@ -87,9 +87,9 @@ macro_rules! define_ref {
                     }
                     Edn::Keyword(k) => Ok(Self::Keyword(k.name().to_string())),
                     $( Edn::Map(m) => {
-                        if m.get_keyword("type").is_some() || m.get_keyword("id").is_some() {
+                        if m.get_keyword("attrs").is_some() || m.get_keyword("id").is_some() {
                             return Err(DeError::Custom(format!(
-                                "{} structural ref must not carry :type or :id",
+                                "{} structural ref must not carry :attrs or :id",
                                 $kind
                             )));
                         }
@@ -307,11 +307,11 @@ fn parse_stereo_bond_structural(m: &EdnMap<'_>) -> Result<StereoBondParticipants
 
 // The streaming counterparts of the `parse_*_structural` tree readers, over the deserializer cursor
 // (they must not delegate to the tree path). Each reads the structural map's keys in order, rejecting
-// an entity map's `:type` / `:id` (the same guard as `from_edn`).
+// an entity map's `:attrs` / `:id` (the same guard as `from_edn`).
 
 fn reject_structural_key(key: &str, context: &'static str) -> EdnError {
-    if key == "type" || key == "id" {
-        DeError::Custom(format!("{context} must not carry :type or :id")).into()
+    if key == "attrs" || key == "id" {
+        DeError::Custom(format!("{context} must not carry :attrs or :id")).into()
     } else {
         DeError::Custom(format!("unexpected key :{key} in {context}")).into()
     }
@@ -734,14 +734,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::type_key("{:atoms [0 1] :type \"c-c\"}")]
+    #[case::attrs_key("{:atoms [0 1] :attrs \"c-c\"}")]
     #[case::id_key("{:atoms [0 1] :id :b1}")]
     fn test_bond_ref_from_edn_structural_error(#[case] input: &str) {
         let tree = read_string(input).unwrap();
         let DeError::Custom(msg) = BondRef::from_edn(&tree).unwrap_err() else {
             panic!("expected a Custom error");
         };
-        assert_eq!(msg, "bond structural ref must not carry :type or :id");
+        assert_eq!(msg, "bond structural ref must not carry :attrs or :id");
     }
 
     #[rstest]

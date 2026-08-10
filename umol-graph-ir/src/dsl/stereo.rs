@@ -1154,7 +1154,7 @@ pub(crate) fn fmt_stereo_kind(f: &mut fmt::Formatter<'_>, kind: StereoKind) -> f
     }
 }
 
-/// Write a `StereoCoset` for the element `:type` body: `*` (open coset), a
+/// Write a `StereoCoset` for the element `:attrs` body: `*` (open coset), a
 /// literal, or an operator expression. `fmt_stereo_config` reuses the literal
 /// and expression arms but writes its own `+` for `Stereo(Undetermined)`.
 fn fmt_stereo_coset(f: &mut fmt::Formatter<'_>, coset: &StereoCoset) -> fmt::Result {

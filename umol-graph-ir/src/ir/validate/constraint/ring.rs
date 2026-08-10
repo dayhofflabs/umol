@@ -339,7 +339,7 @@ mod tests {
         Ok(Solution::Determined(())),
     )]
     #[case::vacuous(
-        r#"{:atoms ["C#x*#y*#R*" "N"] :bonds [[0 1 "1#R*"]] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R*"}]}"#,
+        r#"{:atoms ["C#x*#y*#R*" "N"] :bonds [[0 1 "1#R*"]] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R*"}]}"#,
         Ok(Solution::Determined(())),
     )]
     #[case::finite_set(
@@ -379,7 +379,7 @@ mod tests {
         })),
     )]
     #[case::dative_ring_membership_error(
-        r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
+        r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         Err(ConstraintError::DativeBondRingMembershipUnsupported {
             bond: DativeBondId(0),
         }),

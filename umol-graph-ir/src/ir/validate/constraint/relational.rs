@@ -527,12 +527,12 @@ mod tests {
         mol_dsl!(
             r#"{:atoms ["C" "N" "O" "F" "Cl" "Br" "I" "H"]
                 :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"] [3 4 "2"] [6 7 "*"]]
-                :dative-bonds [{:donors [1 2] :acceptor 0 :type "1"}]
-                :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]"}]
-                :multicenter-bonds [{:atoms [0 2 6] :type "[1,1,0]"}]
-                :noncovalent-bonds [{:atoms [1 4] :type "Hbd"}]
-                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]
-                :stereo-bonds [{:site 3 :ligands [0 5] :type "Ct1"}]}"#
+                :dative-bonds [{:donors [1 2] :acceptor 0 :attrs "1"}]
+                :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]
+                :multicenter-bonds [{:atoms [0 2 6] :attrs "[1,1,0]"}]
+                :noncovalent-bonds [{:atoms [1 4] :attrs "Hbd"}]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+                :stereo-bonds [{:site 3 :ligands [0 5] :attrs "Ct1"}]}"#
         )
     }
 

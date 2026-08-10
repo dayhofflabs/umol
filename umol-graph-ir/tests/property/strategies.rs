@@ -963,7 +963,7 @@ pub(crate) fn noncovalent_bond_update_strategy() -> impl Strategy<Value = Noncov
         .prop_map(|(kind, constraints)| NoncovalentBondUpdate { kind, constraints })
 }
 
-/// Coset forms that round-trip through both the entity `:type` string and the
+/// Coset forms that round-trip through both the entity attribute string and the
 /// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
 /// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
 /// (§5.8) and excluded.

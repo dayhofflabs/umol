@@ -1353,7 +1353,7 @@ fn test_molecule_ast_has_noncovalent_bonds(#[from(rich_molecule)] ast: Molecule)
 #[rstest]
 fn test_molecule_ast_has_stereo_atoms() {
     let ast = mol_dsl!(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#
     );
     assert!(ast.has_stereo_atoms());
     assert!(!ast.has_stereo_bonds());
@@ -1362,7 +1362,7 @@ fn test_molecule_ast_has_stereo_atoms() {
 #[rstest]
 fn test_molecule_ast_has_stereo_bonds() {
     let ast = mol_dsl!(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#
     );
     assert!(ast.has_stereo_bonds());
     assert!(!ast.has_stereo_atoms());

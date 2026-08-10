@@ -457,7 +457,7 @@ fn parse_atom_span_entry(
     Ok((keyword.map(String::from), span))
 }
 
-/// Parse a complete bond-entry payload (`[a b bond]` or the `{:id :atoms :type}` map) and wrap its
+/// Parse a complete bond-entry payload (`[a b bond]` or the `{:id :atoms :attrs}` map) and wrap its
 /// `BondForm` into the given span side.
 #[allow(clippy::type_complexity)]
 fn bond_entry_span(
@@ -472,7 +472,7 @@ fn bond_entry_span(
     ))
 }
 
-/// Split a bond `:modify` payload — `[a b X]` or `{:id :atoms [a b] :type X}` — into its keyword,
+/// Split a bond `:modify` payload — `[a b X]` or `{:id :atoms [a b] :attrs X}` — into its keyword,
 /// endpoints, and the raw value `X` (a `[left right]` vector).
 fn split_bond_frame<'e>(
     payload: &'e Edn<'e>,
@@ -491,7 +491,7 @@ fn split_bond_frame<'e>(
                 })?,
                 "bond span",
             )?,
-            required_key(m, "type", "bond span")?,
+            required_key(m, "attrs", "bond span")?,
         )),
         other => Err(DeError::TypeMismatch {
             expected: "bond :modify [a b [left right]] or map",
@@ -541,7 +541,7 @@ fn parse_constraint_span_entry(edn: &Edn<'_>) -> Result<ConstraintSpanInput, DeE
 }
 
 // Overlay span entries: a bare entry (`Unchanged`) or a `{:add|:modify|:remove <entry>}` wrapper,
-// over the shared `parse_<entity>_entry`. For `:add`/`:remove` and the bare form the entry's `:type`
+// over the shared `parse_<entity>_entry`. For `:add`/`:remove` and the bare form the entry's `:attrs`
 // is one dsl; for `:modify` it is a `[left right]` pair (participants are span-invariant).
 
 #[allow(clippy::type_complexity)]
@@ -577,7 +577,7 @@ fn parse_dative_span_entry(
             })?;
             let acceptor = AtomRef::from_edn(required_key(m, "acceptor", "dative span")?)?;
             let (left, right) = pair(
-                required_key(m, "type", "dative span")?,
+                required_key(m, "attrs", "dative span")?,
                 "dative span :modify",
             )?;
             Ok((
@@ -620,7 +620,7 @@ fn parse_aromatic_span_entry(
                 AtomRef::from_edn(e)
             })?;
             let (left, right) = pair(
-                required_key(m, "type", "aromatic span")?,
+                required_key(m, "attrs", "aromatic span")?,
                 "aromatic span :modify",
             )?;
             Ok((
@@ -673,7 +673,7 @@ fn parse_multicenter_span_entry(
                 |e| AtomRef::from_edn(e),
             )?;
             let (left, right) = pair(
-                required_key(m, "type", "multicenter span")?,
+                required_key(m, "attrs", "multicenter span")?,
                 "multicenter span :modify",
             )?;
             Ok((
@@ -729,7 +729,7 @@ fn parse_noncovalent_span_entry(
                 "noncovalent span",
             )?;
             let (left, right) = pair(
-                required_key(m, "type", "noncovalent span")?,
+                required_key(m, "attrs", "noncovalent span")?,
                 "noncovalent span :modify",
             )?;
             Ok((
@@ -782,7 +782,7 @@ fn parse_stereo_atom_span_entry(
                 parse_stereo_ligand,
             )?;
             let (left, right) = pair(
-                required_key(m, "type", "stereo-atom span")?,
+                required_key(m, "attrs", "stereo-atom span")?,
                 "stereo-atom span :modify",
             )?;
             Ok((
@@ -836,7 +836,7 @@ fn parse_stereo_bond_span_entry(
                 parse_stereo_ligand,
             )?;
             let (left, right) = pair(
-                required_key(m, "type", "stereo-bond span")?,
+                required_key(m, "attrs", "stereo-bond span")?,
                 "stereo-bond span :modify",
             )?;
             Ok((
@@ -1268,8 +1268,8 @@ fn render_dative_span_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let value = |b: &DativeBondForm| DativeBondDsl::from_ref(b).to_edn();
-    let entry = |type_edn: Edn<'static>| {
-        render_dative_entry(id, donors.iter().copied(), acceptor, type_edn, meta)
+    let entry = |attributes_edn: Edn<'static>| {
+        render_dative_entry(id, donors.iter().copied(), acceptor, attributes_edn, meta)
     };
     match span {
         EntitySpan::Unchanged(b) => entry(value(b)),
@@ -1293,8 +1293,9 @@ fn render_aromatic_span_entry(
 ) -> Edn<'static> {
     let value =
         |s: &AromaticSystemForm| Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(s).to_string()));
-    let entry =
-        |type_edn: Edn<'static>| render_aromatic_entry(id, atoms.iter().copied(), type_edn, meta);
+    let entry = |attributes_edn: Edn<'static>| {
+        render_aromatic_entry(id, atoms.iter().copied(), attributes_edn, meta)
+    };
     match span {
         EntitySpan::Unchanged(s) => entry(value(s)),
         EntitySpan::Added(s) => single_key_map("add", entry(value(s))),
@@ -1317,8 +1318,8 @@ fn render_multicenter_span_entry(
 ) -> Edn<'static> {
     let value =
         |b: &MulticenterBondForm| Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(b).to_string()));
-    let entry = |type_edn: Edn<'static>| {
-        render_multicenter_entry(id, atoms.iter().copied(), type_edn, meta)
+    let entry = |attributes_edn: Edn<'static>| {
+        render_multicenter_entry(id, atoms.iter().copied(), attributes_edn, meta)
     };
     match span {
         EntitySpan::Unchanged(b) => entry(value(b)),
@@ -1341,7 +1342,8 @@ fn render_noncovalent_span_entry(
     meta: &MoleculeMetadata,
 ) -> Edn<'static> {
     let value = |b: &NoncovalentBondForm| NoncovalentBondDsl::from_ref(b).to_edn();
-    let entry = |type_edn: Edn<'static>| render_noncovalent_entry(id, atoms, type_edn, meta);
+    let entry =
+        |attributes_edn: Edn<'static>| render_noncovalent_entry(id, atoms, attributes_edn, meta);
     match span {
         EntitySpan::Unchanged(b) => entry(value(b)),
         EntitySpan::Added(b) => single_key_map("add", entry(value(b))),
@@ -1368,8 +1370,8 @@ fn render_stereo_atom_span_entry(
         .iter()
         .map(|&l| render_stereo_ligand(l, meta))
         .collect();
-    let entry = |type_edn: Edn<'static>| {
-        render_stereo_atom_entry(id, site, ligand_edns.clone(), type_edn, meta)
+    let entry = |attributes_edn: Edn<'static>| {
+        render_stereo_atom_entry(id, site, ligand_edns.clone(), attributes_edn, meta)
     };
     match span {
         EntitySpan::Unchanged(s) => entry(value(s)),
@@ -1397,8 +1399,8 @@ fn render_stereo_bond_span_entry(
         .iter()
         .map(|&l| render_stereo_ligand(l, meta))
         .collect();
-    let entry = |type_edn: Edn<'static>| {
-        render_stereo_bond_entry(id, site, ligand_edns.clone(), type_edn, meta)
+    let entry = |attributes_edn: Edn<'static>| {
+        render_stereo_bond_entry(id, site, ligand_edns.clone(), attributes_edn, meta)
     };
     match span {
         EntitySpan::Unchanged(s) => entry(value(s)),
@@ -1683,17 +1685,17 @@ mod tests {
         r#"{
             :atoms [[:a "C"] "F" "Cl" "Br" "I"]
             :bonds [
-                {:id :b :atoms [0 1] :type "2"}
+                {:id :b :atoms [0 1] :attrs "2"}
                 [0 2 "1"]
                 [0 3 "1"]
                 [0 4 "1"]
             ]
-            :dative-bonds [{:id :d :donors [1] :acceptor 0 :type "1#R"}]
-            :aromatic-systems [{:id :ar :atoms [0 1] :type "*#e2"}]
-            :multicenter-bonds [{:id :m :atoms [0 1] :type "*#e2"}]
-            :noncovalent-bonds [{:id :n :atoms [0 1] :type "Hbd"}]
-            :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :type "Th1"}]
-            :stereo-bonds [{:id :sb :site :b :ligands [2 3] :type "Ct1"}]
+            :dative-bonds [{:id :d :donors [1] :acceptor 0 :attrs "1#R"}]
+            :aromatic-systems [{:id :ar :atoms [0 1] :attrs "*#e2"}]
+            :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
+            :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
+            :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
+            :stereo-bonds [{:id :sb :site :b :ligands [2 3] :attrs "Ct1"}]
             :atom-aliases [:x "O"]
         }"#
         .parse()
@@ -1865,8 +1867,8 @@ mod tests {
         lhs:BondForm::from_order(1),
         rhs:BondForm::from_order(2),
     }))]
-    #[case::unchanged_map_id("{:id :b1 :atoms [0 1] :type :single}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(1))))]
-    #[case::modify_map_id("{:modify {:id :b1 :atoms [0 1] :type [:single :double]}}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Modified {
+    #[case::unchanged_map_id("{:id :b1 :atoms [0 1] :attrs :single}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Unchanged(BondForm::from_order(1))))]
+    #[case::modify_map_id("{:modify {:id :b1 :atoms [0 1] :attrs [:single :double]}}", (Some("b1".to_string()), [AtomRef::Index(0), AtomRef::Index(1)], EntitySpan::Modified {
         lhs:BondForm::from_order(1),
         rhs:BondForm::from_order(2),
     }))]
@@ -1905,26 +1907,26 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:donors [0] :acceptor 1 :type "1#R"}"#, (
+    #[case::unchanged(r#"{:donors [0] :acceptor 1 :attrs "1#R"}"#, (
         None, vec![AtomRef::Index(0)], AtomRef::Index(1),
         EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
     ))]
-    #[case::add(r#"{:add {:donors [0] :acceptor 1 :type "1#R"}}"#, (
+    #[case::add(r#"{:add {:donors [0] :acceptor 1 :attrs "1#R"}}"#, (
         None, vec![AtomRef::Index(0)], AtomRef::Index(1),
         EntitySpan::Added(DativeBondDsl::from_str("1#R").unwrap().0),
     ))]
-    #[case::remove(r#"{:remove {:donors [0] :acceptor 1 :type "1#R"}}"#, (
+    #[case::remove(r#"{:remove {:donors [0] :acceptor 1 :attrs "1#R"}}"#, (
         None, vec![AtomRef::Index(0)], AtomRef::Index(1),
         EntitySpan::Removed(DativeBondDsl::from_str("1#R").unwrap().0),
     ))]
-    #[case::modify(r#"{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}"#, (
+    #[case::modify(r#"{:modify {:donors [0] :acceptor 1 :attrs ["1#R" "2#R"]}}"#, (
         None, vec![AtomRef::Index(0)], AtomRef::Index(1),
         EntitySpan::Modified {
             lhs:DativeBondDsl::from_str("1#R").unwrap().0,
             rhs:DativeBondDsl::from_str("2#R").unwrap().0,
         },
     ))]
-    #[case::with_id(r#"{:id :d1 :donors [0 2] :acceptor 1 :type "1#R"}"#, (
+    #[case::with_id(r#"{:id :d1 :donors [0 2] :acceptor 1 :attrs "1#R"}"#, (
         Some("d1".to_string()), vec![AtomRef::Index(0), AtomRef::Index(2)], AtomRef::Index(1),
         EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0),
     ))]
@@ -1944,15 +1946,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:atoms [0 1 2] :type "*#e6"}"#, (
+    #[case::unchanged(r#"{:atoms [0 1 2] :attrs "*#e6"}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1), AtomRef::Index(2)],
         EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0),
     ))]
-    #[case::add(r#"{:add {:atoms [0 1] :type "*#e2"}}"#, (
+    #[case::add(r#"{:add {:atoms [0 1] :attrs "*#e2"}}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Added(AromaticSystemDsl::from_str("*#e2").unwrap().0),
     ))]
-    #[case::modify(r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#, (
+    #[case::modify(r#"{:modify {:atoms [0 1] :attrs ["*#e2" "*#e4"]}}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Modified {
             lhs:AromaticSystemDsl::from_str("*#e2").unwrap().0,
@@ -1970,15 +1972,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:atoms [0 1] :type "*#e2"}"#, (
+    #[case::unchanged(r#"{:atoms [0 1] :attrs "*#e2"}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Unchanged(MulticenterBondDsl::from_str("*#e2").unwrap().0),
     ))]
-    #[case::remove(r#"{:remove {:atoms [0 1 2] :type "*#e3"}}"#, (
+    #[case::remove(r#"{:remove {:atoms [0 1 2] :attrs "*#e3"}}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1), AtomRef::Index(2)],
         EntitySpan::Removed(MulticenterBondDsl::from_str("*#e3").unwrap().0),
     ))]
-    #[case::modify(r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#, (
+    #[case::modify(r#"{:modify {:atoms [0 1] :attrs ["*#e2" "*#e4"]}}"#, (
         None, vec![AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Modified {
             lhs:MulticenterBondDsl::from_str("*#e2").unwrap().0,
@@ -2000,11 +2002,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:atoms [0 1] :type "Hbd"}"#, (
+    #[case::unchanged(r#"{:atoms [0 1] :attrs "Hbd"}"#, (
         None, [AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0),
     ))]
-    #[case::remove(r#"{:remove {:atoms [0 1] :type "Hbd"}}"#, (
+    #[case::remove(r#"{:remove {:atoms [0 1] :attrs "Hbd"}}"#, (
         None, [AtomRef::Index(0), AtomRef::Index(1)],
         EntitySpan::Removed(NoncovalentBondDsl::from_str("Hbd").unwrap().0),
     ))]
@@ -2023,7 +2025,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:site 0 :ligands [1 2 3 4] :type "Th1"}"#, (
+    #[case::unchanged(r#"{:site 0 :ligands [1 2 3 4] :attrs "Th1"}"#, (
         None, AtomRef::Index(0),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
@@ -2033,7 +2035,7 @@ mod tests {
         ],
         EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0),
     ))]
-    #[case::add(r#"{:add {:site 0 :ligands [1 2 [:h 3]] :type "Th1"}}"#, (
+    #[case::add(r#"{:add {:site 0 :ligands [1 2 [:h 3]] :attrs "Th1"}}"#, (
         None, AtomRef::Index(0),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(1) },
@@ -2058,7 +2060,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:site 1 :ligands [0 3] :type "Ct1"}"#, (
+    #[case::unchanged(r#"{:site 1 :ligands [0 3] :attrs "Ct1"}"#, (
         None, BondRef::Index(1),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
@@ -2066,7 +2068,7 @@ mod tests {
         ],
         EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
     ))]
-    #[case::remove(r#"{:remove {:site 1 :ligands [0 3] :type "Ct1"}}"#, (
+    #[case::remove(r#"{:remove {:site 1 :ligands [0 3] :attrs "Ct1"}}"#, (
         None, BondRef::Index(1),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
@@ -2186,7 +2188,7 @@ mod tests {
         },
     )]
     #[case::dative_overlay(
-        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#,
+        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -2241,37 +2243,37 @@ mod tests {
     #[rstest]
     #[case::atom(r#"{:atoms [[:a "C"]]}"#, Entity::Atom(AtomId(0)), "a")]
     #[case::bond(
-        r#"{:atoms ["C" "C"] :bonds [{:id :b :atoms [0 1] :type :single}]}"#,
+        r#"{:atoms ["C" "C"] :bonds [{:id :b :atoms [0 1] :attrs :single}]}"#,
         Entity::Bond(BondId(0)),
         "b"
     )]
     #[case::dative_bond(
-        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d :donors [0] :acceptor 1 :type "1#R"}]}"#,
+        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d :donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         Entity::DativeBond(DativeBondId(0)),
         "d"
     )]
     #[case::aromatic_system(
-        r#"{:atoms ["C" "C"] :aromatic-systems [{:id :a :atoms [0 1] :type "*#e2"}]}"#,
+        r#"{:atoms ["C" "C"] :aromatic-systems [{:id :a :atoms [0 1] :attrs "*#e2"}]}"#,
         Entity::AromaticSystem(AromaticSystemId(0)),
         "a"
     )]
     #[case::multicenter_bond(
-        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m :atoms [0 1] :type "*#e2"}]}"#,
+        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]}"#,
         Entity::MulticenterBond(MulticenterBondId(0)),
         "m"
     )]
     #[case::noncovalent_bond(
-        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:id :n :atoms [0 1] :type "Hbd"}]}"#,
+        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]}"#,
         Entity::NoncovalentBond(NoncovalentBondId(0)),
         "n"
     )]
     #[case::stereo_atom(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :type "Th1"}]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
         Entity::StereoAtom(StereoAtomId(0)),
         "s",
     )]
     #[case::stereo_bond(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s :site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s :site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
         Entity::StereoBond(StereoBondId(0)),
         "s",
     )]
@@ -2329,13 +2331,13 @@ mod tests {
         ),
     )]
     #[case::side_local_dative_mismatch(
-        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#,
+        r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         ParseError::InvalidValue(
             "reaction span entries reference unavailable atom 1".to_string()
         ),
     )]
     #[case::side_local_stereo_bond_mismatch(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
         ParseError::InvalidValue(
             "reaction span entries reference unavailable bond 2".to_string()
         ),
@@ -2451,7 +2453,7 @@ mod tests {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::Bond(BondId(0)), "b1").unwrap();
         metadata
-    }, "{:id :b1 :atoms [0 1] :type :single}")]
+    }, "{:id :b1 :atoms [0 1] :attrs :single}")]
     #[case::aromatic(EntitySpan::Unchanged(BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))), MoleculeMetadata::new(), "[0 1 :aromatic]")]
     fn test_render_bond_span_entry(
         #[case] span: EntitySpan<BondForm>,
@@ -2476,15 +2478,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:donors [0] :acceptor 1 :type "1#R"}"#)]
-    #[case::add(EntitySpan::Added(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:add {:donors [0] :acceptor 1 :type "1#R"}}"#)]
-    #[case::remove(EntitySpan::Removed(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:donors [0] :acceptor 1 :type "1#R"}}"#)]
-    #[case::modify(EntitySpan::Modified { lhs:DativeBondDsl::from_str("1#R").unwrap().0, rhs:DativeBondDsl::from_str("2#R").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:donors [0] :acceptor 1 :attrs "1#R"}"#)]
+    #[case::add(EntitySpan::Added(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:add {:donors [0] :acceptor 1 :attrs "1#R"}}"#)]
+    #[case::remove(EntitySpan::Removed(DativeBondDsl::from_str("1#R").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:donors [0] :acceptor 1 :attrs "1#R"}}"#)]
+    #[case::modify(EntitySpan::Modified { lhs:DativeBondDsl::from_str("1#R").unwrap().0, rhs:DativeBondDsl::from_str("2#R").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:donors [0] :acceptor 1 :attrs ["1#R" "2#R"]}}"#)]
     #[case::with_id(EntitySpan::Unchanged(DativeBondDsl::from_str("1#R").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::DativeBond(DativeBondId(0)), "d1").unwrap();
         metadata
-    }, r#"{:id :d1 :donors [0] :acceptor 1 :type "1#R"}"#)]
+    }, r#"{:id :d1 :donors [0] :acceptor 1 :attrs "1#R"}"#)]
     fn test_render_dative_span_entry(
         #[case] span: EntitySpan<DativeBondForm>,
         #[case] meta: MoleculeMetadata,
@@ -2497,14 +2499,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1 2] :type "*#e6"}"#)]
-    #[case::add(EntitySpan::Added(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1 2] :type "*#e6"}}"#)]
-    #[case::modify(EntitySpan::Modified { lhs:AromaticSystemDsl::from_str("*#e6").unwrap().0, rhs:AromaticSystemDsl::from_str("*#e2").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1 2] :type ["*#e6" "*#e2"]}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1 2] :attrs "*#e6"}"#)]
+    #[case::add(EntitySpan::Added(AromaticSystemDsl::from_str("*#e6").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1 2] :attrs "*#e6"}}"#)]
+    #[case::modify(EntitySpan::Modified { lhs:AromaticSystemDsl::from_str("*#e6").unwrap().0, rhs:AromaticSystemDsl::from_str("*#e2").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1 2] :attrs ["*#e6" "*#e2"]}}"#)]
     #[case::with_id(EntitySpan::Unchanged(AromaticSystemDsl::from_str("*#e6").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::AromaticSystem(AromaticSystemId(0)), "ar1").unwrap();
         metadata
-    }, r#"{:id :ar1 :atoms [0 1 2] :type "*#e6"}"#)]
+    }, r#"{:id :ar1 :atoms [0 1 2] :attrs "*#e6"}"#)]
     fn test_render_aromatic_span_entry(
         #[case] span: EntitySpan<AromaticSystemForm>,
         #[case] meta: MoleculeMetadata,
@@ -2522,9 +2524,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :type "*#e2"}"#)]
-    #[case::remove(EntitySpan::Removed(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:atoms [0 1] :type "*#e2"}}"#)]
-    #[case::modify(EntitySpan::Modified { lhs:MulticenterBondDsl::from_str("*#e2").unwrap().0, rhs:MulticenterBondDsl::from_str("*#e4").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1] :type ["*#e2" "*#e4"]}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :attrs "*#e2"}"#)]
+    #[case::remove(EntitySpan::Removed(MulticenterBondDsl::from_str("*#e2").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:atoms [0 1] :attrs "*#e2"}}"#)]
+    #[case::modify(EntitySpan::Modified { lhs:MulticenterBondDsl::from_str("*#e2").unwrap().0, rhs:MulticenterBondDsl::from_str("*#e4").unwrap().0 }, MoleculeMetadata::new(), r#"{:modify {:atoms [0 1] :attrs ["*#e2" "*#e4"]}}"#)]
     fn test_render_multicenter_span_entry(
         #[case] span: EntitySpan<MulticenterBondForm>,
         #[case] meta: MoleculeMetadata,
@@ -2542,13 +2544,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :type "Hbd"}"#)]
-    #[case::add(EntitySpan::Added(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1] :type "Hbd"}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:atoms [0 1] :attrs "Hbd"}"#)]
+    #[case::add(EntitySpan::Added(NoncovalentBondDsl::from_str("Hbd").unwrap().0), MoleculeMetadata::new(), r#"{:add {:atoms [0 1] :attrs "Hbd"}}"#)]
     #[case::with_id(EntitySpan::Unchanged(NoncovalentBondDsl::from_str("Hbd").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::NoncovalentBond(NoncovalentBondId(0)), "nc1").unwrap();
         metadata
-    }, r#"{:id :nc1 :atoms [0 1] :type "Hbd"}"#)]
+    }, r#"{:id :nc1 :atoms [0 1] :attrs "Hbd"}"#)]
     fn test_render_noncovalent_span_entry(
         #[case] span: EntitySpan<NoncovalentBondForm>,
         #[case] meta: MoleculeMetadata,
@@ -2566,13 +2568,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:site 0 :ligands [1 2 3 4] :type :cw}"#)]
-    #[case::add(EntitySpan::Added(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:add {:site 0 :ligands [1 2 3 4] :type :cw}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:site 0 :ligands [1 2 3 4] :attrs :cw}"#)]
+    #[case::add(EntitySpan::Added(StereoAtomDsl::from_str("Th1").unwrap().0), MoleculeMetadata::new(), r#"{:add {:site 0 :ligands [1 2 3 4] :attrs :cw}}"#)]
     #[case::with_id(EntitySpan::Unchanged(StereoAtomDsl::from_str("Th1").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::StereoAtom(StereoAtomId(0)), "s1").unwrap();
         metadata
-    }, r#"{:id :s1 :site 0 :ligands [1 2 3 4] :type :cw}"#)]
+    }, r#"{:id :s1 :site 0 :ligands [1 2 3 4] :attrs :cw}"#)]
     fn test_render_stereo_atom_span_entry(
         #[case] span: EntitySpan<StereoAtomForm>,
         #[case] meta: MoleculeMetadata,
@@ -2591,13 +2593,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:site 1 :ligands [0 3] :type :e}"#)]
-    #[case::remove(EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:site 1 :ligands [0 3] :type :e}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:site 1 :ligands [0 3] :attrs :e}"#)]
+    #[case::remove(EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:site 1 :ligands [0 3] :attrs :e}}"#)]
     #[case::with_id(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::StereoBond(StereoBondId(0)), "sb1").unwrap();
         metadata
-    }, r#"{:id :sb1 :site 1 :ligands [0 3] :type :e}"#)]
+    }, r#"{:id :sb1 :site 1 :ligands [0 3] :attrs :e}"#)]
     fn test_render_stereo_bond_span_entry(
         #[case] span: EntitySpan<StereoBondForm>,
         #[case] meta: MoleculeMetadata,
@@ -2621,23 +2623,23 @@ mod tests {
     #[case::constraint(r#"{:atoms ["C"] :constraints [{:connected {}} {:add {:connected {}}}]}"#)]
     #[case::aliases(r#"{:atoms [:nu {:add "O"}] :atom-aliases [:nu "C"]}"#)]
     #[case::atom_keyword(r#"{:atoms [[:c "C"]]}"#)]
-    #[case::bond_keyword(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :type :single}]}"#)]
+    #[case::bond_keyword(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :atoms [0 1] :attrs :single}]}"#)]
     #[case::dative(
-        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :type "1#R"}]}"#
+        r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1#R"}]}"#
     )]
     #[case::dative_add(
-        r#"{:atoms ["C" "N"] :dative-bonds [{:add {:donors [0] :acceptor 1 :type "1#R"}}]}"#
+        r#"{:atoms ["C" "N"] :dative-bonds [{:add {:donors [0] :acceptor 1 :attrs "1#R"}}]}"#
     )]
-    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}]}"#)]
-    #[case::aromatic_keyword(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
+    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :attrs ["1#R" "2#R"]}}]}"#)]
+    #[case::aromatic_keyword(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:id :a1 :atoms [0 1 2 3 4 5] :attrs "*#e6"}]}"#)]
     #[case::multicenter_keyword(
-        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1] :type "*#e2"}]}"#
+        r#"{:atoms ["C" "C"] :multicenter-bonds [{:id :m1 :atoms [0 1] :attrs "*#e2"}]}"#
     )]
     #[case::noncovalent(
-        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:id :n1 :atoms [0 1] :type "Hbd"}}]}"#
+        r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:id :n1 :atoms [0 1] :attrs "Hbd"}}]}"#
     )]
-    #[case::stereo_atom_keyword(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
-    #[case::stereo_bond_keyword(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s1 :site 1 :ligands [0 3] :type "Ct1"}]}"#)]
+    #[case::stereo_atom_keyword(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#)]
+    #[case::stereo_bond_keyword(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s1 :site 1 :ligands [0 3] :attrs "Ct1"}]}"#)]
     fn test_reaction_span_dsl_to_edn(#[case] input: &str) {
         let dsl = ReactionSpanDsl::from_str(input).unwrap();
         assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
@@ -2648,15 +2650,15 @@ mod tests {
     #[case::plain_molecule(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
     #[case::modify(r#"{:atoms ["C" "C"] :bonds [{:modify [0 1 [:single :double]]}]}"#)]
     #[case::add_remove(r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :single]}]}"#)]
-    #[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :type "1#R"}]}"#)]
-    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :type ["1#R" "2#R"]}}]}"#)]
-    #[case::aromatic(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "*#e6"}]}"#)]
+    #[case::dative(r#"{:atoms ["C" "N"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R"}]}"#)]
+    #[case::dative_modify(r#"{:atoms ["C" "N"] :dative-bonds [{:modify {:donors [0] :acceptor 1 :attrs ["1#R" "2#R"]}}]}"#)]
+    #[case::aromatic(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "*#e6"}]}"#)]
     #[case::multicenter(
-        r#"{:atoms ["C" "C"] :multicenter-bonds [{:add {:atoms [0 1] :type "*#e2"}}]}"#
+        r#"{:atoms ["C" "C"] :multicenter-bonds [{:add {:atoms [0 1] :attrs "*#e2"}}]}"#
     )]
-    #[case::noncovalent(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#)]
-    #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#)]
-    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#)]
+    #[case::noncovalent(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#)]
+    #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#)]
+    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#)]
     fn test_reaction_span_ast_to_edn(#[case] input: &str) {
         let ast = ReactionSpan::from_str(input).unwrap();
         assert_eq!(ReactionSpan::from_edn(&ast.to_edn()).unwrap(), ast);

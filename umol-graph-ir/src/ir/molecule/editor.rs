@@ -1804,8 +1804,8 @@ mod tests {
         let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "F" "Cl"]
                 :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
-                :stereo-atoms [{:site 0 :ligands [1 3 4] :type "Th1"}]
-                :stereo-bonds [{:site 1 :ligands [0 2] :type "Ct1"}]}"#
+                :stereo-atoms [{:site 0 :ligands [1 3 4] :attrs "Th1"}]
+                :stereo-bonds [{:site 1 :ligands [0 2] :attrs "Ct1"}]}"#
         );
         assert_eq!(molecule.edit().build(), molecule);
     }
@@ -1822,7 +1822,7 @@ mod tests {
         let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "F" "Cl" "Br"]
                 :bonds [[1 2 "1"] [1 3 "1"] [1 4 "1"]]
-                :stereo-atoms [{:site 1 :ligands [2 3 4] :type "Th1"}]}"#
+                :stereo-atoms [{:site 1 :ligands [2 3 4] :attrs "Th1"}]}"#
         );
         let mut editor = molecule.edit();
         editor.remove(&remove_atoms, &[]);
@@ -1847,7 +1847,7 @@ mod tests {
         let molecule = mol_dsl!(
             r#"{:atoms ["C" "C" "C" "C"]
                 :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-                :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
+                :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#
         );
         let mut editor = molecule.edit();
         editor.remove(&[], &remove_bonds);
