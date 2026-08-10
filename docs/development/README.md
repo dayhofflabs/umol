@@ -10,6 +10,8 @@ rule changes and carry neither dates nor implementation status.
   transformation, representation ownership and crate layering, provenance, fallibility, and public
   contract review.
 - [Nomenclature](nomenclature.md) defines repository-specific terms and public naming conventions.
+- [Python API](python-api.md) defines ownership, mutability, view, editor, conversion, and nested
+  value contracts for the Python bindings.
 - [Property tests](property-tests.md) defines executable-specification, evidence, documentation,
   and property-suite organization policy.
 
