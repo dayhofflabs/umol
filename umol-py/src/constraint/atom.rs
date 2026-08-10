@@ -413,7 +413,7 @@ impl AtomConstraintKey {
 
 /// An atom-scope constraint: a predicate on a valence, degree, ring, or stereo
 /// property of a single atom.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum AtomConstraintForm {
     Valence(Py<NumForm>),
     TotalValence(Py<NumForm>),
@@ -1192,23 +1192,27 @@ impl AtomConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrAtomConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            AtomConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            AtomConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .atom_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             AtomConstraintsBacking::Atom(atom) => {
-                f(&mut atom.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut atom.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing atom in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrAtomConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrAtomConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing atom in place, returning the removed entry.
@@ -1216,7 +1220,7 @@ impl AtomConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrAtomConstraintKey,
-    ) -> Option<GraphIrAtomConstraintForm> {
+    ) -> PyResult<Option<GraphIrAtomConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -1230,8 +1234,8 @@ impl AtomConstraintsView {
 
     /// Insert `c` on the atom in place, replacing any existing entry of the same
     /// key (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<AtomConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<AtomConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the atom in place, returning it if
@@ -1241,7 +1245,7 @@ impl AtomConstraintsView {
         py: Python<'_>,
         key: Py<AtomConstraintKey>,
     ) -> PyResult<Option<AtomConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust(py))
+        self.remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .map(|c| AtomConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -1249,7 +1253,7 @@ impl AtomConstraintsView {
     /// Remove the entry with the given key; raises `KeyError` if absent.
     pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<AtomConstraintKey>) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust(py))
+            .remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .is_some()
         {
             Ok(())
@@ -1266,8 +1270,7 @@ impl AtomConstraintsView {
     /// view aliasing the same atom is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: AtomConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1352,8 +1355,8 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_valence(&self, py: Python<'_>, value: NumLike) {
-        self.set_ast(py, GraphIrAtomConstraintForm::valence(value.to_rust(py)));
+    pub(crate) fn set_valence(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.set_ast(py, GraphIrAtomConstraintForm::valence(value.to_rust(py)))
     }
 
     /// The donated-pairs value, or `None`.
@@ -1367,11 +1370,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_donated_pairs(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_donated_pairs(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::donated_pairs(value.to_rust(py)),
-        );
+        )
     }
 
     /// The accepted-pairs value, or `None`.
@@ -1385,11 +1388,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_accepted_pairs(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_accepted_pairs(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::accepted_pairs(value.to_rust(py)),
-        );
+        )
     }
 
     /// The aromatic-valence state, or `None`.
@@ -1411,8 +1414,7 @@ impl AtomConstraintsView {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::aromatic_valence(value.to_rust(py)?),
-        );
-        Ok(())
+        )
     }
 
     /// The multicenter-valence state, or `None`.
@@ -1437,8 +1439,7 @@ impl AtomConstraintsView {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::multicenter_valence(value.to_rust(py)?),
-        );
-        Ok(())
+        )
     }
 
     /// The tetrahedral-stereo state, or `None`.
@@ -1463,8 +1464,7 @@ impl AtomConstraintsView {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::tetrahedral_stereo(value.to_rust(py)?),
-        );
-        Ok(())
+        )
     }
 
     /// The degree value, or `None`.
@@ -1476,8 +1476,8 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_degree(&self, py: Python<'_>, value: NumLike) {
-        self.set_ast(py, GraphIrAtomConstraintForm::degree(value.to_rust(py)));
+    pub(crate) fn set_degree(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.set_ast(py, GraphIrAtomConstraintForm::degree(value.to_rust(py)))
     }
 
     /// The total-degree value, or `None`.
@@ -1491,11 +1491,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_degree(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_total_degree(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::total_degree(value.to_rust(py)),
-        );
+        )
     }
 
     /// The total-valence value, or `None`.
@@ -1509,11 +1509,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_valence(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_total_valence(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::total_valence(value.to_rust(py)),
-        );
+        )
     }
 
     /// The ring-degree value, or `None`.
@@ -1527,11 +1527,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_degree(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_ring_degree(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::ring_degree(value.to_rust(py)),
-        );
+        )
     }
 
     /// The ring-valence value, or `None`.
@@ -1545,11 +1545,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_valence(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_ring_valence(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::ring_valence(value.to_rust(py)),
-        );
+        )
     }
 
     /// The total-hydrogens value, or `None`.
@@ -1563,11 +1563,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_total_hydrogens(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_total_hydrogens(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::total_hydrogens(value.to_rust(py)),
-        );
+        )
     }
 
     /// The all-rings membership count, or `None`.
@@ -1581,11 +1581,11 @@ impl AtomConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAtomConstraintForm::ring_membership(GraphIrRingScope::All, value.to_rust(py)),
-        );
+        )
     }
 
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
@@ -1651,7 +1651,11 @@ impl AtomRingSizeCounts {
     }
 
     /// Mutate the backing constraints in place through `f`.
-    pub(crate) fn write(&self, py: Python<'_>, f: impl FnOnce(&mut GraphIrAtomConstraintsForm)) {
+    pub(crate) fn write(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut GraphIrAtomConstraintsForm),
+    ) -> PyResult<()> {
         match &self.backing {
             AtomRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
@@ -1659,9 +1663,12 @@ impl AtomRingSizeCounts {
                 .atom_mut(*id)
                 .attributes
                 .constraints),
-            AtomRingSizeBacking::Atom(atom) => f(&mut atom.borrow_mut(py).inner_mut().constraints),
+            AtomRingSizeBacking::Atom(atom) => {
+                f(&mut atom.borrow_mut(py).try_inner_mut()?.constraints)
+            }
             AtomRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
+        Ok(())
     }
 }
 
@@ -1694,21 +1701,21 @@ impl AtomRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) -> PyResult<()> {
         let constraint = GraphIrAtomConstraintForm::ring_membership(
             GraphIrRingScope::Size(size),
             count.to_rust(py),
         );
-        self.write(py, |cs| cs.set(constraint));
+        self.write(py, |cs| cs.set(constraint))
     }
 
     /// Remove the sized-ring membership for `size` in place.
-    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) {
+    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) -> PyResult<()> {
         self.write(py, |cs| {
             cs.remove(GraphIrAtomConstraintKey::RingMembership(
                 GraphIrRingScope::Size(size),
             ));
-        });
+        })
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

@@ -2882,7 +2882,7 @@ mod tests {
 
             assert_eq!(
                 reaction.__repr__(py).unwrap(),
-                "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), deltas=Deltas([Delta.Atom(AtomDelta.Add(id=1, ast=AtomForm.parse('O')))]))"
+                "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), deltas=Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm.parse('O')))]))"
             );
         });
     }

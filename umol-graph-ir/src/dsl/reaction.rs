@@ -4011,12 +4011,12 @@ mod tests {
     #[rstest]
     fn test_reaction_input_into_ast_constraint_remove() {
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:remove {:connected {}}}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
             ))]),
@@ -4028,12 +4028,12 @@ mod tests {
         // The constraint ref :o names an atom added in the same reaction (AtomId(1)), resolved
         // against the unified context.
         let input = r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:constraint {:add {:atom [:o {:valence 2}]}}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
@@ -4052,12 +4052,12 @@ mod tests {
         // A structural bond ref ({:atoms [0 1]}) names the lhs bond by its endpoints, resolved
         // against the context's participant lookup.
         let input = r##"{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:bond [{:atoms [0 1]} {:aromatic true}]}}}]}"##;
-        let (ast, _) = parse_reaction_input(&read_string(input).unwrap())
+        let (reaction, _) = parse_reaction_input(&read_string(input).unwrap())
             .unwrap()
             .into_ir()
             .unwrap();
         assert_eq!(
-            ast.deltas,
+            reaction.deltas,
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
                 BondId(0),
                 BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
@@ -4452,9 +4452,9 @@ mod tests {
     #[case::molecule_constraint(r##"{:lhs {:atoms ["C" "N"] :bonds [[0 1 "1"]]} :deltas [{:constraint {:add {:connected {}}}}]}"##)]
     #[case::entity_leaf_constraint(r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}} {:constraint {:add {:atom [1 {:valence 2}]}}}]}"##)]
     fn test_reaction_ast_to_edn(#[case] input: &str) {
-        let ast = Reaction::from_edn(&read_string(input).unwrap()).unwrap();
-        let reparsed = Reaction::from_edn(&ast.to_edn()).unwrap();
-        assert_eq!(reparsed, ast);
+        let reaction = Reaction::from_edn(&read_string(input).unwrap()).unwrap();
+        let reparsed = Reaction::from_edn(&reaction.to_edn()).unwrap();
+        assert_eq!(reparsed, reaction);
     }
 
     #[rstest]

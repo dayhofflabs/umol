@@ -26,6 +26,7 @@ use crate::constraint::noncovalent::{
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsUpdate,
 };
 use crate::convert::{hash_rust, variant_repr};
+use crate::entity_form::{EntityForm, EntityFormValue};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -220,7 +221,7 @@ impl NoncovalentBondUpdate {
 /// not part of the value.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct NoncovalentBondForm(GraphIrNoncovalentBondForm);
+pub struct NoncovalentBondForm(EntityFormValue<GraphIrNoncovalentBondForm>);
 
 #[pymethods]
 impl NoncovalentBondForm {
@@ -237,14 +238,14 @@ impl NoncovalentBondForm {
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
-        NoncovalentBondForm(bond)
+        NoncovalentBondForm::from_inner(bond)
     }
 
     /// Parse a noncovalent-bond-DSL string (e.g. `"Hbd#I"`) into a `NoncovalentBondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrNoncovalentBondForm::from_str(s)
-            .map(Self)
+            .map(Self::from_inner)
             .map_err(parse_error)
     }
 
@@ -263,8 +264,9 @@ impl NoncovalentBondForm {
     }
 
     #[setter]
-    fn set_kind(&mut self, py: Python<'_>, value: NoncovalentBondKindLike) {
-        self.0.kind = value.to_rust(py);
+    fn set_kind(&mut self, py: Python<'_>, value: NoncovalentBondKindLike) -> PyResult<()> {
+        self.try_inner_mut()?.kind = value.to_rust(py);
+        Ok(())
     }
 
     /// The bond's constraints as a live handle onto this bond: reads borrow the
@@ -287,8 +289,17 @@ impl NoncovalentBondForm {
         value: NoncovalentBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).0.constraints = snapshot;
+        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
         Ok(())
+    }
+
+    #[getter]
+    fn readonly(&self) -> bool {
+        self.0.is_readonly()
+    }
+
+    fn copy(&self) -> Self {
+        Self::from_inner(self.inner().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -306,18 +317,28 @@ impl NoncovalentBondForm {
 impl NoncovalentBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondForm {
-        &self.0
+        self.0.value()
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrNoncovalentBondForm {
-        &mut self.0
+    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrNoncovalentBondForm> {
+        self.0.value_mut()
     }
 
     /// Wrap an owned Rust noncovalent-bond AST.
     pub(crate) fn from_inner(bond: GraphIrNoncovalentBondForm) -> Self {
-        NoncovalentBondForm(bond)
+        NoncovalentBondForm(EntityFormValue::writable(bond))
+    }
+}
+
+impl EntityForm for NoncovalentBondForm {
+    type RustForm = GraphIrNoncovalentBondForm;
+    fn clone_rust(&self) -> Self::RustForm {
+        self.inner().clone()
+    }
+    fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
+        Py::new(py, Self(EntityFormValue::readonly(value)))
     }
 }
 
@@ -1009,7 +1030,8 @@ mod tests {
             bond.set_kind(
                 py,
                 NoncovalentBondKindLike::Kind(NoncovalentBondKind::Ionic),
-            );
+            )
+            .unwrap();
             assert_eq!(
                 bond.kind().to_rust(),
                 GraphIrNoncovalentBondKindForm::Lit(GraphIrNoncovalentBondKind::Ionic)
@@ -1103,7 +1125,7 @@ mod tests {
         Python::attach(|py| {
             let bond = hbond(py);
             let view = NoncovalentBondForm::constraints(bond.clone_ref(py));
-            view.set(py, intramolecular(py, true));
+            view.set(py, intramolecular(py, true)).unwrap();
             // the write hit the standalone bond, not a copy
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
@@ -1139,7 +1161,7 @@ mod tests {
             let view = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
             };
-            view.set(py, intramolecular(py, true));
+            view.set(py, intramolecular(py, true)).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Noncovalent(bond),
@@ -1242,7 +1264,7 @@ mod tests {
             let view = NoncovalentBondConstraintsView {
                 backing: NoncovalentBondConstraintsBacking::Noncovalent(bond.clone_ref(py)),
             };
-            view.set_intramolecular(py, BooleanLike::Lit(true));
+            view.set_intramolecular(py, BooleanLike::Lit(true)).unwrap();
             assert_eq!(
                 bond.bind(py).borrow().inner().constraints.intramolecular(),
                 GraphIrBooleanForm::Lit(true)
@@ -1319,7 +1341,8 @@ mod tests {
             };
             // the constraints handle is molecule-backed; a write goes through to the bond
             view.constraints(py)
-                .set_intramolecular(py, BooleanLike::Lit(true));
+                .set_intramolecular(py, BooleanLike::Lit(true))
+                .unwrap();
             assert_eq!(
                 owner
                     .bind(py)

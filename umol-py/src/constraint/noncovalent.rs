@@ -64,7 +64,7 @@ impl NoncovalentBondConstraintKey {
 
 /// A noncovalent-bond-scope constraint: whether the bond is intramolecular (a boolean
 /// value; `Undetermined` when unspecified).
-#[pyclass]
+#[pyclass(frozen)]
 pub enum NoncovalentBondConstraintForm {
     Intramolecular(Py<BooleanForm>),
 }
@@ -594,23 +594,27 @@ impl NoncovalentBondConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrNoncovalentBondConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            NoncovalentBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            NoncovalentBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .noncovalent_bond_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             NoncovalentBondConstraintsBacking::Noncovalent(bond) => {
-                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrNoncovalentBondConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrNoncovalentBondConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -618,7 +622,7 @@ impl NoncovalentBondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrNoncovalentBondConstraintKey,
-    ) -> Option<GraphIrNoncovalentBondConstraintForm> {
+    ) -> PyResult<Option<GraphIrNoncovalentBondConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -632,8 +636,8 @@ impl NoncovalentBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<NoncovalentBondConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -643,7 +647,7 @@ impl NoncovalentBondConstraintsView {
         py: Python<'_>,
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<Option<NoncovalentBondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust())
+        self.remove_ast(py, key.bind(py).borrow().to_rust())?
             .map(|c| NoncovalentBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -655,7 +659,7 @@ impl NoncovalentBondConstraintsView {
         key: Py<NoncovalentBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust())
+            .remove_ast(py, key.bind(py).borrow().to_rust())?
             .is_some()
         {
             Ok(())
@@ -678,8 +682,7 @@ impl NoncovalentBondConstraintsView {
         // the same bond (`bond.constraints.update(bond.constraints)`) reads while the
         // bond is unborrowed instead of self-aliasing into a double-borrow panic.
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -763,11 +766,11 @@ impl NoncovalentBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanLike) {
+    pub(crate) fn set_intramolecular(&self, py: Python<'_>, value: BooleanLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrNoncovalentBondConstraintForm::intramolecular(value.to_rust(py)),
-        );
+        )
     }
 
     /// The present constraints as a dict keyed by snake_case name.

@@ -15,6 +15,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::hash_rust;
 use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
+use crate::entity_form::{EntityForm, EntityFormValue};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -114,7 +115,7 @@ impl AromaticSystemUpdate {
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AromaticSystemForm(GraphIrAromaticSystemForm);
+pub struct AromaticSystemForm(EntityFormValue<GraphIrAromaticSystemForm>);
 
 #[pymethods]
 impl AromaticSystemForm {
@@ -139,14 +140,14 @@ impl AromaticSystemForm {
         if let Some(constraints) = constraints {
             system.constraints = constraints.bind(py).borrow().inner().clone();
         }
-        AromaticSystemForm(system)
+        AromaticSystemForm::from_inner(system)
     }
 
     /// Parse an aromatic-system-DSL string (e.g. `"[1,1,1]#e6"`) into an `AromaticSystemForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrAromaticSystemForm::from_str(s)
-            .map(Self)
+            .map(Self::from_inner)
             .map_err(parse_error)
     }
 
@@ -165,8 +166,9 @@ impl AromaticSystemForm {
     }
 
     #[setter]
-    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) {
-        self.0.electrons = value.to_rust(py);
+    fn set_electrons(&mut self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
+        self.try_inner_mut()?.electrons = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -175,8 +177,9 @@ impl AromaticSystemForm {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
-        self.0.charge = value.to_rust(py);
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.try_inner_mut()?.charge = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -185,8 +188,13 @@ impl AromaticSystemForm {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
-        self.0.unpaired_electrons = value.to_rust(py);
+    fn set_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        self.try_inner_mut()?.unpaired_electrons = value.to_rust(py);
+        Ok(())
     }
 
     /// The system's constraints as a live handle onto this system: reads borrow the
@@ -207,8 +215,17 @@ impl AromaticSystemForm {
         value: AromaticSystemConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).0.constraints = snapshot;
+        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
         Ok(())
+    }
+
+    #[getter]
+    fn readonly(&self) -> bool {
+        self.0.is_readonly()
+    }
+
+    fn copy(&self) -> Self {
+        Self::from_inner(self.inner().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -228,18 +245,28 @@ impl AromaticSystemForm {
 impl AromaticSystemForm {
     /// The wrapped AST system — read access for the system-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrAromaticSystemForm {
-        &self.0
+        self.0.value()
     }
 
     /// Mutable access to the wrapped AST system — write access for the system-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrAromaticSystemForm {
-        &mut self.0
+    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrAromaticSystemForm> {
+        self.0.value_mut()
     }
 
     /// Wrap an owned Rust aromatic-system AST.
     pub(crate) fn from_inner(system: GraphIrAromaticSystemForm) -> Self {
-        AromaticSystemForm(system)
+        AromaticSystemForm(EntityFormValue::writable(system))
+    }
+}
+
+impl EntityForm for AromaticSystemForm {
+    type RustForm = GraphIrAromaticSystemForm;
+    fn clone_rust(&self) -> Self::RustForm {
+        self.inner().clone()
+    }
+    fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
+        Py::new(py, Self(EntityFormValue::readonly(value)))
     }
 }
 
@@ -678,7 +705,9 @@ mod tests {
                 system.electrons().to_rust(),
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
-            system.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]));
+            system
+                .set_electrons(py, ElectronCountsLike::Lit(vec![2, 2]))
+                .unwrap();
             assert_eq!(
                 system.electrons().to_rust(),
                 GraphIrElectronCountsForm::Lit(vec![2, 2])
@@ -693,7 +722,7 @@ mod tests {
                 AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
-            system.set_charge(py, NumLike::Lit(-1));
+            system.set_charge(py, NumLike::Lit(-1)).unwrap();
             assert_eq!(
                 system.charge(py).unwrap().to_rust(py),
                 GraphIrNumForm::Lit(-1)
@@ -714,7 +743,9 @@ mod tests {
                 AromaticSystemForm::from_inner(GraphIrAromaticSystemForm::from_electrons(vec![
                     1, 1, 1,
                 ]));
-            system.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
+            system
+                .set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
+                .unwrap();
             assert_eq!(
                 system.unpaired_electrons(py).unwrap().to_rust(py),
                 unpaired_electrons_form
@@ -1562,7 +1593,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, ec);
+            view.set(py, ec).unwrap();
             // a fresh view proves the write hit the standalone system, not a copy
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
@@ -1658,7 +1689,7 @@ mod tests {
                 view.electron_count(py).unwrap().to_rust(py),
                 GraphIrNumForm::Undetermined
             );
-            view.set_electron_count(py, NumLike::Lit(6));
+            view.set_electron_count(py, NumLike::Lit(6)).unwrap();
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::AromaticSystem(system),
             };
@@ -1688,7 +1719,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, ec);
+            view.set(py, ec).unwrap();
             let fresh = AromaticSystemConstraintsView {
                 backing: AromaticSystemConstraintsBacking::Molecule {
                     owner,

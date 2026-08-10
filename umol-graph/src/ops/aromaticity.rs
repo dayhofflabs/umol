@@ -25,7 +25,7 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AtomId, AtomView,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, AtomView,
     BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig,
     RingModel, RingSetKind, TransactionError,
 };
@@ -195,8 +195,8 @@ impl AromaticityPerception {
         if ast.atoms().iter().any(|atom| {
             matches!(
                 atom.attributes.constraints.aromatic_valence(),
-                Some(AromaticValenceForm::Aromatic(value))
-                    if !matches!(value, NumForm::Lit(_))
+                Some(AromaticValenceForm::Aromatic(valence))
+                    if valence.as_lit().is_none()
             )
         }) || ast.aromatic_systems().iter().any(|system| {
             matches!(
@@ -209,14 +209,14 @@ impl AromaticityPerception {
 
         let systems = match self.find_systems(ast, config, |atom| {
             match atom.attributes.constraints.aromatic_valence() {
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(value))) => {
-                    u8::try_from(*value).ok()
+                Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
+                    u8::try_from(*valence).ok()
                 }
                 Some(AromaticValenceForm::Aromatic(_)) | Some(AromaticValenceForm::NotAromatic) => {
                     None
                 }
                 Some(AromaticValenceForm::Undetermined) | None => match atom.aromatic_valence() {
-                    NumForm::Lit(value) => u8::try_from(value).ok(),
+                    NumForm::Lit(valence) => u8::try_from(valence).ok(),
                     _ => None,
                 },
             }

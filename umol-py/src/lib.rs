@@ -148,6 +148,8 @@ mod electrons;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
+mod entity_form;
+#[cfg(feature = "graph")]
 mod error;
 #[cfg(feature = "graph")]
 mod fingerprint;

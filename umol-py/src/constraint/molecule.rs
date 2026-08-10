@@ -29,7 +29,7 @@ use crate::value::NumForm;
 
 /// A cross-entity molecule constraint covering dative bonds, aromatic systems,
 /// multicenter bonds, noncovalent bonds, stereo atoms, and stereo bonds.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum RelationalConstraint {
     DativeBondDonors(u32, Vec<u32>),
     DativeBondDonor(u32, u32),
@@ -65,7 +65,7 @@ pub enum RelationalConstraint {
 }
 
 /// A molecule-scope predicate over values or connectivity.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum MoleculeConstraint {
     ChargeSum(Option<Vec<u32>>, Py<NumForm>),
     #[pyo3(constructor = (atoms, unpaired_electrons))]
@@ -79,7 +79,7 @@ pub enum MoleculeConstraint {
 
 /// A recursive molecule-constraint tree containing entity leaves, aggregate
 /// leaves, and Boolean combinators.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum Constraint {
     Atom(u32, Py<AtomConstraintForm>),
     Bond(u32, Py<BondConstraintForm>),

@@ -78,7 +78,7 @@ impl DativeBondConstraintKey {
 
 /// A dative-bond-scope constraint: the aromatic flag or a ring membership of a
 /// single dative bond.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum DativeBondConstraintForm {
     Aromatic(Py<BooleanForm>),
     RingMembership(Py<RingMembershipForm>),
@@ -567,23 +567,27 @@ impl DativeBondConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrDativeBondConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            DativeBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            DativeBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .dative_bond_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             DativeBondConstraintsBacking::DativeBond(bond) => {
-                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrDativeBondConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrDativeBondConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -591,7 +595,7 @@ impl DativeBondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrDativeBondConstraintKey,
-    ) -> Option<GraphIrDativeBondConstraintForm> {
+    ) -> PyResult<Option<GraphIrDativeBondConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -605,8 +609,8 @@ impl DativeBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<DativeBondConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<DativeBondConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -616,7 +620,7 @@ impl DativeBondConstraintsView {
         py: Python<'_>,
         key: Py<DativeBondConstraintKey>,
     ) -> PyResult<Option<DativeBondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust(py))
+        self.remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .map(|c| DativeBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -628,7 +632,7 @@ impl DativeBondConstraintsView {
         key: Py<DativeBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust(py))
+            .remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .is_some()
         {
             Ok(())
@@ -649,8 +653,7 @@ impl DativeBondConstraintsView {
         other: DativeBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -734,11 +737,11 @@ impl DativeBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) {
+    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrDativeBondConstraintForm::aromatic(value.to_rust(py)),
-        );
+        )
     }
 
     /// The all-rings membership count, or `None`.
@@ -752,14 +755,14 @@ impl DativeBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrDativeBondConstraintForm::ring_membership(
                 GraphIrRingScope::All,
                 value.to_rust(py),
             ),
-        );
+        )
     }
 
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
@@ -836,7 +839,7 @@ impl DativeBondRingSizeCounts {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrDativeBondConstraintsForm),
-    ) {
+    ) -> PyResult<()> {
         match &self.backing {
             DativeBondRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
@@ -845,10 +848,11 @@ impl DativeBondRingSizeCounts {
                 .attributes
                 .constraints),
             DativeBondRingSizeBacking::DativeBond(bond) => {
-                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+                f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints)
             }
             DativeBondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
+        Ok(())
     }
 }
 
@@ -881,21 +885,21 @@ impl DativeBondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) -> PyResult<()> {
         let constraint = GraphIrDativeBondConstraintForm::ring_membership(
             GraphIrRingScope::Size(size),
             count.to_rust(py),
         );
-        self.write(py, |cs| cs.set(constraint));
+        self.write(py, |cs| cs.set(constraint))
     }
 
     /// Remove the sized-ring membership for `size` in place.
-    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) {
+    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) -> PyResult<()> {
         self.write(py, |cs| {
             cs.remove(GraphIrDativeBondConstraintKey::RingMembership(
                 GraphIrRingScope::Size(size),
             ));
-        });
+        })
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

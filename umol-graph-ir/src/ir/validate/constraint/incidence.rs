@@ -27,54 +27,54 @@ impl IncidenceConstraintValidator {
     /// Validate every inline incidence constraint in entity order.
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let mut bond_components = None;
         let mut any_underdetermined = false;
 
-        for id in ast.atoms().ids() {
+        for id in molecule.atoms().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_atom(ast, id)?,
+                self.validate_molecule_atom(molecule, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for id in ast.bonds().ids() {
+        for id in molecule.bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_bond(ast, id)?,
+                self.validate_molecule_bond(molecule, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for id in ast.dative_bonds().ids() {
+        for id in molecule.dative_bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_dative_bond(ast, id)?,
+                self.validate_molecule_dative_bond(molecule, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for id in ast.aromatic_systems().ids() {
+        for id in molecule.aromatic_systems().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_aromatic_system(ast, id)?,
+                self.validate_molecule_aromatic_system(molecule, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for id in ast.multicenter_bonds().ids() {
+        for id in molecule.multicenter_bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_multicenter_bond(ast, id)?,
+                self.validate_molecule_multicenter_bond(molecule, id)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
             }
         }
-        for id in ast.noncovalent_bonds().ids() {
-            let bond = ast.noncovalent_bond(id);
+        for id in molecule.noncovalent_bonds().ids() {
+            let bond = molecule.noncovalent_bond(id);
             let [a, b] = bond.atom_ids();
             let intramolecular = if bond
                 .constraints()
@@ -82,14 +82,14 @@ impl IncidenceConstraintValidator {
                 .any(|constraint| !constraint.is_undetermined())
             {
                 let components = bond_components.get_or_insert_with(|| {
-                    bond_components_by_atom(ast, connected_components_algorithm)
+                    bond_components_by_atom(molecule, connected_components_algorithm)
                 });
                 components[a.index()] == components[b.index()]
             } else {
                 false
             };
             if let Some(contradiction) = observe(
-                validate_noncovalent_bond(ast, id, intramolecular),
+                validate_noncovalent_bond(molecule, id, intramolecular),
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -106,28 +106,28 @@ impl IncidenceConstraintValidator {
     /// Validate all inline incidence constraints on one molecule atom.
     pub fn validate_molecule_atom(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let atom = ast
+        let atom = molecule
             .atoms()
             .get(atom_id)
             .ok_or(ConstraintError::InvalidReference {
                 entity: Entity::Atom(atom_id),
             })?;
         Ok(conjunction(atom.constraints().iter().map(|constraint| {
-            validate_atom_constraint(ast, atom_id, constraint)
+            validate_atom_constraint(molecule, atom_id, constraint)
         })))
     }
 
     /// Validate one inline atom constraint selected by its container key.
     pub fn validate_molecule_atom_constraint(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         atom_id: AtomId,
         key: AtomConstraintKey,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let atom = ast
+        let atom = molecule
             .atoms()
             .get(atom_id)
             .ok_or(ConstraintError::InvalidReference {
@@ -137,35 +137,35 @@ impl IncidenceConstraintValidator {
             .constraints()
             .get(key)
             .map_or(Solution::Determined(()), |constraint| {
-                validate_atom_constraint(ast, atom_id, constraint)
+                validate_atom_constraint(molecule, atom_id, constraint)
             }))
     }
 
     /// Validate all inline incidence constraints on one molecule bond.
     pub fn validate_molecule_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: BondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let bond = ast
+        let bond = molecule
             .bonds()
             .get(bond_id)
             .ok_or(ConstraintError::InvalidReference {
                 entity: Entity::Bond(bond_id),
             })?;
         Ok(conjunction(bond.constraints().iter().filter_map(
-            |constraint| validate_bond_constraint(ast, bond_id, constraint),
+            |constraint| validate_bond_constraint(molecule, bond_id, constraint),
         )))
     }
 
     /// Validate one inline localized-bond constraint selected by its container key.
     pub fn validate_molecule_bond_constraint(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: BondId,
         key: BondConstraintKey,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let bond = ast
+        let bond = molecule
             .bonds()
             .get(bond_id)
             .ok_or(ConstraintError::InvalidReference {
@@ -174,70 +174,72 @@ impl IncidenceConstraintValidator {
         Ok(bond
             .constraints()
             .get(key)
-            .and_then(|constraint| validate_bond_constraint(ast, bond_id, constraint))
+            .and_then(|constraint| validate_bond_constraint(molecule, bond_id, constraint))
             .unwrap_or(Solution::Determined(())))
     }
 
     /// Validate all inline incidence constraints on one molecule dative bond.
     pub fn validate_molecule_dative_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: DativeBondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let bond = ast
-            .dative_bonds()
-            .get(bond_id)
-            .ok_or(ConstraintError::InvalidReference {
-                entity: Entity::DativeBond(bond_id),
-            })?;
+        let bond =
+            molecule
+                .dative_bonds()
+                .get(bond_id)
+                .ok_or(ConstraintError::InvalidReference {
+                    entity: Entity::DativeBond(bond_id),
+                })?;
         Ok(conjunction(bond.constraints().iter().filter_map(
-            |constraint| validate_dative_bond_constraint(ast, bond_id, constraint),
+            |constraint| validate_dative_bond_constraint(molecule, bond_id, constraint),
         )))
     }
 
     /// Validate all inline incidence constraints on one molecule aromatic system.
     pub fn validate_molecule_aromatic_system(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         system_id: AromaticSystemId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
-        let system =
-            ast.aromatic_systems()
-                .get(system_id)
-                .ok_or(ConstraintError::InvalidReference {
-                    entity: Entity::AromaticSystem(system_id),
-                })?;
+        let system = molecule.aromatic_systems().get(system_id).ok_or(
+            ConstraintError::InvalidReference {
+                entity: Entity::AromaticSystem(system_id),
+            },
+        )?;
         Ok(conjunction(system.constraints().iter().map(|constraint| {
-            validate_aromatic_system_constraint(ast, system_id, constraint)
+            validate_aromatic_system_constraint(molecule, system_id, constraint)
         })))
     }
 
     /// Validate all inline incidence constraints on one molecule multicenter bond.
     pub fn validate_molecule_multicenter_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: MulticenterBondId,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let bond =
-            ast.multicenter_bonds()
+            molecule
+                .multicenter_bonds()
                 .get(bond_id)
                 .ok_or(ConstraintError::InvalidReference {
                     entity: Entity::MulticenterBond(bond_id),
                 })?;
         Ok(conjunction(bond.constraints().iter().map(|constraint| {
-            validate_multicenter_bond_constraint(ast, bond_id, constraint)
+            validate_multicenter_bond_constraint(molecule, bond_id, constraint)
         })))
     }
 
     /// Validate all inline incidence constraints on one molecule noncovalent bond.
     pub fn validate_molecule_noncovalent_bond(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         bond_id: NoncovalentBondId,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
     ) -> Result<Solution<(), IncidenceConstraintContradiction>, ConstraintError> {
         let bond =
-            ast.noncovalent_bonds()
+            molecule
+                .noncovalent_bonds()
                 .get(bond_id)
                 .ok_or(ConstraintError::InvalidReference {
                     entity: Entity::NoncovalentBond(bond_id),
@@ -247,24 +249,24 @@ impl IncidenceConstraintValidator {
             .iter()
             .any(|constraint| !constraint.is_undetermined())
         {
-            let components = bond_components_by_atom(ast, connected_components_algorithm);
+            let components = bond_components_by_atom(molecule, connected_components_algorithm);
             let [a, b] = bond.atom_ids();
             components[a.index()] == components[b.index()]
         } else {
             false
         };
-        Ok(validate_noncovalent_bond(ast, bond_id, intramolecular))
+        Ok(validate_noncovalent_bond(molecule, bond_id, intramolecular))
     }
 }
 
 /// Validate one non-ring atom constraint against its incidence-derived value.
 /// Ring constraints are determined identities here.
 pub fn validate_atom_constraint(
-    ast: &Molecule,
+    molecule: &Molecule,
     atom_id: AtomId,
     constraint: &AtomConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let atom = ast.atom(atom_id);
+    let atom = molecule.atom(atom_id);
     match constraint {
         AtomConstraintForm::Valence(_) => evaluate(
             constraint,
@@ -408,11 +410,11 @@ pub enum IncidenceConstraintContradiction {
 }
 
 pub fn validate_bond_constraint(
-    ast: &Molecule,
+    molecule: &Molecule,
     bond_id: BondId,
     constraint: &BondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
-    let bond = ast.bond(bond_id);
+    let bond = molecule.bond(bond_id);
     Some(match constraint {
         BondConstraintForm::Aromatic(_) => evaluate(
             constraint,
@@ -444,11 +446,11 @@ pub fn validate_bond_constraint(
 }
 
 pub fn validate_dative_bond_constraint(
-    ast: &Molecule,
+    molecule: &Molecule,
     bond_id: DativeBondId,
     constraint: &DativeBondConstraintForm,
 ) -> Option<Solution<(), IncidenceConstraintContradiction>> {
-    let bond = ast.dative_bond(bond_id);
+    let bond = molecule.dative_bond(bond_id);
     Some(match constraint {
         DativeBondConstraintForm::Aromatic(_) if bond.donor_count() != 1 => {
             // Aromatic incidence is defined only for a binary dative bond pending the
@@ -480,12 +482,12 @@ pub fn validate_dative_bond_constraint(
 }
 
 pub fn validate_aromatic_system_constraint(
-    ast: &Molecule,
+    molecule: &Molecule,
     system_id: AromaticSystemId,
     constraint: &AromaticSystemConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
     let derived = AromaticSystemConstraintForm::electron_count(
-        ast.aromatic_system(system_id).electron_count(),
+        molecule.aromatic_system(system_id).electron_count(),
     );
     evaluate(
         constraint,
@@ -498,12 +500,12 @@ pub fn validate_aromatic_system_constraint(
 }
 
 pub fn validate_multicenter_bond_constraint(
-    ast: &Molecule,
+    molecule: &Molecule,
     bond_id: MulticenterBondId,
     constraint: &MulticenterBondConstraintForm,
 ) -> Solution<(), IncidenceConstraintContradiction> {
     let derived = MulticenterBondConstraintForm::electron_count(
-        ast.multicenter_bond(bond_id).electron_count(),
+        molecule.multicenter_bond(bond_id).electron_count(),
     );
     evaluate(
         constraint,
@@ -532,11 +534,11 @@ pub fn validate_noncovalent_bond_constraint(
 }
 
 fn validate_noncovalent_bond(
-    ast: &Molecule,
+    molecule: &Molecule,
     bond_id: NoncovalentBondId,
     intramolecular: bool,
 ) -> Solution<(), IncidenceConstraintContradiction> {
-    let bond = ast.noncovalent_bond(bond_id);
+    let bond = molecule.noncovalent_bond(bond_id);
     let mut any_underdetermined = false;
     for constraint in bond.constraints().iter() {
         if let Some(contradiction) = observe(
@@ -618,12 +620,12 @@ fn conjunction<C>(outcomes: impl IntoIterator<Item = Solution<(), C>>) -> Soluti
 }
 
 pub fn bond_components_by_atom(
-    ast: &Molecule,
+    molecule: &Molecule,
     algorithm: ConnectedComponentsAlgorithm,
 ) -> Vec<usize> {
-    let atom_count = ast.atoms().count();
+    let atom_count = molecule.atoms().count();
     let mut component_by_atom = vec![0; atom_count];
-    for (component, atoms) in ast
+    for (component, atoms) in molecule
         .graph()
         .enumerate_connected_components(algorithm)
         .into_iter()

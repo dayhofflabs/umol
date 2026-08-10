@@ -536,7 +536,7 @@ macro_rules! stereo_constraints {
 
         /// A stereo constraint: a ligand-symmetry, fluxionality, topicity, or stereogenicity
         /// predicate on a stereo atom / bond.
-        #[pyclass]
+        #[pyclass(frozen)]
         pub enum $constraint {
             LigandSymmetry(Py<LigandSymmetryForm>),
             Fluxionality(Py<FluxionalityForm>),
@@ -1013,16 +1013,16 @@ macro_rules! stereo_constraints {
                 &self,
                 py: Python<'_>,
                 f: impl FnOnce(&mut $ast_constraints) -> R,
-            ) -> R {
+            ) -> PyResult<R> {
                 match &self.backing {
-                    $backing::Molecule { owner, id } => f(&mut owner
+                    $backing::Molecule { owner, id } => Ok(f(&mut owner
                         .borrow_mut(py)
                         .inner_mut()
                         .$entity_mut(*id)
                         .attributes
-                        .constraints),
+                        .constraints)),
                     $backing::Value(entity) => {
-                        f(&mut entity.borrow_mut(py).inner_mut().constraints)
+                        Ok(f(&mut entity.borrow_mut(py).try_inner_mut()?.constraints))
                     }
                 }
             }
@@ -1037,9 +1037,9 @@ macro_rules! stereo_constraints {
 
             /// Insert `c` on the entity in place, replacing any existing entry of the same key
             /// (last-wins).
-            pub(crate) fn set(&self, py: Python<'_>, c: Py<$constraint>) {
+            pub(crate) fn set(&self, py: Python<'_>, c: Py<$constraint>) -> PyResult<()> {
                 let constraint = c.bind(py).borrow().to_rust(py);
-                self.with_mut(py, |cs| cs.set(constraint));
+                self.with_mut(py, |cs| cs.set(constraint))
             }
 
             /// Remove the entry with the given key, returning it if present (dict `pop`).
@@ -1049,7 +1049,7 @@ macro_rules! stereo_constraints {
                 key: Py<$key>,
             ) -> PyResult<Option<$constraint>> {
                 let ast_key = key.bind(py).borrow().to_rust(py);
-                self.with_mut(py, |cs| cs.remove(ast_key))
+                self.with_mut(py, |cs| cs.remove(ast_key))?
                     .map(|c| $constraint::from_rust(py, &c))
                     .transpose()
             }
@@ -1057,7 +1057,7 @@ macro_rules! stereo_constraints {
             /// Remove the entry with the given key; raises `KeyError` if absent.
             pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<$key>) -> PyResult<()> {
                 let ast_key = key.bind(py).borrow().to_rust(py);
-                if self.with_mut(py, |cs| cs.remove(ast_key)).is_some() {
+                if self.with_mut(py, |cs| cs.remove(ast_key))?.is_some() {
                     Ok(())
                 } else {
                     Err(PyKeyError::new_err(
@@ -1071,8 +1071,7 @@ macro_rules! stereo_constraints {
             /// entries remove). Resolves `other` before the write borrow (self-alias safe).
             pub(crate) fn update(&self, py: Python<'_>, other: $update) -> PyResult<()> {
                 let resolved = other.resolve(py)?;
-                self.with_mut(py, |cs| resolved.apply(cs));
-                Ok(())
+                self.with_mut(py, |cs| resolved.apply(cs))
             }
 
             pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {

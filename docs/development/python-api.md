@@ -134,6 +134,13 @@ Construction of an immutable owner must not retain a mutable Python alias that c
 owner. Convert mutable inputs to the owner's immutable representation at the construction boundary.
 This is an ownership rule, not semantic validation; validation follows the data-type contracts.
 
+Entity forms are ordinarily writable owned objects. When an entity form is stored in an immutable
+delta, construction clones its value into a form instance whose `readonly` property is true. The
+state cannot be changed in place, getters retain that same read-only instance, and field and
+constraint mutation raise `TypeError`. `copy`, `canonicalize`, `meet`, and `join` produce ordinary
+writable forms. Individual delta variants are immutable; `Deltas` provides only append-only
+container mutation.
+
 Use `*Like` argument adapters for accepted alternate input representations. A `*Like` type is an
 argument boundary and is not exposed as the stored or returned type.
 

@@ -64,7 +64,7 @@ impl MulticenterBondConstraintKey {
 
 /// A multicenter-bond-scope constraint: the asserted total electron count of the
 /// bond (cross-checked against `sum(MulticenterBondForm::electrons)`).
-#[pyclass]
+#[pyclass(frozen)]
 pub enum MulticenterBondConstraintForm {
     ElectronCount(Py<NumForm>),
 }
@@ -536,23 +536,27 @@ impl MulticenterBondConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            MulticenterBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .multicenter_bond_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
-                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrMulticenterBondConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrMulticenterBondConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -560,7 +564,7 @@ impl MulticenterBondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrMulticenterBondConstraintKey,
-    ) -> Option<GraphIrMulticenterBondConstraintForm> {
+    ) -> PyResult<Option<GraphIrMulticenterBondConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -574,8 +578,8 @@ impl MulticenterBondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<MulticenterBondConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -585,7 +589,7 @@ impl MulticenterBondConstraintsView {
         py: Python<'_>,
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<Option<MulticenterBondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust())
+        self.remove_ast(py, key.bind(py).borrow().to_rust())?
             .map(|c| MulticenterBondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -597,7 +601,7 @@ impl MulticenterBondConstraintsView {
         key: Py<MulticenterBondConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust())
+            .remove_ast(py, key.bind(py).borrow().to_rust())?
             .is_some()
         {
             Ok(())
@@ -618,8 +622,7 @@ impl MulticenterBondConstraintsView {
         other: MulticenterBondConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -703,11 +706,11 @@ impl MulticenterBondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrMulticenterBondConstraintForm::electron_count(value.to_rust(py)),
-        );
+        )
     }
 
     /// The present constraints as a dict keyed by snake_case name.

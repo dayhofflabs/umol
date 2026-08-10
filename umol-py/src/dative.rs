@@ -21,6 +21,7 @@ use crate::constraint::dative::{
     DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsUpdate,
 };
 use crate::convert::hash_rust;
+use crate::entity_form::{EntityForm, EntityFormValue};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -100,7 +101,7 @@ impl DativeBondUpdate {
 /// A dative bond: order and bond-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct DativeBondForm(GraphIrDativeBondForm);
+pub struct DativeBondForm(EntityFormValue<GraphIrDativeBondForm>);
 
 #[pymethods]
 impl DativeBondForm {
@@ -117,14 +118,14 @@ impl DativeBondForm {
         if let Some(constraints) = constraints {
             bond.constraints = constraints.bind(py).borrow().inner().clone();
         }
-        DativeBondForm(bond)
+        DativeBondForm::from_inner(bond)
     }
 
     /// Parse a dative-bond-DSL string (e.g. `"1#R(6)"`) into a `DativeBondForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
         GraphIrDativeBondForm::from_str(s)
-            .map(Self)
+            .map(Self::from_inner)
             .map_err(parse_error)
     }
 
@@ -142,8 +143,9 @@ impl DativeBondForm {
     }
 
     #[setter]
-    fn set_order(&mut self, py: Python<'_>, value: NumLike) {
-        self.0.order = value.to_rust(py);
+    fn set_order(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.try_inner_mut()?.order = value.to_rust(py);
+        Ok(())
     }
 
     /// The dative bond's constraints as a live handle onto this bond: reads borrow
@@ -164,8 +166,17 @@ impl DativeBondForm {
         value: DativeBondConstraintsLike,
     ) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).0.constraints = snapshot;
+        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
         Ok(())
+    }
+
+    #[getter]
+    fn readonly(&self) -> bool {
+        self.0.is_readonly()
+    }
+
+    fn copy(&self) -> Self {
+        Self::from_inner(self.inner().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -183,18 +194,30 @@ impl DativeBondForm {
 impl DativeBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrDativeBondForm {
-        &self.0
+        self.0.value()
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrDativeBondForm {
-        &mut self.0
+    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrDativeBondForm> {
+        self.0.value_mut()
     }
 
     /// Wrap an owned Rust dative-bond AST.
     pub(crate) fn from_inner(bond: GraphIrDativeBondForm) -> Self {
-        DativeBondForm(bond)
+        DativeBondForm(EntityFormValue::writable(bond))
+    }
+}
+
+impl EntityForm for DativeBondForm {
+    type RustForm = GraphIrDativeBondForm;
+
+    fn clone_rust(&self) -> Self::RustForm {
+        self.inner().clone()
+    }
+
+    fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
+        Py::new(py, Self(EntityFormValue::readonly(value)))
     }
 }
 
@@ -518,9 +541,10 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_form_constraints() {
-        let bond = DativeBondForm(GraphIrDativeBondForm::from_order(1).with_constraint(
-            GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
-        ));
+        let bond =
+            DativeBondForm::from_inner(GraphIrDativeBondForm::from_order(1).with_constraint(
+                GraphIrDativeBondConstraintForm::aromatic(GraphIrBooleanForm::Lit(true)),
+            ));
         assert_eq!(bond.inner().constraints.len(), 1);
     }
 
@@ -1214,7 +1238,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, aromatic);
+            view.set(py, aromatic).unwrap();
             // a fresh view proves the write hit the standalone bond, not a copy
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
@@ -1315,7 +1339,7 @@ mod tests {
                 view.aromatic(py).unwrap().to_rust(),
                 GraphIrBooleanForm::Undetermined
             );
-            view.set_aromatic(py, BooleanLike::Lit(true));
+            view.set_aromatic(py, BooleanLike::Lit(true)).unwrap();
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
@@ -1331,12 +1355,12 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsForm::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsForm::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, NumLike::Lit(3));
+            proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
-            proxy.__delitem__(py, 6);
+            proxy.__delitem__(py, 6).unwrap();
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
         });
     }
@@ -1352,7 +1376,9 @@ mod tests {
             let view = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond.clone_ref(py)),
             };
-            view.ring_size_count(py).__setitem__(py, 5, NumLike::Lit(1));
+            view.ring_size_count(py)
+                .__setitem__(py, 5, NumLike::Lit(1))
+                .unwrap();
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::DativeBond(bond),
             };
@@ -1373,8 +1399,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, DativeBondConstraintsForm::new(py, vec![])).unwrap();
             let proxy = DativeBondConstraintsForm::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, NumLike::Lit(3));
-            proxy.__setitem__(py, 5, NumLike::Lit(1));
+            proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
+            proxy.__setitem__(py, 5, NumLike::Lit(1)).unwrap();
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());
@@ -1407,7 +1433,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, aromatic);
+            view.set(py, aromatic).unwrap();
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::Molecule {
                     owner,
@@ -1432,7 +1458,9 @@ mod tests {
                     id: GraphIrDativeBondId(0),
                 },
             };
-            view.ring_size_count(py).__setitem__(py, 6, NumLike::Lit(1));
+            view.ring_size_count(py)
+                .__setitem__(py, 6, NumLike::Lit(1))
+                .unwrap();
             let fresh = DativeBondConstraintsView {
                 backing: DativeBondConstraintsBacking::Molecule {
                     owner,

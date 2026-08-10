@@ -27,16 +27,16 @@ pub struct MoleculeConstraintContradiction {
 impl MoleculeConstraintValidator {
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         constraint: &MoleculeConstraint,
         config: ConstraintValidateConfig,
     ) -> Result<Solution<(), MoleculeConstraintContradiction>, ConstraintError> {
         let determined = match constraint {
             MoleculeConstraint::ChargeSum { atoms, sum } => {
-                let atoms = atom_subset(ast, atoms.as_deref())?;
+                let atoms = atom_subset(molecule, atoms.as_deref())?;
                 let derived = atoms
                     .into_iter()
-                    .map(|atom| ast.atom(atom).charge())
+                    .map(|atom| molecule.atom(atom).charge())
                     .fold(NumForm::Lit(0), |sum, charge| sum + charge);
                 return Ok(evaluate(sum, &derived, constraint));
             }
@@ -44,7 +44,7 @@ impl MoleculeConstraintValidator {
                 atoms,
                 unpaired_electrons,
             } => {
-                atom_subset(ast, atoms.as_deref())?;
+                atom_subset(molecule, atoms.as_deref())?;
                 if unpaired_electrons.is_undetermined() {
                     true
                 } else {
@@ -52,16 +52,16 @@ impl MoleculeConstraintValidator {
                 }
             }
             MoleculeConstraint::BondOrderSum { bonds, sum } => {
-                let bonds = bond_subset(ast, bonds.as_deref())?;
+                let bonds = bond_subset(molecule, bonds.as_deref())?;
                 let derived = bonds
                     .into_iter()
-                    .map(|bond| ast.bond(bond).order())
+                    .map(|bond| molecule.bond(bond).order())
                     .fold(NumForm::Lit(0), |sum, order| sum + order);
                 return Ok(evaluate(sum, &derived, constraint));
             }
             MoleculeConstraint::Connected { atoms } => {
-                let atoms = atom_subset(ast, atoms.as_deref())?;
-                connected(ast, &atoms, config.connected_components_algorithm)
+                let atoms = atom_subset(molecule, atoms.as_deref())?;
+                connected(molecule, &atoms, config.connected_components_algorithm)
             }
         };
 

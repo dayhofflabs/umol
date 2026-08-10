@@ -64,7 +64,7 @@ impl AromaticSystemConstraintKey {
 
 /// An aromatic-system-scope constraint: the asserted total π-electron count of the
 /// system (cross-checked against `sum(AromaticSystemForm::electrons)`).
-#[pyclass]
+#[pyclass(frozen)]
 pub enum AromaticSystemConstraintForm {
     ElectronCount(Py<NumForm>),
 }
@@ -526,23 +526,27 @@ impl AromaticSystemConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrAromaticSystemConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .aromatic_system_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
-                f(&mut system.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut system.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing system in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrAromaticSystemConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrAromaticSystemConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing system in place, returning the removed entry.
@@ -550,7 +554,7 @@ impl AromaticSystemConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrAromaticSystemConstraintKey,
-    ) -> Option<GraphIrAromaticSystemConstraintForm> {
+    ) -> PyResult<Option<GraphIrAromaticSystemConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -564,8 +568,8 @@ impl AromaticSystemConstraintsView {
 
     /// Insert `c` on the system in place, replacing any existing entry of the same key
     /// (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<AromaticSystemConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the system in place, returning it if
@@ -575,7 +579,7 @@ impl AromaticSystemConstraintsView {
         py: Python<'_>,
         key: Py<AromaticSystemConstraintKey>,
     ) -> PyResult<Option<AromaticSystemConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust())
+        self.remove_ast(py, key.bind(py).borrow().to_rust())?
             .map(|c| AromaticSystemConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -587,7 +591,7 @@ impl AromaticSystemConstraintsView {
         key: Py<AromaticSystemConstraintKey>,
     ) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust())
+            .remove_ast(py, key.bind(py).borrow().to_rust())?
             .is_some()
         {
             Ok(())
@@ -608,8 +612,7 @@ impl AromaticSystemConstraintsView {
         other: AromaticSystemConstraintsUpdate,
     ) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -693,11 +696,11 @@ impl AromaticSystemConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_electron_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrAromaticSystemConstraintForm::electron_count(value.to_rust(py)),
-        );
+        )
     }
 
     /// The present constraints as a dict keyed by snake_case name.

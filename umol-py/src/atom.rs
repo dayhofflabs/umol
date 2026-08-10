@@ -21,6 +21,7 @@ use crate::constraint::atom::{
 };
 use crate::convert::{hash_rust, variant_repr};
 use crate::element::Element;
+use crate::entity_form::{EntityForm, EntityFormValue};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -367,7 +368,7 @@ impl AtomUpdate {
 /// electrons, and atom-scope constraints.
 #[pyclass(eq)]
 #[derive(PartialEq)]
-pub struct AtomForm(GraphIrAtomForm);
+pub struct AtomForm(EntityFormValue<GraphIrAtomForm>);
 
 #[pymethods]
 impl AtomForm {
@@ -387,7 +388,7 @@ impl AtomForm {
         constraints: Option<Py<AtomConstraintsForm>>,
     ) -> Self {
         let atom = GraphIrAtomForm::new(element.to_rust(py));
-        AtomForm(apply_fields(
+        AtomForm::from_inner(apply_fields(
             atom,
             py,
             isotope_mass,
@@ -402,7 +403,9 @@ impl AtomForm {
     /// Parse an atom-DSL string (e.g. `"C#c-1#v4"`) into an `AtomForm`.
     #[staticmethod]
     fn parse(s: &str) -> PyResult<Self> {
-        GraphIrAtomForm::from_str(s).map(Self).map_err(parse_error)
+        GraphIrAtomForm::from_str(s)
+            .map(Self::from_inner)
+            .map_err(parse_error)
     }
 
     fn __str__(&self) -> String {
@@ -419,8 +422,9 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_element(&mut self, py: Python<'_>, value: ElementLike) {
-        self.0.element = value.to_rust(py);
+    fn set_element(&mut self, py: Python<'_>, value: ElementLike) -> PyResult<()> {
+        self.try_inner_mut()?.element = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -429,8 +433,9 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassLike) {
-        self.0.isotope_mass = value.to_rust(py);
+    fn set_isotope_mass(&mut self, py: Python<'_>, value: IsotopeMassLike) -> PyResult<()> {
+        self.try_inner_mut()?.isotope_mass = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -439,8 +444,9 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_charge(&mut self, py: Python<'_>, value: NumLike) {
-        self.0.charge = value.to_rust(py);
+    fn set_charge(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.try_inner_mut()?.charge = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -449,8 +455,9 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: NumLike) {
-        self.0.implicit_hydrogens = value.to_rust(py);
+    fn set_implicit_hydrogens(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.try_inner_mut()?.implicit_hydrogens = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -459,8 +466,9 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_lone_pairs(&mut self, py: Python<'_>, value: NumLike) {
-        self.0.lone_pairs = value.to_rust(py);
+    fn set_lone_pairs(&mut self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        self.try_inner_mut()?.lone_pairs = value.to_rust(py);
+        Ok(())
     }
 
     #[getter]
@@ -469,8 +477,13 @@ impl AtomForm {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&mut self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
-        self.0.unpaired_electrons = value.to_rust(py);
+    fn set_unpaired_electrons(
+        &mut self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        self.try_inner_mut()?.unpaired_electrons = value.to_rust(py);
+        Ok(())
     }
 
     /// The atom's constraints as a live handle onto this atom: reads borrow the
@@ -489,8 +502,19 @@ impl AtomForm {
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: AtomConstraintsLike) -> PyResult<()> {
         let snapshot = value.to_rust(py)?;
-        slf.borrow_mut(py).0.constraints = snapshot;
+        slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
         Ok(())
+    }
+
+    /// Whether this Python form is retained as a read-only delta value.
+    #[getter]
+    fn readonly(&self) -> bool {
+        self.0.is_readonly()
+    }
+
+    /// Return an independent writable copy.
+    fn copy(&self) -> Self {
+        Self::from_inner(self.inner().clone())
     }
 
     /// The fields as a dict keyed by field name; values are Python objects.
@@ -591,19 +615,31 @@ fn apply_fields(
 impl AtomForm {
     /// The wrapped AST atom — read access for molecule construction.
     pub(crate) fn inner(&self) -> &GraphIrAtomForm {
-        &self.0
+        self.0.value()
     }
 
     /// Mutable access to the wrapped AST atom — write access for the atom-backed
     /// constraints view.
-    pub(crate) fn inner_mut(&mut self) -> &mut GraphIrAtomForm {
-        &mut self.0
+    pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrAtomForm> {
+        self.0.value_mut()
     }
 
     /// Wrap an AST atom (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
     pub(crate) fn from_inner(atom: GraphIrAtomForm) -> Self {
-        AtomForm(atom)
+        AtomForm(EntityFormValue::writable(atom))
+    }
+}
+
+impl EntityForm for AtomForm {
+    type RustForm = GraphIrAtomForm;
+
+    fn clone_rust(&self) -> Self::RustForm {
+        self.inner().clone()
+    }
+
+    fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
+        Py::new(py, Self(EntityFormValue::readonly(value)))
     }
 }
 
@@ -1148,7 +1184,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_form_constraints() {
-        let atom = AtomForm(
+        let atom = AtomForm::from_inner(
             GraphIrAtomForm::from_element(ChemElement::C)
                 .with_constraint(GraphIrAtomConstraintForm::valence(4)),
         );
@@ -1544,7 +1580,7 @@ mod tests {
                 AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
-            view.set(py, valence);
+            view.set(py, valence).unwrap();
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
                     owner,
@@ -1661,7 +1697,7 @@ mod tests {
                 AtomConstraintForm::from_rust(py, &GraphIrAtomConstraintForm::valence(4)).unwrap(),
             )
             .unwrap();
-            view.set(py, valence);
+            view.set(py, valence).unwrap();
             // a fresh view proves the write hit the standalone atom, not a copy
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Atom(atom),
@@ -1861,12 +1897,12 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, NumLike::Lit(3));
+            proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
             assert_eq!(
                 proxy.__getitem__(py, 6).unwrap().unwrap().to_rust(py),
                 GraphIrNumForm::Lit(3)
             );
-            proxy.__delitem__(py, 6);
+            proxy.__delitem__(py, 6).unwrap();
             assert!(proxy.__getitem__(py, 6).unwrap().is_none());
         });
     }
@@ -1888,7 +1924,9 @@ mod tests {
                     id: GraphIrAtomId(0),
                 },
             };
-            view.ring_size_count(py).__setitem__(py, 5, NumLike::Lit(1));
+            view.ring_size_count(py)
+                .__setitem__(py, 5, NumLike::Lit(1))
+                .unwrap();
             let fresh = AtomConstraintsView {
                 backing: AtomConstraintsBacking::Molecule {
                     owner,
@@ -2022,8 +2060,8 @@ mod tests {
         Python::attach(|py| {
             let constraints = Py::new(py, AtomConstraintsForm::new(py, vec![])).unwrap();
             let proxy = AtomConstraintsForm::ring_size_count(constraints.clone_ref(py));
-            proxy.__setitem__(py, 6, NumLike::Lit(3));
-            proxy.__setitem__(py, 5, NumLike::Lit(1));
+            proxy.__setitem__(py, 6, NumLike::Lit(3)).unwrap();
+            proxy.__setitem__(py, 5, NumLike::Lit(1)).unwrap();
             assert_eq!(proxy.__len__(py).unwrap(), 2);
             assert!(proxy.__contains__(py, 6).unwrap());
             assert!(!proxy.__contains__(py, 4).unwrap());

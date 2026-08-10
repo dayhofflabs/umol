@@ -35,6 +35,7 @@ use umol_graph_ir::ir::{
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::entity_form::{EntityForm, EntityFormValue};
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -1175,13 +1176,13 @@ macro_rules! stereo_value {
     (@from_inner production, $value:ident, $ast_value:ident) => {
         /// Wrap an owned Rust stereo-entity AST.
         pub(crate) fn from_inner(value: $ast_value) -> Self {
-            $value(value)
+            $value(EntityFormValue::writable(value))
         }
     };
     (@from_inner test, $value:ident, $ast_value:ident) => {
         #[cfg(test)]
         pub(crate) fn from_inner(value: $ast_value) -> Self {
-            $value(value)
+            $value(EntityFormValue::writable(value))
         }
     };
     (
@@ -1189,7 +1190,7 @@ macro_rules! stereo_value {
         $view:ident, $backing:ident, $from_inner:ident $(,)?
     ) => {
         #[pyclass]
-        pub struct $value($ast_value);
+        pub struct $value(EntityFormValue<$ast_value>);
 
         #[pymethods]
         impl $value {
@@ -1205,7 +1206,7 @@ macro_rules! stereo_value {
                 let constraints = constraints
                     .map(|c| c.bind(py).borrow().inner().clone())
                     .unwrap_or_default();
-                $value($ast_value {
+                $value::from_inner($ast_value {
                     configuration: configuration.to_rust(py),
                     constraints,
                 })
@@ -1214,7 +1215,7 @@ macro_rules! stereo_value {
             /// Parse a stereo-DSL string (e.g. `"Th0"`) into the value.
             #[staticmethod]
             fn parse(s: &str) -> PyResult<Self> {
-                $ast_value::from_str(s).map(Self).map_err(parse_error)
+                $ast_value::from_str(s).map(Self::from_inner).map_err(parse_error)
             }
 
             fn __str__(&self) -> String {
@@ -1232,8 +1233,9 @@ macro_rules! stereo_value {
             }
 
             #[setter]
-            fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationLike) {
-                self.0.configuration = value.to_rust(py);
+            fn set_configuration(&mut self, py: Python<'_>, value: StereoConfigurationLike) -> PyResult<()> {
+                self.try_inner_mut()?.configuration = value.to_rust(py);
+                Ok(())
             }
 
             /// The entity's constraints as a live handle onto this entity: reads borrow the
@@ -1252,9 +1254,14 @@ macro_rules! stereo_value {
             #[setter]
             fn set_constraints(slf: Py<Self>, py: Python<'_>, value: $like) -> PyResult<()> {
                 let snapshot = value.to_rust(py)?;
-                slf.borrow_mut(py).0.constraints = snapshot;
+                slf.borrow_mut(py).try_inner_mut()?.constraints = snapshot;
                 Ok(())
             }
+
+            #[getter]
+            fn readonly(&self) -> bool { self.0.is_readonly() }
+
+            fn copy(&self) -> Self { Self::from_inner(self.inner().clone()) }
 
             /// The fields as a dict: `configuration` plus a `constraints` list of the entries.
             fn asdict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -1274,15 +1281,25 @@ macro_rules! stereo_value {
         impl $value {
             /// The wrapped AST entity — read access for the entity-backed constraints view.
             pub(crate) fn inner(&self) -> &$ast_value {
-                &self.0
+                self.0.value()
             }
 
             /// Mutable access to the wrapped AST entity — write access for the view.
-            pub(crate) fn inner_mut(&mut self) -> &mut $ast_value {
-                &mut self.0
+            pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut $ast_value> {
+                self.0.value_mut()
             }
 
             stereo_value!(@from_inner $from_inner, $value, $ast_value);
+        }
+
+        impl EntityForm for $value {
+            type RustForm = $ast_value;
+
+            fn clone_rust(&self) -> Self::RustForm { self.inner().clone() }
+
+            fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
+                Py::new(py, Self(EntityFormValue::readonly(value)))
+            }
         }
 
         impl_py_lattice!(
@@ -2611,7 +2628,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, stereogenicity);
+            view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
@@ -2845,7 +2862,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, stereogenicity);
+            view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
@@ -2941,7 +2958,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.set(py, stereogenicity);
+            view.set(py, stereogenicity).unwrap();
             assert_eq!(
                 value.borrow(py).inner().constraints.stereogenicity(),
                 GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic)
@@ -3072,10 +3089,12 @@ mod tests {
                 GraphIrStereoKind::Tetrahedral,
                 GraphIrStereoCoset::Lit(0),
             ));
-            value.set_configuration(
-                py,
-                StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
-            );
+            value
+                .set_configuration(
+                    py,
+                    StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
+                )
+                .unwrap();
             assert_eq!(
                 value.inner().configuration,
                 GraphIrStereoConfigurationForm::Kinded(
@@ -3370,7 +3389,7 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-            view.constraints(py).set(py, stereogenicity);
+            view.constraints(py).set(py, stereogenicity).unwrap();
             // a fresh molecule-backed handle proves the write hit the molecule
             assert_eq!(
                 view.constraints(py).stereogenicity(py).unwrap().to_rust(),

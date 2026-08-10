@@ -29,12 +29,12 @@ pub struct RelationalConstraintContradiction {
 impl RelationalConstraintValidator {
     pub fn validate(
         &self,
-        ast: &Molecule,
+        molecule: &Molecule,
         constraint: &RelationalConstraint,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     ) -> Result<Solution<(), RelationalConstraintContradiction>, ConstraintError> {
         let rings = uses_ring_predicate(constraint).then(|| {
-            ast.rings(
+            molecule.rings(
                 RingModel::default(),
                 RingConfig {
                     relevant_cycle_algorithm,
@@ -46,66 +46,66 @@ impl RelationalConstraintValidator {
 
         let truth = match constraint {
             RelationalConstraint::DativeBondDonors { bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(atom_set(view.donor_ids()) == atom_set(atoms.iter().copied()))
             }
             RelationalConstraint::DativeBondDonor { bond, atom } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.donor_ids().any(|candidate| candidate == *atom))
             }
             RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(
                     atom_set(view.donor_ids()).is_superset(&atom_set(atoms.iter().copied())),
                 )
             }
             RelationalConstraint::DativeBondAllDonors { bond, predicate } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                all_atoms(ast, view.donor_ids(), predicate, rings)
+                all_atoms(molecule, view.donor_ids(), predicate, rings)
             }
             RelationalConstraint::DativeBondAnyDonor { bond, predicate } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                any_atom(ast, view.donor_ids(), predicate, rings)
+                any_atom(molecule, view.donor_ids(), predicate, rings)
             }
             RelationalConstraint::DativeBondAcceptor { bond, atom } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.acceptor_id() == *atom)
             }
             RelationalConstraint::DativeBondAcceptorSatisfies { bond, predicate } => {
-                let view = ast
+                let view = molecule
                     .dative_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*bond)))?;
-                evaluate_atom(ast, view.acceptor_id(), predicate, rings)
+                evaluate_atom(molecule, view.acceptor_id(), predicate, rings)
             }
             RelationalConstraint::DativeBondParallels { dative, parallel } => {
-                let dative_view = ast
+                let dative_view = molecule
                     .dative_bonds()
                     .get(*dative)
                     .ok_or_else(|| invalid_reference(Entity::DativeBond(*dative)))?;
-                let parallel_view = ast
+                let parallel_view = molecule
                     .bonds()
                     .get(*parallel)
                     .ok_or_else(|| invalid_reference(Entity::Bond(*parallel)))?;
@@ -115,134 +115,134 @@ impl RelationalConstraintValidator {
                 }))
             }
             RelationalConstraint::AromaticSystemAtoms { system, atoms } => {
-                let view = ast
+                let view = molecule
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(atom_set(view.atom_ids()) == atom_set(atoms.iter().copied()))
             }
             RelationalConstraint::AromaticSystemContains { system, atom } => {
-                let view = ast
+                let view = molecule
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.atom_ids().any(|candidate| candidate == *atom))
             }
             RelationalConstraint::AromaticSystemContainsAll { system, atoms } => {
-                let view = ast
+                let view = molecule
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(
                     atom_set(view.atom_ids()).is_superset(&atom_set(atoms.iter().copied())),
                 )
             }
             RelationalConstraint::AromaticSystemAllAtoms { system, predicate } => {
-                let view = ast
+                let view = molecule
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                all_atoms(ast, view.atom_ids(), predicate, rings)
+                all_atoms(molecule, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::AromaticSystemAnyAtom { system, predicate } => {
-                let view = ast
+                let view = molecule
                     .aromatic_systems()
                     .get(*system)
                     .ok_or_else(|| invalid_reference(Entity::AromaticSystem(*system)))?;
-                any_atom(ast, view.atom_ids(), predicate, rings)
+                any_atom(molecule, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::MulticenterBondAtoms { bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(atom_set(view.atom_ids()) == atom_set(atoms.iter().copied()))
             }
             RelationalConstraint::MulticenterBondContains { bond, atom } => {
-                let view = ast
+                let view = molecule
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.atom_ids().any(|candidate| candidate == *atom))
             }
             RelationalConstraint::MulticenterBondContainsAll { bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(
                     atom_set(view.atom_ids()).is_superset(&atom_set(atoms.iter().copied())),
                 )
             }
             RelationalConstraint::MulticenterBondAllAtoms { bond, predicate } => {
-                let view = ast
+                let view = molecule
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                all_atoms(ast, view.atom_ids(), predicate, rings)
+                all_atoms(molecule, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::MulticenterBondAnyAtom { bond, predicate } => {
-                let view = ast
+                let view = molecule
                     .multicenter_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::MulticenterBond(*bond)))?;
-                any_atom(ast, view.atom_ids(), predicate, rings)
+                any_atom(molecule, view.atom_ids(), predicate, rings)
             }
             RelationalConstraint::NoncovalentBondEnds { bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .noncovalent_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::NoncovalentBond(*bond)))?;
-                require_atoms(ast, *atoms)?;
+                require_atoms(molecule, *atoms)?;
                 Truth::from_bool(unordered_pair(view.atom_ids()) == unordered_pair(*atoms))
             }
             RelationalConstraint::NoncovalentBondContains { bond, atom } => {
-                let view = ast
+                let view = molecule
                     .noncovalent_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::NoncovalentBond(*bond)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.atom_ids().contains(atom))
             }
             RelationalConstraint::NoncovalentBondEndsSatisfy { bond, predicates } => {
-                let view = ast
+                let view = molecule
                     .noncovalent_bonds()
                     .get(*bond)
                     .ok_or_else(|| invalid_reference(Entity::NoncovalentBond(*bond)))?;
                 let [first, second] = view.atom_ids();
                 all_truth([
-                    evaluate_atom(ast, first, &predicates[0], rings),
-                    evaluate_atom(ast, second, &predicates[1], rings),
+                    evaluate_atom(molecule, first, &predicates[0], rings),
+                    evaluate_atom(molecule, second, &predicates[1], rings),
                 ])
             }
             RelationalConstraint::StereoAtomSite { stereo_atom, atom } => {
-                let view = ast
+                let view = molecule
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.site_id() == *atom)
             }
             RelationalConstraint::StereoAtomContains { stereo_atom, atom } => {
-                let view = ast
+                let view = molecule
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.atom_ligand_ids().any(|candidate| candidate == *atom))
             }
             RelationalConstraint::StereoAtomLigands { stereo_atom, atoms } => {
-                let view = ast
+                let view = molecule
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(
                     atom_set(view.atom_ligand_ids()) == atom_set(atoms.iter().copied()),
                 )
@@ -251,44 +251,44 @@ impl RelationalConstraintValidator {
                 stereo_atom,
                 predicate,
             } => {
-                let view = ast
+                let view = molecule
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                all_atoms(ast, view.atom_ligand_ids(), predicate, rings)
+                all_atoms(molecule, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoAtomAnyLigand {
                 stereo_atom,
                 predicate,
             } => {
-                let view = ast
+                let view = molecule
                     .stereo_atoms()
                     .get(*stereo_atom)
                     .ok_or_else(|| invalid_reference(Entity::StereoAtom(*stereo_atom)))?;
-                any_atom(ast, view.atom_ligand_ids(), predicate, rings)
+                any_atom(molecule, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoBondSite { stereo_bond, bond } => {
-                let view = ast
+                let view = molecule
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                require_entity(ast, Entity::Bond(*bond))?;
+                require_entity(molecule, Entity::Bond(*bond))?;
                 Truth::from_bool(view.site_id() == *bond)
             }
             RelationalConstraint::StereoBondContains { stereo_bond, atom } => {
-                let view = ast
+                let view = molecule
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                require_entity(ast, Entity::Atom(*atom))?;
+                require_entity(molecule, Entity::Atom(*atom))?;
                 Truth::from_bool(view.atom_ligand_ids().any(|candidate| candidate == *atom))
             }
             RelationalConstraint::StereoBondLigands { stereo_bond, atoms } => {
-                let view = ast
+                let view = molecule
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                require_atoms(ast, atoms.iter().copied())?;
+                require_atoms(molecule, atoms.iter().copied())?;
                 Truth::from_bool(
                     atom_set(view.atom_ligand_ids()) == atom_set(atoms.iter().copied()),
                 )
@@ -297,21 +297,21 @@ impl RelationalConstraintValidator {
                 stereo_bond,
                 predicate,
             } => {
-                let view = ast
+                let view = molecule
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                all_atoms(ast, view.atom_ligand_ids(), predicate, rings)
+                all_atoms(molecule, view.atom_ligand_ids(), predicate, rings)
             }
             RelationalConstraint::StereoBondAnyLigand {
                 stereo_bond,
                 predicate,
             } => {
-                let view = ast
+                let view = molecule
                     .stereo_bonds()
                     .get(*stereo_bond)
                     .ok_or_else(|| invalid_reference(Entity::StereoBond(*stereo_bond)))?;
-                any_atom(ast, view.atom_ligand_ids(), predicate, rings)
+                any_atom(molecule, view.atom_ligand_ids(), predicate, rings)
             }
         };
 
@@ -343,7 +343,7 @@ impl Truth {
 }
 
 fn evaluate_atom(
-    ast: &Molecule,
+    molecule: &Molecule,
     atom_id: AtomId,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'_>>,
@@ -372,7 +372,7 @@ fn evaluate_atom(
             Truth::False
         }
     } else {
-        truth_from_solution(validate_atom_constraint(ast, atom_id, predicate))
+        truth_from_solution(validate_atom_constraint(molecule, atom_id, predicate))
     }
 }
 
@@ -385,7 +385,7 @@ fn truth_from_solution<C>(outcome: Solution<(), C>) -> Truth {
 }
 
 fn all_atoms<'a>(
-    ast: &'a Molecule,
+    molecule: &'a Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
@@ -393,12 +393,12 @@ fn all_atoms<'a>(
     all_truth(
         atoms
             .into_iter()
-            .map(|atom| evaluate_atom(ast, atom, predicate, rings)),
+            .map(|atom| evaluate_atom(molecule, atom, predicate, rings)),
     )
 }
 
 fn any_atom<'a>(
-    ast: &'a Molecule,
+    molecule: &'a Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
     predicate: &AtomConstraintForm,
     rings: Option<&RingViews<'a>>,
@@ -406,7 +406,7 @@ fn any_atom<'a>(
     let mut any_underdetermined = false;
     for truth in atoms
         .into_iter()
-        .map(|atom| evaluate_atom(ast, atom, predicate, rings))
+        .map(|atom| evaluate_atom(molecule, atom, predicate, rings))
     {
         match truth {
             Truth::True => return Truth::True,
@@ -468,16 +468,16 @@ fn is_ring_predicate(predicate: &AtomConstraintForm) -> bool {
     )
 }
 
-fn require_entity(ast: &Molecule, entity: Entity) -> Result<(), ConstraintError> {
+fn require_entity(molecule: &Molecule, entity: Entity) -> Result<(), ConstraintError> {
     let present = match entity {
-        Entity::Atom(id) => ast.atoms().contains(id),
-        Entity::Bond(id) => ast.bonds().contains(id),
-        Entity::DativeBond(id) => ast.dative_bonds().contains(id),
-        Entity::AromaticSystem(id) => ast.aromatic_systems().contains(id),
-        Entity::MulticenterBond(id) => ast.multicenter_bonds().contains(id),
-        Entity::NoncovalentBond(id) => ast.noncovalent_bonds().contains(id),
-        Entity::StereoAtom(id) => ast.stereo_atoms().contains(id),
-        Entity::StereoBond(id) => ast.stereo_bonds().contains(id),
+        Entity::Atom(id) => molecule.atoms().contains(id),
+        Entity::Bond(id) => molecule.bonds().contains(id),
+        Entity::DativeBond(id) => molecule.dative_bonds().contains(id),
+        Entity::AromaticSystem(id) => molecule.aromatic_systems().contains(id),
+        Entity::MulticenterBond(id) => molecule.multicenter_bonds().contains(id),
+        Entity::NoncovalentBond(id) => molecule.noncovalent_bonds().contains(id),
+        Entity::StereoAtom(id) => molecule.stereo_atoms().contains(id),
+        Entity::StereoBond(id) => molecule.stereo_bonds().contains(id),
     };
     if present {
         Ok(())
@@ -487,11 +487,11 @@ fn require_entity(ast: &Molecule, entity: Entity) -> Result<(), ConstraintError>
 }
 
 fn require_atoms(
-    ast: &Molecule,
+    molecule: &Molecule,
     atoms: impl IntoIterator<Item = AtomId>,
 ) -> Result<(), ConstraintError> {
     for atom in atoms {
-        require_entity(ast, Entity::Atom(atom))?;
+        require_entity(molecule, Entity::Atom(atom))?;
     }
     Ok(())
 }

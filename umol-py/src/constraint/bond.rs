@@ -73,7 +73,7 @@ impl BondConstraintKey {
 
 /// A bond-scope constraint: the aromatic flag, cis/trans stereo, or a ring
 /// membership of a single bond.
-#[pyclass]
+#[pyclass(frozen)]
 pub enum BondConstraintForm {
     Aromatic(Py<BooleanForm>),
     CisTransStereo(Py<CisTransStereoForm>),
@@ -572,23 +572,27 @@ impl BondConstraintsView {
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrBondConstraintsForm) -> R,
-    ) -> R {
+    ) -> PyResult<R> {
         match &self.backing {
-            BondConstraintsBacking::Molecule { owner, id } => f(&mut owner
+            BondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
                 .borrow_mut(py)
                 .inner_mut()
                 .bond_mut(*id)
                 .attributes
-                .constraints),
+                .constraints)),
             BondConstraintsBacking::Bond(bond) => {
-                f(&mut bond.borrow_mut(py).inner_mut().constraints)
+                Ok(f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints))
             }
         }
     }
 
     /// Set one constraint on the backing bond in place (last-wins per key).
-    pub(crate) fn set_ast(&self, py: Python<'_>, constraint: GraphIrBondConstraintForm) {
-        self.with_mut(py, |cs| cs.set(constraint));
+    pub(crate) fn set_ast(
+        &self,
+        py: Python<'_>,
+        constraint: GraphIrBondConstraintForm,
+    ) -> PyResult<()> {
+        self.with_mut(py, |cs| cs.set(constraint))
     }
 
     /// Remove one key from the backing bond in place, returning the removed entry.
@@ -596,7 +600,7 @@ impl BondConstraintsView {
         &self,
         py: Python<'_>,
         key: GraphIrBondConstraintKey,
-    ) -> Option<GraphIrBondConstraintForm> {
+    ) -> PyResult<Option<GraphIrBondConstraintForm>> {
         self.with_mut(py, |cs| cs.remove(key))
     }
 }
@@ -610,8 +614,8 @@ impl BondConstraintsView {
 
     /// Insert `c` on the bond in place, replacing any existing entry of the same
     /// key (last-wins).
-    pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintForm>) {
-        self.set_ast(py, c.bind(py).borrow().to_rust(py));
+    pub(crate) fn set(&self, py: Python<'_>, c: Py<BondConstraintForm>) -> PyResult<()> {
+        self.set_ast(py, c.bind(py).borrow().to_rust(py))
     }
 
     /// Remove the entry with the given key from the bond in place, returning it if
@@ -621,7 +625,7 @@ impl BondConstraintsView {
         py: Python<'_>,
         key: Py<BondConstraintKey>,
     ) -> PyResult<Option<BondConstraintForm>> {
-        self.remove_ast(py, key.bind(py).borrow().to_rust(py))
+        self.remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .map(|c| BondConstraintForm::from_rust(py, &c))
             .transpose()
     }
@@ -629,7 +633,7 @@ impl BondConstraintsView {
     /// Remove the entry with the given key; raises `KeyError` if absent.
     pub(crate) fn __delitem__(&self, py: Python<'_>, key: Py<BondConstraintKey>) -> PyResult<()> {
         if self
-            .remove_ast(py, key.bind(py).borrow().to_rust(py))
+            .remove_ast(py, key.bind(py).borrow().to_rust(py))?
             .is_some()
         {
             Ok(())
@@ -646,8 +650,7 @@ impl BondConstraintsView {
     /// view aliasing the same bond is not a double-borrow panic.
     pub(crate) fn update(&self, py: Python<'_>, other: BondConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |cs| resolved.apply(cs));
-        Ok(())
+        self.with_mut(py, |cs| resolved.apply(cs))
     }
 
     pub(crate) fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -731,8 +734,8 @@ impl BondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) {
-        self.set_ast(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)));
+    pub(crate) fn set_aromatic(&self, py: Python<'_>, value: BooleanLike) -> PyResult<()> {
+        self.set_ast(py, GraphIrBondConstraintForm::aromatic(value.to_rust(py)))
     }
 
     /// The cis/trans-stereo state, or `None`.
@@ -754,8 +757,7 @@ impl BondConstraintsView {
         self.set_ast(
             py,
             GraphIrBondConstraintForm::cis_trans_stereo(value.to_rust(py)?),
-        );
-        Ok(())
+        )
     }
 
     /// The all-rings membership count, or `None`.
@@ -769,11 +771,11 @@ impl BondConstraintsView {
     }
 
     #[setter]
-    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) {
+    pub(crate) fn set_ring_count(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
         self.set_ast(
             py,
             GraphIrBondConstraintForm::ring_membership(GraphIrRingScope::All, value.to_rust(py)),
-        );
+        )
     }
 
     /// The sized-ring membership counts, as a subscriptable proxy keyed by ring
@@ -839,7 +841,11 @@ impl BondRingSizeCounts {
     }
 
     /// Mutate the backing constraints in place through `f`.
-    pub(crate) fn write(&self, py: Python<'_>, f: impl FnOnce(&mut GraphIrBondConstraintsForm)) {
+    pub(crate) fn write(
+        &self,
+        py: Python<'_>,
+        f: impl FnOnce(&mut GraphIrBondConstraintsForm),
+    ) -> PyResult<()> {
         match &self.backing {
             BondRingSizeBacking::Molecule { owner, id } => f(&mut owner
                 .borrow_mut(py)
@@ -847,9 +853,12 @@ impl BondRingSizeCounts {
                 .bond_mut(*id)
                 .attributes
                 .constraints),
-            BondRingSizeBacking::Bond(bond) => f(&mut bond.borrow_mut(py).inner_mut().constraints),
+            BondRingSizeBacking::Bond(bond) => {
+                f(&mut bond.borrow_mut(py).try_inner_mut()?.constraints)
+            }
             BondRingSizeBacking::Value(value) => f(value.borrow_mut(py).inner_mut()),
         }
+        Ok(())
     }
 }
 
@@ -882,21 +891,21 @@ impl BondRingSizeCounts {
     }
 
     /// Set the membership count for rings of `size` in place.
-    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) {
+    pub(crate) fn __setitem__(&self, py: Python<'_>, size: u8, count: NumLike) -> PyResult<()> {
         let constraint = GraphIrBondConstraintForm::ring_membership(
             GraphIrRingScope::Size(size),
             count.to_rust(py),
         );
-        self.write(py, |cs| cs.set(constraint));
+        self.write(py, |cs| cs.set(constraint))
     }
 
     /// Remove the sized-ring membership for `size` in place.
-    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) {
+    pub(crate) fn __delitem__(&self, py: Python<'_>, size: u8) -> PyResult<()> {
         self.write(py, |cs| {
             cs.remove(GraphIrBondConstraintKey::RingMembership(
                 GraphIrRingScope::Size(size),
             ));
-        });
+        })
     }
 
     pub(crate) fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
