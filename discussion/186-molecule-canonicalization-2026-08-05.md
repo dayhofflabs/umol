@@ -960,7 +960,7 @@ and the semantic properties validated by the corresponding property tests.
 - **S0b — Canonicalization correctness corpus.** Add checked-in exact cases derived from the RDKit,
   CDK, and InChI precedents plus bounded internal DAMNSS cases. Record expected orbit partitions and
   renumbering invariance rather than requiring another library's canonical numbers. Keep external
-  programs out of the test dependencies. This is additive. [dep: S0a]
+  programs out of the test dependencies. This is additive. [dep: S0a] **Done.**
 - **S0c — Coloring-feature terminology.** Rename `ConstitutionFeatures` to
   `MoleculeColoringFeatures` throughout `umol-graph-ir` and its callers, preserving the independent
   bitflag semantics and the existing coloring behavior. Update imports, rustdoc, unit tests, and
