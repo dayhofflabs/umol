@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
-use crate::lattice::{impl_py_canonicalize, impl_py_lattice};
+use crate::lattice::{impl_py_lattice, impl_py_normalize};
 
 /// Relational operator in a numeric predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -175,7 +175,7 @@ impl ArithExpr {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     ArithExpr,
     GraphIrArithExpr,
     |value: &ArithExpr, py: Python<'_>| -> PyResult<GraphIrArithExpr> { Ok(value.to_rust(py)) },

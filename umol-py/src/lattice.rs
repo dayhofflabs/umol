@@ -1,29 +1,29 @@
-//! Shared generation of Python methods for form lattice and canonicalization operations.
+//! Shared generation of Python methods for form lattice and normalization operations.
 
-pub(crate) use umol_graph_ir::ir::{Canonicalize, Lattice};
+pub(crate) use umol_graph_ir::ir::{Equiv, Lattice, Normalize};
 
 pub(crate) use crate::error::contradiction_error;
 
-macro_rules! impl_py_canonicalize {
+macro_rules! impl_py_normalize {
     ($py_type:ty, $rust_type:ty, $to_rust:expr, $from_rust:expr) => {
         #[pymethods]
         impl $py_type {
-            /// Return the canonical value without mutating the receiver.
-            fn canonicalize(&self, py: Python<'_>) -> PyResult<Self> {
+            /// Return the normal form without mutating the receiver.
+            fn normalize(&self, py: Python<'_>) -> PyResult<Self> {
                 let to_rust = $to_rust;
                 let from_rust = $from_rust;
                 let value: $rust_type = to_rust(self, py)?;
-                let canonical = $crate::lattice::Canonicalize::canonicalize(value)
+                let normalized = $crate::lattice::Normalize::normalize(value)
                     .map_err($crate::lattice::contradiction_error)?;
-                from_rust(py, canonical)
+                from_rust(py, normalized)
             }
 
-            /// Compare canonical forms while leaving structural equality unchanged.
-            fn canonical_eq(&self, py: Python<'_>, other: &$py_type) -> PyResult<bool> {
+            /// Compare normal forms while leaving structural equality unchanged.
+            fn equiv(&self, py: Python<'_>, other: &$py_type) -> PyResult<bool> {
                 let to_rust = $to_rust;
                 let lhs: $rust_type = to_rust(self, py)?;
                 let rhs: $rust_type = to_rust(other, py)?;
-                Ok($crate::lattice::Canonicalize::canonical_eq(&lhs, &rhs))
+                Ok($crate::lattice::Equiv::equiv(&lhs, &rhs))
             }
         }
     };
@@ -31,7 +31,7 @@ macro_rules! impl_py_canonicalize {
 
 macro_rules! impl_py_lattice {
     ($py_type:ty, $rust_type:ty, $to_rust:expr, $from_rust:expr) => {
-        $crate::lattice::impl_py_canonicalize!($py_type, $rust_type, $to_rust, $from_rust);
+        $crate::lattice::impl_py_normalize!($py_type, $rust_type, $to_rust, $from_rust);
 
         #[pymethods]
         impl $py_type {
@@ -92,5 +92,5 @@ macro_rules! impl_py_lattice {
     };
 }
 
-pub(crate) use impl_py_canonicalize;
 pub(crate) use impl_py_lattice;
+pub(crate) use impl_py_normalize;

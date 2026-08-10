@@ -278,8 +278,8 @@ without turning constraints into structural identity features.
 ## Aggregate canonicalization
 
 > **TODO (2026-08-07):** This section records the approved target contract from discussion doc 186.
-> The current code still names fixed-frame normalization `Canonicalize` and does not yet provide the
-> context-bearing aggregate trait. Remove this marker when doc 186 is implemented.
+> Fixed-frame normalization now uses `Normalize`; the context-bearing aggregate trait remains to be
+> implemented. Remove this marker when doc 186 is implemented.
 
 Aggregate canonicalization selects an entity-id and participant frame for a complete indexed graph IR.
 It is distinct from `Normalize`, which puts values into normal form without changing their id or
@@ -430,7 +430,7 @@ construction/validation boundary does not require introducing a new error type f
 ## Remapping
 
 Remapping is an explicit transformation between id spaces. It transports represented values and
-incidence along a total function; it does not validate chemistry, canonicalize attributes, repair
+incidence along a total function; it does not validate chemistry, normalize attributes, repair
 references, or remove entities. The image vectors passed to a remapping constructor define its
 source domains, and every id in those domains has an image. Construction is therefore infallible.
 A general remapping need not be injective or surjective; injection or bijection is a contextual

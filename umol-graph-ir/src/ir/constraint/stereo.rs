@@ -619,7 +619,7 @@ macro_rules! relation_form {
         }
 
         impl Normalize for $name {
-            /// Finite-domain canonical form over `to_set`: empty → `Err`, full →
+            /// Finite-domain normal form over `to_set`: empty → `Err`, full →
             /// `Undetermined`, singleton → `Lit`, else the smaller of positive /
             /// complement (tiebreak positive).
             fn normalize(self) -> Result<Self, Contradiction> {

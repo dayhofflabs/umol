@@ -1,10 +1,10 @@
 //! Molecule comparison properties.
 //!
 //! The identity-frame laws for `equiv`, the correspondence laws for
-//! `equiv_under`, and agreement with `==` on canonical graph-IR values deliberately use
+//! `equiv_under`, and agreement with `==` on normalized graph-IR values deliberately use
 //! overlapping molecule domains. They establish distinct relations: semantic
 //! equivalence in a shared frame, semantic equivalence under an explicit frame
-//! mapping, and a canonical-representation oracle, respectively.
+//! mapping, and a normal-form oracle, respectively.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -117,7 +117,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_equiv_agrees_with_equality_for_canonical_molecules(
+    fn test_molecule_equiv_agrees_with_equality_for_normalized_molecules(
         left in molecule_strategy(),
         right in molecule_strategy(),
     ) {

@@ -57,7 +57,7 @@ pub trait TryIntoIr<A>: Sized {
 /// For a type implementing both `Lattice` and `AsLit`, projection is total
 /// exactly on structurally ground values:
 /// `value.is_ground() == value.as_lit().is_some()`. It does not normalize,
-/// apply defaults, validate domain invariants, or identify distinct canonical
+/// apply defaults, validate domain invariants, or identify distinct normalized
 /// ground values that happen to have the same downstream numerical effect.
 pub trait AsLit {
     /// Exact non-lattice representation of a ground value.

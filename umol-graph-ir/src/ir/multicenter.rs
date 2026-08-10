@@ -121,7 +121,7 @@ impl MulticenterBondForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> MulticenterBondUpdate {
         let mut constraints = MulticenterBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(
+    #[case::normalized(
         MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64),
         MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(NumForm::lit_set([1])),
     )]

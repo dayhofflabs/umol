@@ -1692,7 +1692,7 @@ mod tests {
     #[case::modify(vec![AtomConstraintForm::valence(3)], Some(AtomConstraintForm::valence(3)), Some(AtomConstraintForm::valence(4)), Ok(()), vec![AtomConstraintForm::valence(4)])]
     #[case::remove(vec![AtomConstraintForm::valence(4)], Some(AtomConstraintForm::valence(4)), None, Ok(()), vec![])]
     #[case::add_from_absent(vec![], None, Some(AtomConstraintForm::valence(4)), Ok(()), vec![AtomConstraintForm::valence(4)])]
-    #[case::canonical_match(vec![AtomConstraintForm::Valence(NumForm::lit_set([4]))], Some(AtomConstraintForm::valence(4)), Some(AtomConstraintForm::valence(5)), Ok(()), vec![AtomConstraintForm::valence(5)])]
+    #[case::normalized_match(vec![AtomConstraintForm::Valence(NumForm::lit_set([4]))], Some(AtomConstraintForm::valence(4)), Some(AtomConstraintForm::valence(5)), Ok(()), vec![AtomConstraintForm::valence(5)])]
     #[case::old_mismatch(vec![AtomConstraintForm::valence(3)], Some(AtomConstraintForm::valence(4)), Some(AtomConstraintForm::valence(5)), Err(Contradiction), vec![AtomConstraintForm::valence(3)])]
     #[case::old_absent_mismatch(vec![AtomConstraintForm::valence(3)], None, Some(AtomConstraintForm::valence(4)), Err(Contradiction), vec![AtomConstraintForm::valence(3)])]
     #[case::key_mismatch(vec![], Some(AtomConstraintForm::valence(3)), Some(AtomConstraintForm::degree(4)), Err(Contradiction), vec![])]

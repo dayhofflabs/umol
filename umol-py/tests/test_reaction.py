@@ -1062,165 +1062,6 @@ def test_reaction_parse_repr():
     )
 
 
-def test_reaction_canonicalize():
-    source = Reaction(
-        Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
-        Deltas(
-            [
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(1)
-                        ),
-                    )
-                ),
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(1), new=NumForm.Lit(2)
-                        ),
-                    )
-                ),
-            ]
-        ),
-    )
-    snapshot = Reaction(source.lhs, source.deltas)
-
-    canonical = source.canonicalize()
-
-    assert canonical.deltas == Deltas(
-        [
-            Delta.Atom(
-                AtomDelta.ModifyField(
-                    id=0,
-                    change=AtomFieldChange.Charge(
-                        old=NumForm.Lit(0), new=NumForm.Lit(2)
-                    ),
-                )
-            )
-        ]
-    )
-    assert canonical.canonicalize() == canonical
-    assert source == snapshot
-    assert canonical.lhs is not source.lhs
-    assert canonical.deltas is not source.deltas
-
-    canonical.lhs.atoms[0].charge = 3
-    canonical.deltas.append(Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O")))))
-    assert canonical.lhs.atoms[0].charge == NumForm.Lit(3)
-    assert len(canonical.deltas) == 2
-
-
-def test_reaction_canonicalize_error():
-    source = Reaction(
-        Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
-        Deltas(
-            [
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(1)
-                        ),
-                    )
-                ),
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(2), new=NumForm.Lit(3)
-                        ),
-                    )
-                ),
-            ]
-        ),
-    )
-    snapshot = Reaction(source.lhs, source.deltas)
-
-    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        source.canonicalize()
-
-    assert source == snapshot
-
-
-def test_reaction_canonical_eq():
-    source = Reaction(
-        Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
-        Deltas(
-            [
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=1,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
-                        ),
-                    )
-                ),
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(1)
-                        ),
-                    )
-                ),
-            ]
-        ),
-    )
-    reordered = Reaction(
-        Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
-        Deltas(
-            [
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(1)
-                        ),
-                    )
-                ),
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=1,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
-                        ),
-                    )
-                ),
-            ]
-        ),
-    )
-    renumbered = Reaction(
-        Molecule.from_entries([AtomForm(Element("O")), AtomForm(Element("C"))]),
-        Deltas(
-            [
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=0,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(-1)
-                        ),
-                    )
-                ),
-                Delta.Atom(
-                    AtomDelta.ModifyField(
-                        id=1,
-                        change=AtomFieldChange.Charge(
-                            old=NumForm.Lit(0), new=NumForm.Lit(1)
-                        ),
-                    )
-                ),
-            ]
-        ),
-    )
-
-    assert source != reordered
-    assert source.canonical_eq(reordered) is True
-    assert source.canonical_eq(renumbered) is False
-
-
 def test_reaction_reverse():
     source = Reaction.parse(
         '{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}'
@@ -1233,7 +1074,8 @@ def test_reaction_reverse():
     assert reversed_reaction.lhs == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
-    assert roundtrip.canonicalize() == source.canonicalize()
+    assert roundtrip.lhs == source.lhs
+    assert roundtrip.deltas.normalize() == source.deltas.normalize()
     assert source == snapshot
     assert reversed_reaction.lhs is not source.lhs
     assert reversed_reaction.deltas is not source.deltas
@@ -1662,7 +1504,7 @@ def test_reaction_workflow():
     assert rhs == rhs_snapshot
     assert reaction.lhs is not lhs
 
-    normalized = reaction.canonicalize()
+    normalized = Reaction(reaction.lhs, reaction.deltas)
 
     assert normalized == expected_forward
     assert reaction == expected_forward

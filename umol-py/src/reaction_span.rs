@@ -6,9 +6,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
 use umol_graph_ir::ir::{
-    AtomId as GraphIrAtomId, BondId as GraphIrBondId, Canonicalize,
-    Constraint as GraphIrConstraint, ConstraintSpan as GraphIrConstraintSpan,
-    EntitySpan as GraphIrEntitySpan, FromIr, IntoIr, ReactionSpan as GraphIrReactionSpan,
+    AtomId as GraphIrAtomId, BondId as GraphIrBondId, Constraint as GraphIrConstraint,
+    ConstraintSpan as GraphIrConstraintSpan, EntitySpan as GraphIrEntitySpan, Equiv, FromIr,
+    IntoIr, Normalize, ReactionSpan as GraphIrReactionSpan,
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
@@ -29,7 +29,7 @@ use crate::stereo::{StereoAtomForm, StereoBondForm, StereoLigand};
 
 type SpanPair<T> = (Option<Py<T>>, Option<Py<T>>);
 
-fn entity_span<T: Canonicalize>(lhs: Option<T>, rhs: Option<T>) -> PyResult<GraphIrEntitySpan<T>> {
+fn entity_span<T: Normalize>(lhs: Option<T>, rhs: Option<T>) -> PyResult<GraphIrEntitySpan<T>> {
     GraphIrEntitySpan::superimpose(lhs, rhs)
         .ok_or_else(|| PyValueError::new_err("reaction span entry is absent from both sides"))
 }
@@ -39,7 +39,7 @@ fn constraint_spans(
     rhs: Option<GraphIrConstraint>,
 ) -> PyResult<Vec<GraphIrConstraintSpan>> {
     match (lhs, rhs) {
-        (Some(lhs), Some(rhs)) if lhs.canonical_eq(&rhs) => {
+        (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => {
             Ok(vec![GraphIrConstraintSpan::Unchanged(lhs)])
         }
         (Some(lhs), Some(rhs)) => Ok(vec![

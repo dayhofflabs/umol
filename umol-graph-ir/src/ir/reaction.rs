@@ -28,7 +28,7 @@ use super::edit::{
     StereoAtomRemoval, StereoBondFieldChange, StereoBondHandle, StereoBondRemoval,
 };
 use super::entity::Entity;
-use super::error::{ApplyError, ApplyPreconditionError, Contradiction};
+use super::error::{ApplyError, ApplyPreconditionError};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -1604,19 +1604,6 @@ fn reframe_stereo(
     Ok(())
 }
 
-impl Normalize for Reaction {
-    /// Value-level in a fixed atom id space: `deltas` are canonicalized;
-    /// `lhs` is passed through (`Molecule` has no whole-molecule canonical form — its
-    /// equality is structural). Equality up to atom renumbering is a separate `umol-graph`
-    /// operation.
-    fn normalize(self) -> Result<Self, Contradiction> {
-        Ok(Self {
-            lhs: self.lhs,
-            deltas: self.deltas.normalize()?,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -1645,16 +1632,6 @@ mod tests {
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
-
-    fn charge_set(id: u32, old: i64, new: i64) -> Delta {
-        Delta::Atom(AtomDelta::ModifyField {
-            id: AtomId(id),
-            change: AtomFieldChange::Charge {
-                old: NumForm::Lit(old),
-                new: NumForm::Lit(new),
-            },
-        })
-    }
 
     #[rstest]
     fn test_reaction_from_sides() {
@@ -1689,22 +1666,6 @@ mod tests {
                     },
                 })]),
             )),
-        );
-    }
-
-    #[rstest]
-    fn test_reaction_normalize() {
-        // The delta chain fuses; the lhs is passed through unchanged.
-        let reaction = Reaction::new(
-            Molecule::default(),
-            Deltas::from_iter([charge_set(0, 0, 1), charge_set(0, 1, 2)]),
-        );
-        assert_eq!(
-            reaction.normalize().unwrap(),
-            Reaction::new(
-                Molecule::default(),
-                Deltas::from_iter([charge_set(0, 0, 2)])
-            ),
         );
     }
 
@@ -2179,7 +2140,7 @@ mod tests {
         ),
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
     )]
-    #[case::canonical_add_remove_cancellation(
+    #[case::normalized_add_remove_cancellation(
         Reaction::new(
             Molecule::default(),
             Deltas::from_iter([

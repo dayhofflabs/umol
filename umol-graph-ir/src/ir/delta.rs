@@ -1070,7 +1070,7 @@ macro_rules! diff_field_ops {
     };
 }
 
-/// Canonical equivalence over optional payloads: both absent is equal, both present compares by
+/// Normalized equivalence over optional attributes: both absent is equal, both present compares by
 /// `equiv`, presence mismatch is unequal.
 fn options_equiv<T: Normalize>(l: &Option<T>, r: &Option<T>) -> bool {
     match (l, r) {
@@ -3063,12 +3063,12 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
 
 /// A collection of [`Delta`] values, as carried by a reaction.
 ///
-/// Before canonicalization, input order matters within a chain of operations on the same entity:
+/// Before normalization, input order matters within a chain of operations on the same entity:
 /// an addition must precede modifications to that addition, and successive field changes must
 /// connect through their `old` and `new` values. Cross-entity source order is not semantic because
 /// deltas refer to entities directly through ids in the reaction-owned frame.
 /// [`Normalize::normalize`] folds each entity's chain, rejects contradictions, and sorts the
-/// normalized result. Unlike an edit sequence, the canonical form retains no incidental source
+/// normalized result. Unlike an edit sequence, the normal form retains no incidental source
 /// ordering.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Deltas(Vec<Delta>);
@@ -3411,7 +3411,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
-    #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(NumForm::Undetermined)), ..Default::default() })]
     fn test_atom_delta_for_update_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         assert_eq!(AtomDelta::for_update(AtomId(0), &current, &update), Vec::new());
@@ -3420,7 +3420,7 @@ mod tests {
     #[rstest]
     #[case::singleton_set(NumForm::Lit(1), NumForm::lit_set([1]))]
     fn test_atom_delta_diff_canonical(#[case] lhs: NumForm, #[case] rhs: NumForm) {
-        // Canonically-equal charges that are structurally distinct → `diff` emits nothing.
+        // Equivalent charges that are structurally distinct → `diff` emits nothing.
         let lhs = AtomForm::from_element(Element::C).with_charge(lhs);
         let rhs = AtomForm::from_element(Element::C).with_charge(rhs);
         assert_eq!(AtomDelta::diff(AtomId(0), &lhs, &rhs), Vec::new());
@@ -3531,7 +3531,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(BondForm::from_order(1), BondUpdate::default())]
-    #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_bond_delta_for_update_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         assert_eq!(BondDelta::for_update(BondId(0), &current, &update), Vec::new());
@@ -3576,7 +3576,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(DativeBondForm::from_order(1), DativeBondUpdate::default())]
-    #[case::canonical_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_dative_bond_delta_for_update_identity(
         #[case] current: DativeBondForm,
@@ -3629,7 +3629,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
-    #[case::canonical_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_aromatic_system_delta_for_update_identity(
         #[case] current: AromaticSystemForm,
@@ -3685,7 +3685,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
-    #[case::canonical_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_multicenter_bond_delta_for_update_identity(
         #[case] current: MulticenterBondForm,
@@ -4155,7 +4155,7 @@ mod tests {
     #[rstest]
     #[case::singleton_set(NumForm::Lit(1), NumForm::lit_set([1]))]
     fn test_entity_span_superimpose_canonical(#[case] lhs: NumForm, #[case] rhs: NumForm) {
-        // Canonically-equal sides that are structurally distinct superimpose to `Unchanged`,
+        // Equivalent sides that are structurally distinct superimpose to `Unchanged`,
         // not `Modified`.
         let lhs = AtomForm::from_element(Element::C).with_charge(lhs);
         let rhs = AtomForm::from_element(Element::C).with_charge(rhs);

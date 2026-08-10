@@ -135,7 +135,7 @@ impl AtomForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> AtomUpdate {
         let mut constraints = AtomConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -215,7 +215,7 @@ impl From<&str> for AtomForm {
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable (free `?x`, or membership-restricted
-/// `?x :: {…}` / `?x :: !{…}`). Sets are cardinality-canonical and
+/// `?x :: {…}` / `?x :: !{…}`). Sets are cardinality-normalized and
 /// universe-relative: a semantic set of more than `⌊118/2⌋` elements is stored
 /// as its complement `NotSet(U∖S)`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -838,7 +838,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(AtomForm::from_element(Element::C).with_charge(1_i64), AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])))]
+    #[case::normalized(AtomForm::from_element(Element::C).with_charge(1_i64), AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])))]
     fn test_atom_form_difference_to_identity(#[case] atom: AtomForm, #[case] other: AtomForm) {
         assert_eq!(atom.difference_to(&other), AtomUpdate::default());
     }

@@ -43,7 +43,6 @@ use crate::error::{
 };
 use crate::fingerprint::config::ReactionCombinedFingerprintConfig;
 use crate::fingerprint::reaction::ReactionCombinedFingerprint;
-use crate::lattice::impl_py_canonicalize;
 use crate::metadata::ReactionMetadata;
 use crate::model::ChemistryModel;
 use crate::molecule::Molecule;
@@ -464,15 +463,6 @@ impl Reaction {
     }
 }
 
-impl_py_canonicalize!(
-    Reaction,
-    GraphIrReaction,
-    |value: &Reaction, py: Python<'_>| -> PyResult<GraphIrReaction> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrReaction| -> PyResult<Reaction> {
-        Reaction::from_rust(py, value)
-    }
-);
-
 impl Reaction {
     /// Wrap a Rust reaction in fresh Python-owned components.
     pub(crate) fn from_rust(py: Python<'_>, reaction: GraphIrReaction) -> PyResult<Self> {
@@ -629,7 +619,7 @@ mod tests {
         AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
         AtomId as GraphIrAtomId, BondDelta as GraphIrBondDelta,
         BondFieldChange as GraphIrBondFieldChange, BondForm as GraphIrBondForm,
-        BondId as GraphIrBondId, Canonicalize, Constraint as GraphIrConstraint,
+        BondId as GraphIrBondId, Constraint as GraphIrConstraint,
         ConstraintDelta as GraphIrConstraintDelta, DativeBondDelta as GraphIrDativeBondDelta,
         DativeBondForm as GraphIrDativeBondForm, DativeBondId as GraphIrDativeBondId,
         Delta as GraphIrDelta, Deltas as GraphIrDeltas, Entity as GraphIrEntity,
@@ -643,7 +633,7 @@ mod tests {
         NoncovalentBondDelta as GraphIrNoncovalentBondDelta,
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
-        NoncovalentBondKind as GraphIrNoncovalentBondKind, NumForm as GraphIrNumForm,
+        NoncovalentBondKind as GraphIrNoncovalentBondKind, Normalize, NumForm as GraphIrNumForm,
         ReactionSpan as GraphIrReactionSpan, ReactionSpanEntries as GraphIrReactionSpanEntries,
         StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomForm as GraphIrStereoAtomForm,
         StereoAtomId as GraphIrStereoAtomId, StereoBondDelta as GraphIrStereoBondDelta,
@@ -1666,106 +1656,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_canonicalize() {
-        Python::attach(|py| {
-            let source = Reaction::from_rust(
-                py,
-                GraphIrReaction::new(
-                    GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(0)],
-                        ..Default::default()
-                    }),
-                    vec![
-                        GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
-                            id: GraphIrAtomId(0),
-                            change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrNumForm::Lit(0),
-                                new: GraphIrNumForm::Lit(1),
-                            },
-                        }),
-                        GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
-                            id: GraphIrAtomId(0),
-                            change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrNumForm::Lit(1),
-                                new: GraphIrNumForm::Lit(2),
-                            },
-                        }),
-                    ]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-            let before = source.to_rust(py);
-            let expected = GraphIrReaction::new(
-                before.lhs.clone(),
-                vec![GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
-                    id: GraphIrAtomId(0),
-                    change: GraphIrAtomFieldChange::Charge {
-                        old: GraphIrNumForm::Lit(0),
-                        new: GraphIrNumForm::Lit(2),
-                    },
-                })]
-                .into_iter()
-                .collect(),
-            );
-
-            let canonical = source.canonicalize(py).unwrap();
-            let twice = canonical.canonicalize(py).unwrap();
-
-            assert_eq!(canonical.to_rust(py), expected);
-            assert_eq!(twice.to_rust(py), expected);
-            assert_eq!(source.to_rust(py), before);
-            assert_ne!(canonical.lhs.as_ptr(), source.lhs.as_ptr());
-            assert_ne!(canonical.deltas.as_ptr(), source.deltas.as_ptr());
-        });
-    }
-
-    #[rstest]
-    fn test_reaction_canonicalize_error() {
-        Python::attach(|py| {
-            let source = Reaction::from_rust(
-                py,
-                GraphIrReaction::new(
-                    GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                        atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(0)],
-                        ..Default::default()
-                    }),
-                    vec![
-                        GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
-                            id: GraphIrAtomId(0),
-                            change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrNumForm::Lit(0),
-                                new: GraphIrNumForm::Lit(1),
-                            },
-                        }),
-                        GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
-                            id: GraphIrAtomId(0),
-                            change: GraphIrAtomFieldChange::Charge {
-                                old: GraphIrNumForm::Lit(2),
-                                new: GraphIrNumForm::Lit(3),
-                            },
-                        }),
-                    ]
-                    .into_iter()
-                    .collect(),
-                ),
-            )
-            .unwrap();
-            let before = source.to_rust(py);
-
-            let error = source.canonicalize(py).err().unwrap();
-
-            assert!(error.is_instance_of::<ContradictionError>(py));
-            assert_eq!(
-                error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "reached a contradiction"
-            );
-            assert_eq!(source.to_rust(py), before);
-        });
-    }
-
-    #[rstest]
     fn test_reaction_to_reaction_span() {
         Python::attach(|py| {
             let reaction = Reaction::from_rust(
@@ -1849,10 +1739,11 @@ mod tests {
             )
             .unwrap();
             let before = source.to_rust(py);
-            let expected_roundtrip = before.clone().canonicalize().unwrap();
+            let expected_deltas = before.deltas.clone().normalize().unwrap();
 
             let reversed = source.reverse(py).unwrap();
             let roundtrip = reversed.reverse(py).unwrap();
+            let roundtrip = roundtrip.to_rust(py);
 
             assert_eq!(
                 reversed.to_rust(py).lhs,
@@ -1864,10 +1755,8 @@ mod tests {
                     ..Default::default()
                 })
             );
-            assert_eq!(
-                roundtrip.to_rust(py).canonicalize().unwrap(),
-                expected_roundtrip
-            );
+            assert_eq!(roundtrip.lhs, before.lhs);
+            assert_eq!(roundtrip.deltas.normalize().unwrap(), expected_deltas);
             assert_eq!(source.to_rust(py), before);
             assert_ne!(reversed.lhs.as_ptr(), source.lhs.as_ptr());
             assert_ne!(reversed.deltas.as_ptr(), source.deltas.as_ptr());

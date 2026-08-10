@@ -48,7 +48,7 @@ use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
 use crate::entity::Readonly;
-use crate::lattice::impl_py_canonicalize;
+use crate::lattice::impl_py_normalize;
 use crate::multicenter::MulticenterBondForm;
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use crate::num::NumForm;
@@ -1941,7 +1941,7 @@ impl Deltas {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     Deltas,
     GraphIrDeltas,
     |value: &Deltas, _py: Python<'_>| -> PyResult<GraphIrDeltas> { Ok(value.to_rust().clone()) },
@@ -5168,7 +5168,7 @@ mod tests {
             }),
         ],
     )]
-    fn test_deltas_canonicalize(
+    fn test_deltas_normalize(
         #[case] input: Vec<GraphIrDelta>,
         #[case] expected: Vec<GraphIrDelta>,
     ) {
@@ -5176,17 +5176,17 @@ mod tests {
         let before = source.to_rust().clone();
 
         Python::attach(|py| {
-            let canonical = source.canonicalize(py).unwrap();
+            let normalized = source.normalize(py).unwrap();
 
             let expected: GraphIrDeltas = expected.into_iter().collect();
-            assert_eq!(canonical.to_rust(), &expected);
+            assert_eq!(normalized.to_rust(), &expected);
             assert_eq!(source.to_rust(), &before);
-            assert_eq!(canonical.canonicalize(py).unwrap(), canonical);
+            assert_eq!(normalized.normalize(py).unwrap(), normalized);
         });
     }
 
     #[rstest]
-    fn test_deltas_canonicalize_error() {
+    fn test_deltas_normalize_error() {
         let source = Deltas::from_rust(
             vec![
                 GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
@@ -5210,7 +5210,7 @@ mod tests {
         let before = source.to_rust();
 
         Python::attach(|py| {
-            let error = source.canonicalize(py).err().unwrap();
+            let error = source.normalize(py).err().unwrap();
             assert!(error.is_instance_of::<ContradictionError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),

@@ -79,7 +79,7 @@ impl DativeBondForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> DativeBondUpdate {
         let mut constraints = DativeBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(
+    #[case::normalized(
         DativeBondForm::from_order(1),
         DativeBondForm::new(NumForm::lit_set([1])),
     )]

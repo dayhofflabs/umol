@@ -1,4 +1,4 @@
-//! Property tests for reaction composition and its DPO and canonicalization invariants.
+//! Property tests for reaction composition and its DPO and normalization invariants.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -251,7 +251,7 @@ proptest! {
     }
 
     /// P4 — determinism: `compose` returns the identical `Vec` on repeated calls and is invariant
-    /// under pre-canonicalizing the inputs.
+    /// under pre-normalizing the input delta collections.
     #[test]
     fn test_reaction_compose_determinism(
         a in overlay_reaction_strategy(),
@@ -261,7 +261,11 @@ proptest! {
             a.compose(&b, COMPOSITION_ALGORITHM),
             a.compose(&b, COMPOSITION_ALGORITHM)
         );
-        if let (Ok(ac), Ok(bc)) = (a.clone().normalize(), b.clone().normalize()) {
+        if let (Ok(a_deltas), Ok(b_deltas)) =
+            (a.deltas.clone().normalize(), b.deltas.clone().normalize())
+        {
+            let ac = Reaction::new(a.lhs.clone(), a_deltas);
+            let bc = Reaction::new(b.lhs.clone(), b_deltas);
             prop_assert_eq!(
                 a.compose(&b, COMPOSITION_ALGORITHM),
                 ac.compose(&bc, COMPOSITION_ALGORITHM)
@@ -269,19 +273,19 @@ proptest! {
         }
     }
 
-    /// P3 — every composite's deltas are in canonical normal form.
+    /// P3 — every composite's deltas are in normal form.
     #[test]
-    fn test_reaction_compose_canonical_deltas(
+    fn test_reaction_compose_normalized_deltas(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
         for c in a.compose(&b, COMPOSITION_ALGORITHM) {
-            let canonical = c
+            let normalized = c
                 .deltas
                 .clone()
                 .normalize()
-                .map_err(|e| TestCaseError::fail(format!("composite deltas not canonical: {e:?}")))?;
-            prop_assert_eq!(canonical, c.deltas);
+                .map_err(|e| TestCaseError::fail(format!("composite deltas not normalized: {e:?}")))?;
+            prop_assert_eq!(normalized, c.deltas);
         }
     }
 

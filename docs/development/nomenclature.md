@@ -272,9 +272,8 @@ graph-IR value; do not extend `attributes` to values that are not complete entit
 ### Canonical and canonicalize
 
 > **TODO (2026-08-07):** The definitions below are the approved target semantics from discussion
-> doc 186. The current code still uses `Canonicalize` and `canonical_eq` for fixed-frame form
-> normalization. Remove this marker when the trait rename and aggregate canonicalization API are
-> implemented.
+> doc 186. Fixed-frame form normalization now uses `Normalize` and `Equiv`; the aggregate
+> canonicalization API remains to be implemented. Remove this marker when that API lands.
 
 **Canonicalize** selects a canonical entity-id and participant frame for a complete indexed graph IR
 modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
@@ -676,7 +675,7 @@ structural: it says the lattice is resolved to a bottom element, not that the st
 chemistry invariants or that its entities are mutually consistent.
 
 `AsLit` is the exact projection out of a ground value, bound by the totality law
-`value.is_ground() == value.as_lit().is_some()`. It does not canonicalize, apply defaults, validate,
+`value.is_ground() == value.as_lit().is_some()`. It does not normalize, apply defaults, validate,
 or merge ground states that happen to have the same downstream numerical effect.
 
 **Not:** valid, or chemically admissible. Structural groundness is separate from both.
@@ -985,7 +984,7 @@ overlays despite their binary shape.
 ### Normalize
 
 **Normalize** puts a form into a deterministic normal form without changing entity ids or
-participant frames. It folds value expressions, canonicalizes set representations, flattens and
+participant frames. It folds value expressions, normalizes set representations, flattens and
 deduplicates logical constraints, normalizes entity fields and constraints, and normalizes
 fixed-frame transformation values such as `Deltas`. It is context-free, idempotent on satisfiable
 values, and returns `Err(Contradiction)` for an unsatisfiable represented value.

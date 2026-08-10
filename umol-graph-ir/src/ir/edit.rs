@@ -279,7 +279,7 @@ pub struct AddBond {
 /// application records an [`Undo`] as these effects are realized. `RemoveTopology` removes atoms
 /// and bonds together.
 ///
-/// Edits have no canonical form. Sorting or deduplicating a sequence would invalidate the `New(n)`
+/// Edits have no normal form. Sorting or deduplicating a sequence would invalidate the `New(n)`
 /// references that depend on its order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
@@ -2645,7 +2645,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AtomForm::from_element(Element::C), AtomUpdate::default())]
-    #[case::canonical_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(AtomForm::from_element(Element::C).with_charge(1_i64), AtomUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AtomForm::from_element(Element::C), AtomUpdate { constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_atom_identity(#[case] current: AtomForm, #[case] update: AtomUpdate) {
         let mut edits = Edits::new();
@@ -2737,7 +2737,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(BondForm::from_order(1), BondUpdate::default())]
-    #[case::canonical_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(BondForm::from_order(1).with_charge(1_i64), BondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(BondForm::from_order(1), BondUpdate { constraints: BondConstraintsForm::from(BondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_bond_identity(#[case] current: BondForm, #[case] update: BondUpdate) {
         let mut edits = Edits::new();
@@ -2814,7 +2814,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(DativeBondForm::from_order(1), DativeBondUpdate::default())]
-    #[case::canonical_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(DativeBondForm::from_order(1), DativeBondUpdate { order: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(DativeBondForm::from_order(1), DativeBondUpdate { constraints: DativeBondConstraintsForm::from(DativeBondConstraintForm::ring_membership(RingScope::Size(6), NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_dative_bond_identity(
         #[case] current: DativeBondForm,
@@ -2904,7 +2904,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate::default())]
-    #[case::canonical_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), AromaticSystemUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(AromaticSystemForm::from_electrons(vec![1, 1, 1]), AromaticSystemUpdate { constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_aromatic_system_identity(
         #[case] current: AromaticSystemForm,
@@ -2994,7 +2994,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate::default())]
-    #[case::canonical_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
+    #[case::normalized_field(MulticenterBondForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64), MulticenterBondUpdate { charge: Some(NumForm::lit_set([1])), ..Default::default() })]
     #[case::absent_constraint_removal(MulticenterBondForm::from_electrons(vec![1, 1, 1]), MulticenterBondUpdate { constraints: MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(NumForm::Undetermined)), ..Default::default() })]
     fn test_edits_update_multicenter_bond_identity(
         #[case] current: MulticenterBondForm,

@@ -987,12 +987,12 @@ and the semantic properties validated by the corresponding property tests.
   `BiRelationEquiv::equiv_under`, relation-data permutation actions, molecule comparisons, edit
   continuity checks, and transaction checks on `Equiv` without introducing another comparison
   protocol. Migrate every Rust caller and preserve the current participant-order actions for
-  aromatic and multicenter electron counts. This is breaking red-to-green. [dep: S1a]
+  aromatic and multicenter electron counts. This is breaking red-to-green. [dep: S1a] **Done.**
 - **S1c — Boundary and documentation migration.** Update the existing Python lattice operations,
   DSL and EDN tests, specifications, examples, fuzz targets, and current rustdoc to the normalization
   vocabulary. Remove the old fixed-frame `Canonicalize` implementation on `Reaction`; `Deltas`
   implements `Normalize`. Do not introduce aggregate canonicalization until S4. This is breaking
-  red-to-green. [dep: S1b]
+  red-to-green. [dep: S1b] **Done.**
 
 ### S2 — Representation integrity and public validators
 

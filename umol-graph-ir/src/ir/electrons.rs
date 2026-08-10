@@ -50,7 +50,7 @@ impl From<Vec<i64>> for ElectronCountsForm {
 }
 
 impl Normalize for ElectronCountsForm {
-    /// Positional vector — both variants are already canonical (no sort/dedup).
+    /// Positional vector — both variants are already normalized (no sort/dedup).
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }

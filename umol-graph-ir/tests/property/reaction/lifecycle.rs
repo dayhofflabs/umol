@@ -1,4 +1,4 @@
-//! Reaction construction, normalization, and derivation properties.
+//! Reaction construction and derivation properties.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -16,13 +16,6 @@ proptest! {
         ))),
         ..Config::default()
     })]
-
-    #[test]
-    fn test_reaction_normalize(reaction in reaction_strategy()) {
-        if let Ok(normalized) = reaction.normalize() {
-            prop_assert_eq!(normalized.clone().normalize(), Ok(normalized));
-        }
-    }
 
     #[test]
     fn test_reaction_apply_at(reaction in reaction_strategy()) {

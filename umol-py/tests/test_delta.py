@@ -224,10 +224,10 @@ def test_entity_delta_readonly_contract(
     assert writable.readonly is False
     setattr(writable, field, copy_update)
 
-    canonical = attributes.canonicalize()
+    normalized = attributes.normalize()
     meet = attributes.meet(attributes)
     join = attributes.join(attributes)
-    assert canonical.readonly is False
+    assert normalized.readonly is False
     assert meet is not None and meet.readonly is False
     assert join is not None and join.readonly is False
 
@@ -3057,18 +3057,18 @@ def test_deltas_iter():
         ),
     ],
 )
-def test_deltas_canonicalize(source, expected):
+def test_deltas_normalize(source, expected):
     snapshot = Deltas(source)
 
-    canonical = source.canonicalize()
+    normalized = source.normalize()
 
-    assert canonical == expected
-    assert canonical is not source
+    assert normalized == expected
+    assert normalized is not source
     assert source == snapshot
-    assert canonical.canonicalize() == canonical
+    assert normalized.normalize() == normalized
 
 
-def test_deltas_canonicalize_error():
+def test_deltas_normalize_error():
     source = Deltas(
         [
             Delta.Atom(
@@ -3092,12 +3092,12 @@ def test_deltas_canonicalize_error():
     snapshot = Deltas(source)
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        source.canonicalize()
+        source.normalize()
 
     assert source == snapshot
 
 
-def test_deltas_canonical_eq():
+def test_deltas_equiv():
     lhs = Deltas(
         [
             Delta.Bond(
@@ -3140,4 +3140,4 @@ def test_deltas_canonical_eq():
     )
 
     assert lhs != rhs
-    assert lhs.canonical_eq(rhs) is True
+    assert lhs.equiv(rhs) is True

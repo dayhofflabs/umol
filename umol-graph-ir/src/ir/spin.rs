@@ -33,7 +33,7 @@ impl UnpairedElectronsForm {
         }
     }
 
-    /// Derive the minimal canonical component update carrying `self` to `other`.
+    /// Derive the minimal normalized component update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> UnpairedElectronsUpdate {
         UnpairedElectronsUpdate {
             count: (!self.count.equiv(&other.count)).then(|| other.count.clone()),
@@ -175,7 +175,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(
+    #[case::normalized(
         UnpairedElectronsForm { count: NumForm::Lit(2), multiplicity: NumForm::Lit(1) },
         UnpairedElectronsForm { count: NumForm::lit_set([2]), multiplicity: NumForm::lit_set([1]) },
     )]

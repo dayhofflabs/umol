@@ -205,7 +205,7 @@ impl StereoAtomForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> StereoAtomUpdate {
         let mut constraints = StereoAtomConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -256,7 +256,7 @@ impl StereoBondForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> StereoBondUpdate {
         let mut constraints = StereoBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -764,7 +764,7 @@ impl From<CisTransConfiguration> for CisTransStereoForm {
 /// `Lit`/`LitSet` base, or one of these under the permutation-action operators
 /// `~` (swap), `'` (mirror), `^` (apply). Kind-relative — **no
 /// `Lattice`/`Normalize`** (structural `Eq` only); the owning configuration
-/// normalizes it under its concrete kind. Canonicalization composes the operator
+/// normalizes it under its concrete kind. Normalization composes the operator
 /// word into one net permutation: over a literal base it folds to a concrete
 /// coset; over a `Var` it leaves at most one operator layer.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -983,7 +983,7 @@ pub(crate) fn canon_coset(
 }
 
 /// Greatest lower bound of two cosets under `kind` (canonicalizing operands);
-/// `Term` meets only an equal canonical `Term`.
+/// `Term` meets only an equal normalized `Term`.
 pub(crate) fn coset_meet(
     a: &StereoCoset,
     b: &StereoCoset,

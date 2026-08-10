@@ -27,7 +27,7 @@ The semantic assertion and the evidence supporting it are different things:
 | Concept | Meaning |
 | --- | --- |
 | Semantic property | A quantified assertion about public behavior. It is part of the API contract and is independent of any particular generator. |
-| Operational domain | The class of inputs or states over which one execution of the property is meaningful: raw values, canonical values, valid DSL values, malformed reactions, simple graphs, multigraphs, and so on. |
+| Operational domain | The class of inputs or states over which one execution of the property is meaningful: raw values, normalized values, valid DSL values, malformed reactions, simple graphs, multigraphs, and so on. |
 | Validation method | The means used to check the assertion: direct expected result, definition-level reference implementation, comparison between implementations, transformation relation, bounded exhaustive collection, or literature result. |
 | Evidence scope | The actual generated distribution, size bound, checked-in collection, or set of named examples over which the validation ran. |
 | Property test | Executable code combining an operational domain, a validation method, and an assertion. |
@@ -44,7 +44,7 @@ Semantic property:
     update(x, difference_to(x, y)) = y
 
 Operational domains:
-    canonical entity forms
+    normalized entity forms
     entity forms containing independent undetermined fields
     each of the eight entity families
 
@@ -207,7 +207,7 @@ module obscures the asserted properties.
 - Generate invalid inputs by applying one named defect to a valid base when the property concerns an
   exact failure boundary. Carry independently derived expected information in a scenario value when
   recomputing it through the production operation would make the assertion circular.
-- Keep raw, canonical, ground, structurally valid, semantically valid, and deliberately malformed
+- Keep raw, normalized, ground, structurally valid, semantically valid, and deliberately malformed
   domains distinct. A strategy's name and documentation must say which domain it emits.
 
 ### Reference and fixture support
@@ -327,14 +327,14 @@ The lattice suite distinguishes at least two domains:
 
 | Domain | Purpose |
 | --- | --- |
-| Canonical, satisfiable values | Check the full lattice laws and laws that depend on canonical representation. |
-| Raw, possibly non-canonical values | Check input-canonicality-independent behavior, canonical folding, `matches`/`meet` consistency, and canonicality of results. |
+| Normalized, satisfiable values | Check the full lattice laws and laws that depend on normal representation. |
+| Raw, possibly non-normal values | Check normalization-independent behavior, normal-form folding, `matches`/`meet` consistency, and normality of results. |
 
 The public `Lattice` contract should state the algebraic laws once. The
 validation description should then say that they are exercised both on
-canonical values and on raw expression trees. Omitting the second domain would
-leave the canonicalization path largely untested even if every generated
-canonical value satisfied the lattice equations.
+normalized values and on raw expression trees. Omitting the second domain would
+leave the normalization path largely untested even if every generated
+normalized value satisfied the lattice equations.
 
 ### Serialization and parsing
 
@@ -351,7 +351,7 @@ Serialization contains several related but non-identical properties:
 
 These cannot be collapsed into a single “serialization roundtrips” claim.
 Each property uses a different domain and comparison relation. In particular,
-surface normalization may require canonical equality rather than stored
+surface normalization may require normalized equivalence rather than stored
 representation equality, while a lossless IR EDN roundtrip requires `==`.
 
 ### Updates, deltas, and edits
@@ -379,10 +379,9 @@ operational domains interchangeable.
 
 ### Molecule comparison
 
-> **TODO (2026-08-07):** These are the approved target relations from discussion doc 186. The
-> current code still calls fixed-frame normalization `Canonicalize` and its equality
-> `canonical_eq`. Remove this marker and update the cited property modules when doc 186 is
-> implemented.
+> **TODO (2026-08-07):** These are the approved target relations from discussion doc 186.
+> Fixed-frame normalization now uses `Normalize` and `Equiv`; aggregate `canonical_eq` remains to be
+> implemented. Remove this marker when doc 186 is implemented.
 
 The comparison suite already records distinct relations:
 
@@ -418,7 +417,7 @@ Reaction properties span several operational domains:
 
 | Domain | Representative properties |
 | --- | --- |
-| Generated well-formed reactions | Canonicalization idempotence, reaction/span reconstruction, derivation reversal, composition, and serialization |
+| Generated well-formed reactions | Reaction/span reconstruction, derivation reversal, composition, and serialization |
 | Comprehensive entity reactions | Roundtrips and transformations across all eight entity families |
 | Host-relative refinements | Pattern-relative updates lower against the matched host value rather than replacing it with the pattern value |
 | Explicit correspondences | `apply_at` agrees with a matching-derived application for the same match |

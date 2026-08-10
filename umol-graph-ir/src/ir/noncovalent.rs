@@ -97,7 +97,7 @@ impl NoncovalentBondForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> NoncovalentBondUpdate {
         let mut constraints = NoncovalentBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -146,7 +146,7 @@ impl From<NoncovalentBondKind> for NoncovalentBondKindForm {
 }
 
 impl Normalize for NoncovalentBondKindForm {
-    /// Both variants are already canonical — nothing folds.
+    /// Both variants are already normalized — nothing folds.
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(self)
     }

@@ -92,7 +92,7 @@ impl BondForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> BondUpdate {
         let mut constraints = BondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(BondForm::from_order(1).with_charge(1_i64), BondForm::from_order(1).with_charge(NumForm::lit_set([1])))]
+    #[case::normalized(BondForm::from_order(1).with_charge(1_i64), BondForm::from_order(1).with_charge(NumForm::lit_set([1])))]
     fn test_bond_form_difference_to_identity(#[case] bond: BondForm, #[case] other: BondForm) {
         assert_eq!(bond.difference_to(&other), BondUpdate::default());
     }

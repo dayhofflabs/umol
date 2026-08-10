@@ -2955,7 +2955,7 @@ mod tests {
         #[case] current: NumForm,
         #[case] old: NumForm,
     ) {
-        // The modify's recorded `old` is canonically equal to — but structurally distinct from — the
+        // The modify's recorded `old` is equivalent to — but structurally distinct from — the
         // stored charge, so the old-state check passes (structural `!=` would raise `OldStateMismatch`).
         one_atom.atom_mut(AtomId(0)).attributes.charge = current;
         one_atom

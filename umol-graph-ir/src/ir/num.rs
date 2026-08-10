@@ -16,7 +16,7 @@ use super::traits::{AsLit, Lattice, Normalize};
 /// mass, valence, bond order, etc.
 ///
 /// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
-/// tree"); semantic equality is `Normalize::equiv`, which compares canonical
+/// tree"); semantic equality is `Equiv::equiv`, which compares normal
 /// forms.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NumForm {
@@ -47,7 +47,7 @@ pub enum ArithExpr {
 
 /// Predicate expression over arithmetic expressions, the constraint-sort half of the field grammar.
 /// `Rel` and `Mem` operators are negation-closed (`RelOp` has `Ne`, `MemOp` has
-/// `NotIn`), so canonicalization eliminates `Not` entirely — it survives only as
+/// `NotIn`), so normalization eliminates `Not` entirely — it survives only as
 /// faithful parser input for `!`. ⊤/⊥ are not variants: a predicate that decides
 /// is lifted by `NumForm` to `Undetermined` / `Err(Contradiction)`.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -148,7 +148,7 @@ impl Normalize for ArithExpr {
     }
 }
 
-/// Lift a canonical set: empty is unsatisfiable, a singleton is a `Lit`.
+/// Lift a normalized set: empty is unsatisfiable, a singleton is a `Lit`.
 fn lift_set(set: BTreeSet<i64>) -> Result<NumForm, Contradiction> {
     match set.len() {
         0 => Err(Contradiction),
@@ -157,7 +157,7 @@ fn lift_set(set: BTreeSet<i64>) -> Result<NumForm, Contradiction> {
     }
 }
 
-/// Lift a canonical arithmetic expression: a ground expression becomes `Lit`.
+/// Lift a normalized arithmetic expression: a ground expression becomes `Lit`.
 fn lift_arith_expr(expression: ArithExpr) -> NumForm {
     match arith_expr_const(&expression) {
         Some(n) => NumForm::Lit(n),
@@ -165,7 +165,7 @@ fn lift_arith_expr(expression: ArithExpr) -> NumForm {
     }
 }
 
-/// Canonical literal expression: the sign lives in `Neg`, so `Lit` is always ≥ 0.
+/// Normalized literal expression: the sign lives in `Neg`, so `Lit` is always ≥ 0.
 fn arith_expr_lit(n: i64) -> ArithExpr {
     if n < 0 {
         ArithExpr::Neg(Box::new(ArithExpr::Lit(-n)))
@@ -174,7 +174,7 @@ fn arith_expr_lit(n: i64) -> ArithExpr {
     }
 }
 
-/// The integer a canonical expression denotes, if ground.
+/// The integer a normalized expression denotes, if ground.
 fn arith_expr_const(expression: &ArithExpr) -> Option<i64> {
     match expression {
         ArithExpr::Lit(n) => Some(*n),
@@ -198,7 +198,7 @@ fn canon_arith_expr(expression: ArithExpr) -> ArithExpr {
     }
 }
 
-/// `inner` is already canonical.
+/// `inner` is already normalized.
 fn canon_neg(inner: ArithExpr) -> ArithExpr {
     match inner {
         ArithExpr::Neg(grand) => *grand,
@@ -264,7 +264,7 @@ fn flatten_product(operands: Vec<ArithExpr>, terms: &mut Vec<ArithExpr>, constan
     }
 }
 
-/// `a`/`b` already canonical; folds a ground `(Lit) op (Lit)` when divisor ≠ 0.
+/// `a`/`b` are already normalized; folds a ground `(Lit) op (Lit)` when divisor ≠ 0.
 fn canon_div_rem(a: ArithExpr, b: ArithExpr, is_rem: bool) -> ArithExpr {
     if let (Some(x), Some(y)) = (arith_expr_const(&a), arith_expr_const(&b)) {
         if y != 0 {
@@ -279,7 +279,7 @@ fn canon_div_rem(a: ArithExpr, b: ArithExpr, is_rem: bool) -> ArithExpr {
     }
 }
 
-/// Predicate canonical form, threading ⊤/⊥ that no `PredExpr` variant can
+/// Predicate normal form, threading ⊤/⊥ that no `PredExpr` variant can
 /// hold. Lifted to `NumForm` (⊤ → `Undetermined`, ⊥ → `Err`).
 enum PredicateReduction {
     Top,
@@ -297,7 +297,7 @@ fn reduce_pred_expr(predicate: PredExpr) -> PredicateReduction {
     }
 }
 
-/// `a`/`b` already canonical.
+/// `a`/`b` are already normalized.
 fn canon_rel(a: ArithExpr, op: RelOp, b: ArithExpr) -> PredicateReduction {
     if let (Some(x), Some(y)) = (arith_expr_const(&a), arith_expr_const(&b)) {
         let holds = match op {
@@ -344,7 +344,7 @@ fn neg_mem_op(op: MemOp) -> MemOp {
     }
 }
 
-/// `e` already canonical; `set` is sorted/deduped by type.
+/// `e` is already normalized; `set` is sorted/deduped by type.
 fn canon_mem(e: ArithExpr, op: MemOp, set: BTreeSet<i64>) -> PredicateReduction {
     if let Some(x) = arith_expr_const(&e) {
         let present = set.contains(&x);
@@ -383,7 +383,7 @@ fn negate(form: PredicateReduction) -> PredicateReduction {
     }
 }
 
-/// `predicate` is already canonical (so it carries no `Not`).
+/// `predicate` is already normalized (so it carries no `Not`).
 fn negate_pred_expr(predicate: PredExpr) -> PredicateReduction {
     match predicate {
         PredExpr::Rel(a, op, b) => canon_rel(a, neg_rel_op(op), b),
@@ -472,7 +472,7 @@ impl Lattice for NumForm {
 
     /// Greatest lower bound, canonicalizing both operands and the result.
     /// Distinct symbolic forms (`ArithExpr`/`PredExpr`) meet only when equal once
-    /// canonical; symbolic versus concrete is rejected.
+    /// normalized; symbolic versus concrete is rejected.
     fn meet(&self, other: &Self) -> Option<Self> {
         let a = self.normalized().ok()?;
         let b = other.normalized().ok()?;
@@ -600,7 +600,7 @@ impl Lattice for NumForm {
     }
 }
 
-/// A non-empty canonical set as a `NumForm`: a singleton collapses to `Lit`.
+/// A non-empty normalized set as a `NumForm`: a singleton collapses to `Lit`.
 fn litset_or_lit(set: BTreeSet<i64>) -> NumForm {
     match set.len() {
         0 => NumForm::Undetermined,

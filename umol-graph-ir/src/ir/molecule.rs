@@ -467,7 +467,7 @@ impl Molecule {
     /// Complete semantic equality in the current id and participant frame.
     ///
     /// Topology, relation participants, and stereo sites/ligands must have the same stored ids;
-    /// entity forms and molecule constraints compare by canonical form.
+    /// entity forms and molecule constraints compare by normal form.
     pub fn equiv(&self, other: &Self) -> bool {
         if self.graph != other.graph
             || self.atoms.len() != other.atoms.len()

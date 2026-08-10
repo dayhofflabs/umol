@@ -23,7 +23,7 @@ pub enum ApplyError {
     /// DPO gluing condition is violated.
     #[error("dangling edge at deleted host atom {host_atom}")]
     Dangling { host_atom: AtomId },
-    /// The reaction's deltas are inconsistent (canonicalization failed).
+    /// The reaction's deltas are inconsistent (normalization failed).
     #[error("inconsistent reaction deltas")]
     Inconsistent,
     /// Structural conflict: a parallel bond, overlapping systems, two stereo centers on one site, etc.
@@ -55,7 +55,7 @@ impl ApplyError {
 /// A reaction or host does not satisfy the structural preconditions for application.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ApplyPreconditionError {
-    /// The reaction's delta sequence cannot be canonicalized.
+    /// The reaction's delta sequence cannot be normalized.
     #[error("inconsistent reaction deltas")]
     InconsistentReaction,
     /// The reaction left-hand side is structurally invalid.

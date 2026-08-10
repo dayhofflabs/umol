@@ -121,7 +121,7 @@ impl AromaticSystemForm {
         }
     }
 
-    /// Derive the minimal canonical attribute update carrying `self` to `other`.
+    /// Derive the minimal normalized attribute update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> AromaticSystemUpdate {
         let mut constraints = AromaticSystemConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::canonical(
+    #[case::normalized(
         AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(1_i64),
         AromaticSystemForm::from_electrons(vec![1, 1, 1]).with_charge(NumForm::lit_set([1])),
     )]

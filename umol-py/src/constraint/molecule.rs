@@ -21,7 +21,7 @@ use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
-use crate::lattice::impl_py_canonicalize;
+use crate::lattice::impl_py_normalize;
 use crate::molecule::Molecule;
 use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
@@ -122,7 +122,7 @@ impl Constraint {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     Constraint,
     GraphIrConstraint,
     |value: &Constraint, py: Python<'_>| -> PyResult<GraphIrConstraint> { Ok(value.to_rust(py)) },
@@ -440,7 +440,7 @@ impl Constraints {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     Constraints,
     GraphIrConstraints,
     |value: &Constraints, _py: Python<'_>| -> PyResult<GraphIrConstraints> {
@@ -558,7 +558,7 @@ impl MoleculeConstraint {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     MoleculeConstraint,
     GraphIrMoleculeConstraint,
     |value: &MoleculeConstraint, py: Python<'_>| -> PyResult<GraphIrMoleculeConstraint> {
@@ -1020,7 +1020,7 @@ impl RelationalConstraint {
     }
 }
 
-impl_py_canonicalize!(
+impl_py_normalize!(
     RelationalConstraint,
     GraphIrRelationalConstraint,
     |value: &RelationalConstraint, py: Python<'_>| -> PyResult<GraphIrRelationalConstraint> {

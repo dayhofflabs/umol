@@ -979,7 +979,7 @@ impl MoleculeEditor {
     }
 
     /// `true` iff noncovalent bond `id` structurally equals `(atoms, attributes)` — participants (unordered)
-    /// and `attributes` up to canonical form, `attributes` reindexed into the stored participant frame.
+    /// and `attributes` up to normal form, `attributes` reindexed into the stored participant frame.
     pub(crate) fn noncovalent_bond_equiv(
         &self,
         id: NoncovalentBondId,
@@ -1024,7 +1024,7 @@ impl MoleculeEditor {
     }
 
     /// `true` iff dative bond `id` structurally equals `(acceptor, donors, attributes)` — the acceptor
-    /// (ordered, single) and donors (unordered) factors and `attributes` up to canonical form.
+    /// (ordered, single) and donors (unordered) factors and `attributes` up to normal form.
     pub(crate) fn dative_bond_equiv(
         &self,
         id: DativeBondId,

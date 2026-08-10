@@ -151,7 +151,7 @@ This is an ownership rule, not semantic validation; validation follows the data-
 Entity forms are ordinarily writable owned objects. When an entity form is stored in an immutable
 delta, construction clones its value into a form instance whose `readonly` property is true. The
 state cannot be changed in place, getters retain that same read-only instance, and field and
-constraint mutation raise `TypeError`. `copy`, `canonicalize`, `meet`, and `join` produce ordinary
+constraint mutation raise `TypeError`. `copy`, `normalize`, `meet`, and `join` produce ordinary
 writable forms. Individual delta variants are immutable; `Deltas` provides only append-only
 container mutation.
 
