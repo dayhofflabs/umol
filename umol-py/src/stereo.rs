@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 // The `BooleanForm` Rust value is still `#[cfg(test)]` (only tests build it directly); its `to_rust`
@@ -35,7 +35,7 @@ use umol_graph_ir::ir::{
 use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -1176,13 +1176,19 @@ macro_rules! stereo_value {
     (@from_inner production, $value:ident, $ast_value:ident) => {
         /// Wrap an owned Rust stereo-entity AST.
         pub(crate) fn from_inner(value: $ast_value) -> Self {
-            $value(EntityFormValue::writable(value))
+            Self {
+                value,
+                readonly: false,
+            }
         }
     };
     (@from_inner test, $value:ident, $ast_value:ident) => {
         #[cfg(test)]
         pub(crate) fn from_inner(value: $ast_value) -> Self {
-            $value(EntityFormValue::writable(value))
+            Self {
+                value,
+                readonly: false,
+            }
         }
     };
     (
@@ -1190,7 +1196,10 @@ macro_rules! stereo_value {
         $view:ident, $backing:ident, $from_inner:ident $(,)?
     ) => {
         #[pyclass]
-        pub struct $value(EntityFormValue<$ast_value>);
+        pub struct $value {
+            value: $ast_value,
+            readonly: bool,
+        }
 
         #[pymethods]
         impl $value {
@@ -1219,17 +1228,17 @@ macro_rules! stereo_value {
             }
 
             fn __str__(&self) -> String {
-                self.0.to_string()
+                self.value.to_string()
             }
 
             fn __repr__(&self) -> String {
-                format!("{}.parse('{}')", stringify!($value), self.0)
+                format!("{}.parse('{}')", stringify!($value), self.value)
             }
 
             /// The stereo configuration (geometry + coset).
             #[getter]
             fn configuration(&self, py: Python<'_>) -> PyResult<StereoConfigurationForm> {
-                StereoConfigurationForm::from_rust(py, &self.0.configuration)
+                StereoConfigurationForm::from_rust(py, &self.value.configuration)
             }
 
             #[setter]
@@ -1259,7 +1268,7 @@ macro_rules! stereo_value {
             }
 
             #[getter]
-            fn readonly(&self) -> bool { self.0.is_readonly() }
+            fn readonly(&self) -> bool { self.readonly }
 
             fn copy(&self) -> Self { Self::from_inner(self.inner().clone()) }
 
@@ -1268,7 +1277,7 @@ macro_rules! stereo_value {
                 let dict = PyDict::new(py);
                 dict.set_item("configuration", self.configuration(py)?)?;
                 let constraints = self
-                    .0
+                    .value
                     .constraints
                     .iter()
                     .map(|c| into_py_variant(py, $constraint::from_rust(py, c)?))
@@ -1281,12 +1290,16 @@ macro_rules! stereo_value {
         impl $value {
             /// The wrapped AST entity — read access for the entity-backed constraints view.
             pub(crate) fn inner(&self) -> &$ast_value {
-                self.0.value()
+                &self.value
             }
 
             /// Mutable access to the wrapped AST entity — write access for the view.
             pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut $ast_value> {
-                self.0.value_mut()
+                if self.readonly {
+                    Err(PyTypeError::new_err("read-only entity form"))
+                } else {
+                    Ok(&mut self.value)
+                }
             }
 
             stereo_value!(@from_inner $from_inner, $value, $ast_value);
@@ -1298,7 +1311,13 @@ macro_rules! stereo_value {
             fn clone_rust(&self) -> Self::RustForm { self.inner().clone() }
 
             fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-                Py::new(py, Self(EntityFormValue::readonly(value)))
+                Py::new(
+                    py,
+                    Self {
+                        value,
+                        readonly: true,
+                    },
+                )
             }
         }
 

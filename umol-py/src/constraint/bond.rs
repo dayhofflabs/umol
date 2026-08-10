@@ -17,8 +17,8 @@ use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{NumForm, NumLike};
 use crate::stereo::{CisTransStereoForm, CisTransStereoLike};
-use crate::value::{NumForm, NumLike};
 
 /// The key (identity) of a bond constraint, for keyed lookup. The ring-membership
 /// key carries its ring scope; all other keys are the bare discriminant.

@@ -20,8 +20,8 @@ use crate::atom::AtomForm;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{NumForm, NumLike};
 use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
-use crate::value::{NumForm, NumLike};
 
 /// Exact ground aromatic-valence state.
 #[pyclass(from_py_object)]

@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::{hash_rust, into_py_variant};
 use crate::lattice::impl_py_lattice;
-use crate::value::{NumForm, NumLike};
+use crate::num::{NumForm, NumLike};
 
 /// Exact unpaired-electron count and spin multiplicity without physical validation.
 #[pyclass(eq, hash, frozen, from_py_object)]

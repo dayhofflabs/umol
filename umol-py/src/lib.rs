@@ -94,6 +94,7 @@ use crate::{
         NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
         NoncovalentBondView, NoncovalentBondViews,
     },
+    num::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
     reaction::{
         ReactionApplicationConfig, ReactionAst, ReactionCompositionConfig, ReactionDerivation,
     },
@@ -116,7 +117,6 @@ use crate::{
     },
     substructure::SubstructureSearchConfig,
     transaction::{MoleculeEditor, Transaction},
-    value::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
 };
 
 #[cfg(feature = "graph")]
@@ -148,7 +148,7 @@ mod electrons;
 #[cfg(feature = "graph")]
 mod element;
 #[cfg(feature = "graph")]
-mod entity_form;
+mod entity;
 #[cfg(feature = "graph")]
 mod error;
 #[cfg(feature = "graph")]
@@ -165,6 +165,8 @@ mod molecule;
 mod multicenter;
 #[cfg(feature = "graph")]
 mod noncovalent;
+#[cfg(feature = "graph")]
+mod num;
 #[cfg(feature = "graph")]
 mod reaction;
 #[cfg(feature = "graph")]
@@ -183,8 +185,6 @@ mod stereo;
 mod substructure;
 #[cfg(feature = "graph")]
 mod transaction;
-#[cfg(feature = "graph")]
-mod value;
 
 /// The native extension module. Wrapper types are registered here as the
 /// binding grows; the graph domain is gated behind the `graph` feature.

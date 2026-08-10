@@ -17,7 +17,7 @@ use umol_graph_ir::ir::{
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::{impl_py_canonicalize, impl_py_lattice};
 
-/// Relational operator in a value predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
+/// Relational operator in a numeric predicate (`<=`, `>=`, `==`, `<`, `>`, `!=`).
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum RelOp {
@@ -53,7 +53,7 @@ impl RelOp {
     }
 }
 
-/// Membership operator in a value predicate (`in`, `not in`).
+/// Membership operator in a numeric predicate (`in`, `not in`).
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum MemOp {

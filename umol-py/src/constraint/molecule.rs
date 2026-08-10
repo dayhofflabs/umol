@@ -23,9 +23,9 @@ use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
 use crate::lattice::impl_py_canonicalize;
 use crate::molecule::MoleculeAst;
+use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::StereoKind;
-use crate::value::NumForm;
 
 /// A cross-entity molecule constraint covering dative bonds, aromatic systems,
 /// multicenter bonds, noncovalent bonds, stereo atoms, and stereo bonds.

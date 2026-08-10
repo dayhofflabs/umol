@@ -16,7 +16,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
 use crate::multicenter::MulticenterBondForm;
-use crate::value::{NumForm, NumLike};
+use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of a multicenter-bond constraint, for keyed lookup. The
 /// single key `ElectronCount` is the bare discriminant (no sub-key).

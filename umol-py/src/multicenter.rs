@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -24,12 +24,12 @@ use crate::constraint::multicenter::{
 };
 use crate::convert::hash_rust;
 use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for a multicenter bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -123,8 +123,16 @@ impl MulticenterBondUpdate {
 /// the participants of the owning molecule's multicenter relation (the view half); the
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
-#[derive(PartialEq)]
-pub struct MulticenterBondForm(EntityFormValue<GraphIrMulticenterBondForm>);
+pub struct MulticenterBondForm {
+    value: GraphIrMulticenterBondForm,
+    readonly: bool,
+}
+
+impl PartialEq for MulticenterBondForm {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl MulticenterBondForm {
@@ -161,17 +169,17 @@ impl MulticenterBondForm {
     }
 
     fn __str__(&self) -> String {
-        self.0.to_string()
+        self.value.to_string()
     }
 
     fn __repr__(&self) -> String {
-        format!("MulticenterBondForm.parse('{}')", self.0)
+        format!("MulticenterBondForm.parse('{}')", self.value)
     }
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
     fn electrons(&self) -> ElectronCountsForm {
-        ElectronCountsForm::from_rust(&self.0.electrons)
+        ElectronCountsForm::from_rust(&self.value.electrons)
     }
 
     #[setter]
@@ -182,7 +190,7 @@ impl MulticenterBondForm {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.charge)
+        NumForm::from_rust(py, &self.value.charge)
     }
 
     #[setter]
@@ -193,7 +201,7 @@ impl MulticenterBondForm {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.value.unpaired_electrons)
     }
 
     #[setter]
@@ -230,7 +238,7 @@ impl MulticenterBondForm {
 
     #[getter]
     fn readonly(&self) -> bool {
-        self.0.is_readonly()
+        self.readonly
     }
 
     fn copy(&self) -> Self {
@@ -245,7 +253,7 @@ impl MulticenterBondForm {
         dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
-            multicenter_bond_constraints_asdict(py, &self.0.constraints)?,
+            multicenter_bond_constraints_asdict(py, &self.value.constraints)?,
         )?;
         Ok(dict)
     }
@@ -254,18 +262,25 @@ impl MulticenterBondForm {
 impl MulticenterBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrMulticenterBondForm {
-        self.0.value()
+        &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrMulticenterBondForm> {
-        self.0.value_mut()
+        if self.readonly {
+            Err(PyTypeError::new_err("read-only entity form"))
+        } else {
+            Ok(&mut self.value)
+        }
     }
 
     /// Wrap an owned Rust multicenter-bond AST.
     pub(crate) fn from_inner(bond: GraphIrMulticenterBondForm) -> Self {
-        MulticenterBondForm(EntityFormValue::writable(bond))
+        Self {
+            value: bond,
+            readonly: false,
+        }
     }
 }
 
@@ -275,7 +290,13 @@ impl EntityForm for MulticenterBondForm {
         self.inner().clone()
     }
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-        Py::new(py, Self(EntityFormValue::readonly(value)))
+        Py::new(
+            py,
+            Self {
+                value,
+                readonly: true,
+            },
+        )
     }
 }
 

@@ -4,7 +4,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
@@ -26,7 +26,7 @@ use crate::constraint::noncovalent::{
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsUpdate,
 };
 use crate::convert::{hash_rust, variant_repr};
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
@@ -220,8 +220,16 @@ impl NoncovalentBondUpdate {
 /// The endpoint atom pair is the owning molecule's relation topology (the view half),
 /// not part of the value.
 #[pyclass(eq)]
-#[derive(PartialEq)]
-pub struct NoncovalentBondForm(EntityFormValue<GraphIrNoncovalentBondForm>);
+pub struct NoncovalentBondForm {
+    value: GraphIrNoncovalentBondForm,
+    readonly: bool,
+}
+
+impl PartialEq for NoncovalentBondForm {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl NoncovalentBondForm {
@@ -250,17 +258,17 @@ impl NoncovalentBondForm {
     }
 
     fn __str__(&self) -> String {
-        self.0.to_string()
+        self.value.to_string()
     }
 
     fn __repr__(&self) -> String {
-        format!("NoncovalentBondForm.parse('{}')", self.0)
+        format!("NoncovalentBondForm.parse('{}')", self.value)
     }
 
     /// The interaction kind.
     #[getter]
     fn kind(&self) -> NoncovalentBondKindForm {
-        NoncovalentBondKindForm::from_rust(&self.0.kind)
+        NoncovalentBondKindForm::from_rust(&self.value.kind)
     }
 
     #[setter]
@@ -295,7 +303,7 @@ impl NoncovalentBondForm {
 
     #[getter]
     fn readonly(&self) -> bool {
-        self.0.is_readonly()
+        self.readonly
     }
 
     fn copy(&self) -> Self {
@@ -308,7 +316,7 @@ impl NoncovalentBondForm {
         dict.set_item("kind", self.kind())?;
         dict.set_item(
             "constraints",
-            noncovalent_bond_constraints_asdict(py, &self.0.constraints)?,
+            noncovalent_bond_constraints_asdict(py, &self.value.constraints)?,
         )?;
         Ok(dict)
     }
@@ -317,18 +325,25 @@ impl NoncovalentBondForm {
 impl NoncovalentBondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrNoncovalentBondForm {
-        self.0.value()
+        &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrNoncovalentBondForm> {
-        self.0.value_mut()
+        if self.readonly {
+            Err(PyTypeError::new_err("read-only entity form"))
+        } else {
+            Ok(&mut self.value)
+        }
     }
 
     /// Wrap an owned Rust noncovalent-bond AST.
     pub(crate) fn from_inner(bond: GraphIrNoncovalentBondForm) -> Self {
-        NoncovalentBondForm(EntityFormValue::writable(bond))
+        Self {
+            value: bond,
+            readonly: false,
+        }
     }
 }
 
@@ -338,7 +353,13 @@ impl EntityForm for NoncovalentBondForm {
         self.inner().clone()
     }
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-        Py::new(py, Self(EntityFormValue::readonly(value)))
+        Py::new(
+            py,
+            Self {
+                value,
+                readonly: true,
+            },
+        )
     }
 }
 

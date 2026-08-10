@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -15,12 +15,12 @@ use umol_graph_ir::ir::{
 
 use crate::convert::hash_rust;
 use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for an aromatic system.
 #[pyclass(frozen, skip_from_py_object)]
@@ -114,8 +114,16 @@ impl AromaticSystemUpdate {
 /// the participants of the owning molecule's aromatic relation (the view half); the
 /// `electrons` vector is positional, aligned to that atom order.
 #[pyclass(eq)]
-#[derive(PartialEq)]
-pub struct AromaticSystemForm(EntityFormValue<GraphIrAromaticSystemForm>);
+pub struct AromaticSystemForm {
+    value: GraphIrAromaticSystemForm,
+    readonly: bool,
+}
+
+impl PartialEq for AromaticSystemForm {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl AromaticSystemForm {
@@ -152,17 +160,17 @@ impl AromaticSystemForm {
     }
 
     fn __str__(&self) -> String {
-        self.0.to_string()
+        self.value.to_string()
     }
 
     fn __repr__(&self) -> String {
-        format!("AromaticSystemForm.parse('{}')", self.0)
+        format!("AromaticSystemForm.parse('{}')", self.value)
     }
 
     /// The per-member-atom electron counts (positional, aligned to `atom_ids`).
     #[getter]
     fn electrons(&self) -> ElectronCountsForm {
-        ElectronCountsForm::from_rust(&self.0.electrons)
+        ElectronCountsForm::from_rust(&self.value.electrons)
     }
 
     #[setter]
@@ -173,7 +181,7 @@ impl AromaticSystemForm {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.charge)
+        NumForm::from_rust(py, &self.value.charge)
     }
 
     #[setter]
@@ -184,7 +192,7 @@ impl AromaticSystemForm {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.value.unpaired_electrons)
     }
 
     #[setter]
@@ -221,7 +229,7 @@ impl AromaticSystemForm {
 
     #[getter]
     fn readonly(&self) -> bool {
-        self.0.is_readonly()
+        self.readonly
     }
 
     fn copy(&self) -> Self {
@@ -236,7 +244,7 @@ impl AromaticSystemForm {
         dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
-            aromatic_system_constraints_asdict(py, &self.0.constraints)?,
+            aromatic_system_constraints_asdict(py, &self.value.constraints)?,
         )?;
         Ok(dict)
     }
@@ -245,18 +253,25 @@ impl AromaticSystemForm {
 impl AromaticSystemForm {
     /// The wrapped AST system — read access for the system-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrAromaticSystemForm {
-        self.0.value()
+        &self.value
     }
 
     /// Mutable access to the wrapped AST system — write access for the system-backed
     /// constraints view.
     pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrAromaticSystemForm> {
-        self.0.value_mut()
+        if self.readonly {
+            Err(PyTypeError::new_err("read-only entity form"))
+        } else {
+            Ok(&mut self.value)
+        }
     }
 
     /// Wrap an owned Rust aromatic-system AST.
     pub(crate) fn from_inner(system: GraphIrAromaticSystemForm) -> Self {
-        AromaticSystemForm(EntityFormValue::writable(system))
+        Self {
+            value: system,
+            readonly: false,
+        }
     }
 }
 
@@ -266,7 +281,13 @@ impl EntityForm for AromaticSystemForm {
         self.inner().clone()
     }
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-        Py::new(py, Self(EntityFormValue::readonly(value)))
+        Py::new(
+            py,
+            Self {
+                value,
+                readonly: true,
+            },
+        )
     }
 }
 

@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_graph_ir::ir::{
@@ -17,12 +17,12 @@ use crate::constraint::bond::{
     BondConstraintsView,
 };
 use crate::convert::hash_rust;
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use crate::value::{NumForm, NumLike};
 
 /// Attribute updates for a localized bond.
 #[pyclass(frozen, skip_from_py_object)]
@@ -117,8 +117,16 @@ impl BondUpdate {
 
 /// A bond: order, charge, unpaired electrons, and bond-scope constraints.
 #[pyclass(eq)]
-#[derive(PartialEq)]
-pub struct BondForm(EntityFormValue<GraphIrBondForm>);
+pub struct BondForm {
+    value: GraphIrBondForm,
+    readonly: bool,
+}
+
+impl PartialEq for BondForm {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl BondForm {
@@ -189,16 +197,16 @@ impl BondForm {
     }
 
     fn __str__(&self) -> String {
-        self.0.to_string()
+        self.value.to_string()
     }
 
     fn __repr__(&self) -> String {
-        format!("BondForm.parse('{}')", self.0)
+        format!("BondForm.parse('{}')", self.value)
     }
 
     #[getter]
     fn order(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.order)
+        NumForm::from_rust(py, &self.value.order)
     }
 
     #[setter]
@@ -209,7 +217,7 @@ impl BondForm {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.charge)
+        NumForm::from_rust(py, &self.value.charge)
     }
 
     #[setter]
@@ -220,7 +228,7 @@ impl BondForm {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.value.unpaired_electrons)
     }
 
     #[setter]
@@ -255,7 +263,7 @@ impl BondForm {
 
     #[getter]
     fn readonly(&self) -> bool {
-        self.0.is_readonly()
+        self.readonly
     }
 
     fn copy(&self) -> Self {
@@ -270,7 +278,7 @@ impl BondForm {
         dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
-            bond_constraints_asdict(py, &self.0.constraints)?,
+            bond_constraints_asdict(py, &self.value.constraints)?,
         )?;
         Ok(dict)
     }
@@ -279,19 +287,26 @@ impl BondForm {
 impl BondForm {
     /// The wrapped AST bond — read access for the bond-backed constraints view.
     pub(crate) fn inner(&self) -> &GraphIrBondForm {
-        self.0.value()
+        &self.value
     }
 
     /// Mutable access to the wrapped AST bond — write access for the bond-backed
     /// constraints view.
     pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrBondForm> {
-        self.0.value_mut()
+        if self.readonly {
+            Err(PyTypeError::new_err("read-only entity form"))
+        } else {
+            Ok(&mut self.value)
+        }
     }
 
     /// Wrap an AST bond (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
     pub(crate) fn from_inner(bond: GraphIrBondForm) -> Self {
-        BondForm(EntityFormValue::writable(bond))
+        Self {
+            value: bond,
+            readonly: false,
+        }
     }
 }
 
@@ -303,7 +318,13 @@ impl EntityForm for BondForm {
     }
 
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-        Py::new(py, Self(EntityFormValue::readonly(value)))
+        Py::new(
+            py,
+            Self {
+                value,
+                readonly: true,
+            },
+        )
     }
 }
 

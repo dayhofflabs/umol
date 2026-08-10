@@ -18,7 +18,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
-use crate::value::{NumForm, NumLike};
+use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of a dative bond constraint, for keyed lookup. The
 /// ring-membership key carries its ring scope; all other keys are the bare

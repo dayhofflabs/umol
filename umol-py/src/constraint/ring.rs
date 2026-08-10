@@ -7,7 +7,7 @@ use umol_graph_ir::ir::{
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::value::{NumForm, NumLike};
+use crate::num::{NumForm, NumLike};
 
 #[pyclass]
 pub enum RingScope {

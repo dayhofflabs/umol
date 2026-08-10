@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::PyIndexError;
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use umol_chem::element::Element as ChemElement;
@@ -21,12 +21,12 @@ use crate::constraint::atom::{
 };
 use crate::convert::{hash_rust, variant_repr};
 use crate::element::Element;
-use crate::entity_form::{EntityForm, EntityFormValue};
+use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::MoleculeAst;
+use crate::num::{MemOp, NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use crate::value::{MemOp, NumForm, NumLike};
 
 /// Element expression: undetermined, a single element, a finite element set, a
 /// complement set (`!{…}`), or a variable with an optional membership restriction.
@@ -367,8 +367,16 @@ impl AtomUpdate {
 /// An atom: element, isotope, charge, implicit hydrogens, lone pairs, unpaired
 /// electrons, and atom-scope constraints.
 #[pyclass(eq)]
-#[derive(PartialEq)]
-pub struct AtomForm(EntityFormValue<GraphIrAtomForm>);
+pub struct AtomForm {
+    value: GraphIrAtomForm,
+    readonly: bool,
+}
+
+impl PartialEq for AtomForm {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
 
 #[pymethods]
 impl AtomForm {
@@ -409,16 +417,16 @@ impl AtomForm {
     }
 
     fn __str__(&self) -> String {
-        self.0.to_string()
+        self.value.to_string()
     }
 
     fn __repr__(&self) -> String {
-        format!("AtomForm.parse('{}')", self.0)
+        format!("AtomForm.parse('{}')", self.value)
     }
 
     #[getter]
     fn element(&self) -> ElementForm {
-        ElementForm::from_rust(&self.0.element)
+        ElementForm::from_rust(&self.value.element)
     }
 
     #[setter]
@@ -429,7 +437,7 @@ impl AtomForm {
 
     #[getter]
     fn isotope_mass(&self) -> IsotopeMassForm {
-        IsotopeMassForm::from_rust(&self.0.isotope_mass)
+        IsotopeMassForm::from_rust(&self.value.isotope_mass)
     }
 
     #[setter]
@@ -440,7 +448,7 @@ impl AtomForm {
 
     #[getter]
     fn charge(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.charge)
+        NumForm::from_rust(py, &self.value.charge)
     }
 
     #[setter]
@@ -451,7 +459,7 @@ impl AtomForm {
 
     #[getter]
     fn implicit_hydrogens(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.implicit_hydrogens)
+        NumForm::from_rust(py, &self.value.implicit_hydrogens)
     }
 
     #[setter]
@@ -462,7 +470,7 @@ impl AtomForm {
 
     #[getter]
     fn lone_pairs(&self, py: Python<'_>) -> PyResult<NumForm> {
-        NumForm::from_rust(py, &self.0.lone_pairs)
+        NumForm::from_rust(py, &self.value.lone_pairs)
     }
 
     #[setter]
@@ -473,7 +481,7 @@ impl AtomForm {
 
     #[getter]
     fn unpaired_electrons(&self, py: Python<'_>) -> PyResult<UnpairedElectronsForm> {
-        UnpairedElectronsForm::from_rust(py, &self.0.unpaired_electrons)
+        UnpairedElectronsForm::from_rust(py, &self.value.unpaired_electrons)
     }
 
     #[setter]
@@ -509,7 +517,7 @@ impl AtomForm {
     /// Whether this Python form is retained as a read-only delta value.
     #[getter]
     fn readonly(&self) -> bool {
-        self.0.is_readonly()
+        self.readonly
     }
 
     /// Return an independent writable copy.
@@ -528,7 +536,7 @@ impl AtomForm {
         dict.set_item("unpaired_electrons", self.unpaired_electrons(py)?)?;
         dict.set_item(
             "constraints",
-            atom_constraints_asdict(py, &self.0.constraints)?,
+            atom_constraints_asdict(py, &self.value.constraints)?,
         )?;
         Ok(dict)
     }
@@ -615,19 +623,26 @@ fn apply_fields(
 impl AtomForm {
     /// The wrapped AST atom — read access for molecule construction.
     pub(crate) fn inner(&self) -> &GraphIrAtomForm {
-        self.0.value()
+        &self.value
     }
 
     /// Mutable access to the wrapped AST atom — write access for the atom-backed
     /// constraints view.
     pub(crate) fn try_inner_mut(&mut self) -> PyResult<&mut GraphIrAtomForm> {
-        self.0.value_mut()
+        if self.readonly {
+            Err(PyTypeError::new_err("read-only entity form"))
+        } else {
+            Ok(&mut self.value)
+        }
     }
 
     /// Wrap an AST atom (the hold-the-value `from_inner` bridge, paired with
     /// `inner`).
     pub(crate) fn from_inner(atom: GraphIrAtomForm) -> Self {
-        AtomForm(EntityFormValue::writable(atom))
+        Self {
+            value: atom,
+            readonly: false,
+        }
     }
 }
 
@@ -639,7 +654,13 @@ impl EntityForm for AtomForm {
     }
 
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>> {
-        Py::new(py, Self(EntityFormValue::readonly(value)))
+        Py::new(
+            py,
+            Self {
+                value,
+                readonly: true,
+            },
+        )
     }
 }
 

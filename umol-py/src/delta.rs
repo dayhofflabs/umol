@@ -47,15 +47,15 @@ use crate::constraint::stereo::{StereoAtomConstraintForm, StereoBondConstraintFo
 use crate::convert::{into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::electrons::ElectronCountsForm;
-use crate::entity_form::ReadonlyForm;
+use crate::entity::ReadonlyForm;
 use crate::lattice::impl_py_canonicalize;
 use crate::multicenter::MulticenterBondForm;
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
+use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
     Permutation, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, StereoLigand,
 };
-use crate::value::NumForm;
 
 /// Render a named old/new complex-enum variant using the child objects' reprs.
 fn field_change_repr(obj: &Bound<'_, PyAny>, type_name: &str, variant: &str) -> PyResult<String> {
