@@ -41,6 +41,7 @@ use crate::delta::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use crate::entity::ReadonlyForm;
 use crate::error::parse_error;
 use crate::metadata::Entity;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
@@ -315,6 +316,37 @@ impl ConstraintEdit {
     }
 }
 
+type ReadonlyBondAddition = ((HandleLike, HandleLike), ReadonlyForm<BondForm>);
+type ReadonlyDativeBondRemoval = (HandleLike, Vec<HandleLike>, ReadonlyForm<DativeBondForm>);
+type ReadonlyAromaticSystemRemoval = (
+    HandleLike,
+    Vec<HandleLike>,
+    ReadonlyForm<AromaticSystemForm>,
+);
+type ReadonlyMulticenterBondRemoval = (
+    HandleLike,
+    Vec<HandleLike>,
+    ReadonlyForm<MulticenterBondForm>,
+);
+type ReadonlyNoncovalentBondRemoval = (
+    HandleLike,
+    (HandleLike, HandleLike),
+    ReadonlyForm<NoncovalentBondForm>,
+);
+type StereoLigandInput = (HandleLike, StereoLigandKind);
+type ReadonlyStereoAtomRemoval = (
+    HandleLike,
+    HandleLike,
+    Vec<StereoLigandInput>,
+    ReadonlyForm<StereoAtomForm>,
+);
+type ReadonlyStereoBondRemoval = (
+    HandleLike,
+    HandleLike,
+    Vec<StereoLigandInput>,
+    ReadonlyForm<StereoBondForm>,
+);
+
 type BondAddition = ((HandleLike, HandleLike), Py<BondForm>);
 type DativeBondAddition = (Vec<HandleLike>, Py<DativeBondForm>);
 type AromaticSystemAddition = (Vec<HandleLike>, Py<AromaticSystemForm>);
@@ -330,23 +362,22 @@ type NoncovalentBondRemoval = (
     (HandleLike, HandleLike),
     Py<NoncovalentBondForm>,
 );
-type StereoLigandInput = (HandleLike, StereoLigandKind);
-type StereoAtomRemovalEntry = (
+type StereoAtomRemoval = (
     HandleLike,
     HandleLike,
     Vec<StereoLigandInput>,
     Py<StereoAtomForm>,
 );
-type StereoBondRemovalEntry = (
+type StereoBondRemoval = (
     HandleLike,
     HandleLike,
     Vec<StereoLigandInput>,
     Py<StereoBondForm>,
 );
 
-struct StereoAtomRemovals(Vec<StereoAtomRemovalEntry>);
+struct ReadonlyStereoAtomRemovals(Vec<ReadonlyStereoAtomRemoval>);
 
-impl FromPyObject<'_, '_> for StereoAtomRemovals {
+impl FromPyObject<'_, '_> for ReadonlyStereoAtomRemovals {
     type Error = PyErr;
 
     fn extract(object: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
@@ -354,7 +385,7 @@ impl FromPyObject<'_, '_> for StereoAtomRemovals {
     }
 }
 
-impl<'py> IntoPyObject<'py> for &StereoAtomRemovals {
+impl<'py> IntoPyObject<'py> for &ReadonlyStereoAtomRemovals {
     type Target = PyAny;
     type Output = Bound<'py, PyAny>;
     type Error = PyErr;
@@ -363,17 +394,22 @@ impl<'py> IntoPyObject<'py> for &StereoAtomRemovals {
         let entries = self
             .0
             .iter()
-            .map(|(id, site, ligands, ast)| {
-                (id.clone(), site.clone(), ligands.clone(), ast.clone_ref(py))
+            .map(|(id, site, ligands, attributes)| {
+                Ok((
+                    id.clone(),
+                    site.clone(),
+                    ligands.clone(),
+                    attributes.into_pyobject(py)?,
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<PyResult<Vec<_>>>()?;
         entries.into_pyobject(py).map(Bound::into_any)
     }
 }
 
-struct StereoBondRemovals(Vec<StereoBondRemovalEntry>);
+struct ReadonlyStereoBondRemovals(Vec<ReadonlyStereoBondRemoval>);
 
-impl FromPyObject<'_, '_> for StereoBondRemovals {
+impl FromPyObject<'_, '_> for ReadonlyStereoBondRemovals {
     type Error = PyErr;
 
     fn extract(object: Borrowed<'_, '_, PyAny>) -> Result<Self, Self::Error> {
@@ -381,7 +417,7 @@ impl FromPyObject<'_, '_> for StereoBondRemovals {
     }
 }
 
-impl<'py> IntoPyObject<'py> for &StereoBondRemovals {
+impl<'py> IntoPyObject<'py> for &ReadonlyStereoBondRemovals {
     type Target = PyAny;
     type Output = Bound<'py, PyAny>;
     type Error = PyErr;
@@ -390,26 +426,31 @@ impl<'py> IntoPyObject<'py> for &StereoBondRemovals {
         let entries = self
             .0
             .iter()
-            .map(|(id, site, ligands, ast)| {
-                (id.clone(), site.clone(), ligands.clone(), ast.clone_ref(py))
+            .map(|(id, site, ligands, attributes)| {
+                Ok((
+                    id.clone(),
+                    site.clone(),
+                    ligands.clone(),
+                    attributes.into_pyobject(py)?,
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<PyResult<Vec<_>>>()?;
         entries.into_pyobject(py).map(Bound::into_any)
     }
 }
 
-/// One raw host-specific molecule edit.
-#[pyclass]
+/// One immutable host-specific molecule edit.
+#[pyclass(frozen)]
 #[allow(
     private_interfaces,
     reason = "PyO3 exposes Python field values through private coercion adapters"
 )]
 pub enum Edit {
     AddAtoms {
-        atoms: Vec<Py<AtomForm>>,
+        atoms: Vec<ReadonlyForm<AtomForm>>,
     },
     AddBonds {
-        bonds: Vec<BondAddition>,
+        bonds: Vec<ReadonlyBondAddition>,
     },
     RemoveTopology {
         atoms: Vec<HandleLike>,
@@ -425,10 +466,10 @@ pub enum Edit {
     },
     AddDativeBond {
         atoms: Vec<HandleLike>,
-        ast: Py<DativeBondForm>,
+        attributes: ReadonlyForm<DativeBondForm>,
     },
     RemoveDativeBonds {
-        removes: Vec<DativeBondRemoval>,
+        removes: Vec<ReadonlyDativeBondRemoval>,
     },
     ModifyDativeBondField {
         id: HandleLike,
@@ -436,10 +477,10 @@ pub enum Edit {
     },
     AddAromaticSystem {
         atoms: Vec<HandleLike>,
-        ast: Py<AromaticSystemForm>,
+        attributes: ReadonlyForm<AromaticSystemForm>,
     },
     RemoveAromaticSystems {
-        removes: Vec<AromaticSystemRemoval>,
+        removes: Vec<ReadonlyAromaticSystemRemoval>,
     },
     ModifyAromaticSystemField {
         id: HandleLike,
@@ -447,10 +488,10 @@ pub enum Edit {
     },
     AddMulticenterBond {
         atoms: Vec<HandleLike>,
-        ast: Py<MulticenterBondForm>,
+        attributes: ReadonlyForm<MulticenterBondForm>,
     },
     RemoveMulticenterBonds {
-        removes: Vec<MulticenterBondRemoval>,
+        removes: Vec<ReadonlyMulticenterBondRemoval>,
     },
     ModifyMulticenterBondField {
         id: HandleLike,
@@ -458,10 +499,10 @@ pub enum Edit {
     },
     AddNoncovalentBond {
         atoms: (HandleLike, HandleLike),
-        ast: Py<NoncovalentBondForm>,
+        attributes: ReadonlyForm<NoncovalentBondForm>,
     },
     RemoveNoncovalentBonds {
-        removes: Vec<NoncovalentBondRemoval>,
+        removes: Vec<ReadonlyNoncovalentBondRemoval>,
     },
     ModifyNoncovalentBondField {
         id: HandleLike,
@@ -470,10 +511,10 @@ pub enum Edit {
     AddStereoAtom {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoAtomForm>,
+        attributes: ReadonlyForm<StereoAtomForm>,
     },
     RemoveStereoAtoms {
-        removes: StereoAtomRemovals,
+        removes: ReadonlyStereoAtomRemovals,
     },
     ModifyStereoAtomField {
         id: HandleLike,
@@ -482,10 +523,10 @@ pub enum Edit {
     AddStereoBond {
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoBondForm>,
+        attributes: ReadonlyForm<StereoBondForm>,
     },
     RemoveStereoBonds {
-        removes: StereoBondRemovals,
+        removes: ReadonlyStereoBondRemovals,
     },
     ModifyStereoBondField {
         id: HandleLike,
@@ -567,28 +608,28 @@ impl Edit {
             Self::RemoveTopology { .. } => ("RemoveTopology", &["atoms", "bonds"]),
             Self::ModifyAtomField { .. } => ("ModifyAtomField", &["id", "change"]),
             Self::ModifyBondField { .. } => ("ModifyBondField", &["id", "change"]),
-            Self::AddDativeBond { .. } => ("AddDativeBond", &["atoms", "ast"]),
+            Self::AddDativeBond { .. } => ("AddDativeBond", &["atoms", "attributes"]),
             Self::RemoveDativeBonds { .. } => ("RemoveDativeBonds", &["removes"]),
             Self::ModifyDativeBondField { .. } => ("ModifyDativeBondField", &["id", "change"]),
-            Self::AddAromaticSystem { .. } => ("AddAromaticSystem", &["atoms", "ast"]),
+            Self::AddAromaticSystem { .. } => ("AddAromaticSystem", &["atoms", "attributes"]),
             Self::RemoveAromaticSystems { .. } => ("RemoveAromaticSystems", &["removes"]),
             Self::ModifyAromaticSystemField { .. } => {
                 ("ModifyAromaticSystemField", &["id", "change"])
             }
-            Self::AddMulticenterBond { .. } => ("AddMulticenterBond", &["atoms", "ast"]),
+            Self::AddMulticenterBond { .. } => ("AddMulticenterBond", &["atoms", "attributes"]),
             Self::RemoveMulticenterBonds { .. } => ("RemoveMulticenterBonds", &["removes"]),
             Self::ModifyMulticenterBondField { .. } => {
                 ("ModifyMulticenterBondField", &["id", "change"])
             }
-            Self::AddNoncovalentBond { .. } => ("AddNoncovalentBond", &["atoms", "ast"]),
+            Self::AddNoncovalentBond { .. } => ("AddNoncovalentBond", &["atoms", "attributes"]),
             Self::RemoveNoncovalentBonds { .. } => ("RemoveNoncovalentBonds", &["removes"]),
             Self::ModifyNoncovalentBondField { .. } => {
                 ("ModifyNoncovalentBondField", &["id", "change"])
             }
-            Self::AddStereoAtom { .. } => ("AddStereoAtom", &["site", "ligands", "ast"]),
+            Self::AddStereoAtom { .. } => ("AddStereoAtom", &["site", "ligands", "attributes"]),
             Self::RemoveStereoAtoms { .. } => ("RemoveStereoAtoms", &["removes"]),
             Self::ModifyStereoAtomField { .. } => ("ModifyStereoAtomField", &["id", "change"]),
-            Self::AddStereoBond { .. } => ("AddStereoBond", &["site", "ligands", "ast"]),
+            Self::AddStereoBond { .. } => ("AddStereoBond", &["site", "ligands", "attributes"]),
             Self::RemoveStereoBonds { .. } => ("RemoveStereoBonds", &["removes"]),
             Self::ModifyStereoBondField { .. } => ("ModifyStereoBondField", &["id", "change"]),
             Self::ModifyAtomConstraint { .. } => ("ModifyAtomConstraint", &["id", "old", "new"]),
@@ -628,8 +669,7 @@ impl Edit {
             GraphIrEdit::AddAtoms { atoms } => Self::AddAtoms {
                 atoms: atoms
                     .iter()
-                    .cloned()
-                    .map(|atom| Py::new(py, AtomForm::from_inner(atom)))
+                    .map(|atom| ReadonlyForm::<AtomForm>::from_rust(py, atom))
                     .collect::<PyResult<_>>()?,
             },
             GraphIrEdit::AddBonds { bonds } => Self::AddBonds {
@@ -641,7 +681,7 @@ impl Edit {
                                 HandleLike::from_atom_handle(&bond.endpoints[0]),
                                 HandleLike::from_atom_handle(&bond.endpoints[1]),
                             ),
-                            Py::new(py, BondForm::from_inner(bond.attributes.clone()))?,
+                            ReadonlyForm::<BondForm>::from_rust(py, &bond.attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -660,16 +700,16 @@ impl Edit {
             },
             GraphIrEdit::AddDativeBond { atoms, attributes } => Self::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, DativeBondForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<DativeBondForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveDativeBonds { removes } => Self::RemoveDativeBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         Ok((
                             HandleLike::from_dative_bond_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, DativeBondForm::from_inner(ast.clone()))?,
+                            ReadonlyForm::<DativeBondForm>::from_rust(py, attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -680,16 +720,16 @@ impl Edit {
             },
             GraphIrEdit::AddAromaticSystem { atoms, attributes } => Self::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, AromaticSystemForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<AromaticSystemForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveAromaticSystems { removes } => Self::RemoveAromaticSystems {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         Ok((
                             HandleLike::from_aromatic_system_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, AromaticSystemForm::from_inner(ast.clone()))?,
+                            ReadonlyForm::<AromaticSystemForm>::from_rust(py, attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -702,16 +742,16 @@ impl Edit {
             }
             GraphIrEdit::AddMulticenterBond { atoms, attributes } => Self::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                ast: Py::new(py, MulticenterBondForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<MulticenterBondForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveMulticenterBonds { removes } => Self::RemoveMulticenterBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         Ok((
                             HandleLike::from_multicenter_bond_handle(id),
                             atoms.iter().map(HandleLike::from_atom_handle).collect(),
-                            Py::new(py, MulticenterBondForm::from_inner(ast.clone()))?,
+                            ReadonlyForm::<MulticenterBondForm>::from_rust(py, attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -730,19 +770,19 @@ impl Edit {
                     HandleLike::from_atom_handle(&atoms[0]),
                     HandleLike::from_atom_handle(&atoms[1]),
                 ),
-                ast: Py::new(py, NoncovalentBondForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<NoncovalentBondForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveNoncovalentBonds { removes } => Self::RemoveNoncovalentBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         Ok((
                             HandleLike::from_noncovalent_bond_handle(id),
                             (
                                 HandleLike::from_atom_handle(&atoms[0]),
                                 HandleLike::from_atom_handle(&atoms[1]),
                             ),
-                            Py::new(py, NoncovalentBondForm::from_inner(ast.clone()))?,
+                            ReadonlyForm::<NoncovalentBondForm>::from_rust(py, attributes)?,
                         ))
                     })
                     .collect::<PyResult<_>>()?,
@@ -771,13 +811,13 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoAtomForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<StereoAtomForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveStereoAtoms { removes } => Self::RemoveStereoAtoms {
-                removes: StereoAtomRemovals(
+                removes: ReadonlyStereoAtomRemovals(
                     removes
                         .iter()
-                        .map(|(id, site, ligands, ast)| {
+                        .map(|(id, site, ligands, attributes)| {
                             Ok((
                                 HandleLike::from_stereo_atom_handle(id),
                                 HandleLike::from_atom_handle(site),
@@ -790,7 +830,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Py::new(py, StereoAtomForm::from_inner(ast.clone()))?,
+                                ReadonlyForm::<StereoAtomForm>::from_rust(py, attributes)?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
@@ -815,13 +855,13 @@ impl Edit {
                         )
                     })
                     .collect(),
-                ast: Py::new(py, StereoBondForm::from_inner(attributes.clone()))?,
+                attributes: ReadonlyForm::<StereoBondForm>::from_rust(py, attributes)?,
             },
             GraphIrEdit::RemoveStereoBonds { removes } => Self::RemoveStereoBonds {
-                removes: StereoBondRemovals(
+                removes: ReadonlyStereoBondRemovals(
                     removes
                         .iter()
-                        .map(|(id, site, ligands, ast)| {
+                        .map(|(id, site, ligands, attributes)| {
                             Ok((
                                 HandleLike::from_stereo_bond_handle(id),
                                 HandleLike::from_bond_handle(site),
@@ -834,7 +874,7 @@ impl Edit {
                                         )
                                     })
                                     .collect(),
-                                Py::new(py, StereoBondForm::from_inner(ast.clone()))?,
+                                ReadonlyForm::<StereoBondForm>::from_rust(py, attributes)?,
                             ))
                         })
                         .collect::<PyResult<_>>()?,
@@ -996,17 +1036,14 @@ impl Edit {
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrEdit {
         match self {
             Self::AddAtoms { atoms } => GraphIrEdit::AddAtoms {
-                atoms: atoms
-                    .iter()
-                    .map(|atom| atom.bind(py).borrow().inner().clone())
-                    .collect(),
+                atoms: atoms.iter().map(|atom| atom.to_rust(py)).collect(),
             },
             Self::AddBonds { bonds } => GraphIrEdit::AddBonds {
                 bonds: bonds
                     .iter()
-                    .map(|((first, second), ast)| GraphIrAddBond {
+                    .map(|((first, second), attributes)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                        attributes: ast.bind(py).borrow().inner().clone(),
+                        attributes: attributes.to_rust(py),
                     })
                     .collect(),
             },
@@ -1022,18 +1059,18 @@ impl Edit {
                 id: id.to_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddDativeBond { atoms, ast } => GraphIrEdit::AddDativeBond {
+            Self::AddDativeBond { atoms, attributes } => GraphIrEdit::AddDativeBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveDativeBonds { removes } => GraphIrEdit::RemoveDativeBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.to_dative_bond_handle(),
                             atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1042,18 +1079,18 @@ impl Edit {
                 id: id.to_dative_bond_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddAromaticSystem { atoms, ast } => GraphIrEdit::AddAromaticSystem {
+            Self::AddAromaticSystem { atoms, attributes } => GraphIrEdit::AddAromaticSystem {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveAromaticSystems { removes } => GraphIrEdit::RemoveAromaticSystems {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.to_aromatic_system_handle(),
                             atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1064,18 +1101,18 @@ impl Edit {
                     change: change.bind(py).borrow().to_rust(py),
                 }
             }
-            Self::AddMulticenterBond { atoms, ast } => GraphIrEdit::AddMulticenterBond {
+            Self::AddMulticenterBond { atoms, attributes } => GraphIrEdit::AddMulticenterBond {
                 atoms: atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveMulticenterBonds { removes } => GraphIrEdit::RemoveMulticenterBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.to_multicenter_bond_handle(),
                             atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1086,18 +1123,18 @@ impl Edit {
                     change: change.bind(py).borrow().to_rust(py),
                 }
             }
-            Self::AddNoncovalentBond { atoms, ast } => GraphIrEdit::AddNoncovalentBond {
+            Self::AddNoncovalentBond { atoms, attributes } => GraphIrEdit::AddNoncovalentBond {
                 atoms: [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveNoncovalentBonds { removes } => GraphIrEdit::RemoveNoncovalentBonds {
                 removes: removes
                     .iter()
-                    .map(|(id, atoms, ast)| {
+                    .map(|(id, atoms, attributes)| {
                         (
                             id.to_noncovalent_bond_handle(),
                             [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1108,19 +1145,23 @@ impl Edit {
                     change: change.bind(py).borrow().to_rust(py),
                 }
             }
-            Self::AddStereoAtom { site, ligands, ast } => GraphIrEdit::AddStereoAtom {
+            Self::AddStereoAtom {
+                site,
+                ligands,
+                attributes,
+            } => GraphIrEdit::AddStereoAtom {
                 site: site.to_atom_handle(),
                 ligands: ligands
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveStereoAtoms { removes } => GraphIrEdit::RemoveStereoAtoms {
                 removes: removes
                     .0
                     .iter()
-                    .map(|(id, site, ligands, ast)| {
+                    .map(|(id, site, ligands, attributes)| {
                         (
                             id.to_stereo_atom_handle(),
                             site.to_atom_handle(),
@@ -1128,7 +1169,7 @@ impl Edit {
                                 .iter()
                                 .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                                 .collect(),
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1137,19 +1178,23 @@ impl Edit {
                 id: id.to_stereo_atom_handle(),
                 change: change.bind(py).borrow().to_rust(py),
             },
-            Self::AddStereoBond { site, ligands, ast } => GraphIrEdit::AddStereoBond {
+            Self::AddStereoBond {
+                site,
+                ligands,
+                attributes,
+            } => GraphIrEdit::AddStereoBond {
                 site: site.to_bond_handle(),
                 ligands: ligands
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                attributes: ast.bind(py).borrow().inner().clone(),
+                attributes: attributes.to_rust(py),
             },
             Self::RemoveStereoBonds { removes } => GraphIrEdit::RemoveStereoBonds {
                 removes: removes
                     .0
                     .iter()
-                    .map(|(id, site, ligands, ast)| {
+                    .map(|(id, site, ligands, attributes)| {
                         (
                             id.to_stereo_bond_handle(),
                             site.to_bond_handle(),
@@ -1157,7 +1202,7 @@ impl Edit {
                                 .iter()
                                 .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                                 .collect(),
-                            ast.bind(py).borrow().inner().clone(),
+                            attributes.to_rust(py),
                         )
                     })
                     .collect(),
@@ -1304,6 +1349,26 @@ impl EditIter {
     }
 }
 
+/// The argument to `Edits.extend`: another container or edit entries.
+#[derive(FromPyObject)]
+pub(crate) enum EditsExtend {
+    Container(Py<Edits>),
+    Entries(Vec<Py<Edit>>),
+}
+
+impl EditsExtend {
+    /// Snapshot every Python input before the target takes a write borrow.
+    fn resolve(&self, py: Python<'_>) -> Vec<GraphIrEdit> {
+        match self {
+            Self::Container(container) => container.bind(py).borrow().0.as_slice().to_vec(),
+            Self::Entries(entries) => entries
+                .iter()
+                .map(|entry| entry.bind(py).borrow().to_rust(py))
+                .collect(),
+        }
+    }
+}
+
 /// An ordered, append-only batch of host-specific molecule edits.
 #[pyclass(eq)]
 #[derive(Debug, PartialEq)]
@@ -1343,6 +1408,15 @@ impl Edits {
         self.0.push(edit.bind(py).borrow().to_rust(py));
     }
 
+    /// Append another container or iterable without rebasing creation handles.
+    fn extend(slf: Py<Self>, py: Python<'_>, other: EditsExtend) {
+        let entries = other.resolve(py);
+        let mut target = slf.borrow_mut(py);
+        for edit in entries {
+            target.0.push(edit);
+        }
+    }
+
     fn __len__(&self) -> usize {
         self.0.len()
     }
@@ -1356,9 +1430,10 @@ impl Edits {
         edit_iter(py, &self.0)
     }
 
-    fn add_atom(&mut self, py: Python<'_>, ast: Py<AtomForm>) -> New {
+    fn add_atom(&mut self, py: Python<'_>, attributes: Py<AtomForm>) -> New {
         New::from_rust(GraphIrEntityHandle::Atom(
-            self.0.add_atom(ast.bind(py).borrow().inner().clone()),
+            self.0
+                .add_atom(attributes.bind(py).borrow().inner().clone()),
         ))
     }
 
@@ -1367,7 +1442,7 @@ impl Edits {
             .add_atoms(
                 atoms
                     .into_iter()
-                    .map(|ast| ast.bind(py).borrow().inner().clone()),
+                    .map(|attributes| attributes.bind(py).borrow().inner().clone()),
             )
             .into_iter()
             .map(|handle| New::from_rust(GraphIrEntityHandle::Atom(handle)))
@@ -1379,12 +1454,12 @@ impl Edits {
         py: Python<'_>,
         first: HandleLike,
         second: HandleLike,
-        ast: Py<BondForm>,
+        attributes: Py<BondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::Bond(self.0.add_bond(
             first.to_atom_handle(),
             second.to_atom_handle(),
-            ast.bind(py).borrow().inner().clone(),
+            attributes.bind(py).borrow().inner().clone(),
         )))
     }
 
@@ -1393,9 +1468,9 @@ impl Edits {
             .add_bonds(
                 bonds
                     .into_iter()
-                    .map(|((first, second), ast)| GraphIrAddBond {
+                    .map(|((first, second), attributes)| GraphIrAddBond {
                         endpoints: [first.to_atom_handle(), second.to_atom_handle()],
-                        attributes: ast.bind(py).borrow().inner().clone(),
+                        attributes: attributes.bind(py).borrow().inner().clone(),
                     }),
             )
             .into_iter()
@@ -1407,20 +1482,20 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<DativeBondForm>,
+        attributes: Py<DativeBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::DativeBond(self.0.add_dative_bond(
             atoms.iter().map(HandleLike::to_atom_handle).collect(),
-            ast.bind(py).borrow().inner().clone(),
+            attributes.bind(py).borrow().inner().clone(),
         )))
     }
 
     fn add_dative_bonds(&mut self, py: Python<'_>, bonds: Vec<DativeBondAddition>) -> Vec<New> {
         self.0
-            .add_dative_bonds(bonds.into_iter().map(|(atoms, ast)| {
+            .add_dative_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1432,12 +1507,12 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<AromaticSystemForm>,
+        attributes: Py<AromaticSystemForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::AromaticSystem(
             self.0.add_aromatic_system(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                ast.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().inner().clone(),
             ),
         ))
     }
@@ -1448,10 +1523,10 @@ impl Edits {
         systems: Vec<AromaticSystemAddition>,
     ) -> Vec<New> {
         self.0
-            .add_aromatic_systems(systems.into_iter().map(|(atoms, ast)| {
+            .add_aromatic_systems(systems.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1463,12 +1538,12 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: Vec<HandleLike>,
-        ast: Py<MulticenterBondForm>,
+        attributes: Py<MulticenterBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::MulticenterBond(
             self.0.add_multicenter_bond(
                 atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                ast.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().inner().clone(),
             ),
         ))
     }
@@ -1479,10 +1554,10 @@ impl Edits {
         bonds: Vec<MulticenterBondAddition>,
     ) -> Vec<New> {
         self.0
-            .add_multicenter_bonds(bonds.into_iter().map(|(atoms, ast)| {
+            .add_multicenter_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1494,12 +1569,12 @@ impl Edits {
         &mut self,
         py: Python<'_>,
         atoms: (HandleLike, HandleLike),
-        ast: Py<NoncovalentBondForm>,
+        attributes: Py<NoncovalentBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::NoncovalentBond(
             self.0.add_noncovalent_bond(
                 [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                ast.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().inner().clone(),
             ),
         ))
     }
@@ -1510,10 +1585,10 @@ impl Edits {
         bonds: Vec<NoncovalentBondAddition>,
     ) -> Vec<New> {
         self.0
-            .add_noncovalent_bonds(bonds.into_iter().map(|(atoms, ast)| {
+            .add_noncovalent_bonds(bonds.into_iter().map(|(atoms, attributes)| {
                 (
                     [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1526,7 +1601,7 @@ impl Edits {
         py: Python<'_>,
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoAtomForm>,
+        attributes: Py<StereoAtomForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::StereoAtom(
             self.0.add_stereo_atom(
@@ -1535,21 +1610,21 @@ impl Edits {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                ast.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().inner().clone(),
             ),
         ))
     }
 
     fn add_stereo_atoms(&mut self, py: Python<'_>, atoms: Vec<StereoAtomAddition>) -> Vec<New> {
         self.0
-            .add_stereo_atoms(atoms.into_iter().map(|(site, ligands, ast)| {
+            .add_stereo_atoms(atoms.into_iter().map(|(site, ligands, attributes)| {
                 (
                     site.to_atom_handle(),
                     ligands
                         .iter()
                         .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                         .collect(),
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1562,7 +1637,7 @@ impl Edits {
         py: Python<'_>,
         site: HandleLike,
         ligands: Vec<StereoLigandInput>,
-        ast: Py<StereoBondForm>,
+        attributes: Py<StereoBondForm>,
     ) -> New {
         New::from_rust(GraphIrEntityHandle::StereoBond(
             self.0.add_stereo_bond(
@@ -1571,21 +1646,21 @@ impl Edits {
                     .iter()
                     .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                     .collect(),
-                ast.bind(py).borrow().inner().clone(),
+                attributes.bind(py).borrow().inner().clone(),
             ),
         ))
     }
 
     fn add_stereo_bonds(&mut self, py: Python<'_>, bonds: Vec<StereoBondAddition>) -> Vec<New> {
         self.0
-            .add_stereo_bonds(bonds.into_iter().map(|(site, ligands, ast)| {
+            .add_stereo_bonds(bonds.into_iter().map(|(site, ligands, attributes)| {
                 (
                     site.to_bond_handle(),
                     ligands
                         .iter()
                         .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                         .collect(),
-                    ast.bind(py).borrow().inner().clone(),
+                    attributes.bind(py).borrow().inner().clone(),
                 )
             }))
             .into_iter()
@@ -1604,11 +1679,11 @@ impl Edits {
         self.0.remove_dative_bonds(
             removes
                 .into_iter()
-                .map(|(id, atoms, ast)| {
+                .map(|(id, atoms, attributes)| {
                     (
                         id.to_dative_bond_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),
@@ -1619,11 +1694,11 @@ impl Edits {
         self.0.remove_aromatic_systems(
             removes
                 .into_iter()
-                .map(|(id, atoms, ast)| {
+                .map(|(id, atoms, attributes)| {
                     (
                         id.to_aromatic_system_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),
@@ -1634,11 +1709,11 @@ impl Edits {
         self.0.remove_multicenter_bonds(
             removes
                 .into_iter()
-                .map(|(id, atoms, ast)| {
+                .map(|(id, atoms, attributes)| {
                     (
                         id.to_multicenter_bond_handle(),
                         atoms.iter().map(HandleLike::to_atom_handle).collect(),
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),
@@ -1649,23 +1724,22 @@ impl Edits {
         self.0.remove_noncovalent_bonds(
             removes
                 .into_iter()
-                .map(|(id, atoms, ast)| {
+                .map(|(id, atoms, attributes)| {
                     (
                         id.to_noncovalent_bond_handle(),
                         [atoms.0.to_atom_handle(), atoms.1.to_atom_handle()],
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),
         );
     }
 
-    fn remove_stereo_atoms(&mut self, py: Python<'_>, removes: StereoAtomRemovals) {
+    fn remove_stereo_atoms(&mut self, py: Python<'_>, removes: Vec<StereoAtomRemoval>) {
         self.0.remove_stereo_atoms(
             removes
-                .0
                 .into_iter()
-                .map(|(id, site, ligands, ast)| {
+                .map(|(id, site, ligands, attributes)| {
                     (
                         id.to_stereo_atom_handle(),
                         site.to_atom_handle(),
@@ -1673,19 +1747,18 @@ impl Edits {
                             .iter()
                             .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                             .collect(),
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),
         );
     }
 
-    fn remove_stereo_bonds(&mut self, py: Python<'_>, removes: StereoBondRemovals) {
+    fn remove_stereo_bonds(&mut self, py: Python<'_>, removes: Vec<StereoBondRemoval>) {
         self.0.remove_stereo_bonds(
             removes
-                .0
                 .into_iter()
-                .map(|(id, site, ligands, ast)| {
+                .map(|(id, site, ligands, attributes)| {
                     (
                         id.to_stereo_bond_handle(),
                         site.to_bond_handle(),
@@ -1693,7 +1766,7 @@ impl Edits {
                             .iter()
                             .map(|(atom, kind)| (atom.to_atom_handle(), kind.to_rust()))
                             .collect(),
-                        ast.bind(py).borrow().inner().clone(),
+                        attributes.bind(py).borrow().inner().clone(),
                     )
                 })
                 .collect(),

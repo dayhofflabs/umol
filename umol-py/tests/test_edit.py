@@ -114,6 +114,118 @@ def test_constraint_edit():
 def test_edit(edit):
     assert edit == edit
     assert repr(edit).startswith(f"Edit.{type(edit).__name__}(")
+    with pytest.raises(AttributeError):
+        edit.extra = None
+
+
+def test_edit_form_fields():
+    atom = AtomForm.parse("C")
+    bond = BondForm.parse("1")
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
+
+    edits = [
+        Edit.AddAtoms(atoms=[atom]),
+        Edit.AddBonds(bonds=[((0, New(0)), bond)]),
+        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
+        Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
+        Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
+        Edit.AddNoncovalentBond(
+            atoms=(0, New(0)), attributes=noncovalent
+        ),
+        Edit.AddStereoAtom(
+            site=New(0), ligands=[], attributes=stereo_atom
+        ),
+        Edit.AddStereoBond(
+            site=New(0), ligands=[], attributes=stereo_bond
+        ),
+    ]
+
+    atom.charge = -1
+    bond.order = 2
+    dative.order = 2
+    aromatic.charge = -1
+    multicenter.charge = -1
+    noncovalent.kind = NoncovalentBondKind.Ionic
+    stereo_atom.configuration = StereoConfigurationForm.Undetermined()
+    stereo_bond.configuration = StereoConfigurationForm.Undetermined()
+
+    retained = [
+        edits[0].atoms[0],
+        edits[1].bonds[0][1],
+        edits[2].attributes,
+        edits[3].attributes,
+        edits[4].attributes,
+        edits[5].attributes,
+        edits[6].attributes,
+        edits[7].attributes,
+    ]
+    assert retained[:6] == [
+        AtomForm.parse("C"),
+        BondForm.parse("1"),
+        DativeBondForm(1),
+        AromaticSystemForm([1, 1]),
+        MulticenterBondForm([1, 1]),
+        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
+    ]
+    assert retained[6].configuration == StereoAtomForm.parse(
+        "Th0"
+    ).configuration
+    assert retained[7].configuration == StereoBondForm.parse(
+        "Ct0"
+    ).configuration
+    assert [attributes.readonly for attributes in retained] == [True] * 8
+    with pytest.raises(TypeError):
+        retained[0].charge = 1
+    returned_atoms = edits[0].atoms
+    returned_atoms.clear()
+    assert edits[0].atoms == [retained[0]]
+    with pytest.raises(AttributeError):
+        edits[0].atoms = []
+
+
+def test_edit_removal_form_fields():
+    dative = DativeBondForm(1)
+    aromatic = AromaticSystemForm([1, 1])
+    multicenter = MulticenterBondForm([1, 1])
+    noncovalent = NoncovalentBondForm(NoncovalentBondKind.HydrogenBond)
+    stereo_atom = StereoAtomForm.parse("Th0")
+    stereo_bond = StereoBondForm.parse("Ct0")
+
+    edits = [
+        Edit.RemoveDativeBonds(removes=[(0, [0, 1], dative)]),
+        Edit.RemoveAromaticSystems(removes=[(0, [0, 1], aromatic)]),
+        Edit.RemoveMulticenterBonds(removes=[(0, [0, 1], multicenter)]),
+        Edit.RemoveNoncovalentBonds(removes=[(0, (0, 1), noncovalent)]),
+        Edit.RemoveStereoAtoms(removes=[(0, 0, [], stereo_atom)]),
+        Edit.RemoveStereoBonds(removes=[(0, 0, [], stereo_bond)]),
+    ]
+
+    dative.order = 2
+    aromatic.charge = -1
+    multicenter.charge = -1
+    noncovalent.kind = NoncovalentBondKind.Ionic
+    stereo_atom.configuration = StereoConfigurationForm.Undetermined()
+    stereo_bond.configuration = StereoConfigurationForm.Undetermined()
+
+    retained = [edit.removes[0][-1] for edit in edits]
+    assert retained[:4] == [
+        DativeBondForm(1),
+        AromaticSystemForm([1, 1]),
+        MulticenterBondForm([1, 1]),
+        NoncovalentBondForm(NoncovalentBondKind.HydrogenBond),
+    ]
+    assert retained[4].configuration == StereoAtomForm.parse(
+        "Th0"
+    ).configuration
+    assert retained[5].configuration == StereoBondForm.parse(
+        "Ct0"
+    ).configuration
+    assert [attributes.readonly for attributes in retained] == [True] * 6
 
 
 def test_edits():
@@ -130,6 +242,23 @@ def test_edits():
     assert edits[-1] == second
     assert list(iterator) == [first, first]
     assert list(edits) == [first, first, second]
+
+
+def test_edits_extend():
+    first = Edit.AddAtoms(atoms=[AtomForm.parse("C")])
+    second = Edit.RemoveTopology(atoms=[New(0)], bonds=[])
+    source = Edits([first, second])
+    target = Edits([second])
+
+    assert target.extend(source) is None
+    assert target.extend([first]) is None
+    source.append(first)
+
+    assert list(target) == [second, first, second, first]
+
+    target.extend(target)
+
+    assert list(target) == [second, first, second, first] * 2
 
 
 @pytest.mark.parametrize("index", [-4, 3])
@@ -159,26 +288,26 @@ def test_edits_add():
     ligands = [(0, StereoLigandKind.Atom)]
 
     handles = (
-        edits.add_atom(atom),
-        edits.add_bond(0, New(0), bond),
-        edits.add_dative_bond([0, New(0)], dative),
-        edits.add_aromatic_system([0, New(0)], aromatic),
-        edits.add_multicenter_bond([0, New(0)], multicenter),
-        edits.add_noncovalent_bond((0, New(0)), noncovalent),
-        edits.add_stereo_atom(New(0), ligands, stereo_atom),
-        edits.add_stereo_bond(New(0), ligands, stereo_bond),
+        edits.add_atom(attributes=atom),
+        edits.add_bond(0, New(0), attributes=bond),
+        edits.add_dative_bond([0, New(0)], attributes=dative),
+        edits.add_aromatic_system([0, New(0)], attributes=aromatic),
+        edits.add_multicenter_bond([0, New(0)], attributes=multicenter),
+        edits.add_noncovalent_bond((0, New(0)), attributes=noncovalent),
+        edits.add_stereo_atom(New(0), ligands, attributes=stereo_atom),
+        edits.add_stereo_bond(New(0), ligands, attributes=stereo_bond),
     )
 
     assert handles == (New(0),) * 8
     assert list(edits) == [
         Edit.AddAtoms(atoms=[atom]),
         Edit.AddBonds(bonds=[((0, New(0)), bond)]),
-        Edit.AddDativeBond(atoms=[0, New(0)], ast=dative),
-        Edit.AddAromaticSystem(atoms=[0, New(0)], ast=aromatic),
-        Edit.AddMulticenterBond(atoms=[0, New(0)], ast=multicenter),
-        Edit.AddNoncovalentBond(atoms=(0, New(0)), ast=noncovalent),
-        Edit.AddStereoAtom(site=New(0), ligands=ligands, ast=stereo_atom),
-        Edit.AddStereoBond(site=New(0), ligands=ligands, ast=stereo_bond),
+        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
+        Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
+        Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
+        Edit.AddNoncovalentBond(atoms=(0, New(0)), attributes=noncovalent),
+        Edit.AddStereoAtom(site=New(0), ligands=ligands, attributes=stereo_atom),
+        Edit.AddStereoBond(site=New(0), ligands=ligands, attributes=stereo_bond),
     ]
 
 
@@ -235,20 +364,20 @@ def test_edits_add_many():
         Edit.AddBonds(
             bonds=[((0, New(0)), bond), ((New(0), New(1)), bond)]
         ),
-        Edit.AddDativeBond(atoms=[0, New(0)], ast=dative),
-        Edit.AddDativeBond(atoms=[New(0), New(1)], ast=dative),
-        Edit.AddAromaticSystem(atoms=[0, New(0)], ast=aromatic),
-        Edit.AddAromaticSystem(atoms=[New(0), New(1)], ast=aromatic),
-        Edit.AddMulticenterBond(atoms=[0, New(0)], ast=multicenter),
-        Edit.AddMulticenterBond(atoms=[New(0), New(1)], ast=multicenter),
-        Edit.AddNoncovalentBond(atoms=(0, New(0)), ast=noncovalent),
+        Edit.AddDativeBond(atoms=[0, New(0)], attributes=dative),
+        Edit.AddDativeBond(atoms=[New(0), New(1)], attributes=dative),
+        Edit.AddAromaticSystem(atoms=[0, New(0)], attributes=aromatic),
+        Edit.AddAromaticSystem(atoms=[New(0), New(1)], attributes=aromatic),
+        Edit.AddMulticenterBond(atoms=[0, New(0)], attributes=multicenter),
+        Edit.AddMulticenterBond(atoms=[New(0), New(1)], attributes=multicenter),
+        Edit.AddNoncovalentBond(atoms=(0, New(0)), attributes=noncovalent),
         Edit.AddNoncovalentBond(
-            atoms=(New(0), New(1)), ast=noncovalent
+            atoms=(New(0), New(1)), attributes=noncovalent
         ),
-        Edit.AddStereoAtom(site=New(0), ligands=ligands, ast=stereo_atom),
-        Edit.AddStereoAtom(site=New(1), ligands=ligands, ast=stereo_atom),
-        Edit.AddStereoBond(site=New(0), ligands=ligands, ast=stereo_bond),
-        Edit.AddStereoBond(site=New(1), ligands=ligands, ast=stereo_bond),
+        Edit.AddStereoAtom(site=New(0), ligands=ligands, attributes=stereo_atom),
+        Edit.AddStereoAtom(site=New(1), ligands=ligands, attributes=stereo_atom),
+        Edit.AddStereoBond(site=New(0), ligands=ligands, attributes=stereo_bond),
+        Edit.AddStereoBond(site=New(1), ligands=ligands, attributes=stereo_bond),
     ]
 
 
@@ -268,12 +397,12 @@ def test_edits_constructor_counters():
             Edit.AddBonds(
                 bonds=[((0, 1), bond), ((1, 0), bond)]
             ),
-            Edit.AddDativeBond(atoms=[0, 1], ast=dative),
-            Edit.AddAromaticSystem(atoms=[0, 1], ast=aromatic),
-            Edit.AddMulticenterBond(atoms=[0, 1], ast=multicenter),
-            Edit.AddNoncovalentBond(atoms=(0, 1), ast=noncovalent),
-            Edit.AddStereoAtom(site=0, ligands=ligands, ast=stereo_atom),
-            Edit.AddStereoBond(site=0, ligands=ligands, ast=stereo_bond),
+            Edit.AddDativeBond(atoms=[0, 1], attributes=dative),
+            Edit.AddAromaticSystem(atoms=[0, 1], attributes=aromatic),
+            Edit.AddMulticenterBond(atoms=[0, 1], attributes=multicenter),
+            Edit.AddNoncovalentBond(atoms=(0, 1), attributes=noncovalent),
+            Edit.AddStereoAtom(site=0, ligands=ligands, attributes=stereo_atom),
+            Edit.AddStereoBond(site=0, ligands=ligands, attributes=stereo_bond),
         ]
     )
 

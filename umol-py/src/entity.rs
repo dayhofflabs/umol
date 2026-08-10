@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::PyClass;
 
-/// Operations needed by the generic read-only form holder used in deltas.
+/// Operations needed by entity forms retained in immutable mutation values.
 pub trait EntityForm: PyClass {
     type RustForm: Clone;
 
@@ -11,7 +11,7 @@ pub trait EntityForm: PyClass {
     fn new_readonly(py: Python<'_>, value: Self::RustForm) -> PyResult<Py<Self>>;
 }
 
-/// A retained read-only Python form used as a field of an immutable delta.
+/// A retained read-only Python form used as a field of an immutable delta or edit.
 pub struct ReadonlyForm<T: EntityForm>(Py<T>);
 
 impl<'a, 'py, T> FromPyObject<'a, 'py> for ReadonlyForm<T>
