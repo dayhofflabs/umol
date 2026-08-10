@@ -2,9 +2,7 @@
 //! construction/raise and available standalone; never consults a chemistry model.
 
 use thiserror::Error;
-use umol_graph_core::{
-    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-};
+use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 use umol_utils::solution::Solution;
 
 pub mod incidence;
@@ -34,7 +32,6 @@ use super::super::id::{
 use super::super::molecule::Molecule;
 use super::super::ring::{RingConfig, RingModel};
 use super::super::stereo::StereoKind;
-use super::super::substructure::SubstructureMatchAlgorithm;
 use super::super::traits::Lattice;
 use super::super::value::NumForm;
 use super::super::view::RingViews;
@@ -47,8 +44,6 @@ use super::super::view::RingViews;
 pub struct ConstraintValidateConfig {
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     pub connected_components_algorithm: ConnectedComponentsAlgorithm,
-    pub substructure_match_algorithm: SubstructureMatchAlgorithm,
-    pub subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm,
 }
 
 /// Cross-check between inline and molecule-scope constraints and their
@@ -594,24 +589,18 @@ fn observe(
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_graph_core::{
-        ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm,
-        SubgraphIsomorphismAlgorithm,
-    };
+    use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 
     use super::*;
     use crate::ir::constraint::{
         AtomConstraintForm, BondConstraintForm, MoleculeConstraint, RelationalConstraint, RingScope,
     };
     use crate::ir::id::{AtomId, BondId, DativeBondId};
-    use crate::ir::substructure::SubstructureMatchAlgorithm;
     use crate::mol_dsl;
 
     const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-        substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
     };
 
     #[fixture]

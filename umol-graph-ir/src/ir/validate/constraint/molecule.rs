@@ -1,23 +1,20 @@
 //! Molecule-scope aggregate and connectivity constraint evaluation.
 
 use std::collections::BTreeSet;
-use std::ops::ControlFlow;
 
 use thiserror::Error;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_utils::solution::Solution;
 
-use super::super::super::constraint::{MoleculeConstraint, SubPatternAnchor};
-use super::super::super::correspondence::MoleculeCorrespondence;
+use super::super::super::constraint::MoleculeConstraint;
 use super::super::super::entity::Entity;
 use super::super::super::id::{AtomId, BondId};
 use super::super::super::molecule::Molecule;
-use super::super::super::substructure::SubstructureMatchConfig;
 use super::super::super::traits::Lattice;
 use super::super::super::value::NumForm;
 use super::{ConstraintError, ConstraintValidateConfig};
 
-/// Evaluates one molecule-scope aggregate, connectivity, or subpattern constraint.
+/// Evaluates one molecule-scope aggregate or connectivity constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MoleculeConstraintValidator;
 
@@ -66,26 +63,6 @@ impl MoleculeConstraintValidator {
                 let atoms = atom_subset(ast, atoms.as_deref())?;
                 connected(ast, &atoms, config.connected_components_algorithm)
             }
-            MoleculeConstraint::SubPattern { anchor, pattern } => {
-                validate_anchor(ast, pattern, anchor)?;
-                pattern
-                    .visit_substructure_matches(
-                        ast,
-                        SubstructureMatchConfig {
-                            match_algorithm: config.substructure_match_algorithm,
-                            subgraph_isomorphism_algorithm: config.subgraph_isomorphism_algorithm,
-                            relevant_cycle_algorithm: config.relevant_cycle_algorithm,
-                        },
-                        |correspondence| {
-                            if anchor_matches(anchor, &correspondence) {
-                                ControlFlow::Break(())
-                            } else {
-                                ControlFlow::Continue(())
-                            }
-                        },
-                    )
-                    .is_break()
-            }
         };
 
         Ok(if determined {
@@ -96,131 +73,6 @@ impl MoleculeConstraintValidator {
             })
         })
     }
-}
-
-fn validate_anchor(
-    host: &Molecule,
-    pattern: &Molecule,
-    anchor: &SubPatternAnchor,
-) -> Result<(), ConstraintError> {
-    for &(target, pattern_id) in anchor.atoms() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::Atom(target),
-            Entity::Atom(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.bonds() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::Bond(target),
-            Entity::Bond(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.dative_bonds() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::DativeBond(target),
-            Entity::DativeBond(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.aromatic_systems() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::AromaticSystem(target),
-            Entity::AromaticSystem(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.multicenter_bonds() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::MulticenterBond(target),
-            Entity::MulticenterBond(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.noncovalent_bonds() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::NoncovalentBond(target),
-            Entity::NoncovalentBond(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.stereo_atoms() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::StereoAtom(target),
-            Entity::StereoAtom(pattern_id),
-        )?;
-    }
-    for &(target, pattern_id) in anchor.stereo_bonds() {
-        require_anchor_pair(
-            host,
-            pattern,
-            Entity::StereoBond(target),
-            Entity::StereoBond(pattern_id),
-        )?;
-    }
-    Ok(())
-}
-
-fn require_anchor_pair(
-    host: &Molecule,
-    pattern: &Molecule,
-    target: Entity,
-    pattern_entity: Entity,
-) -> Result<(), ConstraintError> {
-    if !contains_entity(host, target) {
-        return Err(ConstraintError::InvalidReference { entity: target });
-    }
-    if !contains_entity(pattern, pattern_entity) {
-        return Err(ConstraintError::InvalidReference {
-            entity: pattern_entity,
-        });
-    }
-    Ok(())
-}
-
-fn contains_entity(molecule: &Molecule, entity: Entity) -> bool {
-    match entity {
-        Entity::Atom(id) => molecule.atoms().contains(id),
-        Entity::Bond(id) => molecule.bonds().contains(id),
-        Entity::DativeBond(id) => molecule.dative_bonds().contains(id),
-        Entity::AromaticSystem(id) => molecule.aromatic_systems().contains(id),
-        Entity::MulticenterBond(id) => molecule.multicenter_bonds().contains(id),
-        Entity::NoncovalentBond(id) => molecule.noncovalent_bonds().contains(id),
-        Entity::StereoAtom(id) => molecule.stereo_atoms().contains(id),
-        Entity::StereoBond(id) => molecule.stereo_bonds().contains(id),
-    }
-}
-
-fn anchor_matches(anchor: &SubPatternAnchor, correspondence: &MoleculeCorrespondence) -> bool {
-    anchor.atoms().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::Atom(pattern)) == Some(Entity::Atom(target))
-    }) && anchor.bonds().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::Bond(pattern)) == Some(Entity::Bond(target))
-    }) && anchor.dative_bonds().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::DativeBond(pattern)) == Some(Entity::DativeBond(target))
-    }) && anchor.aromatic_systems().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::AromaticSystem(pattern))
-            == Some(Entity::AromaticSystem(target))
-    }) && anchor.multicenter_bonds().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::MulticenterBond(pattern))
-            == Some(Entity::MulticenterBond(target))
-    }) && anchor.noncovalent_bonds().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::NoncovalentBond(pattern))
-            == Some(Entity::NoncovalentBond(target))
-    }) && anchor.stereo_atoms().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::StereoAtom(pattern)) == Some(Entity::StereoAtom(target))
-    }) && anchor.stereo_bonds().iter().all(|&(target, pattern)| {
-        correspondence.right_of(Entity::StereoBond(pattern)) == Some(Entity::StereoBond(target))
-    })
 }
 
 fn evaluate(
@@ -299,65 +151,22 @@ fn connected(ast: &Molecule, atoms: &[AtomId], algorithm: ConnectedComponentsAlg
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_graph_core::SubgraphIsomorphismAlgorithm::{
-        ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
-    };
-    use umol_graph_core::{
-        RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-        ARCMATCH_DEFAULT_PATH_LENGTH,
-    };
+    use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 
     use super::*;
-    use crate::ir::id::{
-        AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
-        StereoBondId,
-    };
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::substructure::SubstructureMatchAlgorithm;
     use crate::mol_dsl;
 
     const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-        substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-        subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
     };
-    const SUBGRAPH_ISOMORPHISM_ALGORITHMS: [SubgraphIsomorphismAlgorithm; 6] = [
-        Vf2,
-        Ullmann,
-        Ri,
-        ArcMatch {
-            path_length: ARCMATCH_DEFAULT_PATH_LENGTH,
-        },
-        Vf2Rdkit,
-        RayKirsch,
-    ];
-    const SUBSTRUCTURE_MATCH_ALGORITHMS: [SubstructureMatchAlgorithm; 2] = [
-        SubstructureMatchAlgorithm::GraphAndOverlays,
-        SubstructureMatchAlgorithm::Incidence,
-    ];
 
     #[fixture]
     fn aggregate_molecule() -> Molecule {
         mol_dsl!(
             r#"{:atoms ["C#c+" "N#c-" "O#c2" "F#c0" "Cl#c0"]
                 :bonds [[0 1 "1"] [1 2 "2"] [3 4 "1"]]}"#
-        )
-    }
-
-    #[fixture]
-    fn anchored_molecule() -> Molecule {
-        mol_dsl!(
-            r#"{
-                :atoms ["C" "F" "Cl" "Br" "I"]
-                :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-                :dative-bonds [{:donors [1] :acceptor 0 :type "1"}]
-                :aromatic-systems [{:atoms [0 1] :type "*#e2"}]
-                :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]
-                :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]
-                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]
-                :stereo-bonds [{:site 0 :ligands [2 3] :type "Ct1"}]
-            }"#
         )
     }
 
@@ -541,193 +350,6 @@ mod tests {
     ) {
         assert_eq!(
             MoleculeConstraintValidator.validate(&aggregate_molecule, &constraint, CONFIG,),
-            Err(ConstraintError::InvalidReference { entity }),
-        );
-    }
-
-    #[rstest]
-    fn test_molecule_constraint_validator_validate_subpattern_unanchored() {
-        let host = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(),
-            pattern: Box::new(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#)),
-        };
-
-        for match_algorithm in SUBSTRUCTURE_MATCH_ALGORITHMS {
-            for subgraph_isomorphism_algorithm in SUBGRAPH_ISOMORPHISM_ALGORITHMS {
-                assert_eq!(
-                    MoleculeConstraintValidator.validate(
-                        &host,
-                        &constraint,
-                        ConstraintValidateConfig {
-                            substructure_match_algorithm: match_algorithm,
-                            subgraph_isomorphism_algorithm,
-                            ..CONFIG
-                        },
-                    ),
-                    Ok(Solution::Determined(())),
-                    "{match_algorithm:?}/{subgraph_isomorphism_algorithm:?}",
-                );
-            }
-        }
-    }
-
-    #[rstest]
-    fn test_molecule_constraint_validator_validate_subpattern_absent() {
-        let host = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(),
-            pattern: Box::new(mol_dsl!(r#"{:atoms ["O"] :bonds []}"#)),
-        };
-
-        for match_algorithm in SUBSTRUCTURE_MATCH_ALGORITHMS {
-            for subgraph_isomorphism_algorithm in SUBGRAPH_ISOMORPHISM_ALGORITHMS {
-                assert_eq!(
-                    MoleculeConstraintValidator.validate(
-                        &host,
-                        &constraint,
-                        ConstraintValidateConfig {
-                            substructure_match_algorithm: match_algorithm,
-                            subgraph_isomorphism_algorithm,
-                            ..CONFIG
-                        },
-                    ),
-                    Ok(Solution::Contradictory(MoleculeConstraintContradiction {
-                        constraint: constraint.clone(),
-                    },)),
-                    "{match_algorithm:?}/{subgraph_isomorphism_algorithm:?}",
-                );
-            }
-        }
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::atom(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_atom(AtomId(0), AtomId(0)); anchor })]
-    #[case::bond(mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_bond(BondId(0), BondId(0)); anchor })]
-    #[case::dative_bond(mol_dsl!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_dative_bond(DativeBondId(0), DativeBondId(0)); anchor })]
-    #[case::aromatic_system(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*#e2"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_aromatic_system(AromaticSystemId(0), AromaticSystemId(0)); anchor })]
-    #[case::multicenter_bond(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "*#e2"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_multicenter_bond(MulticenterBondId(0), MulticenterBondId(0)); anchor })]
-    #[case::noncovalent_bond(mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_noncovalent_bond(NoncovalentBondId(0), NoncovalentBondId(0)); anchor })]
-    #[case::stereo_atom(mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_atom(StereoAtomId(0), StereoAtomId(0)); anchor })]
-    #[case::stereo_bond(mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :type "Ct1"}]}"#), { let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_bond(StereoBondId(0), StereoBondId(0)); anchor })]
-    fn test_molecule_constraint_validator_validate_subpattern_anchor(
-        #[case] molecule: Molecule,
-        #[case] anchor: SubPatternAnchor,
-    ) {
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor,
-            pattern: Box::new(molecule.clone()),
-        };
-
-        for match_algorithm in SUBSTRUCTURE_MATCH_ALGORITHMS {
-            for subgraph_isomorphism_algorithm in SUBGRAPH_ISOMORPHISM_ALGORITHMS {
-                assert_eq!(
-                    MoleculeConstraintValidator.validate(
-                        &molecule,
-                        &constraint,
-                        ConstraintValidateConfig {
-                            substructure_match_algorithm: match_algorithm,
-                            subgraph_isomorphism_algorithm,
-                            ..CONFIG
-                        },
-                    ),
-                    Ok(Solution::Determined(())),
-                    "{match_algorithm:?}/{subgraph_isomorphism_algorithm:?}",
-                );
-            }
-        }
-    }
-
-    #[rstest]
-    fn test_molecule_constraint_validator_validate_subpattern_anchor_contradiction() {
-        let host = mol_dsl!(r#"{:atoms ["C" "O"] :bonds []}"#);
-        let pattern = mol_dsl!(r#"{:atoms ["O"] :bonds []}"#);
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomId(0), AtomId(0));
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor,
-            pattern: Box::new(pattern),
-        };
-
-        for match_algorithm in SUBSTRUCTURE_MATCH_ALGORITHMS {
-            for subgraph_isomorphism_algorithm in SUBGRAPH_ISOMORPHISM_ALGORITHMS {
-                assert_eq!(
-                    MoleculeConstraintValidator.validate(
-                        &host,
-                        &constraint,
-                        ConstraintValidateConfig {
-                            substructure_match_algorithm: match_algorithm,
-                            subgraph_isomorphism_algorithm,
-                            ..CONFIG
-                        },
-                    ),
-                    Ok(Solution::Contradictory(MoleculeConstraintContradiction {
-                        constraint: constraint.clone(),
-                    },)),
-                    "{match_algorithm:?}/{subgraph_isomorphism_algorithm:?}",
-                );
-            }
-        }
-    }
-
-    #[rstest]
-    fn test_molecule_constraint_validator_validate_subpattern_ring_constraint() {
-        let host = mol_dsl!(
-            r#"{:atoms ["C" "C" "C" "C"]
-                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#
-        );
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(),
-            pattern: Box::new(mol_dsl!(r#"{:atoms ["C#R3"] :bonds []}"#)),
-        };
-
-        for match_algorithm in SUBSTRUCTURE_MATCH_ALGORITHMS {
-            for subgraph_isomorphism_algorithm in SUBGRAPH_ISOMORPHISM_ALGORITHMS {
-                assert_eq!(
-                    MoleculeConstraintValidator.validate(
-                        &host,
-                        &constraint,
-                        ConstraintValidateConfig {
-                            substructure_match_algorithm: match_algorithm,
-                            subgraph_isomorphism_algorithm,
-                            ..CONFIG
-                        },
-                    ),
-                    Ok(Solution::Determined(())),
-                    "{match_algorithm:?}/{subgraph_isomorphism_algorithm:?}",
-                );
-            }
-        }
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::target_atom({ let mut anchor = SubPatternAnchor::new(); anchor.push_atom(AtomId(99), AtomId(0)); anchor }, Entity::Atom(AtomId(99)))]
-    #[case::target_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_bond(BondId(99), BondId(0)); anchor }, Entity::Bond(BondId(99)))]
-    #[case::target_dative_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_dative_bond(DativeBondId(99), DativeBondId(0)); anchor }, Entity::DativeBond(DativeBondId(99)))]
-    #[case::target_aromatic_system({ let mut anchor = SubPatternAnchor::new(); anchor.push_aromatic_system(AromaticSystemId(99), AromaticSystemId(0)); anchor }, Entity::AromaticSystem(AromaticSystemId(99)))]
-    #[case::target_multicenter_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_multicenter_bond(MulticenterBondId(99), MulticenterBondId(0)); anchor }, Entity::MulticenterBond(MulticenterBondId(99)))]
-    #[case::target_noncovalent_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_noncovalent_bond(NoncovalentBondId(99), NoncovalentBondId(0)); anchor }, Entity::NoncovalentBond(NoncovalentBondId(99)))]
-    #[case::target_stereo_atom({ let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_atom(StereoAtomId(99), StereoAtomId(0)); anchor }, Entity::StereoAtom(StereoAtomId(99)))]
-    #[case::target_stereo_bond({ let mut anchor = SubPatternAnchor::new(); anchor.push_stereo_bond(StereoBondId(99), StereoBondId(0)); anchor }, Entity::StereoBond(StereoBondId(99)))]
-    #[case::pattern_atom({ let mut anchor = SubPatternAnchor::new(); anchor.push_atom(AtomId(0), AtomId(99)); anchor }, Entity::Atom(AtomId(99)))]
-    fn test_molecule_constraint_validator_validate_subpattern_anchor_error(
-        anchored_molecule: Molecule,
-        #[case] anchor: SubPatternAnchor,
-        #[case] entity: Entity,
-    ) {
-        let constraint = MoleculeConstraint::SubPattern {
-            anchor,
-            pattern: Box::new(anchored_molecule.clone()),
-        };
-
-        assert_eq!(
-            MoleculeConstraintValidator.validate(
-                &anchored_molecule,
-                &constraint,
-                CONFIG,
-            ),
             Err(ConstraintError::InvalidReference { entity }),
         );
     }

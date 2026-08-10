@@ -197,7 +197,6 @@ PUBLIC_EXPORTS = frozenset(
     StereogenicityForm
     StructuralFeatureSet
     StructuralFingerprintConfig
-    SubPatternAnchor
     SubgraphEnumerationAlgorithm
     SubgraphIsomorphismAlgorithm
     SubstructureMatchAlgorithm

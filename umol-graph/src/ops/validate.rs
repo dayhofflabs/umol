@@ -24,13 +24,11 @@ pub use stereo::{
     StereoValidatorError,
 };
 use thiserror::Error;
-use umol_graph_core::{
-    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-};
+use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 use umol_graph_ir::ir::{
     AtomForm, ConstraintContradiction, ConstraintError, ConstraintValidateConfig,
     ConstraintValidator, EntityStructureContradiction, EntityStructureError,
-    EntityStructureValidator, Molecule, SubstructureMatchAlgorithm,
+    EntityStructureValidator, Molecule,
 };
 use umol_utils::solution::Solution;
 pub use valence::{
@@ -43,8 +41,8 @@ use crate::ops::model::ChemistryModel;
 
 /// Operational configuration for composite molecule validation.
 ///
-/// The model-independent defaults are relevant cycles via Vismara, connected components via BFS,
-/// graph-and-overlays substructure matching, and VF2-RDKit subgraph isomorphism.
+/// The model-independent defaults are relevant cycles via Vismara and connected components via
+/// BFS.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ValidateConfig {
     /// Algorithms used by model-independent constraint validation.
@@ -61,8 +59,6 @@ impl Default for ValidateConfig {
             constraint: ConstraintValidateConfig {
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-                substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
             },
             aromaticity: AromaticityConfig::default(),
             stereo: StereoValidateConfig::default(),
@@ -286,8 +282,6 @@ mod tests {
                 constraint: ConstraintValidateConfig {
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                     connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-                    substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-                    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
                 },
                 aromaticity: AromaticityConfig {
                     ring_config: RingConfig::default(),
@@ -322,8 +316,6 @@ mod tests {
             constraint: ConstraintValidateConfig {
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-                substructure_match_algorithm: SubstructureMatchAlgorithm::Incidence,
-                subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Ullmann,
             },
             aromaticity: AromaticityConfig {
                 ring_config: RingConfig::default(),

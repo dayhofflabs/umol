@@ -1,7 +1,6 @@
 //! Molecule-scope constraints, the `Constraint` combinator tree, and the
 //! molecule-level `Constraints` store.
 
-use std::cmp::Ordering;
 use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -12,7 +11,6 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::molecule::Molecule;
 use super::super::remap::{IdCompaction, IdRemapping};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
@@ -345,7 +343,7 @@ impl From<Vec<Constraint>> for Constraints {
 /// an `atoms` (or `bonds`) value of `None` denotes the entire molecule's atoms
 /// (or bonds), making the predicate stable across structural growth.
 /// `Some(vec)` denotes a fixed subset.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MoleculeConstraint {
     ChargeSum {
         atoms: Option<Vec<AtomId>>,
@@ -362,18 +360,14 @@ pub enum MoleculeConstraint {
     Connected {
         atoms: Option<Vec<AtomId>>,
     },
-    SubPattern {
-        anchor: SubPatternAnchor,
-        pattern: Box<Molecule>,
-    },
 }
 
 impl MoleculeConstraint {
     /// A constraint is vacuous when its value-bearing payload is
     /// `Undetermined`: `ChargeSum`/`BondOrderSum` with `Undetermined` sum,
     /// `UnpairedElectronCoupling` with both unpaired-electron fields
-    /// `Undetermined`. `Connected` and `SubPattern` are structural — never
-    /// vacuous in this sense.
+    /// `Undetermined`. `Connected` is structural and never vacuous in this
+    /// sense.
     pub fn is_vacuous(&self) -> bool {
         match self {
             Self::ChargeSum { sum, .. } => sum.is_undetermined(),
@@ -382,7 +376,6 @@ impl MoleculeConstraint {
                 unpaired_electrons, ..
             } => unpaired_electrons.is_undetermined(),
             Self::Connected { .. } => false,
-            Self::SubPattern { .. } => false,
         }
     }
 
@@ -410,9 +403,6 @@ impl MoleculeConstraint {
                 let atoms = compact_atom_subset(atoms, compaction)?;
                 Some(MoleculeConstraint::Connected { atoms })
             }
-            MoleculeConstraint::SubPattern { anchor, pattern } => anchor
-                .compact(compaction)
-                .map(|anchor| MoleculeConstraint::SubPattern { anchor, pattern }),
         }
     }
 
@@ -436,20 +426,13 @@ impl MoleculeConstraint {
             MoleculeConstraint::Connected { atoms } => MoleculeConstraint::Connected {
                 atoms: remap_atom_subset(atoms, map),
             },
-            MoleculeConstraint::SubPattern { anchor, pattern } => MoleculeConstraint::SubPattern {
-                anchor: anchor.remap(map),
-                pattern,
-            },
         }
     }
 }
 
 impl Canonicalize for MoleculeConstraint {
     /// Canonicalize the value payload (`sum` / `unpaired_electrons`) and sort
-    /// each atom/bond subset; refs are otherwise unchanged. `SubPattern` is a
-    /// **no-op** — the inner pattern is not recursed into (a nested pattern
-    /// normalizes at its own top level via lift/inline and entity
-    /// canonicalization).
+    /// each atom/bond subset; refs are otherwise unchanged.
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => Self::ChargeSum {
@@ -482,57 +465,7 @@ impl Canonicalize for MoleculeConstraint {
                     v
                 }),
             },
-            other @ Self::SubPattern { .. } => other,
         })
-    }
-}
-
-impl PartialOrd for MoleculeConstraint {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for MoleculeConstraint {
-    /// Variant declaration order, then payload. `SubPattern` orders by `anchor`
-    /// only — the inner `Molecule` has no total order (graph), so same-anchor
-    /// patterns compare `Equal` here. This is intentionally weaker than `Eq`,
-    /// which does compare the pattern; canonicalization only needs the order for
-    /// a stable sort, and dedup falls back to `PartialEq`.
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (Self::ChargeSum { atoms: a1, sum: s1 }, Self::ChargeSum { atoms: a2, sum: s2 }) => {
-                (a1, s1).cmp(&(a2, s2))
-            }
-            (
-                Self::UnpairedElectronCoupling {
-                    atoms: a1,
-                    unpaired_electrons: s1,
-                },
-                Self::UnpairedElectronCoupling {
-                    atoms: a2,
-                    unpaired_electrons: s2,
-                },
-            ) => (a1, s1).cmp(&(a2, s2)),
-            (
-                Self::BondOrderSum { bonds: b1, sum: s1 },
-                Self::BondOrderSum { bonds: b2, sum: s2 },
-            ) => (b1, s1).cmp(&(b2, s2)),
-            (Self::Connected { atoms: a1 }, Self::Connected { atoms: a2 }) => a1.cmp(a2),
-            (Self::SubPattern { anchor: a1, .. }, Self::SubPattern { anchor: a2, .. }) => {
-                a1.cmp(a2)
-            }
-            _ => {
-                let rank = |c: &Self| match c {
-                    Self::ChargeSum { .. } => 0u8,
-                    Self::UnpairedElectronCoupling { .. } => 1,
-                    Self::BondOrderSum { .. } => 2,
-                    Self::Connected { .. } => 3,
-                    Self::SubPattern { .. } => 4,
-                };
-                rank(self).cmp(&rank(other))
-            }
-        }
     }
 }
 
@@ -579,205 +512,6 @@ fn remap_bond_subset(bonds: Option<Vec<BondId>>, map: &IdRemapping) -> Option<Ve
     bonds.map(|vec| vec.into_iter().map(|b| map.map_bond(b)).collect())
 }
 
-/// Multi-correspondence anchor for a `SubPattern` constraint. Each vec carries
-/// `(target, pattern)` pairs constraining a target-molecule entity to a
-/// pattern-molecule entity of the same kind. An empty anchor denotes an
-/// unanchored match (pattern can embed anywhere).
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SubPatternAnchor {
-    atoms: Vec<(AtomId, AtomId)>,
-    bonds: Vec<(BondId, BondId)>,
-    dative_bonds: Vec<(DativeBondId, DativeBondId)>,
-    aromatic_systems: Vec<(AromaticSystemId, AromaticSystemId)>,
-    multicenter_bonds: Vec<(MulticenterBondId, MulticenterBondId)>,
-    noncovalent_bonds: Vec<(NoncovalentBondId, NoncovalentBondId)>,
-    stereo_atoms: Vec<(StereoAtomId, StereoAtomId)>,
-    stereo_bonds: Vec<(StereoBondId, StereoBondId)>,
-}
-
-impl SubPatternAnchor {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-            && self.bonds.is_empty()
-            && self.dative_bonds.is_empty()
-            && self.aromatic_systems.is_empty()
-            && self.multicenter_bonds.is_empty()
-            && self.noncovalent_bonds.is_empty()
-            && self.stereo_atoms.is_empty()
-            && self.stereo_bonds.is_empty()
-    }
-
-    pub fn atoms(&self) -> &[(AtomId, AtomId)] {
-        &self.atoms
-    }
-
-    pub fn bonds(&self) -> &[(BondId, BondId)] {
-        &self.bonds
-    }
-
-    pub fn dative_bonds(&self) -> &[(DativeBondId, DativeBondId)] {
-        &self.dative_bonds
-    }
-
-    pub fn aromatic_systems(&self) -> &[(AromaticSystemId, AromaticSystemId)] {
-        &self.aromatic_systems
-    }
-
-    pub fn multicenter_bonds(&self) -> &[(MulticenterBondId, MulticenterBondId)] {
-        &self.multicenter_bonds
-    }
-
-    pub fn noncovalent_bonds(&self) -> &[(NoncovalentBondId, NoncovalentBondId)] {
-        &self.noncovalent_bonds
-    }
-
-    pub fn stereo_atoms(&self) -> &[(StereoAtomId, StereoAtomId)] {
-        &self.stereo_atoms
-    }
-
-    pub fn stereo_bonds(&self) -> &[(StereoBondId, StereoBondId)] {
-        &self.stereo_bonds
-    }
-
-    pub fn push_atom(&mut self, target: AtomId, pattern: AtomId) {
-        self.atoms.push((target, pattern));
-    }
-
-    pub fn push_bond(&mut self, target: BondId, pattern: BondId) {
-        self.bonds.push((target, pattern));
-    }
-
-    pub fn push_dative_bond(&mut self, target: DativeBondId, pattern: DativeBondId) {
-        self.dative_bonds.push((target, pattern));
-    }
-
-    pub fn push_aromatic_system(&mut self, target: AromaticSystemId, pattern: AromaticSystemId) {
-        self.aromatic_systems.push((target, pattern));
-    }
-
-    pub fn push_multicenter_bond(&mut self, target: MulticenterBondId, pattern: MulticenterBondId) {
-        self.multicenter_bonds.push((target, pattern));
-    }
-
-    pub fn push_noncovalent_bond(&mut self, target: NoncovalentBondId, pattern: NoncovalentBondId) {
-        self.noncovalent_bonds.push((target, pattern));
-    }
-
-    pub fn push_stereo_atom(&mut self, target: StereoAtomId, pattern: StereoAtomId) {
-        self.stereo_atoms.push((target, pattern));
-    }
-
-    pub fn push_stereo_bond(&mut self, target: StereoBondId, pattern: StereoBondId) {
-        self.stereo_bonds.push((target, pattern));
-    }
-
-    /// Compact target-side indices per `compaction`. Returns `None` if any target
-    /// index in the anchor has been removed.
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
-        let atoms: Option<Vec<_>> = self
-            .atoms
-            .into_iter()
-            .map(|(t, p)| compaction.compact_atom(t).map(|t| (t, p)))
-            .collect();
-        let bonds: Option<Vec<_>> = self
-            .bonds
-            .into_iter()
-            .map(|(t, p)| compaction.compact_bond(t).map(|t| (t, p)))
-            .collect();
-        let dative_bonds: Option<Vec<_>> = self
-            .dative_bonds
-            .into_iter()
-            .map(|(t, p)| compaction.compact_dative_bond(t).map(|t| (t, p)))
-            .collect();
-        let aromatic_systems: Option<Vec<_>> = self
-            .aromatic_systems
-            .into_iter()
-            .map(|(t, p)| compaction.compact_aromatic_system(t).map(|t| (t, p)))
-            .collect();
-        let multicenter_bonds: Option<Vec<_>> = self
-            .multicenter_bonds
-            .into_iter()
-            .map(|(t, p)| compaction.compact_multicenter_bond(t).map(|t| (t, p)))
-            .collect();
-        let noncovalent_bonds: Option<Vec<_>> = self
-            .noncovalent_bonds
-            .into_iter()
-            .map(|(t, p)| compaction.compact_noncovalent_bond(t).map(|t| (t, p)))
-            .collect();
-        let stereo_atoms: Option<Vec<_>> = self
-            .stereo_atoms
-            .into_iter()
-            .map(|(t, p)| compaction.compact_stereo_atom(t).map(|t| (t, p)))
-            .collect();
-        let stereo_bonds: Option<Vec<_>> = self
-            .stereo_bonds
-            .into_iter()
-            .map(|(t, p)| compaction.compact_stereo_bond(t).map(|t| (t, p)))
-            .collect();
-        Some(Self {
-            atoms: atoms?,
-            bonds: bonds?,
-            dative_bonds: dative_bonds?,
-            aromatic_systems: aromatic_systems?,
-            multicenter_bonds: multicenter_bonds?,
-            noncovalent_bonds: noncovalent_bonds?,
-            stereo_atoms: stereo_atoms?,
-            stereo_bonds: stereo_bonds?,
-        })
-    }
-
-    /// Re-anchor target-side indices through a total id remapping. Total — the parallel of
-    /// `compact`, never drops.
-    pub(crate) fn remap(self, map: &IdRemapping) -> Self {
-        Self {
-            atoms: self
-                .atoms
-                .into_iter()
-                .map(|(t, p)| (map.map_atom(t), p))
-                .collect(),
-            bonds: self
-                .bonds
-                .into_iter()
-                .map(|(t, p)| (map.map_bond(t), p))
-                .collect(),
-            dative_bonds: self
-                .dative_bonds
-                .into_iter()
-                .map(|(t, p)| (map.map_dative(t), p))
-                .collect(),
-            aromatic_systems: self
-                .aromatic_systems
-                .into_iter()
-                .map(|(t, p)| (map.map_aromatic(t), p))
-                .collect(),
-            multicenter_bonds: self
-                .multicenter_bonds
-                .into_iter()
-                .map(|(t, p)| (map.map_multicenter(t), p))
-                .collect(),
-            noncovalent_bonds: self
-                .noncovalent_bonds
-                .into_iter()
-                .map(|(t, p)| (map.map_noncovalent(t), p))
-                .collect(),
-            stereo_atoms: self
-                .stereo_atoms
-                .into_iter()
-                .map(|(t, p)| (map.map_stereo_atom(t), p))
-                .collect(),
-            stereo_bonds: self
-                .stereo_bonds
-                .into_iter()
-                .map(|(t, p)| (map.map_stereo_bond(t), p))
-                .collect(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
@@ -787,12 +521,10 @@ mod tests {
     use umol_graph_core::{Compaction, RelationId};
 
     use super::*;
-    use crate::ir::atom::AtomForm;
     use crate::ir::constraint::RingScope;
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::value::{ArithExpr, NumForm};
     use crate::ir::BooleanForm;
@@ -1255,17 +987,6 @@ mod tests {
         id_compaction(vec![1], vec![]),
         vec![],
     )]
-    #[case::subpattern_shifts_anchor_atoms(
-        vec![Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(3), AtomId(0)); a },
-            pattern: Box::new(Molecule::default()),
-        })],
-        id_compaction(vec![1], vec![]),
-        vec![Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(2), AtomId(0)); a },
-            pattern: Box::new(Molecule::default()),
-        })],
-    )]
     fn test_constraints_compact(
         #[case] items: Vec<Constraint>,
         #[case] compaction: IdCompaction,
@@ -1380,7 +1101,6 @@ mod tests {
     #[case::bond_order_sum_lit(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Lit(4) }, false)]
     #[case::bond_order_sum_undetermined(MoleculeConstraint::BondOrderSum { bonds: None, sum: NumForm::Undetermined }, true)]
     #[case::connected(MoleculeConstraint::Connected { atoms: None }, false)]
-    #[case::sub_pattern(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) }, false)]
     fn test_molecule_constraint_is_vacuous(
         #[case] c: MoleculeConstraint,
         #[case] expected: bool,
@@ -1420,7 +1140,6 @@ mod tests {
 
     #[rstest]
     #[case::connected_none(MoleculeConstraint::Connected { atoms: None })]
-    #[case::sub_pattern_noop(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) })]
     fn test_molecule_constraint_canonicalize_identity(#[case] input: MoleculeConstraint) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
@@ -1430,24 +1149,6 @@ mod tests {
     #[case::charge_before_connected(
         MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
         MoleculeConstraint::Connected { atoms: None },
-        Ordering::Less,
-    )]
-    #[case::connected_before_sub_pattern(
-        MoleculeConstraint::Connected { atoms: None },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
-        Ordering::Less,
-    )]
-    #[case::sub_pattern_ignores_pattern(
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::default()], bonds: vec![], ..Default::default() })) },
-        Ordering::Equal,
-    )]
-    #[case::sub_pattern_orders_by_anchor(
-        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) },
-        MoleculeConstraint::SubPattern {
-            anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(0), AtomId(0)); a },
-            pattern: Box::new(Molecule::default()),
-        },
         Ordering::Less,
     )]
     fn test_molecule_constraint_cmp(
@@ -1526,166 +1227,6 @@ mod tests {
         #[case] expected: Option<MoleculeConstraint>,
     ) {
         assert_eq!(c.compact(&compaction), expected);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_new() {
-        let a = SubPatternAnchor::new();
-        assert!(a.is_empty());
-        assert!(a.atoms().is_empty());
-        assert!(a.bonds().is_empty());
-        assert!(a.dative_bonds().is_empty());
-        assert!(a.aromatic_systems().is_empty());
-        assert!(a.multicenter_bonds().is_empty());
-        assert!(a.noncovalent_bonds().is_empty());
-        assert!(a.stereo_atoms().is_empty());
-        assert!(a.stereo_bonds().is_empty());
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_atom() {
-        let mut a = SubPatternAnchor::new();
-        a.push_atom(AtomId(3), AtomId(0));
-        assert!(!a.is_empty());
-        assert_eq!(a.atoms(), &[(AtomId(3), AtomId(0))]);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_bond() {
-        let mut a = SubPatternAnchor::new();
-        a.push_bond(BondId(5), BondId(1));
-        assert_eq!(a.bonds(), &[(BondId(5), BondId(1))]);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_dative_bond() {
-        let mut a = SubPatternAnchor::new();
-        a.push_dative_bond(DativeBondId(4), DativeBondId(0));
-        assert_eq!(a.dative_bonds(), &[(DativeBondId(4), DativeBondId(0))]);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_aromatic_system() {
-        let mut a = SubPatternAnchor::new();
-        a.push_aromatic_system(AromaticSystemId(2), AromaticSystemId(0));
-        assert_eq!(
-            a.aromatic_systems(),
-            &[(AromaticSystemId(2), AromaticSystemId(0))],
-        );
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_multicenter_bond() {
-        let mut a = SubPatternAnchor::new();
-        a.push_multicenter_bond(MulticenterBondId(7), MulticenterBondId(2));
-        assert_eq!(
-            a.multicenter_bonds(),
-            &[(MulticenterBondId(7), MulticenterBondId(2))],
-        );
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_noncovalent_bond() {
-        let mut a = SubPatternAnchor::new();
-        a.push_noncovalent_bond(NoncovalentBondId(1), NoncovalentBondId(3));
-        assert_eq!(
-            a.noncovalent_bonds(),
-            &[(NoncovalentBondId(1), NoncovalentBondId(3))],
-        );
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_stereo_atom() {
-        let mut a = SubPatternAnchor::new();
-        a.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
-        assert_eq!(a.stereo_atoms(), &[(StereoAtomId(2), StereoAtomId(0))]);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_push_stereo_bond() {
-        let mut a = SubPatternAnchor::new();
-        a.push_stereo_bond(StereoBondId(4), StereoBondId(1));
-        assert_eq!(a.stereo_bonds(), &[(StereoBondId(4), StereoBondId(1))]);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::shifts_target(
-        { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(3), AtomId(0)); a.push_bond(BondId(5), BondId(1)); a },
-        id_compaction(vec![1], vec![2]),
-        Some({ let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(2), AtomId(0)); a.push_bond(BondId(4), BondId(1)); a }),
-    )]
-    #[case::drops_on_removed_target_atom(
-        { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(2), AtomId(0)); a },
-        id_compaction(vec![2], vec![]),
-        None,
-    )]
-    #[case::dative_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_dative_bond(DativeBondId(1), DativeBondId(0)); a },
-        relation_compaction(vec![1], vec![], vec![], vec![], vec![], vec![]),
-        None,
-    )]
-    #[case::aromatic_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_aromatic_system(AromaticSystemId(2), AromaticSystemId(0)); a },
-        relation_compaction(vec![], vec![2], vec![], vec![], vec![], vec![]),
-        None,
-    )]
-    #[case::multicenter_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_multicenter_bond(MulticenterBondId(3), MulticenterBondId(0)); a },
-        relation_compaction(vec![], vec![], vec![3], vec![], vec![], vec![]),
-        None,
-    )]
-    #[case::noncovalent_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_noncovalent_bond(NoncovalentBondId(4), NoncovalentBondId(0)); a },
-        relation_compaction(vec![], vec![], vec![], vec![4], vec![], vec![]),
-        None,
-    )]
-    #[case::stereo_atom_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_stereo_atom(StereoAtomId(2), StereoAtomId(0)); a },
-        relation_compaction(vec![], vec![], vec![], vec![], vec![2], vec![]),
-        None,
-    )]
-    #[case::stereo_bond_dropped(
-        { let mut a = SubPatternAnchor::new(); a.push_stereo_bond(StereoBondId(3), StereoBondId(0)); a },
-        relation_compaction(vec![], vec![], vec![], vec![], vec![], vec![3]),
-        None,
-    )]
-    fn test_sub_pattern_anchor_compact(
-        #[case] anchor: SubPatternAnchor,
-        #[case] compaction: IdCompaction,
-        #[case] expected: Option<SubPatternAnchor>,
-    ) {
-        assert_eq!(anchor.compact(&compaction), expected);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_compact_relations_shift() {
-        let mut a = SubPatternAnchor::new();
-        a.push_dative_bond(DativeBondId(2), DativeBondId(0));
-        a.push_aromatic_system(AromaticSystemId(3), AromaticSystemId(1));
-        a.push_multicenter_bond(MulticenterBondId(4), MulticenterBondId(2));
-        a.push_noncovalent_bond(NoncovalentBondId(5), NoncovalentBondId(3));
-        a.push_stereo_atom(StereoAtomId(6), StereoAtomId(4));
-        a.push_stereo_bond(StereoBondId(7), StereoBondId(5));
-
-        let compaction = relation_compaction(vec![0], vec![1], vec![0], vec![2], vec![1], vec![3]);
-        let mapped = a.compact(&compaction).expect("all targets survive");
-
-        assert_eq!(mapped.dative_bonds(), &[(DativeBondId(1), DativeBondId(0))],);
-        assert_eq!(
-            mapped.aromatic_systems(),
-            &[(AromaticSystemId(2), AromaticSystemId(1))],
-        );
-        assert_eq!(
-            mapped.multicenter_bonds(),
-            &[(MulticenterBondId(3), MulticenterBondId(2))],
-        );
-        assert_eq!(
-            mapped.noncovalent_bonds(),
-            &[(NoncovalentBondId(4), NoncovalentBondId(3))],
-        );
-        assert_eq!(mapped.stereo_atoms(), &[(StereoAtomId(5), StereoAtomId(4))],);
-        assert_eq!(mapped.stereo_bonds(), &[(StereoBondId(6), StereoBondId(5))],);
     }
 
     #[rustfmt::skip]

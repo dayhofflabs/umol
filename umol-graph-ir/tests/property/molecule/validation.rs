@@ -4,12 +4,10 @@
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use umol_chem::element::Element;
-use umol_graph_core::{
-    ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
-};
+use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
 use umol_graph_ir::ir::{
     AtomConstraintForm, AtomForm, AtomId, Constraint, ConstraintValidateConfig,
-    ConstraintValidator, Constraints, Molecule, MoleculeEntries, SubstructureMatchAlgorithm,
+    ConstraintValidator, Constraints, Molecule, MoleculeEntries,
 };
 
 use super::REGRESSION_FILE;
@@ -17,8 +15,6 @@ use super::REGRESSION_FILE;
 const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
-    substructure_match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
-    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
 };
 
 fn molecule_with(constraint: Constraint) -> Molecule {

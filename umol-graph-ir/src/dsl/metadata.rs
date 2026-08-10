@@ -52,8 +52,7 @@ impl MoleculeMetadata {
         Self::default()
     }
 
-    /// Whether this metadata binds no entity keywords and no atom aliases — the shape an anonymous
-    /// molecule (e.g. a sub-pattern) projects.
+    /// Whether this metadata binds no entity keywords and no atom aliases.
     pub fn is_empty(&self) -> bool {
         self.keywords.is_empty() && self.atom_aliases.is_empty()
     }

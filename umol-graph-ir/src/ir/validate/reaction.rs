@@ -545,45 +545,6 @@ impl ReactionIntegrityValidator {
                 }
                 Ok(())
             }
-            MoleculeConstraint::SubPattern { anchor, pattern } => {
-                let pattern_created = HashSet::new();
-                for &(target, pattern_id) in anchor.atoms() {
-                    self.require_available(lhs, created, Entity::Atom(target))?;
-                    self.require_lhs(pattern, Entity::Atom(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.bonds() {
-                    self.require_available(lhs, created, Entity::Bond(target))?;
-                    self.require_lhs(pattern, Entity::Bond(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.dative_bonds() {
-                    self.require_available(lhs, created, Entity::DativeBond(target))?;
-                    self.require_lhs(pattern, Entity::DativeBond(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.aromatic_systems() {
-                    self.require_available(lhs, created, Entity::AromaticSystem(target))?;
-                    self.require_lhs(pattern, Entity::AromaticSystem(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.multicenter_bonds() {
-                    self.require_available(lhs, created, Entity::MulticenterBond(target))?;
-                    self.require_lhs(pattern, Entity::MulticenterBond(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.noncovalent_bonds() {
-                    self.require_available(lhs, created, Entity::NoncovalentBond(target))?;
-                    self.require_lhs(pattern, Entity::NoncovalentBond(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.stereo_atoms() {
-                    self.require_available(lhs, created, Entity::StereoAtom(target))?;
-                    self.require_lhs(pattern, Entity::StereoAtom(pattern_id))?;
-                }
-                for &(target, pattern_id) in anchor.stereo_bonds() {
-                    self.require_available(lhs, created, Entity::StereoBond(target))?;
-                    self.require_lhs(pattern, Entity::StereoBond(pattern_id))?;
-                }
-                for constraint in pattern.constraints().iter() {
-                    self.validate_constraint(pattern, &pattern_created, constraint)?;
-                }
-                Ok(())
-            }
         }
     }
 }

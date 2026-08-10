@@ -120,7 +120,7 @@ A property contract is determined by the returned object's role:
 - returning a live view solely to avoid a copy is not sufficient reason to introduce aliasing.
 
 These rules apply recursively. Marking the outer PyO3 class as frozen is insufficient when a nested
-constraints container, subpattern, or other umol object remains mutable.
+constraints container or other umol object remains mutable.
 
 The existing constraint-container distinction is retained. A value-backed `*ConstraintsForm` is an
 owned mutable container; a molecule-backed `*ConstraintsView` is a live container whose writes

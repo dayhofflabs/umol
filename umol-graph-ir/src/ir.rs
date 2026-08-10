@@ -53,8 +53,8 @@ pub use constraint::{
     NoncovalentBondConstraintsForm, OrientedLigandPermutation, RelationalConstraint,
     RingMembershipForm, RingScope, StereoAtomConstraintForm, StereoAtomConstraintKey,
     StereoAtomConstraintsForm, StereoBondConstraintForm, StereoBondConstraintKey,
-    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, SubPatternAnchor,
-    TopicityForm, TopicityRelationForm,
+    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    TopicityRelationForm,
 };
 pub use correspondence::MoleculeCorrespondence;
 pub use dative::{DativeBondForm, DativeBondUpdate};

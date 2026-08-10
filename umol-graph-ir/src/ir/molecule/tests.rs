@@ -22,7 +22,7 @@ use super::super::constraint::{
     BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
     DativeBondConstraintsForm, MoleculeConstraint, MulticenterBondConstraintForm,
     NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
-    StereoBondConstraintForm, StereogenicityForm, SubPatternAnchor,
+    StereoBondConstraintForm, StereogenicityForm,
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
@@ -450,49 +450,6 @@ fn test_molecule_ast_try_from_entries_molecule_constraint_error(
     #[case] entity: Entity,
 ) {
     entries.constraints = constraint.into();
-
-    assert_eq!(
-        Molecule::try_from_entries(entries),
-        Err(MoleculeEntriesError::InvalidReference { entity }),
-    );
-}
-
-#[rstest]
-#[case::target(
-    {
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomId(4), AtomId(0));
-        anchor
-    },
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::default()],
-        ..Default::default()
-    }),
-    Entity::Atom(AtomId(4)),
-)]
-#[case::pattern(
-    {
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomId(0), AtomId(1));
-        anchor
-    },
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::default()],
-        ..Default::default()
-    }),
-    Entity::Atom(AtomId(1)),
-)]
-fn test_molecule_ast_try_from_entries_subpattern_error(
-    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
-    #[case] anchor: SubPatternAnchor,
-    #[case] pattern: Molecule,
-    #[case] entity: Entity,
-) {
-    entries.constraints = Constraint::Molecule(MoleculeConstraint::SubPattern {
-        anchor,
-        pattern: Box::new(pattern),
-    })
-    .into();
 
     assert_eq!(
         Molecule::try_from_entries(entries),

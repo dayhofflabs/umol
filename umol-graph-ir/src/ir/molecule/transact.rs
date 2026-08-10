@@ -2324,7 +2324,7 @@ mod tests {
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
         NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereogenicityForm, SubPatternAnchor,
+        StereoBondConstraintForm, StereogenicityForm,
     };
     use super::super::super::dative::DativeBondForm;
     use super::super::super::edit::EntityHandle;
@@ -2339,7 +2339,7 @@ mod tests {
         StereoKind,
     };
     use super::super::super::value::NumForm;
-    use super::super::{Molecule, MoleculeEntries};
+    use super::super::Molecule;
     use super::*;
     use crate::ir::BooleanForm;
 
@@ -3300,41 +3300,6 @@ mod tests {
 
         assert_eq!(editor.transact(edits), Err(expected));
         assert_eq!(editor.build(), before);
-    }
-
-    #[rstest]
-    fn test_molecule_editor_transact_molecule_constraint_subpattern(mut one_atom: MoleculeEditor) {
-        let pattern = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 4],
-            ..Default::default()
-        });
-        let mut source_anchor = SubPatternAnchor::new();
-        source_anchor.push_atom(AtomId(7), AtomId(3));
-        let edit = ConstraintEdit::new(
-            Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor: source_anchor,
-                pattern: Box::new(pattern.clone()),
-            }),
-            |_| Some(EntityHandle::Atom(AtomHandle::Id(AtomId(0)))),
-        )
-        .unwrap();
-        let mut expected_anchor = SubPatternAnchor::new();
-        expected_anchor.push_atom(AtomId(0), AtomId(3));
-        let expected = Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: expected_anchor,
-            pattern: Box::new(pattern),
-        });
-        let before = one_atom.clone().build();
-
-        let transaction = one_atom
-            .transact(Edits::from_iter([Edit::AddMoleculeConstraint {
-                constraint: edit,
-            }]))
-            .unwrap();
-        assert_eq!(one_atom.constraints().as_slice(), &[expected]);
-
-        transaction.rollback(&mut one_atom).unwrap();
-        assert_eq!(one_atom.build(), before);
     }
 
     #[rstest]

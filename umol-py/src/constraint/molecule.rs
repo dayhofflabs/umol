@@ -10,7 +10,7 @@ use umol_graph_ir::ir::{
     DativeBondId as GraphIrDativeBondId, MoleculeConstraint as GraphIrMoleculeConstraint,
     MulticenterBondId as GraphIrMulticenterBondId, NoncovalentBondId as GraphIrNoncovalentBondId,
     RelationalConstraint as GraphIrRelationalConstraint, StereoAtomId as GraphIrStereoAtomId,
-    StereoBondId as GraphIrStereoBondId, SubPatternAnchor as GraphIrSubPatternAnchor,
+    StereoBondId as GraphIrStereoBondId,
 };
 
 use super::aromatic::AromaticSystemConstraintForm;
@@ -26,21 +26,6 @@ use crate::molecule::MoleculeAst;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::StereoKind;
 use crate::value::NumForm;
-
-/// Entity correspondences anchoring a subpattern match. Each collection holds
-/// `(target, pattern)` integer-id pairs for one molecule entity family.
-#[pyclass(eq, from_py_object)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SubPatternAnchor {
-    atoms: Vec<(u32, u32)>,
-    bonds: Vec<(u32, u32)>,
-    dative_bonds: Vec<(u32, u32)>,
-    aromatic_systems: Vec<(u32, u32)>,
-    multicenter_bonds: Vec<(u32, u32)>,
-    noncovalent_bonds: Vec<(u32, u32)>,
-    stereo_atoms: Vec<(u32, u32)>,
-    stereo_bonds: Vec<(u32, u32)>,
-}
 
 /// A cross-entity molecule constraint covering dative bonds, aromatic systems,
 /// multicenter bonds, noncovalent bonds, stereo atoms, and stereo bonds.
@@ -79,7 +64,7 @@ pub enum RelationalConstraint {
     StereoBondAnyLigand(u32, Py<AtomConstraintForm>),
 }
 
-/// A molecule-scope predicate over values, connectivity, or a nested pattern.
+/// A molecule-scope predicate over values or connectivity.
 #[pyclass]
 pub enum MoleculeConstraint {
     ChargeSum(Option<Vec<u32>>, Py<NumForm>),
@@ -90,7 +75,6 @@ pub enum MoleculeConstraint {
     },
     BondOrderSum(Option<Vec<u32>>, Py<NumForm>),
     Connected(Option<Vec<u32>>),
-    SubPattern(Py<SubPatternAnchor>, Py<MoleculeAst>),
 }
 
 /// A recursive molecule-constraint tree containing entity leaves, aggregate
@@ -570,9 +554,6 @@ impl MoleculeConstraint {
             Self::Connected(_) => {
                 variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "Connected", 1)
             }
-            Self::SubPattern(_, _) => {
-                variant_repr(slf.bind(py).as_any(), "MoleculeConstraint", "SubPattern", 2)
-            }
         }
     }
 }
@@ -623,10 +604,6 @@ impl MoleculeConstraint {
                     .as_ref()
                     .map(|atoms| atoms.iter().map(|atom| atom.0).collect()),
             ),
-            GraphIrMoleculeConstraint::SubPattern { anchor, pattern } => Self::SubPattern(
-                Py::new(py, SubPatternAnchor::from_rust(anchor))?,
-                Py::new(py, MoleculeAst::from_rust((**pattern).clone()))?,
-            ),
         })
     }
 
@@ -657,10 +634,6 @@ impl MoleculeConstraint {
                 atoms: atoms
                     .as_ref()
                     .map(|atoms| atoms.iter().copied().map(GraphIrAtomId).collect()),
-            },
-            Self::SubPattern(anchor, pattern) => GraphIrMoleculeConstraint::SubPattern {
-                anchor: anchor.bind(py).borrow().to_rust(),
-                pattern: Box::new(pattern.bind(py).borrow().inner().clone()),
             },
         }
     }
@@ -1058,159 +1031,6 @@ impl_py_canonicalize!(
     }
 );
 
-#[pymethods]
-impl SubPatternAnchor {
-    #[new]
-    #[pyo3(signature = (*, atoms=Vec::new(), bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new()))]
-    #[allow(clippy::too_many_arguments)] // one collection per molecule entity family
-    fn new(
-        atoms: Vec<(u32, u32)>,
-        bonds: Vec<(u32, u32)>,
-        dative_bonds: Vec<(u32, u32)>,
-        aromatic_systems: Vec<(u32, u32)>,
-        multicenter_bonds: Vec<(u32, u32)>,
-        noncovalent_bonds: Vec<(u32, u32)>,
-        stereo_atoms: Vec<(u32, u32)>,
-        stereo_bonds: Vec<(u32, u32)>,
-    ) -> Self {
-        Self {
-            atoms,
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-        }
-    }
-
-    #[getter]
-    fn atoms(&self) -> Vec<(u32, u32)> {
-        self.atoms.clone()
-    }
-
-    #[getter]
-    fn bonds(&self) -> Vec<(u32, u32)> {
-        self.bonds.clone()
-    }
-
-    #[getter]
-    fn dative_bonds(&self) -> Vec<(u32, u32)> {
-        self.dative_bonds.clone()
-    }
-
-    #[getter]
-    fn aromatic_systems(&self) -> Vec<(u32, u32)> {
-        self.aromatic_systems.clone()
-    }
-
-    #[getter]
-    fn multicenter_bonds(&self) -> Vec<(u32, u32)> {
-        self.multicenter_bonds.clone()
-    }
-
-    #[getter]
-    fn noncovalent_bonds(&self) -> Vec<(u32, u32)> {
-        self.noncovalent_bonds.clone()
-    }
-
-    #[getter]
-    fn stereo_atoms(&self) -> Vec<(u32, u32)> {
-        self.stereo_atoms.clone()
-    }
-
-    #[getter]
-    fn stereo_bonds(&self) -> Vec<(u32, u32)> {
-        self.stereo_bonds.clone()
-    }
-}
-
-impl SubPatternAnchor {
-    pub(crate) fn from_rust(anchor: &GraphIrSubPatternAnchor) -> Self {
-        Self {
-            atoms: anchor
-                .atoms()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            bonds: anchor
-                .bonds()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            dative_bonds: anchor
-                .dative_bonds()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            aromatic_systems: anchor
-                .aromatic_systems()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            multicenter_bonds: anchor
-                .multicenter_bonds()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            noncovalent_bonds: anchor
-                .noncovalent_bonds()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            stereo_atoms: anchor
-                .stereo_atoms()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-            stereo_bonds: anchor
-                .stereo_bonds()
-                .iter()
-                .map(|(target, pattern)| (target.0, pattern.0))
-                .collect(),
-        }
-    }
-
-    pub(crate) fn to_rust(&self) -> GraphIrSubPatternAnchor {
-        let mut anchor = GraphIrSubPatternAnchor::new();
-        for &(target, pattern) in &self.atoms {
-            anchor.push_atom(GraphIrAtomId(target), GraphIrAtomId(pattern));
-        }
-        for &(target, pattern) in &self.bonds {
-            anchor.push_bond(GraphIrBondId(target), GraphIrBondId(pattern));
-        }
-        for &(target, pattern) in &self.dative_bonds {
-            anchor.push_dative_bond(GraphIrDativeBondId(target), GraphIrDativeBondId(pattern));
-        }
-        for &(target, pattern) in &self.aromatic_systems {
-            anchor.push_aromatic_system(
-                GraphIrAromaticSystemId(target),
-                GraphIrAromaticSystemId(pattern),
-            );
-        }
-        for &(target, pattern) in &self.multicenter_bonds {
-            anchor.push_multicenter_bond(
-                GraphIrMulticenterBondId(target),
-                GraphIrMulticenterBondId(pattern),
-            );
-        }
-        for &(target, pattern) in &self.noncovalent_bonds {
-            anchor.push_noncovalent_bond(
-                GraphIrNoncovalentBondId(target),
-                GraphIrNoncovalentBondId(pattern),
-            );
-        }
-        for &(target, pattern) in &self.stereo_atoms {
-            anchor.push_stereo_atom(GraphIrStereoAtomId(target), GraphIrStereoAtomId(pattern));
-        }
-        for &(target, pattern) in &self.stereo_bonds {
-            anchor.push_stereo_bond(GraphIrStereoBondId(target), GraphIrStereoBondId(pattern));
-        }
-        anchor
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
@@ -1232,44 +1052,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[rstest]
-    fn test_sub_pattern_anchor_new() {
-        let anchor = SubPatternAnchor::new(
-            vec![(1, 2)],
-            vec![(3, 4)],
-            vec![(5, 6)],
-            vec![(7, 8)],
-            vec![(9, 10)],
-            vec![(11, 12)],
-            vec![(13, 14)],
-            vec![(15, 16)],
-        );
-
-        assert_eq!(anchor.atoms(), vec![(1, 2)]);
-        assert_eq!(anchor.bonds(), vec![(3, 4)]);
-        assert_eq!(anchor.dative_bonds(), vec![(5, 6)]);
-        assert_eq!(anchor.aromatic_systems(), vec![(7, 8)]);
-        assert_eq!(anchor.multicenter_bonds(), vec![(9, 10)]);
-        assert_eq!(anchor.noncovalent_bonds(), vec![(11, 12)]);
-        assert_eq!(anchor.stereo_atoms(), vec![(13, 14)]);
-        assert_eq!(anchor.stereo_bonds(), vec![(15, 16)]);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_roundtrip() {
-        let mut anchor = GraphIrSubPatternAnchor::new();
-        anchor.push_atom(GraphIrAtomId(1), GraphIrAtomId(2));
-        anchor.push_bond(GraphIrBondId(3), GraphIrBondId(4));
-        anchor.push_dative_bond(GraphIrDativeBondId(5), GraphIrDativeBondId(6));
-        anchor.push_aromatic_system(GraphIrAromaticSystemId(7), GraphIrAromaticSystemId(8));
-        anchor.push_multicenter_bond(GraphIrMulticenterBondId(9), GraphIrMulticenterBondId(10));
-        anchor.push_noncovalent_bond(GraphIrNoncovalentBondId(11), GraphIrNoncovalentBondId(12));
-        anchor.push_stereo_atom(GraphIrStereoAtomId(13), GraphIrStereoAtomId(14));
-        anchor.push_stereo_bond(GraphIrStereoBondId(15), GraphIrStereoBondId(16));
-
-        assert_eq!(SubPatternAnchor::from_rust(&anchor).to_rust(), anchor);
-    }
 
     #[rstest]
     #[case::donors(GraphIrRelationalConstraint::DativeBondDonors {
@@ -1425,14 +1207,6 @@ mod tests {
     })]
     #[case::connected(GraphIrMoleculeConstraint::Connected {
         atoms: None,
-    })]
-    #[case::sub_pattern(GraphIrMoleculeConstraint::SubPattern {
-        anchor: {
-            let mut anchor = GraphIrSubPatternAnchor::new();
-            anchor.push_atom(GraphIrAtomId(7), GraphIrAtomId(0));
-            anchor
-        },
-        pattern: Box::new(GraphIrMolecule::new()),
     })]
     fn test_molecule_constraint_roundtrip(#[case] constraint: GraphIrMoleculeConstraint) {
         Python::attach(|py| {

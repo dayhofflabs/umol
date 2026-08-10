@@ -35,7 +35,6 @@ use crate::{
         },
         molecule::{
             Constraint, Constraints, ConstraintsView, MoleculeConstraint, RelationalConstraint,
-            SubPatternAnchor,
         },
         multicenter::{
             MulticenterBondConstraintForm, MulticenterBondConstraintKey,
@@ -300,7 +299,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<MoleculeMetadata>()?;
         module.add_class::<ReactionMetadata>()?;
         module.add_class::<SubstructureSearchConfig>()?;
-        module.add_class::<SubPatternAnchor>()?;
         module.add_class::<RelationalConstraint>()?;
         module.add_class::<MoleculeConstraint>()?;
         module.add_class::<Constraint>()?;

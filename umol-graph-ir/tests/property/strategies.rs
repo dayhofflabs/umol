@@ -51,7 +51,7 @@ pub(crate) use umol_graph_ir::ir::{
     StereoBondConstraintsForm, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
     StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
-    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm, SubPatternAnchor,
+    StereoLigandPair, StereoLigandPosition, Stereogenicity, StereogenicityForm,
     TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
@@ -2106,26 +2106,6 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
         }
     }
 
-    // SubPattern: pattern molecule and a small anchor pinning the first few
-    // entities to themselves on both sides (capped to keep refs valid).
-    let target_counts = counts;
-    let sub_pattern = molecule_ast_strategy()
-        .prop_flat_map(move |pattern| {
-            let pattern_counts = ConstraintCounts::from_ir(&pattern);
-            (
-                Just(pattern),
-                sub_pattern_anchor_strategy(target_counts, pattern_counts),
-            )
-        })
-        .prop_map(|(pattern, anchor)| {
-            Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor,
-                pattern: Box::new(pattern),
-            })
-        })
-        .boxed();
-    choices.push(sub_pattern);
-
     if choices.is_empty() {
         return Just(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: None,
@@ -2133,68 +2113,6 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
         .boxed();
     }
     prop::strategy::Union::new(choices).boxed()
-}
-
-/// Sub-pattern anchor: link the first few entities of each kind pairwise,
-/// capped at the minimum of the two molecules' counts on each side so all
-/// refs are valid in their respective metadata scopes.
-pub(crate) fn sub_pattern_anchor_strategy(
-    target: ConstraintCounts,
-    pattern: ConstraintCounts,
-) -> BoxedStrategy<SubPatternAnchor> {
-    let atom_pairs = target.atom.min(pattern.atom).min(2);
-    let bond_pairs = target.bond.min(pattern.bond).min(2);
-    let dative_pairs = target.dative.min(pattern.dative).min(1);
-    let aromatic_pairs = target.aromatic.min(pattern.aromatic).min(1);
-    let multicenter_pairs = target.multicenter.min(pattern.multicenter).min(1);
-    let noncovalent_pairs = target.noncovalent.min(pattern.noncovalent).min(1);
-    let stereo_atom_pairs = target.stereo_atom.min(pattern.stereo_atom).min(1);
-    let stereo_bond_pairs = target.stereo_bond.min(pattern.stereo_bond).min(1);
-    (
-        0..=atom_pairs,
-        0..=bond_pairs,
-        0..=dative_pairs,
-        0..=aromatic_pairs,
-        0..=multicenter_pairs,
-        0..=noncovalent_pairs,
-        0..=stereo_atom_pairs,
-        0..=stereo_bond_pairs,
-    )
-        .prop_map(|(a, b, d, ar, mc, nc, sa, sb)| {
-            let mut anchor = SubPatternAnchor::new();
-            for i in 0..a {
-                anchor.push_atom(AtomId(i as u32), AtomId(i as u32));
-            }
-            for i in 0..b {
-                anchor.push_bond(BondId(i as u32), BondId(i as u32));
-            }
-            for i in 0..d {
-                anchor.push_dative_bond(DativeBondId(i as u32), DativeBondId(i as u32));
-            }
-            for i in 0..ar {
-                anchor.push_aromatic_system(AromaticSystemId(i as u32), AromaticSystemId(i as u32));
-            }
-            for i in 0..mc {
-                anchor.push_multicenter_bond(
-                    MulticenterBondId(i as u32),
-                    MulticenterBondId(i as u32),
-                );
-            }
-            for i in 0..nc {
-                anchor.push_noncovalent_bond(
-                    NoncovalentBondId(i as u32),
-                    NoncovalentBondId(i as u32),
-                );
-            }
-            for i in 0..sa {
-                anchor.push_stereo_atom(StereoAtomId(i as u32), StereoAtomId(i as u32));
-            }
-            for i in 0..sb {
-                anchor.push_stereo_bond(StereoBondId(i as u32), StereoBondId(i as u32));
-            }
-            anchor
-        })
-        .boxed()
 }
 
 /// Constraint tree: leaves wrapped in bounded-depth combinators (And/Or/Not).

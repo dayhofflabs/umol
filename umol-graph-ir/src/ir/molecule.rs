@@ -308,55 +308,6 @@ fn validate_molecule_constraint_references(
         MoleculeConstraint::BondOrderSum { bonds, .. } => {
             require_references(contains, bonds.iter().flatten().copied().map(Entity::Bond))
         }
-        MoleculeConstraint::SubPattern { anchor, pattern } => {
-            let pattern_contains = |entity| match entity {
-                Entity::Atom(id) => pattern.atoms().contains(id),
-                Entity::Bond(id) => pattern.bonds().contains(id),
-                Entity::DativeBond(id) => pattern.dative_bonds().contains(id),
-                Entity::AromaticSystem(id) => pattern.aromatic_systems().contains(id),
-                Entity::MulticenterBond(id) => pattern.multicenter_bonds().contains(id),
-                Entity::NoncovalentBond(id) => pattern.noncovalent_bonds().contains(id),
-                Entity::StereoAtom(id) => pattern.stereo_atoms().contains(id),
-                Entity::StereoBond(id) => pattern.stereo_bonds().contains(id),
-            };
-
-            for &(target, pattern_id) in anchor.atoms() {
-                require_reference(contains, Entity::Atom(target))?;
-                require_reference(&pattern_contains, Entity::Atom(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.bonds() {
-                require_reference(contains, Entity::Bond(target))?;
-                require_reference(&pattern_contains, Entity::Bond(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.dative_bonds() {
-                require_reference(contains, Entity::DativeBond(target))?;
-                require_reference(&pattern_contains, Entity::DativeBond(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.aromatic_systems() {
-                require_reference(contains, Entity::AromaticSystem(target))?;
-                require_reference(&pattern_contains, Entity::AromaticSystem(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.multicenter_bonds() {
-                require_reference(contains, Entity::MulticenterBond(target))?;
-                require_reference(&pattern_contains, Entity::MulticenterBond(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.noncovalent_bonds() {
-                require_reference(contains, Entity::NoncovalentBond(target))?;
-                require_reference(&pattern_contains, Entity::NoncovalentBond(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.stereo_atoms() {
-                require_reference(contains, Entity::StereoAtom(target))?;
-                require_reference(&pattern_contains, Entity::StereoAtom(pattern_id))?;
-            }
-            for &(target, pattern_id) in anchor.stereo_bonds() {
-                require_reference(contains, Entity::StereoBond(target))?;
-                require_reference(&pattern_contains, Entity::StereoBond(pattern_id))?;
-            }
-            for constraint in pattern.constraints().iter() {
-                validate_constraint_references(constraint, &pattern_contains)?;
-            }
-            Ok(())
-        }
     }
 }
 
@@ -2237,9 +2188,6 @@ impl Molecule {
                         .collect(),
                     None => all_atoms(),
                 },
-                MoleculeConstraint::SubPattern { anchor, .. } => {
-                    anchor.atoms().iter().flat_map(|&(a, b)| [a, b]).collect()
-                }
             },
             Constraint::And(constraints) | Constraint::Or(constraints) => constraints
                 .iter()

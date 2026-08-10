@@ -42,7 +42,7 @@ pub struct MoleculeContext {
 /// relational resolvers read to turn a surface ref into a numerical AST id
 /// (keyword / index / participants → id). Written once, generic over this
 /// trait; implemented for [`MoleculeContext`] (a molecule), a reaction's
-/// `ReactionContext`, and sub-pattern contexts. The inverse direction
+/// `ReactionContext`, and other molecule contexts. The inverse direction
 /// (numerical AST id → keyword, for rendering) is the separate `Metadata`
 /// trait.
 pub trait Namespace {
@@ -114,8 +114,8 @@ impl MoleculeContext {
     }
 
     /// The context of an already-resolved molecule: every entity registered anonymously (no
-    /// keyword) with its participants, so a sub-pattern's index and structural refs resolve against
-    /// it. The ids are anonymous, so registration cannot collide.
+    /// keyword) with its participants, so index and structural refs resolve against it. The ids are
+    /// anonymous, so registration cannot collide.
     pub fn from_ir(ast: &Molecule) -> Self {
         let free = "anonymous entity registration never collides";
         let mut context = Self::default();

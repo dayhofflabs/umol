@@ -52,7 +52,7 @@ pub use config::{
     ReactionOverrides, StereoAtomDefaults, StereoAtomOverrides, StereoBondDefaults,
     StereoBondOverrides, StereoDefault, UnpairedElectronsDefault,
 };
-pub use constraint::{ConstraintDsl, ConstraintsDsl, MoleculeConstraintDsl, SubPatternAnchorDsl};
+pub use constraint::{ConstraintDsl, ConstraintsDsl, MoleculeConstraintDsl};
 pub use dative::{
     parse_dative_bond, parse_dative_bond_update, DativeBondConstraintDsl, DativeBondDsl,
     DativeBondPredicate, DativeBondUpdateDsl,

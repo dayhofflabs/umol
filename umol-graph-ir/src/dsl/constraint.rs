@@ -18,10 +18,9 @@ use super::edn_utils::{
     unexpected_byte_kind,
 };
 use super::error::ParseError;
-use super::metadata::{Metadata, MoleculeMetadata};
-use super::molecule::{read_molecule_input, MoleculeDsl};
+use super::metadata::Metadata;
 use super::multicenter::MulticenterBondConstraintDsl;
-use super::namespace::{MoleculeContext, Namespace};
+use super::namespace::Namespace;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::refs::{
     read_aromatic_system_ref, read_atom_ref, read_bond_ref, read_dative_bond_ref,
@@ -42,10 +41,9 @@ use crate::ir::constraint::{
     FluxionalityForm, LigandPermutation, LigandSymmetryForm, MoleculeConstraint,
     MulticenterValenceForm, OrientedLigandPermutation, RingMembershipForm, RingScope,
     StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
-    SubPatternAnchor, TopicityForm,
+    TopicityForm,
 };
 use crate::ir::id::{AtomId, BondId, StereoLigandPosition};
-use crate::ir::molecule::Molecule;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::ir::stereo::{CisTransStereoForm, StereoCoset, StereoKind, TetrahedralStereoForm};
 use crate::ir::traits::{FromIr, IntoIr};
@@ -923,71 +921,6 @@ pub(super) fn read_relational_constraint_dsl(
     Ok(c)
 }
 
-pub(super) fn read_sub_pattern_anchor_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<SubPatternAnchorDsl, EdnError> {
-    let mut out = SubPatternAnchorDsl::default();
-    read_map(de, |d, key| {
-        match key {
-            "atoms" => out.atoms = read_vec(d, |d| read_ref_pair(d, read_atom_ref, read_atom_ref))?,
-            "bonds" => out.bonds = read_vec(d, |d| read_ref_pair(d, read_bond_ref, read_bond_ref))?,
-            "dative-bonds" => {
-                out.dative_bonds = read_vec(d, |d| {
-                    read_ref_pair(d, read_dative_bond_ref, read_dative_bond_ref)
-                })?
-            }
-            "aromatic-systems" => {
-                out.aromatic_systems = read_vec(d, |d| {
-                    read_ref_pair(d, read_aromatic_system_ref, read_aromatic_system_ref)
-                })?
-            }
-            "multicenter-bonds" => {
-                out.multicenter_bonds = read_vec(d, |d| {
-                    read_ref_pair(d, read_multicenter_bond_ref, read_multicenter_bond_ref)
-                })?
-            }
-            "noncovalent-bonds" => {
-                out.noncovalent_bonds = read_vec(d, |d| {
-                    read_ref_pair(d, read_noncovalent_bond_ref, read_noncovalent_bond_ref)
-                })?
-            }
-            "stereo-atoms" => {
-                out.stereo_atoms = read_vec(d, |d| {
-                    read_ref_pair(d, read_stereo_atom_ref, read_stereo_atom_ref)
-                })?
-            }
-            "stereo-bonds" => {
-                out.stereo_bonds = read_vec(d, |d| {
-                    read_ref_pair(d, read_stereo_bond_ref, read_stereo_bond_ref)
-                })?
-            }
-            other => {
-                return Err(DeError::UnknownField {
-                    key: other.to_string(),
-                    path: vec!["sub-pattern-anchor".into()],
-                }
-                .into());
-            }
-        }
-        Ok(())
-    })?;
-    Ok(out)
-}
-
-fn read_ref_pair<R1, R2>(
-    de: &mut EdnStreamDeserializer<'_>,
-    read_first: fn(&mut EdnStreamDeserializer<'_>) -> Result<R1, EdnError>,
-    read_second: fn(&mut EdnStreamDeserializer<'_>) -> Result<R2, EdnError>,
-) -> Result<(R1, R2), EdnError> {
-    de.consume_byte(b'[')?;
-    let first = read_first(de)?;
-    let second = read_second(de)?;
-    if !de.try_consume_byte(b']')? {
-        return Err(DeError::Custom("anchor pair must have 2 elements".into()).into());
-    }
-    Ok((first, second))
-}
-
 pub(super) fn read_molecule_constraint_dsl(
     de: &mut EdnStreamDeserializer<'_>,
     key: &str,
@@ -1053,28 +986,6 @@ pub(super) fn read_molecule_constraint_dsl(
                 Ok(())
             })?;
             MoleculeConstraintDsl::Connected { atoms }
-        }
-        "sub-pattern" => {
-            let mut anchor = None;
-            let mut pattern = None;
-            read_map(de, |d, k| {
-                match k {
-                    "anchor" => anchor = Some(read_sub_pattern_anchor_dsl(d)?),
-                    "pattern" => {
-                        let input = read_molecule_input(d)?;
-                        let (ast, _metadata) = input
-                            .into_ir()
-                            .map_err(|e| DeError::Custom(e.to_string()))?;
-                        pattern = Some(Box::new(ast));
-                    }
-                    _ => d.read_skip_value()?,
-                }
-                Ok(())
-            })?;
-            MoleculeConstraintDsl::SubPattern {
-                anchor: anchor.ok_or_else(|| missing("anchor", "sub-pattern"))?,
-                pattern: pattern.ok_or_else(|| missing("pattern", "sub-pattern"))?,
-            }
         }
         other => unreachable!("read_molecule_constraint_dsl called with non-molecule key {other}"),
     };
@@ -1151,11 +1062,9 @@ pub(super) fn read_constraint_dsl(
         "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
         "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
         "not" => ConstraintDsl::Not(Box::new(read_constraint_dsl(de)?)),
-        "charge-sum"
-        | "unpaired-electron-coupling"
-        | "bond-order-sum"
-        | "connected"
-        | "sub-pattern" => ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?),
+        "charge-sum" | "unpaired-electron-coupling" | "bond-order-sum" | "connected" => {
+            ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?)
+        }
         k if RELATIONAL_KEYS.contains(&k) => {
             ConstraintDsl::Relational(read_relational_constraint_dsl(de, k)?)
         }
@@ -1196,19 +1105,13 @@ pub(super) fn read_constraints_dsl(
 
 /// Surface DSL wrapper around `MoleculeConstraint`. EDN form is a single-key
 /// map keyed by the variant: `{:charge-sum {...}}`,
-/// `{:unpaired-electron-coupling {...}}`, `{:bond-order-sum {...}}`,
-/// `{:connected {...}}`, `{:sub-pattern {...}}`.
+/// `{:unpaired-electron-coupling {...}}`, `{:bond-order-sum {...}}`, or
+/// `{:connected {...}}`.
 ///
 /// For `ChargeSum` / `UnpairedElectronCoupling` / `BondOrderSum` /
 /// `Connected`, the `atoms` (or `bonds`) field is `None` to denote the entire
 /// molecule's atoms (or bonds). Empty subset must be expressed explicitly as
 /// `Some(vec![])`.
-///
-/// `SubPattern` carries a `Box<Molecule>` directly: defaults are a
-/// ground-input convenience that has no meaning for patterns, where
-/// `Undetermined` is a wildcard. The AST↔DSL bridge for the pattern is
-/// the identity; the EDN bridge wraps with empty `MoleculeMetadata` so refs render
-/// as numeric indices.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraintDsl {
     ChargeSum {
@@ -1225,10 +1128,6 @@ pub enum MoleculeConstraintDsl {
     },
     Connected {
         atoms: Option<Vec<AtomRef>>,
-    },
-    SubPattern {
-        anchor: SubPatternAnchorDsl,
-        pattern: Box<Molecule>,
     },
 }
 
@@ -1294,14 +1193,6 @@ impl MoleculeConstraintDsl {
             MoleculeConstraint::Connected { atoms } => Self::Connected {
                 atoms: denote_atom_subset(atoms, meta),
             },
-            MoleculeConstraint::SubPattern { anchor, pattern } => {
-                let pattern_meta = MoleculeMetadata::default();
-                let anchor_dsl = SubPatternAnchorDsl::from_ast_pair(anchor, meta, &pattern_meta);
-                Self::SubPattern {
-                    anchor: anchor_dsl,
-                    pattern: pattern.clone(),
-                }
-            }
         })
     }
 
@@ -1328,14 +1219,6 @@ impl MoleculeConstraintDsl {
             Self::Connected { atoms } => MoleculeConstraint::Connected {
                 atoms: resolve_atom_subset(atoms, namespace)?,
             },
-            Self::SubPattern { anchor, pattern } => {
-                let pattern_context = MoleculeContext::from_ir(&pattern);
-                let anchor_ast = anchor.into_ast_pair(namespace, &pattern_context)?;
-                MoleculeConstraint::SubPattern {
-                    anchor: anchor_ast,
-                    pattern,
-                }
-            }
         })
     }
 }
@@ -1392,32 +1275,6 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                     atoms: parse_optional_refs::<AtomRef>(m, "atoms")?,
                 }
             }
-            "sub-pattern" => {
-                let m = expect_map(v, "sub-pattern")?;
-                let anchor_edn = m
-                    .get_keyword("anchor")
-                    .ok_or_else(|| DeError::MissingField {
-                        key: "anchor".into(),
-                        path: vec!["sub-pattern".into()],
-                    })?;
-                let pattern_edn =
-                    m.get_keyword("pattern")
-                        .ok_or_else(|| DeError::MissingField {
-                            key: "pattern".into(),
-                            path: vec!["sub-pattern".into()],
-                        })?;
-                let pattern_dsl = MoleculeDsl::from_edn(pattern_edn)?;
-                let (pattern_ast, pattern_meta) = pattern_dsl.into_parts();
-                if !pattern_meta.is_empty() {
-                    return Err(DeError::Custom(
-                        "sub-pattern molecule must be anonymous: no :id or :atom-aliases".into(),
-                    ));
-                }
-                Self::SubPattern {
-                    anchor: SubPatternAnchorDsl::from_edn(anchor_edn)?,
-                    pattern: Box::new(pattern_ast),
-                }
-            }
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1456,262 +1313,10 @@ impl ToEdn for MoleculeConstraintDsl {
                 }
                 ("connected", Edn::Map(m))
             }
-            Self::SubPattern { anchor, pattern } => {
-                let pattern_dsl =
-                    MoleculeDsl::new((**pattern).clone(), MoleculeMetadata::default())
-                        .expect("empty metadata is coherent");
-                let mut m = EdnMap::with_capacity(2);
-                m.insert(Edn::keyword("anchor"), anchor.to_edn());
-                m.insert(Edn::keyword("pattern"), pattern_dsl.to_edn());
-                ("sub-pattern", Edn::Map(m))
-            }
         };
         let mut outer = EdnMap::with_capacity(1);
         outer.insert(Edn::Keyword(EdnKeyword::owned(key.into())), value);
         Edn::Map(outer)
-    }
-}
-
-/// Surface DSL wrapper around `SubPatternAnchor`. Each vector carries
-/// `(target, pattern)` ref pairs. Target-side refs resolve against the outer
-/// molecule's `MoleculeMetadata`; pattern-side refs resolve against the pattern
-/// molecule's `MoleculeMetadata`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SubPatternAnchorDsl {
-    pub atoms: Vec<(AtomRef, AtomRef)>,
-    pub bonds: Vec<(BondRef, BondRef)>,
-    pub dative_bonds: Vec<(DativeBondRef, DativeBondRef)>,
-    pub aromatic_systems: Vec<(AromaticSystemRef, AromaticSystemRef)>,
-    pub multicenter_bonds: Vec<(MulticenterBondRef, MulticenterBondRef)>,
-    pub noncovalent_bonds: Vec<(NoncovalentBondRef, NoncovalentBondRef)>,
-    pub stereo_atoms: Vec<(StereoAtomRef, StereoAtomRef)>,
-    pub stereo_bonds: Vec<(StereoBondRef, StereoBondRef)>,
-}
-
-impl SubPatternAnchorDsl {
-    /// Build from an AST anchor. `target_meta` is the outer molecule's
-    /// metadata; `pattern_meta` is the pattern molecule's metadata.
-    pub fn from_ast_pair<M: Metadata>(
-        anchor: &SubPatternAnchor,
-        target_meta: &M,
-        pattern_meta: &MoleculeMetadata,
-    ) -> Self {
-        Self {
-            atoms: anchor
-                .atoms()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        AtomRef::denote(t, target_meta),
-                        AtomRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            bonds: anchor
-                .bonds()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        BondRef::denote(t, target_meta),
-                        BondRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            dative_bonds: anchor
-                .dative_bonds()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        DativeBondRef::denote(t, target_meta),
-                        DativeBondRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            aromatic_systems: anchor
-                .aromatic_systems()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        AromaticSystemRef::denote(t, target_meta),
-                        AromaticSystemRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            multicenter_bonds: anchor
-                .multicenter_bonds()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        MulticenterBondRef::denote(t, target_meta),
-                        MulticenterBondRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            noncovalent_bonds: anchor
-                .noncovalent_bonds()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        NoncovalentBondRef::denote(t, target_meta),
-                        NoncovalentBondRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            stereo_atoms: anchor
-                .stereo_atoms()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        StereoAtomRef::denote(t, target_meta),
-                        StereoAtomRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-            stereo_bonds: anchor
-                .stereo_bonds()
-                .iter()
-                .map(|&(t, p)| {
-                    (
-                        StereoBondRef::denote(t, target_meta),
-                        StereoBondRef::denote(p, pattern_meta),
-                    )
-                })
-                .collect(),
-        }
-    }
-
-    /// Resolve to an AST anchor. `target_*` carry outer-molecule counts +
-    /// Resolve to an AST anchor. `host` is the enclosing molecule/reaction namespace (target side);
-    /// `pattern_*` are the pattern molecule's counts + metadata — a stopgap until the pattern namespace
-    /// is built (S3f).
-    pub(crate) fn into_ast_pair(
-        self,
-        host: &impl Namespace,
-        pattern: &impl Namespace,
-    ) -> Result<SubPatternAnchor, ParseError> {
-        let mut anchor = SubPatternAnchor::new();
-        for (t, p) in self.atoms {
-            anchor.push_atom(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.bonds {
-            anchor.push_bond(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.dative_bonds {
-            anchor.push_dative_bond(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.aromatic_systems {
-            anchor.push_aromatic_system(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.multicenter_bonds {
-            anchor.push_multicenter_bond(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.noncovalent_bonds {
-            anchor.push_noncovalent_bond(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.stereo_atoms {
-            anchor.push_stereo_atom(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        for (t, p) in self.stereo_bonds {
-            anchor.push_stereo_bond(t.resolve(host)?, p.resolve(pattern)?);
-        }
-        Ok(anchor)
-    }
-}
-
-impl<'de> FromEdn<'de> for SubPatternAnchorDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let m = expect_map(edn, "sub-pattern-anchor")?;
-        let mut out = Self::default();
-        for (k, v) in m.iter() {
-            let Edn::Keyword(key) = k else {
-                return Err(DeError::TypeMismatch {
-                    expected: "keyword key",
-                    got: k.kind(),
-                    path: vec!["sub-pattern-anchor".into()],
-                });
-            };
-            match key.name() {
-                "atoms" => out.atoms = parse_ref_pairs::<AtomRef, AtomRef>(v)?,
-                "bonds" => out.bonds = parse_ref_pairs::<BondRef, BondRef>(v)?,
-                "dative-bonds" => {
-                    out.dative_bonds = parse_ref_pairs::<DativeBondRef, DativeBondRef>(v)?
-                }
-                "aromatic-systems" => {
-                    out.aromatic_systems =
-                        parse_ref_pairs::<AromaticSystemRef, AromaticSystemRef>(v)?
-                }
-                "multicenter-bonds" => {
-                    out.multicenter_bonds =
-                        parse_ref_pairs::<MulticenterBondRef, MulticenterBondRef>(v)?
-                }
-                "noncovalent-bonds" => {
-                    out.noncovalent_bonds =
-                        parse_ref_pairs::<NoncovalentBondRef, NoncovalentBondRef>(v)?
-                }
-                "stereo-atoms" => {
-                    out.stereo_atoms = parse_ref_pairs::<StereoAtomRef, StereoAtomRef>(v)?
-                }
-                "stereo-bonds" => {
-                    out.stereo_bonds = parse_ref_pairs::<StereoBondRef, StereoBondRef>(v)?
-                }
-                other => {
-                    return Err(DeError::UnknownField {
-                        key: other.to_string(),
-                        path: vec!["sub-pattern-anchor".into()],
-                    });
-                }
-            }
-        }
-        Ok(out)
-    }
-}
-
-impl ToEdn for SubPatternAnchorDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        let mut m = EdnMap::with_capacity(8);
-        if !self.atoms.is_empty() {
-            m.insert(Edn::keyword("atoms"), render_ref_pairs(&self.atoms));
-        }
-        if !self.bonds.is_empty() {
-            m.insert(Edn::keyword("bonds"), render_ref_pairs(&self.bonds));
-        }
-        if !self.dative_bonds.is_empty() {
-            m.insert(
-                Edn::keyword("dative-bonds"),
-                render_ref_pairs(&self.dative_bonds),
-            );
-        }
-        if !self.aromatic_systems.is_empty() {
-            m.insert(
-                Edn::keyword("aromatic-systems"),
-                render_ref_pairs(&self.aromatic_systems),
-            );
-        }
-        if !self.multicenter_bonds.is_empty() {
-            m.insert(
-                Edn::keyword("multicenter-bonds"),
-                render_ref_pairs(&self.multicenter_bonds),
-            );
-        }
-        if !self.noncovalent_bonds.is_empty() {
-            m.insert(
-                Edn::keyword("noncovalent-bonds"),
-                render_ref_pairs(&self.noncovalent_bonds),
-            );
-        }
-        if !self.stereo_atoms.is_empty() {
-            m.insert(
-                Edn::keyword("stereo-atoms"),
-                render_ref_pairs(&self.stereo_atoms),
-            );
-        }
-        if !self.stereo_bonds.is_empty() {
-            m.insert(
-                Edn::keyword("stereo-bonds"),
-                render_ref_pairs(&self.stereo_bonds),
-            );
-        }
-        Edn::Map(m)
     }
 }
 
@@ -1745,48 +1350,6 @@ where
 
 fn render_refs<R: ToEdn>(refs: &[R]) -> Edn<'static> {
     Edn::Vector(refs.iter().map(R::to_edn).collect::<Vec<_>>().into())
-}
-
-fn parse_ref_pairs<A, B>(edn: &Edn<'_>) -> Result<Vec<(A, B)>, DeError>
-where
-    A: for<'de> FromEdn<'de>,
-    B: for<'de> FromEdn<'de>,
-{
-    let Edn::Vector(v) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "vector of [target pattern] pairs",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    v.iter()
-        .map(|e| {
-            let Edn::Vector(pair) = e else {
-                return Err(DeError::TypeMismatch {
-                    expected: "2-element vector [target pattern]",
-                    got: e.kind(),
-                    path: Vec::new(),
-                });
-            };
-            if pair.len() != 2 {
-                return Err(DeError::Custom(format!(
-                    "anchor pair must have 2 elements, got {}",
-                    pair.len()
-                )));
-            }
-            Ok((A::from_edn(&pair[0])?, B::from_edn(&pair[1])?))
-        })
-        .collect()
-}
-
-fn render_ref_pairs<A: ToEdn, B: ToEdn>(pairs: &[(A, B)]) -> Edn<'static> {
-    Edn::Vector(
-        pairs
-            .iter()
-            .map(|(a, b)| Edn::Vector(vec![a.to_edn(), b.to_edn()].into()))
-            .collect::<Vec<_>>()
-            .into(),
-    )
 }
 
 fn parse_optional_refs<R>(m: &EdnMap<'_>, refs_key: &'static str) -> Result<Option<Vec<R>>, DeError>
@@ -1952,11 +1515,9 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
             "or" => Self::Or(parse_constraint_vec(v, "or")?),
             "not" => Self::Not(Box::new(ConstraintDsl::from_edn(v)?)),
             // Molecule-scope keys: delegate to MoleculeConstraintDsl.
-            "charge-sum"
-            | "unpaired-electron-coupling"
-            | "bond-order-sum"
-            | "connected"
-            | "sub-pattern" => Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?),
+            "charge-sum" | "unpaired-electron-coupling" | "bond-order-sum" | "connected" => {
+                Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?)
+            }
             k if RELATIONAL_KEYS.contains(&k) => {
                 Self::Relational(RelationalConstraintDsl::from_edn(edn)?)
             }
@@ -2198,6 +1759,7 @@ mod tests {
     use umol_edn::read_string;
     use umol_perm::{Orientation, Permutation};
 
+    use super::super::metadata::MoleculeMetadata;
     use super::super::namespace::MoleculeContext;
     use super::*;
     use crate::ir::constraint::{
@@ -2208,9 +1770,7 @@ mod tests {
     };
     use crate::ir::id::{
         AromaticSystemId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
-        StereoBondId,
     };
-    use crate::ir::molecule::Molecule;
     use crate::ir::stereo::{
         CisTransStereoForm, StereoCoset, StereoKind, Stereogenicity, TetrahedralStereoForm,
         Topicity,
@@ -2408,88 +1968,6 @@ mod tests {
         assert!(matches!(err, DeError::MissingField { .. }));
     }
 
-    #[rstest]
-    #[case::named_entity(r#"{:sub-pattern {:anchor {} :pattern {:atoms [[:a "C"]]}}}"#)]
-    #[case::aliased(r#"{:sub-pattern {:anchor {} :pattern {:atoms [:x] :atom-aliases [:x "C"]}}}"#)]
-    fn test_molecule_constraint_dsl_sub_pattern_rejects_named_pattern(#[case] input: &str) {
-        let DeError::Custom(msg) =
-            MoleculeConstraintDsl::from_edn(&read_string(input).unwrap()).unwrap_err()
-        else {
-            panic!("expected a Custom error");
-        };
-        assert_eq!(
-            msg,
-            "sub-pattern molecule must be anonymous: no :id or :atom-aliases"
-        );
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_dsl_empty_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeContext,
-        #[from(full_namespace)] pattern: MoleculeContext,
-    ) {
-        let meta = MoleculeMetadata::default();
-        let anchor = SubPatternAnchor::new();
-        let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
-        let edn = dsl.to_edn();
-        // Empty anchor renders as an empty map.
-        assert_eq!(edn, read_string("{}").unwrap());
-        let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast_pair(&namespace, &pattern).unwrap();
-        assert_eq!(back, anchor);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeContext,
-        #[from(full_namespace)] pattern: MoleculeContext,
-    ) {
-        let meta = MoleculeMetadata::default();
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomId(3), AtomId(0));
-        anchor.push_atom(AtomId(5), AtomId(1));
-        let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
-        let edn = dsl.to_edn();
-        assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
-        let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast_pair(&namespace, &pattern).unwrap();
-        assert_eq!(back, anchor);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_dsl_stereo_roundtrip(
-        #[from(full_namespace)] namespace: MoleculeContext,
-        #[from(full_namespace)] pattern: MoleculeContext,
-    ) {
-        let meta = MoleculeMetadata::default();
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
-        anchor.push_stereo_bond(StereoBondId(4), StereoBondId(1));
-        let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
-        let edn = dsl.to_edn();
-        assert_eq!(
-            edn,
-            read_string("{:stereo-atoms [[2 0]] :stereo-bonds [[4 1]]}").unwrap()
-        );
-        let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast_pair(&namespace, &pattern).unwrap();
-        assert_eq!(back, anchor);
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_dsl_rejects_unknown_key() {
-        let edn = read_string("{:bogus [[0 0]]}").unwrap();
-        let err = SubPatternAnchorDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::UnknownField { .. }));
-    }
-
-    #[rstest]
-    fn test_sub_pattern_anchor_dsl_rejects_wrong_pair_length() {
-        let edn = read_string("{:atoms [[0]]}").unwrap();
-        let err = SubPatternAnchorDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::Custom(_)));
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(4))), "{:atom [0 {:valence 4}]}")]
@@ -2530,8 +2008,6 @@ mod tests {
         "{:unpaired-electron-coupling {:atoms [0] :unpaired-electrons {:count 1 :multiplicity 2}}}")]
     #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(1)]), sum: NumForm::Lit(4) }),
         "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
-    #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()) }),
-        "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
     #[case::and(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::Lit(4))), Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))]),
         "{:and [{:atom [0 {:valence 4}]} {:bond [0 {:aromatic true}]}]}")]

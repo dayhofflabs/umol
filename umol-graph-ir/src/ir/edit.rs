@@ -1266,7 +1266,7 @@ pub enum ConstraintEditError {
 /// Molecule-level constraint whose target-molecule references are stable edit handles.
 ///
 /// The stored constraint uses normalized, per-kind slot ids. Each slot indexes the corresponding
-/// private handle vector; nested subpattern ids remain in the subpattern's independent id space.
+/// private handle vector.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstraintEdit {
     constraint: Constraint,
@@ -1604,56 +1604,6 @@ fn collect_molecule_constraint_entities(
                 entities.extend(bonds.iter().copied().map(Entity::Bond));
             }
         }
-        MoleculeConstraint::SubPattern { anchor, .. } => {
-            entities.extend(
-                anchor
-                    .atoms()
-                    .iter()
-                    .map(|&(target, _)| Entity::Atom(target)),
-            );
-            entities.extend(
-                anchor
-                    .bonds()
-                    .iter()
-                    .map(|&(target, _)| Entity::Bond(target)),
-            );
-            entities.extend(
-                anchor
-                    .dative_bonds()
-                    .iter()
-                    .map(|&(target, _)| Entity::DativeBond(target)),
-            );
-            entities.extend(
-                anchor
-                    .aromatic_systems()
-                    .iter()
-                    .map(|&(target, _)| Entity::AromaticSystem(target)),
-            );
-            entities.extend(
-                anchor
-                    .multicenter_bonds()
-                    .iter()
-                    .map(|&(target, _)| Entity::MulticenterBond(target)),
-            );
-            entities.extend(
-                anchor
-                    .noncovalent_bonds()
-                    .iter()
-                    .map(|&(target, _)| Entity::NoncovalentBond(target)),
-            );
-            entities.extend(
-                anchor
-                    .stereo_atoms()
-                    .iter()
-                    .map(|&(target, _)| Entity::StereoAtom(target)),
-            );
-            entities.extend(
-                anchor
-                    .stereo_bonds()
-                    .iter()
-                    .map(|&(target, _)| Entity::StereoBond(target)),
-            );
-        }
     }
 }
 
@@ -1924,7 +1874,6 @@ mod tests {
         BondConstraintsForm, DativeBondConstraintsForm, MoleculeConstraint,
         MulticenterBondConstraintsForm, NoncovalentBondConstraintsForm, RelationalConstraint,
         RingScope, StereoAtomConstraintsForm, StereoBondConstraintsForm, StereogenicityForm,
-        SubPatternAnchor,
     };
     use super::super::molecule::{Molecule, MoleculeEntries};
     use super::super::noncovalent::NoncovalentBondKind;
@@ -3474,56 +3423,6 @@ mod tests {
         },
     )]
     fn test_constraint_edit_new(
-        #[case] input: Constraint,
-        #[case] mappings: Vec<(Entity, EntityHandle)>,
-        #[case] expected: ConstraintEdit,
-    ) {
-        let mappings: HashMap<_, _> = mappings.into_iter().collect();
-
-        assert_eq!(
-            ConstraintEdit::new(input, |entity| Some(mappings[&entity].clone())),
-            Ok(expected),
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::unanchored(
-        Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()),
-        }),
-        vec![],
-        ConstraintEdit {
-            constraint: Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor: SubPatternAnchor::new(), pattern: Box::new(Molecule::default()),
-            }),
-            atoms: vec![], bonds: vec![], dative_bonds: vec![], aromatic_systems: vec![],
-            multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
-        },
-    )]
-    #[case::anchored({
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomId(7), AtomId(2));
-        anchor.push_bond(BondId(4), BondId(3));
-        Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor, pattern: Box::new(Molecule::default()),
-        })
-    }, vec![
-        (Entity::Atom(AtomId(7)), EntityHandle::Atom(AtomHandle::New(0))),
-        (Entity::Bond(BondId(4)), EntityHandle::Bond(BondHandle::New(1))),
-    ], ConstraintEdit {
-        constraint: {
-            let mut anchor = SubPatternAnchor::new();
-            anchor.push_atom(AtomId(0), AtomId(2));
-            anchor.push_bond(BondId(0), BondId(3));
-            Constraint::Molecule(MoleculeConstraint::SubPattern {
-                anchor, pattern: Box::new(Molecule::default()),
-            })
-        },
-        atoms: vec![AtomHandle::New(0)], bonds: vec![BondHandle::New(1)], dative_bonds: vec![], aromatic_systems: vec![],
-        multicenter_bonds: vec![], noncovalent_bonds: vec![], stereo_atoms: vec![], stereo_bonds: vec![],
-    })]
-    fn test_constraint_edit_new_subpattern(
         #[case] input: Constraint,
         #[case] mappings: Vec<(Entity, EntityHandle)>,
         #[case] expected: ConstraintEdit,

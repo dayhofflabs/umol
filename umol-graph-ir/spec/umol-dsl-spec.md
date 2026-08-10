@@ -156,7 +156,7 @@ An empty string **`:type ""`** is a **parse error** for **every** structural sub
 
 **`:atom-aliases`**. The **`atom-alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be an **EDN string** carrying an **atom-string** payload. An **`atom-entry`** that is a bare **keyword** (not a string and not in a **`[id entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
 
-**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, sub-pattern anchors, and boolean combinators live here. The canonical grammar appears in **§7.12**. Whole-molecule charge and unpaired-electron coupling assertions are written as **`{:charge-sum {:sum n}}`** and **`{:unpaired-electron-coupling {:unpaired-electrons {:count n :multiplicity m}}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
+**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, and boolean combinators live here. The canonical grammar appears in **§7.12**. Whole-molecule charge and unpaired-electron coupling assertions are written as **`{:charge-sum {:sum n}}`** and **`{:unpaired-electron-coupling {:unpaired-electrons {:count n :multiplicity m}}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
 
 **Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-spec* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
@@ -1003,7 +1003,6 @@ molecule-constraint ::=
                                      :unpaired-electrons unpaired-electrons-form } }
   | { :bond-order-sum             { [:bonds [bond-ref+]]? :sum value-expr } }
   | { :connected                  { [:atoms [atom-ref+]]? } }
-  | { :sub-pattern                { :anchor anchor-spec :pattern molecule-map } }
 
 combinator-constraint ::=
     { :and [constraint-entry+] }
@@ -1079,16 +1078,6 @@ stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ key
 stereo-config-form ::= :undetermined | :not-stereo | { :stereo coset-form }
 coset-form ::= int | :undetermined | [ int+ ] | "coset-string"
 
-anchor-spec ::=
-    { [:atoms             [[atom-ref atom-ref]+]]?
-      [:bonds             [[bond-ref bond-ref]+]]?
-      [:dative-bonds      [[dative-bond-ref dative-bond-ref]+]]?
-      [:aromatic-systems  [[aromatic-system-ref aromatic-system-ref]+]]?
-      [:multicenter-bonds [[multicenter-bond-ref multicenter-bond-ref]+]]?
-      [:noncovalent-bonds [[noncovalent-bond-ref noncovalent-bond-ref]+]]?
-      [:stereo-atoms      [[stereo-atom-ref stereo-atom-ref]+]]?
-      [:stereo-bonds      [[stereo-bond-ref stereo-bond-ref]+]]? }
-
 atom-ref             ::= int | keyword
 bond-ref             ::= int | keyword | { :atoms [atom-ref atom-ref] }
 dative-bond-ref      ::= int | keyword | { :donors [atom-ref+] :acceptor atom-ref }
@@ -1101,26 +1090,20 @@ stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+]
 
 **Ref resolution.** An integer ref is the **positional** index into the corresponding entity vector on the molecule map: **`atom-ref`** → **`:atoms`**, **`bond-ref`** → **`:bonds`**, **`dative-bond-ref`** → **`:dative-bonds`**, **`aromatic-system-ref`** → **`:aromatic-systems`**, **`multicenter-bond-ref`** → **`:multicenter-bonds`**, **`noncovalent-bond-ref`** → **`:noncovalent-bonds`**, **`stereo-atom-ref`** → **`:stereo-atoms`**, **`stereo-bond-ref`** → **`:stereo-bonds`**. A keyword ref resolves against the **`:id`** declared on the corresponding entry (**§4**). On serialization, implementations **MUST** emit the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
 
-**Structural refs.** The **map** form of a **non-atom** ref names the entity by its **participants** instead of by position or id: **`:atoms`** for a bond / noncovalent bond (a 2-vector) or an aromatic system / multicenter bond (the atom set); **`:donors`** + **`:acceptor`** for a dative bond; **`:site`** + **`:ligands`** for a stereo atom / stereo bond (the bearing site plus the ordered ligand frame — the same **`(site, ligand-multiset)`** key that identifies the element). It resolves by looking the participant key up among the entities of that kind; because each kind's participants are unique on a molecule (**§4.1**), at most one entity matches, and an **unmatched** key is a **parse error**. A structural ref map **MUST NOT** carry **`:type`** or **`:id`** (those mark an entity *definition*, not a ref). **`atom-ref`** has **no** structural form. Structural refs are **accepted wherever a ref is** — entity entries (a **`stereo-*-entry`** **`:site`**), entity / relational / molecule-scope constraints, sub-pattern anchor pairs, **`:bond-order-sum`** **`:bonds`**, reaction deltas, and reaction-span refs — and by **both** the tree and streaming parsers. They are **input-only**: the emission priority is **keyword > positional**, and a structural ref is **never** re-emitted (serialization produces only the **`:id`** keyword or the positional integer).
+**Structural refs.** The **map** form of a **non-atom** ref names the entity by its **participants** instead of by position or id: **`:atoms`** for a bond / noncovalent bond (a 2-vector) or an aromatic system / multicenter bond (the atom set); **`:donors`** + **`:acceptor`** for a dative bond; **`:site`** + **`:ligands`** for a stereo atom / stereo bond (the bearing site plus the ordered ligand frame — the same **`(site, ligand-multiset)`** key that identifies the element). It resolves by looking the participant key up among the entities of that kind; because each kind's participants are unique on a molecule (**§4.1**), at most one entity matches, and an **unmatched** key is a **parse error**. A structural ref map **MUST NOT** carry **`:type`** or **`:id`** (those mark an entity *definition*, not a ref). **`atom-ref`** has **no** structural form. Structural refs are **accepted wherever a ref is** — entity entries (a **`stereo-*-entry`** **`:site`**), entity / relational / molecule-scope constraints, **`:bond-order-sum`** **`:bonds`**, reaction deltas, and reaction-span refs — and by **both** the tree and streaming parsers. They are **input-only**: the emission priority is **keyword > positional**, and a structural ref is **never** re-emitted (serialization produces only the **`:id`** keyword or the positional integer).
 
 **Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves carry only the **`:intramolecular`** value-only variant (**`#I`**, **§7.10**); every other noncovalent predicate is a relational leaf.
 
 **Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map (so the leaf is **`{:stereo-atom [<ref> [<kind> {<predicate>}]]}`**). The kind is redundant with the referenced element at the **entity** level (the inline form omits it — the **`:type`** **`class`** supplies it, **§7.11**) but is **REQUIRED** at molecule scope, where the constraint is detached from its element: a permutation payload cannot recover its degree, and **`stereo-kind`** is many-to-one on degree (**`:tetrahedral`** and **`:square-planar`** are both degree 4). It is **first** (positional, container-fixed — not a map key) so the degree is known before the predicate value is read. The kind/degree (and the chiral-class restriction on **`'`** values) is cross-checked against the resolved element by the validator (**§6.1**); **`inline_constraints`** drops the carried kind back into the element. These constraints are **distinct** from the atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) inline configurations (which assert the local **coset** at the bearing atom/bond) and from the stereo **relational leaves** (**`:stereo-atom-…`** / **`:stereo-bond-…`**, no inline form).
 
-**Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
-
 **Molecule-scope subset selectors.** `:charge-sum`, `:unpaired-electron-coupling`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When **omitted**, the predicate ranges over **every** atom (or bond) in the molecule, including atoms added by future structural growth. When **present**, the predicate ranges over the listed entities only. An empty vector `[]` is **distinct** from omission: it selects no entities.
-
-**Sub-pattern materialization.** A **`:sub-pattern`** **`:pattern`** is a full **molecule-map**; its inner constraints are evaluated independently from the outer constraint tree. The pattern carries **no defaults** — values pass through verbatim — so a pattern's atom **`charge: undetermined`** stays **`undetermined`** at match time and behaves as a wildcard (**§5.1.4**); zero-defaulting that would apply to a ground input does **not** apply inside a pattern.
-
-**Anonymous patterns.** A sub-pattern **`:pattern`** **MUST** be **anonymous**: an entry **MUST NOT** carry **`:id`** and the map **MUST NOT** declare **`:atom-aliases`**. Pattern entities are named positionally (or structurally) by the anchor and the pattern's inner constraints, so a symbolic namespace inside the pattern is meaningless; a pattern with either is a **parse error**.
 
 **Sugar (inline string equivalents).** Narrow leaves whose entity has a string subgrammar admit two interchangeable serializations:
 
 - the inline **`#tag`** payload on the entity's **`:type`** string (or, for atoms, on the atom literal directly);
 - the **`{:<entity> [ref form]}`** entry in **`:constraints`**.
 
-Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**) **MAY** be emitted in the sugared inline form; nested predicates **MUST** be emitted as **`:constraints`** entries since the inline form has no logical context.
+Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:and`** / **`:or`** / **`:not`**) **MAY** be emitted in the sugared inline form; nested predicates **MUST** be emitted as **`:constraints`** entries since the inline form has no logical context.
 
 **Inline-form coverage by entity:**
 
@@ -1275,9 +1258,8 @@ edit-constraint ::=
 **Constraint handles.** An **`edit-constraint-entry`** has the complete **`constraint-entry`** shape
 from **§7.12**, except that every reference into the target molecule is the corresponding typed
 handle above. This includes references nested under **`:and`**, **`:or`**, and **`:not`**, relational
-constraints, subset-valued molecule constraints, and the target side of a **`:sub-pattern`** anchor.
-The nested pattern and the pattern side of each anchor pair retain the ordinary pattern-local refs of
-**§7.12**. Keyword ids and structural refs are not accepted in standalone edits because the document
+constraints, and subset-valued molecule constraints. Keyword ids and structural refs are not
+accepted in standalone edits because the document
 does not carry the host's metadata or structure. Normalized internal constraint slots never appear in
 the surface form.
 

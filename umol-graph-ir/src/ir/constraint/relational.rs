@@ -11,7 +11,7 @@
 //! the per-entity constraint containers are narrowed to value-only
 //! variants so ref-bearing constraints are unrepresentable inline.
 //!
-//! Two sub-patterns share the enum:
+//! Two groups of relational predicates share the enum:
 //! - **Role identity / set membership**: `Donor`, `Donors`, `ContainsAllDonors`,
 //!   `Acceptor`, `Parallels`, `Ends`, `Atoms`, `Contains`, `ContainsAll` —
 //!   constrain an atom/bond identity to a role or set membership.

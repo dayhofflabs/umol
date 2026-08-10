@@ -5,7 +5,6 @@ from umol import (
     MoleculeAst,
     MoleculeConstraint,
     RelationalConstraint,
-    SubPatternAnchor,
     UnpairedElectronsForm,
 )
 
@@ -26,28 +25,6 @@ def test_moleculeconstraint_unpaired_electron_coupling():
         "MoleculeConstraint.UnpairedElectronCoupling(atoms=[2, 3], "
         "unpaired_electrons=UnpairedElectronsForm(NumForm.Lit(1), NumForm.Lit(2)))"
     )
-
-
-def test_subpatternanchor_fields():
-    anchor = SubPatternAnchor(
-        atoms=[(2, 0)],
-        bonds=[(3, 1)],
-        dative_bonds=[(4, 2)],
-        aromatic_systems=[(5, 3)],
-        multicenter_bonds=[(6, 4)],
-        noncovalent_bonds=[(7, 5)],
-        stereo_atoms=[(8, 6)],
-        stereo_bonds=[(9, 7)],
-    )
-
-    assert anchor.atoms == [(2, 0)]
-    assert anchor.bonds == [(3, 1)]
-    assert anchor.dative_bonds == [(4, 2)]
-    assert anchor.aromatic_systems == [(5, 3)]
-    assert anchor.multicenter_bonds == [(6, 4)]
-    assert anchor.noncovalent_bonds == [(7, 5)]
-    assert anchor.stereo_atoms == [(8, 6)]
-    assert anchor.stereo_bonds == [(9, 7)]
 
 
 def test_constraint_pattern_match():

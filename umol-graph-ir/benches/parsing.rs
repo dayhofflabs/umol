@@ -113,11 +113,6 @@ fn bench_constraint_dsl(c: &mut Criterion) {
     );
     bench_pair::<ConstraintDsl>(
         &mut g,
-        "molecule_sub_pattern",
-        r##"{:sub-pattern {:anchor {:atoms [[0 0]]} :pattern {:atoms ["N"] :bonds []}}}"##,
-    );
-    bench_pair::<ConstraintDsl>(
-        &mut g,
         "nested_combinators",
         r##"{:and [{:or [{:atom [0 {:valence 3}]} {:atom [0 {:valence 4}]}]} {:not {:connected {:atoms [0 1]}}}]}"##,
     );

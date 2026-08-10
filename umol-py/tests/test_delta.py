@@ -54,7 +54,6 @@ from umol import (
     StereoLigand,
     StereoLigandKind,
     StereogenicityForm,
-    SubPatternAnchor,
     UnpairedElectronsForm,
     NumForm,
 )
@@ -2186,30 +2185,6 @@ def test_constraintdelta_remove_match():
     assert isinstance(inverse, ConstraintDelta.Add)
     assert inverse.constraint == delta.constraint
     assert inverse.inverse() == delta
-
-
-def test_constraintdelta_payload_ownership():
-    source_molecule = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    source = Constraint.Molecule(
-        MoleculeConstraint.SubPattern(SubPatternAnchor(), source_molecule)
-    )
-    delta = ConstraintDelta.Add(constraint=source)
-
-    source_molecule.atoms[0].charge = 1
-
-    match delta.constraint:
-        case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
-            assert stored_molecule.atoms[0].charge == NumForm.Undetermined()
-            stored_molecule.atoms[0].charge = -1
-        case _:
-            raise AssertionError("constraint delta did not retain its stored subpattern")
-
-    inverse = delta.inverse()
-    match inverse.constraint:
-        case Constraint.Molecule(MoleculeConstraint.SubPattern(_, stored_molecule)):
-            assert stored_molecule.atoms[0].charge == NumForm.Lit(-1)
-        case _:
-            raise AssertionError("inverse did not retain the changed stored subpattern")
 
 
 @pytest.mark.parametrize(
