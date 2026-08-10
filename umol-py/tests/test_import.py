@@ -99,7 +99,7 @@ PUBLIC_EXPORTS = frozenset(
     MemOp
     MetadataError
     ModelConversionError
-    MoleculeAst
+    Molecule
     MoleculeConstraint
     MoleculeCorrespondence
     MoleculeDefaults
@@ -136,7 +136,7 @@ PUBLIC_EXPORTS = frozenset(
     PatternFingerprintConfig
     Permutation
     ReactionApplicationConfig
-    ReactionAst
+    Reaction
     ReactionCombinedFingerprint
     ReactionCombinedFingerprintConfig
     ReactionCompositionConfig
@@ -144,7 +144,7 @@ PUBLIC_EXPORTS = frozenset(
     ReactionDerivation
     ReactionMetadata
     ReactionSide
-    ReactionSpanAst
+    ReactionSpan
     RefinementRounds
     RelOp
     RelationalConstraint
@@ -321,36 +321,36 @@ def test_deferred_member(owner, name):
     ("operation", "expected"),
     [
         (
-            umol.MoleculeAst.from_smiles,
+            umol.Molecule.from_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
-        (umol.MoleculeAst.edit, "(self, /)"),
-        (umol.MoleculeAst.apply, "(self, /, edits)"),
-        (umol.MoleculeAst.combine, "(self, /, other)"),
-        (umol.MoleculeAst.combine_from, "(self, /, other)"),
-        (umol.MoleculeAst.combine_all, "(molecules)"),
-        (umol.MoleculeAst.split, "(self, /)"),
+        (umol.Molecule.edit, "(self, /)"),
+        (umol.Molecule.apply, "(self, /, edits)"),
+        (umol.Molecule.combine, "(self, /, other)"),
+        (umol.Molecule.combine_from, "(self, /, other)"),
+        (umol.Molecule.combine_all, "(molecules)"),
+        (umol.Molecule.split, "(self, /)"),
         (
-            umol.MoleculeAst.substructure_matches,
+            umol.Molecule.substructure_matches,
             "(self, /, host, *, config=None)",
         ),
-        (umol.MoleculeAst.hashed_fingerprint, "(self, /, *, config)"),
-        (umol.MoleculeAst.counted_hashed_fingerprint, "(self, /, *, config)"),
-        (umol.MoleculeAst.pattern_fingerprint, "(self, /, *, config=None)"),
-        (umol.MoleculeAst.structural_fingerprint, "(self, /, *, config)"),
+        (umol.Molecule.hashed_fingerprint, "(self, /, *, config)"),
+        (umol.Molecule.counted_hashed_fingerprint, "(self, /, *, config)"),
+        (umol.Molecule.pattern_fingerprint, "(self, /, *, config=None)"),
+        (umol.Molecule.structural_fingerprint, "(self, /, *, config)"),
         (umol.MoleculeEditor.snapshot, "(self, /)"),
         (umol.MoleculeEditor.build, "(self, /)"),
         (umol.MoleculeEditor.transact, "(self, /, edits)"),
         (
-            umol.ReactionAst.from_reaction_smiles,
+            umol.Reaction.from_reaction_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
         (
-            umol.ReactionAst.compose,
+            umol.Reaction.compose,
             "(self, /, other, *, config=None)",
         ),
-        (umol.ReactionAst.apply, "(self, /, host, *, config=None)"),
-        (umol.ReactionAst.combined_fingerprint, "(self, /, *, config)"),
+        (umol.Reaction.apply, "(self, /, host, *, config=None)"),
+        (umol.Reaction.combined_fingerprint, "(self, /, *, config)"),
         (umol.Transaction.rollback, "(self, /, editor)"),
     ],
 )

@@ -20,11 +20,11 @@ from umol import (
     HashedFingerprintConfig,
     InvalidStructureError,
     MaximumIndependentSetAlgorithm,
-    MoleculeAst,
+    Molecule,
     ParseError,
     PatternFingerprintConfig,
     ReactionApplicationConfig,
-    ReactionAst,
+    Reaction,
     ReactionCombinedFingerprintConfig,
     RefinementRounds,
     RelevantCycleEnumerationAlgorithm,
@@ -75,13 +75,13 @@ def test_resolved_smiles_workflow():
         stereo=StereoResolveConfig(reset_stereo_constraints=False),
     )
 
-    molecule = MoleculeAst.from_smiles(
+    molecule = Molecule.from_smiles(
         "[cH+]1[cH][cH]1",
         io_config=io_config,
         chemistry_model=chemistry_model,
         resolve_config=resolve_config,
     )
-    independent = MoleculeAst.from_smiles(
+    independent = Molecule.from_smiles(
         "[cH+]1[cH][cH]1",
         io_config=io_config,
         chemistry_model=chemistry_model,
@@ -119,7 +119,7 @@ def test_resolved_smiles_workflow():
     assert independent.atoms[0].charge == NumForm.Lit(1)
 
     with pytest.raises(ParseError, match="^Invalid token at position 2$"):
-        MoleculeAst.from_smiles(
+        Molecule.from_smiles(
             "C->N",
             io_config=SmilesIoConfig.opensmiles(),
             chemistry_model=chemistry_model,
@@ -128,9 +128,9 @@ def test_resolved_smiles_workflow():
 
 
 def test_molecule_editing_workflow():
-    molecule = MoleculeAst.parse('{:atoms ["N#h3"]}')
-    original = MoleculeAst.parse('{:atoms ["N#h3"]}')
-    expected = MoleculeAst.parse(
+    molecule = Molecule.parse('{:atoms ["N#h3"]}')
+    original = Molecule.parse('{:atoms ["N#h3"]}')
+    expected = Molecule.parse(
         '{:atoms ["N#h2" "C#h3"] :bonds [[0 1 "1"]]}'
     )
     edits = Edits()
@@ -190,10 +190,10 @@ def test_molecule_editing_workflow():
 
 
 def test_fingerprint_workflow():
-    molecule = MoleculeAst.from_smiles("CO")
-    product = MoleculeAst.from_smiles("C")
-    molecule_snapshot = MoleculeAst.from_smiles("CO")
-    product_snapshot = MoleculeAst.from_smiles("C")
+    molecule = Molecule.from_smiles("CO")
+    product = Molecule.from_smiles("C")
+    molecule_snapshot = Molecule.from_smiles("CO")
+    product_snapshot = Molecule.from_smiles("C")
     hashed_config = HashedFingerprintConfig.Morgan(radius=0)
     pattern_config = PatternFingerprintConfig(
         width=16,
@@ -210,12 +210,12 @@ def test_fingerprint_workflow():
     counted = molecule.counted_hashed_fingerprint(config=hashed_config)
     pattern = molecule.pattern_fingerprint(config=pattern_config)
     structural = molecule.structural_fingerprint(config=structural_config)
-    reaction = ReactionAst.from_sides(
+    reaction = Reaction.from_sides(
         molecule,
         product,
         Correspondence([(0, 0)], 2, 1),
     )
-    reaction_snapshot = ReactionAst(reaction.lhs, reaction.deltas)
+    reaction_snapshot = Reaction(reaction.lhs, reaction.deltas)
     combined = reaction.combined_fingerprint(
         config=ReactionCombinedFingerprintConfig.Difference(molecule=hashed_config)
     )
@@ -267,16 +267,16 @@ def test_fingerprint_workflow():
         UnderdeterminedError,
         match="^fingerprint requires a determined molecule$",
     ):
-        MoleculeAst.parse('{:atoms ["C"]}').hashed_fingerprint(
+        Molecule.parse('{:atoms ["C"]}').hashed_fingerprint(
             config=HashedFingerprintConfig.Wl(rounds=RefinementRounds.Fixed(rounds=1))
         )
 
 
 def test_substructure_workflow():
-    pattern = MoleculeAst.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
-    host = MoleculeAst.from_smiles("CCO")
-    pattern_snapshot = MoleculeAst.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
-    host_snapshot = MoleculeAst.from_smiles("CCO")
+    pattern = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
+    host = Molecule.from_smiles("CCO")
+    pattern_snapshot = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
+    host_snapshot = Molecule.from_smiles("CCO")
     config = SubstructureSearchConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
         subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
@@ -307,7 +307,7 @@ def test_substructure_workflow():
     with pytest.raises(
         TypeError,
         match=(
-            "^MoleculeAst.substructure_matches\\(\\) takes 1 positional "
+            "^Molecule.substructure_matches\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
@@ -315,14 +315,14 @@ def test_substructure_workflow():
 
 
 def test_reaction_application_workflow():
-    reaction = ReactionAst.parse(
+    reaction = Reaction.parse(
         '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]} '
         ':deltas [{:atom {:modify [0 "#h3#v1"]}} '
         "{:atom {:remove 1}} {:bond {:remove 0}}]}"
     )
-    host = MoleculeAst.from_smiles("CCO")
-    reaction_snapshot = ReactionAst(reaction.lhs, reaction.deltas)
-    host_snapshot = MoleculeAst.from_smiles("CCO")
+    host = Molecule.from_smiles("CCO")
+    reaction_snapshot = Reaction(reaction.lhs, reaction.deltas)
+    host_snapshot = Molecule.from_smiles("CCO")
     config = ReactionApplicationConfig(
         match_algorithm=SubstructureMatchAlgorithm.Incidence(),
         subgraph_isomorphism_algorithm=SubgraphIsomorphismAlgorithm.Ullmann(),
@@ -332,7 +332,7 @@ def test_reaction_application_workflow():
 
     assert len(derivations) == 1
     assert derivations[0].lhs == host_snapshot
-    assert derivations[0].rhs == MoleculeAst.from_smiles("CC")
+    assert derivations[0].rhs == Molecule.from_smiles("CC")
     assert derivations[0].atom_correspondence.matched_pairs == [(0, 0), (1, 1)]
     assert derivations[0].atom_correspondence.left_count == 3
     assert derivations[0].atom_correspondence.right_count == 2
@@ -346,12 +346,12 @@ def test_reaction_application_workflow():
     detached_rhs.atoms[0].charge = 5
 
     assert derivations[0].lhs == host_snapshot
-    assert derivations[0].rhs == MoleculeAst.from_smiles("CC")
+    assert derivations[0].rhs == Molecule.from_smiles("CC")
     assert derivations[0].rhs.hashed_fingerprint(
         config=HashedFingerprintConfig.Morgan(radius=0)
     ).ids == [2246728737]
 
-    invalid_host = ReactionAst.parse(
+    invalid_host = Reaction.parse(
         '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
     ).lhs
 

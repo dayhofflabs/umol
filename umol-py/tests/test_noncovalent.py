@@ -4,7 +4,7 @@ from umol import (
     AtomForm,
     BooleanForm,
     Element,
-    MoleculeAst,
+    Molecule,
     NoncovalentBondForm,
     NoncovalentBondConstraintForm,
     NoncovalentBondConstraintKey,
@@ -81,7 +81,7 @@ def test_noncovalent_bond_update_parse_error():
 
 def hbond_molecule():
     # two oxygens (atom ids 0-1), one hydrogen bond over them (noncovalent id 0)
-    return MoleculeAst.from_entries(
+    return Molecule.from_entries(
         [AtomForm(Element("O")) for _ in range(2)],
         noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )
@@ -283,7 +283,7 @@ def test_noncovalentbondviews_iter():
 
 def test_noncovalentbondviews_of():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
-    mol = MoleculeAst.from_entries(
+    mol = Molecule.from_entries(
         [AtomForm(Element("O")) for _ in range(3)],
         noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )
@@ -296,7 +296,7 @@ def test_noncovalentbondviews_of():
 
 def test_noncovalentbondviews_incident():
     # three oxygens, one hydrogen bond over (0, 1); atom 2 isolated
-    mol = MoleculeAst.from_entries(
+    mol = Molecule.from_entries(
         [AtomForm(Element("O")) for _ in range(3)],
         noncovalent_bonds=[([0, 1], NoncovalentBondForm(NoncovalentBondKind.HydrogenBond))],
     )

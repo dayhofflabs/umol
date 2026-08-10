@@ -18,7 +18,7 @@ use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 
@@ -308,7 +308,7 @@ impl_py_lattice!(
 /// charge, unpaired electrons, and constraints are the mutable system value.
 #[pyclass]
 pub struct AromaticSystemView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrAromaticSystemId,
 }
 
@@ -490,7 +490,7 @@ fn resolve_aromatic_system_index(
 /// The aromatic systems of a molecule, indexed by integer position.
 #[pyclass]
 pub struct AromaticSystemViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -583,14 +583,14 @@ impl AromaticSystemViews {
 
 impl AromaticSystemViews {
     /// Build the aromatic-system-views handle for `owner` (the `.aromatic_systems` accessor).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> AromaticSystemViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> AromaticSystemViews {
         AromaticSystemViews { owner }
     }
 }
 
 #[pyclass]
 struct AromaticSystemViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrAromaticSystemId>,
 }
 
@@ -635,7 +635,7 @@ mod tests {
 
     /// Benzene: six aromatic carbons (atom ids 0–5), one aromatic system over all six
     /// (electrons `[1,1,1,1,1,1]`), aromatic system id 0.
-    fn benzene(py: Python<'_>) -> Py<MoleculeAst> {
+    fn benzene(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 6],
             aromatic: vec![(
@@ -644,7 +644,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1081,7 +1081,7 @@ mod tests {
                 ..Default::default()
             });
             let views = AromaticSystemViews {
-                owner: Py::new(py, MoleculeAst::from_rust(molecule)).unwrap(),
+                owner: Py::new(py, Molecule::from_rust(molecule)).unwrap(),
             };
             assert_eq!(
                 views

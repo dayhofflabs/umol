@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 use crate::aromatic::AromaticSystemForm;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of an aromatic-system constraint, for keyed lookup. The
@@ -484,7 +484,7 @@ pub(crate) fn aromatic_system_constraints_asdict<'py>(
 /// within a molecule (by index) or a standalone `AromaticSystemForm`.
 pub(crate) enum AromaticSystemConstraintsBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrAromaticSystemId,
     },
     AromaticSystem(Py<AromaticSystemForm>),

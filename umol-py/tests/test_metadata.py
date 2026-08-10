@@ -6,7 +6,7 @@ from umol import (
     Element,
     Entity,
     MetadataError,
-    MoleculeAst,
+    Molecule,
     MoleculeMetadata,
     ReactionMetadata,
 )
@@ -61,11 +61,11 @@ def test_molecule_metadata_set_keyword_error():
 
 
 def test_molecule_metadata_remap():
-    source = MoleculeAst.from_entries(
+    source = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
-    _, correspondence = MoleculeAst.from_entries(
+    _, correspondence = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(source)
     metadata = MoleculeMetadata()

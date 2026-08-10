@@ -24,7 +24,7 @@ use crate::convert::hash_rust;
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 
 /// Attribute updates for a dative bond.
@@ -259,7 +259,7 @@ impl_py_lattice!(
 /// and constraints are the mutable bond value.
 #[pyclass]
 pub struct DativeBondView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrDativeBondId,
 }
 
@@ -401,7 +401,7 @@ fn resolve_dative_bond_index(
 /// The dative bonds of a molecule, indexed by integer position.
 #[pyclass]
 pub struct DativeBondViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -495,14 +495,14 @@ impl DativeBondViews {
 
 impl DativeBondViews {
     /// Build the dative-bond-views handle for `owner` (the `.dative_bonds` accessor).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> DativeBondViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> DativeBondViews {
         DativeBondViews { owner }
     }
 }
 
 #[pyclass]
 struct DativeBondViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrDativeBondId>,
 }
 
@@ -539,7 +539,7 @@ mod tests {
 
     /// An ammonia-borane adduct: borane B (id 0) accepts from ammonia N (id 1),
     /// dative bond id 0 (acceptor B, donor N, order 1).
-    fn ammonia_borane(py: Python<'_>) -> Py<MoleculeAst> {
+    fn ammonia_borane(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::B),
@@ -552,7 +552,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -754,7 +754,7 @@ mod tests {
                 ..Default::default()
             });
             let views = DativeBondViews {
-                owner: Py::new(py, MoleculeAst::from_rust(molecule)).unwrap(),
+                owner: Py::new(py, Molecule::from_rust(molecule)).unwrap(),
             };
             assert_eq!(
                 views

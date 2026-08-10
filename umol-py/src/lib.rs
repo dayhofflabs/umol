@@ -86,7 +86,7 @@ use crate::{
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ChemistryModel, ElementScope,
     },
-    molecule::MoleculeAst,
+    molecule::Molecule,
     multicenter::{
         MulticenterBondForm, MulticenterBondUpdate, MulticenterBondView, MulticenterBondViews,
     },
@@ -96,9 +96,9 @@ use crate::{
     },
     num::{ArithExpr, MemOp, NumForm, PredExpr, RelOp},
     reaction::{
-        ReactionApplicationConfig, ReactionAst, ReactionCompositionConfig, ReactionDerivation,
+        Reaction, ReactionApplicationConfig, ReactionCompositionConfig, ReactionDerivation,
     },
-    reaction_span::ReactionSpanAst,
+    reaction_span::ReactionSpan,
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
         AromaticityResolveConfig, ResolveConfig, StereoFailurePolicy, StereoMismatchPolicy,
@@ -225,7 +225,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "UnderdeterminedError",
             module.py().get_type::<UnderdeterminedError>(),
         )?;
-        module.add_class::<MoleculeAst>()?;
+        module.add_class::<Molecule>()?;
         module.add_class::<MoleculeEditor>()?;
         module.add_class::<Transaction>()?;
         module.add_class::<MoleculeDefaults>()?;
@@ -274,9 +274,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<Edits>()?;
         module.add_class::<ReactionCompositionConfig>()?;
         module.add_class::<ReactionApplicationConfig>()?;
-        module.add_class::<ReactionAst>()?;
+        module.add_class::<Reaction>()?;
         module.add_class::<ReactionDerivation>()?;
-        module.add_class::<ReactionSpanAst>()?;
+        module.add_class::<ReactionSpan>()?;
         module.add_class::<RingConfig>()?;
         module.add_class::<SmilesIoConfig>()?;
         module.add_class::<SmilesSyntaxFlags>()?;

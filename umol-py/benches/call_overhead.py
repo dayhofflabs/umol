@@ -11,7 +11,7 @@ import timeit
 
 from umol import (
     HashedFingerprintConfig,
-    MoleculeAst,
+    Molecule,
     RefinementRounds,
     StructuralFingerprintConfig,
     NumForm,
@@ -30,7 +30,7 @@ def main() -> None:
     args = parser.parse_args()
 
     value_as_lit = NumForm.Lit(0).as_lit
-    molecule = MoleculeAst.from_smiles("CCO")
+    molecule = Molecule.from_smiles("CCO")
     hashed_wl = partial(
         molecule.hashed_fingerprint,
         config=HashedFingerprintConfig.Wl(

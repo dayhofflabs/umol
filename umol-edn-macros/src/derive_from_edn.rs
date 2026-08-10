@@ -44,7 +44,8 @@ use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
-    Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type,
+    Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, Index, PathArguments,
+    Type,
 };
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
@@ -413,7 +414,7 @@ fn expand_mixed_enum(
                     .enumerate()
                     .map(|(i, f)| {
                         let ty = &f.ty;
-                        let idx = syn::Index::from(i);
+                        let idx = Index::from(i);
                         quote! {
                             <#ty as ::umol_edn::FromEdn<'de>>::from_edn(&__seq[#idx])?
                         }

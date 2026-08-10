@@ -27,7 +27,7 @@ use crate::electrons::{ElectronCountsForm, ElectronCountsLike};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 
@@ -317,7 +317,7 @@ impl_py_lattice!(
 /// charge, unpaired electrons, and constraints are the mutable bond value.
 #[pyclass]
 pub struct MulticenterBondView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrMulticenterBondId,
 }
 
@@ -496,7 +496,7 @@ fn resolve_multicenter_bond_index(
 /// The multicenter bonds of a molecule, indexed by integer position.
 #[pyclass]
 pub struct MulticenterBondViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -589,14 +589,14 @@ impl MulticenterBondViews {
 
 impl MulticenterBondViews {
     /// Build the multicenter-bond-views handle for `owner` (the `.multicenter_bonds` accessor).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> MulticenterBondViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> MulticenterBondViews {
         MulticenterBondViews { owner }
     }
 }
 
 #[pyclass]
 struct MulticenterBondViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrMulticenterBondId>,
 }
 
@@ -632,7 +632,7 @@ mod tests {
 
     /// Three borons (atom ids 0–2) joined by one 3-center multicenter bond over all
     /// three (electrons `[1,1,1]`), multicenter bond id 0.
-    fn three_center_bond(py: Python<'_>) -> Py<MoleculeAst> {
+    fn three_center_bond(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::B); 3],
             multicenter: vec![(
@@ -641,7 +641,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1083,7 +1083,7 @@ mod tests {
                 ..Default::default()
             });
             let views = MulticenterBondViews {
-                owner: Py::new(py, MoleculeAst::from_rust(molecule)).unwrap(),
+                owner: Py::new(py, Molecule::from_rust(molecule)).unwrap(),
             };
             assert_eq!(
                 views

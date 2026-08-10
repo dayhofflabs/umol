@@ -26,7 +26,7 @@ from umol import (
     MaximumIndependentSetAlgorithm,
     MetadataError,
     ModelConversionError,
-    MoleculeAst,
+    Molecule,
     MoleculeConstraint,
     MoleculeCorrespondence,
     MoleculeDefaults,
@@ -60,9 +60,9 @@ from umol import (
 )
 
 
-def test_molecule_ast_new():
-    assert len(MoleculeAst().atoms) == 0
-    assert len(MoleculeAst().bonds) == 0
+def test_molecule_new():
+    assert len(Molecule().atoms) == 0
+    assert len(Molecule().bonds) == 0
 
 
 @pytest.mark.parametrize(
@@ -87,47 +87,47 @@ def test_molecule_defaults(value, expected, expected_repr):
         (
             '{:atoms ["C"]}',
             MoleculeDefaults(),
-            MoleculeAst.from_entries([AtomForm.parse("C")]),
+            Molecule.from_entries([AtomForm.parse("C")]),
         ),
         (
             '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
             MoleculeDefaults.ground(),
-            MoleculeAst.from_entries(
+            Molecule.from_entries(
                 [AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
             ),
         ),
     ],
 )
-def test_molecule_ast_parse(source, defaults, expected):
-    assert MoleculeAst.parse(source, defaults=defaults) == expected
+def test_molecule_parse(source, defaults, expected):
+    assert Molecule.parse(source, defaults=defaults) == expected
 
 
-def test_molecule_ast_parse_error():
+def test_molecule_parse_error():
     with pytest.raises(
         ParseError,
         match="^EDN parse: unexpected token 'n' at byte 0$",
     ):
-        MoleculeAst.parse("not edn")
+        Molecule.parse("not edn")
 
 
-def test_molecule_ast_parse_keyword_error():
+def test_molecule_parse_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^MoleculeAst.parse\\(\\) takes 1 positional arguments but 2 were given$"
+            "^Molecule.parse\\(\\) takes 1 positional arguments but 2 were given$"
         ),
     ):
-        MoleculeAst.parse('{:atoms ["C"]}', MoleculeDefaults.ground())
+        Molecule.parse('{:atoms ["C"]}', MoleculeDefaults.ground())
 
 
-def test_molecule_ast_parse_with_metadata():
+def test_molecule_parse_with_metadata():
     source = (
         '{:atom-aliases [:x "C"] :atoms [[:carbon :x]] :bonds []}'
     )
 
-    molecule, metadata = MoleculeAst.parse_with_metadata(source)
+    molecule, metadata = Molecule.parse_with_metadata(source)
 
-    assert molecule == MoleculeAst.from_entries([AtomForm(Element("C"))])
+    assert molecule == Molecule.from_entries([AtomForm(Element("C"))])
     assert metadata.keyword(Entity.Atom(0)) == "carbon"
     assert metadata.entity("carbon") == Entity.Atom(0)
     assert repr(metadata) == (
@@ -137,13 +137,13 @@ def test_molecule_ast_parse_with_metadata():
     assert molecule.render_with_metadata(metadata) == source
 
 
-def test_molecule_ast_parse_with_metadata_defaults():
-    molecule, metadata = MoleculeAst.parse_with_metadata(
+def test_molecule_parse_with_metadata_defaults():
+    molecule, metadata = Molecule.parse_with_metadata(
         '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
         defaults=MoleculeDefaults.ground(),
     )
 
-    assert molecule == MoleculeAst.from_entries(
+    assert molecule == Molecule.from_entries(
         [
             AtomForm.parse(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
@@ -153,15 +153,15 @@ def test_molecule_ast_parse_with_metadata_defaults():
     assert metadata == MoleculeMetadata()
 
 
-def test_molecule_ast_parse_with_metadata_keyword_error():
+def test_molecule_parse_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^MoleculeAst.parse_with_metadata\\(\\) takes 1 positional "
+            "^Molecule.parse_with_metadata\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
-        MoleculeAst.parse_with_metadata(
+        Molecule.parse_with_metadata(
             '{:atoms ["C"]}',
             MoleculeDefaults.ground(),
         )
@@ -171,12 +171,12 @@ def test_molecule_ast_parse_with_metadata_keyword_error():
     ("molecule", "defaults", "expected"),
     [
         (
-            MoleculeAst.parse('{:atoms ["C"]}'),
+            Molecule.parse('{:atoms ["C"]}'),
             MoleculeDefaults(),
             '{:atoms ["C"] :bonds []}',
         ),
         (
-            MoleculeAst.parse(
+            Molecule.parse(
                 '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
                 defaults=MoleculeDefaults.ground(),
             ),
@@ -185,29 +185,29 @@ def test_molecule_ast_parse_with_metadata_keyword_error():
         ),
     ],
 )
-def test_molecule_ast_render(molecule, defaults, expected):
+def test_molecule_render(molecule, defaults, expected):
     assert molecule.render(defaults=defaults) == expected
 
 
-def test_molecule_ast_render_keyword_error():
+def test_molecule_render_keyword_error():
     with pytest.raises(
         TypeError,
-        match="^MoleculeAst.render\\(\\) takes 0 positional arguments but 1 was given$",
+        match="^Molecule.render\\(\\) takes 0 positional arguments but 1 was given$",
     ):
-        MoleculeAst.parse('{:atoms ["C"]}').render(MoleculeDefaults())
+        Molecule.parse('{:atoms ["C"]}').render(MoleculeDefaults())
 
 
-def test_molecule_ast_render_with_metadata():
+def test_molecule_render_with_metadata():
     source = (
         '{:atom-aliases [:x "C"] :atoms [[:carbon :x]] :bonds []}'
     )
-    molecule, metadata = MoleculeAst.parse_with_metadata(source)
+    molecule, metadata = Molecule.parse_with_metadata(source)
 
     assert molecule.render_with_metadata(metadata) == source
     assert molecule.render() == '{:atoms ["C"] :bonds []}'
 
 
-def test_molecule_ast_render_with_metadata_error():
+def test_molecule_render_with_metadata_error():
     metadata = MoleculeMetadata()
     metadata.set_keyword(Entity.Atom(1), "outside")
 
@@ -215,33 +215,33 @@ def test_molecule_ast_render_with_metadata_error():
         MetadataError,
         match="^metadata entity is out of range: atom 1$",
     ):
-        MoleculeAst.parse('{:atoms ["C"]}').render_with_metadata(metadata)
+        Molecule.parse('{:atoms ["C"]}').render_with_metadata(metadata)
 
 
-def test_molecule_ast_render_with_metadata_keyword_error():
+def test_molecule_render_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^MoleculeAst.render_with_metadata\\(\\) takes 1 positional "
+            "^Molecule.render_with_metadata\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
-        MoleculeAst.parse('{:atoms ["C"]}').render_with_metadata(
+        Molecule.parse('{:atoms ["C"]}').render_with_metadata(
             MoleculeMetadata(),
             MoleculeDefaults(),
         )
 
 
-def test_molecule_ast_str():
-    molecule = MoleculeAst.parse(
+def test_molecule_str():
+    molecule = Molecule.parse(
         '{:atoms ["C" "O"] :bonds [[0 1 "1"]]}'
     )
 
     assert str(molecule) == molecule.render()
 
 
-def test_molecule_ast_from_entries():
-    molecule = MoleculeAst.from_entries(
+def test_molecule_from_entries():
+    molecule = Molecule.from_entries(
         [AtomForm(Element("C")) for _ in range(5)],
         bonds=[(0, 1, BondForm(2))],
         dative_bonds=[([2], 1, DativeBondForm(1))],
@@ -285,30 +285,30 @@ def test_molecule_ast_from_entries():
     ]
 
 
-def test_molecule_ast_from_entries_default():
-    molecule = MoleculeAst.from_entries([AtomForm(Element("C"))])
+def test_molecule_from_entries_default():
+    molecule = Molecule.from_entries([AtomForm(Element("C"))])
 
     assert len(molecule.atoms) == 1
     assert len(molecule.bonds) == 0
 
 
-def test_molecule_ast_from_entries_atom_reference_error():
+def test_molecule_from_entries_atom_reference_error():
     with pytest.raises(
         ValueError,
         match="^molecule entries reference unavailable atom 1$",
     ):
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("C"))],
             bonds=[(0, 1, BondForm(1))],
         )
 
 
-def test_molecule_ast_from_entries_bond_site_reference_error():
+def test_molecule_from_entries_bond_site_reference_error():
     with pytest.raises(
         ValueError,
         match="^molecule entries reference unavailable bond 0$",
     ):
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("C"))],
             stereo_bonds=[
                 (
@@ -320,12 +320,12 @@ def test_molecule_ast_from_entries_bond_site_reference_error():
         )
 
 
-def test_molecule_ast_from_entries_ligand_reference_error():
+def test_molecule_from_entries_ligand_reference_error():
     with pytest.raises(
         ValueError,
         match="^molecule entries reference unavailable atom 1$",
     ):
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("C"))],
             stereo_atoms=[
                 (
@@ -337,19 +337,19 @@ def test_molecule_ast_from_entries_ligand_reference_error():
         )
 
 
-def test_molecule_ast_from_entries_constraint_reference_error():
+def test_molecule_from_entries_constraint_reference_error():
     with pytest.raises(
         ValueError,
         match="^molecule entries reference unavailable atom 1$",
     ):
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("C"))],
             constraints=[Constraint.Molecule(MoleculeConstraint.Connected([1]))],
         )
 
 
-def test_molecule_ast_from_smiles():
-    assert MoleculeAst.from_smiles("C") == MoleculeAst.parse(
+def test_molecule_from_smiles():
+    assert Molecule.from_smiles("C") == Molecule.parse(
         '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
         defaults=MoleculeDefaults.ground(),
     )
@@ -364,8 +364,8 @@ def test_molecule_ast_from_smiles():
         SmilesIoConfig.lenient(),
     ],
 )
-def test_molecule_ast_from_smiles_io_config(io_config):
-    molecule = MoleculeAst.from_smiles("[se]1cccc1", io_config=io_config)
+def test_molecule_from_smiles_io_config(io_config):
+    molecule = Molecule.from_smiles("[se]1cccc1", io_config=io_config)
 
     assert [atom.element for atom in molecule.atoms] == [
         ElementForm.Lit(Element("Se")),
@@ -390,15 +390,15 @@ def test_molecule_ast_from_smiles_io_config(io_config):
     ]
 
 
-def test_molecule_ast_from_smiles_io_config_error():
+def test_molecule_from_smiles_io_config_error():
     with pytest.raises(ParseError, match="^Invalid token at position 2$"):
-        MoleculeAst.from_smiles("C->N", io_config=SmilesIoConfig.opensmiles())
+        Molecule.from_smiles("C->N", io_config=SmilesIoConfig.opensmiles())
     with pytest.raises(
         ContradictionError,
         match="^no atom-typing match for AtomId\\(0\\) "
         "\\(element C, charge Some\\(0\\)\\)$",
     ):
-        MoleculeAst.from_smiles("C->N", io_config=SmilesIoConfig.lenient())
+        Molecule.from_smiles("C->N", io_config=SmilesIoConfig.lenient())
 
 
 @pytest.mark.parametrize(
@@ -418,7 +418,7 @@ def test_molecule_ast_from_smiles_io_config_error():
         ),
     ],
 )
-def test_molecule_ast_from_smiles_chemistry_model_valence(valence_model, expected):
+def test_molecule_from_smiles_chemistry_model_valence(valence_model, expected):
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         valence=valence_model,
@@ -426,12 +426,12 @@ def test_molecule_ast_from_smiles_chemistry_model_valence(valence_model, expecte
         stereo=default.stereo,
     )
 
-    assert MoleculeAst.from_smiles(
+    assert Molecule.from_smiles(
         "C", chemistry_model=chemistry_model
-    ) == MoleculeAst.from_entries([expected])
+    ) == Molecule.from_entries([expected])
 
 
-def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
+def test_molecule_from_smiles_chemistry_model_aromaticity():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         valence=default.valence,
@@ -441,7 +441,7 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         stereo=default.stereo,
     )
 
-    molecule = MoleculeAst.from_smiles(
+    molecule = Molecule.from_smiles(
         "c1ccccc1",
         chemistry_model=chemistry_model,
         resolve_config=ResolveConfig(
@@ -500,10 +500,10 @@ def test_molecule_ast_from_smiles_chemistry_model_aromaticity():
         ),
     ],
 )
-def test_molecule_ast_from_smiles_aromaticity_policy(source, expected):
+def test_molecule_from_smiles_aromaticity_policy(source, expected):
     default = ChemistryModel.default()
 
-    assert MoleculeAst.from_smiles(
+    assert Molecule.from_smiles(
         source,
         chemistry_model=ChemistryModel(
             valence=default.valence,
@@ -516,10 +516,10 @@ def test_molecule_ast_from_smiles_aromaticity_policy(source, expected):
             ),
             stereo=StereoResolveConfig(),
         ),
-    ) == MoleculeAst.parse(expected)
+    ) == Molecule.parse(expected)
 
 
-def test_molecule_ast_from_smiles_chemistry_model_stereo():
+def test_molecule_from_smiles_chemistry_model_stereo():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         valence=default.valence,
@@ -530,7 +530,7 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         ),
     )
 
-    molecule = MoleculeAst.from_smiles(
+    molecule = Molecule.from_smiles(
         "C[C@H](N)O",
         chemistry_model=chemistry_model,
         resolve_config=ResolveConfig(
@@ -624,8 +624,8 @@ def test_molecule_ast_from_smiles_chemistry_model_stereo():
         ),
     ],
 )
-def test_molecule_ast_from_smiles_resolve_config(source, resolve_config, expected):
-    molecule = MoleculeAst.from_smiles(source, resolve_config=resolve_config)
+def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
+    molecule = Molecule.from_smiles(source, resolve_config=resolve_config)
 
     assert (
         [atom.charge for atom in molecule.atoms],
@@ -742,28 +742,28 @@ def test_molecule_ast_from_smiles_resolve_config(source, resolve_config, expecte
         ),
     ],
 )
-def test_molecule_ast_from_smiles_error(source, kwargs, error_type, message):
+def test_molecule_from_smiles_error(source, kwargs, error_type, message):
     with pytest.raises(error_type, match=f"^{re.escape(message)}$"):
-        MoleculeAst.from_smiles(source, **kwargs)
+        Molecule.from_smiles(source, **kwargs)
 
 
-def test_molecule_ast_from_smiles_keyword_error():
+def test_molecule_from_smiles_keyword_error():
     with pytest.raises(TypeError):
-        MoleculeAst.from_smiles("C", SmilesIoConfig.opensmiles())
+        Molecule.from_smiles("C", SmilesIoConfig.opensmiles())
 
 
-def test_molecule_ast_from_smiles_ownership():
+def test_molecule_from_smiles_ownership():
     io_config = SmilesIoConfig.opensmiles()
     chemistry_model = ChemistryModel.default()
     resolve_config = ResolveConfig.default()
 
-    first = MoleculeAst.from_smiles(
+    first = Molecule.from_smiles(
         "C",
         io_config=io_config,
         chemistry_model=chemistry_model,
         resolve_config=resolve_config,
     )
-    second = MoleculeAst.from_smiles(
+    second = Molecule.from_smiles(
         "C",
         io_config=io_config,
         chemistry_model=chemistry_model,
@@ -771,7 +771,7 @@ def test_molecule_ast_from_smiles_ownership():
     )
     first.atoms[0].charge = 1
 
-    assert second == MoleculeAst.parse(
+    assert second == Molecule.parse(
         '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
         defaults=MoleculeDefaults.ground(),
     )
@@ -781,21 +781,21 @@ def test_molecule_ast_from_smiles_ownership():
     assert resolve_config == ResolveConfig.default()
 
 
-def test_molecule_ast_combine():
-    left = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    right = MoleculeAst.from_entries(
+def test_molecule_combine():
+    left = Molecule.from_entries([AtomForm(Element("C"))])
+    right = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
-    left_before = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    right_before = MoleculeAst.from_entries(
+    left_before = Molecule.from_entries([AtomForm(Element("C"))])
+    right_before = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
 
     combined, correspondence = left.combine(right)
 
-    assert combined == MoleculeAst.from_entries(
+    assert combined == Molecule.from_entries(
         [
             AtomForm(Element("C")),
             AtomForm(Element("O")),
@@ -810,20 +810,20 @@ def test_molecule_ast_combine():
     assert right == right_before
 
 
-def test_molecule_ast_combine_from():
-    recipient = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    other = MoleculeAst.from_entries(
+def test_molecule_combine_from():
+    recipient = Molecule.from_entries([AtomForm(Element("C"))])
+    other = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
-    other_before = MoleculeAst.from_entries(
+    other_before = Molecule.from_entries(
         [AtomForm(Element("O")), AtomForm(Element("N"))],
         bonds=[(0, 1, BondForm(2))],
     )
 
     correspondence = recipient.combine_from(other)
 
-    assert recipient == MoleculeAst.from_entries(
+    assert recipient == Molecule.from_entries(
         [
             AtomForm(Element("C")),
             AtomForm(Element("O")),
@@ -836,15 +836,15 @@ def test_molecule_ast_combine_from():
     assert other == other_before
 
 
-def test_molecule_ast_combine_from_alias():
-    molecule = MoleculeAst.from_entries(
+def test_molecule_combine_from_alias():
+    molecule = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O"))],
         bonds=[(0, 1, BondForm(1))],
     )
 
     correspondence = molecule.combine_from(molecule)
 
-    assert molecule == MoleculeAst.from_entries(
+    assert molecule == Molecule.from_entries(
         [
             AtomForm(Element("C")),
             AtomForm(Element("O")),
@@ -857,29 +857,29 @@ def test_molecule_ast_combine_from_alias():
     assert correspondence.bonds.matched_pairs == [(0, 1)]
 
 
-def test_molecule_ast_combine_all():
+def test_molecule_combine_all():
     molecules = [
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
-        MoleculeAst.from_entries(
+        Molecule.from_entries([AtomForm(Element("C"))]),
+        Molecule.from_entries(
             [AtomForm(Element("O")), AtomForm(Element("N"))],
             bonds=[(0, 1, BondForm(2))],
         ),
-        MoleculeAst.from_entries([AtomForm(Element("F"))]),
+        Molecule.from_entries([AtomForm(Element("F"))]),
     ]
     snapshots = [
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
-        MoleculeAst.from_entries(
+        Molecule.from_entries([AtomForm(Element("C"))]),
+        Molecule.from_entries(
             [AtomForm(Element("O")), AtomForm(Element("N"))],
             bonds=[(0, 1, BondForm(2))],
         ),
-        MoleculeAst.from_entries([AtomForm(Element("F"))]),
+        Molecule.from_entries([AtomForm(Element("F"))]),
     ]
 
-    combined, correspondences = MoleculeAst.combine_all(
+    combined, correspondences = Molecule.combine_all(
         molecule for molecule in molecules
     )
 
-    assert combined == MoleculeAst.from_entries(
+    assert combined == Molecule.from_entries(
         [
             AtomForm(Element("C")),
             AtomForm(Element("O")),
@@ -901,8 +901,8 @@ def test_molecule_ast_combine_all():
     assert molecules == snapshots
 
 
-def test_molecule_ast_combine_all_empty():
-    assert MoleculeAst.combine_all([]) == (MoleculeAst(), [])
+def test_molecule_combine_all_empty():
+    assert Molecule.combine_all([]) == (Molecule(), [])
 
 
 def test_correspondence_constructor():
@@ -960,10 +960,10 @@ def test_correspondence_constructor_error(
 
 
 def test_correspondence_value():
-    _, molecule_correspondence = MoleculeAst.from_entries(
+    _, molecule_correspondence = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("O")), AtomForm(Element("N"))],
             bonds=[(0, 1, BondForm(2))],
         )
@@ -998,10 +998,10 @@ def test_correspondence_value():
 
 
 def test_molecule_correspondence_value():
-    _, correspondence = MoleculeAst.from_entries(
+    _, correspondence = Molecule.from_entries(
         [AtomForm(Element("C"))]
     ).combine(
-        MoleculeAst.from_entries(
+        Molecule.from_entries(
             [AtomForm(Element("O")), AtomForm(Element("N"))],
             bonds=[(0, 1, BondForm(2))],
         )
@@ -1024,8 +1024,8 @@ def test_molecule_correspondence_value():
     assert MoleculeCorrespondence.compose_all(iter(())) is None
 
 
-def test_molecule_ast_split():
-    molecule = MoleculeAst.from_entries(
+def test_molecule_split():
+    molecule = Molecule.from_entries(
         [
             AtomForm(Element("C")),
             AtomForm(Element("O")),
@@ -1037,8 +1037,8 @@ def test_molecule_ast_split():
     components = molecule.split()
 
     assert [component for component, _ in components] == [
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
-        MoleculeAst.from_entries(
+        Molecule.from_entries([AtomForm(Element("C"))]),
+        Molecule.from_entries(
             [AtomForm(Element("O")), AtomForm(Element("N"))],
             bonds=[(0, 1, BondForm(2))],
         ),
@@ -1051,25 +1051,25 @@ def test_molecule_ast_split():
     ] == [[], [(0, 0)]]
 
 
-def test_molecule_ast_split_empty():
-    assert MoleculeAst().split() == []
+def test_molecule_split_empty():
+    assert Molecule().split() == []
 
 
-def test_molecule_ast_bonds_error():
+def test_molecule_bonds_error():
     with pytest.raises(IndexError):
-        MoleculeAst.from_entries([AtomForm(Element("C"))]).bonds[0]
+        Molecule.from_entries([AtomForm(Element("C"))]).bonds[0]
 
 
-def test_molecule_ast_eq():
-    assert MoleculeAst() == MoleculeAst()
+def test_molecule_eq():
+    assert Molecule() == Molecule()
 
 
 @pytest.mark.parametrize(
     ("molecule", "expected"),
     [
-        (MoleculeAst(), "MoleculeAst(atoms=0, bonds=0)"),
+        (Molecule(), "Molecule(atoms=0, bonds=0)"),
         (
-            MoleculeAst.from_entries(
+            Molecule.from_entries(
                 [
                     AtomForm(Element("C")),
                     AtomForm(Element("C")),
@@ -1084,9 +1084,9 @@ def test_molecule_ast_eq():
                     )
                 ],
             ),
-            "MoleculeAst(atoms=3, bonds=1, aromatic_systems=1, noncovalent_bonds=1)",
+            "Molecule(atoms=3, bonds=1, aromatic_systems=1, noncovalent_bonds=1)",
         ),
     ],
 )
-def test_molecule_ast_repr(molecule, expected):
+def test_molecule_repr(molecule, expected):
     assert repr(molecule) == expected

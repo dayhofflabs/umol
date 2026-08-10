@@ -103,7 +103,7 @@ impl Entity {
 /// Persistent entity-keyword and atom-alias metadata for a molecule DSL value.
 ///
 /// The metadata may be detached from its molecule for transport, but
-/// `MoleculeAst.render_with_metadata` checks that every keyword still names an
+/// `Molecule.render_with_metadata` checks that every keyword still names an
 /// entity present in the molecule.
 #[pyclass(eq, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]

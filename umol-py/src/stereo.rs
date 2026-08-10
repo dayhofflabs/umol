@@ -38,7 +38,7 @@ use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 
 /// A permutation of `0..degree` in one-line (image) notation.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -1356,7 +1356,7 @@ macro_rules! stereo_view {
     ) => {
         #[pyclass]
         pub struct $view {
-            owner: Py<MoleculeAst>,
+            owner: Py<Molecule>,
             id: $ast_id,
         }
 
@@ -1524,7 +1524,7 @@ macro_rules! stereo_views {
 
         #[pyclass]
         pub struct $views {
-            owner: Py<MoleculeAst>,
+            owner: Py<Molecule>,
         }
 
         #[pymethods]
@@ -1611,14 +1611,14 @@ macro_rules! stereo_views {
 
         impl $views {
             /// Build the stereo-views handle for `owner` (the `mol.stereo_{atoms,bonds}` accessor).
-            pub(crate) fn new(owner: Py<MoleculeAst>) -> $views {
+            pub(crate) fn new(owner: Py<Molecule>) -> $views {
                 $views { owner }
             }
         }
 
         #[pyclass]
         struct $iter {
-            owner: Py<MoleculeAst>,
+            owner: Py<Molecule>,
             ids: IntoIter<$ast_id>,
         }
 
@@ -3227,7 +3227,7 @@ mod tests {
         assert_eq!(value.__str__(), "Ct1");
     }
 
-    fn stereo_atom_molecule(py: Python<'_>) -> Py<MoleculeAst> {
+    fn stereo_atom_molecule(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 5],
             stereo_atoms: vec![(
@@ -3245,10 +3245,10 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
-    fn stereo_bond_molecule(py: Python<'_>) -> Py<MoleculeAst> {
+    fn stereo_bond_molecule(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 4],
             bonds: vec![
@@ -3278,7 +3278,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]

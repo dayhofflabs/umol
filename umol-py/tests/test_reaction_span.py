@@ -10,20 +10,20 @@ from umol import (
     Element,
     Entity,
     MetadataError,
-    MoleculeAst,
+    Molecule,
     MoleculeDefaults,
     MoleculeMetadata,
     ParseError,
-    ReactionAst,
-    ReactionSpanAst,
+    Reaction,
+    ReactionSpan,
     NumForm,
 )
 
 
-def test_reaction_span_ast_parse():
-    span = ReactionSpanAst.parse(r'{:atoms ["C" {:add "O"}]}')
+def test_reaction_span_parse():
+    span = ReactionSpan.parse(r'{:atoms ["C" {:add "O"}]}')
 
-    assert span == ReactionSpanAst.from_entries(
+    assert span == ReactionSpan.from_entries(
         [
             (AtomForm(Element("C")), AtomForm(Element("C"))),
             (None, AtomForm(Element("O"))),
@@ -31,32 +31,32 @@ def test_reaction_span_ast_parse():
     )
 
 
-def test_reaction_span_ast_parse_error():
+def test_reaction_span_parse_error():
     with pytest.raises(
         ParseError,
         match="^EDN parse: unexpected token 'n' at byte 0$",
     ):
-        ReactionSpanAst.parse("not edn")
+        ReactionSpan.parse("not edn")
 
 
-def test_reaction_span_ast_parse_defaults():
-    span = ReactionSpanAst.parse(
+def test_reaction_span_parse_defaults():
+    span = ReactionSpan.parse(
         r'{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
         defaults=MoleculeDefaults.ground(),
     )
 
     atom = AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")
-    assert span == ReactionSpanAst.from_entries([(atom, atom)])
+    assert span == ReactionSpan.from_entries([(atom, atom)])
 
 
-def test_reaction_span_ast_parse_with_metadata_roundtrip():
-    span, metadata = ReactionSpanAst.parse_with_metadata(
+def test_reaction_span_parse_with_metadata_roundtrip():
+    span, metadata = ReactionSpan.parse_with_metadata(
         r'{:atoms [[:carbon :x] {:add "O"}] '
         r':bonds [{:add [0 1 :single]}] :atom-aliases [:x "C"]}'
     )
 
     rendered = span.render_with_metadata(metadata)
-    reparsed, reparsed_metadata = ReactionSpanAst.parse_with_metadata(rendered)
+    reparsed, reparsed_metadata = ReactionSpan.parse_with_metadata(rendered)
 
     assert rendered == (
         r'{:atom-aliases [:x "C"] :atoms [[:carbon :x] {:add "O"}] '
@@ -65,8 +65,8 @@ def test_reaction_span_ast_parse_with_metadata_roundtrip():
     assert (reparsed, reparsed_metadata) == (span, metadata)
 
 
-def test_reaction_span_ast_render():
-    span = ReactionSpanAst.from_entries(
+def test_reaction_span_render():
+    span = ReactionSpan.from_entries(
         [
             (AtomForm(Element("C")), AtomForm(Element("C"))),
             (None, AtomForm(Element("O"))),
@@ -77,8 +77,8 @@ def test_reaction_span_ast_render():
     assert str(span) == span.render()
 
 
-def test_reaction_span_ast_render_with_metadata_error():
-    span = ReactionSpanAst.from_entries(
+def test_reaction_span_render_with_metadata_error():
+    span = ReactionSpan.from_entries(
         [(AtomForm(Element("C")), AtomForm(Element("C")))]
     )
     metadata = MoleculeMetadata()
@@ -91,58 +91,58 @@ def test_reaction_span_ast_render_with_metadata_error():
         span.render_with_metadata(metadata)
 
 
-def test_reaction_span_ast_from_entries():
+def test_reaction_span_from_entries():
     lhs = AtomForm(Element("C"), charge=NumForm.Lit(1))
     rhs = AtomForm(Element("C"), charge=NumForm.LitSet({1}))
 
-    span = ReactionSpanAst.from_entries([(lhs, rhs)])
+    span = ReactionSpan.from_entries([(lhs, rhs)])
 
-    assert span == ReactionSpanAst.from_entries([(lhs, lhs)])
+    assert span == ReactionSpan.from_entries([(lhs, lhs)])
 
 
-def test_reaction_span_ast_from_entries_error():
+def test_reaction_span_from_entries_error():
     with pytest.raises(
         ValueError,
         match="^reaction span entry is absent from both sides$",
     ):
-        ReactionSpanAst.from_entries([(None, None)])
+        ReactionSpan.from_entries([(None, None)])
 
 
-def test_reaction_span_ast_from_entries_reference_error():
+def test_reaction_span_from_entries_reference_error():
     with pytest.raises(
         ValueError,
         match="^reaction span entries reference unavailable atom 1$",
     ):
-        ReactionSpanAst.from_entries(
+        ReactionSpan.from_entries(
             [(AtomForm(Element("C")), AtomForm(Element("C")))],
             bonds=[(0, 1, (BondForm(1), BondForm(1)))],
         )
 
 
-def test_reaction_span_ast_lhs():
-    span = ReactionSpanAst.parse(
+def test_reaction_span_lhs():
+    span = ReactionSpan.parse(
         r'{:atoms ["C" {:remove "O"} {:add "N"}] '
         r':bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}'
     )
 
-    assert span.lhs() == MoleculeAst.parse(
+    assert span.lhs() == Molecule.parse(
         r'{:atoms ["C" "O"] :bonds [[0 1 :single]]}'
     )
 
 
-def test_reaction_span_ast_rhs():
-    span = ReactionSpanAst.parse(
+def test_reaction_span_rhs():
+    span = ReactionSpan.parse(
         r'{:atoms ["C" {:remove "O"} {:add "N"}] '
         r':bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}'
     )
 
-    assert span.rhs() == MoleculeAst.parse(
+    assert span.rhs() == Molecule.parse(
         r'{:atoms ["C" "N"] :bonds [[0 1 :double]]}'
     )
 
 
-def test_reaction_span_ast_correspondence():
-    span = ReactionSpanAst.parse(
+def test_reaction_span_correspondence():
+    span = ReactionSpan.parse(
         r'{:atoms ["C" {:remove "O"} {:add "N"}] '
         r':bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}'
     )
@@ -161,8 +161,8 @@ def test_reaction_span_ast_correspondence():
     assert correspondence.bonds.right_unmatched == [0]
 
 
-def test_reaction_span_ast_to_reaction_roundtrip():
-    span = ReactionSpanAst.parse(
+def test_reaction_span_to_reaction_roundtrip():
+    span = ReactionSpan.parse(
         r'{:atoms ["C" {:add "O"}] :bonds [{:add [0 1 :single]}]}'
     )
 
@@ -172,9 +172,9 @@ def test_reaction_span_ast_to_reaction_roundtrip():
     assert reaction.to_reaction_span() == span
 
 
-def test_reaction_ast_to_reaction_span_error():
-    reaction = ReactionAst(
-        MoleculeAst.from_entries(
+def test_reaction_to_reaction_span_error():
+    reaction = Reaction(
+        Molecule.from_entries(
             [AtomForm(Element("C")), AtomForm(Element("C"))],
             bonds=[(0, 1, BondForm(1))],
         ),

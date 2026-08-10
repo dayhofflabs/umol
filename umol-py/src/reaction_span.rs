@@ -1,4 +1,4 @@
-//! `ReactionSpanAst` — a Python facade over the superimposed reaction span AST.
+//! `ReactionSpan` — a Python facade over the superimposed reaction span AST.
 
 use std::str::FromStr;
 
@@ -21,10 +21,10 @@ use crate::dative::DativeBondForm;
 use crate::defaults::MoleculeDefaults;
 use crate::error::{metadata_error, parse_error};
 use crate::metadata::MoleculeMetadata;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::multicenter::MulticenterBondForm;
 use crate::noncovalent::NoncovalentBondForm;
-use crate::reaction::ReactionAst;
+use crate::reaction::Reaction;
 use crate::stereo::{StereoAtomForm, StereoBondForm, StereoLigand};
 
 type SpanPair<T> = (Option<Py<T>>, Option<Py<T>>);
@@ -57,10 +57,10 @@ fn constraint_spans(
 /// A superimposed reaction span with explicit before/after entity states.
 #[pyclass(eq, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ReactionSpanAst(GraphIrReactionSpan);
+pub struct ReactionSpan(GraphIrReactionSpan);
 
 #[pymethods]
-impl ReactionSpanAst {
+impl ReactionSpan {
     /// Parse a reaction span from its EDN representation under explicit construction defaults.
     #[staticmethod]
     #[pyo3(signature = (text, *, defaults=None))]
@@ -259,13 +259,13 @@ impl ReactionSpanAst {
     }
 
     /// Project the left-hand molecule as a detached snapshot.
-    fn lhs(&self) -> MoleculeAst {
-        MoleculeAst::from_rust(self.0.lhs())
+    fn lhs(&self) -> Molecule {
+        Molecule::from_rust(self.0.lhs())
     }
 
     /// Project the right-hand molecule as a detached snapshot.
-    fn rhs(&self) -> MoleculeAst {
-        MoleculeAst::from_rust(self.0.rhs())
+    fn rhs(&self) -> Molecule {
+        Molecule::from_rust(self.0.rhs())
     }
 
     /// Recover the correspondence between the normalized side projections.
@@ -274,12 +274,12 @@ impl ReactionSpanAst {
     }
 
     /// Recover the reaction rule represented by this span.
-    fn to_reaction(&self, py: Python<'_>) -> PyResult<ReactionAst> {
-        ReactionAst::from_rust(py, self.0.to_reaction())
+    fn to_reaction(&self, py: Python<'_>) -> PyResult<Reaction> {
+        Reaction::from_rust(py, self.0.to_reaction())
     }
 }
 
-impl ReactionSpanAst {
+impl ReactionSpan {
     pub(crate) fn from_rust(span: GraphIrReactionSpan) -> Self {
         Self(span)
     }
@@ -341,21 +341,21 @@ mod tests {
             ..Default::default()
         })
     )]
-    fn test_reaction_span_ast_parse(
+    fn test_reaction_span_parse(
         #[case] text: &str,
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: GraphIrReactionSpan,
     ) {
         assert_eq!(
-            ReactionSpanAst::parse(text, defaults).unwrap().to_rust(),
+            ReactionSpan::parse(text, defaults).unwrap().to_rust(),
             &expected
         );
     }
 
     #[rstest]
-    fn test_reaction_span_ast_parse_error() {
+    fn test_reaction_span_parse_error() {
         Python::attach(|py| {
-            let error = ReactionSpanAst::parse("not edn", None).unwrap_err();
+            let error = ReactionSpan::parse("not edn", None).unwrap_err();
 
             assert!(error.is_instance_of::<ParseError>(py));
             assert_eq!(
@@ -366,8 +366,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_parse_with_metadata() {
-        let (span, metadata) = ReactionSpanAst::parse_with_metadata(
+    fn test_reaction_span_parse_with_metadata() {
+        let (span, metadata) = ReactionSpan::parse_with_metadata(
             r#"{:atoms [[:carbon :x]] :atom-aliases [:x "C"]}"#,
             None,
         )
@@ -417,17 +417,17 @@ mod tests {
         Some(MoleculeDefaults::ground()),
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#
     )]
-    fn test_reaction_span_ast_render(
+    fn test_reaction_span_render(
         #[case] span: GraphIrReactionSpan,
         #[case] defaults: Option<MoleculeDefaults>,
         #[case] expected: &str,
     ) {
-        assert_eq!(ReactionSpanAst::from_rust(span).render(defaults), expected);
+        assert_eq!(ReactionSpan::from_rust(span).render(defaults), expected);
     }
 
     #[rstest]
-    fn test_reaction_span_ast_render_with_metadata() {
-        let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
+    fn test_reaction_span_render_with_metadata() {
+        let span = ReactionSpan::from_rust(GraphIrReactionSpan::from_entries(
             GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
@@ -454,9 +454,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_render_with_metadata_error() {
+    fn test_reaction_span_render_with_metadata_error() {
         Python::attach(|py| {
-            let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
+            let span = ReactionSpan::from_rust(GraphIrReactionSpan::from_entries(
                 GraphIrReactionSpanEntries {
                     atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                         ChemElement::C,
@@ -482,8 +482,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_render_with_metadata_roundtrip() {
-        let (span, metadata) = ReactionSpanAst::parse_with_metadata(
+    fn test_reaction_span_render_with_metadata_roundtrip() {
+        let (span, metadata) = ReactionSpan::parse_with_metadata(
             concat!(
                 r#"{:atoms [[:carbon "C"] {:add "O"}] "#,
                 r#":bonds [{:add [0 1 :single]}]}"#,
@@ -495,14 +495,14 @@ mod tests {
         let rendered = span.render_with_metadata(&metadata, None).unwrap();
 
         assert_eq!(
-            ReactionSpanAst::parse_with_metadata(&rendered, None).unwrap(),
+            ReactionSpan::parse_with_metadata(&rendered, None).unwrap(),
             (span, metadata)
         );
     }
 
     #[rstest]
-    fn test_reaction_span_ast_str() {
-        let span = ReactionSpanAst::from_rust(GraphIrReactionSpan::from_entries(
+    fn test_reaction_span_str() {
+        let span = ReactionSpan::from_rust(GraphIrReactionSpan::from_entries(
             GraphIrReactionSpanEntries {
                 atoms: vec![GraphIrEntitySpan::Unchanged(GraphIrAtomForm::from_element(
                     ChemElement::C,
@@ -515,7 +515,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_from_entries() {
+    fn test_reaction_span_from_entries() {
         Python::attach(|py| {
             let canonical_lhs =
                 GraphIrAtomForm::from_element(ChemElement::C).with_charge(GraphIrNumForm::Lit(1));
@@ -562,7 +562,7 @@ mod tests {
                     atoms: Some(vec![GraphIrAtomId(3)]),
                 });
 
-            let span = ReactionSpanAst::from_entries(
+            let span = ReactionSpan::from_entries(
                 py,
                 vec![
                     (
@@ -786,9 +786,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_from_entries_error() {
+    fn test_reaction_span_from_entries_error() {
         Python::attach(|py| {
-            let error = ReactionSpanAst::from_entries(
+            let error = ReactionSpan::from_entries(
                 py,
                 vec![(None, None)],
                 Vec::new(),
@@ -814,7 +814,7 @@ mod tests {
     #[case::union(true, true, false)]
     #[case::lhs(false, true, true)]
     #[case::rhs(true, false, true)]
-    fn test_reaction_span_ast_from_entries_reference_error(
+    fn test_reaction_span_from_entries_reference_error(
         #[case] first_on_lhs: bool,
         #[case] first_on_rhs: bool,
         #[case] include_second: bool,
@@ -854,7 +854,7 @@ mod tests {
                     ),
                 ));
             }
-            let error = ReactionSpanAst::from_entries(
+            let error = ReactionSpan::from_entries(
                 py,
                 atoms,
                 vec![(
@@ -890,8 +890,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_lhs() {
-        let span = ReactionSpanAst::from_rust(
+    fn test_reaction_span_lhs() {
+        let span = ReactionSpan::from_rust(
             r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                 .parse()
                 .unwrap(),
@@ -915,8 +915,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_rhs() {
-        let span = ReactionSpanAst::from_rust(
+    fn test_reaction_span_rhs() {
+        let span = ReactionSpan::from_rust(
             r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                 .parse()
                 .unwrap(),
@@ -940,8 +940,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_correspondence() {
-        let span = ReactionSpanAst::from_rust(
+    fn test_reaction_span_correspondence() {
+        let span = ReactionSpan::from_rust(
             r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
                 .parse()
                 .unwrap(),
@@ -969,7 +969,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_ast_to_reaction() {
+    fn test_reaction_span_to_reaction() {
         Python::attach(|py| {
             let span: GraphIrReactionSpan =
                 r#"{:atoms ["C" {:remove "O"} {:add "N"}] :bonds [{:remove [0 1 :single]} {:add [0 2 :double]}]}"#
@@ -978,7 +978,7 @@ mod tests {
             let expected: GraphIrReaction = span.to_reaction();
 
             assert_eq!(
-                ReactionSpanAst::from_rust(span)
+                ReactionSpan::from_rust(span)
                     .to_reaction(py)
                     .unwrap()
                     .to_rust(py),

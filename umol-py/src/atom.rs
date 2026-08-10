@@ -24,7 +24,7 @@ use crate::element::Element;
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{MemOp, NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 
@@ -669,7 +669,7 @@ impl EntityForm for AtomForm {
 /// index. Field reads rebuild the transient Rust view; the molecule is never copied.
 #[pyclass]
 pub struct AtomView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrAtomId,
 }
 
@@ -871,7 +871,7 @@ fn resolve_atom_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<Grap
 /// The atoms of a molecule, indexed by integer position.
 #[pyclass]
 pub struct AtomViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -922,14 +922,14 @@ impl AtomViews {
 
 impl AtomViews {
     /// Build the atom-views handle for `owner` (the `.atoms` accessor on the molecule).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> AtomViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> AtomViews {
         AtomViews { owner }
     }
 }
 
 #[pyclass]
 struct AtomViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrAtomId>,
 }
 
@@ -1030,7 +1030,7 @@ mod tests {
         );
     }
 
-    fn carbon_oxygen(py: Python<'_>) -> Py<MoleculeAst> {
+    fn carbon_oxygen(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::C),
@@ -1038,7 +1038,7 @@ mod tests {
             ],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1585,7 +1585,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1632,7 +1632,7 @@ mod tests {
                 .with_constraint(GraphIrAtomConstraintForm::valence(4));
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![atom],
                     ..Default::default()
                 })),
@@ -1671,7 +1671,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1885,7 +1885,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1934,7 +1934,7 @@ mod tests {
         Python::attach(|py| {
             let owner = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),

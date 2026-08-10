@@ -105,12 +105,7 @@ pub(crate) fn reaction_smiles_input_error(error: GraphReactionSmilesInputError) 
     match error {
         GraphReactionSmilesInputError::Syntax(error) => ParseError::new_err(error.to_string()),
         GraphReactionSmilesInputError::Interpretation(error) => {
-            let message = match &error {
-                GraphReactionInterpretationError::AgentsUnsupported => {
-                    String::from("reaction agents cannot be represented in ReactionAst")
-                }
-                _ => error.to_string(),
-            };
+            let message = error.to_string();
             match error {
                 GraphReactionInterpretationError::Reactants(
                     GraphMoleculeInterpretationError::ModelConversion(_),
@@ -448,7 +443,7 @@ mod tests {
             GraphReactionInterpretationError::AgentsUnsupported,
         ),
         "ModelConversionError",
-        "reaction agents cannot be represented in ReactionAst"
+        "reaction agents cannot be represented in Reaction"
     )]
     fn test_reaction_smiles_input_error(
         #[case] input: GraphReactionSmilesInputError,

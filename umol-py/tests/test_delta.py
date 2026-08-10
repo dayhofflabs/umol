@@ -27,7 +27,7 @@ from umol import (
     ElementForm,
     ElectronCountsForm,
     IsotopeMassForm,
-    MoleculeAst,
+    Molecule,
     MoleculeConstraint,
     MulticenterBondForm,
     MulticenterBondConstraintForm,

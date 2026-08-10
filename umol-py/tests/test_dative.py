@@ -9,7 +9,7 @@ from umol import (
     DativeBondConstraintsForm,
     DativeBondUpdate,
     Element,
-    MoleculeAst,
+    Molecule,
     ParseError,
     RingMembershipForm,
     RingScope,
@@ -64,7 +64,7 @@ def test_dative_bond_update_parse_error():
 
 def ammonia_borane():
     # borane B (id 0) accepts from ammonia N (id 1); dative bond id 0
-    return MoleculeAst.from_entries(
+    return Molecule.from_entries(
         [AtomForm(Element("B")), AtomForm(Element("N"))],
         dative_bonds=[([1], 0, DativeBondForm(1))],
     )
@@ -293,7 +293,7 @@ def test_dativebondviews_of():
 
 def test_dativebondviews_incident():
     # B(0) accepts from N(1); C(2) isolated
-    mol = MoleculeAst.from_entries(
+    mol = Molecule.from_entries(
         [AtomForm(Element("B")), AtomForm(Element("N")), AtomForm(Element("C"))],
         dative_bonds=[([1], 0, DativeBondForm(1))],
     )

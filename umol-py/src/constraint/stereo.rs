@@ -22,7 +22,7 @@ use umol_graph_ir::ir::{
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::stereo::{
     LigandPermutation, OrientedLigandPermutation, StereoAtomForm, StereoBondForm, StereoLigandPair,
     Stereogenicity, Topicity,
@@ -972,7 +972,7 @@ macro_rules! stereo_constraints {
         /// What a `$view` writes through to: a stereo entity within a molecule (by id) or a
         /// standalone own-value stereo entity (`Py<$value>`).
         pub(crate) enum $backing {
-            Molecule { owner: Py<MoleculeAst>, id: $ast_id },
+            Molecule { owner: Py<Molecule>, id: $ast_id },
             Value(Py<$value>),
         }
 

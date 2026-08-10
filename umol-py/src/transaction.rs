@@ -8,7 +8,7 @@ use umol_graph_ir::ir::{
 
 use crate::edit::Edits;
 use crate::error::transaction_error;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 
 /// A mutable molecule editor that can be inspected before it is finalized.
 #[pyclass]
@@ -27,18 +27,18 @@ impl MoleculeEditor {
 #[pymethods]
 impl MoleculeEditor {
     /// Materialize the editor's current state without consuming it.
-    fn snapshot(&self) -> PyResult<MoleculeAst> {
+    fn snapshot(&self) -> PyResult<Molecule> {
         self.inner
             .as_ref()
-            .map(|editor| MoleculeAst::from_rust(editor.snapshot()))
+            .map(|editor| Molecule::from_rust(editor.snapshot()))
             .ok_or_else(consumed_editor_error)
     }
 
     /// Finalize the editor and consume its mutable state.
-    fn build(&mut self) -> PyResult<MoleculeAst> {
+    fn build(&mut self) -> PyResult<Molecule> {
         self.inner
             .take()
-            .map(|editor| MoleculeAst::from_rust(editor.build()))
+            .map(|editor| Molecule::from_rust(editor.build()))
             .ok_or_else(consumed_editor_error)
     }
 

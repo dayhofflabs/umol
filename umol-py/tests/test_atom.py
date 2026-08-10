@@ -11,7 +11,7 @@ from umol import (
     IsotopeMass,
     IsotopeMassForm,
     MemOp,
-    MoleculeAst,
+    Molecule,
     ParseError,
     UnpairedElectronsForm,
     UnpairedElectronsUpdate,
@@ -103,7 +103,7 @@ def test_atom_update_parse_error():
 
 
 def carbon_oxygen():
-    return MoleculeAst.from_entries(
+    return Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O"))]
     )
 
@@ -260,7 +260,7 @@ def test_atomview_constraints():
         Element("C"),
         constraints=AtomConstraintsForm([AtomConstraintForm.Valence(NumForm.Lit(4))]),
     )
-    mol = MoleculeAst.from_entries([atom])
+    mol = Molecule.from_entries([atom])
     assert len(mol.atoms[0].constraints) == 1
 
 
@@ -343,7 +343,7 @@ def test_molecule_atoms_iter():
 def test_atomview_charge_through_handle():
     atom = AtomForm(Element("C"))
     atom.charge = NumForm.Lit(-1)
-    mol = MoleculeAst.from_entries([atom])
+    mol = Molecule.from_entries([atom])
     assert mol.atoms[0].charge == NumForm.Lit(-1)
 
 
@@ -377,44 +377,44 @@ def test_atomast_parse_error():
 
 
 def test_atomview_set_charge():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].charge = NumForm.Lit(-1)
     # a fresh view re-reads the molecule, proving the write landed on it
     assert mol.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_atomview_set_charge_int_literal():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].charge = -1
     assert mol.atoms[0].charge == NumForm.Lit(-1)
 
 
 def test_atomview_set_element():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].element = Element("N")
     assert mol.atoms[0].element == ElementForm.Lit(Element("N"))
 
 
 def test_atomview_set_isotope_mass():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].isotope_mass = 13
     assert mol.atoms[0].isotope_mass == IsotopeMassForm.Lit(13)
 
 
 def test_atomview_set_implicit_hydrogens():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].implicit_hydrogens = NumForm.Lit(3)
     assert mol.atoms[0].implicit_hydrogens == NumForm.Lit(3)
 
 
 def test_atomview_set_lone_pairs():
-    mol = MoleculeAst.from_entries([AtomForm(Element("O"))])
+    mol = Molecule.from_entries([AtomForm(Element("O"))])
     mol.atoms[0].lone_pairs = NumForm.Lit(2)
     assert mol.atoms[0].lone_pairs == NumForm.Lit(2)
 
 
 def test_atomview_set_unpaired_electrons():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].unpaired_electrons = UnpairedElectronsForm(1, 2)
     unpaired_electrons = mol.atoms[0].unpaired_electrons
     assert unpaired_electrons.count._0 == 1
@@ -459,13 +459,13 @@ def test_unpairedelectronsast_eq_repr():
 
 
 def test_atomview_repr():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
+    mol = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
     assert repr(mol.atoms[0]) == "AtomView(id=0)"
     assert repr(mol.atoms) == "AtomViews(len=2)"
 
 
 def test_atomview_asdict():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"), charge=NumForm.Lit(-1))])
+    mol = Molecule.from_entries([AtomForm(Element("C"), charge=NumForm.Lit(-1))])
     d = mol.atoms[0].asdict()
     assert set(d.keys()) == {
         "element",
@@ -482,7 +482,7 @@ def test_atomview_asdict():
 
 
 def test_atomview_set_constraints():
-    mol = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    mol = Molecule.from_entries([AtomForm(Element("C"))])
     mol.atoms[0].constraints = AtomConstraintsForm([AtomConstraintForm.Degree(NumForm.Lit(2))])
     assert len(mol.atoms[0].constraints) == 1
     assert mol.atoms[0].constraints.get(AtomConstraintKey.Degree()) == AtomConstraintForm.Degree(

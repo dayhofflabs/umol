@@ -16,7 +16,7 @@ use crate::bond::BondForm;
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::stereo::{CisTransStereoForm, CisTransStereoLike};
 
@@ -528,7 +528,7 @@ pub(crate) fn bond_constraints_asdict<'py>(
 /// index) or a standalone `BondForm`.
 pub(crate) enum BondConstraintsBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),
@@ -802,7 +802,7 @@ impl BondConstraintsView {
 /// molecule, a standalone `BondForm`, or a standalone `BondConstraintsForm` value.
 pub(crate) enum BondRingSizeBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrBondId,
     },
     Bond(Py<BondForm>),

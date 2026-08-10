@@ -21,11 +21,11 @@ from umol import (
     InvalidStructureError,
     MetadataError,
     ModelConversionError,
-    MoleculeAst,
+    Molecule,
     MoleculeCorrespondence,
     ParseError,
     ReactionApplicationConfig,
-    ReactionAst,
+    Reaction,
     ReactionCompositionConfig,
     ReactionDefaults,
     ReactionDerivation,
@@ -221,24 +221,24 @@ def test_return_only_value_constructor_error(value_type, message):
 
 
 def test_reactionast_constructor():
-    empty = ReactionAst()
-    populated = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+    empty = Reaction()
+    populated = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]),
     )
 
-    assert empty.lhs == MoleculeAst()
+    assert empty.lhs == Molecule()
     assert empty.deltas == Deltas()
-    assert populated.lhs == MoleculeAst.from_entries([AtomForm(Element("C"))])
+    assert populated.lhs == Molecule.from_entries([AtomForm(Element("C"))])
     assert populated.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]
     )
 
 
 def test_reactionast_constructor_snapshot():
-    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    lhs = Molecule.from_entries([AtomForm(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))])
-    reaction = ReactionAst(lhs, deltas)
+    reaction = Reaction(lhs, deltas)
 
     lhs.atoms[0].charge = 1
     deltas.append(Delta.Atom(AtomDelta.Add(id=2, attributes=AtomForm(Element("N")))))
@@ -252,8 +252,8 @@ def test_reactionast_constructor_snapshot():
 
 
 def test_reactionast_components():
-    reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+    reaction = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas(),
     )
 
@@ -271,8 +271,8 @@ def test_reactionast_components():
 
 
 def test_reactionast_component_replacement():
-    reaction = ReactionAst()
-    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    reaction = Reaction()
+    lhs = Molecule.from_entries([AtomForm(Element("C"))])
     deltas = Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))])
 
     reaction.lhs = lhs
@@ -289,11 +289,11 @@ def test_reactionast_component_replacement():
 
 
 def test_reactionast_component_replacement_self():
-    reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+    reaction = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]),
     )
-    expected = ReactionAst(reaction.lhs, reaction.deltas)
+    expected = Reaction(reaction.lhs, reaction.deltas)
 
     reaction.lhs = reaction.lhs
     reaction.deltas = reaction.deltas
@@ -302,15 +302,15 @@ def test_reactionast_component_replacement_self():
 
 
 def test_reactionast_value():
-    reaction = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"))]),
+    reaction = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"))]),
         Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]),
     )
 
-    assert reaction == ReactionAst(reaction.lhs, reaction.deltas)
-    assert reaction != ReactionAst()
+    assert reaction == Reaction(reaction.lhs, reaction.deltas)
+    assert reaction != Reaction()
     assert repr(reaction) == (
-        "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), "
+        "Reaction(lhs=Molecule(atoms=1, bonds=0), "
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
         "id=1, attributes=AtomForm.parse('O')))]))"
     )
@@ -360,10 +360,10 @@ def test_reactiondefaults_value(value, expected, expected_repr):
     ],
 )
 def test_reactionast_parse(text):
-    first = ReactionAst.parse(text)
+    first = Reaction.parse(text)
 
     canonical = str(first)
-    second = ReactionAst.parse(canonical)
+    second = Reaction.parse(canonical)
 
     assert second == first
     assert str(second) == canonical
@@ -372,13 +372,13 @@ def test_reactionast_parse(text):
 
 
 def test_reactionast_parse_defaults():
-    reaction = ReactionAst.parse(
+    reaction = Reaction.parse(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
         defaults=ReactionDefaults.ground(),
     )
 
-    assert reaction == ReactionAst.parse(
+    assert reaction == Reaction.parse(
         '{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} '
         ":deltas [{:atom {:add "
         '"O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}'
@@ -390,17 +390,17 @@ def test_reactionast_parse_error():
         ParseError,
         match="^EDN parse: unexpected token 'n' at byte 0$",
     ):
-        ReactionAst.parse("not edn")
+        Reaction.parse("not edn")
 
 
 def test_reactionast_parse_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.parse\\(\\) takes 1 positional arguments but 2 were given$"
+            "^Reaction.parse\\(\\) takes 1 positional arguments but 2 were given$"
         ),
     ):
-        ReactionAst.parse(
+        Reaction.parse(
             '{:lhs {:atoms ["C"]} :deltas []}',
             ReactionDefaults.ground(),
         )
@@ -488,10 +488,10 @@ def test_reactionast_parse_keyword_error():
     ],
 )
 def test_reactionast_parse_with_metadata(source, lhs_entity, delta_entity):
-    reaction, metadata = ReactionAst.parse_with_metadata(source)
+    reaction, metadata = Reaction.parse_with_metadata(source)
 
     rendered = reaction.render_with_metadata(metadata)
-    reparsed, reparsed_metadata = ReactionAst.parse_with_metadata(rendered)
+    reparsed, reparsed_metadata = Reaction.parse_with_metadata(rendered)
 
     assert metadata.lhs.keyword(lhs_entity) == "lhs"
     assert metadata.lhs.entity("lhs") == lhs_entity
@@ -509,9 +509,9 @@ def test_reactionast_parse_with_metadata_aliases():
         ':deltas [{:atom {:add [:added :delta-o]}}]}'
     )
 
-    reaction, metadata = ReactionAst.parse_with_metadata(source)
+    reaction, metadata = Reaction.parse_with_metadata(source)
     rendered = reaction.render_with_metadata(metadata)
-    reparsed, reparsed_metadata = ReactionAst.parse_with_metadata(rendered)
+    reparsed, reparsed_metadata = Reaction.parse_with_metadata(rendered)
 
     assert repr(metadata.lhs) == (
         "MoleculeMetadata(keywords=[], atom_alias_count=1)"
@@ -528,14 +528,14 @@ def test_reactionast_parse_with_metadata_aliases():
 
 
 def test_reactionast_parse_with_metadata_defaults():
-    reaction, metadata = ReactionAst.parse_with_metadata(
+    reaction, metadata = Reaction.parse_with_metadata(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
         defaults=ReactionDefaults.ground(),
     )
 
-    assert reaction == ReactionAst(
-        MoleculeAst.from_entries(
+    assert reaction == Reaction(
+        Molecule.from_entries(
             [
                 AtomForm.parse(
                     "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
@@ -562,11 +562,11 @@ def test_reactionast_parse_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.parse_with_metadata\\(\\) takes 1 positional "
+            "^Reaction.parse_with_metadata\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
-        ReactionAst.parse_with_metadata(
+        Reaction.parse_with_metadata(
             '{:lhs {:atoms ["C"]} :deltas []}',
             ReactionDefaults.ground(),
         )
@@ -576,8 +576,8 @@ def test_reactionast_parse_with_metadata_keyword_error():
     ("reaction", "defaults", "expected"),
     [
         pytest.param(
-            ReactionAst(
-                MoleculeAst.from_entries([AtomForm(Element("C"))]),
+            Reaction(
+                Molecule.from_entries([AtomForm(Element("C"))]),
                 Deltas(
                     [
                         Delta.Atom(
@@ -595,8 +595,8 @@ def test_reactionast_parse_with_metadata_keyword_error():
             id="required",
         ),
         pytest.param(
-            ReactionAst(
-                MoleculeAst.from_entries(
+            Reaction(
+                Molecule.from_entries(
                     [
                         AtomForm.parse(
                             "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"
@@ -630,13 +630,13 @@ def test_reactionast_render(reaction, defaults, expected):
 def test_reactionast_render_keyword_error():
     with pytest.raises(
         TypeError,
-        match="^ReactionAst.render\\(\\) takes 0 positional arguments but 1 was given$",
+        match="^Reaction.render\\(\\) takes 0 positional arguments but 1 was given$",
     ):
-        ReactionAst().render(ReactionDefaults())
+        Reaction().render(ReactionDefaults())
 
 
 def test_reactionast_render_with_metadata():
-    reaction, metadata = ReactionAst.parse_with_metadata(
+    reaction, metadata = Reaction.parse_with_metadata(
         '{:lhs {:atoms [[:carbon "C"] [:oxygen "O"]]} '
         ':deltas [{:atom {:add [:nitrogen "N"]}}]}'
     )
@@ -661,8 +661,8 @@ def test_reactionast_render_with_metadata_error():
             "^metadata entity is not introduced by an add delta: atom 1$"
         ),
     ):
-        ReactionAst(
-            MoleculeAst.from_entries([AtomForm(Element("C"))]),
+        Reaction(
+            Molecule.from_entries([AtomForm(Element("C"))]),
         ).render_with_metadata(metadata)
 
 
@@ -670,30 +670,30 @@ def test_reactionast_render_with_metadata_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.render_with_metadata\\(\\) takes 1 positional "
+            "^Reaction.render_with_metadata\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
-        ReactionAst().render_with_metadata(
+        Reaction().render_with_metadata(
             ReactionMetadata(),
             ReactionDefaults(),
         )
 
 
 def test_reactionast_from_sides():
-    lhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
-    rhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
-    lhs_snapshot = MoleculeAst.from_entries(
+    lhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
+    rhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
+    lhs_snapshot = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("O"))]
     )
-    rhs_snapshot = MoleculeAst.from_entries(
+    rhs_snapshot = Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
 
     atom_correspondence = Correspondence([(0, 0)], 2, 2)
-    reaction = ReactionAst.from_sides(lhs, rhs, atom_correspondence)
+    reaction = Reaction.from_sides(lhs, rhs, atom_correspondence)
 
-    assert reaction == ReactionAst(
+    assert reaction == Reaction(
         lhs_snapshot,
         Deltas(
             [
@@ -705,14 +705,14 @@ def test_reactionast_from_sides():
     assert lhs == lhs_snapshot
     assert rhs == rhs_snapshot
     assert reaction.lhs is not lhs
-    assert ReactionAst.from_sides(lhs, rhs, atom_correspondence) == reaction
+    assert Reaction.from_sides(lhs, rhs, atom_correspondence) == reaction
 
 
 def test_reactionast_from_sides_snapshot():
-    lhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
-    rhs = MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
-    reaction = ReactionAst.from_sides(lhs, rhs, Correspondence([(0, 0)], 2, 2))
-    expected = ReactionAst(reaction.lhs, reaction.deltas)
+    lhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))])
+    rhs = Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("N"))])
+    reaction = Reaction.from_sides(lhs, rhs, Correspondence([(0, 0)], 2, 2))
+    expected = Reaction(reaction.lhs, reaction.deltas)
 
     lhs.atoms[0].charge = 1
     rhs.atoms[0].charge = -1
@@ -732,15 +732,15 @@ def test_reactionast_from_sides_snapshot():
 
 
 def test_reactionast_from_sides_error():
-    lhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
-    rhs = MoleculeAst.from_entries([AtomForm(Element("C"))])
+    lhs = Molecule.from_entries([AtomForm(Element("C"))])
+    rhs = Molecule.from_entries([AtomForm(Element("C"))])
     atom_correspondence = Correspondence([(0, 0)], 2, 1)
 
     with pytest.raises(
         ValueError,
         match="^atom correspondence is incompatible with the reaction sides$",
     ):
-        ReactionAst.from_sides(lhs, rhs, atom_correspondence)
+        Reaction.from_sides(lhs, rhs, atom_correspondence)
 
 
 @pytest.mark.parametrize(
@@ -768,23 +768,23 @@ def test_reactionast_from_sides_error():
         ),
     ],
 )
-def test_reaction_ast_from_reaction_smiles(source, expected):
-    assert ReactionAst.from_reaction_smiles(source) == ReactionAst.parse(expected)
+def test_reaction_from_reaction_smiles(source, expected):
+    assert Reaction.from_reaction_smiles(source) == Reaction.parse(expected)
 
 
-def test_reaction_ast_from_reaction_smiles_io_config():
+def test_reaction_from_reaction_smiles_io_config():
     with pytest.raises(
         UnderdeterminedError,
         match="^reactants: resolution underdetermined$",
     ):
-        ReactionAst.from_reaction_smiles(
+        Reaction.from_reaction_smiles(
             "C~C>>C.C",
             io_config=SmilesIoConfig.lenient(),
         )
 
 
-def test_reaction_ast_from_reaction_smiles_resolve_config():
-    reaction = ReactionAst.from_reaction_smiles(
+def test_reaction_from_reaction_smiles_resolve_config():
+    reaction = Reaction.from_reaction_smiles(
         "[cH+:1]1[cH:2][cH:3]1>>[cH+:1]1[cH:2][cH:3]1",
         resolve_config=ResolveConfig(
             aromaticity=AromaticityResolveConfig(
@@ -794,7 +794,7 @@ def test_reaction_ast_from_reaction_smiles_resolve_config():
         ),
     )
 
-    assert reaction == ReactionAst.parse(
+    assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:aromatic-systems '
         '[{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] '
         ':atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" '
@@ -852,10 +852,10 @@ def test_reaction_ast_from_reaction_smiles_resolve_config():
         ),
     ],
 )
-def test_reaction_ast_from_reaction_smiles_aromaticity_policy(source, expected):
+def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
     default = ChemistryModel.default()
 
-    assert ReactionAst.from_reaction_smiles(
+    assert Reaction.from_reaction_smiles(
         source,
         chemistry_model=ChemistryModel(
             valence=default.valence,
@@ -868,7 +868,7 @@ def test_reaction_ast_from_reaction_smiles_aromaticity_policy(source, expected):
             ),
             stereo=StereoResolveConfig(),
         ),
-    ) == ReactionAst.parse(expected)
+    ) == Reaction.parse(expected)
 
 
 @pytest.mark.parametrize(
@@ -987,36 +987,36 @@ def test_reaction_ast_from_reaction_smiles_aromaticity_policy(source, expected):
             "C>O>C",
             {},
             ModelConversionError,
-            "reaction agents cannot be represented in ReactionAst",
+            "reaction agents cannot be represented in Reaction",
             id="agents",
         ),
     ],
 )
-def test_reaction_ast_from_reaction_smiles_error(
+def test_reaction_from_reaction_smiles_error(
     source,
     kwargs,
     error_type,
     message,
 ):
     with pytest.raises(error_type, match=f"^{re.escape(message)}$"):
-        ReactionAst.from_reaction_smiles(source, **kwargs)
+        Reaction.from_reaction_smiles(source, **kwargs)
 
 
-def test_reaction_ast_from_reaction_smiles_keyword_error():
+def test_reaction_from_reaction_smiles_keyword_error():
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.from_reaction_smiles\\(\\) takes 1 positional "
+            "^Reaction.from_reaction_smiles\\(\\) takes 1 positional "
             "arguments but 2 were given$"
         ),
     ):
-        ReactionAst.from_reaction_smiles(
+        Reaction.from_reaction_smiles(
             "C>>C",
             SmilesIoConfig.opensmiles(),
         )
 
 
-def test_reaction_ast_from_reaction_smiles_ownership():
+def test_reaction_from_reaction_smiles_ownership():
     source = "[CH4:1]>>[CH4:1]"
     io_config = SmilesIoConfig.opensmiles()
     chemistry_model = ChemistryModel.default()
@@ -1024,7 +1024,7 @@ def test_reaction_ast_from_reaction_smiles_ownership():
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
     )
-    reaction = ReactionAst.from_reaction_smiles(
+    reaction = Reaction.from_reaction_smiles(
         source,
         io_config=io_config,
         chemistry_model=chemistry_model,
@@ -1033,14 +1033,14 @@ def test_reaction_ast_from_reaction_smiles_ownership():
 
     del source, io_config, chemistry_model, resolve_config
 
-    assert reaction == ReactionAst.parse(
+    assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:atoms '
         '["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}'
     )
 
 
 def test_reactionast_str_components():
-    reaction = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}')
+    reaction = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
 
     reaction.lhs.atoms[0].charge = 1
     reaction.deltas.append(Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O")))))
@@ -1053,18 +1053,18 @@ def test_reactionast_str_components():
 
 
 def test_reactionast_parse_repr():
-    reaction = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}')
+    reaction = Reaction.parse('{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}')
 
     assert repr(reaction) == (
-        "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), "
+        "Reaction(lhs=Molecule(atoms=1, bonds=0), "
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
         "id=1, attributes=AtomForm.parse('O')))]))"
     )
 
 
 def test_reactionast_canonicalize():
-    source = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"), charge=0)]),
+    source = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1086,7 +1086,7 @@ def test_reactionast_canonicalize():
             ]
         ),
     )
-    snapshot = ReactionAst(source.lhs, source.deltas)
+    snapshot = Reaction(source.lhs, source.deltas)
 
     canonical = source.canonicalize()
 
@@ -1114,8 +1114,8 @@ def test_reactionast_canonicalize():
 
 
 def test_reactionast_canonicalize_error():
-    source = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C"), charge=0)]),
+    source = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"), charge=0)]),
         Deltas(
             [
                 Delta.Atom(
@@ -1137,7 +1137,7 @@ def test_reactionast_canonicalize_error():
             ]
         ),
     )
-    snapshot = ReactionAst(source.lhs, source.deltas)
+    snapshot = Reaction(source.lhs, source.deltas)
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         source.canonicalize()
@@ -1146,8 +1146,8 @@ def test_reactionast_canonicalize_error():
 
 
 def test_reactionast_canonical_eq():
-    source = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
+    source = Reaction(
+        Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1169,8 +1169,8 @@ def test_reactionast_canonical_eq():
             ]
         ),
     )
-    reordered = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
+    reordered = Reaction(
+        Molecule.from_entries([AtomForm(Element("C")), AtomForm(Element("O"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1192,8 +1192,8 @@ def test_reactionast_canonical_eq():
             ]
         ),
     )
-    renumbered = ReactionAst(
-        MoleculeAst.from_entries([AtomForm(Element("O")), AtomForm(Element("C"))]),
+    renumbered = Reaction(
+        Molecule.from_entries([AtomForm(Element("O")), AtomForm(Element("C"))]),
         Deltas(
             [
                 Delta.Atom(
@@ -1222,15 +1222,15 @@ def test_reactionast_canonical_eq():
 
 
 def test_reactionast_reverse():
-    source = ReactionAst.parse(
+    source = Reaction.parse(
         '{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}'
     )
-    snapshot = ReactionAst(source.lhs, source.deltas)
+    snapshot = Reaction(source.lhs, source.deltas)
 
     reversed_reaction = source.reverse()
     roundtrip = reversed_reaction.reverse()
 
-    assert reversed_reaction.lhs == MoleculeAst.from_entries(
+    assert reversed_reaction.lhs == Molecule.from_entries(
         [AtomForm(Element("C")), AtomForm(Element("N"))]
     )
     assert roundtrip.canonicalize() == source.canonicalize()
@@ -1304,32 +1304,32 @@ def test_reactionast_reverse():
         ),
     ],
 )
-def test_reaction_ast_compose(config, first, second, expected):
-    first = ReactionAst.parse(first)
-    second = ReactionAst.parse(second)
+def test_reaction_compose(config, first, second, expected):
+    first = Reaction.parse(first)
+    second = Reaction.parse(second)
 
     composites = first.compose(
         second,
         config=config,
     )
 
-    expected = [ReactionAst.parse(reaction) for reaction in expected]
+    expected = [Reaction.parse(reaction) for reaction in expected]
     assert len(composites) == len(expected)
     for reaction in expected:
         assert reaction in composites
 
 
-def test_reaction_ast_compose_default():
-    first = ReactionAst.parse(
+def test_reaction_compose_default():
+    first = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
-    second = ReactionAst.parse(
+    second = Reaction.parse(
         '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
-    fused = ReactionAst.parse(
+    fused = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
-    disjoint = ReactionAst.parse(
+    disjoint = Reaction.parse(
         '{:lhs {:atoms ["C#c0" "C#c+"]} :deltas '
         '[{:atom {:modify [0 "#c+"]}} '
         '{:atom {:modify [1 "#c+2"]}}]}'
@@ -1352,13 +1352,13 @@ def test_reaction_ast_compose_default():
         assert reaction in omitted
 
 
-def test_reaction_ast_compose_error():
-    first = ReactionAst()
-    second = ReactionAst()
+def test_reaction_compose_error():
+    first = Reaction()
+    second = Reaction()
 
     with pytest.raises(
         TypeError,
-        match="^ReactionAst.compose\\(\\) got an unexpected keyword argument 'algorithm'$",
+        match="^Reaction.compose\\(\\) got an unexpected keyword argument 'algorithm'$",
     ):
         first.compose(
             second,
@@ -1366,15 +1366,15 @@ def test_reaction_ast_compose_error():
         )
 
 
-def test_reaction_ast_compose_snapshot():
-    first = ReactionAst.parse(
+def test_reaction_compose_snapshot():
+    first = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
-    second = ReactionAst.parse(
+    second = Reaction.parse(
         '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
-    first_snapshot = ReactionAst(first.lhs, first.deltas)
-    second_snapshot = ReactionAst(second.lhs, second.deltas)
+    first_snapshot = Reaction(first.lhs, first.deltas)
+    second_snapshot = Reaction(second.lhs, second.deltas)
 
     first.compose(first)
     composites = first.compose(second)
@@ -1405,14 +1405,14 @@ def test_reaction_ast_compose_snapshot():
 
 
 def test_reactionast_apply():
-    reaction = ReactionAst.parse(
+    reaction = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
-    host = ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
-    reaction_snapshot = ReactionAst(reaction.lhs, reaction.deltas)
-    host_snapshot = ReactionAst(host).lhs
-    first_product = ReactionAst.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs
-    second_product = ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs
+    host = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
+    reaction_snapshot = Reaction(reaction.lhs, reaction.deltas)
+    host_snapshot = Reaction(host).lhs
+    first_product = Reaction.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs
+    second_product = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs
 
     application = reaction.apply(host)
 
@@ -1447,7 +1447,7 @@ def test_reactionast_apply():
     assert first.atom_correspondence is not atom_correspondence
     assert atom_correspondence == comap.atoms
     assert (
-        ReactionAst.from_sides(first.lhs, first.rhs, atom_correspondence)
+        Reaction.from_sides(first.lhs, first.rhs, atom_correspondence)
         == first.to_reaction()
     )
     assert comap.atoms.matched_pairs == [(0, 0), (1, 1)]
@@ -1486,7 +1486,7 @@ def test_reactionast_apply():
     assert reversed_first.rhs == host_snapshot
     assert reversed_first.reverse() == first
 
-    second_step = ReactionAst.parse(
+    second_step = Reaction.parse(
         '{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
     config = ReactionApplicationConfig(
@@ -1495,7 +1495,7 @@ def test_reactionast_apply():
     )
     following = next(second_step.apply(first.rhs, config=config))
     chained = first.chain(following)
-    chained_product = ReactionAst.parse(
+    chained_product = Reaction.parse(
         '{:lhs {:atoms ["C#c+2" "C#c0"]} :deltas []}'
     ).lhs
 
@@ -1504,7 +1504,7 @@ def test_reactionast_apply():
     assert first.rhs == first_product
     assert following.lhs == first_product
 
-    expected_reaction = ReactionAst.parse(
+    expected_reaction = Reaction.parse(
         '{:lhs {:atoms ["C#c0" "C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}'
     )
     recovered = chained.to_reaction()
@@ -1522,7 +1522,7 @@ def test_reactionast_apply():
     assert chained.lhs == host_snapshot
     assert chained.rhs == chained_product
 
-    zero = ReactionAst.parse('{:lhs {:atoms ["N"]} :deltas []}').apply(host_snapshot)
+    zero = Reaction.parse('{:lhs {:atoms ["N"]} :deltas []}').apply(host_snapshot)
 
     assert iter(zero) is zero
     assert list(zero) == []
@@ -1550,14 +1550,14 @@ def test_reactionast_apply():
         ),
     ],
 )
-def test_reaction_ast_apply_config(config):
-    reaction = ReactionAst.parse(
+def test_reaction_apply_config(config):
+    reaction = Reaction.parse(
         '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
-    host = ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
+    host = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
     expected = [
-        ReactionAst.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs,
-        ReactionAst.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["C#c+" "C#c0"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["C#c0" "C#c+"]} :deltas []}').lhs,
     ]
 
     application = (
@@ -1567,23 +1567,23 @@ def test_reaction_ast_apply_config(config):
     assert [derivation.rhs for derivation in application] == expected
 
 
-def test_reaction_ast_apply_config_error():
+def test_reaction_apply_config_error():
     with pytest.raises(TypeError):
-        ReactionAst().apply(MoleculeAst(), ReactionApplicationConfig())
+        Reaction().apply(Molecule(), ReactionApplicationConfig())
 
 
-def test_reaction_ast_apply_rejection():
-    reaction = ReactionAst.parse(
+def test_reaction_apply_rejection():
+    reaction = Reaction.parse(
         '{:lhs {:atoms ["C"]} :deltas [{:atom {:remove 0}}]}'
     )
-    host = ReactionAst.parse(
+    host = Reaction.parse(
         '{:lhs {:atoms ["C" "C" "C" "O"] :bonds [[1 3 "1"]]} :deltas []}'
     ).lhs
     expected = [
-        ReactionAst.parse(
+        Reaction.parse(
             '{:lhs {:atoms ["C" "C" "O"] :bonds [[0 2 "1"]]} :deltas []}'
         ).lhs,
-        ReactionAst.parse(
+        Reaction.parse(
             '{:lhs {:atoms ["C" "C" "O"] :bonds [[1 2 "1"]]} :deltas []}'
         ).lhs,
     ]
@@ -1591,9 +1591,9 @@ def test_reaction_ast_apply_rejection():
     assert [derivation.rhs for derivation in reaction.apply(host)] == expected
 
 
-def test_reaction_ast_apply_precondition_error():
-    reaction = ReactionAst()
-    host = ReactionAst.parse(
+def test_reaction_apply_precondition_error():
+    reaction = Reaction()
+    host = Reaction.parse(
         '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
     ).lhs
 
@@ -1607,13 +1607,13 @@ def test_reaction_ast_apply_precondition_error():
         reaction.apply(host)
 
 
-def test_reaction_ast_apply_iteration_error():
-    reaction = ReactionAst.parse(
+def test_reaction_apply_iteration_error():
+    reaction = Reaction.parse(
         "{:lhs {:atoms [\"C\"] "
         ":constraints [{:charge-sum {:atoms [0] :sum 0}}]} "
         ":deltas [{:constraint {:remove {:charge-sum {:atoms [0] :sum 0}}}}]}"
     )
-    host = ReactionAst.parse('{:lhs {:atoms ["C"]} :deltas []}').lhs
+    host = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}').lhs
 
     application = reaction.apply(host)
 
@@ -1629,20 +1629,20 @@ def test_reaction_ast_apply_iteration_error():
 
 
 def test_reactionast_workflow():
-    lhs = ReactionAst.parse(
+    lhs = Reaction.parse(
         '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} '
         ":deltas []}"
     ).lhs
-    rhs = ReactionAst.parse(
+    rhs = Reaction.parse(
         '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
         ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th0"}] '
         ":constraints [{:connected {}}]} :deltas []}"
     ).lhs
-    lhs_snapshot = ReactionAst(lhs).lhs
-    rhs_snapshot = ReactionAst(rhs).lhs
-    expected_forward = ReactionAst.parse(
+    lhs_snapshot = Reaction(lhs).lhs
+    rhs_snapshot = Reaction(rhs).lhs
+    expected_forward = Reaction.parse(
         "{:deltas ["
         "{:stereo-atom {:add {:ligands [1 2 3 4] :site 0 :type :ccw}}} "
         "{:constraint {:add {:connected {}}}}] "
@@ -1651,7 +1651,7 @@ def test_reactionast_workflow():
         "[0 4 :single]]}}"
     )
 
-    reaction = ReactionAst.from_sides(
+    reaction = Reaction.from_sides(
         lhs,
         rhs,
         Correspondence([(atom_id, atom_id) for atom_id in range(5)], 5, 5),
@@ -1687,7 +1687,7 @@ def test_reactionast_workflow():
     )
     assert normalized == expected_forward
 
-    parsed = ReactionAst.parse(rendered)
+    parsed = Reaction.parse(rendered)
 
     assert parsed == expected_forward
     assert normalized == expected_forward
@@ -1701,7 +1701,7 @@ def test_reactionast_workflow():
 
     assert parsed == expected_forward
 
-    expected_reverse = ReactionAst.parse(
+    expected_reverse = Reaction.parse(
         "{:deltas ["
         "{:stereo-atom {:remove 0}} "
         "{:constraint {:remove {:connected {}}}}] "
@@ -1722,11 +1722,11 @@ def test_reactionast_workflow():
 
     assert reversed_reaction == expected_reverse
 
-    second = ReactionAst.parse(
+    second = Reaction.parse(
         '{:lhs {:atoms ["Xe#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
     )
-    second_snapshot = ReactionAst(second.lhs, second.deltas)
-    expected_composite = ReactionAst.parse(
+    second_snapshot = Reaction(second.lhs, second.deltas)
+    expected_composite = Reaction.parse(
         "{:deltas ["
         '{:atom {:modify [5 "#c+"]}} '
         "{:stereo-atom {:remove 0}} "

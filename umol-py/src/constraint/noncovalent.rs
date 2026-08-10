@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::noncovalent::NoncovalentBondForm;
 
 /// The key (identity) of a noncovalent-bond constraint, for keyed lookup. The single
@@ -552,7 +552,7 @@ impl NoncovalentBondConstraintsLike {
 /// a molecule (by index) or a standalone `NoncovalentBondForm`.
 pub(crate) enum NoncovalentBondConstraintsBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrNoncovalentBondId,
     },
     Noncovalent(Py<NoncovalentBondForm>),

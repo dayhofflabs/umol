@@ -6,7 +6,7 @@ from umol import (
     CisTransStereo,
     CisTransStereoForm,
     Element,
-    MoleculeAst,
+    Molecule,
     ParseError,
     Permutation,
     StereoAtomForm,
@@ -345,7 +345,7 @@ def test_cistransconfiguration_enum():
 
 def stereo_atom_molecule():
     # a tetrahedral stereocenter on atom 0 with four atom ligands (atoms 1-4)
-    return MoleculeAst.from_entries(
+    return Molecule.from_entries(
         [AtomForm(Element("C")) for _ in range(5)],
         stereo_atoms=[
             (
@@ -472,5 +472,5 @@ def test_stereoatomviews_setitem():
 
 def test_molecule_repr_stereo():
     assert repr(stereo_atom_molecule()) == (
-        "MoleculeAst(atoms=5, bonds=0, stereo_atoms=1)"
+        "Molecule(atoms=5, bonds=0, stereo_atoms=1)"
     )

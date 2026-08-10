@@ -29,7 +29,7 @@ use crate::convert::{hash_rust, variant_repr};
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 
 /// A noncovalent interaction kind. A fieldless, hashable value enum whose members
 /// value the Rust `NoncovalentBondKind` exactly.
@@ -380,7 +380,7 @@ impl_py_lattice!(
 /// constraints are the mutable bond value.
 #[pyclass]
 pub struct NoncovalentBondView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrNoncovalentBondId,
 }
 
@@ -506,7 +506,7 @@ fn resolve_noncovalent_bond_index(
 /// The noncovalent bonds of a molecule, indexed by integer position.
 #[pyclass]
 pub struct NoncovalentBondViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -599,14 +599,14 @@ impl NoncovalentBondViews {
 
 impl NoncovalentBondViews {
     /// Build the noncovalent-bond-views handle for `owner` (the `.noncovalent_bonds` accessor).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> NoncovalentBondViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> NoncovalentBondViews {
         NoncovalentBondViews { owner }
     }
 }
 
 #[pyclass]
 struct NoncovalentBondViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrNoncovalentBondId>,
 }
 
@@ -1322,7 +1322,7 @@ mod tests {
     }
 
     /// A molecule of two oxygens with one hydrogen bond over atoms (0, 1), noncovalent id 0.
-    fn molecule_with_hbond(py: Python<'_>) -> Py<MoleculeAst> {
+    fn molecule_with_hbond(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
@@ -1335,7 +1335,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1509,7 +1509,7 @@ mod tests {
 
     /// Three atoms, one hydrogen bond over (0, 1), atom 2 isolated. For the collection
     /// negative cases (`of` / `incident` with no bond).
-    fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<MoleculeAst> {
+    fn molecule_with_hbond_and_isolated(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::O),
@@ -1523,7 +1523,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]

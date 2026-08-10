@@ -20,7 +20,7 @@ use crate::convert::hash_rust;
 use crate::entity::EntityForm;
 use crate::error::parse_error;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 
@@ -342,7 +342,7 @@ impl_py_lattice!(
 /// index. Field reads rebuild the transient Rust view; the molecule is never copied.
 #[pyclass]
 pub struct BondView {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     id: GraphIrBondId,
 }
 
@@ -497,7 +497,7 @@ fn resolve_bond_index(molecule: &GraphIrMolecule, index: isize) -> PyResult<Grap
 /// The bonds of a molecule, indexed by integer position.
 #[pyclass]
 pub struct BondViews {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
 }
 
 #[pymethods]
@@ -561,14 +561,14 @@ impl BondViews {
 
 impl BondViews {
     /// Build the bond-views handle for `owner` (the `.bonds` accessor on the molecule).
-    pub(crate) fn new(owner: Py<MoleculeAst>) -> BondViews {
+    pub(crate) fn new(owner: Py<Molecule>) -> BondViews {
         BondViews { owner }
     }
 }
 
 #[pyclass]
 struct BondViewIter {
-    owner: Py<MoleculeAst>,
+    owner: Py<Molecule>,
     ids: IntoIter<GraphIrBondId>,
 }
 
@@ -606,7 +606,7 @@ mod tests {
     use crate::stereo::{CisTransConfiguration, CisTransStereoForm, CisTransStereoLike};
 
     /// A two-carbon molecule joined by one double bond (bond id 0, atoms 0–1).
-    fn ethene(py: Python<'_>) -> Py<MoleculeAst> {
+    fn ethene(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
             atoms: vec![
                 GraphIrAtomForm::from_element(ChemElement::C),
@@ -619,7 +619,7 @@ mod tests {
             )],
             ..Default::default()
         });
-        Py::new(py, MoleculeAst::from_rust(molecule)).unwrap()
+        Py::new(py, Molecule::from_rust(molecule)).unwrap()
     }
 
     #[rstest]
@@ -1541,7 +1541,7 @@ mod tests {
                 )],
                 ..Default::default()
             });
-            let owner = Py::new(py, MoleculeAst::from_rust(molecule)).unwrap();
+            let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
             let views = BondViews { owner };
             assert_eq!(views.of(py, 0, 1).unwrap().id(), 0);
             assert_eq!(views.of(py, 1, 0).unwrap().id(), 0);

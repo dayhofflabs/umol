@@ -8,9 +8,9 @@ from umol import (
     EcfpHashScheme,
     HashedFingerprintConfig,
     HashedFeatureSet,
-    MoleculeAst,
+    Molecule,
     PatternFingerprintConfig,
-    ReactionAst,
+    Reaction,
     ReactionCombinedFingerprint,
     ReactionCombinedFingerprintConfig,
     ReactionDefaults,
@@ -33,17 +33,17 @@ from umol import (
 
 @pytest.fixture
 def ethanol():
-    return MoleculeAst.from_smiles("CCO")
+    return Molecule.from_smiles("CCO")
 
 
 @pytest.fixture
 def undetermined_molecule():
-    return MoleculeAst.from_entries([AtomForm.parse("C")])
+    return Molecule.from_entries([AtomForm.parse("C")])
 
 
 @pytest.fixture
 def ethanol_deoxygenation():
-    return ReactionAst.parse(
+    return Reaction.parse(
         "{:deltas [{:atom {:remove 2}} {:bond {:remove 1}}] "
         ':lhs {:atoms ["C#h3#v#d0#t0#a!#m!" '
         '"C#h2#v2#d0#t0#a!#m!" "O#h#n2#v#d0#t0#a!#m!"] '
@@ -504,7 +504,7 @@ def test_fingerprint_result_constructor_error(result_type):
         ),
     ],
 )
-def test_molecule_ast_hashed_fingerprint(ethanol, config, expected_ids):
+def test_molecule_hashed_fingerprint(ethanol, config, expected_ids):
     fingerprint = ethanol.hashed_fingerprint(config=config)
     ids = fingerprint.ids
 
@@ -569,8 +569,8 @@ def test_molecule_ast_hashed_fingerprint(ethanol, config, expected_ids):
         ),
     ],
 )
-def test_molecule_ast_counted_hashed_fingerprint(config, expected_entries):
-    fingerprint = MoleculeAst.from_smiles("CC").counted_hashed_fingerprint(
+def test_molecule_counted_hashed_fingerprint(config, expected_entries):
+    fingerprint = Molecule.from_smiles("CC").counted_hashed_fingerprint(
         config=config
     )
     entries = fingerprint.entries
@@ -648,7 +648,7 @@ def test_molecule_ast_counted_hashed_fingerprint(config, expected_entries):
         ),
     ],
 )
-def test_molecule_ast_pattern_fingerprint(
+def test_molecule_pattern_fingerprint(
     ethanol, config, expected_width, expected_bits
 ):
     if config is None:
@@ -702,7 +702,7 @@ def test_molecule_ast_pattern_fingerprint(
         ),
     ],
 )
-def test_molecule_ast_structural_fingerprint(ethanol, config, expected_keys):
+def test_molecule_structural_fingerprint(ethanol, config, expected_keys):
     fingerprint = ethanol.structural_fingerprint(config=config)
     keys = fingerprint.keys
 
@@ -715,8 +715,8 @@ def test_molecule_ast_structural_fingerprint(ethanol, config, expected_keys):
 
 def test_hashed_feature_set_operations():
     config = HashedFingerprintConfig.Morgan()
-    ethane = MoleculeAst.from_smiles("CC").hashed_fingerprint(config=config)
-    propane = MoleculeAst.from_smiles("CCC").hashed_fingerprint(config=config)
+    ethane = Molecule.from_smiles("CC").hashed_fingerprint(config=config)
+    propane = Molecule.from_smiles("CCC").hashed_fingerprint(config=config)
     folded = ethane.fold(64)
 
     assert ethane.tanimoto(propane) == pytest.approx(0.2)
@@ -728,7 +728,7 @@ def test_hashed_feature_set_operations():
 
 
 def test_hashed_feature_set_fold_error():
-    fingerprint = MoleculeAst.from_smiles("CC").hashed_fingerprint(
+    fingerprint = Molecule.from_smiles("CC").hashed_fingerprint(
         config=HashedFingerprintConfig.Morgan()
     )
 
@@ -738,8 +738,8 @@ def test_hashed_feature_set_fold_error():
 
 def test_bit_fp_operations():
     config = PatternFingerprintConfig(width=64)
-    ethane = MoleculeAst.from_smiles("CC").pattern_fingerprint(config=config)
-    propane = MoleculeAst.from_smiles("CCC").pattern_fingerprint(config=config)
+    ethane = Molecule.from_smiles("CC").pattern_fingerprint(config=config)
+    propane = Molecule.from_smiles("CCC").pattern_fingerprint(config=config)
 
     assert [bit for bit in range(64) if ethane[bit]] == [10, 15, 20, 37, 45, 62]
     assert [bit for bit in range(64) if propane[bit]] == [
@@ -762,7 +762,7 @@ def test_bit_fp_operations():
 
 @pytest.mark.parametrize("index", [64, -65])
 def test_bit_fp_getitem_error(index):
-    fingerprint = MoleculeAst.from_smiles("CC").pattern_fingerprint(
+    fingerprint = Molecule.from_smiles("CC").pattern_fingerprint(
         config=PatternFingerprintConfig(width=64)
     )
 
@@ -772,7 +772,7 @@ def test_bit_fp_getitem_error(index):
 
 @pytest.mark.parametrize("operation", ["tanimoto", "dice", "is_subset"])
 def test_bit_fp_operations_error(operation):
-    molecule = MoleculeAst.from_smiles("CC")
+    molecule = Molecule.from_smiles("CC")
     narrow = molecule.pattern_fingerprint(config=PatternFingerprintConfig(width=64))
     wide = molecule.pattern_fingerprint(config=PatternFingerprintConfig(width=128))
 
@@ -782,8 +782,8 @@ def test_bit_fp_operations_error(operation):
 
 def test_structural_feature_set_is_subset():
     config = StructuralFingerprintConfig(max_bonds=2)
-    ethane = MoleculeAst.from_smiles("CC").structural_fingerprint(config=config)
-    propane = MoleculeAst.from_smiles("CCC").structural_fingerprint(config=config)
+    ethane = Molecule.from_smiles("CC").structural_fingerprint(config=config)
+    propane = Molecule.from_smiles("CCC").structural_fingerprint(config=config)
 
     assert ethane.is_subset(propane) is True
     assert propane.is_subset(ethane) is False
@@ -798,7 +798,7 @@ def test_structural_feature_set_is_subset():
         ("structural_fingerprint", StructuralFingerprintConfig(max_bonds=2)),
     ],
 )
-def test_molecule_ast_fingerprint_keyword_error(ethanol, method_name, config):
+def test_molecule_fingerprint_keyword_error(ethanol, method_name, config):
     with pytest.raises(TypeError):
         getattr(ethanol, method_name)(config)
 
@@ -811,7 +811,7 @@ def test_molecule_ast_fingerprint_keyword_error(ethanol, method_name, config):
         "structural_fingerprint",
     ],
 )
-def test_molecule_ast_fingerprint_required_error(ethanol, method_name):
+def test_molecule_fingerprint_required_error(ethanol, method_name):
     with pytest.raises(TypeError):
         getattr(ethanol, method_name)()
 
@@ -831,7 +831,7 @@ def test_molecule_ast_fingerprint_required_error(ethanol, method_name):
         ),
     ],
 )
-def test_molecule_ast_fingerprint_error(undetermined_molecule, method_name, kwargs):
+def test_molecule_fingerprint_error(undetermined_molecule, method_name, kwargs):
     with pytest.raises(
         UnderdeterminedError,
         match="fingerprint requires a determined molecule",
@@ -839,7 +839,7 @@ def test_molecule_ast_fingerprint_error(undetermined_molecule, method_name, kwar
         getattr(undetermined_molecule, method_name)(**kwargs)
 
 
-def test_reaction_ast_combined_fingerprint_difference(ethanol_deoxygenation):
+def test_reaction_combined_fingerprint_difference(ethanol_deoxygenation):
     expected = [
         (864662311, -1),
         (1535166686, -1),
@@ -875,7 +875,7 @@ def test_reaction_ast_combined_fingerprint_difference(ethanol_deoxygenation):
     assert all(type(count) is int for _, count in features)
 
 
-def test_reaction_ast_combined_fingerprint_disjoint_union(ethanol_deoxygenation):
+def test_reaction_combined_fingerprint_disjoint_union(ethanol_deoxygenation):
     expected = [
         (ReactionSide.Reactant, 864662311),
         (ReactionSide.Reactant, 1535166686),
@@ -904,7 +904,7 @@ def test_reaction_ast_combined_fingerprint_disjoint_union(ethanol_deoxygenation)
     assert all(type(identifier) is int for _, identifier in features)
 
 
-def test_reaction_ast_combined_fingerprint_feature_types(ethanol_deoxygenation):
+def test_reaction_combined_fingerprint_feature_types(ethanol_deoxygenation):
     molecule_config = HashedFingerprintConfig.Morgan()
     molecular_binary = ethanol_deoxygenation.lhs.hashed_fingerprint(
         config=molecule_config
@@ -935,18 +935,18 @@ def test_reaction_ast_combined_fingerprint_feature_types(ethanol_deoxygenation):
         molecular_binary.is_subset(reaction_tagged)
 
 
-def test_reaction_ast_combined_fingerprint_required_error(ethanol_deoxygenation):
+def test_reaction_combined_fingerprint_required_error(ethanol_deoxygenation):
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.combined_fingerprint\\(\\) missing 1 required keyword "
+            "^Reaction.combined_fingerprint\\(\\) missing 1 required keyword "
             "argument: 'config'$"
         ),
     ):
         ethanol_deoxygenation.combined_fingerprint()
 
 
-def test_reaction_ast_combined_fingerprint_keyword_error(ethanol_deoxygenation):
+def test_reaction_combined_fingerprint_keyword_error(ethanol_deoxygenation):
     config = ReactionCombinedFingerprintConfig.Difference(
         molecule=HashedFingerprintConfig.Morgan()
     )
@@ -954,7 +954,7 @@ def test_reaction_ast_combined_fingerprint_keyword_error(ethanol_deoxygenation):
     with pytest.raises(
         TypeError,
         match=(
-            "^ReactionAst.combined_fingerprint\\(\\) takes 0 positional arguments "
+            "^Reaction.combined_fingerprint\\(\\) takes 0 positional arguments "
             "but 1 was given$"
         ),
     ):

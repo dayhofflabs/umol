@@ -19,7 +19,7 @@ use super::ring::{RingMembershipForm, RingScope};
 use crate::atom::AtomForm;
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 use crate::stereo::{TetrahedralConfiguration, TetrahedralStereoForm};
 
@@ -1148,7 +1148,7 @@ pub(crate) fn atom_constraints_asdict<'py>(
 /// (by index) or a standalone `AtomForm`.
 pub(crate) enum AtomConstraintsBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrAtomId,
     },
     Atom(Py<AtomForm>),
@@ -1612,7 +1612,7 @@ impl AtomConstraintsView {
 /// a standalone `AtomForm`, or a standalone `AtomConstraintsForm` value.
 pub(crate) enum AtomRingSizeBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrAtomId,
     },
     Atom(Py<AtomForm>),

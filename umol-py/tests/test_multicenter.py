@@ -4,7 +4,7 @@ from umol import (
     AtomForm,
     ElectronCountsForm,
     Element,
-    MoleculeAst,
+    Molecule,
     MulticenterBondForm,
     MulticenterBondConstraintForm,
     MulticenterBondConstraintKey,
@@ -100,7 +100,7 @@ def test_multicenter_bond_update_parse_error():
 
 def three_center_bond():
     # three borons (atom ids 0-2), one 3-center multicenter bond over all three
-    return MoleculeAst.from_entries(
+    return Molecule.from_entries(
         [AtomForm(Element("B")) for _ in range(3)],
         multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
     )
@@ -339,7 +339,7 @@ def test_multicenterbondviews_of():
 
 def test_multicenterbondviews_incident():
     # three bonded borons plus one isolated boron (atom id 3)
-    mol = MoleculeAst.from_entries(
+    mol = Molecule.from_entries(
         [AtomForm(Element("B")) for _ in range(4)],
         multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
     )

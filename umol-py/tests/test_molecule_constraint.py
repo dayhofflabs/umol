@@ -2,7 +2,7 @@ from umol import (
     Constraint,
     Constraints,
     ConstraintsView,
-    MoleculeAst,
+    Molecule,
     MoleculeConstraint,
     RelationalConstraint,
     UnpairedElectronsForm,
@@ -62,14 +62,14 @@ def test_constraints_sequence():
 
 def test_moleculeast_from_entries_constraints():
     entry = connected_constraint()
-    molecule = MoleculeAst.from_entries([], constraints=[entry])
+    molecule = Molecule.from_entries([], constraints=[entry])
 
     assert isinstance(molecule.constraints, ConstraintsView)
     assert list(molecule.constraints) == [entry]
 
 
 def test_moleculeast_constraints_live_view():
-    molecule = MoleculeAst()
+    molecule = Molecule()
     view = molecule.constraints
     entry = connected_constraint()
 
@@ -81,7 +81,7 @@ def test_moleculeast_constraints_live_view():
 
 
 def test_moleculeast_constraints_set_container():
-    molecule = MoleculeAst()
+    molecule = Molecule()
     entry = connected_constraint()
 
     molecule.constraints = Constraints([entry, entry])
@@ -90,8 +90,8 @@ def test_moleculeast_constraints_set_container():
 
 
 def test_moleculeast_constraints_set_view():
-    source = MoleculeAst.from_entries([], constraints=[connected_constraint()])
-    target = MoleculeAst()
+    source = Molecule.from_entries([], constraints=[connected_constraint()])
+    target = Molecule()
 
     target.constraints = source.constraints
 
@@ -99,7 +99,7 @@ def test_moleculeast_constraints_set_view():
 
 
 def test_moleculeast_constraints_set_self():
-    molecule = MoleculeAst.from_entries([], constraints=[connected_constraint()])
+    molecule = Molecule.from_entries([], constraints=[connected_constraint()])
 
     molecule.constraints = molecule.constraints
 

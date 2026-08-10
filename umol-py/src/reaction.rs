@@ -1,4 +1,4 @@
-//! `ReactionAst` — an owned Python component facade over the Rust reaction AST.
+//! `Reaction` — an owned Python component facade over the Rust reaction AST.
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::str::FromStr;
@@ -46,8 +46,8 @@ use crate::fingerprint::reaction::ReactionCombinedFingerprint;
 use crate::lattice::impl_py_canonicalize;
 use crate::metadata::ReactionMetadata;
 use crate::model::ChemistryModel;
-use crate::molecule::MoleculeAst;
-use crate::reaction_span::ReactionSpanAst as PyReactionSpanAst;
+use crate::molecule::Molecule;
+use crate::reaction_span::ReactionSpan as PyReactionSpan;
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
 
@@ -210,19 +210,19 @@ impl ReactionApplicationConfig {
 
 /// A reaction whose molecule and delta components remain live Python values.
 #[pyclass]
-pub struct ReactionAst {
-    lhs: Py<MoleculeAst>,
+pub struct Reaction {
+    lhs: Py<Molecule>,
     deltas: Py<Deltas>,
 }
 
 #[pymethods]
-impl ReactionAst {
+impl Reaction {
     /// Build a reaction from detached component snapshots.
     #[new]
     #[pyo3(signature = (lhs=None, deltas=None))]
     fn new(
         py: Python<'_>,
-        lhs: Option<Py<MoleculeAst>>,
+        lhs: Option<Py<Molecule>>,
         deltas: Option<Py<Deltas>>,
     ) -> PyResult<Self> {
         Self::from_rust(
@@ -299,8 +299,8 @@ impl ReactionAst {
     #[staticmethod]
     fn from_sides(
         py: Python<'_>,
-        lhs: Py<MoleculeAst>,
-        rhs: Py<MoleculeAst>,
+        lhs: Py<Molecule>,
+        rhs: Py<Molecule>,
         atom_correspondence: &PyCorrespondence,
     ) -> PyResult<Self> {
         let lhs = lhs.bind(py).borrow().to_rust().clone();
@@ -346,16 +346,16 @@ impl ReactionAst {
 
     /// The live left-hand molecule component.
     #[getter]
-    fn lhs(&self, py: Python<'_>) -> Py<MoleculeAst> {
+    fn lhs(&self, py: Python<'_>) -> Py<Molecule> {
         self.lhs.clone_ref(py)
     }
 
     /// Replace the left-hand molecule with a detached snapshot.
     #[setter]
-    fn set_lhs(slf: Py<Self>, py: Python<'_>, value: Py<MoleculeAst>) -> PyResult<()> {
+    fn set_lhs(slf: Py<Self>, py: Python<'_>, value: Py<Molecule>) -> PyResult<()> {
         let resolved = Py::new(
             py,
-            MoleculeAst::from_rust(value.bind(py).borrow().to_rust().clone()),
+            Molecule::from_rust(value.bind(py).borrow().to_rust().clone()),
         )?;
         slf.borrow_mut(py).lhs = resolved;
         Ok(())
@@ -382,10 +382,10 @@ impl ReactionAst {
     ///
     /// Raises `ContradictionError` when the deltas are internally inconsistent or cannot form a
     /// structurally intact right-hand molecule.
-    fn to_reaction_span(&self, py: Python<'_>) -> PyResult<PyReactionSpanAst> {
+    fn to_reaction_span(&self, py: Python<'_>) -> PyResult<PyReactionSpan> {
         self.to_rust(py)
             .to_reaction_span()
-            .map(PyReactionSpanAst::from_rust)
+            .map(PyReactionSpan::from_rust)
             .map_err(contradiction_error)
     }
 
@@ -419,7 +419,7 @@ impl ReactionAst {
     fn apply(
         &self,
         py: Python<'_>,
-        host: Py<MoleculeAst>,
+        host: Py<Molecule>,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py);
@@ -460,24 +460,24 @@ impl ReactionAst {
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
         let lhs = self.lhs.bind(py).repr()?.extract::<String>()?;
         let deltas = self.deltas.bind(py).repr()?.extract::<String>()?;
-        Ok(format!("ReactionAst(lhs={lhs}, deltas={deltas})"))
+        Ok(format!("Reaction(lhs={lhs}, deltas={deltas})"))
     }
 }
 
 impl_py_canonicalize!(
-    ReactionAst,
+    Reaction,
     GraphIrReaction,
-    |value: &ReactionAst, py: Python<'_>| -> PyResult<GraphIrReaction> { Ok(value.to_rust(py)) },
-    |py: Python<'_>, value: GraphIrReaction| -> PyResult<ReactionAst> {
-        ReactionAst::from_rust(py, value)
+    |value: &Reaction, py: Python<'_>| -> PyResult<GraphIrReaction> { Ok(value.to_rust(py)) },
+    |py: Python<'_>, value: GraphIrReaction| -> PyResult<Reaction> {
+        Reaction::from_rust(py, value)
     }
 );
 
-impl ReactionAst {
+impl Reaction {
     /// Wrap a Rust reaction in fresh Python-owned components.
     pub(crate) fn from_rust(py: Python<'_>, reaction: GraphIrReaction) -> PyResult<Self> {
         Ok(Self {
-            lhs: Py::new(py, MoleculeAst::from_rust(reaction.lhs))?,
+            lhs: Py::new(py, Molecule::from_rust(reaction.lhs))?,
             deltas: Py::new(py, Deltas::from_rust(reaction.deltas))?,
         })
     }
@@ -500,14 +500,14 @@ pub struct ReactionDerivation(GraphIrReactionDerivation);
 impl ReactionDerivation {
     /// The molecule matched by the reaction, as a fresh snapshot.
     #[getter]
-    fn lhs(&self) -> MoleculeAst {
-        MoleculeAst::from_rust(self.0.lhs().clone())
+    fn lhs(&self) -> Molecule {
+        Molecule::from_rust(self.0.lhs().clone())
     }
 
     /// The molecule produced by the reaction, as a fresh snapshot.
     #[getter]
-    fn rhs(&self) -> MoleculeAst {
-        MoleculeAst::from_rust(self.0.rhs().clone())
+    fn rhs(&self) -> Molecule {
+        Molecule::from_rust(self.0.rhs().clone())
     }
 
     /// The correspondence between the two molecule sides, as a fresh snapshot.
@@ -535,8 +535,8 @@ impl ReactionDerivation {
     }
 
     /// Recover the reaction rule represented by this concrete firing.
-    fn to_reaction(&self, py: Python<'_>) -> PyResult<ReactionAst> {
-        ReactionAst::from_rust(py, self.to_rust().to_reaction())
+    fn to_reaction(&self, py: Python<'_>) -> PyResult<Reaction> {
+        Reaction::from_rust(py, self.to_rust().to_reaction())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -890,27 +890,27 @@ mod tests {
             })].into_iter().collect(),
         ),
     )]
-    fn test_reaction_ast_new(
+    fn test_reaction_new(
         #[case] lhs: Option<GraphIrMolecule>,
         #[case] deltas: Option<GraphIrDeltas>,
         #[case] expected: GraphIrReaction,
     ) {
         Python::attach(|py| {
-            let lhs = lhs.map(|value| Py::new(py, MoleculeAst::from_rust(value)).unwrap());
+            let lhs = lhs.map(|value| Py::new(py, Molecule::from_rust(value)).unwrap());
             let deltas = deltas.map(|value| Py::new(py, Deltas::from_rust(value)).unwrap());
 
-            let reaction = ReactionAst::new(py, lhs, deltas).unwrap();
+            let reaction = Reaction::new(py, lhs, deltas).unwrap();
 
             assert_eq!(reaction.to_rust(py), expected);
         });
     }
 
     #[rstest]
-    fn test_reaction_ast_new_snapshot() {
+    fn test_reaction_new_snapshot() {
         Python::attach(|py| {
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -934,7 +934,7 @@ mod tests {
             );
 
             let reaction =
-                ReactionAst::new(py, Some(lhs.clone_ref(py)), Some(deltas.clone_ref(py))).unwrap();
+                Reaction::new(py, Some(lhs.clone_ref(py)), Some(deltas.clone_ref(py))).unwrap();
             *lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
             let delta = into_py_variant(
                 py,
@@ -997,13 +997,13 @@ mod tests {
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
         ))],
     )]
-    fn test_reaction_ast_parse(
+    fn test_reaction_parse(
         #[case] text: &str,
         #[case] atom_count: usize,
         #[case] expected_deltas: Vec<GraphIrDelta>,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::parse(py, text, None).unwrap().to_rust(py);
+            let reaction = Reaction::parse(py, text, None).unwrap().to_rust(py);
 
             assert_eq!(reaction.lhs.atoms().count(), atom_count);
             assert_eq!(reaction.deltas.as_slice(), expected_deltas.as_slice());
@@ -1011,9 +1011,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_parse_error() {
+    fn test_reaction_parse_error() {
         Python::attach(|py| {
-            let error = ReactionAst::parse(py, "not edn", None).err().unwrap();
+            let error = Reaction::parse(py, "not edn", None).err().unwrap();
 
             assert!(error.is_instance_of::<ParseError>(py));
             assert_eq!(
@@ -1034,23 +1034,23 @@ mod tests {
         Some(ReactionDefaults::ground()),
         r##"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} :deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"##
     )]
-    fn test_reaction_ast_parse_defaults(
+    fn test_reaction_parse_defaults(
         #[case] text: &str,
         #[case] defaults: Option<ReactionDefaults>,
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                ReactionAst::parse(py, text, defaults).unwrap().to_rust(py),
+                Reaction::parse(py, text, defaults).unwrap().to_rust(py),
                 expected.parse::<GraphIrReaction>().unwrap()
             );
         });
     }
 
     #[rstest]
-    fn test_reaction_ast_parse_with_metadata() {
+    fn test_reaction_parse_with_metadata() {
         Python::attach(|py| {
-            let (reaction, metadata) = ReactionAst::parse_with_metadata(
+            let (reaction, metadata) = Reaction::parse_with_metadata(
                 py,
                 concat!(
                     r#"{:lhs {:atoms [[:lhs :lhs-c]] :atom-aliases [:lhs-c "C"]} "#,
@@ -1094,9 +1094,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_parse_with_metadata_defaults() {
+    fn test_reaction_parse_with_metadata_defaults() {
         Python::attach(|py| {
-            let (reaction, metadata) = ReactionAst::parse_with_metadata(
+            let (reaction, metadata) = Reaction::parse_with_metadata(
                 py,
                 concat!(
                     r#"{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} "#,
@@ -1139,14 +1139,14 @@ mod tests {
             r#":lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}}"#,
         )
     )]
-    fn test_reaction_ast_render(
+    fn test_reaction_render(
         #[case] reaction: GraphIrReaction,
         #[case] defaults: Option<ReactionDefaults>,
         #[case] expected: &str,
     ) {
         Python::attach(|py| {
             assert_eq!(
-                ReactionAst::from_rust(py, reaction)
+                Reaction::from_rust(py, reaction)
                     .unwrap()
                     .render(py, defaults),
                 expected
@@ -1155,9 +1155,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_render_with_metadata() {
+    fn test_reaction_render_with_metadata() {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(
+            let reaction = Reaction::from_rust(
                 py,
                 r#"{:lhs {:atoms ["C"]} :deltas [{:atom {:add "O"}}]}"#
                     .parse()
@@ -1185,10 +1185,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_render_with_metadata_error() {
+    fn test_reaction_render_with_metadata_error() {
         Python::attach(|py| {
             let reaction =
-                ReactionAst::from_rust(py, r#"{:lhs {:atoms ["C"]} :deltas []}"#.parse().unwrap())
+                Reaction::from_rust(py, r#"{:lhs {:atoms ["C"]} :deltas []}"#.parse().unwrap())
                     .unwrap();
             let mut metadata = GraphIrReactionMetadata::default();
             metadata
@@ -1302,7 +1302,7 @@ mod tests {
             .collect(),
         ),
     )]
-    fn test_reaction_ast_from_sides(
+    fn test_reaction_from_sides(
         #[case] lhs: GraphIrMolecule,
         #[case] rhs: GraphIrMolecule,
         #[case] atom_pairs: Vec<(usize, usize)>,
@@ -1324,10 +1324,10 @@ mod tests {
                 )
                 .expect("correspondence producer preserves partial-bijection invariants"),
             );
-            let lhs = Py::new(py, MoleculeAst::from_rust(lhs)).unwrap();
-            let rhs = Py::new(py, MoleculeAst::from_rust(rhs)).unwrap();
+            let lhs = Py::new(py, Molecule::from_rust(lhs)).unwrap();
+            let rhs = Py::new(py, Molecule::from_rust(rhs)).unwrap();
 
-            let reaction = ReactionAst::from_sides(
+            let reaction = Reaction::from_sides(
                 py,
                 lhs.clone_ref(py),
                 rhs.clone_ref(py),
@@ -1422,7 +1422,7 @@ mod tests {
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None }),
         ))],
     )]
-    fn test_reaction_ast_from_sides_entities(
+    fn test_reaction_from_sides_entities(
         #[case] lhs: &str,
         #[case] rhs: &str,
         #[case] atom_pairs: Vec<(usize, usize)>,
@@ -1444,10 +1444,10 @@ mod tests {
                 )
                 .expect("correspondence producer preserves partial-bijection invariants"),
             );
-            let reaction = ReactionAst::from_sides(
+            let reaction = Reaction::from_sides(
                 py,
-                Py::new(py, MoleculeAst::from_rust(lhs.clone())).unwrap(),
-                Py::new(py, MoleculeAst::from_rust(rhs)).unwrap(),
+                Py::new(py, Molecule::from_rust(lhs.clone())).unwrap(),
+                Py::new(py, Molecule::from_rust(rhs)).unwrap(),
                 &atom_correspondence,
             )
             .unwrap();
@@ -1460,7 +1460,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_from_sides_snapshot() {
+    fn test_reaction_from_sides_snapshot() {
         Python::attach(|py| {
             let lhs_before = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![
@@ -1476,13 +1476,13 @@ mod tests {
                 ],
                 ..Default::default()
             });
-            let lhs = Py::new(py, MoleculeAst::from_rust(lhs_before.clone())).unwrap();
-            let rhs = Py::new(py, MoleculeAst::from_rust(rhs_before.clone())).unwrap();
+            let lhs = Py::new(py, Molecule::from_rust(lhs_before.clone())).unwrap();
+            let rhs = Py::new(py, Molecule::from_rust(rhs_before.clone())).unwrap();
             let atom_correspondence = PyCorrespondence::from_rust(
                 &Correspondence::new(vec![(GraphIrAtomId(0), GraphIrAtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
             );
-            let reaction = ReactionAst::from_sides(
+            let reaction = Reaction::from_sides(
                 py,
                 lhs.clone_ref(py),
                 rhs.clone_ref(py),
@@ -1539,9 +1539,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_components() {
+    fn test_reaction_components() {
         Python::attach(|py| {
-            let reaction = Py::new(py, ReactionAst::new(py, None, None).unwrap()).unwrap();
+            let reaction = Py::new(py, Reaction::new(py, None, None).unwrap()).unwrap();
             let first_lhs = reaction.bind(py).borrow().lhs(py);
             let second_lhs = reaction.bind(py).borrow().lhs(py);
             let first_deltas = reaction.bind(py).borrow().deltas(py);
@@ -1590,12 +1590,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_set_components() {
+    fn test_reaction_set_components() {
         Python::attach(|py| {
-            let reaction = Py::new(py, ReactionAst::new(py, None, None).unwrap()).unwrap();
+            let reaction = Py::new(py, Reaction::new(py, None, None).unwrap()).unwrap();
             let lhs = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
                     ..Default::default()
                 })),
@@ -1618,8 +1618,8 @@ mod tests {
                 deltas.bind(py).borrow().to_rust().clone(),
             );
 
-            ReactionAst::set_lhs(reaction.clone_ref(py), py, lhs.clone_ref(py)).unwrap();
-            ReactionAst::set_deltas(reaction.clone_ref(py), py, deltas.clone_ref(py)).unwrap();
+            Reaction::set_lhs(reaction.clone_ref(py), py, lhs.clone_ref(py)).unwrap();
+            Reaction::set_deltas(reaction.clone_ref(py), py, deltas.clone_ref(py)).unwrap();
             *lhs.bind(py).borrow_mut().to_rust_mut() = GraphIrMolecule::new();
             let delta = into_py_variant(
                 py,
@@ -1640,7 +1640,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_set_components_self() {
+    fn test_reaction_set_components_self() {
         Python::attach(|py| {
             let expected = GraphIrReaction::new(
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -1654,22 +1654,21 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            let reaction =
-                Py::new(py, ReactionAst::from_rust(py, expected.clone()).unwrap()).unwrap();
+            let reaction = Py::new(py, Reaction::from_rust(py, expected.clone()).unwrap()).unwrap();
             let own_lhs = reaction.bind(py).borrow().lhs(py);
             let own_deltas = reaction.bind(py).borrow().deltas(py);
 
-            ReactionAst::set_lhs(reaction.clone_ref(py), py, own_lhs).unwrap();
-            ReactionAst::set_deltas(reaction.clone_ref(py), py, own_deltas).unwrap();
+            Reaction::set_lhs(reaction.clone_ref(py), py, own_lhs).unwrap();
+            Reaction::set_deltas(reaction.clone_ref(py), py, own_deltas).unwrap();
 
             assert_eq!(reaction.bind(py).borrow().to_rust(py), expected);
         });
     }
 
     #[rstest]
-    fn test_reaction_ast_canonicalize() {
+    fn test_reaction_canonicalize() {
         Python::attach(|py| {
-            let source = ReactionAst::from_rust(
+            let source = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -1723,9 +1722,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_canonicalize_error() {
+    fn test_reaction_canonicalize_error() {
         Python::attach(|py| {
-            let source = ReactionAst::from_rust(
+            let source = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -1767,9 +1766,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_reaction_span() {
+    fn test_reaction_to_reaction_span() {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(
+            let reaction = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -1800,9 +1799,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_reaction_span_error() {
+    fn test_reaction_to_reaction_span_error() {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(
+            let reaction = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -1841,9 +1840,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_reverse() {
+    fn test_reaction_reverse() {
         Python::attach(|py| {
-            let source = ReactionAst::parse(
+            let source = Reaction::parse(
                 py,
                 r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##,
                 None,
@@ -1891,14 +1890,14 @@ mod tests {
             r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##
         ],
     )]
-    fn test_reaction_ast_compose(
+    fn test_reaction_compose(
         #[case] first: &str,
         #[case] second: &str,
         #[case] expected: Vec<&str>,
     ) {
         Python::attach(|py| {
-            let first = ReactionAst::parse(py, first, None).unwrap();
-            let second = ReactionAst::parse(py, second, None).unwrap();
+            let first = Reaction::parse(py, first, None).unwrap();
+            let second = Reaction::parse(py, second, None).unwrap();
             let expected: Vec<GraphIrReaction> = expected
                 .into_iter()
                 .map(|reaction| GraphIrReaction::from_str(reaction).unwrap())
@@ -1925,15 +1924,15 @@ mod tests {
     #[case::modular_product(ReactionCompositionConfig::new(
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking()
     ))]
-    fn test_reaction_ast_compose_config(#[case] config: ReactionCompositionConfig) {
+    fn test_reaction_compose_config(#[case] config: ReactionCompositionConfig) {
         Python::attach(|py| {
-            let first = ReactionAst::parse(
+            let first = Reaction::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
                 None,
             )
             .unwrap();
-            let second = ReactionAst::parse(
+            let second = Reaction::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
                 None,
@@ -1965,11 +1964,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_compose_default() {
+    fn test_reaction_compose_default() {
         Python::attach(|py| {
             let first = Py::new(
                 py,
-                ReactionAst::parse(
+                Reaction::parse(
                     py,
                     r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
                     None,
@@ -1979,7 +1978,7 @@ mod tests {
             .unwrap();
             let second = Py::new(
                 py,
-                ReactionAst::parse(
+                Reaction::parse(
                     py,
                     r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
                     None,
@@ -1997,13 +1996,13 @@ mod tests {
             let kwargs = PyDict::new(py);
             kwargs.set_item("config", config).unwrap();
 
-            let omitted: Vec<Py<ReactionAst>> = first
+            let omitted: Vec<Py<Reaction>> = first
                 .bind(py)
                 .call_method1("compose", (second.clone_ref(py),))
                 .unwrap()
                 .extract()
                 .unwrap();
-            let explicit: Vec<Py<ReactionAst>> = first
+            let explicit: Vec<Py<Reaction>> = first
                 .bind(py)
                 .call_method("compose", (second,), Some(&kwargs))
                 .unwrap()
@@ -2038,15 +2037,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_compose_snapshot() {
+    fn test_reaction_compose_snapshot() {
         Python::attach(|py| {
-            let first = ReactionAst::parse(
+            let first = Reaction::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}"##,
                 None,
             )
             .unwrap();
-            let second = ReactionAst::parse(
+            let second = Reaction::parse(
                 py,
                 r##"{:lhs {:atoms ["C#c+"]} :deltas [{:atom {:modify [0 "#c+2"]}}]}"##,
                 None,
@@ -2114,7 +2113,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply(
+    fn test_reaction_apply(
         reaction_application: (
             GraphIrReaction,
             GraphIrMolecule,
@@ -2123,8 +2122,8 @@ mod tests {
     ) {
         let (expected_reaction, expected_host, _) = reaction_application;
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, expected_reaction.clone()).unwrap();
-            let host = Py::new(py, MoleculeAst::from_rust(expected_host.clone())).unwrap();
+            let reaction = Reaction::from_rust(py, expected_reaction.clone()).unwrap();
+            let host = Py::new(py, Molecule::from_rust(expected_host.clone())).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             assert_eq!(application.borrow(py).correspondences.len(), 2);
@@ -2162,7 +2161,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_snapshot(
+    fn test_reaction_apply_snapshot(
         reaction_application: (
             GraphIrReaction,
             GraphIrMolecule,
@@ -2171,8 +2170,8 @@ mod tests {
     ) {
         let (expected_reaction, expected_host, _) = reaction_application;
         Python::attach(|py| {
-            let mut reaction = ReactionAst::from_rust(py, expected_reaction).unwrap();
-            let host = Py::new(py, MoleculeAst::from_rust(expected_host)).unwrap();
+            let mut reaction = Reaction::from_rust(py, expected_reaction).unwrap();
+            let host = Py::new(py, Molecule::from_rust(expected_host)).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
             *reaction.lhs.bind(py).borrow_mut().to_rust_mut() =
@@ -2253,7 +2252,7 @@ mod tests {
         SubgraphIsomorphismAlgorithm::Vf2Rdkit(),
         RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
-    fn test_reaction_ast_apply_config(
+    fn test_reaction_apply_config(
         reaction_application: (
             GraphIrReaction,
             GraphIrMolecule,
@@ -2263,8 +2262,8 @@ mod tests {
     ) {
         let (reaction, host, _) = reaction_application;
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, reaction).unwrap();
-            let host = Py::new(py, MoleculeAst::from_rust(host)).unwrap();
+            let reaction = Reaction::from_rust(py, reaction).unwrap();
+            let host = Py::new(py, Molecule::from_rust(host)).unwrap();
             let application = reaction.apply(py, host, Some(config)).unwrap();
 
             let products: Vec<GraphIrMolecule> = std::iter::from_fn(|| {
@@ -2298,12 +2297,12 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_apply_error() {
+    fn test_reaction_apply_error() {
         Python::attach(|py| {
-            let reaction = ReactionAst::new(py, None, None).unwrap();
+            let reaction = Reaction::new(py, None, None).unwrap();
             let host = Py::new(
                 py,
-                MoleculeAst::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
                         GraphIrAtomForm::from_element(ChemElement::C),
                         GraphIrAtomForm::from_element(ChemElement::O),
@@ -2421,13 +2420,13 @@ mod tests {
             (17417400371411086222, -1),
         ]
     )]
-    fn test_reaction_ast_combined_fingerprint_difference(
+    fn test_reaction_combined_fingerprint_difference(
         ethanol_deoxygenation: GraphIrReaction,
         #[case] config: ReactionCombinedFingerprintConfig,
         #[case] expected_entries: Vec<(u128, i32)>,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, ethanol_deoxygenation).unwrap();
+            let reaction = Reaction::from_rust(py, ethanol_deoxygenation).unwrap();
             let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
@@ -2536,13 +2535,13 @@ mod tests {
             (ReactionSide::Product, 16456488943967932267),
         ]
     )]
-    fn test_reaction_ast_combined_fingerprint_disjoint_union(
+    fn test_reaction_combined_fingerprint_disjoint_union(
         ethanol_deoxygenation: GraphIrReaction,
         #[case] config: ReactionCombinedFingerprintConfig,
         #[case] expected_ids: Vec<(ReactionSide, u128)>,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, ethanol_deoxygenation).unwrap();
+            let reaction = Reaction::from_rust(py, ethanol_deoxygenation).unwrap();
             let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let fingerprint = fingerprint.bind(py).as_any();
@@ -2589,12 +2588,12 @@ mod tests {
             },
         }
     )]
-    fn test_reaction_ast_combined_fingerprint_difference_identity(
+    fn test_reaction_combined_fingerprint_difference_identity(
         ethanol_identity: GraphIrReaction,
         #[case] config: ReactionCombinedFingerprintConfig,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, ethanol_identity).unwrap();
+            let reaction = Reaction::from_rust(py, ethanol_identity).unwrap();
             let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let features = fingerprint.bind(py).getattr("features").unwrap();
@@ -2642,13 +2641,13 @@ mod tests {
             (ReactionSide::Product, 4018048386),
         ]
     )]
-    fn test_reaction_ast_combined_fingerprint_disjoint_union_identity(
+    fn test_reaction_combined_fingerprint_disjoint_union_identity(
         ethanol_identity: GraphIrReaction,
         #[case] config: ReactionCombinedFingerprintConfig,
         #[case] expected_ids: Vec<(ReactionSide, u128)>,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, ethanol_identity).unwrap();
+            let reaction = Reaction::from_rust(py, ethanol_identity).unwrap();
             let fingerprint = reaction.combined_fingerprint(py, config).unwrap();
             let fingerprint = Py::new(py, fingerprint).unwrap();
             let features = fingerprint.bind(py).getattr("features").unwrap();
@@ -2728,14 +2727,14 @@ mod tests {
         "ContradictionError",
         "reaction fingerprint input is inconsistent",
     )]
-    fn test_reaction_ast_combined_fingerprint_error(
+    fn test_reaction_combined_fingerprint_error(
         #[case] input: GraphIrReaction,
         #[case] config: ReactionCombinedFingerprintConfig,
         #[case] expected_type: &str,
         #[case] expected_message: &str,
     ) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, input).unwrap();
+            let reaction = Reaction::from_rust(py, input).unwrap();
             let error = reaction.combined_fingerprint(py, config).unwrap_err();
 
             assert_eq!(error.get_type(py).name().unwrap(), expected_type);
@@ -2747,11 +2746,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_eq() {
+    fn test_reaction_eq() {
         Python::attach(|py| {
-            let empty = ReactionAst::new(py, None, None).unwrap();
-            let other_empty = ReactionAst::new(py, None, None).unwrap();
-            let populated = ReactionAst::from_rust(
+            let empty = Reaction::new(py, None, None).unwrap();
+            let other_empty = Reaction::new(py, None, None).unwrap();
+            let populated = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2792,9 +2791,9 @@ mod tests {
         ),
         r##"{:deltas [{:atom {:add "O"}}] :lhs {:atoms ["C"] :bonds []}}"##,
     )]
-    fn test_reaction_ast_str(#[case] input: GraphIrReaction, #[case] expected: &str) {
+    fn test_reaction_str(#[case] input: GraphIrReaction, #[case] expected: &str) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, input).unwrap();
+            let reaction = Reaction::from_rust(py, input).unwrap();
 
             assert_eq!(reaction.__str__(py), expected);
             assert_eq!(reaction.__str__(py), reaction.render(py, None));
@@ -2802,9 +2801,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_str_components() {
+    fn test_reaction_str_components() {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(
+            let reaction = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2857,12 +2856,12 @@ mod tests {
     #[case::molecule_constraint(
         r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##
     )]
-    fn test_reaction_ast_str_roundtrip(#[case] text: &str) {
+    fn test_reaction_str_roundtrip(#[case] text: &str) {
         Python::attach(|py| {
-            let first = ReactionAst::parse(py, text, None).unwrap();
+            let first = Reaction::parse(py, text, None).unwrap();
 
             let canonical = first.__str__(py);
-            let second = ReactionAst::parse(py, &canonical, None).unwrap();
+            let second = Reaction::parse(py, &canonical, None).unwrap();
 
             assert!(first.__eq__(&second, py));
             assert_eq!(second.__str__(py), canonical);
@@ -2870,9 +2869,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_repr() {
+    fn test_reaction_repr() {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(
+            let reaction = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2891,7 +2890,7 @@ mod tests {
 
             assert_eq!(
                 reaction.__repr__(py).unwrap(),
-                "ReactionAst(lhs=MoleculeAst(atoms=1, bonds=0), deltas=Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm.parse('O')))]))"
+                "Reaction(lhs=Molecule(atoms=1, bonds=0), deltas=Deltas([Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm.parse('O')))]))"
             );
         });
     }
@@ -2910,16 +2909,16 @@ mod tests {
         .into_iter()
         .collect(),
     ))]
-    fn test_reaction_ast_from_rust(#[case] expected: GraphIrReaction) {
+    fn test_reaction_from_rust(#[case] expected: GraphIrReaction) {
         Python::attach(|py| {
-            let reaction = ReactionAst::from_rust(py, expected.clone()).unwrap();
+            let reaction = Reaction::from_rust(py, expected.clone()).unwrap();
 
             assert_eq!(reaction.to_rust(py), expected);
         });
     }
 
     #[rstest]
-    fn test_reaction_ast_to_rust() {
+    fn test_reaction_to_rust() {
         Python::attach(|py| {
             let expected = GraphIrReaction::new(
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2933,7 +2932,7 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            let reaction = ReactionAst::from_rust(py, expected.clone()).unwrap();
+            let reaction = Reaction::from_rust(py, expected.clone()).unwrap();
 
             let mut snapshot = reaction.to_rust(py);
             snapshot.lhs = GraphIrMolecule::new();
@@ -2944,7 +2943,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_ast_to_rust_roundtrip() {
+    fn test_reaction_to_rust_roundtrip() {
         Python::attach(|py| {
             let expected = GraphIrReaction::new(
                 GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
@@ -2958,11 +2957,10 @@ mod tests {
                 .into_iter()
                 .collect(),
             );
-            let python =
-                Py::new(py, ReactionAst::from_rust(py, expected.clone()).unwrap()).unwrap();
+            let python = Py::new(py, Reaction::from_rust(py, expected.clone()).unwrap()).unwrap();
 
             let rust = python.bind(py).borrow().to_rust(py);
-            let roundtrip = Py::new(py, ReactionAst::from_rust(py, rust).unwrap()).unwrap();
+            let roundtrip = Py::new(py, Reaction::from_rust(py, rust).unwrap()).unwrap();
 
             assert_eq!(roundtrip.bind(py).borrow().to_rust(py), expected);
             assert_ne!(python.as_ptr(), roundtrip.as_ptr());
@@ -3207,8 +3205,8 @@ mod tests {
                     .extract::<String>()
                     .unwrap(),
                 concat!(
-                    "ReactionDerivation(lhs=MoleculeAst(atoms=2, bonds=1), ",
-                    "rhs=MoleculeAst(atoms=2, bonds=1), ",
+                    "ReactionDerivation(lhs=Molecule(atoms=2, bonds=1), ",
+                    "rhs=Molecule(atoms=2, bonds=1), ",
                     "comap=MoleculeCorrespondence(",
                     "atoms=Correspondence(matched_pairs=[(0, 0), (1, 1)], left_count=2, right_count=2), ",
                     "bonds=Correspondence(matched_pairs=[(0, 0)], left_count=1, right_count=1), ",

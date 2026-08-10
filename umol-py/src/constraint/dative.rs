@@ -17,7 +17,7 @@ use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::dative::DativeBondForm;
 use crate::lattice::impl_py_lattice;
-use crate::molecule::MoleculeAst;
+use crate::molecule::Molecule;
 use crate::num::{NumForm, NumLike};
 
 /// The key (identity) of a dative bond constraint, for keyed lookup. The
@@ -523,7 +523,7 @@ pub(crate) fn dative_bond_constraints_asdict<'py>(
 /// `DativeBondForm` backing or a dative bond within a molecule (by index).
 pub(crate) enum DativeBondConstraintsBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondForm>),
@@ -794,7 +794,7 @@ impl DativeBondConstraintsView {
 /// `DativeBondConstraintsForm` value.
 pub(crate) enum DativeBondRingSizeBacking {
     Molecule {
-        owner: Py<MoleculeAst>,
+        owner: Py<Molecule>,
         id: GraphIrDativeBondId,
     },
     DativeBond(Py<DativeBondForm>),

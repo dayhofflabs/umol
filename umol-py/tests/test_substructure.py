@@ -1,7 +1,7 @@
 import pytest
 
 from umol import (
-    MoleculeAst,
+    Molecule,
     RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
     SubstructureMatchAlgorithm,
@@ -86,13 +86,13 @@ def test_substructure_search_config_keyword_error():
         )
 
 
-def test_molecule_ast_substructure_matches():
+def test_molecule_substructure_matches():
     pattern_source = '{:atoms ["C" "C"] :bonds [[0 1 "1"]]}'
     host_source = '{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}'
-    pattern = MoleculeAst.parse(pattern_source)
-    host = MoleculeAst.parse(host_source)
-    pattern_before = MoleculeAst.parse(pattern_source)
-    host_before = MoleculeAst.parse(host_source)
+    pattern = Molecule.parse(pattern_source)
+    host = Molecule.parse(host_source)
+    pattern_before = Molecule.parse(pattern_source)
+    host_before = Molecule.parse(host_source)
 
     matches = pattern.substructure_matches(host)
 
@@ -115,14 +115,14 @@ def test_molecule_ast_substructure_matches():
     assert matches[0].atoms.matched_pairs == [(0, 0), (1, 1)]
 
 
-def test_molecule_ast_substructure_matches_overlay():
-    pattern = MoleculeAst.parse(
+def test_molecule_substructure_matches_overlay():
+    pattern = Molecule.parse(
         (
             '{:atoms ["N" "B"] :bonds [] '
             ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
         ),
     )
-    host = MoleculeAst.parse(
+    host = Molecule.parse(
         (
             '{:atoms ["N" "B" "C"] :bonds [] '
             ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
@@ -149,9 +149,9 @@ def test_molecule_ast_substructure_matches_overlay():
     assert match.stereo_bonds.matched_pairs == []
 
 
-def test_molecule_ast_substructure_matches_empty():
-    pattern = MoleculeAst.parse('{:atoms ["O"] :bonds []}')
-    host = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
+def test_molecule_substructure_matches_empty():
+    pattern = Molecule.parse('{:atoms ["O"] :bonds []}')
+    host = Molecule.parse('{:atoms ["C"] :bonds []}')
 
     assert pattern.substructure_matches(
         host,
@@ -162,14 +162,14 @@ def test_molecule_ast_substructure_matches_empty():
     ) == []
 
 
-def test_molecule_ast_substructure_matches_keyword_error():
-    pattern = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
-    host = MoleculeAst.parse('{:atoms ["C"] :bonds []}')
+def test_molecule_substructure_matches_keyword_error():
+    pattern = Molecule.parse('{:atoms ["C"] :bonds []}')
+    host = Molecule.parse('{:atoms ["C"] :bonds []}')
 
     with pytest.raises(
         TypeError,
         match=(
-            "^MoleculeAst.substructure_matches\\(\\) takes 1 positional arguments "
+            "^Molecule.substructure_matches\\(\\) takes 1 positional arguments "
             "but 2 were given$"
         ),
     ):
