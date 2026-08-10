@@ -78,7 +78,7 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
-| `*Level` | closed enum selecting one of several nested named layers | 0 (planned) | graph-ir |
+| `*Level` | closed enum selecting one of several nested named layers | 1 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
@@ -368,7 +368,7 @@ composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the full level. Not
 constraints, which do not contribute to structural identity.
-**In code:** the `Constitution` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
+**In code:** the `Constitution` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
 
 ### Constraint
 
@@ -667,7 +667,7 @@ contribute to structural identity. Para-stereo changes refinement behavior withi
 than defining another level.
 
 **Not:** a claim that every constraint, model choice, or future operation participates.
-**In code:** the `Full` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
+**In code:** the `Full` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
 
 ### Ground term
 
@@ -771,8 +771,7 @@ not semantics.
 
 **Not:** the molecular topology, which is the atom-and-bond graph itself. The incidence graph is a
 construction over a structure, not a representation of one.
-**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceLevel` (planned replacement for
-`IncidenceNodeSelection`),
+**In code:** `IncidenceGraph`, `incidence_graph`, `IncidenceLevel`,
 `SubstructureMatchAlgorithm::Incidence`.
 
 ### Inconsistency
@@ -866,7 +865,7 @@ entity kinds extend the first applicable level without changing the meanings of 
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** `IncidenceLevel` and `CanonicalizationLevel` (planned).
+**In code:** `IncidenceLevel`; `CanonicalizationLevel` is planned.
 
 ### Ligand and site
 
@@ -1296,7 +1295,7 @@ values carried by those entities. It does not include overlay entities.
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** the `Topology` variant of `IncidenceLevel` and `CanonicalizationLevel` (planned).
+**In code:** the `Topology` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
 
 ### Transaction
 

@@ -1,38 +1,23 @@
 //! Incidence (Levi) graph: relations lifted to pseudonodes for symmetry analysis.
 
-use bitflags::bitflags;
 use strum::EnumCount;
 use umol_graph_core::{Graph, NodeId};
 
 use super::entity::{Entity, EntityKind};
 use super::molecule::Molecule;
 
-bitflags! {
-    /// Which relation kinds become pseudonodes in [`Molecule::incidence_graph`].
-    /// Atoms and localized bonds are always present (the base topology); these
-    /// toggle the rest.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub struct IncidenceNodeSelection: u8 {
-        const OVERLAYS = 1 << 0; // dative, aromatic, multicenter, noncovalent
-        const STEREO = 1 << 1; // stereo atoms and stereo bonds
-    }
-}
-
-impl IncidenceNodeSelection {
-    /// Atoms + localized bonds only.
-    pub fn topological() -> Self {
-        Self::empty()
-    }
-
-    /// Topological + all overlays — the full constitution.
-    pub fn constitution() -> Self {
-        Self::OVERLAYS
-    }
-
-    /// Constitution + stereo elements.
-    pub fn full() -> Self {
-        Self::OVERLAYS | Self::STEREO
-    }
+/// Structural level represented by an [`IncidenceGraph`].
+///
+/// The variants form a nested hierarchy. [`Topology`](Self::Topology) contains
+/// atoms and localized bonds. [`Constitution`](Self::Constitution) additionally
+/// contains dative bonds, aromatic systems, multicenter bonds, and noncovalent
+/// bonds. [`Full`](Self::Full) additionally contains stereo atoms and stereo
+/// bonds. Constraints do not contribute to any structural level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IncidenceLevel {
+    Topology,
+    Constitution,
+    Full,
 }
 
 /// A molecule's incidence graph: atoms plus a pseudonode per selected relation,
@@ -86,36 +71,36 @@ impl IncidenceGraph {
 }
 
 impl Molecule {
-    /// Build the incidence (Levi) graph over the selected relation kinds. Localized
-    /// bonds and overlays become pseudonodes wired to their participant atoms;
+    /// Build the incidence (Levi) graph at the selected structural level. Localized
+    /// bonds and included overlays become pseudonodes wired to their participant atoms;
     /// stereo elements attach to their site only (an atom, or the site bond's
     /// pseudonode) — the ligand topology is already present via the bonds, so the
     /// only new information a stereo node carries is its site and (at colour time)
     /// its stereo label.
-    pub fn incidence_graph(&self, selection: IncidenceNodeSelection) -> IncidenceGraph {
+    pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
         let atom_count = self.raw_graph().node_count();
-        let overlays = selection.contains(IncidenceNodeSelection::OVERLAYS);
-        let stereo = selection.contains(IncidenceNodeSelection::STEREO);
+        let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
+        let stereo = matches!(level, IncidenceLevel::Full);
 
         let entity_counts = [
             atom_count as u32,
             self.bonds().ids().count() as u32,
-            if overlays {
+            if constitution {
                 self.dative_bonds().count() as u32
             } else {
                 0
             },
-            if overlays {
+            if constitution {
                 self.aromatic_systems().count() as u32
             } else {
                 0
             },
-            if overlays {
+            if constitution {
                 self.multicenter_bonds().count() as u32
             } else {
                 0
             },
-            if overlays {
+            if constitution {
                 self.noncovalent_bonds().count() as u32
             } else {
                 0
@@ -146,7 +131,7 @@ impl Molecule {
             node += 1;
         }
 
-        if overlays {
+        if constitution {
             for v in self.dative_bonds().iter() {
                 for a in v.atom_ids() {
                     edges.push([node, a.index() as u32]);
@@ -260,8 +245,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::topological(
-        IncidenceNodeSelection::topological(),
+    #[case::topology(
+        IncidenceLevel::Topology,
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
@@ -269,7 +254,7 @@ mod tests {
         ],
     )]
     #[case::constitution(
-        IncidenceNodeSelection::constitution(),
+        IncidenceLevel::Constitution,
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
@@ -279,7 +264,7 @@ mod tests {
         ],
     )]
     #[case::full(
-        IncidenceNodeSelection::full(),
+        IncidenceLevel::Full,
         vec![
             Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), Entity::Atom(AtomId(2)),
             Entity::Atom(AtomId(3)), Entity::Atom(AtomId(4)), Entity::Atom(AtomId(5)),
@@ -291,10 +276,10 @@ mod tests {
     )]
     fn test_molecule_incidence_graph(
         molecule: Molecule,
-        #[case] selection: IncidenceNodeSelection,
+        #[case] level: IncidenceLevel,
         #[case] expected: Vec<Entity>,
     ) {
-        let inc = molecule.incidence_graph(selection);
+        let inc = molecule.incidence_graph(level);
         assert_eq!(inc.graph().node_count(), expected.len());
         let got: Vec<Entity> = (0..expected.len())
             .map(|i| inc.entity(NodeId(i as u32)))
@@ -322,7 +307,7 @@ mod tests {
         #[case] node: u32,
         #[case] expected: Vec<u32>,
     ) {
-        let inc = molecule.incidence_graph(IncidenceNodeSelection::full());
+        let inc = molecule.incidence_graph(IncidenceLevel::Full);
         let graph = inc.graph();
         let mut got: Vec<u32> = graph
             .edge_ids()

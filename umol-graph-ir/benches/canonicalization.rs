@@ -2,7 +2,7 @@
 //!
 //! The raw-topology path and the incidence paths do not yet implement the same
 //! semantics: the former labels only the stored atom/bond graph, while the
-//! latter includes the entity kinds selected by `IncidenceNodeSelection`.
+//! latter includes the entity kinds selected by `IncidenceLevel`.
 //! Criterion ids include the measured graph's node and edge counts. The exact
 //! compact-versus-incidence comparison belongs to the later canonicalization
 //! carrier benchmark once a compact overlay-aware labeling path exists.
@@ -14,7 +14,7 @@ use umol_chem::element::Element;
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomForm, AtomId, BondForm, BondId, ConstitutionColoring, DativeBondForm,
-    Entity, IncidenceGraph, IncidenceNodeSelection, Molecule, MoleculeColoring, MoleculeEntries,
+    Entity, IncidenceGraph, IncidenceLevel, Molecule, MoleculeColoring, MoleculeEntries,
     MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind, StereoAtomForm, StereoBondForm,
     StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
@@ -26,30 +26,17 @@ struct CorpusCase {
     molecule: Molecule,
 }
 
-#[derive(Clone, Copy)]
-enum Level {
-    Topology,
-    Constitution,
-    Full,
-}
+const LEVELS: [IncidenceLevel; 3] = [
+    IncidenceLevel::Topology,
+    IncidenceLevel::Constitution,
+    IncidenceLevel::Full,
+];
 
-impl Level {
-    const ALL: [Self; 3] = [Self::Topology, Self::Constitution, Self::Full];
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::Topology => "topology",
-            Self::Constitution => "constitution",
-            Self::Full => "full",
-        }
-    }
-
-    fn selection(self) -> IncidenceNodeSelection {
-        match self {
-            Self::Topology => IncidenceNodeSelection::topological(),
-            Self::Constitution => IncidenceNodeSelection::constitution(),
-            Self::Full => IncidenceNodeSelection::full(),
-        }
+fn level_name(level: IncidenceLevel) -> &'static str {
+    match level {
+        IncidenceLevel::Topology => "topology",
+        IncidenceLevel::Constitution => "constitution",
+        IncidenceLevel::Full => "full",
     }
 }
 
@@ -338,20 +325,19 @@ fn bench_raw_topology_labeling(c: &mut Criterion) {
 fn bench_incidence_construction(c: &mut Criterion) {
     let corpus = corpus();
 
-    for level in Level::ALL {
-        let selection = level.selection();
+    for level in LEVELS {
         let mut group = c.benchmark_group(format!(
             "canonicalization/incidence_construction/{}",
-            level.name()
+            level_name(level)
         ));
         for case in &corpus {
-            let incidence = case.molecule.incidence_graph(selection);
+            let incidence = case.molecule.incidence_graph(level);
             let size = graph_size(
                 incidence.graph().node_count(),
                 incidence.graph().edge_count(),
             );
             group.bench_function(BenchmarkId::new(case.name, size), |b| {
-                b.iter(|| black_box(&case.molecule).incidence_graph(selection))
+                b.iter(|| black_box(&case.molecule).incidence_graph(level))
             });
         }
         group.finish();
@@ -361,14 +347,13 @@ fn bench_incidence_construction(c: &mut Criterion) {
 fn bench_incidence_labeling(c: &mut Criterion) {
     let corpus = corpus();
 
-    for level in Level::ALL {
-        let selection = level.selection();
+    for level in LEVELS {
         let mut group = c.benchmark_group(format!(
             "canonicalization/incidence_labeling/{}",
-            level.name()
+            level_name(level)
         ));
         for case in &corpus {
-            let incidence = case.molecule.incidence_graph(selection);
+            let incidence = case.molecule.incidence_graph(level);
             let graph = incidence.graph();
             let colors = incidence_colors(&case.molecule, &incidence);
             let size = graph_size(graph.node_count(), graph.edge_count());

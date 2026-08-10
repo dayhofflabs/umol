@@ -24,7 +24,7 @@ use super::correspondence::{
 };
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
-use super::incidence::IncidenceNodeSelection;
+use super::incidence::IncidenceLevel;
 use super::molecule::Molecule;
 use super::ring::{RingConfig, RingModel, RingSetKind};
 use super::stereo::coset_matches;
@@ -287,9 +287,8 @@ impl Molecule {
         if pattern.atoms().count() > host.atoms().count() {
             return ControlFlow::Continue(());
         }
-        let selection = IncidenceNodeSelection::constitution();
-        let pattern_levi = pattern.incidence_graph(selection);
-        let host_levi = host.incidence_graph(selection);
+        let pattern_levi = pattern.incidence_graph(IncidenceLevel::Constitution);
+        let host_levi = host.incidence_graph(IncidenceLevel::Constitution);
         let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
         let atom_count = pattern.atoms().count();
 

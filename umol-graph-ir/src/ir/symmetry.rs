@@ -9,7 +9,7 @@ use umol_perm::{Orientation, OrientedPermutation, OrientedPermutationGroup, Perm
 use super::coloring::MoleculeColoring;
 use super::entity::{Entity, EntityKind};
 use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandPosition};
-use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
+use super::incidence::{IncidenceGraph, IncidenceLevel};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::Molecule;
 #[cfg(test)]
@@ -43,7 +43,7 @@ impl Molecule {
         &self,
         cfg: &GraphSymmetryConfig<C>,
     ) -> GraphSymmetry {
-        let incidence = self.incidence_graph(IncidenceNodeSelection::full());
+        let incidence = self.incidence_graph(IncidenceLevel::Full);
         let node_count = incidence.graph().node_count();
         let base: Vec<u64> = (0..node_count)
             .map(|i| cfg.coloring.color(self, incidence.entity(NodeId(i as u32))))

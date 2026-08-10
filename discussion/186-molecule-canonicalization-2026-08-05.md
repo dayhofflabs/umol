@@ -968,7 +968,7 @@ and the semantic properties validated by the corresponding property tests.
 - **S0d — Structural-level terminology.** Replace the bitflag-shaped `IncidenceNodeSelection` with
   `IncidenceLevel::{Topology, Constitution, Full}` and migrate every incidence, symmetry,
   substructure, test, and benchmark caller. Verify the exact entity-kind membership of each level;
-  do not retain a second bitflag route. This is breaking red-to-green. [dep: S0c]
+  do not retain a second bitflag route. This is breaking red-to-green. [dep: S0c] **Done.**
 - **S0e — Conversion-context terminology.** Rename the `Ctx` associated type to `Context` on
   `FromAst`, `IntoAst`, `TryFromAst`, and `TryIntoAst`, migrate every implementation and caller, and
   update public rustdoc. This is a mechanical breaking red-to-green migration and does not rename the
