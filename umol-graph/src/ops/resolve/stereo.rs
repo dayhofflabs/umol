@@ -383,7 +383,7 @@ mod tests {
             r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0] :type "Th1"}]
+            :stereo-atoms [{:site 1 :ligands [0] :attrs "Th1"}]
         }"#
         )
     }
@@ -394,7 +394,7 @@ mod tests {
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0] :type "Ct1"}]
+            :stereo-bonds [{:site 1 :ligands [0] :attrs "Ct1"}]
         }"#
         )
     }
@@ -405,7 +405,7 @@ mod tests {
             r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th0"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th0"}]
         }"#
         )
     }
@@ -416,7 +416,7 @@ mod tests {
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :type "Ct0"}]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]
         }"#
         )
     }
@@ -499,7 +499,7 @@ mod tests {
     #[case::existing_atom(mol_dsl_ground!(r#"{
         :atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-        :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
+        :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
     }"#))]
     fn test_stereo_resolver_plan_identity(stereo_model: StereoModel, #[case] molecule: Molecule) {
         assert_eq!(
@@ -885,7 +885,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#h3" "C#h#T!" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
         }"#),
         Edits::from_iter([Edit::RemoveStereoAtoms {
             removes: vec![(
@@ -908,7 +908,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C!"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :type "Ct1"}]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
         }"#),
         Edits::from_iter([Edit::RemoveStereoBonds {
             removes: vec![(
@@ -956,7 +956,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C #h3" "C #h1" "N #h2" "O #h1"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
         }"#)
     )]
     #[case::cis_trans(
@@ -965,7 +965,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :type "Ct1"}]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
         }"#)
     )]
     fn test_stereo_resolver_resolve(

@@ -78,7 +78,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         );
 
@@ -97,7 +97,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         );
 
@@ -132,7 +132,7 @@ mod tests {
         mol_dsl!(r#"{
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
@@ -145,7 +145,7 @@ mod tests {
         mol_dsl!(r#"{
             :atoms ["C" "C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[2,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
@@ -159,7 +159,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a!"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
             AromaticityInconsistency::AromaticBondConstraintMismatch {
@@ -174,7 +174,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[2,0,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,0,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceMismatch {
@@ -188,7 +188,7 @@ mod tests {
         mol_dsl!(r#"{
             :atoms ["O#n1" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#),
         Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
@@ -217,7 +217,7 @@ mod tests {
         mol_dsl!(r#"{
             :atoms ["C" "C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         Solution::Determined(()),
     )]
@@ -227,7 +227,7 @@ mod tests {
             :atoms ["C#a*" "C#a*" "C#a*" "C#a*" "C#a*" "C#a*"]
             :bonds [[0 1 "1#a*"] [1 2 "1#a*"] [2 3 "1#a*"] [3 4 "1#a*"]
                     [4 5 "1#a*"] [5 0 "1#a*"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         Solution::Determined(()),
     )]
@@ -237,7 +237,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"]
                     [4 5 "1#a"] [5 0 "1#a"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
         Solution::Determined(()),
     )]

@@ -31,11 +31,11 @@ a match wildcard), **concrete molecules → `mol_ground!`** (defaults fill the s
 - `:atoms` — vector of atom-strings. An entry may also be `[:id "C#h3"]` (inline id
   keyword) or a bare keyword referencing `:atom-aliases`.
 - `:bonds` — vector of `[a b "bondstr"]` (endpoints are 0-based indices or id keywords),
-  or `{:a 0 :b 1 :type "1"}`. `:type` may be a keyword shorthand: `:single` `:double`
+  or `{:a 0 :b 1 :attrs "1"}`. `:attrs` may be a keyword shorthand: `:single` `:double`
   `:triple` `:quadruple`.
 - Optional keys: `:dative-bonds :aromatic-systems :multicenter-bonds :noncovalent-bonds
   :stereo-atoms :stereo-bonds :atom-aliases :constraints :guards`. Each structural
-  entry needs `:type`.
+  entry needs `:attrs`.
 - **Aromaticity is not a bond order** — never write order 1.5/"aromatic". Use an
   `:aromatic-systems` entry plus ordinary (Kekulé) `:bonds`; the atom `#a` / bond `#a`
   flags mark membership.

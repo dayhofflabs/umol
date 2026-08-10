@@ -32,8 +32,8 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [8 10 :double]
         [10 11 :single]]
       :stereo-atoms [
-        {:ligands [1 3 4 [:h 2]] :site 2 :type :ccw}
-        {:ligands [2 5 10 [:h 4]] :site 4 :type :cw}]}
+        {:attrs :ccw :ligands [1 3 4 [:h 2]] :site 2}
+        {:attrs :cw :ligands [2 5 10 [:h 4]] :site 4}]}
     :success true}
   :counts {
     :output {
@@ -64,6 +64,6 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [8 10 :double]
         [10 11 :single]]
       :stereo-atoms [
-        {:ligands [1 3 4 [:h 2]] :site 2 :type :ccw}
-        {:ligands [2 5 10 [:h 4]] :site 4 :type :cw}]}
+        {:attrs :ccw :ligands [1 3 4 [:h 2]] :site 2}
+        {:attrs :cw :ligands [2 5 10 [:h 4]] :site 4}]}
     :success true}}

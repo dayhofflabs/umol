@@ -1,1 +1,1 @@
-{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "*#e6"}] :constraints [{:aromatic-system-contains [0 0]} {:aromatic-system-all-atoms [0 {:aromatic-valence {:aromatic 1}}]} {:aromatic-system-atoms [0 [0 1 2]]}]}
+{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "*#e6"}] :constraints [{:aromatic-system-contains [0 0]} {:aromatic-system-all-atoms [0 {:aromatic-valence {:aromatic 1}}]} {:aromatic-system-atoms [0 [0 1 2]]}]}

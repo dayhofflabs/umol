@@ -1,1 +1,1 @@
-{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*"}]}
+{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*"}]}

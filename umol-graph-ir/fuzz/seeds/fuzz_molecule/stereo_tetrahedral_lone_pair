@@ -1,1 +1,1 @@
-{:atoms ["N" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 [:lp 0]] :type "Th2"}]}
+{:atoms ["N" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 [:lp 0]] :attrs "Th2"}]}

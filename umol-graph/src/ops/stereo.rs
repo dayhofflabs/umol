@@ -381,12 +381,12 @@ mod tests {
             :stereo-atoms [{
                 :site 1
                 :ligands [0 2 3 [:h 1]]
-                :type "Th1"
+                :attrs "Th1"
             }]
             :stereo-bonds [{
                 :site 4
                 :ligands [4 [:h 5] 7 [:h 6]]
-                :type "Ct1"
+                :attrs "Ct1"
             }]
         }"#),
         StereoDerivation {
@@ -437,12 +437,12 @@ mod tests {
             :stereo-atoms [{
                 :site 1
                 :ligands [0 2 3 [:h 1]]
-                :type "Th0"
+                :attrs "Th0"
             }]
             :stereo-bonds [{
                 :site 4
                 :ligands [4 [:h 5] 7 [:h 6]]
-                :type "Ct0"
+                :attrs "Ct0"
             }]
         }"#),
         StereoDerivation {
@@ -484,8 +484,8 @@ mod tests {
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
                     [4 5 "1"] [5 6 "2"] [6 7 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0] :type "Th1"}]
-            :stereo-bonds [{:site 4 :ligands [4] :type "Ct1"}]
+            :stereo-atoms [{:site 1 :ligands [0] :attrs "Th1"}]
+            :stereo-bonds [{:site 4 :ligands [4] :attrs "Ct1"}]
         }"#),
         StereoDerivation {
             atoms: vec![],
@@ -506,8 +506,8 @@ mod tests {
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
                     [4 5 "1"] [5 6 "2#C!"] [6 7 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :type "Th1"}]
-            :stereo-bonds [{:site 4 :ligands [4 [:h 5] 7 [:h 6]] :type "Ct1"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
+            :stereo-bonds [{:site 4 :ligands [4 [:h 5] 7 [:h 6]] :attrs "Ct1"}]
         }"#),
         StereoDerivation {
             atoms: vec![],
@@ -591,7 +591,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C" "C#T1" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
-            :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]
         }"#),
         None,
     )]

@@ -1281,7 +1281,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
+        Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
     )]
     fn test_ingest_reaction_smiles_with(
         #[case] input: &str,

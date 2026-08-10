@@ -992,14 +992,14 @@ mod tests {
             r#"{
                 :atoms ["N" "B"]
                 :bonds []
-                :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]
+                :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]
             }"#
         ));
         let host = Molecule::from_rust(mol_dsl!(
             r#"{
                 :atoms ["N" "B" "C"]
                 :bonds []
-                :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]
+                :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]
             }"#
         ));
         let expected = vec![MoleculeCorrespondence::from_rust(

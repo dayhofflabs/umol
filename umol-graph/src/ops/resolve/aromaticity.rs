@@ -357,7 +357,7 @@ mod tests {
             :atoms ["C#a2" "C#a0" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         )
     }
@@ -369,7 +369,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 "1#a!"] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         )
     }
@@ -551,7 +551,7 @@ mod tests {
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[2,0,1,1,1,1]#c0#u0#s"
+                :attrs "[2,0,1,1,1,1]#c0#u0#s"
             }]
         }"#
         );
@@ -613,7 +613,7 @@ mod tests {
             :atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#)
     )]
     #[case::rejected_projections(
@@ -639,7 +639,7 @@ mod tests {
             :atoms ["O#n1#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#)
     )]
     fn test_aromaticity_resolver_plan_identity(
@@ -791,7 +791,7 @@ mod tests {
         mol_dsl!(r#"{
             :atoms ["C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]
         }"#),
         AromaticityContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {

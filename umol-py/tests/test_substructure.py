@@ -119,13 +119,13 @@ def test_molecule_substructure_matches_overlay():
     pattern = Molecule.parse(
         (
             '{:atoms ["N" "B"] :bonds [] '
-            ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}'
         ),
     )
     host = Molecule.parse(
         (
             '{:atoms ["N" "B" "C"] :bonds [] '
-            ':dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}'
+            ':dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}'
         ),
     )
 

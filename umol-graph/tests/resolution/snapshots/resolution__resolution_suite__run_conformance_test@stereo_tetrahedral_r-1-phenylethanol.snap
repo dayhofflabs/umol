@@ -5,7 +5,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :aromatic-systems [{:atoms [3 4 5 6 7 8] :type "[1,1,1,1,1,1]"}]
+      :aromatic-systems [{:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}]
       :atoms [
         "C#h3#v"
         "C#h#v3#T1"
@@ -26,11 +26,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [5 6 :aromatic]
         [6 7 :aromatic]
         [7 8 :aromatic]]
-      :stereo-atoms [{:ligands [0 2 3 [:h 1]] :site 1 :type :cw}]}
+      :stereo-atoms [{:attrs :cw :ligands [0 2 3 [:h 1]] :site 1}]}
     :success true}
   :counts {
     :output {
-      :aromatic-systems [{:atoms [3 4 5 6 7 8] :type "[1,1,1,1,1,1]"}]
+      :aromatic-systems [{:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}]
       :atoms [
         "C#h3#v"
         "C#h#v3#T1"
@@ -51,5 +51,5 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [5 6 :aromatic]
         [6 7 :aromatic]
         [7 8 :aromatic]]
-      :stereo-atoms [{:ligands [0 2 3 [:h 1]] :site 1 :type :cw}]}
+      :stereo-atoms [{:attrs :cw :ligands [0 2 3 [:h 1]] :site 1}]}
     :success true}}

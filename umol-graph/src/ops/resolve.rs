@@ -561,7 +561,7 @@ mod tests {
             :atoms ["C#h#v2#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#)
     )]
     #[case::stereo(
@@ -573,7 +573,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#h#v3#a!#T1" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
-            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :type "Th1"}]
+            :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
         }"#)
     )]
     fn test_resolver_resolve_stages(
@@ -593,7 +593,7 @@ mod tests {
         let mut molecule = mol_dsl!(
             r#"{
             :atoms ["C#i*#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"]
-            :noncovalent-bonds [{:atoms [0 1] :type "*"}]
+            :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]
         }"#
         );
         assert_eq!(
@@ -605,7 +605,7 @@ mod tests {
             mol_dsl!(
                 r#"{
                 :atoms ["C#i=#c0#h4#n0#u0#s#v0#a!" "C#i=#c0#h4#n0#u0#s"]
-                :noncovalent-bonds [{:atoms [0 1] :type "*"}]
+                :noncovalent-bonds [{:atoms [0 1] :attrs "*"}]
             }"#
             )
         );
@@ -700,7 +700,7 @@ mod tests {
             :atoms ["C#i*#c0#h0#n0#u0#s#v0#a!#m1"
                     "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
                     "C#i=#c0#h0#n0#u0#s#v0#a!#m1"]
-            :multicenter-bonds [{:atoms [0 1 2] :type "*"}]
+            :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]
         }"#),
         Solution::Underdetermined(())
     )]
@@ -806,7 +806,7 @@ mod tests {
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         );
         let expected = molecule.clone();

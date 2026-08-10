@@ -5,4 +5,4 @@
          [3 4 :aromatic]
          [4 0 :aromatic]]
  :aromatic-systems [{:atoms [0 1 2 3 4]
-                      :type "[2,1,1,1,1]#c0#u0#s1"}]}
+                      :attrs "[2,1,1,1,1]#c0#u0#s1"}]}

@@ -5,7 +5,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[1,1,1,1,1,1,0]"}]
+      :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,0]"}]
       :atoms [
         "C#h#v2#a"
         "C#h#v2#a"
@@ -25,7 +25,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success true}
   :counts {
     :output {
-      :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[1,1,1,1,1,1,0]"}]
+      :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,0]"}]
       :atoms [
         "C#h#v2#a"
         "C#h#v2#a"

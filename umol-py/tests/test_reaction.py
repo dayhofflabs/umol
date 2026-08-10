@@ -349,7 +349,7 @@ def test_reactiondefaults_value(value, expected, expected_repr):
         pytest.param(
             '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
-            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} '
+            ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} '
             ":deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}",
             id="stereo-mirror",
         ),
@@ -418,9 +418,9 @@ def test_reactionast_parse_keyword_error():
         ),
         pytest.param(
             '{:lhs {:atoms ["C" "C"] '
-            ':bonds [{:id :lhs :atoms [0 1] :type "1"}]} '
+            ':bonds [{:id :lhs :atoms [0 1] :attrs "1"}]} '
             ':deltas [{:bond {:add '
-            '{:id :delta :atoms [0 1] :type "2"}}}]}',
+            '{:id :delta :atoms [0 1] :attrs "2"}}}]}',
             Entity.Bond(0),
             Entity.Bond(1),
             id="bond",
@@ -428,18 +428,18 @@ def test_reactionast_parse_keyword_error():
         pytest.param(
             '{:lhs {:atoms ["C" "N"] '
             ':dative-bonds [{:id :lhs :donors [0] '
-            ':acceptor 1 :type "1#R"}]} '
+            ':acceptor 1 :attrs "1#R"}]} '
             ':deltas [{:dative-bond {:add '
-            '{:id :delta :donors [0] :acceptor 1 :type "1#R"}}}]}',
+            '{:id :delta :donors [0] :acceptor 1 :attrs "1#R"}}}]}',
             Entity.DativeBond(0),
             Entity.DativeBond(1),
             id="dative-bond",
         ),
         pytest.param(
             '{:lhs {:atoms ["C" "C"] '
-            ':aromatic-systems [{:id :lhs :atoms [0 1] :type "*#e2"}]} '
+            ':aromatic-systems [{:id :lhs :atoms [0 1] :attrs "*#e2"}]} '
             ':deltas [{:aromatic-system {:add '
-            '{:id :delta :atoms [0 1] :type "*#e2"}}}]}',
+            '{:id :delta :atoms [0 1] :attrs "*#e2"}}}]}',
             Entity.AromaticSystem(0),
             Entity.AromaticSystem(1),
             id="aromatic-system",
@@ -447,18 +447,18 @@ def test_reactionast_parse_keyword_error():
         pytest.param(
             '{:lhs {:atoms ["B" "H" "B"] '
             ':multicenter-bonds [{:id :lhs :atoms [0 1 2] '
-            ':type "[1,0,1]#e2"}]} '
+            ':attrs "[1,0,1]#e2"}]} '
             ':deltas [{:multicenter-bond {:add '
-            '{:id :delta :atoms [0 1 2] :type "[1,0,1]#e2"}}}]}',
+            '{:id :delta :atoms [0 1 2] :attrs "[1,0,1]#e2"}}}]}',
             Entity.MulticenterBond(0),
             Entity.MulticenterBond(1),
             id="multicenter-bond",
         ),
         pytest.param(
             '{:lhs {:atoms ["N" "H"] '
-            ':noncovalent-bonds [{:id :lhs :atoms [0 1] :type "Hbd"}]} '
+            ':noncovalent-bonds [{:id :lhs :atoms [0 1] :attrs "Hbd"}]} '
             ':deltas [{:noncovalent-bond {:add '
-            '{:id :delta :atoms [0 1] :type "Hbd"}}}]}',
+            '{:id :delta :atoms [0 1] :attrs "Hbd"}}}]}',
             Entity.NoncovalentBond(0),
             Entity.NoncovalentBond(1),
             id="noncovalent-bond",
@@ -466,21 +466,21 @@ def test_reactionast_parse_keyword_error():
         pytest.param(
             '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
             ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
-            ':type "Th1"}]} '
+            ':attrs "Th1"}]} '
             ':deltas [{:stereo-atom {:add '
-            '{:id :delta :site 0 :ligands [1 2 3 4] :type "Th2"}}}]}',
+            '{:id :delta :site 0 :ligands [1 2 3 4] :attrs "Th2"}}}]}',
             Entity.StereoAtom(0),
             Entity.StereoAtom(1),
             id="stereo-atom",
         ),
         pytest.param(
             '{:lhs {:atoms ["C" "C" "C" "C"] '
-            ':bonds [{:id :first :atoms [0 1] :type "2"} '
-            '{:id :second :atoms [2 3] :type "2"}] '
+            ':bonds [{:id :first :atoms [0 1] :attrs "2"} '
+            '{:id :second :atoms [2 3] :attrs "2"}] '
             ':stereo-bonds [{:id :lhs :site :first '
-            ':ligands [2 3] :type "Ct1"}]} '
+            ':ligands [2 3] :attrs "Ct1"}]} '
             ':deltas [{:stereo-bond {:add '
-            '{:id :delta :site :second :ligands [0 1] :type "Ct2"}}}]}',
+            '{:id :delta :site :second :ligands [0 1] :attrs "Ct2"}}}]}',
             Entity.StereoBond(0),
             Entity.StereoBond(1),
             id="stereo-bond",
@@ -796,7 +796,7 @@ def test_reaction_from_reaction_smiles_resolve_config():
 
     assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:aromatic-systems '
-        '[{:atoms [0 1 2] :type "[0,1,1]#c0#u0#s"}] '
+        '[{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] '
         ':atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" '
         '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
         '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
@@ -1637,14 +1637,14 @@ def test_reactionast_workflow():
     rhs = Reaction.parse(
         '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
-        ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th0"}] '
+        ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}] '
         ":constraints [{:connected {}}]} :deltas []}"
     ).lhs
     lhs_snapshot = Reaction(lhs).lhs
     rhs_snapshot = Reaction(rhs).lhs
     expected_forward = Reaction.parse(
         "{:deltas ["
-        "{:stereo-atom {:add {:ligands [1 2 3 4] :site 0 :type :ccw}}} "
+        "{:stereo-atom {:add {:ligands [1 2 3 4] :site 0 :attrs :ccw}}} "
         "{:constraint {:add {:connected {}}}}] "
         ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ":bonds [[0 1 :single] [0 2 :single] [0 3 :single] "
@@ -1679,8 +1679,8 @@ def test_reactionast_workflow():
     rendered = str(normalized)
 
     assert rendered == (
-        "{:deltas [{:stereo-atom {:add {:ligands [1 2 3 4] "
-        ":site 0 :type :ccw}}} {:constraint {:add {:connected {}}}}] "
+        "{:deltas [{:stereo-atom {:add {:attrs :ccw :ligands [1 2 3 4] "
+        ":site 0}}} {:constraint {:add {:connected {}}}}] "
         ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ":bonds [[0 1 :single] [0 2 :single] [0 3 :single] "
         "[0 4 :single]]}}"
@@ -1708,7 +1708,7 @@ def test_reactionast_workflow():
         ':lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
         ":bonds [[0 1 :single] [0 2 :single] [0 3 :single] "
         "[0 4 :single]] :constraints [{:connected {}}] "
-        ":stereo-atoms [{:ligands [1 2 3 4] :site 0 :type :ccw}]}}"
+        ":stereo-atoms [{:ligands [1 2 3 4] :site 0 :attrs :ccw}]}}"
     )
     reversed_reaction = parsed.reverse()
 
@@ -1734,7 +1734,7 @@ def test_reactionast_workflow():
         ':lhs {:atoms ["C" "F" "Cl" "Br" "I" "Xe#c0"] '
         ":bonds [[0 1 :single] [0 2 :single] [0 3 :single] "
         "[0 4 :single]] :constraints [{:connected {}}] "
-        ":stereo-atoms [{:ligands [1 2 3 4] :site 0 :type :ccw}]}}"
+        ":stereo-atoms [{:ligands [1 2 3 4] :site 0 :attrs :ccw}]}}"
     )
 
     composites = reversed_reaction.compose(second)

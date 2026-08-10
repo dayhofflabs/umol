@@ -1,1 +1,1 @@
-{:atoms ["C" "C"] :multicenter-bonds [{:remove {:atoms [0 1] :type "*#e2"}}]}
+{:atoms ["C" "C"] :multicenter-bonds [{:remove {:atoms [0 1] :attrs "*#e2"}}]}

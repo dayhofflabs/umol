@@ -7,11 +7,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :output {
       :atoms ["C#h3#v" "N#n#v3" "N#n#v3" "C#h3#v"]
       :bonds [[0 1 :single] [1 2 "2#C1"] [2 3 :single]]
-      :stereo-bonds [{:ligands [0 [:lp 1] 3 [:lp 2]] :site 1 :type :e}]}
+      :stereo-bonds [{:attrs :e :ligands [0 [:lp 1] 3 [:lp 2]] :site 1}]}
     :success true}
   :counts {
     :output {
       :atoms ["C#h3#v" "N#n#v3" "N#n#v3" "C#h3#v"]
       :bonds [[0 1 :single] [1 2 "2#C1"] [2 3 :single]]
-      :stereo-bonds [{:ligands [0 [:lp 1] 3 [:lp 2]] :site 1 :type :e}]}
+      :stereo-bonds [{:attrs :e :ligands [0 [:lp 1] 3 [:lp 2]] :site 1}]}
     :success true}}

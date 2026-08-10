@@ -197,7 +197,7 @@ mod tests {
         ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
         },
-        mol_dsl!(r#"{:atoms ["N#d0" "B"] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["N#d0" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(0),
@@ -209,7 +209,7 @@ mod tests {
         ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
         },
-        mol_dsl!(r#"{:atoms ["N" "B#t0"] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["N" "B#t0"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
             IncidenceConstraintContradiction::Atom {
                 atom: AtomId(1),
@@ -221,7 +221,7 @@ mod tests {
         ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
         },
-        mol_dsl!(r#"{:atoms ["N#d1" "N" "B"] :dative-bonds [{:donors [0 1] :acceptor 2 :type "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["N#d1" "N" "B"] :dative-bonds [{:donors [0 1] :acceptor 2 :attrs "1"}]}"#),
         Solution::Underdetermined(Edits::new()),
     )]
     #[case::vacuous(

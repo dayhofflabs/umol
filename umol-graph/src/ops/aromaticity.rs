@@ -571,7 +571,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"] [6 7 "1#a"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[1,1,1,1,1,1]"
+                :attrs "[1,1,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {
@@ -605,7 +605,7 @@ mod tests {
                     [4 5 "1#a*"] [5 0 "1#a*"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[1,1,1,1,1,1]"
+                :attrs "[1,1,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {
@@ -633,7 +633,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[2,0,1,1,1,1]"
+                :attrs "[2,0,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {
@@ -670,7 +670,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4 5]
-                :type "[1,1,1,1,1,1]"
+                :attrs "[1,1,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {
@@ -697,7 +697,7 @@ mod tests {
             :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]
             :aromatic-systems [{
                 :atoms [0 1 2 3 4]
-                :type "[2,1,1,1,1]"
+                :attrs "[2,1,1,1,1]"
             }]
         }"#),
         Solution::Determined(AromaticityDerivation {

@@ -100,7 +100,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]"}]}"#),
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]"}]}"#),
         Edits::from_iter([
             Edit::ModifyMulticenterBondField {
                 id: MulticenterBondHandle::Id(MulticenterBondId(0)),
@@ -120,7 +120,7 @@ mod tests {
     )]
     #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-#s3"}]}"#),
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c-#s3"}]}"#),
         Edits::from_iter([Edit::ModifyMulticenterBondField {
             id: MulticenterBondHandle::Id(MulticenterBondId(0)),
             change: MulticenterBondFieldChange::UnpairedElectrons {
@@ -141,7 +141,7 @@ mod tests {
 
     #[rstest]
     #[case::determined(mol_dsl!(r#"{:atoms ["B" "H" "B"]
-        :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c-#u2#s1"}]}"#))]
+        :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c-#u2#s1"}]}"#))]
     fn test_multicenter_bonds_resolver_plan_identity(#[case] molecule: Molecule) {
         assert_eq!(
             MulticenterBondsResolver::new().plan(&molecule),
@@ -163,7 +163,7 @@ mod tests {
     )]
     #[case::underdetermined(
         mol_dsl!(r#"{:atoms ["C#m1" "C" "C"]
-                       :multicenter-bonds [{:atoms [0 1 2] :type "*"}]}"#),
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"#),
         Solution::Underdetermined(Edits::new()),
     )]
     #[case::vacuous(
@@ -180,9 +180,9 @@ mod tests {
     #[rstest]
     #[case::partial_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#s3"}]}"#),
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#s3"}]}"#),
         mol_dsl!(r#"{:atoms ["B" "H" "B"]
-                       :multicenter-bonds [{:atoms [0 1 2] :type "[1, 0, 1]#c0#u2#s3"}]}"#)
+                       :multicenter-bonds [{:atoms [0 1 2] :attrs "[1, 0, 1]#c0#u2#s3"}]}"#)
     )]
     fn test_multicenter_bonds_resolver_resolve(
         #[case] mut molecule: Molecule,
@@ -201,8 +201,8 @@ mod tests {
             r#"{
             :atoms ["B" "H" "B" "H" "B"]
             :multicenter-bonds [
-                {:atoms [0 1 2] :type "[1, 0, 1]"}
-                {:atoms [2 3 4] :type "[1, 0, 1]"}
+                {:atoms [0 1 2] :attrs "[1, 0, 1]"}
+                {:atoms [2 3 4] :attrs "[1, 0, 1]"}
             ]
         }"#
         );

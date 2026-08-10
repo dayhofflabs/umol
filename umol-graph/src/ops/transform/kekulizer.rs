@@ -553,7 +553,7 @@ mod tests {
 
     #[rstest]
     #[case::neutral_all_covered(
-        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         MatchingInput {
             required_covered: vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
             required_exposed: vec![],
@@ -562,7 +562,7 @@ mod tests {
         }
     )]
     #[case::prescribed_donor(
-        mol_dsl_ground!(r#"{:atoms ["N" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[2,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["N" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[2,1,1]"}]}"#),
         MatchingInput {
             required_covered: vec![AtomId(1), AtomId(2)],
             required_exposed: vec![PrescribedExposure { atom: AtomId(0), electrons: 2 }],
@@ -571,7 +571,7 @@ mod tests {
         }
     )]
     #[case::prescribed_acceptor_at_positional_atom(
-        mol_dsl_ground!(r#"{:atoms ["C" "B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,0,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C" "B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,0,1]"}]}"#),
         MatchingInput {
             required_covered: vec![AtomId(0), AtomId(2)],
             required_exposed: vec![PrescribedExposure { atom: AtomId(1), electrons: 0 }],
@@ -580,7 +580,7 @@ mod tests {
         }
     )]
     #[case::mobile_positive_charge(
-        mol_dsl_ground!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#c+"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]}"#),
         MatchingInput {
             required_covered: vec![],
             required_exposed: vec![],
@@ -589,7 +589,7 @@ mod tests {
         }
     )]
     #[case::mobile_negative_charge(
-        mol_dsl_ground!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#c-"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c-"}]}"#),
         MatchingInput {
             required_covered: vec![],
             required_exposed: vec![],
@@ -604,19 +604,19 @@ mod tests {
 
     #[rstest]
     #[case::undetermined_electrons(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "*#c0#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*#c0#u0#s1"}]}"#),
         KekulizerError::UndeterminedElectrons(AromaticSystemId(0))
     )]
     #[case::undetermined_charge(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#u0#s1"}]}"#),
         KekulizerError::UndeterminedCharge(AromaticSystemId(0))
     )]
     #[case::undetermined_unpaired_electrons(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#c0#u0"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u0"}]}"#),
         KekulizerError::UndeterminedUnpairedElectrons(AromaticSystemId(0))
     )]
     #[case::electron_count_mismatch(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1]#c0#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1]#c0#u0#s1"}]}"#),
         KekulizerError::ElectronCountMismatch {
             system: AromaticSystemId(0),
             member_count: 2,
@@ -624,7 +624,7 @@ mod tests {
         }
     )]
     #[case::unsupported_contribution_at_positional_atom(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,3]#c0#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,3]#c0#u0#s1"}]}"#),
         KekulizerError::UnsupportedElectronContribution {
             system: AromaticSystemId(0),
             atom: AtomId(1),
@@ -632,25 +632,25 @@ mod tests {
         }
     )]
     #[case::open_shell(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#c0#u1#s2"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u1#s2"}]}"#),
         KekulizerError::OpenShell(AromaticSystemId(0))
     )]
     #[case::multiple_prescribed_exposures(
-        mol_dsl!(r#"{:atoms ["B" "C" "N"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :type "[0,1,2]#c0#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["B" "C" "N"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,2]#c0#u0#s1"}]}"#),
         KekulizerError::MultiplePrescribedExposures {
             system: AromaticSystemId(0),
             count: 2,
         }
     )]
     #[case::unsupported_charge(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]#c+2#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c+2#u0#s1"}]}"#),
         KekulizerError::UnsupportedCharge {
             system: AromaticSystemId(0),
             charge: 2,
         }
     )]
     #[case::mixed_prescribed_and_mobile_demand(
-        mol_dsl!(r#"{:atoms ["B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[0,1]#c+#u0#s1"}]}"#),
+        mol_dsl!(r#"{:atoms ["B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[0,1]#c+#u0#s1"}]}"#),
         KekulizerError::MixedExposureDemand(AromaticSystemId(0))
     )]
     fn test_matching_input_from_system_error(
@@ -693,17 +693,17 @@ mod tests {
 
     #[rstest]
     #[case::benzene(
-        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
         mol_dsl_ground!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#)
     )]
     #[case::embedded_benzene_nonidentity_correspondence(
-        mol_dsl_ground!(r#"{:atoms ["O#h#n2" "H" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [2 7 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6 7] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["O#h#n2" "H" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [2 7 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6 7] :attrs "[1,1,1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(1)],
         mol_dsl_ground!(r#"{:atoms ["O#h#n2" "H" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :single] [2 3 :double] [3 4 :single] [4 5 :double] [5 6 :single] [6 7 :double] [2 7 :single]]}"#)
     )]
     #[case::multiple_disjoint_systems(
-        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"} {:atoms [4 5 6 7] :type "[1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"} {:atoms [4 5 6 7] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(4), AtomId(1), AtomId(5), AtomId(2), AtomId(6), AtomId(3), AtomId(7)],
         mol_dsl_ground!(r#"{:atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h" "C#h"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 0 :single] [4 5 :double] [5 6 :single] [6 7 :double] [7 4 :single]]}"#)
     )]
@@ -731,12 +731,12 @@ mod tests {
 
     #[rstest]
     #[case::no_matching(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
         KekulizerError::NoMatching(AromaticSystemId(0))
     )]
     #[case::missing_system_atom(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(2)],
         KekulizerError::InvalidNodeOrder {
             system: AromaticSystemId(0),
@@ -745,7 +745,7 @@ mod tests {
         }
     )]
     #[case::duplicate_system_atom(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :type "[1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(1), AtomId(2), AtomId(3)],
         KekulizerError::InvalidNodeOrder {
             system: AromaticSystemId(0),
@@ -754,7 +754,7 @@ mod tests {
         }
     )]
     #[case::spin_invariant(
-        mol_dsl_ground!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
         KekulizerError::PostLocalizationSpinInvariant(
             SpinInvariantsContradiction::MoleculeAtom {
@@ -780,12 +780,12 @@ mod tests {
 
     #[rstest]
     #[case::non_bipartite(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [0 2 :aromatic]] :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [0 2 :aromatic]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}"#),
         (0..3).map(AtomId).collect(),
         KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
     #[case::mobile_exposure(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
         KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
@@ -807,7 +807,7 @@ mod tests {
 
     #[rstest]
     #[case::five_membered_ring(
-        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -819,7 +819,7 @@ mod tests {
         }]
     )]
     #[case::seven_membered_ring(
-        mol_dsl_ground!(r#"{:atoms ["B#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[0,1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["B#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[0,1,1,1,1,1,1]"}]}"#),
         (0..7).map(AtomId).collect(),
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -831,7 +831,7 @@ mod tests {
         }]
     )]
     #[case::fused_heterocycle(
-        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 8 :aromatic] [8 3 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :type "[2,1,1,1,1,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 7 :aromatic] [7 8 :aromatic] [8 3 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[2,1,1,1,1,1,1,1,1]"}]}"#),
         (0..9).map(AtomId).collect(),
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -843,7 +843,7 @@ mod tests {
         }]
     )]
     #[case::nontrivial_host_ids(
-        mol_dsl_ground!(r#"{:atoms ["O" "H" "N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 2 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6] :type "[2,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["O" "H" "N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :single] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 2 :aromatic]] :aromatic-systems [{:atoms [2 3 4 5 6] :attrs "[2,1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(1)],
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -855,7 +855,7 @@ mod tests {
         }]
     )]
     #[case::five_membered_mobile_hole_natural_order(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -867,7 +867,7 @@ mod tests {
         }]
     )]
     #[case::five_membered_mobile_hole_rotated_order(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         vec![AtomId(2), AtomId(3), AtomId(4), AtomId(0), AtomId(1)],
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -879,7 +879,7 @@ mod tests {
         }]
     )]
     #[case::seven_membered_mobile_hole_natural_order(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[1,1,1,1,1,1,1]#c+"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,1]#c+"}]}"#),
         (0..7).map(AtomId).collect(),
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -891,7 +891,7 @@ mod tests {
         }]
     )]
     #[case::seven_membered_mobile_hole_rotated_order(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :type "[1,1,1,1,1,1,1]#c+"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic] [6 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[1,1,1,1,1,1,1]#c+"}]}"#),
         vec![AtomId(3), AtomId(4), AtomId(5), AtomId(6), AtomId(0), AtomId(1), AtomId(2)],
         vec![SystemPlan {
             system_idx: AromaticSystemId(0),
@@ -914,12 +914,12 @@ mod tests {
 
     #[rstest]
     #[case::impossible_prescribed_hole(
-        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
         KekulizerError::NoMatching(AromaticSystemId(0))
     )]
     #[case::mobile_matching_deficiency(
-        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]}"#),
+        mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
         KekulizerError::MatchingDeficiency {
             system: AromaticSystemId(0),

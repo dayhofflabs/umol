@@ -983,7 +983,7 @@ mod tests {
         })],
     )]
     #[case::stereo_mirror(
-        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##,
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##,
         5,
         vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Mirror {
             id: GraphIrStereoAtomId(0),
@@ -1345,7 +1345,7 @@ mod tests {
     #[rstest]
     #[case::dative_bond(
         r#"{:atoms ["N" "B"] :bonds []}"#,
-        r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :type "1"}]}"#,
+        r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#,
         vec![(0, 0), (1, 1)],
         vec![GraphIrDelta::DativeBond(GraphIrDativeBondDelta::Add {
             id: GraphIrDativeBondId(0),
@@ -1356,7 +1356,7 @@ mod tests {
     )]
     #[case::aromatic_system(
         r#"{:atoms ["C" "C"] :bonds []}"#,
-        r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "[1,1]"}]}"#,
+        r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]"}]}"#,
         vec![(0, 0), (1, 1)],
         vec![GraphIrDelta::AromaticSystem(GraphIrAromaticSystemDelta::Add {
             id: GraphIrAromaticSystemId(0),
@@ -1366,7 +1366,7 @@ mod tests {
     )]
     #[case::multicenter_bond(
         r#"{:atoms ["B" "H" "B"] :bonds []}"#,
-        r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "[3,5,7]"}]}"#,
+        r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "[3,5,7]"}]}"#,
         vec![(0, 0), (1, 1), (2, 2)],
         vec![GraphIrDelta::MulticenterBond(GraphIrMulticenterBondDelta::Add {
             id: GraphIrMulticenterBondId(0),
@@ -1376,7 +1376,7 @@ mod tests {
     )]
     #[case::noncovalent_bond(
         r#"{:atoms ["O" "O"] :bonds []}"#,
-        r#"{:atoms ["O" "O"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :type "Hbd"}]}"#,
+        r#"{:atoms ["O" "O"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#,
         vec![(0, 0), (1, 1)],
         vec![GraphIrDelta::NoncovalentBond(GraphIrNoncovalentBondDelta::Add {
             id: GraphIrNoncovalentBondId(0),
@@ -1386,7 +1386,7 @@ mod tests {
     )]
     #[case::stereo_atom(
         r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds []}"#,
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
         vec![(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)],
         vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
             id: GraphIrStereoAtomId(0),
@@ -1402,7 +1402,7 @@ mod tests {
     )]
     #[case::stereo_bond(
         r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]}"#,
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
         vec![(0, 0), (1, 1), (2, 2), (3, 3)],
         vec![GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
             id: GraphIrStereoBondId(0),
@@ -2851,7 +2851,7 @@ mod tests {
     )]
     #[case::atom_modify(r##"{:lhs {:atoms ["Br#c0"]} :deltas [{:atom {:modify [0 "#c-1"]}}]}"##)]
     #[case::stereo_mirror(
-        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##
     )]
     #[case::molecule_constraint(
         r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##

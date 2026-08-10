@@ -131,13 +131,13 @@ mod tests {
             :atoms ["C#c-#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[2,1,1,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]
+            :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]
         }"#)
     )]
     #[case::tropylium(
@@ -148,7 +148,7 @@ mod tests {
                     [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic]
                     [6 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5 6]
-                                :type "[0,1,1,1,1,1,1]"}]
+                                :attrs "[0,1,1,1,1,1,1]"}]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a"
@@ -157,7 +157,7 @@ mod tests {
                     [3 4 :aromatic] [4 5 :aromatic] [5 6 :aromatic]
                     [6 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5 6]
-                                :type "[1,1,1,1,1,1,1]#c+"}]
+                                :attrs "[1,1,1,1,1,1,1]#c+"}]
         }"#)
     )]
     #[case::multiple_systems(
@@ -167,8 +167,8 @@ mod tests {
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 3 :aromatic]]
             :aromatic-systems [
-                {:atoms [0 1 2] :type "[0,1,1]"}
-                {:atoms [3 4 5] :type "[0,1,1]"}]
+                {:atoms [0 1 2] :attrs "[0,1,1]"}
+                {:atoms [3 4 5] :attrs "[0,1,1]"}]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a"
@@ -176,8 +176,8 @@ mod tests {
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 3 :aromatic]]
             :aromatic-systems [
-                {:atoms [0 1 2] :type "[1,1,1]#c+"}
-                {:atoms [3 4 5] :type "[1,1,1]#c+"}]
+                {:atoms [0 1 2] :attrs "[1,1,1]#c+"}
+                {:atoms [3 4 5] :attrs "[1,1,1]#c+"}]
         }"#)
     )]
     fn test_delocalize_charge_transform(#[case] input: Molecule, #[case] expected: Molecule) {
@@ -189,18 +189,18 @@ mod tests {
         :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                 [3 4 :aromatic] [4 0 :aromatic]]
-        :aromatic-systems [{:atoms [0 1 2 3 4] :type "[1,1,1,1,1]#c-"}]
+        :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]
     }"#))]
     #[case::heterogeneous(mol_dsl_ground!(r#"{
         :atoms ["B#c-#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                 [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
-        :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "[1,1,1,1,1,1]"}]
+        :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
     }"#))]
     #[case::non_literal(mol_dsl!(r#"{
         :atoms ["C" "C" "C"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
-        :aromatic-systems [{:atoms [0 1 2] :type "*"}]
+        :aromatic-systems [{:atoms [0 1 2] :attrs "*"}]
     }"#))]
     fn test_delocalize_charge_transform_identity(#[case] input: Molecule) {
         assert_eq!(DelocalizeCharge.transform(&input), Ok(input));
@@ -211,12 +211,12 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#c+#h#a0" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2] :type "[0,1,1]"}]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]
         }"#),
         mol_dsl_ground!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
-            :aromatic-systems [{:atoms [0 1 2] :type "[1,1,1]#c+"}]
+            :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]
         }"#)
     )]
     fn test_delocalize_charge_generate_all(#[case] input: Molecule, #[case] expected: Molecule) {

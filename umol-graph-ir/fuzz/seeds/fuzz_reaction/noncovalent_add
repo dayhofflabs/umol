@@ -1,1 +1,1 @@
-{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :type "Hbd"}}}]}
+{:lhs {:atoms ["N" "H"]} :deltas [{:noncovalent-bond {:add {:atoms [0 1] :attrs "Hbd"}}}]}

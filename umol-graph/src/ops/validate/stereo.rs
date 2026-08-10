@@ -368,12 +368,12 @@ mod tests {
     // symmetry, genuinely stereogenic, every ligand pair diastereotopic.
     const CFCLBRI: &str = r#"{:atoms ["C" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
-        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#;
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#;
 
     // Cis/trans double bond, each terminus bearing two distinct substituents.
     const BUTENE: &str = r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
         :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
-        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :type "Ct1"}]}"#;
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]}"#;
 
     #[rstest]
     fn test_stereo_validate_config_default() {
@@ -484,7 +484,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0] :type "Th1"}]
+            :stereo-atoms [{:site 1 :ligands [0] :attrs "Th1"}]
         }"#),
         Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
             StereoInconsistency::StereoAtomFailure {
@@ -496,7 +496,7 @@ mod tests {
         mol_dsl_ground!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0] :type "Ct1"}]
+            :stereo-bonds [{:site 1 :ligands [0] :attrs "Ct1"}]
         }"#),
         Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
             StereoInconsistency::StereoBondFailure {
@@ -511,7 +511,7 @@ mod tests {
             :stereo-atoms [{
                 :site 1
                 :ligands [0 2 3 [:h 1]]
-                :type "Th0"
+                :attrs "Th0"
             }]
         }"#),
         Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
@@ -528,7 +528,7 @@ mod tests {
             :stereo-bonds [{
                 :site 1
                 :ligands [0 [:h 1] 3 [:h 2]]
-                :type "Ct0"
+                :attrs "Ct0"
             }]
         }"#),
         Solution::Contradictory(StereoValidatorContradiction::Inconsistency(
@@ -545,7 +545,7 @@ mod tests {
             :stereo-atoms [{
                 :site 1
                 :ligands [0 2 3 [:h 1]]
-                :type "Th1"
+                :attrs "Th1"
             }]
         }"#),
         Solution::Determined(()),
@@ -557,7 +557,7 @@ mod tests {
             :stereo-bonds [{
                 :site 1
                 :ligands [0 [:h 1] 3 [:h 2]]
-                :type "Ct1"
+                :attrs "Ct1"
             }]
         }"#),
         Solution::Determined(()),
