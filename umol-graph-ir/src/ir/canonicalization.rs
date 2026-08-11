@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, EdgeId, Graph, NodeId, SubdividedGraph, SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, SubdividedGraph,
+    SubdivisionNodeSource,
 };
 
 use super::atom::{ElementForm, IsotopeMassForm};
@@ -623,6 +624,7 @@ struct AutomorphismAdapter {
     subdivision: SubdividedGraph,
     classes: Vec<AutomorphismClass>,
     source_node_count: usize,
+    entity_blocks: Vec<Vec<NodeId>>,
 }
 
 #[allow(dead_code)]
@@ -642,6 +644,19 @@ impl AutomorphismAdapter {
         debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
 
         let subdivision = source.subdivide_edges();
+        let mut entity_blocks = Vec::<Vec<NodeId>>::new();
+        let mut previous_kind = None;
+        for node in source.node_ids() {
+            let kind = incidence_graph.entity(node).kind();
+            if previous_kind != Some(kind) {
+                entity_blocks.push(Vec::new());
+                previous_kind = Some(kind);
+            }
+            entity_blocks
+                .last_mut()
+                .expect("current entity block is present")
+                .push(node);
+        }
         let classes = initial_classes
             .entities
             .iter()
@@ -660,6 +675,7 @@ impl AutomorphismAdapter {
             subdivision,
             classes,
             source_node_count: source.node_count(),
+            entity_blocks,
         }
     }
 
@@ -692,6 +708,23 @@ impl AutomorphismAdapter {
             .graph()
             .automorphisms(|node| self.class(node), algorithm);
 
+        self.project_automorphisms(&output)
+    }
+
+    fn automorphisms_for_partition(
+        &self,
+        partition: &OrderedPartition,
+        algorithm: AutomorphismAlgorithm,
+    ) -> ProjectedAutomorphismOutput {
+        let cell_indices = partition.cell_indices(self.graph().node_count());
+        let output = self
+            .graph()
+            .automorphisms(|node| cell_indices[node.index()], algorithm);
+
+        self.project_automorphisms(&output)
+    }
+
+    fn project_automorphisms(&self, output: &AutomorphismOutput) -> ProjectedAutomorphismOutput {
         let source_node = |node| match self.node_source(node) {
             SubdivisionNodeSource::Node(source) => source,
             SubdivisionNodeSource::Edge(_) => {
@@ -727,6 +760,362 @@ impl AutomorphismAdapter {
             generators,
         }
     }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct OrderedPartition {
+    cells: Vec<Vec<NodeId>>,
+}
+
+#[allow(dead_code)]
+impl OrderedPartition {
+    fn from_classes<C: Copy + Ord>(classes: &[C]) -> Self {
+        let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
+        for (index, &class) in classes.iter().enumerate() {
+            cells.entry(class).or_default().push(NodeId(index as u32));
+        }
+
+        Self {
+            cells: cells.into_values().collect(),
+        }
+    }
+
+    fn refine(mut self, graph: &Graph) -> Self {
+        loop {
+            let cell_indices = self.cell_indices(graph.node_count());
+            let mut refined = Vec::with_capacity(self.cells.len());
+            let mut changed = false;
+
+            for cell in self.cells {
+                let mut splits = BTreeMap::<Vec<u32>, Vec<NodeId>>::new();
+                for node in cell {
+                    let mut signature = graph
+                        .neighbors(node)
+                        .iter()
+                        .map(|neighbor| cell_indices[neighbor.node.index()])
+                        .collect::<Vec<_>>();
+                    signature.sort_unstable();
+                    splits.entry(signature).or_default().push(node);
+                }
+                changed |= splits.len() > 1;
+                // The minimum sorted-incidence key places the greater exact signature first.
+                refined.extend(splits.into_values().rev());
+            }
+
+            self.cells = refined;
+            if !changed {
+                return self;
+            }
+        }
+    }
+
+    fn individualize(&self, cell_index: usize, node: NodeId) -> Self {
+        let mut cells = Vec::with_capacity(self.cells.len() + 1);
+        for (index, cell) in self.cells.iter().enumerate() {
+            if index != cell_index {
+                cells.push(cell.clone());
+                continue;
+            }
+
+            cells.push(vec![node]);
+            let remainder = cell
+                .iter()
+                .copied()
+                .filter(|&candidate| candidate != node)
+                .collect::<Vec<_>>();
+            if !remainder.is_empty() {
+                cells.push(remainder);
+            }
+        }
+
+        Self { cells }
+    }
+
+    fn first_non_singleton_entity_cell(&self, entity_count: usize) -> Option<usize> {
+        self.cells.iter().position(|cell| {
+            cell.len() > 1 && cell.first().is_some_and(|node| node.index() < entity_count)
+        })
+    }
+
+    fn entity_order(&self, entity_count: usize) -> Vec<NodeId> {
+        self.cells
+            .iter()
+            .flatten()
+            .copied()
+            .filter(|node| node.index() < entity_count)
+            .collect()
+    }
+
+    fn fixed_entity_prefix(&self, entity_count: usize) -> Vec<NodeId> {
+        self.cells
+            .iter()
+            .take_while(|cell| cell.len() == 1)
+            .flatten()
+            .copied()
+            .take_while(|node| node.index() < entity_count)
+            .collect()
+    }
+
+    fn cell_indices(&self, node_count: usize) -> Vec<u32> {
+        let mut indices = vec![0; node_count];
+        for (cell_index, cell) in self.cells.iter().enumerate() {
+            for node in cell {
+                indices[node.index()] = cell_index as u32;
+            }
+        }
+        indices
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BranchOrder {
+    Node,
+    ReverseNode,
+    BackendCanonical,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CanonicalSearchOptions {
+    automorphism_pruning: bool,
+    prefix_pruning: bool,
+    branch_order: BranchOrder,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct CanonicalSearchStats {
+    refinement_calls: usize,
+    visited_leaves: usize,
+    prefix_pruned_branches: usize,
+    orbit_pruned_branches: usize,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanonicalCandidate<K> {
+    key: K,
+    entity_order: Vec<NodeId>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanonicalSearchResult<K> {
+    candidate: CanonicalCandidate<K>,
+    stats: CanonicalSearchStats,
+}
+
+#[allow(dead_code)]
+/// Minimize a typed leaf key over the adapter's ordered exact partition.
+///
+/// Automorphism pruning requires the leaf key to be invariant under adapter automorphisms.
+/// Prefix pruning requires `prefix_worse` to reject only partitions whose every leaf is greater
+/// than the current best key.
+fn canonical_search<K, LeafKey, PrefixWorse>(
+    adapter: &AutomorphismAdapter,
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_key: &LeafKey,
+    prefix_worse: &PrefixWorse,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    LeafKey: Fn(&[NodeId]) -> K,
+    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+{
+    let initial = OrderedPartition::from_classes(&adapter.classes).refine(adapter.graph());
+    let mut best = None;
+    let mut stats = CanonicalSearchStats {
+        refinement_calls: 1,
+        ..Default::default()
+    };
+
+    search_partition(
+        adapter,
+        initial,
+        algorithm,
+        options,
+        leaf_key,
+        prefix_worse,
+        &mut best,
+        &mut stats,
+    );
+
+    CanonicalSearchResult {
+        candidate: best.expect("every finite partition has a discrete entity refinement"),
+        stats,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search_partition<K, LeafKey, PrefixWorse>(
+    adapter: &AutomorphismAdapter,
+    partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_key: &LeafKey,
+    prefix_worse: &PrefixWorse,
+    best: &mut Option<CanonicalCandidate<K>>,
+    stats: &mut CanonicalSearchStats,
+) where
+    K: Ord,
+    LeafKey: Fn(&[NodeId]) -> K,
+    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+{
+    if options.prefix_pruning
+        && best
+            .as_ref()
+            .is_some_and(|best| prefix_worse(&partition, best))
+    {
+        stats.prefix_pruned_branches += 1;
+        return;
+    }
+
+    let Some(cell_index) = partition.first_non_singleton_entity_cell(adapter.source_node_count)
+    else {
+        stats.visited_leaves += 1;
+        let entity_order = partition.entity_order(adapter.source_node_count);
+        let candidate = CanonicalCandidate {
+            key: leaf_key(&entity_order),
+            entity_order,
+        };
+        if best.as_ref().is_none_or(|best| {
+            (&candidate.key, &candidate.entity_order) < (&best.key, &best.entity_order)
+        }) {
+            *best = Some(candidate);
+        }
+        return;
+    };
+
+    let mut candidates = partition.cells[cell_index].clone();
+    let automorphisms = (options.automorphism_pruning
+        || options.branch_order == BranchOrder::BackendCanonical)
+        .then(|| adapter.automorphisms_for_partition(&partition, algorithm));
+
+    if options.automorphism_pruning {
+        let orbits = &automorphisms
+            .as_ref()
+            .expect("automorphisms requested for orbit pruning")
+            .orbits;
+        let mut representatives = BTreeMap::<NodeId, NodeId>::new();
+        for candidate in candidates {
+            representatives
+                .entry(orbits[candidate.index()])
+                .and_modify(|representative| *representative = (*representative).min(candidate))
+                .or_insert(candidate);
+        }
+        stats.orbit_pruned_branches += partition.cells[cell_index].len() - representatives.len();
+        candidates = representatives.into_values().collect();
+    }
+
+    match options.branch_order {
+        BranchOrder::Node => candidates.sort_unstable(),
+        BranchOrder::ReverseNode => candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs)),
+        BranchOrder::BackendCanonical => {
+            let labels = &automorphisms
+                .as_ref()
+                .expect("automorphisms requested for backend branch order")
+                .canonical_labels;
+            let mut ranks = vec![0; adapter.source_node_count];
+            for (rank, node) in labels.iter().enumerate() {
+                ranks[node.index()] = rank;
+            }
+            candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+        }
+    }
+
+    for candidate in candidates {
+        stats.refinement_calls += 1;
+        let child = partition
+            .individualize(cell_index, candidate)
+            .refine(adapter.graph());
+        search_partition(
+            adapter,
+            child,
+            algorithm,
+            options,
+            leaf_key,
+            prefix_worse,
+            best,
+            stats,
+        );
+    }
+}
+
+#[allow(dead_code)]
+fn exhaustive_minimum<K, LeafKey>(
+    adapter: &AutomorphismAdapter,
+    leaf_key: &LeafKey,
+) -> CanonicalCandidate<K>
+where
+    K: Ord,
+    LeafKey: Fn(&[NodeId]) -> K,
+{
+    fn visit_cells<K, LeafKey>(
+        cells: &mut [Vec<NodeId>],
+        cell_index: usize,
+        order: &mut Vec<NodeId>,
+        leaf_key: &LeafKey,
+        best: &mut Option<CanonicalCandidate<K>>,
+    ) where
+        K: Ord,
+        LeafKey: Fn(&[NodeId]) -> K,
+    {
+        fn visit_permutations<K, LeafKey>(
+            cells: &mut [Vec<NodeId>],
+            cell_index: usize,
+            position: usize,
+            order: &mut Vec<NodeId>,
+            leaf_key: &LeafKey,
+            best: &mut Option<CanonicalCandidate<K>>,
+        ) where
+            K: Ord,
+            LeafKey: Fn(&[NodeId]) -> K,
+        {
+            if position == cells[cell_index].len() {
+                let old_len = order.len();
+                order.extend_from_slice(&cells[cell_index]);
+                visit_cells(cells, cell_index + 1, order, leaf_key, best);
+                order.truncate(old_len);
+                return;
+            }
+
+            for next in position..cells[cell_index].len() {
+                cells[cell_index].swap(position, next);
+                visit_permutations(cells, cell_index, position + 1, order, leaf_key, best);
+                cells[cell_index].swap(position, next);
+            }
+        }
+
+        if cell_index == cells.len() {
+            let candidate = CanonicalCandidate {
+                key: leaf_key(order),
+                entity_order: order.clone(),
+            };
+            if best.as_ref().is_none_or(|best| {
+                (&candidate.key, &candidate.entity_order) < (&best.key, &best.entity_order)
+            }) {
+                *best = Some(candidate);
+            }
+            return;
+        }
+
+        visit_permutations(cells, cell_index, 0, order, leaf_key, best);
+    }
+
+    let mut cells = adapter.entity_blocks.clone();
+    let mut best = None;
+    visit_cells(
+        &mut cells,
+        0,
+        &mut Vec::with_capacity(adapter.source_node_count),
+        leaf_key,
+        &mut best,
+    );
+
+    best.expect("every finite partition has an entity ordering")
 }
 
 #[allow(dead_code)]
@@ -1374,6 +1763,285 @@ mod tests {
                 generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
             },
         );
+    }
+
+    #[rstest]
+    #[case::ordered_classes(
+        vec![2_u32, 0, 2, 1, 0],
+        OrderedPartition {
+            cells: vec![
+                vec![NodeId(1), NodeId(4)],
+                vec![NodeId(3)],
+                vec![NodeId(0), NodeId(2)],
+            ],
+        },
+    )]
+    fn test_ordered_partition_from_classes(
+        #[case] classes: Vec<u32>,
+        #[case] expected: OrderedPartition,
+    ) {
+        assert_eq!(OrderedPartition::from_classes(&classes), expected);
+    }
+
+    #[rstest]
+    #[case::path(
+        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
+        OrderedPartition {
+            cells: vec![vec![NodeId(1), NodeId(2)], vec![NodeId(0), NodeId(3)]],
+        },
+    )]
+    fn test_ordered_partition_refine(#[case] graph: Graph, #[case] expected: OrderedPartition) {
+        assert_eq!(
+            OrderedPartition::from_classes(&[0_u32; 4]).refine(&graph),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::first_cell(
+        OrderedPartition {
+            cells: vec![vec![NodeId(0), NodeId(3)], vec![NodeId(1), NodeId(2)]],
+        },
+        0,
+        NodeId(3),
+        OrderedPartition {
+            cells: vec![
+                vec![NodeId(3)],
+                vec![NodeId(0)],
+                vec![NodeId(1), NodeId(2)],
+            ],
+        },
+    )]
+    fn test_ordered_partition_individualize(
+        #[case] partition: OrderedPartition,
+        #[case] cell_index: usize,
+        #[case] node: NodeId,
+        #[case] expected: OrderedPartition,
+    ) {
+        assert_eq!(partition.individualize(cell_index, node), expected);
+    }
+
+    #[rstest]
+    #[case::path(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        }),
+    )]
+    #[case::branched(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        }),
+    )]
+    #[case::parallel_bonds(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        }),
+    )]
+    #[case::distinct_attributes(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        }),
+    )]
+    fn test_canonical_search(#[case] molecule: Molecule) {
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+        let classes = initial_classes(&molecule, &incidence_graph).unwrap();
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let source = incidence_graph.graph();
+        let leaf_key = |order: &[NodeId]| {
+            let mut positions = vec![0_u32; source.node_count()];
+            for (position, node) in order.iter().enumerate() {
+                positions[node.index()] = position as u32;
+            }
+            let entity_classes = order
+                .iter()
+                .map(|node| classes.entities[node.index()])
+                .collect::<Vec<_>>();
+            let mut incidences = source
+                .edge_ids()
+                .map(|edge| {
+                    let [first, second] = source.edge_endpoints(edge);
+                    let first = positions[first.index()];
+                    let second = positions[second.index()];
+                    (
+                        classes.incidences[edge.index()],
+                        first.min(second),
+                        first.max(second),
+                    )
+                })
+                .collect::<Vec<_>>();
+            incidences.sort_unstable();
+
+            (entity_classes, incidences)
+        };
+        let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+        let expected = exhaustive_minimum(&adapter, &leaf_key);
+        let unpruned = canonical_search(
+            &adapter,
+            AutomorphismAlgorithm::Nauty,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::Node,
+            },
+            &leaf_key,
+            &no_prefix,
+        );
+        let reversed = canonical_search(
+            &adapter,
+            AutomorphismAlgorithm::Nauty,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::ReverseNode,
+            },
+            &leaf_key,
+            &no_prefix,
+        );
+        let pruned = canonical_search(
+            &adapter,
+            AutomorphismAlgorithm::Nauty,
+            CanonicalSearchOptions {
+                automorphism_pruning: true,
+                prefix_pruning: false,
+                branch_order: BranchOrder::BackendCanonical,
+            },
+            &leaf_key,
+            &no_prefix,
+        );
+
+        assert_eq!(unpruned.candidate, expected);
+        assert_eq!(reversed.candidate, expected);
+        assert_eq!(pruned.candidate, expected);
+        assert!(pruned.stats.visited_leaves <= unpruned.stats.visited_leaves);
+    }
+
+    #[rstest]
+    fn test_canonical_search_prefix() {
+        let source = Graph::new(4, &[]);
+        let adapter = AutomorphismAdapter {
+            subdivision: source.subdivide_edges(),
+            classes: vec![AutomorphismClass::Entity(0); 4],
+            source_node_count: 4,
+            entity_blocks: vec![(0..4).map(NodeId).collect()],
+        };
+        let leaf_key = |order: &[NodeId]| order.to_vec();
+        let prefix_worse = |partition: &OrderedPartition,
+                            best: &CanonicalCandidate<Vec<NodeId>>| {
+            let prefix = partition.fixed_entity_prefix(4);
+            prefix.as_slice() > &best.key[..prefix.len()]
+        };
+        let expected = exhaustive_minimum(&adapter, &leaf_key);
+        let actual = canonical_search(
+            &adapter,
+            AutomorphismAlgorithm::Nauty,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: true,
+                branch_order: BranchOrder::Node,
+            },
+            &leaf_key,
+            &prefix_worse,
+        );
+
+        assert_eq!(actual.candidate, expected);
+        assert_ne!(actual.stats.prefix_pruned_branches, 0);
+    }
+
+    #[rstest]
+    #[case::order_four(4)]
+    fn test_canonical_search_exhaustive(#[case] node_count: usize) {
+        let endpoint_pairs = (0..node_count as u32)
+            .flat_map(|first| ((first + 1)..node_count as u32).map(move |second| [first, second]))
+            .collect::<Vec<_>>();
+
+        for edge_mask in 0..(1_u64 << endpoint_pairs.len()) {
+            let edges = endpoint_pairs
+                .iter()
+                .enumerate()
+                .filter_map(|(position, &edge)| ((edge_mask >> position) & 1 == 1).then_some(edge))
+                .collect::<Vec<_>>();
+            let source = Graph::new(node_count, &edges);
+            let adapter = AutomorphismAdapter {
+                subdivision: source.subdivide_edges(),
+                classes: (0..node_count)
+                    .map(|_| AutomorphismClass::Entity(0))
+                    .chain((0..edges.len()).map(|_| AutomorphismClass::Incidence(1)))
+                    .collect(),
+                source_node_count: node_count,
+                entity_blocks: vec![(0..node_count as u32).map(NodeId).collect()],
+            };
+            let leaf_key = |order: &[NodeId]| {
+                let mut positions = vec![0_u32; node_count];
+                for (position, node) in order.iter().enumerate() {
+                    positions[node.index()] = position as u32;
+                }
+                let mut mapped_edges = source
+                    .edge_ids()
+                    .map(|edge| {
+                        let [first, second] = source.edge_endpoints(edge);
+                        let first = positions[first.index()];
+                        let second = positions[second.index()];
+                        [first.min(second), first.max(second)]
+                    })
+                    .collect::<Vec<_>>();
+                mapped_edges.sort_unstable();
+                mapped_edges
+            };
+            let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+            let expected = exhaustive_minimum(&adapter, &leaf_key);
+
+            for options in [
+                CanonicalSearchOptions {
+                    automorphism_pruning: false,
+                    prefix_pruning: false,
+                    branch_order: BranchOrder::ReverseNode,
+                },
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    prefix_pruning: false,
+                    branch_order: BranchOrder::BackendCanonical,
+                },
+            ] {
+                assert_eq!(
+                    canonical_search(
+                        &adapter,
+                        AutomorphismAlgorithm::Nauty,
+                        options,
+                        &leaf_key,
+                        &no_prefix,
+                    )
+                    .candidate,
+                    expected,
+                    "edge mask {edge_mask:#08b}",
+                );
+            }
+        }
     }
 
     #[rstest]
