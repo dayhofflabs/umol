@@ -790,9 +790,12 @@ impl AutomorphismAdapter {
         algorithm: AutomorphismAlgorithm,
     ) -> ProjectedAutomorphismOutput {
         let cell_indices = partition.cell_indices(self.graph().node_count());
-        let output = self
-            .graph()
-            .automorphisms(|node| cell_indices[node.index()], algorithm);
+        // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
+        // exact adapter class here keeps orbit pruning restricted to true automorphisms.
+        let output = self.graph().automorphisms(
+            |node| (self.class(node), cell_indices[node.index()]),
+            algorithm,
+        );
 
         self.project_automorphisms(&output)
     }
@@ -1224,6 +1227,36 @@ fn partition_descriptors(
         .map(|source| match *source {
             SubdivisionNodeSource::Node(node) => entity_keys[node.index()].clone(),
             SubdivisionNodeSource::Edge(edge) => incidence_keys[edge.index()].clone(),
+        })
+        .collect()
+}
+
+#[allow(dead_code)]
+/// Search descriptors for the constitution key.
+///
+/// Dative roles and positional electron counts remain exact automorphism colors, but they do not
+/// fix the search partition: their order is selected by the typed leaf key. Using them for both
+/// purposes would exclude valid dense relabelings before the key can compare them.
+fn constitution_partition_descriptors(
+    adapter: &AutomorphismAdapter,
+    entity_keys: &[InitialClassKey],
+    incidence_graph: &IncidenceGraph,
+) -> Vec<InitialClassKey> {
+    adapter
+        .node_sources
+        .iter()
+        .map(|source| match *source {
+            SubdivisionNodeSource::Node(node) => entity_keys[node.index()].clone(),
+            SubdivisionNodeSource::Edge(edge) => {
+                let value = match incidence_graph.incidence(edge) {
+                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
+                    Incidence::AromaticParticipant(_) => variant(3, []),
+                    Incidence::MulticenterParticipant(_) => variant(4, []),
+                    incidence => incidence_key(incidence)
+                        .expect("initial classes established incidence normalization"),
+                };
+                InitialClassKey::Incidence(value)
+            }
         })
         .collect()
 }
@@ -1929,7 +1962,7 @@ fn canonicalize_constitution_with_options(
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
-    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
         constitution_candidate(molecule, &incidence_graph, order)
             .expect("initial classes established constitution normalization")
@@ -3787,6 +3820,382 @@ mod tests {
         .unwrap();
 
         assert_eq!(right_correspondence, left_correspondence);
+    }
+
+    #[rstest]
+    fn test_canonicalize_constitution_properties(
+        initial_class_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let normalized_source = normalize_molecule(initial_class_molecule.clone()).unwrap();
+        let (canonical, correspondence) = canonicalize_constitution_with_options(
+            &initial_class_molecule,
+            &canonicalization_context,
+            CanonicalSearchOptions {
+                automorphism_pruning: true,
+                prefix_pruning: false,
+                branch_order: BranchOrder::BackendCanonical,
+            },
+        )
+        .unwrap();
+        let acted = normalize_molecule(initial_class_molecule.remap(&correspondence)).unwrap();
+        let inverse = correspondence.reverse();
+
+        assert_eq!(acted, canonical);
+        assert!(initial_class_molecule.equiv_under(&canonical, &correspondence));
+        assert!(canonical.equiv_under(&normalized_source, &inverse));
+        assert_eq!(canonical.check_integrity(), Ok(()));
+
+        let (canonical_again, _) = canonicalize_constitution_with_options(
+            &canonical,
+            &canonicalization_context,
+            CanonicalSearchOptions {
+                automorphism_pruning: true,
+                prefix_pruning: false,
+                branch_order: BranchOrder::BackendCanonical,
+            },
+        )
+        .unwrap();
+        let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Constitution);
+        let canonical_again_incidence =
+            canonical_again.incidence_graph(IncidenceLevel::Constitution);
+        assert_eq!(
+            constitution_comparison_key(
+                &canonical,
+                &canonical_incidence,
+                &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
+            ),
+            constitution_comparison_key(
+                &canonical_again,
+                &canonical_again_incidence,
+                &canonical_again_incidence
+                    .graph()
+                    .node_ids()
+                    .collect::<Vec<_>>(),
+            ),
+        );
+
+        let renumbering = reverse_correspondence(&initial_class_molecule);
+        let renumbered = initial_class_molecule.remap(&renumbering);
+        let (canonical_renumbered, renumbered_correspondence) =
+            canonicalize_constitution_with_options(
+                &renumbered,
+                &canonicalization_context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    prefix_pruning: false,
+                    branch_order: BranchOrder::BackendCanonical,
+                },
+            )
+            .unwrap();
+        let composed = renumbering.compose(&renumbered_correspondence);
+        let composed_action = normalize_molecule(initial_class_molecule.remap(&composed)).unwrap();
+        let canonical_renumbered_incidence =
+            canonical_renumbered.incidence_graph(IncidenceLevel::Constitution);
+
+        assert_eq!(composed_action, canonical_renumbered);
+        assert!(initial_class_molecule.equiv_under(&canonical_renumbered, &composed));
+        assert_eq!(
+            constitution_comparison_key(
+                &canonical,
+                &canonical_incidence,
+                &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
+            ),
+            constitution_comparison_key(
+                &canonical_renumbered,
+                &canonical_renumbered_incidence,
+                &canonical_renumbered_incidence
+                    .graph()
+                    .node_ids()
+                    .collect::<Vec<_>>(),
+            ),
+        );
+
+        let (unpruned, _) = canonicalize_constitution_with_options(
+            &initial_class_molecule,
+            &canonicalization_context,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::ReverseNode,
+            },
+        )
+        .unwrap();
+        let unpruned_incidence = unpruned.incidence_graph(IncidenceLevel::Constitution);
+        assert_eq!(
+            constitution_comparison_key(
+                &canonical,
+                &canonical_incidence,
+                &canonical_incidence.graph().node_ids().collect::<Vec<_>>(),
+            ),
+            constitution_comparison_key(
+                &unpruned,
+                &unpruned_incidence,
+                &unpruned_incidence.graph().node_ids().collect::<Vec<_>>(),
+            ),
+        );
+    }
+
+    #[rstest]
+    fn test_canonicalize_constitution_family_minimum(
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let atoms = vec![AtomForm::from_element(Element::C); 4];
+        let cases = [
+            (
+                "dative",
+                Molecule::from_entries(MoleculeEntries {
+                    atoms: atoms.clone(),
+                    dative: vec![
+                        (
+                            vec![AtomId(0)],
+                            AtomId(2),
+                            DativeBondForm::new(NumForm::RangeFrom(1)),
+                        ),
+                        (
+                            vec![AtomId(1)],
+                            AtomId(3),
+                            DativeBondForm::new(NumForm::RangeFrom(1)),
+                        ),
+                    ],
+                    ..Default::default()
+                }),
+            ),
+            (
+                "aromatic",
+                Molecule::from_entries(MoleculeEntries {
+                    atoms: atoms.clone(),
+                    aromatic: vec![
+                        (
+                            vec![AtomId(0), AtomId(1)],
+                            AromaticSystemForm::from_electrons(vec![1, 2])
+                                .with_charge(NumForm::var("q")),
+                        ),
+                        (
+                            vec![AtomId(2), AtomId(3)],
+                            AromaticSystemForm::from_electrons(vec![1, 2])
+                                .with_charge(NumForm::var("q")),
+                        ),
+                    ],
+                    ..Default::default()
+                }),
+            ),
+            (
+                "multicenter",
+                Molecule::from_entries(MoleculeEntries {
+                    atoms: atoms.clone(),
+                    multicenter: vec![
+                        (
+                            vec![AtomId(0), AtomId(1)],
+                            MulticenterBondForm::from_electrons(vec![2, 1]),
+                        ),
+                        (
+                            vec![AtomId(2), AtomId(3)],
+                            MulticenterBondForm::from_electrons(vec![2, 1]),
+                        ),
+                    ],
+                    ..Default::default()
+                }),
+            ),
+            (
+                "noncovalent",
+                Molecule::from_entries(MoleculeEntries {
+                    atoms,
+                    noncovalent: vec![
+                        (
+                            AtomId(0),
+                            AtomId(1),
+                            NoncovalentBondForm::new(NoncovalentBondKindForm::Undetermined),
+                        ),
+                        (
+                            AtomId(2),
+                            AtomId(3),
+                            NoncovalentBondForm::new(NoncovalentBondKindForm::Undetermined),
+                        ),
+                    ],
+                    ..Default::default()
+                }),
+            ),
+        ];
+
+        for (family, molecule) in cases {
+            let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+            let (entity_keys, incidence_keys) =
+                initial_class_keys(&molecule, &incidence_graph).unwrap();
+            let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+            let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+            let leaf_candidate = |order: &[NodeId]| {
+                constitution_candidate(&molecule, &incidence_graph, order).unwrap()
+            };
+            let expected = exhaustive_minimum(&adapter, &leaf_candidate);
+            let (canonical, correspondence) = canonicalize_constitution_with_options(
+                &molecule,
+                &canonicalization_context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    prefix_pruning: false,
+                    branch_order: BranchOrder::BackendCanonical,
+                },
+            )
+            .unwrap();
+            let (unpruned, _) = canonicalize_constitution_with_options(
+                &molecule,
+                &canonicalization_context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: false,
+                    prefix_pruning: false,
+                    branch_order: BranchOrder::ReverseNode,
+                },
+            )
+            .unwrap();
+            let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Constitution);
+            let canonical_order = canonical_incidence.graph().node_ids().collect::<Vec<_>>();
+            let unpruned_incidence = unpruned.incidence_graph(IncidenceLevel::Constitution);
+            let unpruned_order = unpruned_incidence.graph().node_ids().collect::<Vec<_>>();
+
+            assert_eq!(
+                constitution_comparison_key(&unpruned, &unpruned_incidence, &unpruned_order),
+                Ok(expected.key.clone()),
+                "unpruned {family}",
+            );
+            assert_eq!(
+                constitution_comparison_key(&canonical, &canonical_incidence, &canonical_order),
+                Ok(expected.key),
+                "pruned {family}",
+            );
+            assert_eq!(unpruned, canonical, "{family}");
+            assert!(
+                molecule.equiv_under(&canonical, &correspondence),
+                "{family}"
+            );
+            assert_eq!(canonical.check_integrity(), Ok(()), "{family}");
+
+            for (index, atom_images) in permutations(molecule.atoms().count())
+                .into_iter()
+                .enumerate()
+            {
+                let mut images =
+                    molecule_counts(&molecule).map(|count| (0..count).collect::<Vec<_>>());
+                images[0] = atom_images;
+                if index % 2 == 1 {
+                    for family_images in &mut images[1..6] {
+                        family_images.reverse();
+                    }
+                }
+                let renumbered = molecule.remap(&molecule_correspondence(&images));
+
+                assert_eq!(
+                    canonicalize_constitution(&renumbered, &canonicalization_context),
+                    Ok(canonical.clone()),
+                    "{family}, renumbering {index}",
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_canonicalize_constitution_participant_order(
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let left = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            aromatic: vec![
+                (
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+                ),
+                (
+                    vec![AtomId(3), AtomId(4), AtomId(5)],
+                    AromaticSystemForm::from_electrons(vec![3, 2, 1]),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(0), AtomId(3), AtomId(5)],
+                    MulticenterBondForm::from_electrons(vec![1, 2, 3]),
+                ),
+                (
+                    vec![AtomId(1), AtomId(2), AtomId(4)],
+                    MulticenterBondForm::from_electrons(vec![3, 2, 1]),
+                ),
+            ],
+            ..Default::default()
+        });
+        let right = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            aromatic: vec![
+                (
+                    vec![AtomId(2), AtomId(0), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![3, 1, 2]),
+                ),
+                (
+                    vec![AtomId(4), AtomId(5), AtomId(3)],
+                    AromaticSystemForm::from_electrons(vec![2, 1, 3]),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(5), AtomId(0), AtomId(3)],
+                    MulticenterBondForm::from_electrons(vec![3, 1, 2]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(4), AtomId(1)],
+                    MulticenterBondForm::from_electrons(vec![2, 1, 3]),
+                ),
+            ],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            canonicalize_constitution(&right, &canonicalization_context),
+            canonicalize_constitution(&left, &canonicalization_context),
+        );
+    }
+
+    #[rstest]
+    fn test_canonicalize_constitution_contradiction(
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let selected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(1),
+                DativeBondForm::new(NumForm::lit_set([])),
+            )],
+            ..Default::default()
+        });
+        let excluded_constraint = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)
+                .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([])))],
+            ..Default::default()
+        });
+        let excluded_stereo = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
+            )],
+            ..Default::default()
+        });
+
+        for (location, molecule) in [
+            ("selected", selected),
+            ("excluded constraint", excluded_constraint),
+            ("excluded stereo", excluded_stereo),
+        ] {
+            assert_eq!(
+                canonicalize_constitution(&molecule, &canonicalization_context),
+                Err(MoleculeCanonicalizationError::Contradiction(Contradiction)),
+                "{location}",
+            );
+        }
     }
 
     #[rstest]

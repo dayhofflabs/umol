@@ -1497,7 +1497,17 @@ and the semantic properties validated by the corresponding property tests.
   renumbering with canonicalization reaches the same selected constitution form. Verify complete-
   output semantic preservation without requiring excluded stereo placement to agree. Entity-relation
   conflicts are exact S7a integrity-error cases, not canonicalization inputs. Freeze constitution
-  fixtures without changing the topology fixtures. This is additive. [dep: S7e]
+  fixtures without changing the topology fixtures. This is additive. [dep: S7e] **Done.** The
+  constitution suite now checks selected-layer idempotence, correspondence action, inverse and
+  composition laws, pruning independence, participant-order covariance, and exhaustive atom and
+  entity renumberings. Focused definition-level minima cover two instances of each DAMN family,
+  including positional electron counts, an open numeric expression, and undetermined data; selected,
+  constraint-only, and stereo-only contradictions are separate cases. The dative minimum exposed
+  that exact occurrence colors had also been fixing search order. Constitution search now leaves
+  dative roles and positional electron values to the typed leaf key while retaining them as exact
+  automorphism colors for sound orbit pruning. The existing exact all-family fixture remains the
+  frozen constitution numbering, and topology fixtures are unchanged. `Nauty` remains the sole
+  supported automorphism algorithm, so cross-algorithm agreement is currently vacuous.
 
 ### S8 — Full canonicalization without para-stereo refinement
 
