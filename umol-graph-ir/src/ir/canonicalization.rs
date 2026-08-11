@@ -12,6 +12,7 @@ use umol_graph_core::{
 use super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::bond::BondForm;
 use super::correspondence::MoleculeCorrespondence;
+use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
 use super::id::{
@@ -507,6 +508,18 @@ fn unpaired_electrons_form_key(value: &UnpairedElectronsForm) -> CanonicalKeyVal
         num_form_key(&value.count),
         num_form_key(&value.multiplicity),
     ])
+}
+
+fn electron_counts_form_key(value: &ElectronCountsForm) -> CanonicalKeyValue {
+    match value {
+        ElectronCountsForm::Undetermined => variant(0, []),
+        ElectronCountsForm::Lit(values) => variant(
+            1,
+            [sequence(
+                values.iter().map(|&value| CanonicalKeyValue::Signed(value)),
+            )],
+        ),
+    }
 }
 
 fn noncovalent_bond_kind_form_key(value: &NoncovalentBondKindForm) -> CanonicalKeyValue {
@@ -1476,6 +1489,214 @@ fn topology_candidate(
 }
 
 #[allow(dead_code)]
+fn constitution_comparison_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalComparisonKey, Contradiction> {
+    Ok(constitution_candidate(molecule, incidence_graph, order)?.key)
+}
+
+fn constitution_candidate(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    fn electron_occurrence_fields(
+        atom_ids: impl IntoIterator<Item = AtomId>,
+        electrons: &ElectronCountsForm,
+        atom_images: &[usize],
+    ) -> [FieldKey; 2] {
+        match electrons {
+            ElectronCountsForm::Undetermined => {
+                let mut participants = atom_ids
+                    .into_iter()
+                    .map(|atom| atom_images[atom.index()] as u64)
+                    .collect::<Vec<_>>();
+                participants.sort_unstable();
+                [
+                    field(
+                        0,
+                        sequence(participants.into_iter().map(CanonicalKeyValue::Unsigned)),
+                    ),
+                    field(1, electron_counts_form_key(electrons)),
+                ]
+            }
+            ElectronCountsForm::Lit(electrons) => {
+                let mut occurrences = atom_ids
+                    .into_iter()
+                    .zip(electrons)
+                    .map(|(atom, &electrons)| (atom_images[atom.index()] as u64, electrons))
+                    .collect::<Vec<_>>();
+                occurrences.sort_unstable_by_key(|&(atom, _)| atom);
+                let (participants, electrons): (Vec<_>, Vec<_>) = occurrences.into_iter().unzip();
+                [
+                    field(
+                        0,
+                        sequence(participants.into_iter().map(CanonicalKeyValue::Unsigned)),
+                    ),
+                    field(
+                        1,
+                        electron_counts_form_key(&ElectronCountsForm::Lit(electrons)),
+                    ),
+                ]
+            }
+        }
+    }
+
+    let mut candidate = topology_candidate(molecule, incidence_graph, order)?;
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let mut atom_images = vec![0_usize; atom_count];
+    for (image, &node) in candidate.entity_order[..atom_count].iter().enumerate() {
+        let Entity::Atom(id) = incidence_graph.entity(node) else {
+            unreachable!("topology candidate begins with every atom")
+        };
+        atom_images[id.index()] = image;
+    }
+
+    let mut dative = molecule
+        .dative_bonds()
+        .iter()
+        .map(|bond| {
+            let mut donors = bond
+                .donor_ids()
+                .map(|atom| atom_images[atom.index()] as u64)
+                .collect::<Vec<_>>();
+            donors.sort_unstable();
+            let fields = vec![
+                field(
+                    0,
+                    sequence(donors.into_iter().map(CanonicalKeyValue::Unsigned)),
+                ),
+                field(
+                    1,
+                    CanonicalKeyValue::Unsigned(atom_images[bond.acceptor_id().index()] as u64),
+                ),
+                field(2, num_form_key(bond.order().normalized()?.as_ref())),
+            ];
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                bond.id,
+                incidence_graph.node_of(Entity::DativeBond(bond.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    dative.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let dative = dative
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    let mut aromatic = molecule
+        .aromatic_systems()
+        .iter()
+        .map(|system| {
+            let electrons = system.electrons().normalized()?;
+            let mut fields =
+                electron_occurrence_fields(system.atom_ids(), electrons.as_ref(), &atom_images)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+            fields.extend([
+                field(2, num_form_key(system.charge().normalized()?.as_ref())),
+                field(
+                    3,
+                    unpaired_electrons_form_key(system.unpaired_electrons().normalized()?.as_ref()),
+                ),
+            ]);
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                system.id,
+                incidence_graph.node_of(Entity::AromaticSystem(system.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    aromatic.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let aromatic = aromatic
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    let mut multicenter = molecule
+        .multicenter_bonds()
+        .iter()
+        .map(|bond| {
+            let electrons = bond.electrons().normalized()?;
+            let mut fields =
+                electron_occurrence_fields(bond.atom_ids(), electrons.as_ref(), &atom_images)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+            fields.extend([
+                field(2, num_form_key(bond.charge().normalized()?.as_ref())),
+                field(
+                    3,
+                    unpaired_electrons_form_key(bond.unpaired_electrons().normalized()?.as_ref()),
+                ),
+            ]);
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                bond.id,
+                incidence_graph.node_of(Entity::MulticenterBond(bond.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    multicenter.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let multicenter = multicenter
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    let mut noncovalent = molecule
+        .noncovalent_bonds()
+        .iter()
+        .map(|bond| {
+            let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()] as u64);
+            let fields = vec![
+                field(
+                    0,
+                    product([
+                        CanonicalKeyValue::Unsigned(first.min(second)),
+                        CanonicalKeyValue::Unsigned(first.max(second)),
+                    ]),
+                ),
+                field(
+                    1,
+                    noncovalent_bond_kind_form_key(bond.kind().normalized()?.as_ref()),
+                ),
+            ];
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                bond.id,
+                incidence_graph.node_of(Entity::NoncovalentBond(bond.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    noncovalent.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let noncovalent = noncovalent
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    for (position, rows) in [
+        (EntityBlockPosition::DATIVE_BOND, &dative),
+        (EntityBlockPosition::AROMATIC_SYSTEM, &aromatic),
+        (EntityBlockPosition::MULTICENTER_BOND, &multicenter),
+        (EntityBlockPosition::NONCOVALENT_BOND, &noncovalent),
+    ] {
+        if !rows.is_empty() {
+            candidate.key.entity_blocks.push(PositionedKey {
+                position,
+                value: sequence(rows.iter().map(|(key, _)| key.clone())),
+            });
+            candidate
+                .entity_order
+                .extend(rows.iter().map(|(_, node)| *node));
+        }
+    }
+
+    Ok(candidate)
+}
+
+#[allow(dead_code)]
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),
@@ -2437,6 +2658,228 @@ mod tests {
         assert_eq!(
             topology_comparison_key(&molecule, &incidence_graph, &order),
             topology_comparison_key(&remapped, &remapped_incidence_graph, &remapped_order),
+        );
+    }
+
+    #[rstest]
+    #[case::dative_bond(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            dative: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AtomId(2),
+                DativeBondForm::new(NumForm::RangeFrom(-1)),
+            )],
+            ..Default::default()
+        }),
+        EntityBlockPosition::DATIVE_BOND,
+        positioned_product([
+            (
+                0,
+                sequence([
+                    CanonicalKeyValue::Unsigned(1),
+                    CanonicalKeyValue::Unsigned(2),
+                ]),
+            ),
+            (1, CanonicalKeyValue::Unsigned(0)),
+            (2, num_form_key(&NumForm::RangeFrom(-1))),
+        ]),
+    )]
+    #[case::aromatic_system(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2])
+                    .with_charge(NumForm::var("q")),
+            )],
+            ..Default::default()
+        }),
+        EntityBlockPosition::AROMATIC_SYSTEM,
+        positioned_product([
+            (
+                0,
+                sequence([
+                    CanonicalKeyValue::Unsigned(0),
+                    CanonicalKeyValue::Unsigned(2),
+                ]),
+            ),
+            (
+                1,
+                electron_counts_form_key(&ElectronCountsForm::Lit(vec![2, 1])),
+            ),
+            (2, num_form_key(&NumForm::var("q"))),
+            (
+                3,
+                unpaired_electrons_form_key(&UnpairedElectronsForm::default()),
+            ),
+        ]),
+    )]
+    #[case::multicenter_bond(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(2)],
+                MulticenterBondForm::from_electrons(vec![2, 0])
+                    .with_charge(NumForm::RangeTo(1)),
+            )],
+            ..Default::default()
+        }),
+        EntityBlockPosition::MULTICENTER_BOND,
+        positioned_product([
+            (
+                0,
+                sequence([
+                    CanonicalKeyValue::Unsigned(0),
+                    CanonicalKeyValue::Unsigned(2),
+                ]),
+            ),
+            (
+                1,
+                electron_counts_form_key(&ElectronCountsForm::Lit(vec![0, 2])),
+            ),
+            (2, num_form_key(&NumForm::RangeTo(1))),
+            (
+                3,
+                unpaired_electrons_form_key(&UnpairedElectronsForm::default()),
+            ),
+        ]),
+    )]
+    #[case::noncovalent_bond(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(2),
+                NoncovalentBondForm::default(),
+            )],
+            ..Default::default()
+        }),
+        EntityBlockPosition::NONCOVALENT_BOND,
+        positioned_product([
+            (
+                0,
+                product([
+                    CanonicalKeyValue::Unsigned(0),
+                    CanonicalKeyValue::Unsigned(2),
+                ]),
+            ),
+            (
+                1,
+                noncovalent_bond_kind_form_key(&NoncovalentBondKindForm::Undetermined),
+            ),
+        ]),
+    )]
+    fn test_constitution_comparison_key(
+        #[case] molecule: Molecule,
+        #[case] position: EntityBlockPosition,
+        #[case] expected: CanonicalKeyValue,
+    ) {
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+        let mut atom_ids = molecule.atoms().ids().collect::<Vec<_>>();
+        atom_ids.reverse();
+        let mut order = atom_ids
+            .into_iter()
+            .map(|id| incidence_graph.node_of(Entity::Atom(id)))
+            .collect::<Vec<_>>();
+        order.extend(
+            incidence_graph
+                .graph()
+                .node_ids()
+                .filter(|&node| !matches!(incidence_graph.entity(node), Entity::Atom(_))),
+        );
+        let key = constitution_comparison_key(&molecule, &incidence_graph, &order).unwrap();
+
+        assert_eq!(
+            key.entity_blocks
+                .into_iter()
+                .find(|block| block.position == position),
+            Some(PositionedKey {
+                position,
+                value: sequence([expected]),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_constitution_comparison_key_dense_remapping() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::F),
+            ],
+            dative: vec![(
+                vec![AtomId(0), AtomId(2)],
+                AtomId(1),
+                DativeBondForm::new(NumForm::RangeFrom(1)),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![2, 1]).with_charge(NumForm::var("q")),
+            )],
+            multicenter: vec![(
+                vec![AtomId(1), AtomId(3)],
+                MulticenterBondForm::new(ElectronCountsForm::Undetermined)
+                    .with_charge(NumForm::RangeTo(2)),
+            )],
+            noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default())],
+            ..Default::default()
+        });
+        let correspondence = molecule_correspondence(&[
+            vec![3, 1, 0, 2],
+            Vec::new(),
+            vec![0],
+            vec![0],
+            vec![0],
+            vec![0],
+            Vec::new(),
+            Vec::new(),
+        ]);
+        let remapped = molecule.remap(&correspondence);
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+        let remapped_incidence_graph = remapped.incidence_graph(IncidenceLevel::Constitution);
+        let mut order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+        order.reverse();
+        let remapped_order = order
+            .iter()
+            .map(|&node| incidence_graph.entity(node))
+            .map(|entity| {
+                correspondence
+                    .right_of(entity)
+                    .expect("dense correspondence maps every entity")
+            })
+            .map(|entity| remapped_incidence_graph.node_of(entity))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            constitution_comparison_key(&molecule, &incidence_graph, &order),
+            constitution_comparison_key(&remapped, &remapped_incidence_graph, &remapped_order),
+        );
+    }
+
+    #[rstest]
+    fn test_constitution_comparison_key_excluded_data() {
+        let molecule = Molecule::from_entries(project_entries(
+            encoding_entries(),
+            IncidenceLevel::Constitution,
+        ));
+        let mut excluded = Molecule::from_entries(encoding_entries());
+        excluded.modify_atoms(|atom| {
+            atom.with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4)))
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+        let excluded_incidence_graph = excluded.incidence_graph(IncidenceLevel::Constitution);
+        let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+        let excluded_order = excluded_incidence_graph
+            .graph()
+            .node_ids()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            constitution_comparison_key(&molecule, &incidence_graph, &order),
+            constitution_comparison_key(&excluded, &excluded_incidence_graph, &excluded_order),
         );
     }
 

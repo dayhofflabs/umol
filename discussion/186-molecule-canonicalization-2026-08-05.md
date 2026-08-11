@@ -1468,7 +1468,12 @@ and the semantic properties validated by the corresponding property tests.
   aromatic, multicenter, and noncovalent entities. Encode donor/acceptor roles and the association
   between each unordered participant and its positional electron value through typed occurrences,
   never through stored participant index. Include normalized non-ground inherent values and exclude
-  constraints and stereo. This is additive. [dep: S7c]
+  constraints and stereo. This is additive. [dep: S7c] **Done.** The constitution leaf key now
+  appends the four DAMN entity blocks to the topology prefix. Dative rows preserve donor and
+  acceptor roles; aromatic and multicenter rows pair each participant with its electron value before
+  ordering by the candidate atom frame; and noncovalent rows use canonical endpoint pairs. Every
+  inherent value is normalized without inspecting constraints or stereo. Exact tests cover all four
+  rows, non-ground values, dense remapping with position-sensitive electrons, and excluded data.
 - **S7e — Constitution frame selection.** Extend the typed-order search and dense correspondence to
   all six constitution entity families. Use identity mappings only for the two excluded stereo entity
   families, transport their references and frames with the selected constitution remapping, and
