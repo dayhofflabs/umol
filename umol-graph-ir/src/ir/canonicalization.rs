@@ -4,7 +4,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
-use umol_graph_core::AutomorphismAlgorithm;
+use umol_graph_core::{
+    AutomorphismAlgorithm, EdgeId, Graph, NodeId, SubdividedGraph, SubdivisionNodeSource,
+};
 
 use super::atom::{ElementForm, IsotopeMassForm};
 use super::entity::Entity;
@@ -608,6 +610,126 @@ struct InitialClasses {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum AutomorphismClass {
+    Entity(u32),
+    Incidence(u32),
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+struct AutomorphismAdapter {
+    // Source entity nodes retain their ids; each source incidence edge becomes one additional node.
+    subdivision: SubdividedGraph,
+    classes: Vec<AutomorphismClass>,
+    source_node_count: usize,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ProjectedAutomorphismOutput {
+    orbits: Vec<NodeId>,
+    // Backend canonical labels are branch-order hints, not the canonical molecule numbering.
+    canonical_labels: Vec<NodeId>,
+    generators: Vec<Vec<NodeId>>,
+}
+
+#[allow(dead_code)]
+impl AutomorphismAdapter {
+    fn new(incidence_graph: &IncidenceGraph, initial_classes: &InitialClasses) -> Self {
+        let source = incidence_graph.graph();
+        debug_assert_eq!(initial_classes.entities.len(), source.node_count());
+        debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
+
+        let subdivision = source.subdivide_edges();
+        let classes = initial_classes
+            .entities
+            .iter()
+            .copied()
+            .map(AutomorphismClass::Entity)
+            .chain(
+                initial_classes
+                    .incidences
+                    .iter()
+                    .copied()
+                    .map(AutomorphismClass::Incidence),
+            )
+            .collect();
+
+        Self {
+            subdivision,
+            classes,
+            source_node_count: source.node_count(),
+        }
+    }
+
+    fn graph(&self) -> &Graph {
+        self.subdivision.graph()
+    }
+
+    fn class(&self, node: NodeId) -> AutomorphismClass {
+        self.classes[node.index()]
+    }
+
+    fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
+        self.subdivision.node_source(node)
+    }
+
+    fn node_of(&self, source: SubdivisionNodeSource) -> NodeId {
+        self.subdivision.node_of(source)
+    }
+
+    fn edge_source(&self, edge: EdgeId) -> EdgeId {
+        self.subdivision.edge_source(edge)
+    }
+
+    fn incidence_edges_of(&self, edge: EdgeId) -> [EdgeId; 2] {
+        self.subdivision.incidence_edges_of(edge)
+    }
+
+    fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> ProjectedAutomorphismOutput {
+        let output = self
+            .graph()
+            .automorphisms(|node| self.class(node), algorithm);
+
+        let source_node = |node| match self.node_source(node) {
+            SubdivisionNodeSource::Node(source) => source,
+            SubdivisionNodeSource::Edge(_) => {
+                unreachable!("disjoint classes preserve the adapter node domain")
+            }
+        };
+        let orbits = (0..self.source_node_count)
+            .map(|index| source_node(output.orbit_of(NodeId(index as u32))))
+            .collect();
+        let canonical_labels = output
+            .canonical_labels()
+            .iter()
+            .filter_map(|&node| match self.node_source(node) {
+                SubdivisionNodeSource::Node(source) => Some(source),
+                SubdivisionNodeSource::Edge(_) => None,
+            })
+            .collect();
+        let generators = output
+            .generators()
+            .iter()
+            .map(|generator| {
+                generator[..self.source_node_count]
+                    .iter()
+                    .copied()
+                    .map(source_node)
+                    .collect()
+            })
+            .collect();
+
+        ProjectedAutomorphismOutput {
+            orbits,
+            canonical_labels,
+            generators,
+        }
+    }
+}
+
+#[allow(dead_code)]
 fn initial_classes(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -1131,6 +1253,127 @@ mod tests {
                 assert_ne!(entity_class, incidence_class);
             }
         }
+    }
+
+    #[rstest]
+    #[case::localized_self_loop(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            bonds: vec![(AtomId(0), AtomId(0), BondForm::from_order(1))],
+            ..Default::default()
+        }),
+        vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
+    )]
+    #[case::parallel_bonds(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        }),
+        vec![
+            Incidence::BondEndpoint,
+            Incidence::BondEndpoint,
+            Incidence::BondEndpoint,
+            Incidence::BondEndpoint,
+        ],
+    )]
+    #[case::repeated_relation_participant(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::B),
+            ],
+            dative: vec![(
+                vec![AtomId(0), AtomId(0)],
+                AtomId(1),
+                DativeBondForm::from_order(1),
+            )],
+            ..Default::default()
+        }),
+        vec![
+            Incidence::DativeDonor,
+            Incidence::DativeDonor,
+            Incidence::DativeAcceptor,
+        ],
+    )]
+    fn test_automorphism_adapter_new(
+        #[case] molecule: Molecule,
+        #[case] expected_incidences: Vec<Incidence>,
+    ) {
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+        let classes = initial_classes(&molecule, &incidence_graph).unwrap();
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let source = incidence_graph.graph();
+
+        assert_eq!(
+            incidence_graph
+                .incidences()
+                .map(|(_, incidence)| incidence.clone())
+                .collect::<Vec<_>>(),
+            expected_incidences,
+        );
+        assert_eq!(
+            adapter.graph().node_count(),
+            source.node_count() + source.edge_count(),
+        );
+        assert_eq!(adapter.graph().edge_count(), 2 * source.edge_count());
+        assert!(adapter.graph().is_simple());
+
+        for node in source.node_ids() {
+            let adapter_node = adapter.node_of(SubdivisionNodeSource::Node(node));
+            assert_eq!(
+                adapter.node_source(adapter_node),
+                SubdivisionNodeSource::Node(node),
+            );
+            assert_eq!(
+                adapter.class(adapter_node),
+                AutomorphismClass::Entity(classes.entities[node.index()]),
+            );
+        }
+        for edge in source.edge_ids() {
+            let adapter_node = adapter.node_of(SubdivisionNodeSource::Edge(edge));
+            assert_eq!(
+                adapter.node_source(adapter_node),
+                SubdivisionNodeSource::Edge(edge),
+            );
+            assert_eq!(
+                adapter.class(adapter_node),
+                AutomorphismClass::Incidence(classes.incidences[edge.index()]),
+            );
+            for incidence_edge in adapter.incidence_edges_of(edge) {
+                assert_eq!(adapter.edge_source(incidence_edge), edge);
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_automorphism_adapter_automorphisms() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+        let classes = initial_classes(&molecule, &incidence_graph).unwrap();
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+
+        assert_eq!(
+            adapter.automorphisms(AutomorphismAlgorithm::Nauty),
+            ProjectedAutomorphismOutput {
+                orbits: vec![NodeId(0), NodeId(0), NodeId(2)],
+                canonical_labels: vec![NodeId(0), NodeId(1), NodeId(2)],
+                generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
+            },
+        );
     }
 
     #[rstest]

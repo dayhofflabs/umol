@@ -1316,7 +1316,7 @@ and the semantic properties validated by the corresponding property tests.
   nodes and edges back to common-carrier entities and occurrences, and project generators and orbits
   to entity nodes. Verify that localized self-loops, parallel bonds, and repeated relation
   participants produce a simple adapter graph without losing multiplicity or role. Backend
-  canonical labels are an optimization input only. This is additive. [dep: S5a, S5b]
+  canonical labels are an optimization input only. This is additive. [dep: S5a, S5b] **Done.**
 - **S5d — Typed-order canonical search.** Add the private graph-IR individualization-refinement
   search described above: ordered exact partitions, collision-free equitable refinement, fixed
   non-singleton-cell selection, typed leaf keys, prefix pruning, and automorphism-orbit pruning.
