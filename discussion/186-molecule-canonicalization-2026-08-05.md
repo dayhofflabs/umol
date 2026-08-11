@@ -1090,7 +1090,7 @@ and the semantic properties validated by the corresponding property tests.
   families, position-sensitive aromatic and multicenter data, stereo frames, and reference-bearing
   constraints. Validate `equiv_under`, exact identity, inverse roundtrip, composition agreement, and
   post-remap integrity. Keep asserted-producer tests separate from independently supplied coverage
-  failures. This is additive. [dep: S3b]
+  failures. This is additive. [dep: S3b] **Done.**
 
 ### S4 — Aggregate canonicalization contract and comparison schema
 

@@ -23,6 +23,8 @@ mod meet_pushout;
 mod metadata;
 #[path = "molecule/references.rs"]
 mod references;
+#[path = "molecule/remapping.rs"]
+mod remapping;
 #[path = "molecule/ring.rs"]
 mod ring;
 #[path = "molecule/serialization.rs"]
