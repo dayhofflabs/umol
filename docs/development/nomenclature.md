@@ -279,7 +279,9 @@ graph-IR value; do not extend `attributes` to values that are not complete entit
 **Canonicalize** selects a canonical entity-id and participant frame for a complete indexed graph IR
 modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
 through the selected frame, applies the corresponding participant actions, and normalizes the
-carried forms. The operation takes an explicit canonicalization context.
+carried forms. The operation takes an explicit canonicalization context. The library's typed order
+defines the selected frame; backend canonical labels may guide and prune the search but do not
+define that order.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
 the search-based counterpart of `equiv_under`: the caller does not supply a correspondence because

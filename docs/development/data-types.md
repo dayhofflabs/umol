@@ -318,9 +318,22 @@ pub trait Canonicalize: Sized {
         context: &CanonicalizationContext,
     ) -> Result<Self, Self::Error>;
 
+    fn canonicalize_by(
+        self,
+        level: CanonicalizationLevel,
+        context: &CanonicalizationContext,
+    ) -> Result<Self, Self::Error>;
+
     fn canonical_eq(
         &self,
         other: &Self,
+        context: &CanonicalizationContext,
+    ) -> bool;
+
+    fn canonical_eq_by(
+        &self,
+        other: &Self,
+        level: CanonicalizationLevel,
         context: &CanonicalizationContext,
     ) -> bool;
 }
@@ -331,8 +344,8 @@ implementation establishes a real need for distinct context types. Canonical-for
 fallible; equality is total. Structurally equal inputs compare equal immediately. Two successfully
 canonicalized inputs compare by structural equality, and two intrinsic contradictions compare
 equal because both denote the empty semantic value. One contradiction and one successful form do
-not compare equal. Integrity or operational failures never make distinct inputs equal; callers that
-need the diagnostic invoke `canonicalize` directly.
+not compare equal. Integrity failures never make distinct inputs equal; callers that need the
+diagnostic invoke `canonicalize` directly.
 
 Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
 para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
@@ -343,7 +356,8 @@ A parameterized operation may select a frame using only a coarser structural lay
 the complete original molecule in that frame. Its guarantee is deliberately limited:
 
 - the selected structural layer is in canonical form;
-- the complete result is a remapping of the input and retains excluded features unchanged; and
+- the complete result is a remapping of the input and retains excluded features semantically,
+  while still normalizing their carried form values; and
 - the ordering of excluded features within an automorphism class of the selected layer is not
   determined.
 
@@ -351,6 +365,16 @@ An excluded feature must not break such a tie. Complete outputs from differently
 may therefore differ by an automorphism of the selected layer. Complete `canonical_eq` does not use
 this coarser operation; it compares canonical representatives formed from every available entity
 kind and constraint.
+
+Because `canonicalize_by` returns the complete normalized aggregate, an intrinsic contradiction in
+excluded data still makes that transformation fail. `canonical_eq_by` compares only the selected
+layer and must not be implemented by comparing complete `canonicalize_by` results; contradictions
+outside the selected layer do not affect that reduced relation.
+
+Backend canonical labels are search inputs, not the stable numbering contract. The canonical frame
+is the minimum under the library's typed comparison order. Automorphism generators and orbits may
+prune equivalent branches, but changing the selected graph algorithm must not change the resulting
+canonical representative.
 
 The typed comparison schema is a compatibility contract, but that contract must admit additive
 entity-model extensions. Existing entity-kind blocks, field components, constraint variants, and
