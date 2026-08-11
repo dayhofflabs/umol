@@ -28,9 +28,8 @@ use umol_utils::solution::Solution;
 use crate::ops::invariant::ValenceMismatch;
 use crate::ops::transform::Transformer;
 use crate::ops::validate::{
-    EntityStructureInvariantsContradiction, EntityStructureInvariantsError,
-    EntityStructureInvariantsValidator, SpinInvariantsContradiction, SpinInvariantsError,
-    SpinInvariantsValidator, ValenceInvariantsError, ValenceInvariantsValidator,
+    SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator,
+    ValenceInvariantsError, ValenceInvariantsValidator,
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -97,10 +96,6 @@ pub enum KekulizerError {
         system: AromaticSystemId,
         atom: AtomId,
     },
-    #[error("post-localization entity-structure contradiction: {0}")]
-    PostLocalizationEntityStructure(EntityStructureInvariantsContradiction),
-    #[error("post-localization entity-structure validation error: {0}")]
-    PostLocalizationEntityStructureInvariantsError(EntityStructureInvariantsError),
     #[error("post-localization valence-invariant contradiction: {0}")]
     PostLocalizationValenceInvariant(ValenceMismatch),
     #[error("post-localization valence-invariant validation error: {0}")]
@@ -328,17 +323,6 @@ impl Transformer for Kekulizer {
 }
 
 fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizerError> {
-    match EntityStructureInvariantsValidator
-        .validate(candidate)
-        .map_err(KekulizerError::PostLocalizationEntityStructureInvariantsError)?
-    {
-        Solution::Determined(()) | Solution::Underdetermined(()) => {}
-        Solution::Contradictory(contradiction) => {
-            return Err(KekulizerError::PostLocalizationEntityStructure(
-                contradiction,
-            ));
-        }
-    }
     match ValenceInvariantsValidator
         .validate(candidate)
         .map_err(KekulizerError::PostLocalizationValenceInvariantError)?

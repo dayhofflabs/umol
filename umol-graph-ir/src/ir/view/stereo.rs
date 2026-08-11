@@ -59,15 +59,6 @@ impl<'a> StereoAtomViews<'a> {
         })
     }
 
-    /// Whether two stereo atoms share a site — the "≤1 stereo center per site" structural conflict.
-    /// The per-entity emit-compliance primitive: the entity-structure validator and the generating ops
-    /// (`apply_at` / `meet_pushout`) both consult it, and no generating op may emit a molecule for
-    /// which it holds.
-    pub fn has_conflict(&self) -> bool {
-        let mut sites: HashSet<AtomId> = HashSet::new();
-        self.iter().any(|view| !sites.insert(view.site_id()))
-    }
-
     pub fn contains(&self, id: StereoAtomId) -> bool {
         self.stereo_atoms.contains(RelationId::from(id))
     }
@@ -384,13 +375,6 @@ impl<'a> StereoBondViews<'a> {
             attributes: set.data(rid),
             molecule,
         })
-    }
-
-    /// Whether two stereo bonds share a site — the "≤1 stereo center per site" structural conflict; the
-    /// stereo-bond twin of [`StereoAtomViews::has_conflict`].
-    pub fn has_conflict(&self) -> bool {
-        let mut sites: HashSet<BondId> = HashSet::new();
-        self.iter().any(|view| !sites.insert(view.site_id()))
     }
 
     pub fn contains(&self, id: StereoBondId) -> bool {

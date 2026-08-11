@@ -53,16 +53,6 @@ impl<'a> NoncovalentBondViews<'a> {
         })
     }
 
-    /// Whether a noncovalent bond is a self-loop or two share an unordered atom pair (at most one
-    /// interaction per pair). Emit-compliance peer of [`StereoAtomViews::has_conflict`].
-    pub fn has_conflict(&self) -> bool {
-        let mut seen: HashSet<[AtomId; 2]> = HashSet::new();
-        self.iter().any(|view| {
-            let [a, b] = view.atom_ids();
-            a == b || !seen.insert(if a <= b { [a, b] } else { [b, a] })
-        })
-    }
-
     pub fn contains(&self, id: NoncovalentBondId) -> bool {
         self.noncovalent_bonds.contains(RelationId::from(id))
     }

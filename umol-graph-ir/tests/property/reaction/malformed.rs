@@ -491,21 +491,21 @@ proptest! {
     fn test_reaction_check_preconditions_entity_reference_error(
         (reaction, expected) in unavailable_entity_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
     }
 
     #[test]
     fn test_reaction_check_preconditions_participant_reference_error(
         (reaction, expected) in unavailable_participant_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
     }
 
     #[test]
     fn test_reaction_check_preconditions_incidence_error(
         (reaction, expected) in incompatible_incidence_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
     }
 
     #[test]
@@ -513,7 +513,7 @@ proptest! {
         reaction in malformed_update_strategy(),
     ) {
         prop_assert_eq!(
-            reaction.check_preconditions(&Molecule::default()),
+            reaction.check_preconditions(),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
     }

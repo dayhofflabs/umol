@@ -424,7 +424,7 @@ impl Reaction {
         let reaction = self.to_rust(py);
         let host = host.bind(py).borrow().to_rust().clone();
         reaction
-            .check_preconditions(&host)
+            .check_preconditions()
             .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
         let config = config.unwrap_or_default().to_rust();
         let correspondences = reaction.lhs.substructure_matches(&host, config);

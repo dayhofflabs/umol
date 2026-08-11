@@ -1,6 +1,6 @@
 //! Dative bond views.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
@@ -55,29 +55,6 @@ impl<'a> DativeBondViews<'a> {
             donors: set.participants_2(rid),
             molecule,
         })
-    }
-
-    /// Whether a dative bond names its acceptor as a donor, repeats a donor, or two bonds share an
-    /// acceptor and a donor (parallel dative). Emit-compliance peer of
-    /// [`StereoAtomViews::has_conflict`].
-    pub fn has_conflict(&self) -> bool {
-        let mut donors_by_acceptor: HashMap<AtomId, HashSet<AtomId>> = HashMap::new();
-        for view in self.iter() {
-            let acceptor = view.acceptor_id();
-            let mut donors: HashSet<AtomId> = HashSet::new();
-            for donor in view.donor_ids() {
-                if donor == acceptor || !donors.insert(donor) {
-                    return true;
-                }
-            }
-            let accumulated = donors_by_acceptor.entry(acceptor).or_default();
-            for donor in donors {
-                if !accumulated.insert(donor) {
-                    return true;
-                }
-            }
-        }
-        false
     }
 
     pub fn contains(&self, id: DativeBondId) -> bool {

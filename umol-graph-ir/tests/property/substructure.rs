@@ -22,18 +22,6 @@ const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
 ];
 const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
-/// Cross-strategy / cross-algorithm agreement is asserted only when every entity family satisfies
-/// the uniqueness assumptions shared by the matching implementations.
-fn has_no_entity_conflicts(molecule: &Molecule) -> bool {
-    !molecule.bonds().has_conflict()
-        && !molecule.dative_bonds().has_conflict()
-        && !molecule.aromatic_systems().has_conflict()
-        && !molecule.multicenter_bonds().has_conflict()
-        && !molecule.noncovalent_bonds().has_conflict()
-        && !molecule.stereo_atoms().has_conflict()
-        && !molecule.stereo_bonds().has_conflict()
-}
-
 fn sorted_matches(
     pattern: &Molecule,
     host: &Molecule,
@@ -65,8 +53,8 @@ fn sorted_matches(
 proptest! {
     #[test]
     fn test_substructure_cross_validation(
-        host in molecule_strategy().prop_filter("no entity conflicts", has_no_entity_conflicts),
-        pattern in molecule_strategy().prop_filter("no entity conflicts", has_no_entity_conflicts),
+        host in molecule_strategy(),
+        pattern in molecule_strategy(),
     ) {
         let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
         for strategy in STRATEGIES {
@@ -83,7 +71,6 @@ proptest! {
     #[test]
     fn test_substructure_cross_validation_planted(
         (host, subset) in molecule_strategy()
-            .prop_filter("no entity conflicts", has_no_entity_conflicts)
             .prop_filter("non-empty", |m| m.atoms().count() > 0)
             .prop_flat_map(|m| {
                 let n = m.atoms().count();

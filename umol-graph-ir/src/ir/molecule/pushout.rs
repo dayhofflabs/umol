@@ -415,7 +415,7 @@ mod tests {
     }
 
     // The glue is inadmissible (`None`) when it would be malformed: a coincident-atom meet is `⊥`
-    // (`carbon_nitrogen` / `oxygen_nitrogen`), or an emit-compliance invariant fails — here two aromatic
+    // (`carbon_nitrogen` / `oxygen_nitrogen`), or publication integrity fails — here two aromatic
     // systems that share glue atom 0 (`[0,1]` from left, `[0,2]` from right's unmatched atom), which
     // checked molecule publication rejects.
     #[rstest]

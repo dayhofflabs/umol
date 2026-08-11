@@ -1,5 +1,5 @@
 //! Validators over a resolved `Molecule`, grouped by tier:
-//! - tier 2 (invariants): entity structure, constraint satisfaction, electron count, and spin;
+//! - tier 2 (invariants): constraint satisfaction, electron count, and spin;
 //! - tier 3 (conformance): valence table / atom-typing, aromaticity, stereo (model-carrying).
 //!
 //! Each validator returns `Result<Solution<(), C>, E>`: `Determined` and
@@ -11,7 +11,6 @@
 pub mod aromaticity;
 pub mod connectivity;
 pub mod constraint;
-pub mod entity_structure;
 pub mod spin;
 pub mod stereo;
 pub mod valence;
@@ -28,10 +27,6 @@ pub use constraint::{
     MoleculeConstraintInvariantsValidator, RelationalConstraintInvariantsContradiction,
     RelationalConstraintInvariantsValidator, RingConstraintInvariantsContradiction,
     RingConstraintInvariantsValidator,
-};
-pub use entity_structure::{
-    EntityStructureInvariantsContradiction, EntityStructureInvariantsError,
-    EntityStructureInvariantsValidator,
 };
 pub use spin::{SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator};
 pub use stereo::{
@@ -80,8 +75,7 @@ impl Default for ValidateConfig {
 
 #[derive(Clone, Debug)]
 pub struct Validator<'a> {
-    // Invariants validators: model-independent structural and physical semantics.
-    pub entity_structure: EntityStructureInvariantsValidator,
+    // Invariants validators: model-independent constraint and physical semantics.
     pub constraint: ConstraintInvariantsValidator,
     pub valence_invariants: ValenceInvariantsValidator,
     pub spin_invariants: SpinInvariantsValidator,
@@ -101,8 +95,6 @@ pub enum ValidatorContradiction {
     #[error(transparent)]
     Constraint(#[from] ConstraintInvariantsContradiction),
     #[error(transparent)]
-    EntityStructure(#[from] EntityStructureInvariantsContradiction),
-    #[error(transparent)]
     Connectivity(#[from] ConnectivityConformanceContradiction),
     #[error(transparent)]
     ValenceConformance(#[from] ValenceConformanceContradiction),
@@ -121,8 +113,6 @@ pub enum ValidatorError {
     #[error(transparent)]
     Constraint(#[from] ConstraintInvariantsError),
     #[error(transparent)]
-    EntityStructure(#[from] EntityStructureInvariantsError),
-    #[error(transparent)]
     Connectivity(#[from] ConnectivityConformanceError),
     #[error(transparent)]
     ValenceConformance(#[from] ValenceConformanceError),
@@ -139,7 +129,6 @@ impl<'a> Validator<'a> {
 
     pub fn with_config(model: &'a ChemistryModel, config: ValidateConfig) -> Self {
         Self {
-            entity_structure: EntityStructureInvariantsValidator,
             constraint: ConstraintInvariantsValidator::new(config.constraint),
             valence_invariants: ValenceInvariantsValidator,
             spin_invariants: SpinInvariantsValidator,
@@ -153,17 +142,12 @@ impl<'a> Validator<'a> {
         }
     }
 
-    /// Model-independent entity structure, constraint, electron-count, and spin invariants.
+    /// Model-independent constraint, electron-count, and spin invariants.
     pub fn validate_invariants(
         &self,
         molecule: &Molecule,
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
-        match self.entity_structure.validate(molecule)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => any_undetermined = true,
-            Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
-        }
         match self.constraint.validate(molecule)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,

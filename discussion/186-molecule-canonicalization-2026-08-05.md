@@ -300,8 +300,8 @@ The graph-IR restructuring is:
 After this migration, `umol-graph-ir` must not define `*Validator` types. Existing graph-IR
 validators split by tier rather than moving as one block:
 
-- the remaining model-independent entity-structure checks move to an invariants validator in
-  `umol-graph`;
+- fixed entity-relation conditions are consolidated into `Molecule::check_integrity`, so the
+  graph-layer entity-structure validator has no remaining semantic role and is removed;
 - remove the span-level DPO-validator entry point because it only confirms span integrity. Review
   the reaction-level entry point separately: a check that predicts whether deltas materialize a
   span is not DPO validation, while actual DPO dangling and identification conditions belong to
@@ -353,26 +353,23 @@ The integrity and validator migration proceeds in four green stages:
 2. Replace `ReactionIntegrityValidator` with `Reaction::check_integrity`, and unify
    `ReactionSpan` checked construction with its integrity operation. Preserve the distinction
    between a permissive lhs-plus-deltas reaction and a span whose two projections are molecules.
-3. Move every semantic validator to `umol-graph`: the non-integrity portion of
-   `EntityStructureValidator`, the aggregate and focused constraint validators, and connectivity.
-   Rebalance stereo validation and apply the approved invariants/conformance names. All resulting
-   validators are public.
+3. Move every semantic validator to `umol-graph`: the aggregate and focused constraint validators
+   and connectivity. Remove `EntityStructureValidator` after all of its fixed relation conditions
+   have moved to integrity. Rebalance stereo validation and apply the approved
+   invariants/conformance names. All resulting validators are public.
 4. Rewire the composite `Validator`, reaction application, resolvers, transformers, substructure
    operations, Rust and Python callers, tests, property tests, specifications, and rustdoc. Remove
    the old graph-IR validator modules and exports only after every consumer has moved and the
    workspace is green.
 
-The phrase *non-simple input* is too narrow for the current reaction-application precondition.
-`Reaction::apply` presently runs the whole `EntityStructureValidator` over both the reaction LHS
-and the host. In addition to localized-bond self-loops and parallel bonds, that validator rejects
-duplicate or role-conflicting dative participants, parallel dative and noncovalent relations,
-duplicate or overlapping aromatic participants, duplicate or identical multicenter participant
-sets, and repeated stereo sites. Its electron-vector length cases move to integrity; the remaining
-cases are model-independent structural invariants. Duplicate participants within one aromatic
-system or multicenter bond also belong to integrity because their positional electron-count value
-must be a function of participant identity. Before the migration rewires `apply`, decide which of
-the remaining invariants are actual application preconditions. The decision must be stated per
-property rather than summarized as graph simplicity.
+The fixed entity-relation conditions formerly grouped under *non-simple input* are molecule
+integrity, not reaction-application preconditions. Checked `Molecule` construction establishes
+localized-bond simplicity; dative roles and uniqueness; noncovalent uniqueness; aromatic,
+multicenter, and stereo uniqueness; and positional electron-vector integrity. Reaction application
+therefore does not repeat those checks over the LHS and host. Its global precondition operation is
+reaction-local, while each generated product is admitted only through checked molecule
+publication. A match that creates an entity-relation collision is rejected as
+`ApplyError::StructuralConflict` without weakening the no-panic guarantee.
 
 Nauty handles disconnected graphs directly. Splitting a molecule into connected components is
 therefore not required for correctness and would complicate constraints or other data that span
@@ -1262,35 +1259,18 @@ and the semantic properties validated by the corresponding property tests.
   Rewire resolvers, transformers, substructure operations, Rust and Python callers, specifications,
   and rustdoc. This is breaking red-to-green. [dep: S2c, S2d] **Done.**
 - **S2f — Reaction-application preconditions.** Replace `Reaction::apply`'s wholesale use of
-  `EntityStructureValidator` with integrity checks and the explicitly approved operation-specific
-  preconditions. Before match enumeration, check the reaction LHS and host for localized-bond
-  simplicity, dative role and uniqueness, noncovalent uniqueness, aromatic-system overlap,
-  identical multicenter participant sets, and repeated stereo sites. Duplicate participants within
-  one aromatic system or multicenter bond are rejected earlier by molecule integrity. The remaining
-  properties are tier-2 invariants generally, but application requires them because matching,
-  incidence-induced correspondence, participant-position transport, and singular aromatic/stereo
-  views rely on the corresponding uniqueness contracts. Do not encode them under a single
-  “non-simple” condition.
+  `EntityStructureValidator` with the operation-specific reaction gate. Rename
+  `Reaction::validate_application` to `Reaction::check_preconditions`; it checks reaction-local
+  normalization, integrity, and rule-level DPO conditions once before match enumeration and does
+  not take a host. Checked `Molecule` construction already establishes the fixed entity-relation
+  conditions of both the LHS and host, so application does not repeat a global structure gate.
 
-  Rename `Reaction::validate_application` to `Reaction::check_preconditions`; it is an
-  operation-precondition probe, not a tier-2 or tier-3 validator. `Reaction::apply` and the Python
-  eager-correspondence path run this gate once before enumerating matches. The lower-level
-  `Reaction::apply_at` does not repeat the global gate: its supplied `MoleculeCorrespondence`
-  discharges the relevant matching ambiguity, while its lowering remains panic-free and checks the
-  generated product. Keep that per-match product conflict gate separately, because a structurally
-  valid LHS and host can still conflict under one embedding while another embedding succeeds.
-
-  Graph IR uses the existing per-family conflict predicates for the operation precondition; the
-  graph-layer `EntityStructureInvariantsValidator` remains responsible for detailed semantic
-  diagnosis through `EntityStructureInvariantsContradiction` and
-  `EntityStructureInvariantsError`. Report the coarse operation failures as
-  `ApplyPreconditionError::ReactionStructureInvariant { kind: EntityKind }` and
-  `ApplyPreconditionError::HostStructureInvariant { kind: EntityKind }`. Retain the existing
-  `ApplyError::StructuralConflict` for the match-local product gate unchanged; its name belongs to
-  the later application-error hierarchy review, and this work introduces no additional
-  `*Conflict` name. Exercise every retained precondition, the distinction between global
-  precondition and match-local product rejection, and independently supplied malformed inputs
-  without panics. This is breaking red-to-green. [dep: S2b, S2c, S2e] **Done.**
+  `Reaction::apply_at` remains panic-free and publishes each generated product through checked
+  molecule construction. Preserve `ApplyError::StructuralConflict` for a match-local
+  entity-relation collision because a valid LHS and host can still conflict under one embedding
+  while another embedding succeeds. Exercise reaction-local precondition failures and match-local
+  product rejection independently. This is breaking red-to-green. [dep: S2b, S2c, S2e]
+  **Done.**
 
 ### S3 — Complete remapping
 
@@ -1479,6 +1459,11 @@ and the semantic properties validated by the corresponding property tests.
   a defensive check. Rewire the kekulizer, substructure properties, generators, fixtures, rustdoc,
   and tests, and replace the completed S5 fixtures that intentionally violated the former tier-2
   classification. This is breaking red-to-green. [dep: S7b]
+  **Done.** The duplicate graph-layer validator, composite stage, public per-view conflict probes,
+  and global LHS/host application gate are removed. Reaction product construction and composition
+  pushout now rely on checked molecule publication, while `Reaction::check_preconditions` is
+  reaction-local and no longer takes a host. Kekulization, substructure properties, fuzzing, and
+  Python bindings use the consolidated contract.
 - **S7d — Constitution typed key.** Extend the schema and exact refinement signatures to dative,
   aromatic, multicenter, and noncovalent entities. Encode donor/acceptor roles and the association
   between each unordered participant and its positional electron value through typed occurrences,
