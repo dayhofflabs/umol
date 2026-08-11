@@ -88,7 +88,7 @@ pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
-    MoleculeEntriesError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
+    MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 pub use noncovalent::{
@@ -98,7 +98,7 @@ pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
 pub use reaction::Reaction;
 pub use reaction_derivation::ReactionDerivation;
-pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanEntriesError};
+pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
@@ -121,9 +121,9 @@ pub use validate::{
     ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
     DpoContradiction, DpoError, DpoValidator, EntityStructureContradiction, EntityStructureError,
     EntityStructureValidator, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    MoleculeConstraintContradiction, MoleculeConstraintValidator, ReactionIntegrityContradiction,
-    ReactionIntegrityError, ReactionIntegrityValidator, RelationalConstraintContradiction,
-    RelationalConstraintValidator, RingConstraintContradiction, RingConstraintValidator,
+    MoleculeConstraintContradiction, MoleculeConstraintValidator, ReactionIntegrityError,
+    RelationalConstraintContradiction, RelationalConstraintValidator, RingConstraintContradiction,
+    RingConstraintValidator,
 };
 pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,

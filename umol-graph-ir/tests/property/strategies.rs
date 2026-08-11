@@ -1298,9 +1298,12 @@ pub(crate) fn stereo_bond_constraints_strategy(
 }
 
 pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomForm> {
-    (stereo_atom_kind_strategy(), stereo_coset_strategy()).prop_flat_map(|(kind, coset)| {
-        stereo_atom_constraints_strategy(kind)
-            .prop_map(move |cs| StereoAtomForm::new(kind, coset.clone()).with_constraints(cs))
+    stereo_atom_kind_strategy().prop_flat_map(|kind| {
+        (
+            stereo_coset_for_kind(kind),
+            stereo_atom_constraints_strategy(kind),
+        )
+            .prop_map(move |(coset, cs)| StereoAtomForm::new(kind, coset).with_constraints(cs))
     })
 }
 
@@ -1344,11 +1347,13 @@ pub(crate) fn stereo_atom_update_strategy() -> impl Strategy<Value = StereoAtomU
 }
 
 pub(crate) fn stereo_bond_form_strategy() -> impl Strategy<Value = StereoBondForm> {
-    stereo_coset_strategy().prop_flat_map(|coset| {
-        stereo_bond_constraints_strategy(StereoKind::CisTrans).prop_map(move |cs| {
-            StereoBondForm::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
+    (
+        stereo_coset_for_kind(StereoKind::CisTrans),
+        stereo_bond_constraints_strategy(StereoKind::CisTrans),
+    )
+        .prop_map(|(coset, cs)| {
+            StereoBondForm::new(StereoKind::CisTrans, coset).with_constraints(cs)
         })
-    })
 }
 
 pub(crate) fn stereo_bond_update_constraints_strategy(
@@ -1397,10 +1402,22 @@ pub(crate) fn stereo_atom_entries_strategy(
     if atom_count == 0 || max == 0 {
         return Just(Vec::new()).boxed();
     }
-    let entry = (
-        prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
-        stereo_atom_form_strategy(),
-    );
+    let entry = stereo_atom_kind_strategy().prop_flat_map(move |kind| {
+        (
+            prop::collection::vec(
+                (stereo_ligand_kind_strategy(), 0..atom_count as u32),
+                kind.degree(),
+            ),
+            stereo_coset_for_kind(kind),
+            stereo_atom_constraints_strategy(kind),
+        )
+            .prop_map(move |(ligands, coset, constraints)| {
+                (
+                    ligands,
+                    StereoAtomForm::new(kind, coset).with_constraints(constraints),
+                )
+            })
+    });
     prop::collection::vec(entry, 0..=max)
         .prop_map(|entries| {
             entries
@@ -1434,10 +1451,21 @@ pub(crate) fn stereo_bond_entries_strategy(
     if atom_count == 0 || bond_count == 0 || max == 0 {
         return Just(Vec::new()).boxed();
     }
+    let kind = StereoKind::CisTrans;
     let entry = (
-        prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
-        stereo_bond_form_strategy(),
-    );
+        prop::collection::vec(
+            (stereo_ligand_kind_strategy(), 0..atom_count as u32),
+            kind.degree(),
+        ),
+        stereo_coset_for_kind(kind),
+        stereo_bond_constraints_strategy(kind),
+    )
+        .prop_map(move |(ligands, coset, constraints)| {
+            (
+                ligands,
+                StereoBondForm::new(kind, coset).with_constraints(constraints),
+            )
+        });
     prop::collection::vec(entry, 0..=max)
         .prop_map(|entries| {
             entries

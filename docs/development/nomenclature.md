@@ -43,8 +43,9 @@ alter determined representation.
 **Integrity and validation tiers.** *Integrity* is the graph-IR-owned construction contract and is
 enforced by an integrity check. *Invariants* are model-independent semantic properties and
 *conformance* is acceptance by a selected chemistry model; both are checked by validators in
-`umol-graph`. Run integrity, invariants, and conformance in that order, but do not give them one API
-family merely because the tiers are ordered.
+`umol-graph`. Run integrity, invariants, and conformance in that order; within conformance, run the
+cheap topology-only connectivity check before valence conformance. Do not give integrity and
+semantic validation one API family merely because the tiers are ordered.
 
 **Derivation and policy.** *Perception* produces a policy-free *derivation*, which may carry
 *inconsistencies*. A *policy* maps a classified inconsistency to a *recovery action*. Policies belong

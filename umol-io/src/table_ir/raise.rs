@@ -12,7 +12,7 @@ use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
     BooleanForm, CisTransStereoForm, Constraints, DativeBondForm, ElementForm, IsotopeMassForm,
-    Lattice, Molecule, MoleculeEntries, MoleculeEntriesError, MulticenterBondForm,
+    Lattice, Molecule, MoleculeEntries, MoleculeIntegrityError, MulticenterBondForm,
     NoncovalentBondForm, NumForm, StereoCoset, TetrahedralStereoForm, TryIntoIr,
     UnpairedElectronsForm,
 };
@@ -38,7 +38,7 @@ use utils::{
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RaiseError {
     #[error(transparent)]
-    MoleculeEntries(#[from] MoleculeEntriesError),
+    MoleculeEntries(#[from] MoleculeIntegrityError),
     #[error("tetrahedral stereo at atom {atom} with {count} ligands, expected 3 or 4 ligands")]
     TetrahedralLigandCount { atom: usize, count: usize },
     #[error("directional bond {bond} not adjacent to a stereogenic double bond")]
@@ -501,7 +501,7 @@ mod tests {
             molecule.bonds.push(TableBond::new(0, 1, TableBondOrder::Single));
             molecule
         },
-        RaiseError::MoleculeEntries(MoleculeEntriesError::InvalidReference {
+        RaiseError::MoleculeEntries(MoleculeIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         })
     )]

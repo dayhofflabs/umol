@@ -41,8 +41,10 @@ use super::super::noncovalent::{
 use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
-use super::{Molecule, MoleculeEntries, MoleculeEntriesError, TransactionError};
+use super::super::stereo::{
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
+};
+use super::{Molecule, MoleculeEntries, MoleculeIntegrityError, TransactionError};
 use crate::{mol_dsl, mol_dsl_ground};
 
 fn ground_atom() -> AtomForm {
@@ -139,8 +141,12 @@ fn test_molecule_builder() {
 )]
 #[case::stereo_atom_ground_coset(
     Molecule::from_entries(MoleculeEntries {
-        atoms: vec![ground_atom()],
-        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))],
+        atoms: vec![ground_atom(); 5],
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        )],
         constraints: Constraints::new(),
         ..Default::default()
     }),
@@ -148,8 +154,12 @@ fn test_molecule_builder() {
 )]
 #[case::stereo_atom_undetermined_coset(
     Molecule::from_entries(MoleculeEntries {
-        atoms: vec![ground_atom()],
-        stereo_atoms: vec![(AtomId(0), vec![], StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))],
+        atoms: vec![ground_atom(); 5],
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4).map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined),
+        )],
         constraints: Constraints::new(),
         ..Default::default()
     }),
@@ -300,6 +310,7 @@ fn equiv_molecule_entries() -> MoleculeEntries {
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
@@ -308,6 +319,8 @@ fn equiv_molecule_entries() -> MoleculeEntries {
             vec![
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
             ],
             StereoBondForm::new(StereoKind::CisTrans, 1u32),
         )],
@@ -369,8 +382,88 @@ fn test_molecule_try_from_entries_error(
 
     assert_eq!(
         Molecule::try_from_entries(entries),
-        Err(MoleculeEntriesError::InvalidReference { entity }),
+        Err(MoleculeIntegrityError::InvalidReference { entity }),
     );
+}
+
+#[rstest]
+#[case::aromatic_electron_count(
+    |entries: &mut MoleculeEntries| {
+        entries.aromatic[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
+    },
+    MoleculeIntegrityError::ElectronCountLengthMismatch {
+        entity: Entity::AromaticSystem(AromaticSystemId(0)),
+        participants: 3,
+        electron_counts: 1,
+    },
+)]
+#[case::multicenter_electron_count(
+    |entries: &mut MoleculeEntries| {
+        entries.multicenter[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
+    },
+    MoleculeIntegrityError::ElectronCountLengthMismatch {
+        entity: Entity::MulticenterBond(MulticenterBondId(0)),
+        participants: 3,
+        electron_counts: 1,
+    },
+)]
+#[case::stereo_atom_kind(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::CisTrans,
+            StereoCoset::Lit(0),
+        );
+    },
+    MoleculeIntegrityError::StereoKindNotPermitted {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        kind: StereoKind::CisTrans,
+    },
+)]
+#[case::stereo_bond_kind(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_bonds[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::Tetrahedral,
+            StereoCoset::Lit(0),
+        );
+    },
+    MoleculeIntegrityError::StereoKindNotPermitted {
+        entity: Entity::StereoBond(StereoBondId(0)),
+        kind: StereoKind::Tetrahedral,
+    },
+)]
+#[case::stereo_ligand_arity(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].1.pop();
+    },
+    MoleculeIntegrityError::StereoLigandArity {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        kind: StereoKind::Tetrahedral,
+        expected: 4,
+        actual: 3,
+    },
+)]
+#[case::stereo_coset(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
+            StereoKind::Tetrahedral,
+            StereoCoset::Lit(2),
+        );
+    },
+    MoleculeIntegrityError::StereoCosetOutOfRange {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        kind: StereoKind::Tetrahedral,
+        coset: 2,
+        count: 2,
+    },
+)]
+fn test_molecule_try_from_entries_integrity_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] expected: MoleculeIntegrityError,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
 }
 
 #[rstest]
@@ -418,7 +511,7 @@ fn test_molecule_try_from_entries_constraint_error(
 
     assert_eq!(
         Molecule::try_from_entries(entries),
-        Err(MoleculeEntriesError::InvalidReference { entity }),
+        Err(MoleculeIntegrityError::InvalidReference { entity }),
     );
 }
 
@@ -459,14 +552,12 @@ fn test_molecule_try_from_entries_molecule_constraint_error(
 
     assert_eq!(
         Molecule::try_from_entries(entries),
-        Err(MoleculeEntriesError::InvalidReference { entity }),
+        Err(MoleculeIntegrityError::InvalidReference { entity }),
     );
 }
 
 #[rstest]
-#[should_panic(
-    expected = "invalid molecule entries: molecule entries reference unavailable atom 1"
-)]
+#[should_panic(expected = "invalid molecule entries: molecule references unavailable atom 1")]
 fn test_molecule_from_entries_error() {
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::default()],
@@ -1373,7 +1464,7 @@ fn test_molecule_has_stereo_atoms() {
 #[rstest]
 fn test_molecule_has_stereo_bonds() {
     let molecule = mol_dsl!(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
     );
     assert!(molecule.has_stereo_bonds());
     assert!(!molecule.has_stereo_atoms());
@@ -1400,11 +1491,7 @@ fn test_molecule_atoms(#[from(rich_molecule)] molecule: Molecule) {
 #[test]
 fn test_bond_views_induced_ids() {
     let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-        ],
+        atoms: vec![AtomForm::from_element(Element::C); 5],
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(1), AtomId(2), BondForm::from_order(1)),
@@ -3349,16 +3436,14 @@ fn test_molecule_combine_stereo() {
         ..Default::default()
     });
     let right = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-        ],
+        atoms: vec![AtomForm::from_element(Element::C); 5],
         stereo_atoms: vec![(
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
@@ -3369,11 +3454,11 @@ fn test_molecule_combine_stereo() {
 
     assert_eq!(union.stereo_atoms().count(), 1);
     let stereo = union.stereo_atoms().iter().next().unwrap();
-    // right's site (atom 0) and ligands (atoms 1, 2) shift by left's one atom
+    // right's site (atom 0) and ligands (atoms 1..=4) shift by left's one atom
     assert_eq!(stereo.site_id(), AtomId(1));
     assert_eq!(
         stereo.ligands().map(|l| l.atom_id()).collect::<Vec<_>>(),
-        vec![AtomId(2), AtomId(3)]
+        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)]
     );
 }
 

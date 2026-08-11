@@ -70,7 +70,8 @@ rules, diagnostics, and explicit validation can operate on them.
 Tier 3 contains choices such as valence, aromaticity, stereo, and connectivity models. A different
 model may legitimately produce a different conformance result for the same structurally valid IR.
 
-The composite order is integrity check, invariants validation, then conformance validation. A later
+The composite order is integrity check, invariants validation, then conformance validation. Within
+conformance, the cheap topology-only connectivity check runs before valence conformance. A later
 tier may assume the earlier tiers only when its public contract says so or its producer establishes
 them. It must not turn an earlier-tier failure into a chemistry contradiction.
 

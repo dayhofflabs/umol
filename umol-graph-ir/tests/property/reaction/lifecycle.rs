@@ -18,6 +18,11 @@ proptest! {
     })]
 
     #[test]
+    fn test_reaction_check_integrity(reaction in comprehensive_reaction_strategy()) {
+        prop_assert_eq!(reaction.check_integrity(), Ok(()));
+    }
+
+    #[test]
     fn test_reaction_apply_at(reaction in reaction_strategy()) {
         let atom_count = reaction.lhs.atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();

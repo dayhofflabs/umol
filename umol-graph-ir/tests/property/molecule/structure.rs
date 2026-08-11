@@ -23,6 +23,11 @@ proptest! {
     }
 
     #[test]
+    fn test_molecule_check_integrity(molecule in molecule_with_constraints_strategy()) {
+        prop_assert_eq!(molecule.check_integrity(), Ok(()));
+    }
+
+    #[test]
     fn test_molecule_extract(
         (molecule, atoms) in molecule_with_atom_subset_strategy(),
     ) {

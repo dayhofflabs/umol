@@ -22,6 +22,4 @@ pub use constraint::{
 };
 pub use dpo::{DpoContradiction, DpoError, DpoValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
-pub use reaction::{
-    ReactionIntegrityContradiction, ReactionIntegrityError, ReactionIntegrityValidator,
-};
+pub use reaction::ReactionIntegrityError;

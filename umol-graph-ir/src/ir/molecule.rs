@@ -8,8 +8,8 @@ use std::{iter, mem};
 pub use build::MoleculeBuilder;
 pub use editor::MoleculeEditor;
 pub use fragment::{Fragment, Port, PortArg};
+pub use integrity::MoleculeIntegrityError;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
-use thiserror::Error;
 use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
     RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
@@ -47,6 +47,7 @@ use super::view::{
 mod build;
 mod editor;
 mod fragment;
+mod integrity;
 mod pushout;
 pub mod spec;
 pub(super) mod transact;
@@ -85,18 +86,11 @@ pub struct MoleculeEntries {
     pub constraints: Constraints,
 }
 
-/// Failure to construct a molecule from entries with invalid entity references.
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum MoleculeEntriesError {
-    #[error("molecule entries reference unavailable {entity}")]
-    InvalidReference { entity: Entity },
-}
-
 pub(super) fn validate_entry_references(
     entries: &MoleculeEntries,
-) -> Result<(), MoleculeEntriesError> {
+) -> Result<(), MoleculeIntegrityError> {
     validate_entry_references_inner(entries)
-        .map_err(|entity| MoleculeEntriesError::InvalidReference { entity })
+        .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })
 }
 
 fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Entity> {
@@ -336,7 +330,7 @@ impl Molecule {
 
     /// Checked form of [`Self::from_entries`]. Validates entity references but
     /// does not enforce graph simplicity, chemistry, or constraint satisfiability.
-    pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeEntriesError> {
+    pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeIntegrityError> {
         validate_entry_references(&entries)?;
         let MoleculeEntries {
             atoms,
@@ -405,7 +399,7 @@ impl Molecule {
                 .collect(),
         );
 
-        Ok(Self {
+        let molecule = Self {
             graph,
             atoms: Arc::new(atoms),
             bonds: Arc::new(bond_data),
@@ -416,7 +410,9 @@ impl Molecule {
             stereo_atoms: Arc::new(stereo_atoms),
             stereo_bonds: Arc::new(stereo_bonds),
             constraints,
-        })
+        };
+        molecule.check_integrity()?;
+        Ok(molecule)
     }
 
     #[allow(clippy::too_many_arguments)]

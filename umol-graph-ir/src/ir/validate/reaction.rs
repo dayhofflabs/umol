@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::iter;
 
 use thiserror::Error;
-use umol_utils::solution::Solution;
 
 use super::super::constraint::{Constraint, MoleculeConstraint, RelationalConstraint};
 use super::super::delta::{
@@ -14,40 +13,25 @@ use super::super::delta::{
 use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
-use super::super::molecule::Molecule;
+use super::super::molecule::{Molecule, MoleculeIntegrityError};
+use super::super::reaction::Reaction;
 
-/// Tier-1 integrity validator for reaction delta references and structural incidence.
+/// Internal implementation of reaction integrity checking.
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ReactionIntegrityValidator;
+struct ReactionIntegrityCheck;
 
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ReactionIntegrityContradiction {
+pub enum ReactionIntegrityError {
+    #[error("reaction lhs is not a valid molecule representation: {0}")]
+    Lhs(#[from] MoleculeIntegrityError),
     #[error("reaction references unavailable entity {entity:?}")]
     InvalidReference { entity: Entity },
     #[error("reaction incidence does not match lhs entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ReactionIntegrityError {}
-
-impl ReactionIntegrityValidator {
-    pub fn validate(
-        &self,
-        lhs: &Molecule,
-        deltas: &Deltas,
-    ) -> Result<Solution<(), ReactionIntegrityContradiction>, ReactionIntegrityError> {
-        match self.validate_inner(lhs, deltas) {
-            Ok(()) => Ok(Solution::Determined(())),
-            Err(contradiction) => Ok(Solution::Contradictory(contradiction)),
-        }
-    }
-
-    fn validate_inner(
-        &self,
-        lhs: &Molecule,
-        deltas: &Deltas,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+impl ReactionIntegrityCheck {
+    fn check(&self, lhs: &Molecule, deltas: &Deltas) -> Result<(), ReactionIntegrityError> {
         let mut created = HashSet::new();
         for delta in deltas.iter() {
             let entity = match delta {
@@ -69,7 +53,7 @@ impl ReactionIntegrityValidator {
             };
             if let Some(entity) = entity {
                 if contains_entity(lhs, entity) || !created.insert(entity) {
-                    return Err(ReactionIntegrityContradiction::InvalidReference { entity });
+                    return Err(ReactionIntegrityError::InvalidReference { entity });
                 }
             }
         }
@@ -92,15 +76,11 @@ impl ReactionIntegrityValidator {
         Ok(())
     }
 
-    fn require_lhs(
-        &self,
-        lhs: &Molecule,
-        entity: Entity,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    fn require_lhs(&self, lhs: &Molecule, entity: Entity) -> Result<(), ReactionIntegrityError> {
         if contains_entity(lhs, entity) {
             Ok(())
         } else {
-            Err(ReactionIntegrityContradiction::InvalidReference { entity })
+            Err(ReactionIntegrityError::InvalidReference { entity })
         }
     }
 
@@ -109,11 +89,11 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         entity: Entity,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         if contains_entity(lhs, entity) || created.contains(&entity) {
             Ok(())
         } else {
-            Err(ReactionIntegrityContradiction::InvalidReference { entity })
+            Err(ReactionIntegrityError::InvalidReference { entity })
         }
     }
 
@@ -122,22 +102,22 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         for atom in atoms {
             self.require_available(lhs, created, Entity::Atom(atom))?;
         }
         Ok(())
     }
 
-    fn incidence_mismatch(entity: Entity) -> ReactionIntegrityContradiction {
-        ReactionIntegrityContradiction::IncidenceMismatch { entity }
+    fn incidence_mismatch(entity: Entity) -> ReactionIntegrityError {
+        ReactionIntegrityError::IncidenceMismatch { entity }
     }
 
     fn validate_atom(
         &self,
         lhs: &Molecule,
         delta: &AtomDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             AtomDelta::Add { .. } => Ok(()),
             AtomDelta::Remove { id, .. }
@@ -151,7 +131,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &BondDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             BondDelta::Add { atoms, .. } => self.require_atoms(lhs, created, *atoms),
             BondDelta::Remove { id, atoms, .. } => {
@@ -161,7 +141,7 @@ impl ReactionIntegrityValidator {
                 let actual = lhs
                     .bonds()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?
                     .atom_ids();
                 if unordered_pair(actual) == unordered_pair(*atoms) {
                     Ok(())
@@ -180,7 +160,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &DativeBondDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             DativeBondDelta::Add {
                 donors, acceptor, ..
@@ -197,7 +177,7 @@ impl ReactionIntegrityValidator {
                 let view = lhs
                     .dative_bonds()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?;
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
                 if view.acceptor_id() == *acceptor
                     && unordered_ids(view.donor_ids()) == unordered_ids(donors.iter().copied())
                 {
@@ -218,7 +198,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &AromaticSystemDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             AromaticSystemDelta::Add { atoms, .. } => {
                 self.require_atoms(lhs, created, atoms.iter().copied())
@@ -230,7 +210,7 @@ impl ReactionIntegrityValidator {
                 let view = lhs
                     .aromatic_systems()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?;
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
                 if unordered_ids(view.atom_ids()) == unordered_ids(atoms.iter().copied()) {
                     Ok(())
                 } else {
@@ -249,7 +229,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &MulticenterBondDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             MulticenterBondDelta::Add { atoms, .. } => {
                 self.require_atoms(lhs, created, atoms.iter().copied())
@@ -261,7 +241,7 @@ impl ReactionIntegrityValidator {
                 let view = lhs
                     .multicenter_bonds()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?;
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
                 if unordered_ids(view.atom_ids()) == unordered_ids(atoms.iter().copied()) {
                     Ok(())
                 } else {
@@ -280,7 +260,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &NoncovalentBondDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             NoncovalentBondDelta::Add { atoms, .. } => self.require_atoms(lhs, created, *atoms),
             NoncovalentBondDelta::Remove { id, atoms, .. } => {
@@ -290,7 +270,7 @@ impl ReactionIntegrityValidator {
                 let actual = lhs
                     .noncovalent_bonds()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?
                     .atom_ids();
                 if unordered_pair(actual) == unordered_pair(*atoms) {
                     Ok(())
@@ -310,7 +290,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &StereoAtomDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             StereoAtomDelta::Add { site, ligands, .. } => self.require_atoms(
                 lhs,
@@ -330,7 +310,7 @@ impl ReactionIntegrityValidator {
                 let view = lhs
                     .stereo_atoms()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?;
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
                 let actual: Vec<StereoLigand> = view
                     .ligands()
                     .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
@@ -354,7 +334,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         delta: &StereoBondDelta,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match delta {
             StereoBondDelta::Add { site, ligands, .. } => {
                 self.require_available(lhs, created, Entity::Bond(*site))?;
@@ -370,7 +350,7 @@ impl ReactionIntegrityValidator {
                 let view = lhs
                     .stereo_bonds()
                     .get(*id)
-                    .ok_or(ReactionIntegrityContradiction::InvalidReference { entity })?;
+                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
                 let actual: Vec<StereoLigand> = view
                     .ligands()
                     .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
@@ -394,7 +374,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &Constraint,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match constraint {
             Constraint::Atom(id, _) => self.require_available(lhs, created, Entity::Atom(*id)),
             Constraint::Bond(id, _) => self.require_available(lhs, created, Entity::Bond(*id)),
@@ -437,7 +417,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &RelationalConstraint,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match constraint {
             RelationalConstraint::DativeBondDonors { bond, atoms }
             | RelationalConstraint::DativeBondContainsAllDonors { bond, atoms } => {
@@ -532,7 +512,7 @@ impl ReactionIntegrityValidator {
         lhs: &Molecule,
         created: &HashSet<Entity>,
         constraint: &MoleculeConstraint,
-    ) -> Result<(), ReactionIntegrityContradiction> {
+    ) -> Result<(), ReactionIntegrityError> {
         match constraint {
             MoleculeConstraint::ChargeSum { atoms, .. }
             | MoleculeConstraint::UnpairedElectronCoupling { atoms, .. }
@@ -546,6 +526,17 @@ impl ReactionIntegrityValidator {
                 Ok(())
             }
         }
+    }
+}
+
+impl Reaction {
+    /// Check the representation invariants required to interpret this reaction.
+    ///
+    /// The check covers the lhs molecule, delta references, created-id uniqueness, and the
+    /// recorded incidence of removed entities. It does not impose DPO or chemistry semantics.
+    pub fn check_integrity(&self) -> Result<(), ReactionIntegrityError> {
+        self.lhs.check_integrity()?;
+        ReactionIntegrityCheck.check(&self.lhs, &self.deltas)
     }
 }
 

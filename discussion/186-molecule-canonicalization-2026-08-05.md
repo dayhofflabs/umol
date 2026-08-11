@@ -276,14 +276,20 @@ validators split by tier rather than moving as one block:
   tier-2 invariants validation in `umol-graph`; and
 - `ConnectivityValidator` and `ConnectivityModel` move together to `umol-graph`, with the validator
   renamed `ConnectivityConformanceValidator` because its result depends on the selected model.
+  Add `ConnectivityModel` to `ChemistryModel` and run connectivity first in the conformance pass,
+  immediately before valence conformance.
 
 The existing graph validators then need the following cleanup:
 
 - remove `validate_integrity`, `EntityStructureValidator`, and `ConstraintValidator` from the
   composite `Validator`. The composite runs `validate_invariants` followed by
-  `validate_conformance`; successful graph-IR construction is its integrity precondition;
-- rename `Validator::validate_atom`, which currently runs only valence and spin invariants, so its
-  tier is explicit;
+  `validate_conformance`; successful graph-IR construction is its integrity precondition.
+  Connectivity runs first within `validate_conformance`, immediately before valence conformance;
+- remove `Validator::validate_atom`. It is only a partial combination of the valence and spin
+  invariants for a free-standing `AtomForm`, yet constructing the model-bearing composite provides
+  no input to either operation. Keep the focused `validate_atom` methods on
+  `ValenceInvariantsValidator` and `SpinInvariantsValidator` public; a top-level `AtomValidator` may
+  be designed separately if a complete atom-validation operation is later required;
 - remove `LigandArity`, `CosetOutOfRange`, `ImproperOnAchiral`, `MissingStereoAtom`, and
   `MissingStereoBond` from `StereoConformanceValidator`. The first two become integrity errors, the
   third disappears, and the last two are covered by tier-2 constraint satisfaction;
@@ -1017,25 +1023,52 @@ and the semantic properties validated by the corresponding property tests.
   `Result<Solution<_, _>, _>` and non-ground `Underdetermined` behavior. This is breaking
   red-to-green; the exact public domain stems must be approved before this subitem starts. [dep: S2a]
 - **S2d — Public conformance validators.** Move `ConnectivityValidator` and `ConnectivityModel`
-  together to `umol-graph`, rename the validator `ConnectivityConformanceValidator`, and rebalance
-  stereo conformance. Remove `LigandArity`, `CosetOutOfRange`, `ImproperOnAchiral`,
+  together to `umol-graph`, rename the validator `ConnectivityConformanceValidator`, add
+  `ConnectivityModel` to `ChemistryModel`, and run connectivity first in the conformance pass,
+  immediately before valence conformance. Rebalance stereo conformance. Remove `LigandArity`,
+  `CosetOutOfRange`, `ImproperOnAchiral`,
   `MissingStereoAtom`, and `MissingStereoBond` from stereo conformance; retain perception/model and
   symmetry-derived checks, with non-ground configuration producing `Underdetermined`. Align the
   aromaticity and stereo contradiction/error names. All resulting validators are public. This is
   breaking red-to-green. [dep: S2b, S2c]
 - **S2e — Composite validation and operation callers.** Remove `validate_integrity` and the moved
-  graph-IR validators from the composite `Validator`; run invariants and then conformance. Rename
-  the atom-only invariants entry point so its tier is explicit. Rewire resolvers, transformers,
-  substructure operations, Rust and Python callers, specifications, and rustdoc. This is breaking
-  red-to-green. [dep: S2c, S2d]
+  graph-IR validators from the composite `Validator`; run invariants and then conformance, with
+  connectivity first in the conformance pass. Remove the partial composite
+  `Validator::validate_atom` operation; keep the focused valence- and spin-invariants atom
+  operations public without adding a top-level `AtomValidator`. Remove the duplicate public
+  `ValenceInvariants::check` and `check_atom` surface, consolidate that semantic operation behind
+  `ValenceInvariantsValidator::validate` and `validate_atom`, and do not retain `check` aliases.
+  Rewire resolvers, transformers, substructure operations, Rust and Python callers, specifications,
+  and rustdoc. This is breaking red-to-green. [dep: S2c, S2d]
 - **S2f — Reaction-application preconditions.** Replace `Reaction::apply`'s wholesale use of
   `EntityStructureValidator` with integrity checks and the explicitly approved operation-specific
-  preconditions. Decide separately for localized-bond simplicity, dative role and uniqueness,
-  noncovalent uniqueness, aromatic overlap, multicenter participant-set uniqueness, and repeated
-  stereo sites; do not encode them under a single “non-simple” condition. Exercise each retained
-  precondition and verify that independently supplied malformed inputs return typed failures without
-  panics. This subitem is blocked until that per-property semantic decision is made; once decided it
-  is breaking red-to-green. [dep: S2b, S2c, S2e]
+  preconditions. Before match enumeration, check the reaction LHS and host for localized-bond
+  simplicity, dative role and uniqueness, noncovalent uniqueness, aromatic participant uniqueness
+  and overlap, multicenter participant and participant-set uniqueness, and repeated stereo sites.
+  These remain tier-2 invariants generally, but application requires them because matching,
+  incidence-induced correspondence, participant-position transport, and singular aromatic/stereo
+  views rely on the corresponding uniqueness contracts. Do not encode them under a single
+  “non-simple” condition.
+
+  Rename `Reaction::validate_application` to `Reaction::check_preconditions`; it is an
+  operation-precondition probe, not a tier-2 or tier-3 validator. `Reaction::apply` and the Python
+  eager-correspondence path run this gate once before enumerating matches. The lower-level
+  `Reaction::apply_at` does not repeat the global gate: its supplied `MoleculeCorrespondence`
+  discharges the relevant matching ambiguity, while its lowering remains panic-free and checks the
+  generated product. Keep that per-match product conflict gate separately, because a structurally
+  valid LHS and host can still conflict under one embedding while another embedding succeeds.
+
+  Graph IR uses the existing per-family conflict predicates for the operation precondition; the
+  graph-layer `EntityStructureInvariantsValidator` remains responsible for detailed semantic
+  diagnosis through `EntityStructureInvariantsContradiction` and
+  `EntityStructureInvariantsError`. Report the coarse operation failures as
+  `ApplyPreconditionError::ReactionStructureInvariant { kind: EntityKind }` and
+  `ApplyPreconditionError::HostStructureInvariant { kind: EntityKind }`. Retain the existing
+  `ApplyError::StructuralConflict` for the match-local product gate unchanged; its name belongs to
+  the later application-error hierarchy review, and this work introduces no additional
+  `*Conflict` name. Exercise every retained precondition, the distinction between global
+  precondition and match-local product rejection, and independently supplied malformed inputs
+  without panics. This is breaking red-to-green. [dep: S2b, S2c, S2e]
 
 ### S3 — Complete remapping
 

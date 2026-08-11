@@ -420,7 +420,9 @@ mod tests {
             bond,
             [
                 StereoLigand::new(f, StereoLigandKind::Atom),
+                StereoLigand::new(c1, StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(h, StereoLigandKind::Atom),
+                StereoLigand::new(c2, StereoLigandKind::ImplicitHydrogen),
             ],
             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         );

@@ -36,8 +36,7 @@ use super::id::{
 };
 use super::ligand::StereoLigand;
 use super::molecule::{
-    validate_constraint_references, validate_entry_references, Molecule, MoleculeEntries,
-    MoleculeEntriesError,
+    validate_constraint_references, Molecule, MoleculeEntries, MoleculeIntegrityError,
 };
 use super::multicenter::MulticenterBondForm;
 use super::noncovalent::NoncovalentBondForm;
@@ -95,9 +94,13 @@ pub struct ReactionSpanEntries {
 
 /// Failure to construct a reaction span from structurally inconsistent entries.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ReactionSpanEntriesError {
+pub enum ReactionSpanIntegrityError {
     #[error("reaction span entries reference unavailable {entity}")]
     InvalidReference { entity: Entity },
+    #[error("reaction span lhs is not a valid molecule representation: {0}")]
+    Lhs(MoleculeIntegrityError),
+    #[error("reaction span rhs is not a valid molecule representation: {0}")]
+    Rhs(MoleculeIntegrityError),
 }
 
 impl ReactionSpan {
@@ -117,12 +120,12 @@ impl ReactionSpan {
     ///
     /// # Errors
     ///
-    /// Returns [`ReactionSpanEntriesError::InvalidReference`] when a participant, site, ligand, or
+    /// Returns [`ReactionSpanIntegrityError::InvalidReference`] when a participant, site, ligand, or
     /// constraint references an entity absent from the union frame or from a side on which the
     /// referring entry is present. Chemistry and other semantic properties are not validated.
     pub fn try_from_entries(
         mut entries: ReactionSpanEntries,
-    ) -> Result<Self, ReactionSpanEntriesError> {
+    ) -> Result<Self, ReactionSpanIntegrityError> {
         normalize_reaction_span_entries(&mut entries);
         validate_reaction_span_entries(&entries)?;
 
@@ -197,16 +200,20 @@ impl ReactionSpan {
             stereo_bonds,
             constraints,
         };
-        for side in [Side::Left, Side::Right] {
-            validate_entry_references(&span.project_entries(side)).map_err(
-                |error| match error {
-                    MoleculeEntriesError::InvalidReference { entity } => {
-                        ReactionSpanEntriesError::InvalidReference { entity }
-                    }
-                },
-            )?;
-        }
+        span.check_integrity()?;
         Ok(span)
+    }
+
+    /// Check the representation invariants required to interpret both sides of this span.
+    ///
+    /// Union-frame references are established by checked construction. This check additionally
+    /// materializes both projections through the authoritative molecule integrity contract.
+    pub fn check_integrity(&self) -> Result<(), ReactionSpanIntegrityError> {
+        Molecule::try_from_entries(self.project_entries(Side::Left))
+            .map_err(ReactionSpanIntegrityError::Lhs)?;
+        Molecule::try_from_entries(self.project_entries(Side::Right))
+            .map_err(ReactionSpanIntegrityError::Rhs)?;
+        Ok(())
     }
 }
 
@@ -473,11 +480,11 @@ fn contains_entry(entries: &ReactionSpanEntries, entity: Entity) -> bool {
 
 fn validate_reaction_span_entries(
     entries: &ReactionSpanEntries,
-) -> Result<(), ReactionSpanEntriesError> {
+) -> Result<(), ReactionSpanIntegrityError> {
     let validate = |entity| {
         contains_entry(entries, entity)
             .then_some(())
-            .ok_or(ReactionSpanEntriesError::InvalidReference { entity })
+            .ok_or(ReactionSpanIntegrityError::InvalidReference { entity })
     };
 
     for (first, second, _) in &entries.bonds {
@@ -521,7 +528,7 @@ fn validate_reaction_span_entries(
     for span in &entries.constraints {
         for constraint in [span.lhs(), span.rhs()].into_iter().flatten() {
             validate_constraint_references(constraint, &contains)
-                .map_err(|entity| ReactionSpanEntriesError::InvalidReference { entity })?;
+                .map_err(|entity| ReactionSpanIntegrityError::InvalidReference { entity })?;
         }
     }
     Ok(())
@@ -2493,7 +2500,7 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), EntitySpan::Unchanged(BondForm::default()))],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::dative_union(
         ReactionSpanEntries {
@@ -2505,7 +2512,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::aromatic_union(
         ReactionSpanEntries {
@@ -2516,7 +2523,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::multicenter_union(
         ReactionSpanEntries {
@@ -2527,7 +2534,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::noncovalent_union(
         ReactionSpanEntries {
@@ -2539,7 +2546,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::stereo_atom_site(
         ReactionSpanEntries {
@@ -2551,7 +2558,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::stereo_atom_ligand_union(
         ReactionSpanEntries {
@@ -2563,7 +2570,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::stereo_bond_site_union(
         ReactionSpanEntries {
@@ -2575,7 +2582,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Bond(BondId(0)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Bond(BondId(0)) },
     )]
     #[case::stereo_bond_ligand_union(
         ReactionSpanEntries {
@@ -2588,7 +2595,7 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::constraint_union(
         ReactionSpanEntries {
@@ -2598,7 +2605,7 @@ mod tests {
             ))],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
     )]
     #[case::bond_lhs(
         ReactionSpanEntries {
@@ -2613,7 +2620,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::bond_rhs(
         ReactionSpanEntries {
@@ -2628,7 +2637,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::dative_rhs(
         ReactionSpanEntries {
@@ -2643,7 +2654,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::aromatic_lhs(
         ReactionSpanEntries {
@@ -2657,7 +2670,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::multicenter_rhs(
         ReactionSpanEntries {
@@ -2672,7 +2687,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(2)) },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(2)),
+        }),
     )]
     #[case::noncovalent_lhs(
         ReactionSpanEntries {
@@ -2687,7 +2704,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::stereo_atom_site_lhs(
         ReactionSpanEntries {
@@ -2699,7 +2718,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(0)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(0)),
+        }),
     )]
     #[case::stereo_atom_ligand_rhs(
         ReactionSpanEntries {
@@ -2714,7 +2735,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(1)) },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
     )]
     #[case::stereo_bond_site_lhs(
         ReactionSpanEntries {
@@ -2734,7 +2757,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Bond(BondId(0)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Bond(BondId(0)),
+        }),
     )]
     #[case::stereo_bond_ligand_rhs(
         ReactionSpanEntries {
@@ -2755,7 +2780,9 @@ mod tests {
             )],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(2)) },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(2)),
+        }),
     )]
     #[case::constraint_lhs(
         ReactionSpanEntries {
@@ -2766,11 +2793,13 @@ mod tests {
             ))],
             ..Default::default()
         },
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(0)) },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(0)),
+        }),
     )]
     fn test_reaction_span_try_from_entries_error(
         #[case] entries: ReactionSpanEntries,
-        #[case] expected: ReactionSpanEntriesError,
+        #[case] expected: ReactionSpanIntegrityError,
     ) {
         assert_eq!(ReactionSpan::try_from_entries(entries), Err(expected));
     }
@@ -2836,17 +2865,17 @@ mod tests {
 
         assert_eq!(
             ReactionSpan::try_from_entries(entries),
-            Err(ReactionSpanEntriesError::InvalidReference { entity }),
+            Err(ReactionSpanIntegrityError::InvalidReference { entity }),
         );
     }
 
     #[rstest]
     #[case::invalid(
-        ReactionSpanEntriesError::InvalidReference { entity: Entity::Atom(AtomId(3)) },
+        ReactionSpanIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(3)) },
         "reaction span entries reference unavailable atom 3",
     )]
     fn test_reaction_span_entries_error_display(
-        #[case] error: ReactionSpanEntriesError,
+        #[case] error: ReactionSpanIntegrityError,
         #[case] expected: &str,
     ) {
         assert_eq!(error.to_string(), expected);
@@ -3779,7 +3808,9 @@ mod tests {
             site: BondId(1),
             ligands: vec![
                 StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
             ],
             attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
         })]),

@@ -43,10 +43,7 @@ use super::reaction_derivation::ReactionDerivation;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
 use super::traits::Normalize;
-use super::validate::{
-    DpoValidator, EntityStructureValidator, ReactionIntegrityContradiction,
-    ReactionIntegrityValidator,
-};
+use super::validate::{DpoValidator, EntityStructureValidator, ReactionIntegrityError};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1407,20 +1404,15 @@ impl Reaction {
             .normalize()
             .map_err(|_| ApplyPreconditionError::InconsistentReaction)?;
 
-        let reaction_integrity = match ReactionIntegrityValidator.validate(&self.lhs, &deltas) {
-            Ok(outcome) => outcome,
-            Err(error) => match error {},
-        };
-        reaction_integrity
-            .into_observation()
-            .map_err(|contradiction| match contradiction {
-                ReactionIntegrityContradiction::InvalidReference { entity } => {
-                    ApplyPreconditionError::InvalidReactionReference { entity }
-                }
-                ReactionIntegrityContradiction::IncidenceMismatch { entity } => {
-                    ApplyPreconditionError::ReactionIncidenceMismatch { entity }
-                }
-            })?;
+        self.check_integrity().map_err(|error| match error {
+            ReactionIntegrityError::InvalidReference { entity } => {
+                ApplyPreconditionError::InvalidReactionReference { entity }
+            }
+            ReactionIntegrityError::IncidenceMismatch { entity } => {
+                ApplyPreconditionError::ReactionIncidenceMismatch { entity }
+            }
+            ReactionIntegrityError::Lhs(_) => ApplyPreconditionError::InconsistentReaction,
+        })?;
 
         let lhs_structure = match EntityStructureValidator.validate(&self.lhs) {
             Ok(outcome) => outcome,
@@ -1632,6 +1624,39 @@ mod tests {
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
+
+    #[rstest]
+    #[case::empty(Reaction::default())]
+    #[case::identity(Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        }),
+        Deltas::new(),
+    ))]
+    fn test_reaction_check_integrity(#[case] reaction: Reaction) {
+        assert_eq!(reaction.check_integrity(), Ok(()));
+    }
+
+    #[rstest]
+    #[case::unavailable_atom(
+        Reaction::new(
+            Molecule::default(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::default(),
+            })]),
+        ),
+        ReactionIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(0)),
+        },
+    )]
+    fn test_reaction_check_integrity_error(
+        #[case] reaction: Reaction,
+        #[case] expected: ReactionIntegrityError,
+    ) {
+        assert_eq!(reaction.check_integrity(), Err(expected));
+    }
 
     #[rstest]
     fn test_reaction_from_sides() {
