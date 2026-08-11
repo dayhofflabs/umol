@@ -538,11 +538,16 @@ mod tests {
             );
             let stereo_atom_rhs = GraphIrStereoAtomForm::new(
                 GraphIrStereoKind::Tetrahedral,
-                GraphIrStereoCoset::Lit(2),
+                GraphIrStereoCoset::Lit(0),
             );
             let added_stereo_bond =
                 GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1));
-            let ligand = GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom);
+            let ligands = [0, 1, 0, 1]
+                .into_iter()
+                .map(|id| {
+                    GraphIrStereoLigand::new(GraphIrAtomId(id), GraphIrStereoLigandKind::Atom)
+                })
+                .collect::<Vec<_>>();
             let unchanged_constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
             let modified_constraint_lhs =
@@ -642,7 +647,11 @@ mod tests {
                 )],
                 vec![(
                     0,
-                    vec![StereoLigand::from_rust(ligand)],
+                    ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
                     (
                         Some(
                             Py::new(py, StereoAtomForm::from_rust(stereo_atom_lhs.clone()))
@@ -656,7 +665,11 @@ mod tests {
                 )],
                 vec![(
                     0,
-                    vec![StereoLigand::from_rust(ligand)],
+                    ligands
+                        .iter()
+                        .copied()
+                        .map(StereoLigand::from_rust)
+                        .collect(),
                     (
                         None,
                         Some(
@@ -762,7 +775,7 @@ mod tests {
                     )],
                     stereo_atoms: vec![(
                         GraphIrAtomId(0),
-                        vec![ligand],
+                        ligands.clone(),
                         GraphIrEntitySpan::Modified {
                             lhs: stereo_atom_lhs,
                             rhs: stereo_atom_rhs,
@@ -770,7 +783,7 @@ mod tests {
                     )],
                     stereo_bonds: vec![(
                         GraphIrBondId(0),
-                        vec![ligand],
+                        ligands,
                         GraphIrEntitySpan::Added(added_stereo_bond),
                     )],
                     constraints: vec![
@@ -811,13 +824,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::union(true, true, false)]
-    #[case::lhs(false, true, true)]
-    #[case::rhs(true, false, true)]
+    #[case::union(
+        true,
+        true,
+        false,
+        "reaction span entries reference unavailable atom 1"
+    )]
+    #[case::lhs(false, true, true, "reaction span lhs is not a valid molecule representation: molecule references unavailable atom 1")]
+    #[case::rhs(true, false, true, "reaction span rhs is not a valid molecule representation: molecule references unavailable atom 1")]
     fn test_reaction_span_from_entries_reference_error(
         #[case] first_on_lhs: bool,
         #[case] first_on_rhs: bool,
         #[case] include_second: bool,
+        #[case] expected: &str,
     ) {
         Python::attach(|py| {
             let mut atoms = vec![(
@@ -884,7 +903,7 @@ mod tests {
             assert!(error.is_instance_of::<PyValueError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "reaction span entries reference unavailable atom 1"
+                expected
             );
         });
     }

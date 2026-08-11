@@ -10,11 +10,10 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{
-    AromaticityModel, ChemistryModel, ConnectivityModel, StereoModel, ValenceModel,
-};
+use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, ValenceModel};
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
+use umol_graph::ops::validate::ConnectivityModel;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{FromIr, IntoIr, Molecule};
 use umol_utils::solution::Solution;

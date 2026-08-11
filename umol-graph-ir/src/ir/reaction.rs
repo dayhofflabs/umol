@@ -2225,6 +2225,115 @@ mod tests {
     }
 
     #[rstest]
+    #[case::bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(), AtomForm::default()],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::default()),
+                (AtomId(0), AtomId(1), BondForm::default()),
+            ],
+            ..Default::default()
+        },
+        EntityKind::Bond,
+    )]
+    #[case::dative_bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(), AtomForm::default()],
+            dative: vec![(
+                vec![AtomId(0), AtomId(0)],
+                AtomId(1),
+                DativeBondForm::default(),
+            )],
+            ..Default::default()
+        },
+        EntityKind::DativeBond,
+    )]
+    #[case::aromatic_system(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            )],
+            ..Default::default()
+        },
+        EntityKind::AromaticSystem,
+    )]
+    #[case::multicenter_bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(0)],
+                MulticenterBondForm::from_electrons(vec![1, 1]),
+            )],
+            ..Default::default()
+        },
+        EntityKind::MulticenterBond,
+    )]
+    #[case::noncovalent_bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(0),
+                NoncovalentBondForm::default(),
+            )],
+            ..Default::default()
+        },
+        EntityKind::NoncovalentBond,
+    )]
+    #[case::stereo_atom(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default()],
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                ),
+                (
+                    AtomId(0),
+                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                ),
+            ],
+            ..Default::default()
+        },
+        EntityKind::StereoAtom,
+    )]
+    #[case::stereo_bond(
+        MoleculeEntries {
+            atoms: vec![AtomForm::default(), AtomForm::default()],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            stereo_bonds: vec![
+                (
+                    BondId(0),
+                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                ),
+                (
+                    BondId(0),
+                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                ),
+            ],
+            ..Default::default()
+        },
+        EntityKind::StereoBond,
+    )]
+    fn test_first_application_invariant_failure(
+        #[case] entries: MoleculeEntries,
+        #[case] expected: EntityKind,
+    ) {
+        let molecule = Molecule::from_entries(entries);
+
+        assert_eq!(
+            first_application_invariant_failure(&molecule),
+            Some(expected)
+        );
+    }
+
+    #[rstest]
     #[case::inconsistent_reaction(
         Reaction::new(
             Molecule::default(),

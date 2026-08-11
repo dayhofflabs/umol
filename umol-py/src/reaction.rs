@@ -1392,14 +1392,22 @@ mod tests {
     )]
     #[case::stereo_bond(
         r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]}"#,
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#,
         vec![(0, 0), (1, 1), (2, 2), (3, 3)],
         vec![GraphIrDelta::StereoBond(GraphIrStereoBondDelta::Add {
             id: GraphIrStereoBondId(0),
             site: GraphIrBondId(1),
             ligands: vec![
                 GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(1),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
                 GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(2),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
             ],
             attributes: GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1)),
         })],
@@ -2218,7 +2226,7 @@ mod tests {
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "invalid host: bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
+                "host violates the application invariant for bond"
             );
         });
     }

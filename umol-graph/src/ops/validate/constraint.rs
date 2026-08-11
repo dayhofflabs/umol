@@ -26,9 +26,10 @@ pub use relational::{
 };
 pub use ring::{RingConstraintInvariantsContradiction, RingConstraintInvariantsValidator};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomConstraintForm, AtomId, BondConstraintForm, BondId, Constraint,
-    DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule, MoleculeConstraint,
-    MulticenterBondId, NoncovalentBondId, NumForm, RingConfig, RingModel, RingViews,
+    AromaticSystemConstraintForm, AromaticSystemId, AtomConstraintForm, AtomId, BondConstraintForm,
+    BondId, Constraint, DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule,
+    MoleculeConstraint, MulticenterBondConstraintForm, MulticenterBondId,
+    NoncovalentBondConstraintForm, NoncovalentBondId, NumForm, RingConfig, RingModel, RingViews,
     StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId, StereoKind,
 };
 
@@ -360,7 +361,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_aromatic_system(
         &self,
         id: AromaticSystemId,
-        constraint: &umol_graph_ir::ir::AromaticSystemConstraintForm,
+        constraint: &AromaticSystemConstraintForm,
     ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
         self.require(Entity::AromaticSystem(id))?;
         Ok(
@@ -372,7 +373,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_multicenter_bond(
         &self,
         id: MulticenterBondId,
-        constraint: &umol_graph_ir::ir::MulticenterBondConstraintForm,
+        constraint: &MulticenterBondConstraintForm,
     ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
         self.require(Entity::MulticenterBond(id))?;
         Ok(
@@ -384,7 +385,7 @@ impl<'a> ConstraintEvaluation<'a> {
     fn evaluate_noncovalent_bond(
         &mut self,
         id: NoncovalentBondId,
-        constraint: &umol_graph_ir::ir::NoncovalentBondConstraintForm,
+        constraint: &NoncovalentBondConstraintForm,
     ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
         self.require(Entity::NoncovalentBond(id))?;
         let intramolecular = if constraint.is_undetermined() {
@@ -588,6 +589,7 @@ fn observe(
 mod tests {
     use proptest::prelude::*;
     use rstest::{fixture, rstest};
+    use umol_chem::element::Element;
     use umol_graph_core::{ConnectedComponentsAlgorithm, RelevantCycleEnumerationAlgorithm};
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondId, Constraints,
@@ -766,7 +768,7 @@ mod tests {
 
     fn molecule_with(constraint: Constraint) -> Molecule {
         Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(umol_chem::element::Element::C)],
+            atoms: vec![AtomForm::from_element(Element::C)],
             constraints: Constraints::from(constraint),
             ..MoleculeEntries::default()
         })
@@ -830,7 +832,7 @@ mod tests {
         fn test_constraint_inline_top_level_leaf_agreement(value in 0_i64..=3) {
             let constraint = AtomConstraintForm::valence(value);
             let inline = Molecule::from_entries(MoleculeEntries {
-                atoms: vec![AtomForm::from_element(umol_chem::element::Element::C)
+                atoms: vec![AtomForm::from_element(Element::C)
                     .with_constraint(constraint.clone())],
                 ..MoleculeEntries::default()
             });

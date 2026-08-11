@@ -186,7 +186,7 @@ fn test_mol_stereo_atom() {
 fn test_mol_stereo_bond() {
     let molecule: Molecule = mol! {
         (c1: C) -[db: "2"]- (c2: C), (f: F), (h: H),
-        stereo bond (db) [(f) (h)] : "Ct1",
+        stereo bond (db) [(f) (h) (f) (h)] : "Ct1",
     };
 
     assert_eq!(molecule.stereo_bonds().count(), 1);

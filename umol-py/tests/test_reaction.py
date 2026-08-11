@@ -478,9 +478,9 @@ def test_reaction_parse_keyword_error():
             ':bonds [{:id :first :atoms [0 1] :attrs "2"} '
             '{:id :second :atoms [2 3] :attrs "2"}] '
             ':stereo-bonds [{:id :lhs :site :first '
-            ':ligands [2 3] :attrs "Ct1"}]} '
+            ':ligands [2 3 2 3] :attrs "Ct1"}]} '
             ':deltas [{:stereo-bond {:add '
-            '{:id :delta :site :second :ligands [0 1] :attrs "Ct2"}}}]}',
+            '{:id :delta :site :second :ligands [0 1 0 1] :attrs "Ct2"}}}]}',
             Entity.StereoBond(0),
             Entity.StereoBond(1),
             id="stereo-bond",
@@ -1447,10 +1447,7 @@ def test_reaction_apply_precondition_error():
 
     with pytest.raises(
         InvalidStructureError,
-        match=(
-            r"^invalid host: bond: parallel bonds on atoms "
-            r"\[AtomId\(0\), AtomId\(1\)\]$"
-        ),
+        match=r"^host violates the application invariant for bond$",
     ):
         reaction.apply(host)
 

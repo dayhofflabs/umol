@@ -357,9 +357,6 @@ def test_reaction_application_workflow():
 
     with pytest.raises(
         InvalidStructureError,
-        match=(
-            r"^invalid host: bond: parallel bonds on atoms "
-            r"\[AtomId\(0\), AtomId\(1\)\]$"
-        ),
+        match=r"^host violates the application invariant for bond$",
     ):
         reaction.apply(invalid_host, config=config)

@@ -1009,19 +1009,21 @@ and the semantic properties validated by the corresponding property tests.
   asserted entry construction through the same implementation and add exact success and error cases
   plus properties that generated checked molecules pass their integrity check. This is additive
   until the constructors are rewired, then breaking red-to-green within the subitem. [dep: S1c]
+  **Done.**
 - **S2b — Reaction and span integrity contracts.** Add `ReactionIntegrityError` and
   `ReactionSpanIntegrityError` with public `check_integrity` operations. Replace
   `ReactionIntegrityValidator`; make checked construction, DSL raise, side materialization, and span
   projection use the shared checks. Preserve permissive lhs-plus-deltas construction for reactions
   and the stronger two-sided construction invariant for spans. Verify malformed stored references
   and side projections as typed integrity errors rather than contradictions or panics. This is
-  breaking red-to-green. [dep: S2a]
+  breaking red-to-green. [dep: S2a] **Done.**
 - **S2c — Public invariants validators.** Move the non-integrity portion of
   `EntityStructureValidator` and the aggregate, incidence, ring, relational, and molecule-scope
   constraint validators from `umol-graph-ir` to `umol-graph`. Apply the approved public
   `*InvariantsValidator` names and keep every aggregate and focused validator public. Preserve
   `Result<Solution<_, _>, _>` and non-ground `Underdetermined` behavior. This is breaking
   red-to-green; the exact public domain stems must be approved before this subitem starts. [dep: S2a]
+  **Done.**
 - **S2d — Public conformance validators.** Move `ConnectivityValidator` and `ConnectivityModel`
   together to `umol-graph`, rename the validator `ConnectivityConformanceValidator`, add
   `ConnectivityModel` to `ChemistryModel`, and run connectivity first in the conformance pass,
@@ -1030,7 +1032,7 @@ and the semantic properties validated by the corresponding property tests.
   `MissingStereoAtom`, and `MissingStereoBond` from stereo conformance; retain perception/model and
   symmetry-derived checks, with non-ground configuration producing `Underdetermined`. Align the
   aromaticity and stereo contradiction/error names. All resulting validators are public. This is
-  breaking red-to-green. [dep: S2b, S2c]
+  breaking red-to-green. [dep: S2b, S2c] **Done.**
 - **S2e — Composite validation and operation callers.** Remove `validate_integrity` and the moved
   graph-IR validators from the composite `Validator`; run invariants and then conformance, with
   connectivity first in the conformance pass. Remove the partial composite
@@ -1039,7 +1041,7 @@ and the semantic properties validated by the corresponding property tests.
   `ValenceInvariants::check` and `check_atom` surface, consolidate that semantic operation behind
   `ValenceInvariantsValidator::validate` and `validate_atom`, and do not retain `check` aliases.
   Rewire resolvers, transformers, substructure operations, Rust and Python callers, specifications,
-  and rustdoc. This is breaking red-to-green. [dep: S2c, S2d]
+  and rustdoc. This is breaking red-to-green. [dep: S2c, S2d] **Done.**
 - **S2f — Reaction-application preconditions.** Replace `Reaction::apply`'s wholesale use of
   `EntityStructureValidator` with integrity checks and the explicitly approved operation-specific
   preconditions. Before match enumeration, check the reaction LHS and host for localized-bond
@@ -1068,7 +1070,7 @@ and the semantic properties validated by the corresponding property tests.
   the later application-error hierarchy review, and this work introduces no additional
   `*Conflict` name. Exercise every retained precondition, the distinction between global
   precondition and match-local product rejection, and independently supplied malformed inputs
-  without panics. This is breaking red-to-green. [dep: S2b, S2c, S2e]
+  without panics. This is breaking red-to-green. [dep: S2b, S2c, S2e] **Done.**
 
 ### S3 — Complete remapping
 

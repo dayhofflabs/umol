@@ -3298,7 +3298,15 @@ mod tests {
                 GraphIrBondId(0),
                 vec![
                     GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(
+                        GraphIrAtomId(0),
+                        GraphIrStereoLigandKind::ImplicitHydrogen,
+                    ),
                     GraphIrStereoLigand::new(GraphIrAtomId(3), GraphIrStereoLigandKind::Atom),
+                    GraphIrStereoLigand::new(
+                        GraphIrAtomId(1),
+                        GraphIrStereoLigandKind::ImplicitHydrogen,
+                    ),
                 ],
                 GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(0)),
             )],

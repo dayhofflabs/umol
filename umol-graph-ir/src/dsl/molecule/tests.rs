@@ -764,6 +764,9 @@ fn test_molecule_dsl_streaming_per_variant_parity(#[case] source: &str) {
 #[case::dative_donors_empty(
     r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donors [] :acceptor 1 :attrs :single}]}"##
 )]
+#[case::stereo_atom_wrong_arity(
+    r##"{:atoms ["C" "F"] :stereo-atoms [{:site 0 :ligands [1] :attrs "Th1"}]}"##
+)]
 fn test_molecule_dsl_streaming_error_parity(#[case] source: &str) {
     let via_str_err = MoleculeDsl::from_edn_str(source).is_err();
     let via_tree_err = read_string(source)

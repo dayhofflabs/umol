@@ -3,8 +3,9 @@
 use thiserror::Error;
 use umol_graph_core::RelevantCycleEnumerationAlgorithm;
 use umol_graph_ir::ir::{
-    AtomConstraintForm, AtomId, BondConstraintForm, BondId, DativeBondConstraintForm, DativeBondId,
-    Entity, Lattice, Molecule, NumForm, RingAtomView, RingBondView, RingConfig, RingModel,
+    AtomConstraintForm, AtomConstraintsForm, AtomId, BondConstraintForm, BondConstraintsForm,
+    BondId, DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule, NumForm,
+    RingAtomView, RingBondView, RingConfig, RingModel,
 };
 use umol_utils::solution::Solution;
 
@@ -168,7 +169,7 @@ impl RingConstraintInvariantsValidator {
 fn validate_atom_constraints(
     view: &RingAtomView<'_>,
     atom_id: AtomId,
-    constraints: &umol_graph_ir::ir::AtomConstraintsForm,
+    constraints: &AtomConstraintsForm,
 ) -> Solution<(), RingConstraintInvariantsContradiction> {
     conjunction(constraints.iter().filter_map(|constraint| {
         let (asserted, derived) = match constraint {
@@ -193,7 +194,7 @@ fn validate_atom_constraints(
 fn validate_bond_constraints(
     view: &RingBondView<'_>,
     bond_id: BondId,
-    constraints: &umol_graph_ir::ir::BondConstraintsForm,
+    constraints: &BondConstraintsForm,
 ) -> Solution<(), RingConstraintInvariantsContradiction> {
     conjunction(constraints.iter().filter_map(|constraint| {
         let BondConstraintForm::RingMembership(membership) = constraint else {

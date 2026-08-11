@@ -1276,7 +1276,7 @@ impl MoleculeInput {
         // The context is complete; constraints resolve against it directly.
         let constraints = ConstraintsDsl(constraint_dsls).into_ir(&context)?;
 
-        let molecule = Molecule::from_entries(MoleculeEntries {
+        let molecule = Molecule::try_from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative: dative_list,
@@ -1286,7 +1286,8 @@ impl MoleculeInput {
             stereo_atoms: stereo_atom_list,
             stereo_bonds: stereo_bond_list,
             constraints,
-        });
+        })
+        .map_err(|error| ParseError::InvalidValue(error.to_string()))?;
         Ok((molecule, context))
     }
 }

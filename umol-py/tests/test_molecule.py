@@ -263,6 +263,8 @@ def test_molecule_from_entries():
                 [
                     StereoLigand(2, StereoLigandKind.Atom),
                     StereoLigand(3, StereoLigandKind.Atom),
+                    StereoLigand(2, StereoLigandKind.Atom),
+                    StereoLigand(3, StereoLigandKind.Atom),
                 ],
                 StereoBondForm.parse("Ct0"),
             )
@@ -295,7 +297,7 @@ def test_molecule_from_entries_default():
 def test_molecule_from_entries_atom_reference_error():
     with pytest.raises(
         ValueError,
-        match="^molecule entries reference unavailable atom 1$",
+        match="^molecule references unavailable atom 1$",
     ):
         Molecule.from_entries(
             [AtomForm(Element("C"))],
@@ -306,7 +308,7 @@ def test_molecule_from_entries_atom_reference_error():
 def test_molecule_from_entries_bond_site_reference_error():
     with pytest.raises(
         ValueError,
-        match="^molecule entries reference unavailable bond 0$",
+        match="^molecule references unavailable bond 0$",
     ):
         Molecule.from_entries(
             [AtomForm(Element("C"))],
@@ -323,7 +325,7 @@ def test_molecule_from_entries_bond_site_reference_error():
 def test_molecule_from_entries_ligand_reference_error():
     with pytest.raises(
         ValueError,
-        match="^molecule entries reference unavailable atom 1$",
+        match="^molecule references unavailable atom 1$",
     ):
         Molecule.from_entries(
             [AtomForm(Element("C"))],
@@ -340,7 +342,7 @@ def test_molecule_from_entries_ligand_reference_error():
 def test_molecule_from_entries_constraint_reference_error():
     with pytest.raises(
         ValueError,
-        match="^molecule entries reference unavailable atom 1$",
+        match="^molecule references unavailable atom 1$",
     ):
         Molecule.from_entries(
             [AtomForm(Element("C"))],
