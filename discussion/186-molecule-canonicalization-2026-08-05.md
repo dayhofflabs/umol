@@ -712,6 +712,14 @@ same representative, and changing `AutomorphismAlgorithm` may change cost but no
 separation is what makes canonical numbering stable across supported backends without forcing the
 typed molecule schema into `umol-graph-core`.
 
+At topology and constitution levels, the projected graph automorphisms preserve the corresponding
+typed leaf key and can prune entity branches directly. At full stereo level, a graph automorphism
+also induces a ligand-frame action that can change the stored stereo configuration. Projecting only
+the entity-id action does not prove leaf-key equality and is therefore not a sound pruning basis.
+The initial full-level implementation disables orbit pruning while retaining exact refinement and
+backend-selected branch order. Full-level orbit pruning may be restored only when its orbit
+representatives carry the covariant stereo action as well.
+
 The nominal search space contains every dense entity remapping, but it is not enumerated naively.
 Exact partition refinement makes most cells discrete; automorphism orbits remove equivalent
 branches; and fully determined leading key components permit prefix pruning once a candidate
@@ -1569,7 +1577,19 @@ and the semantic properties validated by the corresponding property tests.
   pruning independence, meso cases, repeated ligands, undetermined configurations, and selected-layer
   algorithm agreement. Malformed stereo reaches the exact integrity-error cases and never a panic.
   Do not require complete-output identity before S9b has used constraints to select the remaining
-  structural automorphism. This is additive. [dep: S8c]
+  structural automorphism. This is additive. [dep: S8c] **Done.** Exact frame-action cases and the
+  one-pass full canonicalizer jointly cover frame, coset, inline-constraint, and molecule-constraint
+  covariance for stereo atoms and bonds. The selected full layer is idempotent and invariant across
+  all 120 atom renumberings of a bounded symmetric stereo carrier. Its result agrees with exhaustive
+  minimization under both forward and reverse branch order, including the sole currently supported
+  nauty selector. The exhaustive comparison exposed that graph-only orbit pruning was unsound for
+  covariant stereo values: full-level search now disables it until orbit representatives carry the
+  induced frame action, and the enabled/disabled private search settings produce the same exact
+  minimum. Focused cases cover a meso pair, repeated virtual ligands, and kinded and kindless
+  undetermined configurations. Malformed arity and coset values are rejected without panic by the
+  checked `Molecule::try_from_entries` integrity boundary; the asserted `from_entries` constructor
+  retains its documented panic contract. Constraint-placement identity beyond the selected
+  structural key remains deferred to S9b.
 
 ### S9 — Para-stereo fixpoint and complete molecule API
 

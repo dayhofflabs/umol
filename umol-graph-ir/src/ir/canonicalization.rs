@@ -2921,9 +2921,14 @@ fn canonicalize_full_one_pass(
 fn canonicalize_full_one_pass_with_options(
     molecule: &Molecule,
     context: &CanonicalizationContext,
-    options: CanonicalSearchOptions,
+    mut options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizationError> {
     molecule.check_integrity()?;
+    // A full-frame automorphism acts on both entity ids and stereo configurations. The graph
+    // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
+    // whose coupled frame action changes the leaf key. Keep full stereo search exhaustive within
+    // each refined cell until orbit representatives carry that covariant action as well.
+    options.automorphism_pruning = false;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
@@ -3218,6 +3223,97 @@ mod tests {
             )],
             ..Default::default()
         })
+    }
+
+    #[fixture]
+    fn symmetric_stereo_canonicalization_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            )],
+            ..Default::default()
+        })
+    }
+
+    #[fixture]
+    fn meso_canonicalization_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Cl),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                ),
+                (
+                    AtomId(1),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    ],
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                ),
+            ],
+            ..Default::default()
+        })
+    }
+
+    #[fixture]
+    fn repeated_ligand_canonicalization_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        })
+    }
+
+    fn selected_full_key(molecule: &Molecule) -> CanonicalComparisonKey {
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+        let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+        full_comparison_key(molecule, &incidence_graph, &order)
+            .expect("canonical molecule has a full comparison key")
     }
 
     #[rstest]
@@ -3694,7 +3790,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_full_one_pass_distinguishes_stereo_configuration(
+    fn test_canonicalize_full_one_pass_configuration(
         canonicalization_context: CanonicalizationContext,
         stereo_atom_canonicalization_molecule: Molecule,
     ) {
@@ -3744,6 +3840,241 @@ mod tests {
         );
         assert_eq!(canonical.check_integrity(), Ok(()));
         assert_eq!(canonical.stereo_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_stereo_atom_constraints(
+        canonicalization_context: CanonicalizationContext,
+        stereo_atom_canonicalization_molecule: Molecule,
+    ) {
+        let constraint = StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+        });
+        let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
+        entries.stereo_atoms[0].2.constraints = constraint.clone().into();
+        entries.constraints =
+            Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
+        let source = Molecule::from_entries(entries);
+        let reframed = reframe_stereo_atom(
+            &source,
+            StereoAtomId(0),
+            Permutation::from_image(&[1, 0, 2, 3]),
+        );
+
+        assert_eq!(
+            canonicalize_full_one_pass(&reframed, &canonicalization_context),
+            canonicalize_full_one_pass(&source, &canonicalization_context),
+        );
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_stereo_bond_constraints(
+        canonicalization_context: CanonicalizationContext,
+        stereo_bond_canonicalization_molecule: Molecule,
+    ) {
+        let constraint = StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        });
+        let mut entries = molecule_entries(&stereo_bond_canonicalization_molecule);
+        entries.stereo_bonds[0].2.constraints = constraint.clone().into();
+        entries.constraints =
+            Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into();
+        let source = Molecule::from_entries(entries);
+        let reframed = reframe_stereo_bond(
+            &source,
+            StereoBondId(0),
+            Permutation::from_image(&[2, 3, 0, 1]),
+        );
+        let left = canonicalize_full_one_pass(&source, &canonicalization_context)
+            .expect("fixed molecule canonicalizes");
+        let right = canonicalize_full_one_pass(&reframed, &canonicalization_context)
+            .expect("reframed molecule canonicalizes");
+
+        assert_eq!(selected_full_key(&right), selected_full_key(&left));
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_selected_layer(
+        initial_class_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let canonical =
+            canonicalize_full_one_pass(&initial_class_molecule, &canonicalization_context)
+                .expect("fixed molecule canonicalizes");
+        let canonical_again = canonicalize_full_one_pass(&canonical, &canonicalization_context)
+            .expect("canonical molecule canonicalizes");
+
+        assert_eq!(
+            selected_full_key(&canonical_again),
+            selected_full_key(&canonical),
+        );
+        assert_eq!(canonical_again.check_integrity(), Ok(()));
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_renumbering(
+        symmetric_stereo_canonicalization_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let canonical = canonicalize_full_one_pass(
+            &symmetric_stereo_canonicalization_molecule,
+            &canonicalization_context,
+        )
+        .expect("fixed molecule canonicalizes");
+        let expected = selected_full_key(&canonical);
+
+        for rank in 0..(1..=5).product() {
+            let permutation = Permutation::unrank(5, rank);
+            let correspondence = molecule_correspondence(&[
+                (0..5).map(|index| permutation.apply(index)).collect(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                vec![0],
+                Vec::new(),
+            ]);
+            let renumbered = symmetric_stereo_canonicalization_molecule.remap(&correspondence);
+            let actual = canonicalize_full_one_pass(&renumbered, &canonicalization_context)
+                .expect("renumbered molecule canonicalizes");
+
+            assert_eq!(selected_full_key(&actual), expected, "rank {rank}");
+        }
+    }
+
+    #[rstest]
+    #[case::nauty(AutomorphismAlgorithm::Nauty)]
+    fn test_canonicalize_full_one_pass_minimum(
+        symmetric_stereo_canonicalization_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+        #[case] algorithm: AutomorphismAlgorithm,
+    ) {
+        let incidence_graph =
+            symmetric_stereo_canonicalization_molecule.incidence_graph(IncidenceLevel::Full);
+        let (entity_keys, incidence_keys) = initial_class_keys(
+            &symmetric_stereo_canonicalization_molecule,
+            &incidence_graph,
+        )
+        .expect("fixed molecule has initial classes");
+        let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let constitution_classes =
+            constitution_entity_classes(&symmetric_stereo_canonicalization_molecule)
+                .expect("fixed molecule has constitution classes");
+        let descriptors = full_partition_descriptors(
+            &symmetric_stereo_canonicalization_molecule,
+            &incidence_graph,
+            &adapter,
+            &entity_keys,
+            &constitution_classes,
+        )
+        .expect("fixed molecule has full descriptors");
+        let leaf_candidate = |order: &[NodeId]| {
+            full_candidate(
+                &symmetric_stereo_canonicalization_molecule,
+                &incidence_graph,
+                order,
+            )
+            .expect("full descriptors establish normalization")
+        };
+        let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+        let expected = exhaustive_minimum(&adapter, &leaf_candidate);
+
+        for options in [
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::Node,
+            },
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::ReverseNode,
+            },
+        ] {
+            let actual = canonical_search(
+                &adapter,
+                &descriptors,
+                algorithm,
+                options,
+                &leaf_candidate,
+                &no_prefix,
+            );
+            assert_eq!(actual.candidate.key, expected.key, "{options:?}");
+        }
+
+        for options in [
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: false,
+                branch_order: BranchOrder::ReverseNode,
+            },
+            CanonicalSearchOptions {
+                automorphism_pruning: true,
+                prefix_pruning: false,
+                branch_order: BranchOrder::BackendCanonical,
+            },
+        ] {
+            let (canonical, _) = canonicalize_full_one_pass_with_options(
+                &symmetric_stereo_canonicalization_molecule,
+                &CanonicalizationContext {
+                    automorphism_algorithm: algorithm,
+                    ..canonicalization_context
+                },
+                options,
+            )
+            .expect("fixed molecule canonicalizes");
+            assert_eq!(selected_full_key(&canonical), expected.key, "{options:?}");
+        }
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_meso(
+        meso_canonicalization_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let correspondence = molecule_correspondence(&[
+            vec![1, 0, 3, 2, 5, 4],
+            vec![0, 3, 4, 1, 2],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![1, 0],
+            Vec::new(),
+        ]);
+        let renumbered = meso_canonicalization_molecule.remap(&correspondence);
+
+        assert_eq!(
+            canonicalize_full_one_pass(&renumbered, &canonicalization_context),
+            canonicalize_full_one_pass(&meso_canonicalization_molecule, &canonicalization_context,),
+        );
+    }
+
+    #[rstest]
+    #[case::kinded(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32))]
+    #[case::undetermined(StereoConfigurationForm::Undetermined)]
+    fn test_canonicalize_full_one_pass_repeated_ligands(
+        repeated_ligand_canonicalization_molecule: Molecule,
+        canonicalization_context: CanonicalizationContext,
+        #[case] configuration: StereoConfigurationForm,
+    ) {
+        let mut entries = molecule_entries(&repeated_ligand_canonicalization_molecule);
+        entries.stereo_atoms[0].2.configuration = configuration;
+        let source = Molecule::from_entries(entries);
+        let reframed = reframe_stereo_atom(
+            &source,
+            StereoAtomId(0),
+            Permutation::from_image(&[0, 1, 3, 2]),
+        );
+
+        assert_eq!(
+            canonicalize_full_one_pass(&reframed, &canonicalization_context),
+            canonicalize_full_one_pass(&source, &canonicalization_context),
+        );
     }
 
     fn rank_paired_initial_classes(
