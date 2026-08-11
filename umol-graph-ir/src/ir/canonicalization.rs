@@ -8,8 +8,9 @@ use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, SubdivisionNodeSource,
 };
 
-use super::atom::{ElementForm, IsotopeMassForm};
-use super::entity::Entity;
+use super::atom::{AtomForm, ElementForm, IsotopeMassForm};
+use super::bond::BondForm;
+use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
 use super::incidence::{Incidence, IncidenceGraph};
 use super::ligand::StereoLigandKind;
@@ -1217,38 +1218,57 @@ fn rank_initial_classes(
     }
 }
 
+fn atom_inherent_fields(attributes: &AtomForm) -> Result<Vec<FieldKey>, Contradiction> {
+    Ok(vec![
+        field(
+            0,
+            element_form_key(attributes.element.normalized()?.as_ref()),
+        ),
+        field(
+            1,
+            isotope_mass_form_key(attributes.isotope_mass.normalized()?.as_ref()),
+        ),
+        field(2, num_form_key(attributes.charge.normalized()?.as_ref())),
+        field(
+            3,
+            num_form_key(attributes.implicit_hydrogens.normalized()?.as_ref()),
+        ),
+        field(
+            4,
+            num_form_key(attributes.lone_pairs.normalized()?.as_ref()),
+        ),
+        field(
+            5,
+            unpaired_electrons_form_key(attributes.unpaired_electrons.normalized()?.as_ref()),
+        ),
+    ])
+}
+
+fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradiction> {
+    Ok(vec![
+        field(1, num_form_key(attributes.order.normalized()?.as_ref())),
+        field(2, num_form_key(attributes.charge.normalized()?.as_ref())),
+        field(
+            3,
+            unpaired_electrons_form_key(attributes.unpaired_electrons.normalized()?.as_ref()),
+        ),
+    ])
+}
+
 fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => {
             let attributes = molecule.atom(id).attributes;
             (
                 EntityBlockPosition::ATOM,
-                product([
-                    element_form_key(attributes.element.normalized()?.as_ref()),
-                    isotope_mass_form_key(attributes.isotope_mass.normalized()?.as_ref()),
-                    num_form_key(attributes.charge.normalized()?.as_ref()),
-                    num_form_key(attributes.implicit_hydrogens.normalized()?.as_ref()),
-                    num_form_key(attributes.lone_pairs.normalized()?.as_ref()),
-                    unpaired_electrons_form_key(
-                        attributes.unpaired_electrons.normalized()?.as_ref(),
-                    ),
-                ]),
+                CanonicalKeyValue::Product(atom_inherent_fields(attributes)?),
             )
         }
         Entity::Bond(id) => {
             let attributes = molecule.bond(id).attributes;
             (
                 EntityBlockPosition::BOND,
-                positioned_product([
-                    (1, num_form_key(attributes.order.normalized()?.as_ref())),
-                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
-                    (
-                        3,
-                        unpaired_electrons_form_key(
-                            attributes.unpaired_electrons.normalized()?.as_ref(),
-                        ),
-                    ),
-                ]),
+                CanonicalKeyValue::Product(bond_inherent_fields(attributes)?),
             )
         }
         Entity::DativeBond(id) => {
@@ -1345,6 +1365,76 @@ fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassK
     };
 
     Ok(InitialClassKey::Entity { position, value })
+}
+
+#[allow(dead_code)]
+fn topology_comparison_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalComparisonKey, Contradiction> {
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let bond_count = incidence_graph.entity_count(EntityKind::Bond);
+    let mut atom_images = vec![0_usize; atom_count];
+    let mut atom_order = Vec::with_capacity(atom_count);
+    let mut bond_order = Vec::with_capacity(bond_count);
+
+    for &node in order {
+        match incidence_graph.entity(node) {
+            Entity::Atom(id) => {
+                atom_images[id.index()] = atom_order.len();
+                atom_order.push(id);
+            }
+            Entity::Bond(id) => bond_order.push(id),
+            _ => unreachable!("topology incidence graph contains only atoms and bonds"),
+        }
+    }
+
+    debug_assert_eq!(atom_order.len(), atom_count);
+    debug_assert_eq!(bond_order.len(), bond_count);
+
+    let atoms = atom_order
+        .into_iter()
+        .map(|id| {
+            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let bonds = bond_order
+        .into_iter()
+        .map(|id| {
+            let bond = molecule.bond(id);
+            let mut fields = Vec::with_capacity(4);
+            let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()] as u64);
+            fields.push(field(
+                0,
+                product([
+                    CanonicalKeyValue::Unsigned(first.min(second)),
+                    CanonicalKeyValue::Unsigned(first.max(second)),
+                ]),
+            ));
+            fields.extend(bond_inherent_fields(bond.attributes)?);
+            Ok(CanonicalKeyValue::Product(fields))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+
+    let mut entity_blocks = Vec::with_capacity(2);
+    if !atoms.is_empty() {
+        entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Sequence(atoms),
+        });
+    }
+    if !bonds.is_empty() {
+        entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::BOND,
+            value: CanonicalKeyValue::Sequence(bonds),
+        });
+    }
+
+    Ok(CanonicalComparisonKey {
+        entity_blocks,
+        constraints: Vec::new(),
+    })
 }
 
 /// Failure to construct a canonical [`Molecule`](super::Molecule).
@@ -2017,6 +2107,144 @@ mod tests {
     }
 
     #[rstest]
+    fn test_topology_comparison_key() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C)
+                    .with_charge(NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+                        ArithExpr::Lit(1),
+                        ArithExpr::Lit(2),
+                    ]))))
+                    .with_constraint(AtomConstraintForm::Valence(NumForm::lit_set([]))),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                BondForm::new(NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+                    ArithExpr::Lit(0),
+                    ArithExpr::Lit(1),
+                ]))))
+                .with_charge(-1_i64),
+            )],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(1),
+                DativeBondForm::new(NumForm::lit_set([])),
+            )],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+        let order = [
+            incidence_graph.node_of(Entity::Atom(AtomId(0))),
+            incidence_graph.node_of(Entity::Atom(AtomId(1))),
+            incidence_graph.node_of(Entity::Bond(BondId(0))),
+        ];
+        let undetermined_num = NumForm::Undetermined;
+        let undetermined_isotope = IsotopeMassForm::Undetermined;
+        let undetermined_spin = UnpairedElectronsForm::default();
+
+        assert_eq!(
+            topology_comparison_key(&molecule, &incidence_graph, &order),
+            Ok(CanonicalComparisonKey {
+                entity_blocks: vec![
+                    PositionedKey {
+                        position: EntityBlockPosition::ATOM,
+                        value: sequence([
+                            product([
+                                element_form_key(&ElementForm::Lit(Element::C)),
+                                isotope_mass_form_key(&undetermined_isotope),
+                                num_form_key(&NumForm::Lit(3)),
+                                num_form_key(&undetermined_num),
+                                num_form_key(&undetermined_num),
+                                unpaired_electrons_form_key(&undetermined_spin),
+                            ]),
+                            product([
+                                element_form_key(&ElementForm::Lit(Element::O)),
+                                isotope_mass_form_key(&undetermined_isotope),
+                                num_form_key(&undetermined_num),
+                                num_form_key(&undetermined_num),
+                                num_form_key(&undetermined_num),
+                                unpaired_electrons_form_key(&undetermined_spin),
+                            ]),
+                        ]),
+                    },
+                    PositionedKey {
+                        position: EntityBlockPosition::BOND,
+                        value: sequence([positioned_product([
+                            (
+                                0,
+                                product([
+                                    CanonicalKeyValue::Unsigned(0),
+                                    CanonicalKeyValue::Unsigned(1),
+                                ]),
+                            ),
+                            (1, num_form_key(&NumForm::Lit(1))),
+                            (2, num_form_key(&NumForm::Lit(-1))),
+                            (3, unpaired_electrons_form_key(&undetermined_spin)),
+                        ])]),
+                    },
+                ],
+                constraints: Vec::new(),
+            }),
+        );
+    }
+
+    #[rstest]
+    fn test_topology_comparison_key_dense_remapping() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (
+                    AtomId(1),
+                    AtomId(2),
+                    BondForm::from_order(1).with_charge(-1_i64),
+                ),
+            ],
+            ..Default::default()
+        });
+        let remapped = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (
+                    AtomId(0),
+                    AtomId(2),
+                    BondForm::from_order(1).with_charge(-1_i64),
+                ),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+            ],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+        let remapped_incidence_graph = remapped.incidence_graph(IncidenceLevel::Topology);
+        let order = [
+            incidence_graph.node_of(Entity::Atom(AtomId(2))),
+            incidence_graph.node_of(Entity::Atom(AtomId(0))),
+            incidence_graph.node_of(Entity::Atom(AtomId(1))),
+            incidence_graph.node_of(Entity::Bond(BondId(1))),
+            incidence_graph.node_of(Entity::Bond(BondId(0))),
+        ];
+        let remapped_order = remapped_incidence_graph
+            .graph()
+            .node_ids()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            topology_comparison_key(&molecule, &incidence_graph, &order),
+            topology_comparison_key(&remapped, &remapped_incidence_graph, &remapped_order),
+        );
+    }
+
+    #[rstest]
     #[case::localized_bond(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
@@ -2266,32 +2494,9 @@ mod tests {
         let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
         let classes = initial_classes(&molecule, &incidence_graph).unwrap();
         let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
-        let source = incidence_graph.graph();
         let leaf_key = |order: &[NodeId]| {
-            let mut positions = vec![0_u32; source.node_count()];
-            for (position, node) in order.iter().enumerate() {
-                positions[node.index()] = position as u32;
-            }
-            let entity_classes = order
-                .iter()
-                .map(|node| classes.entities[node.index()])
-                .collect::<Vec<_>>();
-            let mut incidences = source
-                .edge_ids()
-                .map(|edge| {
-                    let [first, second] = source.edge_endpoints(edge);
-                    let first = positions[first.index()];
-                    let second = positions[second.index()];
-                    (
-                        classes.incidences[edge.index()],
-                        first.min(second),
-                        first.max(second),
-                    )
-                })
-                .collect::<Vec<_>>();
-            incidences.sort_unstable();
-
-            (entity_classes, incidences)
+            topology_comparison_key(&molecule, &incidence_graph, order)
+                .expect("selected topology values normalize")
         };
         let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
         let expected = exhaustive_minimum(&adapter, &leaf_key);

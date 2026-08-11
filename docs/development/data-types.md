@@ -416,8 +416,11 @@ domain to which it belongs. An absent block contributes no entry. Constraints fo
 terminal section, so extending an entity domain does not move the constraint section or alter keys
 for molecules that lack the new kind.
 
-Rows compare their components in the following local field order. The dense row index is implicit
-in the row sequence. Inline constraints are excluded here and enter through the constraint section.
+Rows compare their components in the following local field order. Every entity family included at
+the selected structural level contributes all of its inherent fields; participant topology,
+participant-indexed values, and frame-dependent values occupy the listed structural components
+rather than being omitted. The dense row index is implicit in the row sequence. Inline constraints
+are excluded here and enter through the constraint section.
 
 | Entity row | Components from position 0 onward |
 | --- | --- |

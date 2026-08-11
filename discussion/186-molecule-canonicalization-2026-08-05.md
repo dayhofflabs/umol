@@ -521,6 +521,12 @@ distributed over their occurrence classes, and stereo configuration enters throu
 descriptor below. Duplicating the original vector or raw-frame configuration on the entity node
 would make stored participant order observable and is incorrect.
 
+Every entity family included at a selected structural level contributes all of its inherent fields.
+Participant topology, participant-indexed values, and frame-dependent values are encoded through
+their corresponding rows, typed incidences, or frame actions rather than duplicated in the raw
+entity-node value. Constraints are the only entity-form components excluded from every structural
+level.
+
 ### Complete stereo frame action
 
 The ligand order stored on a stereo entity is a participant frame, not structural identity. The
@@ -1379,9 +1385,10 @@ and the semantic properties validated by the corresponding property tests.
 ### S6 — Topology canonicalization
 
 - **S6a — Topology typed key.** Implement the topology projection of the frozen comparison schema
-  over normalized atoms, localized bonds, and their endpoint occurrences. Constraints and every
-  higher entity family are absent from the search key. Verify the exact key against hand-built dense
-  remappings before using it in search. This is additive. [dep: S4b, S5e]
+  over all normalized inherent atom and localized-bond fields and their endpoint occurrences.
+  Constraints and every higher entity family are absent from the search key. Verify the exact key
+  against hand-built dense remappings before using it in search. This is additive. [dep: S4b, S5e]
+  **Done.**
 - **S6b — Topology frame selection.** Run the typed-order search to derive dense atom and localized
   bond mappings. Complete the `MoleculeCorrespondence` with identity mappings for the six excluded
   entity-id families, transport all references and participant frames through the public molecule
