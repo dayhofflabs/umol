@@ -1478,7 +1478,11 @@ and the semantic properties validated by the corresponding property tests.
   all six constitution entity families. Use identity mappings only for the two excluded stereo entity
   families, transport their references and frames with the selected constitution remapping, and
   normalize all carried values. Stereo and constraints do not break constitution-level ties. The
-  public trait surface waits until every level is complete. This is additive. [dep: S7d]
+  public trait surface waits until every level is complete. This is additive. [dep: S7d] **Done.**
+  Constitution frame selection now runs the exact typed search over AB+DAMN, derives dense mappings
+  for those six families, leaves the two stereo entity mappings at identity, and remaps and
+  normalizes the complete molecule. Exact cases verify all eight mapping components, transported
+  stereo references, and independence from excluded stereo and constraint data.
 - **S7f — Constitution properties.** Add selected-layer idempotence, renumbering,
   participant-permutation, bounded-exhaustive minimum, pruning independence, and algorithm agreement
   over all six constitution entity kinds. Exercise at least two entities of each DAMN family so
