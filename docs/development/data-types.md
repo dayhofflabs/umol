@@ -390,6 +390,141 @@ if one schema is an append-only extension of another, every molecule expressible
 schema has the same canonical representative under both. This cumulative promise concerns the
 canonical IR, not an internal comparison-key encoding.
 
+### Canonical comparison schema
+
+The following schema is the normative typed order for aggregate canonicalization. Numeric positions
+are local to the table in which they occur. A position is permanent once published: declarations may
+move in Rust, but an existing position must not be reused or assigned another meaning. New entries
+are appended after the highest assigned position in their table or structural domain.
+
+The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
+stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. Thus the
+public cumulative canonicalization levels are `Topology`, `Constitution`, and `Full`, where `Full`
+is topology plus overlays. `NonStereo` names the middle entity domain; it is not another cumulative
+level.
+
+| Domain position | Structural domain | Entity slots |
+| ---: | --- | --- |
+| 0 | Topology | Atom = 0, Bond = 1 |
+| 1 | NonStereo | Dative bond = 0, Aromatic system = 1, Multicenter bond = 2, Noncovalent bond = 3 |
+| 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
+
+An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
+this position and then by their dense row sequence. This hierarchy makes `Topology`, `Constitution`,
+and `Full` exact domain prefixes while allowing a future entity kind to be appended within the
+domain to which it belongs. An absent block contributes no entry. Constraints form a separate
+terminal section, so extending an entity domain does not move the constraint section or alter keys
+for molecules that lack the new kind.
+
+Rows compare their components in the following local field order. The dense row index is implicit
+in the row sequence. Inline constraints are excluded here and enter through the constraint section.
+
+| Entity row | Components from position 0 onward |
+| --- | --- |
+| Atom | element, isotope mass, charge, implicit hydrogens, lone pairs, unpaired electrons |
+| Bond | endpoint pair, order, charge, unpaired electrons |
+| Dative bond | donors, acceptor, order |
+| Aromatic system | participants, participant electron counts, charge, unpaired electrons |
+| Multicenter bond | participants, participant electron counts, charge, unpaired electrons |
+| Noncovalent bond | endpoint pair, kind |
+| Stereo atom | site, ligand frame, configuration |
+| Stereo bond | site, ligand frame, configuration |
+
+Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
+donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
+kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, and `LonePair = 2`. Unpaired electrons
+are the product `(count = 0, multiplicity = 1)`. A stereo configuration is the product of its kind
+and coset after the complete participant-frame action described above.
+
+Products compare components in position order. Variants compare their explicit tag first and then
+their payload components in written order. Sequences compare lexicographically, with a proper prefix
+sorting before the longer sequence. Sets compare as sorted, duplicate-free member sequences. Options
+use `None = 0` and `Some = 1`, followed by the value. Booleans use `false < true`; signed and unsigned
+integers use numeric order; strings use lexicographic Unicode scalar-value order; entity ids use
+their numeric indices. Elements use atomic-number order. A permutation compares as
+`(degree, one-line image)`, and orientation uses `Proper = 0`, `Improper = 1`.
+
+The normalized form variants have these tag positions:
+
+| Type | Variant positions from 0 onward |
+| --- | --- |
+| `BooleanForm` | `Undetermined`, `Lit` |
+| `NumForm` | `Undetermined`, `Lit`, `LitSet`, `RangeFrom`, `RangeTo`, `ArithExpr`, `PredExpr` |
+| `ArithExpr` | `Lit`, `Var`, `Neg`, `Sum`, `Product`, `Div`, `Rem` |
+| `PredExpr` | `Rel`, `Mem`, `Not`, `And`, `Or` |
+| `RelOp` | `Le`, `Ge`, `Eq`, `Lt`, `Gt`, `Ne` |
+| `MemOp` | `In`, `NotIn` |
+| `ElementForm` | `Undetermined`, `Lit`, `LitSet`, `NotSet`, `Var` |
+| `IsotopeMassForm` | `Undetermined`, `Natural`, `Lit`, `LitSet`, `Var` |
+| `ElectronCountsForm` | `Undetermined`, `Lit` |
+| `AromaticValenceForm` | `Undetermined`, `NotAromatic`, `Aromatic` |
+| `MulticenterValenceForm` | `Undetermined`, `NotMulticenter`, `Multicenter` |
+| `TetrahedralStereoForm`, `CisTransStereoForm` | `Undetermined`, `NotStereo`, `Stereo` |
+| `NoncovalentBondKindForm` | `Undetermined`, `Lit` |
+| `NoncovalentBondKind` | `HydrogenBond`, `HalogenBond`, `ChalcogenBond`, `Ionic`, `VanDerWaals` |
+| `StereoConfigurationForm` | `Undetermined`, `Kinded` |
+| `StereoKind` | `Tetrahedral`, `CisTrans`, `Axial`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral` |
+| `StereoCoset` | `Undetermined`, `Lit`, `LitSet`, `Term` |
+| `StereoTerm` | `Var`, `Lit`, `LitSet`, `Swap`, `Mirror`, `Apply` |
+| `RingScope` | `All`, `Size` |
+| `TopicityRelationForm`, `StereogenicityForm` | `Undetermined`, `Lit`, `LitSet`, `NotSet` |
+| `Topicity` | `Homotopic`, `Enantiotopic`, `Diastereotopic` |
+| `Stereogenicity` | `Symmetric`, `Prochiral`, `Stereogenic` |
+
+Inline constraint blocks use the same composite entity-block positions and therefore the same
+topology, non-stereo, and stereo domain hierarchy. The molecule-level constraint tree is a terminal
+block after every inline block. An inline constraint row is `(entity id, constraint tag, payload)`.
+The currently assigned inline constraint tags are:
+
+| Constraint block | Variant positions from 0 onward |
+| --- | --- |
+| Atom | `Valence`, `DonatedPairs`, `AcceptedPairs`, `AromaticValence`, `MulticenterValence`, `TetrahedralStereo`, `Degree`, `TotalDegree`, `TotalValence`, `RingDegree`, `RingValence`, `TotalHydrogens`, `RingMembership` |
+| Bond | `Aromatic`, `CisTransStereo`, `RingMembership` |
+| Dative bond | `Aromatic`, `RingMembership` |
+| Aromatic system | `ElectronCount` |
+| Multicenter bond | `ElectronCount` |
+| Noncovalent bond | `Intramolecular` |
+| Stereo atom, stereo bond | `LigandSymmetry`, `Fluxionality`, `Topicity`, `Stereogenicity` |
+
+The molecule-level `Constraint` comparison key uses `EntityLeaf = 0`, `Relational = 1`,
+`Molecule = 2`, `And = 3`, `Or = 4`, and `Not = 5`. Every public entity-leaf variant maps to
+`EntityLeaf`, followed by its composite entity-block position, referenced entity id, stereo kind
+where present, and inline constraint key. This comparison-key grouping does not change the public
+`Constraint` enum. `And` and `Or` compare their normalized set-like child sequences.
+
+`MoleculeConstraint` uses `ChargeSum = 0`, `UnpairedElectronCoupling = 1`, `BondOrderSum = 2`,
+and `Connected = 3`. Payload fields compare in their declaration's semantic order: the optional
+entity subset first, then the asserted value where one exists.
+
+`RelationalConstraint` uses the composite position `(owning entity-block position, local slot)`.
+The assigned local slots are:
+
+| Owning entity | Local slots and variants in order |
+| --- | --- |
+| Dative bond | 0–7: `DativeBondDonors`, `DativeBondDonor`, `DativeBondContainsAllDonors`, `DativeBondAllDonors`, `DativeBondAnyDonor`, `DativeBondAcceptor`, `DativeBondAcceptorSatisfies`, `DativeBondParallels` |
+| Aromatic system | 0–4: `AromaticSystemAtoms`, `AromaticSystemContains`, `AromaticSystemContainsAll`, `AromaticSystemAllAtoms`, `AromaticSystemAnyAtom` |
+| Multicenter bond | 0–4: `MulticenterBondAtoms`, `MulticenterBondContains`, `MulticenterBondContainsAll`, `MulticenterBondAllAtoms`, `MulticenterBondAnyAtom` |
+| Noncovalent bond | 0–2: `NoncovalentBondEnds`, `NoncovalentBondContains`, `NoncovalentBondEndsSatisfy` |
+| Stereo atom | 0–4: `StereoAtomSite`, `StereoAtomContains`, `StereoAtomLigands`, `StereoAtomAllLigands`, `StereoAtomAnyLigand` |
+| Stereo bond | 0–4: `StereoBondSite`, `StereoBondContains`, `StereoBondLigands`, `StereoBondAllLigands`, `StereoBondAnyLigand` |
+
+Each relational payload compares its named fields from left to right as shown by the public variant.
+Atom collections with set semantics are normalized before comparison; ordered predicate pairs retain
+their order.
+
+Reaction spans reuse the complete molecule schema and lift each entity row through the span tags
+`Unchanged = 0`, `Added = 1`, `Removed = 2`, and `Modified = 3`. `Modified` compares its lhs value
+before its rhs value. Constraint spans use the first three tags. These positions are deliberately
+independent of the Rust declaration order.
+
+An absent extension contributes no positioned entry. Therefore appending a later field, variant,
+constraint, or entity kind within its assigned domain leaves the key of every earlier-schema value
+byte-for-byte equivalent at the typed-key level. A genuinely new structural category may be
+appended as a domain after stereo. Moving an existing entity kind between domains or inserting a
+domain is schema-breaking because it changes both comparison order and cumulative-level semantics.
+The concrete Rust key storage remains private and may change, but exact ordering tests must
+instantiate these published positions and verify this append-only property.
+
 ## Provenance and contextual validity
 
 Whether a consumer must re-establish a contextual property depends on what kind of value it

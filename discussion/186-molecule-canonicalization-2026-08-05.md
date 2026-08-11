@@ -397,8 +397,8 @@ This explanation remains a hypothesis until measured. The first canonicalization
 compare the compact graph-and-overlays representation with materialized full incidence, record
 construction and canonical-labeling time separately, and include node and edge counts. The corpus
 must cover ordinary molecules as well as deliberately overlay-heavy cases. The comparison must be
-made separately for topology, non-stereo constitution, and stereo-sensitive canonicalization,
-because their refinement costs differ.
+made separately for topology, constitution, and full stereo-sensitive canonicalization because
+their refinement costs differ.
 
 Nauty consumes vertex colors rather than edge colors, so some exact encodings may still require
 subdivision at its adapter boundary. That does not establish that every localized bond should be a
@@ -566,13 +566,18 @@ collision-free comparison key or another optimized representation, but it must a
 order and must not replace it with a hash.
 
 The comparison key is a private typed data object with explicit ordering semantics, not a rendered
-encoding and not a tuple-of-vectors public contract. A straightforward implementation may contain a
-vector block for each of the eight entity families followed by constraints, with typed row keys for
-participants, frames, and normalized form values. Its storage shape is private; its comparison order
-is the contract. The choice among valid total orders is mathematically arbitrary, like choosing a
-fixed seed, but becomes a public compatibility contract once published. For the same input and
-semantic context, canonical numbering must remain stable across library releases, platforms, and
-supported algorithm implementations.
+encoding and not a tuple-of-vectors public contract. Entity blocks are arranged in three ordered
+domains: topology is AB, non-stereo is DAMN, and stereo is SS. Constitution is topology plus
+non-stereo; overlays are non-stereo plus stereo; full structure is topology plus overlays. A
+straightforward implementation may contain positioned entity blocks followed by constraints, with
+typed row keys for participants, frames, and normalized form values. Each entity position is the
+composite `(domain position, slot within domain)`, so the cumulative `Topology`, `Constitution`, and
+`Full` levels are exact prefixes while future kinds can be appended within their semantic domain.
+`NonStereo` names the middle domain and is not a fourth cumulative level. The storage shape is
+private; its comparison order is the contract. The choice among valid total orders is mathematically
+arbitrary, like choosing a fixed seed, but becomes a public compatibility contract once published.
+For the same input and semantic context, canonical numbering must remain stable across library
+releases, platforms, and supported algorithm implementations.
 
 The comparison schema therefore assigns explicit, platform-independent positions to every entity
 block, row component, and variant tag. Its `Ord` implementation is manual or delegates only to
@@ -601,9 +606,13 @@ versioned API and cannot silently change the published scheme or its existing re
 Freezing the schema does not freeze the entity model. The compatibility unit is the canonical
 representative of a value expressible in the schema version that first covered it. The existing
 entity-kind blocks, field components, constraint variants, and their comparison order receive
-explicit stable schema positions. A future entity kind or constraint variant is added at an
-append-only extension position; it must not renumber, reorder, or reinterpret an existing position.
-The implementation must not derive these positions from a Rust enum's declaration order.
+explicit stable schema positions. A future entity kind is appended within topology, non-stereo, or
+stereo according to its semantics; a genuinely new structural category may be appended after the
+stereo domain. Constraint positions mirror the same entity hierarchy, with molecule-level
+constraints terminal. A future constraint variant is appended within its owning local table. No
+extension may renumber, reorder, or reinterpret an existing position, and the implementation must
+not derive positions from a Rust enum's declaration order. Moving an existing entity kind between
+domains or inserting a domain is schema-breaking because it changes cumulative-level semantics.
 
 Consequently, extending the schema must leave the canonical numbering and complete canonical form
 of every molecule containing none of the new entity kinds or constraint variants unchanged. For a
@@ -774,8 +783,8 @@ Three related but distinct progressions must not be conflated.
 
 ### Internal canonicalization strategy
 
-Canonical labeling may refine structural equivalence in stages: topology, non-stereo constitution,
-then stereo. The useful intermediate result is an orbit partition or a progressively refined
+Canonical labeling may refine structural equivalence in stages: topology, constitution, then full
+structure. The useful intermediate result is an orbit partition or a progressively refined
 labeling problem. An intermediate numbering must not be committed as the canonical molecule frame,
 because a higher level may distinguish entities that were symmetric at a lower level. The final
 canonical frame is applied to the original molecule only after the requested refinement has
@@ -784,11 +793,11 @@ the context's `para_stereo` setting is enabled, iterates to a fixpoint.
 
 ### Canonicalization excluding higher-level features
 
-A caller may intentionally request a coarser canonicalization relation. Topology-only
-canonicalization ignores non-topological structure; non-stereo canonicalization ignores stereo and
-therefore treats stereo isomers as equal for the purpose of choosing an order. This is analogous to
-supplying a comparator to `sort_by`: values that compare equal are retained, not collapsed or
-removed.
+A caller may intentionally request a coarser canonicalization relation. Topology-level
+canonicalization ignores overlays; constitution-level canonicalization includes topology and the
+non-stereo DAMN entities but ignores stereo and therefore treats stereo isomers as equal for the
+purpose of choosing an order. This is analogous to supplying a comparator to `sort_by`: values that
+compare equal are retained, not collapsed or removed.
 
 The closed selector is:
 
@@ -842,8 +851,9 @@ independently combinable switches; a `*Level` type is a closed enum of nested na
 Accordingly, rename `ConstitutionFeatures` to `MoleculeColoringFeatures`, because it also contains
 `STEREO_KIND`, and retain its bitflag semantics. Replace `IncidenceNodeSelection` with the
 `IncidenceLevel` enum using `Topology`, `Constitution`, and `Full`. Canonicalization uses the parallel
-`CanonicalizationLevel`. The level enums remove the misleading `OVERLAYS` flag, which currently
-excludes the two stereo overlay kinds.
+`CanonicalizationLevel`. The level enums remove the misleading `OVERLAYS` flag: overlays are the
+non-stereo and stereo domains together and therefore are not a nested level between topology and
+full structure.
 
 ### Progressive implementation
 
@@ -1259,10 +1269,15 @@ and the semantic properties validated by the corresponding property tests.
   unqualified pair in S9c, when those operations are complete. This is additive because S1 freed
   the name. [dep: S1c, S2b] **Done.**
 - **S4b — Stable typed comparison schema.** Define private typed comparison-key components with
-  explicit entity-block, field, variant, span-tag, and constraint-extension positions. Implement
-  ordering manually or through explicitly frozen component orders; do not use Rust discriminants,
-  hashes, rendered DSL, or protocol bytes. Add exact ordering and append-only compatibility cases,
-  including values with future-extension positions absent. This is additive. [dep: S1a]
+  explicit structural-domain, entity-slot, field, variant, span-tag, and constraint positions.
+  Encode topology as AB, non-stereo as DAMN, and stereo as SS; constitution is topology plus
+  non-stereo, while overlays are non-stereo plus stereo. Mirror the entity hierarchy in constraint
+  positions and keep molecule-level constraints terminal. Implement ordering manually or through
+  explicitly frozen component orders; do not use Rust discriminants, hashes, rendered DSL, or
+  protocol bytes. Publish the exact numbered schema in `docs/development/data-types.md`; the schema
+  order is public even though the concrete key storage is private. Add exact ordering and
+  append-only compatibility cases, including future slots within each domain and values with
+  extensions absent. This is additive. [dep: S1a] **Done.**
 - **S4c — Graph-layer operation inputs.** Add `CanonicalizationConfig` in `umol-graph` containing the
   automorphism algorithm, with the graph-layer default selecting nauty. Its
   `context(&StereoModel)` method constructs the graph-IR `CanonicalizationContext` from the config
@@ -1341,13 +1356,13 @@ and the semantic properties validated by the corresponding property tests.
   never through stored participant index. Include normalized non-ground inherent values and exclude
   constraints and stereo. This is additive. [dep: S6c]
 - **S7b — Constitution frame selection.** Extend the typed-order search and dense correspondence to
-  all six non-stereo entity families. Use identity mappings only for the two excluded stereo entity
+  all six constitution entity families. Use identity mappings only for the two excluded stereo entity
   families, transport their references and frames with the selected constitution remapping, and
   normalize all carried values. Stereo and constraints do not break constitution-level ties. The
   public trait surface waits until every level is complete. This is additive. [dep: S7a]
 - **S7c — Constitution properties.** Add selected-layer idempotence, renumbering,
   participant-permutation, inverse/composition, bounded-exhaustive-minimum, pruning-independence,
-  and algorithm-agreement properties over all six non-stereo entity kinds. Include undetermined and
+  and algorithm-agreement properties over all six constitution entity kinds. Include undetermined and
   non-literal inherent values, repeated participant occurrences, and complete-output preservation
   without requiring excluded stereo placement to agree. Freeze constitution fixtures without
   changing the topology fixtures. This is additive. [dep: S7b]

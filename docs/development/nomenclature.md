@@ -364,13 +364,13 @@ contradiction.
 
 ### Constitution
 
-**Constitution** is the structural level containing topology plus every non-stereo overlay: dative
-bonds, aromatic systems, multicenter bonds, and noncovalent bonds. It distinguishes structural
-composition and connectivity without adding stereo configuration.
+**Constitution** is the structural level containing topology (AB) plus the non-stereo domain (DAMN):
+dative bonds, aromatic systems, multicenter bonds, and noncovalent bonds. It distinguishes
+structural composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the full level. Not
 constraints, which do not contribute to structural identity.
-**In code:** the `Constitution` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
+**In code:** the `Constitution` variants of `IncidenceLevel` and `CanonicalizationLevel`.
 
 ### Constraint
 
@@ -663,13 +663,13 @@ because they are complete graph-model objects, not lattice values. Role-bearing 
 
 ### Full
 
-**Full** is the structural level containing constitution plus stereo atoms and stereo bonds. It is
-the complete structural entity model, but it still excludes constraints because constraints do not
+**Full** is the structural level containing topology plus every overlay: AB + DAMN + SS. It is the
+complete structural entity model, but it still excludes constraints because constraints do not
 contribute to structural identity. Para-stereo changes refinement behavior within this level rather
 than defining another level.
 
 **Not:** a claim that every constraint, model choice, or future operation participates.
-**In code:** the `Full` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
+**In code:** the `Full` variants of `IncidenceLevel` and `CanonicalizationLevel`.
 
 ### Ground term
 
@@ -760,9 +760,8 @@ Bond direction is not encoded structurally either: the colouring separates the e
 directed bond, so a dative donor and acceptor are never automorphism-equivalent.
 
 `IncidenceLevel` names three levels, which land on the chemist's own hierarchy: `Topology` is atoms
-and localized bonds, `Constitution` adds dative bonds, aromatic systems, multicenter bonds, and
-noncovalent bonds, and `Full` adds stereo atoms and stereo bonds. That makes "the same molecule" a
-parameter rather than three code paths.
+and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds the
+stereo domain (SS). That makes "the same molecule" a parameter rather than three code paths.
 
 **Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
 bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
@@ -865,9 +864,13 @@ noncovalent bonds. `Full` adds stereo atoms and stereo bonds. Constraints are no
 and para-stereo is context-dependent behavior within `Full`, not a fourth level. Future structural
 entity kinds extend the first applicable level without changing the meanings of the earlier ones.
 
+The corresponding entity domains are topology (AB), non-stereo (DAMN), and stereo (SS).
+Constitution is topology plus non-stereo; overlays are non-stereo plus stereo. Domains are
+compositional groups, whereas levels are the nested public selectors.
+
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** `IncidenceLevel`; `CanonicalizationLevel` is planned.
+**In code:** `IncidenceLevel`, `CanonicalizationLevel`.
 
 ### Ligand and site
 
@@ -984,6 +987,15 @@ overlays despite their binary shape.
 **In code:** `NoncovalentBondKind`, `NoncovalentBondKindForm`; the notation literals `Hbd`, `Xbd`,
 `Ybd`, `Ion`, `Vdw`.
 
+### Non-stereo
+
+**Non-stereo** is the DAMN entity domain: dative bonds, aromatic systems, multicenter bonds, and
+noncovalent bonds. It excludes topology (AB) and stereo entities (SS). Constitution is topology plus
+non-stereo; overlays are non-stereo plus stereo.
+
+**Not:** constitution, which also includes topology; overlays, which also include stereo.
+**In code:** the `NonStereo` position in the canonical comparison schema.
+
 ### Normalize
 
 **Normalize** puts a form into a deterministic normal form without changing entity ids or
@@ -1003,9 +1015,9 @@ explicit context. Not chemical standardization, resolution, validation, or repai
 
 ### Overlay
 
-An **overlay** is one of the six entity kinds that are not molecular topology: dative bond, aromatic
-system, multicenter bond, noncovalent bond, stereo atom, stereo bond. Atoms and localized bonds are
-the topology and are not overlays.
+An **overlay** is one of the six entity kinds that are not molecular topology: the non-stereo DAMN
+entities plus the stereo SS entities. Atoms and localized bonds are the topology (AB) and are not
+overlays.
 
 **Not:** *relation* or *hyperedge*, which are whitepaper framings for the same thing and appear in
 source comments descriptively; overlay is the repository term. Not *entity*, which is the umbrella
@@ -1292,12 +1304,12 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 ### Topology
 
-**Topology** is the lowest structural level: atoms and localized bonds, including the inherent
-values carried by those entities. It does not include overlay entities.
+**Topology** is the AB entity domain and the lowest structural level: atoms and localized bonds,
+including the inherent values carried by those entities. It does not include overlay entities.
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** the `Topology` variant of `IncidenceLevel`; `CanonicalizationLevel` is planned.
+**In code:** the `Topology` variants of `IncidenceLevel` and `CanonicalizationLevel`.
 
 ### Transaction
 
