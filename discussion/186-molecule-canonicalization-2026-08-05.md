@@ -1408,6 +1408,12 @@ and the semantic properties validated by the corresponding property tests.
   Exercise selected-layer contradictions separately from contradictions confined to excluded data.
   Do not require complete-output identity when excluded features distinguish a topology
   automorphism. Freeze the first topology canonical-number fixtures. This is additive. [dep: S6b]
+  **Done.** The bounded-exhaustive check covers all 64 simple graphs on four atoms and all 24 atom
+  renumberings per graph, with alternating localized-bond renumberings. It compares the selected
+  key with exhaustive minimization, disables pruning under a different branch order, and verifies
+  exact topology-only idempotence, complete-result equivalence under the induced correspondence,
+  and integrity. Excluded entities are exercised through selected-key comparison only. The current
+  supported automorphism-algorithm set contains only nauty, so there is no second backend to compare.
 
 ### S7 — Constitution canonicalization
 
