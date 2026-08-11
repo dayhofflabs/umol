@@ -1,13 +1,24 @@
 //! Aggregate canonicalization inputs and failures.
 
 use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_core::AutomorphismAlgorithm;
 
+use super::atom::{ElementForm, IsotopeMassForm};
+use super::entity::Entity;
 use super::error::Contradiction;
-use super::molecule::MoleculeIntegrityError;
+use super::incidence::{Incidence, IncidenceGraph};
+use super::ligand::StereoLigandKind;
+use super::molecule::{Molecule, MoleculeIntegrityError};
+use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
+use super::num::{ArithExpr, NumForm, PredExpr};
+use super::operators::{MemOp, RelOp};
 use super::reaction_span::ReactionSpanIntegrityError;
+use super::spin::UnpairedElectronsForm;
+use super::stereo::StereoKind;
+use super::traits::Normalize;
 use super::validate::ReactionIntegrityError;
 
 /// Semantic and operational inputs to aggregate canonicalization.
@@ -283,6 +294,480 @@ impl PartialOrd for CanonicalComparisonKey {
     }
 }
 
+fn field(position: u16, value: CanonicalKeyValue) -> FieldKey {
+    PositionedKey {
+        position: FieldPosition(position),
+        value,
+    }
+}
+
+fn product(values: impl IntoIterator<Item = CanonicalKeyValue>) -> CanonicalKeyValue {
+    CanonicalKeyValue::Product(
+        values
+            .into_iter()
+            .enumerate()
+            .map(|(position, value)| field(position as u16, value))
+            .collect(),
+    )
+}
+
+fn positioned_product(
+    values: impl IntoIterator<Item = (u16, CanonicalKeyValue)>,
+) -> CanonicalKeyValue {
+    CanonicalKeyValue::Product(
+        values
+            .into_iter()
+            .map(|(position, value)| field(position, value))
+            .collect(),
+    )
+}
+
+fn variant(
+    position: u16,
+    values: impl IntoIterator<Item = CanonicalKeyValue>,
+) -> CanonicalKeyValue {
+    CanonicalKeyValue::Variant(VariantKey {
+        position: VariantPosition(position),
+        fields: values
+            .into_iter()
+            .enumerate()
+            .map(|(position, value)| field(position as u16, value))
+            .collect(),
+    })
+}
+
+fn sequence(values: impl IntoIterator<Item = CanonicalKeyValue>) -> CanonicalKeyValue {
+    CanonicalKeyValue::Sequence(values.into_iter().collect())
+}
+
+fn option(value: Option<CanonicalKeyValue>) -> CanonicalKeyValue {
+    match value {
+        None => variant(0, []),
+        Some(value) => variant(1, [value]),
+    }
+}
+
+fn element_form_key(value: &ElementForm) -> CanonicalKeyValue {
+    match value {
+        ElementForm::Undetermined => variant(0, []),
+        ElementForm::Lit(element) => variant(
+            1,
+            [CanonicalKeyValue::Unsigned(element.atomic_number().into())],
+        ),
+        ElementForm::LitSet(elements) => variant(
+            2,
+            [sequence(elements.iter().map(|element| {
+                CanonicalKeyValue::Unsigned(element.atomic_number().into())
+            }))],
+        ),
+        ElementForm::NotSet(elements) => variant(
+            3,
+            [sequence(elements.iter().map(|element| {
+                CanonicalKeyValue::Unsigned(element.atomic_number().into())
+            }))],
+        ),
+        ElementForm::Var(variable) => {
+            let (name, restriction) = variable.as_ref();
+            variant(
+                4,
+                [
+                    CanonicalKeyValue::Text(name.clone()),
+                    option(restriction.as_ref().map(|(operator, elements)| {
+                        product([
+                            mem_op_key(*operator),
+                            sequence(elements.iter().map(|element| {
+                                CanonicalKeyValue::Unsigned(element.atomic_number().into())
+                            })),
+                        ])
+                    })),
+                ],
+            )
+        }
+    }
+}
+
+fn isotope_mass_form_key(value: &IsotopeMassForm) -> CanonicalKeyValue {
+    match value {
+        IsotopeMassForm::Undetermined => variant(0, []),
+        IsotopeMassForm::Natural => variant(1, []),
+        IsotopeMassForm::Lit(mass) => variant(2, [CanonicalKeyValue::Unsigned(u64::from(*mass))]),
+        IsotopeMassForm::LitSet(masses) => variant(
+            3,
+            [sequence(masses.iter().map(|mass| {
+                CanonicalKeyValue::Unsigned(u64::from(*mass))
+            }))],
+        ),
+        IsotopeMassForm::Var(variable) => {
+            let (name, masses) = variable.as_ref();
+            variant(
+                4,
+                [
+                    CanonicalKeyValue::Text(name.clone()),
+                    option(masses.as_ref().map(|masses| {
+                        sequence(
+                            masses
+                                .iter()
+                                .map(|mass| CanonicalKeyValue::Unsigned(u64::from(*mass))),
+                        )
+                    })),
+                ],
+            )
+        }
+    }
+}
+
+fn num_form_key(value: &NumForm) -> CanonicalKeyValue {
+    match value {
+        NumForm::Undetermined => variant(0, []),
+        NumForm::Lit(value) => variant(1, [CanonicalKeyValue::Signed(*value)]),
+        NumForm::LitSet(values) => variant(
+            2,
+            [sequence(
+                values.iter().map(|value| CanonicalKeyValue::Signed(*value)),
+            )],
+        ),
+        NumForm::RangeFrom(value) => variant(3, [CanonicalKeyValue::Signed(*value)]),
+        NumForm::RangeTo(value) => variant(4, [CanonicalKeyValue::Signed(*value)]),
+        NumForm::ArithExpr(expression) => variant(5, [arith_expr_key(expression)]),
+        NumForm::PredExpr(predicate) => variant(6, [pred_expr_key(predicate)]),
+    }
+}
+
+fn arith_expr_key(expression: &ArithExpr) -> CanonicalKeyValue {
+    match expression {
+        ArithExpr::Lit(value) => variant(0, [CanonicalKeyValue::Signed(*value)]),
+        ArithExpr::Var(name) => variant(1, [CanonicalKeyValue::Text(name.clone())]),
+        ArithExpr::Neg(inner) => variant(2, [arith_expr_key(inner)]),
+        ArithExpr::Sum(terms) => variant(3, [sequence(terms.iter().map(arith_expr_key))]),
+        ArithExpr::Product(factors) => variant(4, [sequence(factors.iter().map(arith_expr_key))]),
+        ArithExpr::Div(lhs, rhs) => variant(5, [arith_expr_key(lhs), arith_expr_key(rhs)]),
+        ArithExpr::Rem(lhs, rhs) => variant(6, [arith_expr_key(lhs), arith_expr_key(rhs)]),
+    }
+}
+
+fn pred_expr_key(predicate: &PredExpr) -> CanonicalKeyValue {
+    match predicate {
+        PredExpr::Rel(lhs, operator, rhs) => variant(
+            0,
+            [
+                arith_expr_key(lhs),
+                rel_op_key(*operator),
+                arith_expr_key(rhs),
+            ],
+        ),
+        PredExpr::Mem(expression, operator, values) => variant(
+            1,
+            [
+                arith_expr_key(expression),
+                mem_op_key(*operator),
+                sequence(values.iter().map(|value| CanonicalKeyValue::Signed(*value))),
+            ],
+        ),
+        PredExpr::Not(inner) => variant(2, [pred_expr_key(inner)]),
+        PredExpr::And(terms) => variant(3, [sequence(terms.iter().map(pred_expr_key))]),
+        PredExpr::Or(terms) => variant(4, [sequence(terms.iter().map(pred_expr_key))]),
+    }
+}
+
+fn rel_op_key(operator: RelOp) -> CanonicalKeyValue {
+    variant(
+        match operator {
+            RelOp::Le => 0,
+            RelOp::Ge => 1,
+            RelOp::Eq => 2,
+            RelOp::Lt => 3,
+            RelOp::Gt => 4,
+            RelOp::Ne => 5,
+        },
+        [],
+    )
+}
+
+fn mem_op_key(operator: MemOp) -> CanonicalKeyValue {
+    variant(
+        match operator {
+            MemOp::In => 0,
+            MemOp::NotIn => 1,
+        },
+        [],
+    )
+}
+
+fn unpaired_electrons_form_key(value: &UnpairedElectronsForm) -> CanonicalKeyValue {
+    product([
+        num_form_key(&value.count),
+        num_form_key(&value.multiplicity),
+    ])
+}
+
+fn noncovalent_bond_kind_form_key(value: &NoncovalentBondKindForm) -> CanonicalKeyValue {
+    match value {
+        NoncovalentBondKindForm::Undetermined => variant(0, []),
+        NoncovalentBondKindForm::Lit(kind) => variant(1, [noncovalent_bond_kind_key(*kind)]),
+    }
+}
+
+fn noncovalent_bond_kind_key(kind: NoncovalentBondKind) -> CanonicalKeyValue {
+    variant(
+        match kind {
+            NoncovalentBondKind::HydrogenBond => 0,
+            NoncovalentBondKind::HalogenBond => 1,
+            NoncovalentBondKind::ChalcogenBond => 2,
+            NoncovalentBondKind::Ionic => 3,
+            NoncovalentBondKind::VanDerWaals => 4,
+        },
+        [],
+    )
+}
+
+fn stereo_kind_key(kind: StereoKind) -> CanonicalKeyValue {
+    variant(
+        match kind {
+            StereoKind::Tetrahedral => 0,
+            StereoKind::CisTrans => 1,
+            StereoKind::Axial => 2,
+            StereoKind::SquarePlanar => 3,
+            StereoKind::TrigonalBipyramidal => 4,
+            StereoKind::Octahedral => 5,
+        },
+        [],
+    )
+}
+
+fn stereo_ligand_kind_key(kind: StereoLigandKind) -> CanonicalKeyValue {
+    variant(
+        match kind {
+            StereoLigandKind::Atom => 0,
+            StereoLigandKind::ImplicitHydrogen => 1,
+            StereoLigandKind::LonePair => 2,
+        },
+        [],
+    )
+}
+
+fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradiction> {
+    Ok(match incidence {
+        Incidence::BondEndpoint => variant(0, []),
+        Incidence::DativeDonor => variant(1, []),
+        Incidence::DativeAcceptor => variant(2, []),
+        Incidence::AromaticParticipant(value) => {
+            variant(3, [num_form_key(value.normalized()?.as_ref())])
+        }
+        Incidence::MulticenterParticipant(value) => {
+            variant(4, [num_form_key(value.normalized()?.as_ref())])
+        }
+        Incidence::NoncovalentEndpoint => variant(5, []),
+        Incidence::StereoSite => variant(6, []),
+        Incidence::StereoLigand(kind) => variant(7, [stereo_ligand_kind_key(*kind)]),
+    })
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum InitialClassKey {
+    Entity {
+        position: EntityBlockPosition,
+        value: CanonicalKeyValue,
+    },
+    Incidence(CanonicalKeyValue),
+}
+
+impl Ord for InitialClassKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (
+                Self::Entity {
+                    position: lhs_position,
+                    value: lhs_value,
+                },
+                Self::Entity {
+                    position: rhs_position,
+                    value: rhs_value,
+                },
+            ) => lhs_position
+                .cmp(rhs_position)
+                .then_with(|| lhs_value.cmp(rhs_value)),
+            (Self::Entity { .. }, Self::Incidence(_)) => Ordering::Less,
+            (Self::Incidence(_), Self::Entity { .. }) => Ordering::Greater,
+            (Self::Incidence(lhs), Self::Incidence(rhs)) => lhs.cmp(rhs),
+        }
+    }
+}
+
+impl PartialOrd for InitialClassKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct InitialClasses {
+    entities: Vec<u32>,
+    incidences: Vec<u32>,
+}
+
+#[allow(dead_code)]
+fn initial_classes(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+) -> Result<InitialClasses, Contradiction> {
+    let entity_keys = incidence_graph
+        .graph()
+        .node_ids()
+        .map(|node| entity_class_key(molecule, incidence_graph.entity(node)))
+        .collect::<Result<Vec<_>, _>>()?;
+    let incidence_keys = incidence_graph
+        .incidences()
+        .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
+        .collect::<Result<Vec<_>, _>>()?;
+    let keys = entity_keys
+        .iter()
+        .chain(incidence_keys.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let classes = keys
+        .into_iter()
+        .enumerate()
+        .map(|(class, key)| (key, class as u32))
+        .collect::<BTreeMap<_, _>>();
+
+    Ok(InitialClasses {
+        entities: entity_keys.iter().map(|key| classes[key]).collect(),
+        incidences: incidence_keys.iter().map(|key| classes[key]).collect(),
+    })
+}
+
+fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassKey, Contradiction> {
+    let (position, value) = match entity {
+        Entity::Atom(id) => {
+            let attributes = molecule.atom(id).attributes;
+            (
+                EntityBlockPosition::ATOM,
+                product([
+                    element_form_key(attributes.element.normalized()?.as_ref()),
+                    isotope_mass_form_key(attributes.isotope_mass.normalized()?.as_ref()),
+                    num_form_key(attributes.charge.normalized()?.as_ref()),
+                    num_form_key(attributes.implicit_hydrogens.normalized()?.as_ref()),
+                    num_form_key(attributes.lone_pairs.normalized()?.as_ref()),
+                    unpaired_electrons_form_key(
+                        attributes.unpaired_electrons.normalized()?.as_ref(),
+                    ),
+                ]),
+            )
+        }
+        Entity::Bond(id) => {
+            let attributes = molecule.bond(id).attributes;
+            (
+                EntityBlockPosition::BOND,
+                positioned_product([
+                    (1, num_form_key(attributes.order.normalized()?.as_ref())),
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                        ),
+                    ),
+                ]),
+            )
+        }
+        Entity::DativeBond(id) => {
+            let attributes = molecule
+                .dative_bonds()
+                .get(id)
+                .expect("incidence dative bond is in range")
+                .attributes;
+            (
+                EntityBlockPosition::DATIVE_BOND,
+                positioned_product([(2, num_form_key(attributes.order.normalized()?.as_ref()))]),
+            )
+        }
+        Entity::AromaticSystem(id) => {
+            let attributes = molecule
+                .aromatic_systems()
+                .get(id)
+                .expect("incidence aromatic system is in range")
+                .attributes;
+            (
+                EntityBlockPosition::AROMATIC_SYSTEM,
+                positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                        ),
+                    ),
+                ]),
+            )
+        }
+        Entity::MulticenterBond(id) => {
+            let attributes = molecule
+                .multicenter_bonds()
+                .get(id)
+                .expect("incidence multicenter bond is in range")
+                .attributes;
+            (
+                EntityBlockPosition::MULTICENTER_BOND,
+                positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
+                        ),
+                    ),
+                ]),
+            )
+        }
+        Entity::NoncovalentBond(id) => {
+            let attributes = molecule
+                .noncovalent_bonds()
+                .get(id)
+                .expect("incidence noncovalent bond is in range")
+                .attributes;
+            (
+                EntityBlockPosition::NONCOVALENT_BOND,
+                positioned_product([(
+                    1,
+                    noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                )]),
+            )
+        }
+        Entity::StereoAtom(id) => {
+            let attributes = molecule
+                .stereo_atoms()
+                .get(id)
+                .expect("incidence stereo atom is in range")
+                .attributes;
+            (
+                EntityBlockPosition::STEREO_ATOM,
+                positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]),
+            )
+        }
+        Entity::StereoBond(id) => {
+            let attributes = molecule
+                .stereo_bonds()
+                .get(id)
+                .expect("incidence stereo bond is in range")
+                .attributes;
+            (
+                EntityBlockPosition::STEREO_BOND,
+                positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]),
+            )
+        }
+    };
+
+    Ok(InitialClassKey::Entity { position, value })
+}
+
 /// Failure to construct a canonical [`Molecule`](super::Molecule).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizationError {
@@ -320,10 +805,349 @@ pub enum ReactionCanonicalizationError {
 mod tests {
     use std::cmp::Ordering;
 
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
+    use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::{AtomId, Entity};
+    use crate::ir::{
+        AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm,
+        BondId, DativeBondForm, DativeBondId, Entity, IncidenceLevel, MoleculeEntries,
+        MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
+        StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoLigand,
+    };
+
+    #[fixture]
+    fn initial_class_molecule() -> Molecule {
+        let normalized_three = NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+            ArithExpr::Lit(1),
+            ArithExpr::Lit(2),
+        ])));
+        let normalized_one = NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+            ArithExpr::Lit(0),
+            ArithExpr::Lit(1),
+        ])));
+        let atom_ligands = vec![
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ];
+        let bond_ligands = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(3_i64),
+                AtomForm::from_element(Element::C)
+                    .with_charge(normalized_three)
+                    .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                AtomForm::from_element(Element::O).with_charge(3_i64),
+                AtomForm::from_element(Element::C).with_charge(4_i64),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::H),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::new(normalized_one.clone())),
+                (AtomId(2), AtomId(3), BondForm::from_order(2)),
+            ],
+            dative: vec![
+                (vec![AtomId(0)], AtomId(4), DativeBondForm::from_order(1)),
+                (
+                    vec![AtomId(1)],
+                    AtomId(4),
+                    DativeBondForm::new(normalized_one),
+                ),
+                (vec![AtomId(2)], AtomId(4), DativeBondForm::from_order(2)),
+            ],
+            aromatic: vec![
+                (
+                    vec![AtomId(0), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![1, 2]),
+                ),
+                (
+                    vec![AtomId(2), AtomId(3)],
+                    AromaticSystemForm::from_electrons(vec![2, 1]),
+                ),
+                (
+                    vec![AtomId(3), AtomId(4)],
+                    AromaticSystemForm::from_electrons(vec![1, 2]).with_charge(1_i64),
+                ),
+            ],
+            multicenter: vec![
+                (
+                    vec![AtomId(0), AtomId(2)],
+                    MulticenterBondForm::from_electrons(vec![1, 2]),
+                ),
+                (
+                    vec![AtomId(1), AtomId(3)],
+                    MulticenterBondForm::from_electrons(vec![2, 1]),
+                ),
+            ],
+            noncovalent: vec![
+                (
+                    AtomId(0),
+                    AtomId(5),
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                ),
+                (
+                    AtomId(1),
+                    AtomId(5),
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                ),
+                (
+                    AtomId(2),
+                    AtomId(5),
+                    NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+                ),
+            ],
+            stereo_atoms: vec![
+                (
+                    AtomId(0),
+                    atom_ligands.clone(),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+                ),
+                (
+                    AtomId(1),
+                    atom_ligands.clone(),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                ),
+                (
+                    AtomId(2),
+                    atom_ligands,
+                    StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(0)),
+                ),
+            ],
+            stereo_bonds: vec![
+                (
+                    BondId(0),
+                    bond_ligands.clone(),
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
+                ),
+                (
+                    BondId(1),
+                    bond_ligands,
+                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+                ),
+            ],
+            ..Default::default()
+        })
+    }
+
+    #[rstest]
+    fn test_incidence_cmp() {
+        let incidences = [
+            Incidence::BondEndpoint,
+            Incidence::DativeDonor,
+            Incidence::DativeAcceptor,
+            Incidence::AromaticParticipant(NumForm::Undetermined),
+            Incidence::AromaticParticipant(NumForm::Lit(-1)),
+            Incidence::AromaticParticipant(NumForm::Lit(1)),
+            Incidence::AromaticParticipant(NumForm::lit_set([0, 1])),
+            Incidence::AromaticParticipant(NumForm::RangeFrom(0)),
+            Incidence::AromaticParticipant(NumForm::RangeTo(0)),
+            Incidence::AromaticParticipant(NumForm::var("x")),
+            Incidence::AromaticParticipant(NumForm::pred_expr(PredExpr::Rel(
+                ArithExpr::Var("x".into()),
+                RelOp::Eq,
+                ArithExpr::Lit(0),
+            ))),
+            Incidence::MulticenterParticipant(NumForm::Undetermined),
+            Incidence::NoncovalentEndpoint,
+            Incidence::StereoSite,
+            Incidence::StereoLigand(StereoLigandKind::Atom),
+            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+            Incidence::StereoLigand(StereoLigandKind::LonePair),
+        ];
+
+        for pair in incidences.windows(2) {
+            assert_eq!(pair[0].cmp(&pair[1]), Ordering::Less);
+        }
+        for lhs in &incidences {
+            for rhs in &incidences {
+                assert_eq!(
+                    lhs.cmp(rhs),
+                    incidence_key(lhs)
+                        .unwrap()
+                        .cmp(&incidence_key(rhs).unwrap()),
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::atom(
+        Entity::Atom(AtomId(0)),
+        vec![
+            FieldPosition(0),
+            FieldPosition(1),
+            FieldPosition(2),
+            FieldPosition(3),
+            FieldPosition(4),
+            FieldPosition(5),
+        ]
+    )]
+    #[case::bond(
+        Entity::Bond(BondId(0)),
+        vec![FieldPosition(1), FieldPosition(2), FieldPosition(3)]
+    )]
+    #[case::dative_bond(
+        Entity::DativeBond(DativeBondId(0)),
+        vec![FieldPosition(2)]
+    )]
+    #[case::aromatic_system(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        vec![FieldPosition(2), FieldPosition(3)]
+    )]
+    #[case::multicenter_bond(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        vec![FieldPosition(2), FieldPosition(3)]
+    )]
+    #[case::noncovalent_bond(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        vec![FieldPosition(1)]
+    )]
+    #[case::stereo_atom(
+        Entity::StereoAtom(StereoAtomId(0)),
+        vec![FieldPosition(2)]
+    )]
+    #[case::stereo_bond(
+        Entity::StereoBond(StereoBondId(0)),
+        vec![FieldPosition(2)]
+    )]
+    fn test_entity_class_key_field_positions(
+        initial_class_molecule: Molecule,
+        #[case] entity: Entity,
+        #[case] expected: Vec<FieldPosition>,
+    ) {
+        let InitialClassKey::Entity {
+            value: CanonicalKeyValue::Product(fields),
+            ..
+        } = entity_class_key(&initial_class_molecule, entity).unwrap()
+        else {
+            panic!("entity class key must be a product");
+        };
+
+        assert_eq!(
+            fields
+                .into_iter()
+                .map(|field| field.position)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::normalized_atom(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
+    #[case::atom_element(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+    #[case::atom_charge(Entity::Atom(AtomId(0)), Entity::Atom(AtomId(3)), false)]
+    #[case::normalized_bond(Entity::Bond(BondId(0)), Entity::Bond(BondId(1)), true)]
+    #[case::bond_order(Entity::Bond(BondId(0)), Entity::Bond(BondId(2)), false)]
+    #[case::normalized_dative(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(1)),
+        true
+    )]
+    #[case::dative_order(
+        Entity::DativeBond(DativeBondId(0)),
+        Entity::DativeBond(DativeBondId(2)),
+        false
+    )]
+    #[case::aromatic_electrons_excluded(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(1)),
+        true
+    )]
+    #[case::aromatic_charge(
+        Entity::AromaticSystem(AromaticSystemId(0)),
+        Entity::AromaticSystem(AromaticSystemId(2)),
+        false
+    )]
+    #[case::multicenter_electrons_excluded(
+        Entity::MulticenterBond(MulticenterBondId(0)),
+        Entity::MulticenterBond(MulticenterBondId(1)),
+        true
+    )]
+    #[case::noncovalent_kind_equal(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(1)),
+        true
+    )]
+    #[case::noncovalent_kind_distinct(
+        Entity::NoncovalentBond(NoncovalentBondId(0)),
+        Entity::NoncovalentBond(NoncovalentBondId(2)),
+        false
+    )]
+    #[case::stereo_atom_configuration_excluded(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(1)),
+        true
+    )]
+    #[case::stereo_atom_kind(
+        Entity::StereoAtom(StereoAtomId(0)),
+        Entity::StereoAtom(StereoAtomId(2)),
+        false
+    )]
+    #[case::stereo_bond_configuration_excluded(
+        Entity::StereoBond(StereoBondId(0)),
+        Entity::StereoBond(StereoBondId(1)),
+        true
+    )]
+    #[case::entity_kind(Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+    fn test_initial_classes(
+        initial_class_molecule: Molecule,
+        #[case] lhs: Entity,
+        #[case] rhs: Entity,
+        #[case] expected_equal: bool,
+    ) {
+        let incidence_graph = initial_class_molecule.incidence_graph(IncidenceLevel::Full);
+        let classes = initial_classes(&initial_class_molecule, &incidence_graph).unwrap();
+        let lhs_class = classes.entities[incidence_graph.node_of(lhs).index()];
+        let rhs_class = classes.entities[incidence_graph.node_of(rhs).index()];
+
+        assert_eq!(lhs_class == rhs_class, expected_equal);
+    }
+
+    #[rstest]
+    fn test_initial_classes_incidence(initial_class_molecule: Molecule) {
+        let incidence_graph = initial_class_molecule.incidence_graph(IncidenceLevel::Full);
+        let classes = initial_classes(&initial_class_molecule, &incidence_graph).unwrap();
+        let incidences = incidence_graph
+            .incidences()
+            .map(|(edge, incidence)| (incidence, classes.incidences[edge.index()]))
+            .collect::<Vec<_>>();
+
+        for (lhs, lhs_class) in &incidences {
+            for (rhs, rhs_class) in &incidences {
+                assert_eq!(lhs_class == rhs_class, lhs == rhs);
+            }
+        }
+        for entity_class in &classes.entities {
+            for (_, incidence_class) in &incidences {
+                assert_ne!(entity_class, incidence_class);
+            }
+        }
+    }
+
+    #[rstest]
+    fn test_initial_classes_error() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(NumForm::LitSet(Box::default()))
+            ],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+
+        assert_eq!(
+            initial_classes(&molecule, &incidence_graph),
+            Err(Contradiction)
+        );
+    }
 
     #[rstest]
     #[case::integrity(

@@ -430,6 +430,30 @@ in the row sequence. Inline constraints are excluded here and enter through the 
 | Stereo atom | site, ligand frame, configuration |
 | Stereo bond | site, ligand frame, configuration |
 
+Canonical-search initial classes retain these published field positions even when participant data
+is represented by incidence occurrences. Omitted participant-bearing fields are not renumbered: for
+example, a bond node uses positions 1 through 3 for order, charge, and unpaired electrons, while its
+endpoint pair is represented by two incidences. Entity-node classes contain only normalized,
+constraint-free, frame-independent values. Aromatic and multicenter participant electron counts and
+stereo ligand kinds occur on their corresponding incidences; raw stereo configurations do not enter
+the initial node classes.
+
+Typed incidences use the following frozen order:
+
+| Position | Incidence |
+| ---: | --- |
+| 0 | Bond endpoint |
+| 1 | Dative donor |
+| 2 | Dative acceptor |
+| 3 | Aromatic participant, followed by its normalized electron-count value |
+| 4 | Multicenter participant, followed by its normalized electron-count value |
+| 5 | Noncovalent endpoint |
+| 6 | Stereo site |
+| 7 | Stereo ligand, followed by its ligand kind |
+
+The public `Incidence` total order follows this table and agrees with the typed canonical key for
+normalized incidence values. Entity-node and incidence classes occupy disjoint key domains.
+
 Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
 donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
 kind)`, with ligand kinds `Atom = 0`, `ImplicitHydrogen = 1`, and `LonePair = 2`. Unpaired electrons

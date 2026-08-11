@@ -1288,23 +1288,28 @@ and the semantic properties validated by the corresponding property tests.
 ### S5 — Exact incidence and canonical search
 
 - **S5a — Occurrence-level typed incidences.** Extend the existing `IncidenceGraph` with one typed
-  record per incidence edge while retaining molecule entities as its graph nodes. Cover localized
-  bond endpoints, dative donor/acceptor roles, aromatic and multicenter participant-associated
-  electron values, noncovalent endpoints, stereo sites, and stereo ligand kinds. Do not encode raw
-  stereo ligand position as an immutable color. Preserve distinct parallel occurrences and expose
-  their source edge without imposing tier-2 invariants. Keep one common incidence facility; do not
-  add a canonicalization-only molecule graph. Approve the small public record/accessor vocabulary
-  before changing the carrier, then migrate symmetry, substructure, tests, and benchmarks in the
-  same green subitem. [dep: S0d, S2a]
+  record per incidence edge while retaining molecule entities as its graph nodes. Add the public
+  `Incidence` enum with `BondEndpoint`, `DativeDonor`, `DativeAcceptor`,
+  `AromaticParticipant(NumForm)`, `MulticenterParticipant(NumForm)`, `NoncovalentEndpoint`,
+  `StereoSite`, and `StereoLigand(StereoLigandKind)` variants. Store one value aligned with every
+  graph `EdgeId`, exposed through `incidence(edge)` and the exact-size `incidences()` iterator. Do
+  not encode raw stereo ligand position as an immutable value. Preserve distinct parallel
+  occurrences without imposing tier-2 invariants. Keep one common incidence facility; do not add a
+  canonicalization-only molecule graph. Incidence-based substructure matching may consume the
+  typed values directly; exact typed symmetry remains the responsibility of the S5c backend
+  adapter. [dep: S0d, S2a] **Done.**
 - **S5b — Collision-free initial classes.** Add collision-free equality-class ranking from normalized
   constraint-free entity values and typed incidence values. A literal aromatic or multicenter
   electron vector contributes its value per participant occurrence; an undetermined vector
   contributes a distinct undetermined occurrence value. Remove those vectors and raw-frame stereo
   configuration from their entity-node classes rather than encoding the same positional data twice.
-  Keep `MoleculeColoringFeatures` for
-  consumers that genuinely need selectable hashed colors, but canonicalization never treats a
-  `u64` hash as identity. Add cases proving equal represented values share a class and every selected
-  distinction separates classes. This is additive. [dep: S1a, S4b, S5a]
+  Give `Incidence` an explicit public `PartialOrd`/`Ord` implementation using the same frozen
+  variant ranks and contained-value ordering as the canonicalization schema; do not derive an order
+  from enum declaration position. Add a pairwise test proving that public incidence comparison and
+  schema-key comparison agree. Keep `MoleculeColoringFeatures` for consumers that genuinely need
+  selectable hashed colors, but canonicalization never treats a `u64` hash as identity. Add cases
+  proving equal represented values share a class and every selected distinction separates classes.
+  This is additive. [dep: S1a, S4b, S5a] **Done.**
 - **S5c — Simple backend adapter.** Translate every incidence edge into a distinct colored
   occurrence vertex at the selected automorphism backend boundary. Use disjoint source-class colors
   so an occurrence vertex cannot map to a molecule-entity vertex. Preserve mappings from adapter

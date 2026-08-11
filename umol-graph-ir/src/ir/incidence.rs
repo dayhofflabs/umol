@@ -1,5 +1,7 @@
 //! Incidence (Levi) graph: relations lifted to pseudonodes for symmetry analysis.
 
+use std::cmp::Ordering;
+
 use strum::EnumCount;
 use umol_graph_core::{EdgeId, Graph, NodeId};
 
@@ -27,6 +29,12 @@ pub enum IncidenceLevel {
 ///
 /// Each value describes one participant occurrence. Parallel occurrences remain
 /// separate graph edges and therefore have separate `Incidence` values.
+///
+/// # Semantic properties
+///
+/// The total order uses the frozen aggregate-canonicalization schema rather
+/// than enum declaration order. For normalized values, it agrees with the
+/// typed incidence keys used to form canonicalization classes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Incidence {
     BondEndpoint,
@@ -37,6 +45,42 @@ pub enum Incidence {
     NoncovalentEndpoint,
     StereoSite,
     StereoLigand(StereoLigandKind),
+}
+
+impl Incidence {
+    fn position(&self) -> u8 {
+        match self {
+            Self::BondEndpoint => 0,
+            Self::DativeDonor => 1,
+            Self::DativeAcceptor => 2,
+            Self::AromaticParticipant(_) => 3,
+            Self::MulticenterParticipant(_) => 4,
+            Self::NoncovalentEndpoint => 5,
+            Self::StereoSite => 6,
+            Self::StereoLigand(_) => 7,
+        }
+    }
+}
+
+impl Ord for Incidence {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.position()
+            .cmp(&other.position())
+            .then_with(|| match (self, other) {
+                (Self::AromaticParticipant(lhs), Self::AromaticParticipant(rhs))
+                | (Self::MulticenterParticipant(lhs), Self::MulticenterParticipant(rhs)) => {
+                    lhs.cmp(rhs)
+                }
+                (Self::StereoLigand(lhs), Self::StereoLigand(rhs)) => lhs.cmp(rhs),
+                _ => Ordering::Equal,
+            })
+    }
+}
+
+impl PartialOrd for Incidence {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// A molecule's incidence graph: one node per selected molecule entity, with
