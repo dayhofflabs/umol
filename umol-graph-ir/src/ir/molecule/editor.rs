@@ -44,7 +44,7 @@ use super::super::view::{
     NoncovalentBondEditorViewMut, StereoAtomEditorView, StereoAtomEditorViewMut,
     StereoBondEditorView, StereoBondEditorViewMut,
 };
-use super::Molecule;
+use super::{Molecule, MoleculeIntegrityError};
 
 #[derive(Clone)]
 enum FixedSetStorage<P, O, D, const N: usize> {
@@ -1575,7 +1575,8 @@ impl MoleculeEditor {
         self.clone().build()
     }
 
-    pub fn build(self) -> Molecule {
+    /// Publish the editor's current state after checking molecule integrity.
+    pub fn try_build(self) -> Result<Molecule, MoleculeIntegrityError> {
         let molecule = Molecule::from_arcs(
             self.graph,
             self.atoms,
@@ -1588,10 +1589,19 @@ impl MoleculeEditor {
             self.stereo_bonds.into_arc(),
             self.constraints,
         );
-        molecule
-            .check_integrity()
-            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"));
-        molecule
+        molecule.check_integrity()?;
+        Ok(molecule)
+    }
+
+    /// Publish editor state whose molecule integrity is established by the producer.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the editor does not contain a representation-integral molecule. Use
+    /// [`Self::try_build`] for independently assembled or potentially conflicting edits.
+    pub fn build(self) -> Molecule {
+        self.try_build()
+            .unwrap_or_else(|error| panic!("invalid molecule editor state: {error}"))
     }
 }
 
@@ -1798,6 +1808,21 @@ mod tests {
             triatomic.build(),
             mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
         );
+    }
+
+    #[rstest]
+    #[case::parallel_bond(AtomId(0), AtomId(1), MoleculeIntegrityError::BondsParallel {
+        atoms: [AtomId(0), AtomId(1)],
+    })]
+    fn test_molecule_editor_try_build_error(
+        #[from(triatomic)] mut editor: MoleculeEditor,
+        #[case] first: AtomId,
+        #[case] second: AtomId,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        editor.add_bond(first, second, BondForm::from_order(1));
+
+        assert_eq!(editor.try_build(), Err(expected));
     }
 
     // `edit()` → `build()` reproduces the molecule including both stereo overlays.

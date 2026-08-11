@@ -798,9 +798,9 @@ absent.
 ### Integrity
 
 **Integrity** is the tier-1 construction contract of a graph-IR representation: well-formed storage,
-resolvable stored references, required parallel-collection shapes, and kind-dependent values needed
-to interpret the representation. Constraint satisfaction and other model-independent semantic
-conditions are invariants rather than integrity.
+resolvable stored references, required parallel-collection shapes, fixed entity-relation semantics,
+and kind-dependent values needed to interpret the representation. Constraint satisfaction and other
+model-independent semantic conditions are invariants rather than integrity.
 
 **Not:** an invariant or conformance. Integrity is established by construction and checked in
 `umol-graph-ir`; it is not a `Solution` verdict.

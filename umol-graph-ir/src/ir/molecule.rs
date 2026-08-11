@@ -323,14 +323,16 @@ impl Molecule {
     /// entity-type field is supplied directly. The topology-only case fills
     /// just `atoms` and `bonds`; relations and molecule-level constraints go
     /// in the remaining fields. Panics if an entry references an unavailable
-    /// entity; use [`Self::try_from_entries`] for untrusted input.
+    /// entity or otherwise violates molecule representation integrity; use
+    /// [`Self::try_from_entries`] for untrusted input.
     pub fn from_entries(entries: MoleculeEntries) -> Self {
         Self::try_from_entries(entries)
             .unwrap_or_else(|error| panic!("invalid molecule entries: {error}"))
     }
 
-    /// Checked form of [`Self::from_entries`]. Validates entity references but
-    /// does not enforce graph simplicity, chemistry, or constraint satisfiability.
+    /// Checked form of [`Self::from_entries`]. Validates molecule representation integrity,
+    /// including the fixed simple-relation semantics of every entity family, but does not enforce
+    /// chemistry or constraint satisfiability.
     pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeIntegrityError> {
         validate_entry_references(&entries)?;
         let MoleculeEntries {

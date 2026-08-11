@@ -407,6 +407,132 @@ fn test_molecule_try_from_entries_error(
         electron_counts: 1,
     },
 )]
+#[case::aromatic_duplicate_participant(
+    |entries: &mut MoleculeEntries| entries.aromatic[0].0[2] = AtomId(1),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::AromaticSystem(AromaticSystemId(0)),
+        atom: AtomId(1),
+    },
+)]
+#[case::multicenter_duplicate_participant(
+    |entries: &mut MoleculeEntries| entries.multicenter[0].0[2] = AtomId(1),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::MulticenterBond(MulticenterBondId(0)),
+        atom: AtomId(1),
+    },
+)]
+#[case::bond_self_loop(
+    |entries: &mut MoleculeEntries| entries.bonds[0].1 = AtomId(0),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::Bond(BondId(0)),
+        atom: AtomId(0),
+    },
+)]
+#[case::bonds_parallel(
+    |entries: &mut MoleculeEntries| {
+        entries.bonds[1].0 = AtomId(0);
+        entries.bonds[1].1 = AtomId(1);
+    },
+    MoleculeIntegrityError::BondsParallel {
+        atoms: [AtomId(0), AtomId(1)],
+    },
+)]
+#[case::dative_donor_duplicate(
+    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(1),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::DativeBond(DativeBondId(0)),
+        atom: AtomId(1),
+    },
+)]
+#[case::dative_acceptor_is_donor(
+    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::DativeBond(DativeBondId(0)),
+        atom: AtomId(3),
+    },
+)]
+#[case::dative_bonds_parallel(
+    |entries: &mut MoleculeEntries| entries.dative.push((
+        vec![AtomId(1)],
+        AtomId(3),
+        DativeBondForm::from_order(2),
+    )),
+    MoleculeIntegrityError::DativeBondsParallel {
+        acceptor: AtomId(3),
+        shared_donor: AtomId(1),
+    },
+)]
+#[case::aromatic_systems_overlap(
+    |entries: &mut MoleculeEntries| entries.aromatic.push((
+        vec![AtomId(2), AtomId(3)],
+        AromaticSystemForm::default(),
+    )),
+    MoleculeIntegrityError::AromaticSystemsOverlap { atom: AtomId(2) },
+)]
+#[case::multicenter_bonds_identical(
+    |entries: &mut MoleculeEntries| entries.multicenter.push((
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        MulticenterBondForm::default(),
+    )),
+    MoleculeIntegrityError::MulticenterBondsIdentical {
+        atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+    },
+)]
+#[case::noncovalent_self_loop(
+    |entries: &mut MoleculeEntries| entries.noncovalent[0].1 = AtomId(0),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
+        atom: AtomId(0),
+    },
+)]
+#[case::noncovalent_bonds_parallel_distinct_kinds(
+    |entries: &mut MoleculeEntries| entries.noncovalent.push((
+        AtomId(3),
+        AtomId(0),
+        NoncovalentBondForm::from_kind(NoncovalentBondKind::VanDerWaals),
+    )),
+    MoleculeIntegrityError::NoncovalentBondsParallel {
+        atoms: [AtomId(0), AtomId(3)],
+    },
+)]
+#[case::stereo_atom_site_is_atom_ligand(
+    |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[0] =
+        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        atom: AtomId(1),
+    },
+)]
+#[case::stereo_atom_ligand_duplicate(
+    |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[1] =
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        atom: AtomId(0),
+    },
+)]
+#[case::stereo_atom_sites_duplicate(
+    |entries: &mut MoleculeEntries| {
+        let stereo_atom = entries.stereo_atoms[0].clone();
+        entries.stereo_atoms.push(stereo_atom);
+    },
+    MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: AtomId(1) },
+)]
+#[case::stereo_bond_ligand_duplicate(
+    |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1[1] =
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::StereoBond(StereoBondId(0)),
+        atom: AtomId(0),
+    },
+)]
+#[case::stereo_bond_sites_duplicate(
+    |entries: &mut MoleculeEntries| {
+        let stereo_bond = entries.stereo_bonds[0].clone();
+        entries.stereo_bonds.push(stereo_bond);
+    },
+    MoleculeIntegrityError::StereoBondSitesDuplicate { bond: BondId(1) },
+)]
 #[case::stereo_atom_kind(
     |entries: &mut MoleculeEntries| {
         entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
@@ -464,6 +590,26 @@ fn test_molecule_try_from_entries_integrity_error(
     invalidate(&mut entries);
 
     assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
+#[case::repeated_virtual_ligand_anchors(vec![
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+])]
+fn test_molecule_try_from_entries(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] ligands: Vec<StereoLigand>,
+) {
+    entries.stereo_atoms[0].1 = ligands.clone();
+    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
+
+    assert_eq!(
+        molecule.stereo_atom(StereoAtomId(0)).ligand_frame(),
+        ligands
+    );
 }
 
 #[rstest]
@@ -750,10 +896,12 @@ fn test_molecule_equiv_relation_frames(#[from(equiv_molecule_entries)] entries: 
 
     let mut stereo_atom_site = entries.clone();
     stereo_atom_site.stereo_atoms[0].0 = AtomId(2);
+    stereo_atom_site.stereo_atoms[0].1[1] = StereoLigand::new(AtomId(1), StereoLigandKind::Atom);
     differences.push(Molecule::from_entries(stereo_atom_site));
 
     let mut stereo_atom_ligand = entries.clone();
-    stereo_atom_ligand.stereo_atoms[0].1[2] = StereoLigand::new(AtomId(1), StereoLigandKind::Atom);
+    stereo_atom_ligand.stereo_atoms[0].1[2] =
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair);
     differences.push(Molecule::from_entries(stereo_atom_ligand));
 
     let mut stereo_bond_site = entries.clone();
@@ -781,7 +929,7 @@ fn test_molecule_equiv_structure_and_counts(
     let mut differences = Vec::new();
 
     let mut topology = entries.clone();
-    topology.bonds[2].1 = AtomId(1);
+    topology.bonds[2].1 = AtomId(0);
     differences.push(Molecule::from_entries(topology));
 
     let mut atoms = entries.clone();
@@ -837,33 +985,6 @@ fn test_molecule_equiv_under_non_identity(
     assert!(!left.equiv(&right));
     assert!(left.equiv_under(&right, &correspondence));
     assert!(right.equiv_under(&left, &correspondence.reverse()));
-}
-
-#[rstest]
-fn test_molecule_equiv_under_non_simple_topology() {
-    let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        bonds: vec![
-            (AtomId(0), AtomId(0), BondForm::from_order(1)),
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(1), BondForm::from_order(2)),
-        ],
-        ..Default::default()
-    });
-    let correspondence = MoleculeCorrespondence::new(
-        Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
-        Correspondence::from_images(&[BondId(2), BondId(0), BondId(1)], 3),
-        Correspondence::from_images(&[], 0),
-        Correspondence::from_images(&[], 0),
-        Correspondence::from_images(&[], 0),
-        Correspondence::from_images(&[], 0),
-        Correspondence::from_images(&[], 0),
-        Correspondence::from_images(&[], 0),
-    );
-    let remapped = molecule.remap(&correspondence);
-
-    assert!(molecule.equiv_under(&remapped, &correspondence));
-    assert!(remapped.equiv_under(&molecule, &correspondence.reverse()));
 }
 
 #[rstest]
@@ -2624,67 +2745,6 @@ fn test_molecule_rings_kind(#[case] kind: RingSetKind, #[case] mut expected: Vec
 }
 
 #[rstest]
-fn test_molecule_rings_parallel_bond_identity() {
-    let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(1), AtomId(2), BondForm::from_order(1)),
-            (AtomId(2), AtomId(0), BondForm::from_order(1)),
-        ],
-        ..Default::default()
-    });
-    let mut actual = molecule
-        .rings(
-            RingModel {
-                kind: RingSetKind::Simple,
-                max_ring_size: 3,
-            },
-            RingConfig::default(),
-        )
-        .iter()
-        .map(|ring| ring.bonds().to_vec())
-        .collect::<Vec<_>>();
-    actual.sort_unstable();
-    assert_eq!(
-        actual,
-        vec![
-            vec![BondId(0), BondId(2), BondId(3)],
-            vec![BondId(1), BondId(2), BondId(3)],
-        ]
-    );
-}
-
-#[rstest]
-#[case::self_loop(1, vec![[0, 0]])]
-#[case::parallel_pair(2, vec![[0, 1], [0, 1]])]
-fn test_molecule_rings_invalid(#[case] atom_count: usize, #[case] edges: Vec<[u32; 2]>) {
-    let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); atom_count],
-        bonds: edges
-            .into_iter()
-            .map(|[first, second]| (AtomId(first), AtomId(second), BondForm::from_order(1)))
-            .collect(),
-        ..Default::default()
-    });
-    let rings = molecule.rings(
-        RingModel {
-            kind: RingSetKind::Simple,
-            max_ring_size: usize::MAX,
-        },
-        RingConfig::default(),
-    );
-    assert_eq!(
-        rings
-            .iter()
-            .map(|ring| (ring.atoms().to_vec(), ring.bonds().to_vec()))
-            .collect::<Vec<_>>(),
-        vec![]
-    );
-}
-
-#[rstest]
 fn test_molecule_editor_add_and_remove(#[from(rich_molecule)] molecule: Molecule) {
     let mut b = molecule.edit();
     let new_a = b.add_atom(AtomForm::from_element(Element::Br));
@@ -3643,36 +3703,6 @@ fn test_molecule_split() {
     assert_eq!(second.bond(BondId(0)).attributes, &BondForm::from_order(2));
     assert_eq!(second_corr.atoms().right_of(AtomId(0)), Some(AtomId(2)));
     assert_eq!(second_corr.atoms().right_of(AtomId(1)), Some(AtomId(3)));
-}
-
-#[rstest]
-fn test_molecule_split_duplicate_incidence() {
-    let bond = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
-    let mol = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        noncovalent: vec![
-            (AtomId(0), AtomId(1), bond.clone()),
-            (AtomId(0), AtomId(1), bond),
-        ],
-        ..Default::default()
-    });
-
-    let components = mol.split();
-
-    assert_eq!(components.len(), 2);
-    assert_eq!(components[0].0.noncovalent_bonds().count(), 2);
-    assert_eq!(
-        components[0].1.noncovalent_bonds(),
-        &Correspondence::new(
-            vec![
-                (NoncovalentBondId(0), NoncovalentBondId(0)),
-                (NoncovalentBondId(1), NoncovalentBondId(1)),
-            ],
-            2,
-            2,
-        )
-        .expect("split assigns each component noncovalent bond its original id"),
-    );
 }
 
 #[rstest]

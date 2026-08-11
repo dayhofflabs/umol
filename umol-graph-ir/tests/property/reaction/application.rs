@@ -331,10 +331,10 @@ proptest! {
         update in stereo_atom_application_update_strategy(),
     ) {
         let ligands = vec![
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
         ];
         let pattern_atom = StereoAtomForm::new(
             StereoKind::Tetrahedral,

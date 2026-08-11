@@ -542,12 +542,30 @@ mod tests {
             );
             let added_stereo_bond =
                 GraphIrStereoBondForm::new(GraphIrStereoKind::CisTrans, GraphIrStereoCoset::Lit(1));
-            let ligands = [0, 1, 0, 1]
-                .into_iter()
-                .map(|id| {
-                    GraphIrStereoLigand::new(GraphIrAtomId(id), GraphIrStereoLigandKind::Atom)
-                })
-                .collect::<Vec<_>>();
+            let stereo_atom_ligands = [
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(0),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
+                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::LonePair),
+                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(0),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
+            ];
+            let stereo_bond_ligands = vec![
+                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(0),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
+                GraphIrStereoLigand::new(
+                    GraphIrAtomId(1),
+                    GraphIrStereoLigandKind::ImplicitHydrogen,
+                ),
+            ];
             let unchanged_constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
             let modified_constraint_lhs =
@@ -647,7 +665,7 @@ mod tests {
                 )],
                 vec![(
                     0,
-                    ligands
+                    stereo_atom_ligands
                         .iter()
                         .copied()
                         .map(StereoLigand::from_rust)
@@ -665,7 +683,7 @@ mod tests {
                 )],
                 vec![(
                     0,
-                    ligands
+                    stereo_bond_ligands
                         .iter()
                         .copied()
                         .map(StereoLigand::from_rust)
@@ -775,7 +793,7 @@ mod tests {
                     )],
                     stereo_atoms: vec![(
                         GraphIrAtomId(0),
-                        ligands.clone(),
+                        stereo_atom_ligands.to_vec(),
                         GraphIrEntitySpan::Modified {
                             lhs: stereo_atom_lhs,
                             rhs: stereo_atom_rhs,
@@ -783,7 +801,7 @@ mod tests {
                     )],
                     stereo_bonds: vec![(
                         GraphIrBondId(0),
-                        ligands,
+                        stereo_bond_ligands,
                         GraphIrEntitySpan::Added(added_stereo_bond),
                     )],
                     constraints: vec![

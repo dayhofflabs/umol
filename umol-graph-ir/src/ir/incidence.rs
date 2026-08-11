@@ -558,34 +558,42 @@ mod tests {
     }
 
     #[rstest]
-    #[case::bond_self_loop(
+    #[case::repeated_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            bonds: vec![(AtomId(0), AtomId(0), BondForm::from_order(1))],
-            ..Default::default()
-        }),
-        vec![
-            ([NodeId(0), NodeId(1)], Incidence::BondEndpoint),
-            ([NodeId(0), NodeId(1)], Incidence::BondEndpoint),
-        ],
-    )]
-    #[case::repeated_aromatic_participant(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            aromatic: vec![(
-                vec![AtomId(0), AtomId(0)],
-                AromaticSystemForm::from_electrons(vec![1, 2]),
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         }),
         vec![
+            ([NodeId(0), NodeId(3)], Incidence::StereoSite),
             (
-                [NodeId(0), NodeId(1)],
-                Incidence::AromaticParticipant(NumForm::Lit(1)),
+                [NodeId(1), NodeId(3)],
+                Incidence::StereoLigand(StereoLigandKind::Atom),
             ),
             (
-                [NodeId(0), NodeId(1)],
-                Incidence::AromaticParticipant(NumForm::Lit(2)),
+                [NodeId(2), NodeId(3)],
+                Incidence::StereoLigand(StereoLigandKind::Atom),
+            ),
+            (
+                [NodeId(0), NodeId(3)],
+                Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+            ),
+            (
+                [NodeId(0), NodeId(3)],
+                Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
             ),
         ],
     )]

@@ -201,7 +201,7 @@ impl Molecule {
             })
             .collect();
 
-        let mut object = Molecule::from_entries(MoleculeEntries {
+        let mut object = Molecule::try_from_entries(MoleculeEntries {
             atoms,
             bonds,
             dative,
@@ -211,7 +211,8 @@ impl Molecule {
             stereo_atoms,
             stereo_bonds,
             constraints: Constraints::new(),
-        });
+        })
+        .ok()?;
 
         let atom_correspondence = |nodes: &Correspondence<NodeId>| {
             Correspondence::new(
@@ -280,22 +281,6 @@ impl Molecule {
             }
         }
         object.constraints = constraints;
-
-        // Emit-compliance: the glue is a generated molecule, so it must satisfy every per-entity
-        // structural invariant — gluing can collide bonds/overlays a well-formed input never would
-        // (parallel bonds, overlapping systems, two stereo centers on one site, …). The per-entity
-        // `has_conflict` primitives are the shared gates (also consulted by the validator and
-        // `apply_at`); enforced per generating op pending a single central emit gate.
-        if object.bonds().has_conflict()
-            || object.dative_bonds().has_conflict()
-            || object.aromatic_systems().has_conflict()
-            || object.multicenter_bonds().has_conflict()
-            || object.noncovalent_bonds().has_conflict()
-            || object.stereo_atoms().has_conflict()
-            || object.stereo_bonds().has_conflict()
-        {
-            return None;
-        }
 
         Some(MoleculePushout {
             object,

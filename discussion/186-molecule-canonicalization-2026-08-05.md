@@ -346,9 +346,10 @@ The integrity and validator migration proceeds in four green stages:
 
 1. Add the three graph-IR-owned `check_integrity` operations and `*IntegrityError` types. Molecule
    integrity consolidates reference checks, aromatic and multicenter electron-vector lengths,
-   stereo ligand arity, explicit coset domains, and explicit permutation degree. Route checked and
-   asserted construction, DSL and external-format raise, Python construction, and builder/editor
-   publication through the shared checks.
+   duplicate aromatic and multicenter participants, stereo ligand arity, explicit coset domains,
+   and explicit permutation degree. Route checked and asserted construction, DSL and
+   external-format raise, Python construction, and builder/editor publication through the shared
+   checks.
 2. Replace `ReactionIntegrityValidator` with `Reaction::check_integrity`, and unify
    `ReactionSpan` checked construction with its integrity operation. Preserve the distinction
    between a permissive lhs-plus-deltas reaction and a span whose two projections are molecules.
@@ -367,8 +368,10 @@ and the host. In addition to localized-bond self-loops and parallel bonds, that 
 duplicate or role-conflicting dative participants, parallel dative and noncovalent relations,
 duplicate or overlapping aromatic participants, duplicate or identical multicenter participant
 sets, and repeated stereo sites. Its electron-vector length cases move to integrity; the remaining
-cases are model-independent structural invariants. Before the migration rewires `apply`, decide
-which of those invariants are actual application preconditions. The decision must be stated per
+cases are model-independent structural invariants. Duplicate participants within one aromatic
+system or multicenter bond also belong to integrity because their positional electron-count value
+must be a function of participant identity. Before the migration rewires `apply`, decide which of
+the remaining invariants are actual application preconditions. The decision must be stated per
 property rather than summarized as graph simplicity.
 
 Nauty handles disconnected graphs directly. Splitting a molecule into connected components is
@@ -411,11 +414,13 @@ typed incidences that require it. A second canonicalization-only molecule graph 
 ### S5e carrier decision
 
 The exact encoding was checked against exhaustive dense entity remapping for all 64 simple graphs
-on four atoms and for topology, constitution, and full DAMNSS fixtures. The latter include
-tier-2-invalid but representation-intact repeated participants, localized self-loops, and parallel
-bonds. The comparison exposed and fixed an independent `Molecule::equiv_under` defect: the method
-must inspect the endpoints of the explicitly mapped localized bond rather than ask the graph for an
-arbitrary edge between the mapped atoms.
+on four atoms and for topology, constitution, and full DAMNSS fixtures. The latter originally
+included repeated dative donors, localized self-loops, and parallel bonds under the then-current
+tier-2 classification. The comparison exposed and fixed an independent `Molecule::equiv_under`
+defect: the method must inspect the endpoints of the explicitly mapped localized bond rather than
+ask the graph for an arbitrary edge between the mapped atoms. S7 reclassifies all entity-relation
+shape and uniqueness conditions as integrity and replaces every such fixture before constitution
+canonicalization.
 
 The first backend adapter subdivided every incidence edge. That doubled the already subdivided
 localized-bond topology and materially increased labeling time: ordinary naphthalene rose from
@@ -503,14 +508,15 @@ entity/atom adjacency. Its type records the information attached to that occurre
   occurrence. Raw stereo ligand position is not an incidence color because it is a changeable
   participant frame.
 
-This occurrence-level representation is exact even for a tier-2-invalid molecule containing a
-localized self-loop, parallel localized bonds, or repeated relation participants. Such values remain
-inside the representation-integrity domain and canonicalization must preserve them rather than
-silently merge occurrences or impose an invariants check. The common carrier may therefore contain
-parallel incidence edges. At the nauty boundary, each incidence edge becomes its own colored
-occurrence vertex between the entity node and participant node. The resulting algorithm input is a
-simple vertex-colored graph even when the common carrier contains parallel occurrences. This
-adapter transformation is not another molecular graph model.
+This occurrence-level representation can encode localized self-loops, parallel localized bonds,
+and repeated dative donors without merging occurrences. S7 nevertheless excludes all such values
+from the `Molecule` representation-integrity domain: the entity relations have fixed simple,
+partial-function, or unique-incidence semantics that checked construction establishes eagerly.
+Canonicalization therefore consumes only values satisfying those semantics.
+The common carrier may nevertheless contain parallel incidence edges. At the nauty boundary, each
+incidence edge becomes its own colored occurrence vertex between the entity node and participant
+node. The resulting algorithm input is a simple vertex-colored graph even when the common carrier
+contains parallel occurrences. This adapter transformation is not another molecular graph model.
 
 Node and incidence values are ranked into collision-free equality classes from their normalized
 typed values. Canonicalization must not reduce either class to a `u64` identity hash. Constraints are
@@ -1258,9 +1264,10 @@ and the semantic properties validated by the corresponding property tests.
 - **S2f — Reaction-application preconditions.** Replace `Reaction::apply`'s wholesale use of
   `EntityStructureValidator` with integrity checks and the explicitly approved operation-specific
   preconditions. Before match enumeration, check the reaction LHS and host for localized-bond
-  simplicity, dative role and uniqueness, noncovalent uniqueness, aromatic participant uniqueness
-  and overlap, multicenter participant and participant-set uniqueness, and repeated stereo sites.
-  These remain tier-2 invariants generally, but application requires them because matching,
+  simplicity, dative role and uniqueness, noncovalent uniqueness, aromatic-system overlap,
+  identical multicenter participant sets, and repeated stereo sites. Duplicate participants within
+  one aromatic system or multicenter bond are rejected earlier by molecule integrity. The remaining
+  properties are tier-2 invariants generally, but application requires them because matching,
   incidence-induced correspondence, participant-position transport, and singular aromatic/stereo
   views rely on the corresponding uniqueness contracts. Do not encode them under a single
   “non-simple” condition.
@@ -1363,9 +1370,9 @@ and the semantic properties validated by the corresponding property tests.
   boundary. Use disjoint source-class colors so an occurrence vertex cannot map to a
   molecule-entity vertex. Preserve mappings from adapter nodes and edges back to common-carrier
   entities and occurrences, and project generators and orbits to entity nodes. Verify that
-  localized self-loops, parallel bonds, and repeated relation participants produce a simple adapter
-  graph without losing multiplicity or role. Backend canonical labels are an optimization input
-  only. This is additive. [dep: S5a, S5b] **Done.**
+  localized self-loops, parallel bonds, and repeated dative donors produce a simple adapter graph
+  without losing multiplicity or role. Backend canonical labels are an optimization input only.
+  This is additive. [dep: S5a, S5b] **Done.**
 - **S5d — Typed-order canonical search.** Add the private graph-IR individualization-refinement
   search described above: ordered exact partitions, collision-free equitable refinement, fixed
   non-singleton-cell selection, typed leaf keys, prefix pruning, and automorphism-orbit pruning.
@@ -1379,12 +1386,14 @@ and the semantic properties validated by the corresponding property tests.
   molecule schema is introduced. This is additive. [dep: S4b, S5b, S5c] **Done.**
 - **S5e — Encoding verification and benchmark decision.** On bounded generated molecules, compare
   colored-encoding isomorphism with explicit dense-remapping equivalence at each implemented level,
-  including tier-2-invalid but representation-intact repeated occurrences. Re-run S0's benchmark
-  with the exact carrier and record carrier construction, adapter construction, refinement calls,
-  visited leaves, pruned branches, backend time, and remapping time. If a compact raw-graph plus
-  typed-overlay carrier wins materially, revise `IncidenceGraph` itself while preserving the same
-  occurrence contract; do not retain two molecular encodings. This is additive or a measured
-  breaking red-to-green carrier replacement. [dep: S0b, S5d] **Done.**
+  including repeated dative occurrences admitted under the integrity contract in force for this
+  comparison. Re-run S0's benchmark with the exact carrier and record carrier construction, adapter
+  construction, refinement calls, visited leaves, pruned branches, backend time, and remapping
+  time. If a compact raw-graph plus typed-overlay carrier wins materially, revise `IncidenceGraph`
+  itself while preserving the same occurrence contract; do not retain two molecular encodings.
+  This is additive or a measured breaking red-to-green carrier replacement. [dep: S0b, S5d]
+  **Done.** S7 replaces the repeated-participant fixtures under the complete entity-relation
+  integrity contract.
 
 ### S6 — Topology canonicalization
 
@@ -1417,22 +1426,77 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S7 — Constitution canonicalization
 
-- **S7a — Constitution typed key.** Extend the schema and exact refinement signatures to dative,
+- **S7a — Entity-relation integrity.** Extend `Molecule::check_integrity` with the complete fixed
+  relation semantics of every entity family. Within one entity, reject repeated actual atom
+  participants: localized and noncovalent self-loops; repeated dative donors or an acceptor also
+  used as a donor; repeated aromatic and multicenter participants; and repeated actual-atom stereo
+  ligands or a stereo-atom site also used as an actual-atom ligand. Stereo virtual ligands anchored
+  at the same atom are ligand occurrences rather than atom participants and remain valid.
+
+  Across entities, reject localized bonds on the same unordered atom pair; repeated dative
+  `(acceptor, donor)` incidences; aromatic systems sharing an atom; multicenter bonds with identical
+  participant sets; noncovalent bonds on the same unordered atom pair regardless of interaction
+  kind; stereo atoms sharing a site; and stereo bonds sharing a site. Use typed molecule-integrity
+  errors carrying the entity, participant, site, or relation key needed to diagnose the failure;
+  retain the approved `DuplicateParticipant { entity, atom }` case for applicable within-entity
+  failures. Update the permanent integrity contract and route every checked and asserted
+  constructor, DSL and format conversion, builder/editor publication, reaction-side publication,
+  and Python construction path through the same implementation. Add exact cases for every entity
+  family plus generated properties that every published molecule satisfies the complete relation
+  contract. This is breaking red-to-green. [dep: S2a, S6c] **Done.** `Molecule::check_integrity`
+  now enforces the complete within-entity and cross-entity relation contract with typed failures;
+  repeated virtual stereo-ligand anchors remain valid. Checked entry construction is the shared
+  gate used by DSL, format, and Python construction. Editor, reaction-product, and pushout
+  publication were moved through checked finalization during this migration so no transient
+  conflict is published or panics during reaction application/composition. Exact cases cover every
+  rejected relation shape, and the shared molecule, transaction, remapping, and reaction generators
+  now construct integral relations directly. The 64-case graph-IR property suite, complete
+  graph-IR and graph unit/integration suites, and both crates' all-target clippy checks pass.
+- **S7b — Fallible editor publication.** Add
+  `MoleculeEditor::try_build(self) -> Result<Molecule, MoleculeIntegrityError>` as the checked
+  publication path and implement the asserted `build` route through it. Review `snapshot` against
+  the same publication contract rather than maintaining an independent check. Rewire reaction
+  application and the pushout used by composition to publish candidates through the checked route:
+  reaction application maps entity-relation collisions to `ApplyError::StructuralConflict` and
+  other integrity failures to its internal-invariant error, while pushout maps an inadmissible glue
+  to its existing `None`. A transaction or editor may retain incomplete or conflicting transient
+  state; the gate applies when it publishes a `Molecule`. Add exact cases showing checked failure,
+  asserted-producer behavior, and application or composition conflict without panic. This is
+  additive, then breaking red-to-green as callers move. [dep: S7a]
+- **S7c — Redundant structure-check removal.** Remove
+  `EntityStructureInvariantsValidator`, its composite-validator stage, and the global
+  reaction-application structure precondition: checked `Molecule` inputs already establish every
+  condition they tested. Replace the seven per-family product/pushout `has_conflict` chains with the
+  single checked publication gate. Remove public per-view `has_conflict` methods where they become
+  tautological for every published molecule; retain no parallel semantic implementation merely as
+  a defensive check. Rewire the kekulizer, substructure properties, generators, fixtures, rustdoc,
+  and tests, and replace the completed S5 fixtures that intentionally violated the former tier-2
+  classification. This is breaking red-to-green. [dep: S7b]
+- **S7d — Constitution typed key.** Extend the schema and exact refinement signatures to dative,
   aromatic, multicenter, and noncovalent entities. Encode donor/acceptor roles and the association
   between each unordered participant and its positional electron value through typed occurrences,
   never through stored participant index. Include normalized non-ground inherent values and exclude
-  constraints and stereo. This is additive. [dep: S6c]
-- **S7b — Constitution frame selection.** Extend the typed-order search and dense correspondence to
+  constraints and stereo. This is additive. [dep: S7c]
+- **S7e — Constitution frame selection.** Extend the typed-order search and dense correspondence to
   all six constitution entity families. Use identity mappings only for the two excluded stereo entity
   families, transport their references and frames with the selected constitution remapping, and
   normalize all carried values. Stereo and constraints do not break constitution-level ties. The
-  public trait surface waits until every level is complete. This is additive. [dep: S7a]
-- **S7c — Constitution properties.** Add selected-layer idempotence, renumbering,
-  participant-permutation, inverse/composition, bounded-exhaustive-minimum, pruning-independence,
-  and algorithm-agreement properties over all six constitution entity kinds. Include undetermined and
-  non-literal inherent values, repeated participant occurrences, and complete-output preservation
-  without requiring excluded stereo placement to agree. Freeze constitution fixtures without
-  changing the topology fixtures. This is additive. [dep: S7b]
+  public trait surface waits until every level is complete. This is additive. [dep: S7d]
+- **S7f — Constitution properties.** Add selected-layer idempotence, renumbering,
+  participant-permutation, bounded-exhaustive minimum, pruning independence, and algorithm agreement
+  over all six constitution entity kinds. Exercise at least two entities of each DAMN family so
+  entity-table ordering is observable, and cover undetermined and non-literal inherent values.
+  Keep bounded-exhaustive domains focused per entity family rather than multiplying every DAMN
+  dimension into one Cartesian generator. Exercise contradictions in selected constitution data
+  separately from contradictions confined to excluded stereo or constraints.
+
+  State inverse and composition through the action of the induced correspondences rather than by
+  comparing correspondence storage: applying the returned correspondence produces the normalized
+  canonical result, its inverse recovers the normalized source semantically, and composing an input
+  renumbering with canonicalization reaches the same selected constitution form. Verify complete-
+  output semantic preservation without requiring excluded stereo placement to agree. Entity-relation
+  conflicts are exact S7a integrity-error cases, not canonicalization inputs. Freeze constitution
+  fixtures without changing the topology fixtures. This is additive. [dep: S7e]
 
 ### S8 — Full canonicalization without para-stereo refinement
 
@@ -1441,7 +1505,7 @@ and the semantic properties validated by the corresponding property tests.
   fluxionality permutations, inline constraints, and molecule-level stereo constraints together.
   Rebuild transformed constraint containers through their keyed insertion API. Add covariance,
   inverse, and composition cases for every stereo kind and both constraint locations. This is
-  additive. [dep: S2b, S7c]
+  additive. [dep: S2b, S7f]
 - **S8b — Duplicate-frame and non-ground handling.** Add the general ligand-position order needed
   by fully undetermined, kindless stereo forms. For kinded forms, enumerate every bounded ligand
   permutation consistent with equal repeated ligands, apply S8a, and retain the minimum normalized

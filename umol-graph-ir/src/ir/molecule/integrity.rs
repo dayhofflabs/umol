@@ -1,5 +1,8 @@
 //! Representation-integrity checks for [`Molecule`].
 
+use std::collections::{BTreeSet, HashSet};
+use std::iter::once;
+
 use thiserror::Error;
 use umol_perm::Permutation;
 
@@ -8,6 +11,8 @@ use super::super::constraint::{
 };
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
+use super::super::id::{AtomId, BondId};
+use super::super::ligand::StereoLigandKind;
 use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::Molecule;
 
@@ -30,6 +35,27 @@ pub enum MoleculeIntegrityError {
         participants: usize,
         electron_counts: usize,
     },
+    #[error("{entity}: participant atom {atom:?} is duplicated")]
+    DuplicateParticipant { entity: Entity, atom: AtomId },
+    #[error("bond: parallel bonds on atoms {atoms:?}")]
+    BondsParallel { atoms: [AtomId; 2] },
+    #[error(
+        "dative bond: parallel datives to acceptor {acceptor:?} sharing donor {shared_donor:?}"
+    )]
+    DativeBondsParallel {
+        acceptor: AtomId,
+        shared_donor: AtomId,
+    },
+    #[error("noncovalent bond: parallel bonds on atoms {atoms:?}")]
+    NoncovalentBondsParallel { atoms: [AtomId; 2] },
+    #[error("aromatic systems: overlap on atom {atom:?}")]
+    AromaticSystemsOverlap { atom: AtomId },
+    #[error("multicenter bonds: identical participant set {atoms:?}")]
+    MulticenterBondsIdentical { atoms: Vec<AtomId> },
+    #[error("stereo atom: duplicate site {atom:?}")]
+    StereoAtomSitesDuplicate { atom: AtomId },
+    #[error("stereo bond: duplicate site {bond:?}")]
+    StereoBondSitesDuplicate { bond: BondId },
     #[error("{entity}: stereo kind {kind:?} is not permitted for this entity family")]
     StereoKindNotPermitted { entity: Entity, kind: StereoKind },
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
@@ -65,9 +91,9 @@ pub enum MoleculeIntegrityError {
 impl Molecule {
     /// Check the representation invariants required to interpret this molecule.
     ///
-    /// This checks stored references, parallel collection shapes, and kind-dependent stereo
-    /// domains. It does not check graph simplicity, entity uniqueness, chemistry, or constraint
-    /// satisfaction.
+    /// This checks stored references, parallel collection shapes, the fixed relation semantics of
+    /// every entity family, and kind-dependent stereo domains. It does not check chemistry or
+    /// constraint satisfaction.
     pub fn check_integrity(&self) -> Result<(), MoleculeIntegrityError> {
         use super::super::entity::EntityKind;
 
@@ -97,54 +123,127 @@ impl Molecule {
             Entity::StereoBond(id) => id.index() < self.stereo_bonds.count(),
         };
 
+        let mut bond_pairs = HashSet::new();
         for view in self.bonds().iter() {
-            for atom in view.atom_ids() {
-                require_reference(&contains, Entity::Atom(atom))?;
+            let entity = Entity::Bond(view.id);
+            let atoms = view.atom_ids();
+            require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
+            check_unique_participants(entity, atoms)?;
+            let pair = unordered_pair(atoms);
+            if !bond_pairs.insert(pair) {
+                return Err(MoleculeIntegrityError::BondsParallel { atoms: pair });
             }
         }
+
+        let mut dative_incidences = HashSet::new();
         for view in self.dative_bonds().iter() {
-            require_reference(&contains, Entity::Atom(view.acceptor_id()))?;
-            require_references(&contains, view.donor_ids().map(Entity::Atom))?;
+            let entity = Entity::DativeBond(view.id);
+            let acceptor = view.acceptor_id();
+            require_references(&contains, view.atom_ids().map(Entity::Atom))?;
+            check_unique_participants(entity, view.atom_ids())?;
+            for donor in view.donor_ids() {
+                if !dative_incidences.insert((acceptor, donor)) {
+                    return Err(MoleculeIntegrityError::DativeBondsParallel {
+                        acceptor,
+                        shared_donor: donor,
+                    });
+                }
+            }
         }
+
+        let mut aromatic_membership = HashSet::new();
         for view in self.aromatic_systems().iter() {
+            let entity = Entity::AromaticSystem(view.id);
             require_references(&contains, view.atom_ids().map(Entity::Atom))?;
+            check_unique_participants(entity, view.atom_ids())?;
+            for atom in view.atom_ids() {
+                if !aromatic_membership.insert(atom) {
+                    return Err(MoleculeIntegrityError::AromaticSystemsOverlap { atom });
+                }
+            }
             check_electron_count_length(
-                Entity::AromaticSystem(view.id),
+                entity,
                 view.atom_ids().count(),
                 &view.attributes.electrons,
             )?;
         }
+
+        let mut multicenter_participant_sets = HashSet::new();
         for view in self.multicenter_bonds().iter() {
+            let entity = Entity::MulticenterBond(view.id);
             require_references(&contains, view.atom_ids().map(Entity::Atom))?;
+            check_unique_participants(entity, view.atom_ids())?;
+            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            if !multicenter_participant_sets.insert(atoms.iter().copied().collect::<BTreeSet<_>>())
+            {
+                return Err(MoleculeIntegrityError::MulticenterBondsIdentical { atoms });
+            }
             check_electron_count_length(
-                Entity::MulticenterBond(view.id),
+                entity,
                 view.atom_ids().count(),
                 &view.attributes.electrons,
             )?;
         }
+
+        let mut noncovalent_pairs = HashSet::new();
         for view in self.noncovalent_bonds().iter() {
-            require_references(&contains, view.atom_ids().into_iter().map(Entity::Atom))?;
+            let entity = Entity::NoncovalentBond(view.id);
+            let atoms = view.atom_ids();
+            require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
+            check_unique_participants(entity, atoms)?;
+            let pair = unordered_pair(atoms);
+            if !noncovalent_pairs.insert(pair) {
+                return Err(MoleculeIntegrityError::NoncovalentBondsParallel { atoms: pair });
+            }
         }
+
+        let mut stereo_atom_sites = HashSet::new();
         for view in self.stereo_atoms().iter() {
             let entity = Entity::StereoAtom(view.id);
-            require_reference(&contains, Entity::Atom(view.site_id()))?;
+            let site = view.site_id();
+            require_reference(&contains, Entity::Atom(site))?;
             require_references(
                 &contains,
                 view.ligand_frame()
                     .into_iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
+            check_unique_participants(
+                entity,
+                once(site).chain(
+                    view.ligand_frame()
+                        .into_iter()
+                        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                        .map(|ligand| ligand.atom_id),
+                ),
+            )?;
+            if !stereo_atom_sites.insert(site) {
+                return Err(MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: site });
+            }
             check_stereo_atom(entity, view.ligands().count(), view.attributes)?;
         }
+
+        let mut stereo_bond_sites = HashSet::new();
         for view in self.stereo_bonds().iter() {
             let entity = Entity::StereoBond(view.id);
-            require_reference(&contains, Entity::Bond(view.site_id()))?;
+            let site = view.site_id();
+            require_reference(&contains, Entity::Bond(site))?;
             require_references(
                 &contains,
                 view.ligand_frame()
                     .into_iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
+            check_unique_participants(
+                entity,
+                view.ligand_frame()
+                    .into_iter()
+                    .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                    .map(|ligand| ligand.atom_id),
+            )?;
+            if !stereo_bond_sites.insert(site) {
+                return Err(MoleculeIntegrityError::StereoBondSitesDuplicate { bond: site });
+            }
             check_stereo_bond(entity, view.ligands().count(), view.attributes)?;
         }
         for constraint in self.constraints.iter() {
@@ -153,6 +252,27 @@ impl Molecule {
         }
         Ok(())
     }
+}
+
+fn unordered_pair([first, second]: [AtomId; 2]) -> [AtomId; 2] {
+    if first <= second {
+        [first, second]
+    } else {
+        [second, first]
+    }
+}
+
+fn check_unique_participants(
+    entity: Entity,
+    participants: impl IntoIterator<Item = AtomId>,
+) -> Result<(), MoleculeIntegrityError> {
+    let mut seen = HashSet::new();
+    for atom in participants {
+        if !seen.insert(atom) {
+            return Err(MoleculeIntegrityError::DuplicateParticipant { entity, atom });
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn require_reference(

@@ -78,6 +78,9 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
             atom(Element::F, atom_charge + 3),
             atom(Element::P, atom_charge + 4),
             atom(Element::S, atom_charge + 5),
+            atom(Element::Cl, atom_charge + 6),
+            atom(Element::Br, atom_charge + 7),
+            atom(Element::H, atom_charge + 8),
         ],
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
@@ -114,7 +117,7 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
                 AromaticSystemForm::from_electrons(vec![aromatic + 3, aromatic + 4, aromatic + 5]),
             ),
             (
-                vec![AtomId(0), AtomId(3), AtomId(5)],
+                vec![AtomId(6), AtomId(7), AtomId(8)],
                 AromaticSystemForm::from_electrons(vec![aromatic + 6, aromatic + 7, aromatic + 8]),
             ),
         ],

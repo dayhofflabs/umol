@@ -1746,12 +1746,6 @@ mod tests {
             ArithExpr::Lit(0),
             ArithExpr::Lit(1),
         ])));
-        let atom_ligands = vec![
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-        ];
         let bond_ligands = vec![
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -1794,7 +1788,7 @@ mod tests {
                     AromaticSystemForm::from_electrons(vec![2, 1]),
                 ),
                 (
-                    vec![AtomId(3), AtomId(4)],
+                    vec![AtomId(4), AtomId(5)],
                     AromaticSystemForm::from_electrons(vec![1, 2]).with_charge(1_i64),
                 ),
             ],
@@ -1828,17 +1822,32 @@ mod tests {
             stereo_atoms: vec![
                 (
                     AtomId(0),
-                    atom_ligands.clone(),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
                 ),
                 (
                     AtomId(1),
-                    atom_ligands.clone(),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
                 (
                     AtomId(2),
-                    atom_ligands,
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
                     StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(0)),
                 ),
             ],
@@ -2048,30 +2057,25 @@ mod tests {
         entries
     }
 
-    fn encoding_entries(repeated_occurrences: bool) -> MoleculeEntries {
-        let occurrence = if repeated_occurrences {
-            AtomId(0)
-        } else {
-            AtomId(1)
-        };
+    fn encoding_entries() -> MoleculeEntries {
         MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 4],
             bonds: vec![
-                (AtomId(0), AtomId(0), BondForm::from_order(1)),
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             dative: vec![(
-                vec![AtomId(0), occurrence],
+                vec![AtomId(0), AtomId(1)],
                 AtomId(2),
                 DativeBondForm::from_order(1),
             )],
             aromatic: vec![(
-                vec![AtomId(0), occurrence, AtomId(2)],
+                vec![AtomId(0), AtomId(1), AtomId(2)],
                 AromaticSystemForm::from_electrons(vec![1, 2, 3]),
             )],
             multicenter: vec![(
-                vec![AtomId(1), occurrence, AtomId(3)],
+                vec![AtomId(1), AtomId(2), AtomId(3)],
                 MulticenterBondForm::from_electrons(vec![2, 0, 1]),
             )],
             noncovalent: vec![(
@@ -2083,7 +2087,7 @@ mod tests {
                 AtomId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(occurrence, StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 ],
@@ -2093,7 +2097,7 @@ mod tests {
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(occurrence, StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 ],
@@ -2462,61 +2466,40 @@ mod tests {
         vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
         0,
     )]
-    #[case::localized_self_loop(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            bonds: vec![(AtomId(0), AtomId(0), BondForm::from_order(1))],
-            ..Default::default()
-        }),
-        vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
-        2,
-    )]
-    #[case::parallel_bonds(
+    #[case::repeated_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
             ],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            ],
-            ..Default::default()
-        }),
-        vec![
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-            Incidence::BondEndpoint,
-        ],
-        0,
-    )]
-    #[case::repeated_relation_participant(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::N),
-                AtomForm::from_element(Element::B),
-            ],
-            dative: vec![(
-                vec![AtomId(0), AtomId(0)],
-                AtomId(1),
-                DativeBondForm::from_order(1),
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         }),
         vec![
-            Incidence::DativeDonor,
-            Incidence::DativeDonor,
-            Incidence::DativeAcceptor,
+            Incidence::StereoSite,
+            Incidence::StereoLigand(StereoLigandKind::Atom),
+            Incidence::StereoLigand(StereoLigandKind::Atom),
+            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
         ],
-        3,
+        5,
     )]
     fn test_automorphism_adapter_new(
         #[case] molecule: Molecule,
         #[case] expected_incidences: Vec<Incidence>,
         #[case] expected_occurrence_nodes: usize,
     ) {
-        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
         let classes = initial_classes(&molecule, &incidence_graph).unwrap();
         let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
         let source = incidence_graph.graph();
@@ -2670,16 +2653,6 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(0), AtomId(2), BondForm::from_order(1)),
                 (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            ],
-            ..Default::default()
-        }),
-    )]
-    #[case::parallel_bonds(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 2],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
             ],
             ..Default::default()
         }),
@@ -3222,16 +3195,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::topology(IncidenceLevel::Topology, false)]
-    #[case::constitution(IncidenceLevel::Constitution, false)]
-    #[case::constitution_repeated_occurrences(IncidenceLevel::Constitution, true)]
-    #[case::full(IncidenceLevel::Full, false)]
-    #[case::full_repeated_occurrences(IncidenceLevel::Full, true)]
-    fn test_colored_encoding_dense_remapping_equivalence(
-        #[case] level: IncidenceLevel,
-        #[case] repeated_occurrences: bool,
-    ) {
-        let entries = encoding_entries(repeated_occurrences);
+    #[case::topology(IncidenceLevel::Topology)]
+    #[case::constitution(IncidenceLevel::Constitution)]
+    #[case::full(IncidenceLevel::Full)]
+    fn test_colored_encoding_dense_remapping_equivalence(#[case] level: IncidenceLevel) {
+        let entries = encoding_entries();
         let complete = Molecule::from_entries(entries.clone());
         let molecule = Molecule::from_entries(project_entries(entries, level));
         let remapped = molecule.remap(&reverse_correspondence(&molecule));

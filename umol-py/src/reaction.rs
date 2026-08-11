@@ -2196,37 +2196,27 @@ mod tests {
     #[rstest]
     fn test_reaction_apply_error() {
         Python::attach(|py| {
-            let reaction = Reaction::new(py, None, None).unwrap();
-            let host = Py::new(
+            let reaction = Reaction::from_rust(
                 py,
-                Molecule::from_rust(GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![
-                        GraphIrAtomForm::from_element(ChemElement::C),
-                        GraphIrAtomForm::from_element(ChemElement::O),
-                    ],
-                    bonds: vec![
-                        (
-                            GraphIrAtomId(0),
-                            GraphIrAtomId(1),
-                            GraphIrBondForm::from_order(1),
-                        ),
-                        (
-                            GraphIrAtomId(0),
-                            GraphIrAtomId(1),
-                            GraphIrBondForm::from_order(2),
-                        ),
-                    ],
-                    ..Default::default()
-                })),
+                GraphIrReaction::new(
+                    GraphIrMolecule::default(),
+                    [GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
+                        id: GraphIrAtomId(0),
+                        attributes: GraphIrAtomForm::from_element(ChemElement::C),
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
             )
             .unwrap();
+            let host = Py::new(py, Molecule::from_rust(GraphIrMolecule::default())).unwrap();
 
             let error = reaction.apply(py, host, None).err().unwrap();
 
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "host violates the application invariant for bond"
+                "reaction references unavailable entity Atom(AtomId(0))"
             );
         });
     }

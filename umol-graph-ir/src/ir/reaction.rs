@@ -34,9 +34,9 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::molecule::Molecule;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
+use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 use super::reaction_derivation::ReactionDerivation;
@@ -1347,7 +1347,22 @@ impl Reaction {
 
         let mut builder = host.edit();
         builder.transact(edits)?;
-        let product = builder.build();
+        let product = match builder.try_build() {
+            Ok(product) => product,
+            Err(
+                MoleculeIntegrityError::DuplicateParticipant { .. }
+                | MoleculeIntegrityError::BondsParallel { .. }
+                | MoleculeIntegrityError::DativeBondsParallel { .. }
+                | MoleculeIntegrityError::NoncovalentBondsParallel { .. }
+                | MoleculeIntegrityError::AromaticSystemsOverlap { .. }
+                | MoleculeIntegrityError::MulticenterBondsIdentical { .. }
+                | MoleculeIntegrityError::StereoAtomSitesDuplicate { .. }
+                | MoleculeIntegrityError::StereoBondSitesDuplicate { .. },
+            ) => {
+                return Err(ApplyError::StructuralConflict);
+            }
+            Err(_) => return Err(ApplyError::InternalInvariant),
+        };
 
         // Emit-compliance: the product is a generated molecule, so it must satisfy every per-entity
         // structural invariant (a rule's adds can land a parallel bond, an overlapping system, or a
@@ -2225,115 +2240,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default(), AtomForm::default()],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::default()),
-                (AtomId(0), AtomId(1), BondForm::default()),
-            ],
-            ..Default::default()
-        },
-        EntityKind::Bond,
-    )]
-    #[case::dative_bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default(), AtomForm::default()],
-            dative: vec![(
-                vec![AtomId(0), AtomId(0)],
-                AtomId(1),
-                DativeBondForm::default(),
-            )],
-            ..Default::default()
-        },
-        EntityKind::DativeBond,
-    )]
-    #[case::aromatic_system(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default()],
-            aromatic: vec![(
-                vec![AtomId(0), AtomId(0)],
-                AromaticSystemForm::from_electrons(vec![1, 1]),
-            )],
-            ..Default::default()
-        },
-        EntityKind::AromaticSystem,
-    )]
-    #[case::multicenter_bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default()],
-            multicenter: vec![(
-                vec![AtomId(0), AtomId(0)],
-                MulticenterBondForm::from_electrons(vec![1, 1]),
-            )],
-            ..Default::default()
-        },
-        EntityKind::MulticenterBond,
-    )]
-    #[case::noncovalent_bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default()],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(0),
-                NoncovalentBondForm::default(),
-            )],
-            ..Default::default()
-        },
-        EntityKind::NoncovalentBond,
-    )]
-    #[case::stereo_atom(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default()],
-            stereo_atoms: vec![
-                (
-                    AtomId(0),
-                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                ),
-                (
-                    AtomId(0),
-                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-                ),
-            ],
-            ..Default::default()
-        },
-        EntityKind::StereoAtom,
-    )]
-    #[case::stereo_bond(
-        MoleculeEntries {
-            atoms: vec![AtomForm::default(), AtomForm::default()],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
-            stereo_bonds: vec![
-                (
-                    BondId(0),
-                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
-                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                ),
-                (
-                    BondId(0),
-                    vec![StereoLigand::new(AtomId(0), StereoLigandKind::Atom); 4],
-                    StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-                ),
-            ],
-            ..Default::default()
-        },
-        EntityKind::StereoBond,
-    )]
-    fn test_first_application_invariant_failure(
-        #[case] entries: MoleculeEntries,
-        #[case] expected: EntityKind,
-    ) {
-        let molecule = Molecule::from_entries(entries);
-
-        assert_eq!(
-            first_application_invariant_failure(&molecule),
-            Some(expected)
-        );
-    }
-
-    #[rstest]
     #[case::inconsistent_reaction(
         Reaction::new(
             Molecule::default(),
@@ -2344,21 +2250,6 @@ mod tests {
         ),
         Molecule::default(),
         ApplyPreconditionError::InconsistentReaction,
-    )]
-    #[case::reaction_structure(
-        Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-                bonds: vec![
-                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                    (AtomId(0), AtomId(1), BondForm::from_order(2)),
-                ],
-                ..Default::default()
-            }),
-            Deltas::new(),
-        ),
-        Molecule::default(),
-        ApplyPreconditionError::ReactionStructureInvariant { kind: EntityKind::Bond },
     )]
     #[case::reaction_dpo(
         Reaction::new(
@@ -2371,18 +2262,6 @@ mod tests {
         ),
         Molecule::default(),
         ApplyPreconditionError::ReactionDpo(DpoContradiction::DanglingBond { atom: AtomId(0), bond: BondId(0) }),
-    )]
-    #[case::host_structure(
-        Reaction::new(Molecule::default(), Deltas::new()),
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-            ],
-            ..Default::default()
-        }),
-        ApplyPreconditionError::HostStructureInvariant { kind: EntityKind::Bond },
     )]
     fn test_reaction_check_preconditions_error(
         #[case] reaction: Reaction,
@@ -2759,30 +2638,6 @@ mod tests {
         assert_eq!(applications.next(), None);
     }
 
-    #[rstest]
-    #[case::host_structure(
-        Reaction::new(Molecule::default(), Deltas::new()),
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(1), BondForm::from_order(2)),
-            ],
-            ..Default::default()
-        }),
-        ApplyPreconditionError::HostStructureInvariant { kind: EntityKind::Bond },
-    )]
-    fn test_reaction_apply_precondition_error(
-        #[case] reaction: Reaction,
-        #[case] host: Molecule,
-        #[case] expected: ApplyPreconditionError,
-    ) {
-        match reaction.apply(&host, MATCH_CONFIG) {
-            Err(error) => assert_eq!(error, expected),
-            Ok(_) => panic!("invalid input passed application integrity validation"),
-        }
-    }
-
     #[fixture]
     fn tetrahedral_inversion() -> Reaction {
         // Invert a tetrahedral C(0) whose ligands F,Cl,Br,I are stated in ascending order: coset 0 → 1.
@@ -2985,13 +2840,15 @@ mod tests {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
             ],
             stereo_atoms: vec![
                 (
                     AtomId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     ],
@@ -3001,7 +2858,7 @@ mod tests {
                     AtomId(1),
                     vec![
                         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                     ],

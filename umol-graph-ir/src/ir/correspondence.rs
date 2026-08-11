@@ -523,13 +523,9 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::*;
-    use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
-    use crate::ir::multicenter::MulticenterBondForm;
-    use crate::ir::noncovalent::NoncovalentBondForm;
-    use crate::ir::stereo::{StereoAtomForm, StereoBondForm};
 
     #[fixture]
     fn correspondence() -> MoleculeCorrespondence {
@@ -726,133 +722,6 @@ mod tests {
             .expect("the empty correspondence is a partial bijection");
 
         assert_eq!(MoleculeCorrespondence::induce(&lhs, &rhs, atoms), None);
-    }
-
-    #[rstest]
-    fn test_molecule_correspondence_induce_incidence_error() {
-        let atoms = vec![AtomForm::from_element(Element::C); 2];
-        let entry_pairs = vec![
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    bonds: vec![
-                        (AtomId(0), AtomId(1), BondForm::default()),
-                        (AtomId(0), AtomId(1), BondForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    dative: vec![
-                        (vec![AtomId(0)], AtomId(1), DativeBondForm::default()),
-                        (vec![AtomId(0)], AtomId(1), DativeBondForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    aromatic: vec![
-                        (vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()),
-                        (vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    multicenter: vec![
-                        (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()),
-                        (vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    multicenter: vec![(vec![AtomId(0), AtomId(1)], MulticenterBondForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    noncovalent: vec![
-                        (AtomId(0), AtomId(1), NoncovalentBondForm::default()),
-                        (AtomId(0), AtomId(1), NoncovalentBondForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    stereo_atoms: vec![
-                        (AtomId(0), Vec::new(), StereoAtomForm::default()),
-                        (AtomId(0), Vec::new(), StereoAtomForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    stereo_atoms: vec![(AtomId(0), Vec::new(), StereoAtomForm::default())],
-                    ..Default::default()
-                },
-            ),
-            (
-                MoleculeEntries {
-                    atoms: atoms.clone(),
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
-                    stereo_bonds: vec![
-                        (BondId(0), Vec::new(), StereoBondForm::default()),
-                        (BondId(0), Vec::new(), StereoBondForm::default()),
-                    ],
-                    ..Default::default()
-                },
-                MoleculeEntries {
-                    atoms,
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
-                    stereo_bonds: vec![(BondId(0), Vec::new(), StereoBondForm::default())],
-                    ..Default::default()
-                },
-            ),
-        ];
-
-        for (duplicate, unique) in entry_pairs {
-            for (lhs, rhs) in [(unique.clone(), duplicate.clone()), (duplicate, unique)] {
-                assert_eq!(
-                    MoleculeCorrespondence::induce(
-                        &Molecule::from_entries(lhs),
-                        &Molecule::from_entries(rhs),
-                        Correspondence::from_images(&[AtomId(0), AtomId(1)], 2),
-                    ),
-                    None,
-                );
-            }
-        }
     }
 
     #[rstest]

@@ -444,12 +444,6 @@ mod tests {
             },
         )),
     )]
-    #[case::entity_structure(
-        mol_dsl!(r#"{:atoms ["C"] :bonds [[0 0 "1"]]}"#),
-        Solution::Contradictory(ValidatorContradiction::EntityStructure(
-            EntityStructureInvariantsContradiction::BondSelfLoop { atom: AtomId(0) },
-        )),
-    )]
     fn test_validator_validate(
         #[case] molecule: Molecule,
         #[case] expected: Solution<(), ValidatorContradiction>,

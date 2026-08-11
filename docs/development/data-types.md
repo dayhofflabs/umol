@@ -55,6 +55,21 @@ kind-dependent domain needed to interpret their representation. A checked constr
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
+The fixed relation semantics of every entity family are part of molecule integrity. No entity may
+contain the same actual atom more than once. This excludes localized and noncovalent self-loops,
+repeated dative donors or an acceptor also used as a donor, repeated aromatic and multicenter
+participants, repeated actual-atom stereo ligands, and a stereo-atom site reused as an actual-atom
+ligand. Stereo virtual ligands anchored at the same atom are ligand occurrences rather than repeated
+atom participants and remain valid.
+
+The same contract supplies the cross-entity uniqueness needed to interpret each relation family:
+localized bonds have unique unordered endpoint pairs; dative `(acceptor, donor)` incidences are
+unique; aromatic systems are atom-disjoint; multicenter participant sets are unique; noncovalent
+bonds have unique unordered endpoint pairs regardless of interaction kind; and stereo-atom and
+stereo-bond sites are unique within their families. These are not deferred semantic judgments. They
+define the stored relation represented by each entity family and are established whenever a
+`Molecule` is published.
+
 For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
 outside that kind's coset space are representation-integrity failures. The same applies to an
 explicit coset set or variable domain containing an out-of-range member and to an explicit frame
@@ -81,8 +96,9 @@ Representation integrity has one authoritative implementation in the crate that 
 is exposed as `check_integrity` with a corresponding `*IntegrityError`; there is no `*Checker`
 object. An integrity check returns `Result<(), *IntegrityError>`, never `Solution`,
 `Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
-collection shapes such as participant and electron-count lengths, and kind-dependent data needed to
-interpret a value such as stereo frame arity, coset domains, and permutation degree.
+collection shapes such as participant and electron-count lengths, fixed entity-relation semantics,
+and kind-dependent data needed to interpret a value such as stereo frame arity, coset domains, and
+permutation degree.
 
 Every path that publishes an aggregate IR value uses that same implementation:
 
@@ -161,6 +177,7 @@ type. For aggregate graph-IR values, these are representation invariants:
 - participant, site, ligand, anchor, and constraint references are resolvable;
 - correspondence pairs are in range and form a partial bijection;
 - parallel collections have the shape required by the representation;
+- entity relations satisfy their fixed participant and cross-entity uniqueness semantics;
 - a representation variant contains the data required to interpret that variant.
 
 Construction does not establish model-independent semantics merely because they can be checked

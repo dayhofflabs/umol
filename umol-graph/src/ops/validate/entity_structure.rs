@@ -7,11 +7,11 @@ use thiserror::Error;
 use umol_graph_ir::ir::{AtomId, BondId, Molecule};
 use umol_utils::solution::Solution;
 
-/// Structural shape checks on per-relation entities: per-relation participant
-/// well-formedness (no self-loops, no duplicate or role-conflicting
-/// participants), no same-type parallel relations, aromatic-system disjointness,
-/// distinct stereo sites. Cross-type parallelism (a localized and a dative bond on the same atom
-/// pair) is permitted. Parallel collection shape is representation integrity and is checked by
+/// Structural shape checks on per-relation entities: no self-loops, no duplicate or
+/// role-conflicting dative participants, no same-type parallel relations, aromatic-system
+/// disjointness, and distinct stereo sites. Cross-type parallelism (a localized and a dative bond
+/// on the same atom pair) is permitted. Parallel collection shape and duplicate aromatic or
+/// multicenter participants are representation integrity and are checked by
 /// `Molecule::check_integrity` before this validator runs.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EntityStructureInvariantsValidator;
@@ -37,12 +37,8 @@ pub enum EntityStructureInvariantsContradiction {
     NoncovalentBondSelfLoop { atom: AtomId },
     #[error("noncovalent bond: parallel bonds on atoms {atoms:?}")]
     NoncovalentBondsParallel { atoms: [AtomId; 2] },
-    #[error("aromatic system: participant {atom:?} duplicated")]
-    AromaticSystemDuplicateParticipant { atom: AtomId },
     #[error("aromatic systems: overlap on atom {atom:?}")]
     AromaticSystemsOverlap { atom: AtomId },
-    #[error("multicenter bond: participant {atom:?} duplicated")]
-    MulticenterBondDuplicateParticipant { atom: AtomId },
     #[error("multicenter bonds: identical participant set {atoms:?}")]
     MulticenterBondsIdentical { atoms: Vec<AtomId> },
     #[error("stereo atom: duplicate site {atom:?}")]
@@ -172,35 +168,28 @@ fn noncovalent_structure_check(
     None
 }
 
-/// Aromatic systems: participants distinct within a system and systems pairwise vertex-disjoint.
-/// The disjointness conflict is the per-entity `has_conflict` primitive; the detailed contradiction
-/// locates the offending atom.
+/// Aromatic systems are pairwise vertex-disjoint. Participant uniqueness within one system is
+/// representation integrity. The disjointness conflict is the per-entity `has_conflict` primitive;
+/// the detailed contradiction locates the offending atom.
 fn aromatic_structure_check(molecule: &Molecule) -> Option<EntityStructureInvariantsContradiction> {
     if molecule.aromatic_systems().has_conflict() {
         let mut global: HashSet<AtomId> = HashSet::new();
         for view in molecule.aromatic_systems().iter() {
-            let mut local: HashSet<AtomId> = HashSet::new();
             for atom in view.atom_ids() {
-                if !local.insert(atom) {
-                    return Some(
-                        EntityStructureInvariantsContradiction::AromaticSystemDuplicateParticipant { atom },
-                    );
-                }
-                if global.contains(&atom) {
+                if !global.insert(atom) {
                     return Some(
                         EntityStructureInvariantsContradiction::AromaticSystemsOverlap { atom },
                     );
                 }
             }
-            global.extend(local);
         }
     }
     None
 }
 
-/// Multicenter bonds: participants distinct within a bond, and no two bonds with an identical
-/// participant set (partial overlap allowed). The duplicate/identical conflict is the per-entity
-/// `has_conflict` primitive; the detailed contradiction locates the offender.
+/// No two multicenter bonds have an identical participant set; partial overlap is allowed.
+/// Participant uniqueness within one bond is representation integrity. The identical-set conflict
+/// is the per-entity `has_conflict` primitive; the detailed contradiction locates the offender.
 fn multicenter_structure_check(
     molecule: &Molecule,
 ) -> Option<EntityStructureInvariantsContradiction> {
@@ -208,14 +197,7 @@ fn multicenter_structure_check(
         let mut seen_sets: HashSet<BTreeSet<AtomId>> = HashSet::new();
         for view in molecule.multicenter_bonds().iter() {
             let atoms: Vec<AtomId> = view.atom_ids().collect();
-            let mut set: BTreeSet<AtomId> = BTreeSet::new();
-            for &atom in &atoms {
-                if !set.insert(atom) {
-                    return Some(
-                        EntityStructureInvariantsContradiction::MulticenterBondDuplicateParticipant { atom },
-                    );
-                }
-            }
+            let set: BTreeSet<AtomId> = atoms.iter().copied().collect();
             if !seen_sets.insert(set) {
                 return Some(
                     EntityStructureInvariantsContradiction::MulticenterBondsIdentical { atoms },
@@ -256,7 +238,7 @@ fn stereo_structure_check(molecule: &Molecule) -> Option<EntityStructureInvarian
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AtomId, BondId, Molecule};
+    use umol_graph_ir::ir::Molecule;
     use umol_graph_ir::mol_dsl;
 
     use super::*;
@@ -273,75 +255,6 @@ mod tests {
                 .validate(&molecule)
                 .unwrap(),
             Solution::Determined(())
-        );
-    }
-
-    #[rstest]
-    #[case::bond_self_loop(
-        mol_dsl!(r#"{:atoms ["C"] :bonds [[0 0 "1"]]}"#),
-        EntityStructureInvariantsContradiction::BondSelfLoop { atom: AtomId(0) }
-    )]
-    #[case::bonds_parallel(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"] [0 1 "1"]]}"#),
-        EntityStructureInvariantsContradiction::BondsParallel { atoms: [AtomId(0), AtomId(1)] }
-    )]
-    #[case::dative_acceptor_is_donor(
-        mol_dsl!(r#"{:atoms ["C"] :bonds [] :dative-bonds [{:donors [0] :acceptor 0 :attrs "1"}]}"#),
-        EntityStructureInvariantsContradiction::DativeBondAcceptorIsDonor { atom: AtomId(0) }
-    )]
-    #[case::dative_parallel(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1] :acceptor 0 :attrs "1"} {:donors [1] :acceptor 0 :attrs "1"}]}"#),
-        EntityStructureInvariantsContradiction::DativeBondsParallel { acceptor: AtomId(0), shared_donor: AtomId(1) }
-    )]
-    #[case::noncovalent_self_loop(
-        mol_dsl!(r#"{:atoms ["C"] :bonds [] :noncovalent-bonds [{:atoms [0 0] :attrs "Hbd"}]}"#),
-        EntityStructureInvariantsContradiction::NoncovalentBondSelfLoop { atom: AtomId(0) }
-    )]
-    #[case::noncovalent_parallel(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"} {:atoms [0 1] :attrs "Hbd"}]}"#),
-        EntityStructureInvariantsContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
-    )]
-    #[case::noncovalent_parallel_distinct_kinds(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"} {:atoms [0 1] :attrs "Vdw"}]}"#),
-        EntityStructureInvariantsContradiction::NoncovalentBondsParallel { atoms: [AtomId(0), AtomId(1)] }
-    )]
-    #[case::aromatic_duplicate_participant(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 1] :attrs "*"}]}"#),
-        EntityStructureInvariantsContradiction::AromaticSystemDuplicateParticipant { atom: AtomId(1) }
-    )]
-    #[case::aromatic_overlap(
-        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*"} {:atoms [1 2] :attrs "*"}]}"#),
-        EntityStructureInvariantsContradiction::AromaticSystemsOverlap { atom: AtomId(1) }
-    )]
-    #[case::multicenter_duplicate_participant(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 1] :attrs "*"}]}"#),
-        EntityStructureInvariantsContradiction::MulticenterBondDuplicateParticipant { atom: AtomId(1) }
-    )]
-    #[case::multicenter_identical(
-        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"} {:atoms [0 1 2] :attrs "*"}]}"#),
-        EntityStructureInvariantsContradiction::MulticenterBondsIdentical { atoms: vec![AtomId(0), AtomId(1), AtomId(2)] }
-    )]
-    #[case::stereo_atom_sites_duplicate(
-        mol_dsl!(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th*"} {:site 0 :ligands [1 2 3 4] :attrs "Th*"}]}"#),
-        EntityStructureInvariantsContradiction::StereoAtomSitesDuplicate { atom: AtomId(0) }
-    )]
-    #[case::stereo_bond_sites_duplicate(
-        mol_dsl!(r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 "2"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5] :attrs "Ct1"} {:site 0 :ligands [2 3 4 5] :attrs "Ct1"}]}"#),
-        EntityStructureInvariantsContradiction::StereoBondSitesDuplicate { bond: BondId(0) }
-    )]
-    #[case::dative_donor_duplicate(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :dative-bonds [{:donors [1 1] :acceptor 0 :attrs "1"}]}"#),
-        EntityStructureInvariantsContradiction::DativeBondDonorDuplicate { acceptor: AtomId(0), donor: AtomId(1) }
-    )]
-    fn test_entity_structure_validator_validate_error(
-        #[case] molecule: Molecule,
-        #[case] expected: EntityStructureInvariantsContradiction,
-    ) {
-        assert_eq!(
-            EntityStructureInvariantsValidator
-                .validate(&molecule)
-                .unwrap(),
-            Solution::Contradictory(expected)
         );
     }
 }
