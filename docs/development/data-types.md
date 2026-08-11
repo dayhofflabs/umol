@@ -509,7 +509,8 @@ therefore related operations with different codomains.
 A public end-to-end remapping operation on `Molecule` accepts a `MoleculeCorrespondence` that
 describes the complete old and new id spaces. The correspondence source counts must equal the
 molecule counts, and every component correspondence must be total on both sides. The operation
-returns `None` when these structural conditions do not hold.
+returns `None` when these structural conditions do not hold or when the source molecule fails its
+representation-integrity contract. The asserted route panics under either condition.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity forms, and every typed reference in constraints. It does not validate

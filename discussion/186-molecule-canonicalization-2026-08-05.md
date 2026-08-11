@@ -913,8 +913,8 @@ The operation has the following contract:
   and all references in constraints are transported together;
 - it performs no chemistry validation, resolution, attribute canonicalization, repair, compaction,
   or entity removal; and
-- failure of the correspondence to describe such a dense renumbering is ordinary absence and is
-  reported with `Option`.
+- failure of the source molecule's representation integrity or of the correspondence to describe
+  such a dense renumbering is reported with `Option`.
 
 The implementation coordinates `umol_graph_core::Remapping`, which owns topology and relation
 participant transport, with `IdRemapping`, which owns typed references across all eight entity
@@ -1081,10 +1081,11 @@ and the semantic properties validated by the corresponding property tests.
   `RelationData`/`BiRelationData` permutation behavior. This is breaking red-to-green.
   [dep: doc 176] **Done.**
 - **S3b — Dense molecule remapping.** Add public `Molecule::remap` and `try_remap` over a complete
-  `MoleculeCorrespondence`. The checked route returns `None` unless source counts agree and every
-  entity-family mapping is a bijection onto a dense target. Rebuild topology and every entity table
-  through graph-core remapping plus `IdRemapping`; transport all constraint references and reuse
-  relation payload permutation rather than reimplementing it. This is additive. [dep: S2a, S3a]
+  `MoleculeCorrespondence`. The checked route returns `None` when source counts differ, an
+  entity-family mapping is not a bijection onto a dense target, or the source molecule fails its
+  representation-integrity contract. Rebuild topology and every entity table through graph-core
+  remapping plus `IdRemapping`; transport all constraint references and reuse relation payload
+  permutation rather than reimplementing it. This is additive. [dep: S2a, S3a] **Done.**
 - **S3c — Remapping semantic properties.** Add generated crossing permutations over all eight entity
   families, position-sensitive aromatic and multicenter data, stereo frames, and reference-bearing
   constraints. Validate `equiv_under`, exact identity, inverse roundtrip, composition agreement, and

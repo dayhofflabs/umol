@@ -49,6 +49,7 @@ mod editor;
 mod fragment;
 mod integrity;
 mod pushout;
+mod remapping;
 pub mod spec;
 pub(super) mod transact;
 

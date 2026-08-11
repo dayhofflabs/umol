@@ -888,6 +888,100 @@ fn test_molecule_equiv_under_rejects_inconsistent_correspondence(
 }
 
 #[rstest]
+fn test_molecule_remap(
+    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+) {
+    let (left, right, correspondence) = case;
+
+    assert_eq!(left.remap(&correspondence), right);
+}
+
+#[rstest]
+#[case::partial_correspondence(|molecule: Molecule, correspondence: &MoleculeCorrespondence| {
+    let atoms = Correspondence::new(
+        correspondence.atoms().matched_pairs()[..3].to_vec(),
+        correspondence.atoms().left_count(),
+        correspondence.atoms().right_count(),
+    )
+    .expect("the subset remains a partial bijection");
+    (
+        molecule,
+        MoleculeCorrespondence::new(
+            atoms,
+            correspondence.bonds().clone(),
+            correspondence.dative_bonds().clone(),
+            correspondence.aromatic_systems().clone(),
+            correspondence.multicenter_bonds().clone(),
+            correspondence.noncovalent_bonds().clone(),
+            correspondence.stereo_atoms().clone(),
+            correspondence.stereo_bonds().clone(),
+        ),
+    )
+})]
+#[case::source_count(|molecule: Molecule, correspondence: &MoleculeCorrespondence| {
+    (
+        molecule,
+        MoleculeCorrespondence::new(
+            Correspondence::from_images(
+                &[AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+                5,
+            ),
+            correspondence.bonds().clone(),
+            correspondence.dative_bonds().clone(),
+            correspondence.aromatic_systems().clone(),
+            correspondence.multicenter_bonds().clone(),
+            correspondence.noncovalent_bonds().clone(),
+            correspondence.stereo_atoms().clone(),
+            correspondence.stereo_bonds().clone(),
+        ),
+    )
+})]
+#[case::source_integrity(|mut molecule: Molecule, correspondence: &MoleculeCorrespondence| {
+    molecule.constraints_mut().push(Constraint::Molecule(
+        MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(4)]),
+        },
+    ));
+    (molecule, correspondence.clone())
+})]
+fn test_molecule_try_remap_error(
+    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[case] prepare: fn(Molecule, &MoleculeCorrespondence) -> (Molecule, MoleculeCorrespondence),
+) {
+    let (left, _, correspondence) = case;
+    let (left, correspondence) = prepare(left, &correspondence);
+
+    assert_eq!(left.try_remap(&correspondence), None);
+}
+
+#[rstest]
+#[should_panic(
+    expected = "molecule remapping requires an integrity-valid source and a complete dense correspondence"
+)]
+fn test_molecule_remap_error(
+    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+) {
+    let (left, _, correspondence) = case;
+    let partial = MoleculeCorrespondence::new(
+        Correspondence::new(
+            correspondence.atoms().matched_pairs()[..3].to_vec(),
+            correspondence.atoms().left_count(),
+            correspondence.atoms().right_count(),
+        )
+        .expect("the subset remains a partial bijection"),
+        correspondence.bonds().clone(),
+        correspondence.dative_bonds().clone(),
+        correspondence.aromatic_systems().clone(),
+        correspondence.multicenter_bonds().clone(),
+        correspondence.noncovalent_bonds().clone(),
+        correspondence.stereo_atoms().clone(),
+        correspondence.stereo_bonds().clone(),
+    );
+
+    left.remap(&partial);
+}
+
+#[rstest]
 #[case::c_c(BondId(0), AtomId(0), AtomId(1), NumForm::Lit(1))]
 #[case::c_n(BondId(1), AtomId(1), AtomId(2), NumForm::Lit(2))]
 #[case::n_o(BondId(2), AtomId(2), AtomId(3), NumForm::Lit(1))]
