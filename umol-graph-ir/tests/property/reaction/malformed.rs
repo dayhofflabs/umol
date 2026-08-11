@@ -488,32 +488,32 @@ proptest! {
     })]
 
     #[test]
-    fn test_reaction_validate_application_entity_reference_error(
+    fn test_reaction_check_preconditions_entity_reference_error(
         (reaction, expected) in unavailable_entity_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_validate_application_participant_reference_error(
+    fn test_reaction_check_preconditions_participant_reference_error(
         (reaction, expected) in unavailable_participant_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_validate_application_incidence_error(
+    fn test_reaction_check_preconditions_incidence_error(
         (reaction, expected) in incompatible_incidence_strategy(),
     ) {
-        prop_assert_eq!(reaction.validate_application(&Molecule::default()), Err(expected));
+        prop_assert_eq!(reaction.check_preconditions(&Molecule::default()), Err(expected));
     }
 
     #[test]
-    fn test_reaction_validate_application_update_error(
+    fn test_reaction_check_preconditions_update_error(
         reaction in malformed_update_strategy(),
     ) {
         prop_assert_eq!(
-            reaction.validate_application(&Molecule::default()),
+            reaction.check_preconditions(&Molecule::default()),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
     }

@@ -2,10 +2,10 @@
 
 use thiserror::Error;
 
-use super::entity::Entity;
+use super::entity::{Entity, EntityKind};
 use super::id::AtomId;
 use super::molecule::transact::TransactionError;
-use super::validate::{DpoContradiction, EntityStructureContradiction};
+use super::validate::DpoContradiction;
 
 /// Unsatisfiable operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
@@ -58,15 +58,15 @@ pub enum ApplyPreconditionError {
     /// The reaction's delta sequence cannot be normalized.
     #[error("inconsistent reaction deltas")]
     InconsistentReaction,
-    /// The reaction left-hand side is structurally invalid.
-    #[error("invalid reaction lhs: {0}")]
-    ReactionStructure(EntityStructureContradiction),
+    /// The reaction left-hand side violates an entity-structure invariant required by application.
+    #[error("reaction lhs violates the application invariant for {kind}")]
+    ReactionStructureInvariant { kind: EntityKind },
     /// The reaction violates its rule-local DPO invariant.
     #[error("invalid reaction: {0}")]
     ReactionDpo(DpoContradiction),
-    /// The host molecule is structurally invalid.
-    #[error("invalid host: {0}")]
-    HostStructure(EntityStructureContradiction),
+    /// The host violates an entity-structure invariant required by application.
+    #[error("host violates the application invariant for {kind}")]
+    HostStructureInvariant { kind: EntityKind },
     /// A delta or molecule constraint references an entity unavailable on the reaction LHS or among
     /// the entities created by the reaction.
     #[error("reaction references unavailable entity {entity:?}")]

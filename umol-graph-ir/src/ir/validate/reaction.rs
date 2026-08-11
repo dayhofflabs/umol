@@ -59,7 +59,7 @@ impl ReactionIntegrityCheck {
         }
         for delta in deltas.iter() {
             match delta {
-                Delta::Atom(delta) => self.validate_atom(lhs, delta)?,
+                Delta::Atom(delta) => self.validate_atom(lhs, &created, delta)?,
                 Delta::Bond(delta) => self.validate_bond(lhs, &created, delta)?,
                 Delta::DativeBond(delta) => self.validate_dative(lhs, &created, delta)?,
                 Delta::AromaticSystem(delta) => self.validate_aromatic(lhs, &created, delta)?,
@@ -74,14 +74,6 @@ impl ReactionIntegrityCheck {
             }
         }
         Ok(())
-    }
-
-    fn require_lhs(&self, lhs: &Molecule, entity: Entity) -> Result<(), ReactionIntegrityError> {
-        if contains_entity(lhs, entity) {
-            Ok(())
-        } else {
-            Err(ReactionIntegrityError::InvalidReference { entity })
-        }
     }
 
     fn require_available(
@@ -116,13 +108,16 @@ impl ReactionIntegrityCheck {
     fn validate_atom(
         &self,
         lhs: &Molecule,
+        created: &HashSet<Entity>,
         delta: &AtomDelta,
     ) -> Result<(), ReactionIntegrityError> {
         match delta {
             AtomDelta::Add { .. } => Ok(()),
             AtomDelta::Remove { id, .. }
             | AtomDelta::ModifyField { id, .. }
-            | AtomDelta::ModifyConstraint { id, .. } => self.require_lhs(lhs, Entity::Atom(*id)),
+            | AtomDelta::ModifyConstraint { id, .. } => {
+                self.require_available(lhs, created, Entity::Atom(*id))
+            }
         }
     }
 
@@ -136,21 +131,19 @@ impl ReactionIntegrityCheck {
             BondDelta::Add { atoms, .. } => self.require_atoms(lhs, created, *atoms),
             BondDelta::Remove { id, atoms, .. } => {
                 let entity = Entity::Bond(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(lhs, created, *atoms)?;
-                let actual = lhs
-                    .bonds()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?
-                    .atom_ids();
-                if unordered_pair(actual) == unordered_pair(*atoms) {
+                if !lhs.bonds().contains(*id)
+                    || unordered_pair(lhs.bonds().get(*id).expect("checked lhs bond").atom_ids())
+                        == unordered_pair(*atoms)
+                {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
                 }
             }
             BondDelta::ModifyField { id, .. } | BondDelta::ModifyConstraint { id, .. } => {
-                self.require_lhs(lhs, Entity::Bond(*id))
+                self.require_available(lhs, created, Entity::Bond(*id))
             }
         }
     }
@@ -172,15 +165,16 @@ impl ReactionIntegrityCheck {
                 ..
             } => {
                 let entity = Entity::DativeBond(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(lhs, created, donors.iter().copied().chain([*acceptor]))?;
-                let view = lhs
-                    .dative_bonds()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
-                if view.acceptor_id() == *acceptor
-                    && unordered_ids(view.donor_ids()) == unordered_ids(donors.iter().copied())
-                {
+                if !lhs.dative_bonds().contains(*id) || {
+                    let view = lhs
+                        .dative_bonds()
+                        .get(*id)
+                        .expect("checked lhs dative bond");
+                    view.acceptor_id() == *acceptor
+                        && unordered_ids(view.donor_ids()) == unordered_ids(donors.iter().copied())
+                } {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -188,7 +182,7 @@ impl ReactionIntegrityCheck {
             }
             DativeBondDelta::ModifyField { id, .. }
             | DativeBondDelta::ModifyConstraint { id, .. } => {
-                self.require_lhs(lhs, Entity::DativeBond(*id))
+                self.require_available(lhs, created, Entity::DativeBond(*id))
             }
         }
     }
@@ -205,13 +199,16 @@ impl ReactionIntegrityCheck {
             }
             AromaticSystemDelta::Remove { id, atoms, .. } => {
                 let entity = Entity::AromaticSystem(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(lhs, created, atoms.iter().copied())?;
-                let view = lhs
-                    .aromatic_systems()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
-                if unordered_ids(view.atom_ids()) == unordered_ids(atoms.iter().copied()) {
+                if !lhs.aromatic_systems().contains(*id)
+                    || unordered_ids(
+                        lhs.aromatic_systems()
+                            .get(*id)
+                            .expect("checked lhs aromatic system")
+                            .atom_ids(),
+                    ) == unordered_ids(atoms.iter().copied())
+                {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -219,7 +216,7 @@ impl ReactionIntegrityCheck {
             }
             AromaticSystemDelta::ModifyField { id, .. }
             | AromaticSystemDelta::ModifyConstraint { id, .. } => {
-                self.require_lhs(lhs, Entity::AromaticSystem(*id))
+                self.require_available(lhs, created, Entity::AromaticSystem(*id))
             }
         }
     }
@@ -236,13 +233,16 @@ impl ReactionIntegrityCheck {
             }
             MulticenterBondDelta::Remove { id, atoms, .. } => {
                 let entity = Entity::MulticenterBond(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(lhs, created, atoms.iter().copied())?;
-                let view = lhs
-                    .multicenter_bonds()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
-                if unordered_ids(view.atom_ids()) == unordered_ids(atoms.iter().copied()) {
+                if !lhs.multicenter_bonds().contains(*id)
+                    || unordered_ids(
+                        lhs.multicenter_bonds()
+                            .get(*id)
+                            .expect("checked lhs multicenter bond")
+                            .atom_ids(),
+                    ) == unordered_ids(atoms.iter().copied())
+                {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -250,7 +250,7 @@ impl ReactionIntegrityCheck {
             }
             MulticenterBondDelta::ModifyField { id, .. }
             | MulticenterBondDelta::ModifyConstraint { id, .. } => {
-                self.require_lhs(lhs, Entity::MulticenterBond(*id))
+                self.require_available(lhs, created, Entity::MulticenterBond(*id))
             }
         }
     }
@@ -265,14 +265,16 @@ impl ReactionIntegrityCheck {
             NoncovalentBondDelta::Add { atoms, .. } => self.require_atoms(lhs, created, *atoms),
             NoncovalentBondDelta::Remove { id, atoms, .. } => {
                 let entity = Entity::NoncovalentBond(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(lhs, created, *atoms)?;
-                let actual = lhs
-                    .noncovalent_bonds()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?
-                    .atom_ids();
-                if unordered_pair(actual) == unordered_pair(*atoms) {
+                if !lhs.noncovalent_bonds().contains(*id)
+                    || unordered_pair(
+                        lhs.noncovalent_bonds()
+                            .get(*id)
+                            .expect("checked lhs noncovalent bond")
+                            .atom_ids(),
+                    ) == unordered_pair(*atoms)
+                {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -280,7 +282,7 @@ impl ReactionIntegrityCheck {
             }
             NoncovalentBondDelta::ModifyField { id, .. }
             | NoncovalentBondDelta::ModifyConstraint { id, .. } => {
-                self.require_lhs(lhs, Entity::NoncovalentBond(*id))
+                self.require_available(lhs, created, Entity::NoncovalentBond(*id))
             }
         }
     }
@@ -301,21 +303,23 @@ impl ReactionIntegrityCheck {
                 id, site, ligands, ..
             } => {
                 let entity = Entity::StereoAtom(*id);
-                self.require_lhs(lhs, entity)?;
+                self.require_available(lhs, created, entity)?;
                 self.require_atoms(
                     lhs,
                     created,
                     iter::once(*site).chain(ligands.iter().map(|l| l.atom_id)),
                 )?;
-                let view = lhs
-                    .stereo_atoms()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
-                let actual: Vec<StereoLigand> = view
-                    .ligands()
-                    .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
-                    .collect();
-                if view.site_id() == *site && actual == *ligands {
+                if !lhs.stereo_atoms().contains(*id) || {
+                    let view = lhs
+                        .stereo_atoms()
+                        .get(*id)
+                        .expect("checked lhs stereo atom");
+                    let actual: Vec<StereoLigand> = view
+                        .ligands()
+                        .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
+                        .collect();
+                    view.site_id() == *site && actual == *ligands
+                } {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -325,7 +329,9 @@ impl ReactionIntegrityCheck {
             | StereoAtomDelta::ModifyConstraint { id, .. }
             | StereoAtomDelta::Apply { id, .. }
             | StereoAtomDelta::Swap { id, .. }
-            | StereoAtomDelta::Mirror { id, .. } => self.require_lhs(lhs, Entity::StereoAtom(*id)),
+            | StereoAtomDelta::Mirror { id, .. } => {
+                self.require_available(lhs, created, Entity::StereoAtom(*id))
+            }
         }
     }
 
@@ -344,18 +350,20 @@ impl ReactionIntegrityCheck {
                 id, site, ligands, ..
             } => {
                 let entity = Entity::StereoBond(*id);
-                self.require_lhs(lhs, entity)?;
-                self.require_lhs(lhs, Entity::Bond(*site))?;
+                self.require_available(lhs, created, entity)?;
+                self.require_available(lhs, created, Entity::Bond(*site))?;
                 self.require_atoms(lhs, created, ligands.iter().map(|l| l.atom_id))?;
-                let view = lhs
-                    .stereo_bonds()
-                    .get(*id)
-                    .ok_or(ReactionIntegrityError::InvalidReference { entity })?;
-                let actual: Vec<StereoLigand> = view
-                    .ligands()
-                    .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
-                    .collect();
-                if view.site_id() == *site && actual == *ligands {
+                if !lhs.stereo_bonds().contains(*id) || {
+                    let view = lhs
+                        .stereo_bonds()
+                        .get(*id)
+                        .expect("checked lhs stereo bond");
+                    let actual: Vec<StereoLigand> = view
+                        .ligands()
+                        .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
+                        .collect();
+                    view.site_id() == *site && actual == *ligands
+                } {
                     Ok(())
                 } else {
                     Err(Self::incidence_mismatch(entity))
@@ -365,7 +373,9 @@ impl ReactionIntegrityCheck {
             | StereoBondDelta::ModifyConstraint { id, .. }
             | StereoBondDelta::Apply { id, .. }
             | StereoBondDelta::Swap { id, .. }
-            | StereoBondDelta::Mirror { id, .. } => self.require_lhs(lhs, Entity::StereoBond(*id)),
+            | StereoBondDelta::Mirror { id, .. } => {
+                self.require_available(lhs, created, Entity::StereoBond(*id))
+            }
         }
     }
 

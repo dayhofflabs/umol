@@ -29,7 +29,7 @@ fn populated_molecule_dsl() -> MoleculeDsl {
         :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
         :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
         :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-        :stereo-bonds [{:id :sb :site 0 :ligands [2 3] :attrs "Ct1"}]
+        :stereo-bonds [{:id :sb :site 0 :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
         :atom-aliases [:x "O"]
     }"#
     .parse()
@@ -240,8 +240,8 @@ fn test_molecule_dsl_edn_roundtrip_with_keywords_and_aliases() {
 #[case::stereo_atom_section(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::stereo_atom_id_field_and_keyword_attrs(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :attrs :ccw}]}"##)]
 #[case::stereo_atom_virtual_ligand(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:h 0]] :attrs "Th1"}]}"##)]
-#[case::stereo_bond_section(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"##)]
-#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :attrs "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :attrs :e}]}"##)]
+#[case::stereo_bond_section(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :attrs "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 [:h 1] 3 [:h 2]] :attrs :e}]}"##)]
 #[case::atom_aliases(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##)]
 #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"##)]
 #[case::constraints_bond_order_sum(r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :atoms [0 1] :attrs "1"} {:id :b2 :atoms [1 2] :attrs "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##)]
@@ -295,7 +295,7 @@ fn test_molecule_dsl_edn_roundtrip_with_keywords_and_aliases() {
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1#f(0,1,2)#g/"}]}"##)]
 #[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :invariant false}}]]}]}"##)]
 #[case::stereo_atom_fluxionality_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:fluxionality {:permutation [[0 1 2]]}}]]}]}"##)]
-#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}] :constraints [{:stereo-bond [0 [:cis-trans {:topicity {:pair [0 1] :relation :diastereotopic}}]]}]}"##)]
+#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}] :constraints [{:stereo-bond [0 [:cis-trans {:topicity {:pair [0 1] :relation :diastereotopic}}]]}]}"##)]
 fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
     let via_str = MoleculeDsl::from_edn_str(source).unwrap();
     let tree = read_string(source).unwrap();
@@ -307,12 +307,12 @@ fn test_molecule_dsl_from_edn_str_from_edn_parity(#[case] source: &str) {
 #[rstest]
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::stereo_atom_id_field_virtual_ligands(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 [:lp 0] [:h 0]] :attrs "Th1"}]}"##)]
-#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :attrs "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :attrs "Ct1"}]}"##)]
-#[case::stereo_bond_id_field(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :sb1 :site 1 :ligands [0 3] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond_keyword_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :atoms [1 2] :attrs "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond_id_field(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :sb1 :site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1#f(0,1,2)#g/"}]}"##)]
 #[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}] :constraints [{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}]}"##)]
-#[case::stereo_bond_inline_constraints(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1#g/"}]}"##)]
-#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}] :constraints [{:stereo-bond [0 [:cis-trans {:stereogenicity {:relation :stereogenic}}]]}]}"##)]
+#[case::stereo_bond_inline_constraints(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1#g/"}]}"##)]
+#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}] :constraints [{:stereo-bond [0 [:cis-trans {:stereogenicity {:relation :stereogenic}}]]}]}"##)]
 fn test_molecule_dsl_stereo_edn_roundtrip(#[case] source: &str) {
     let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
     let reparsed = MoleculeDsl::from_edn(&dsl.to_edn()).unwrap();
@@ -372,7 +372,7 @@ fn test_molecule_dsl_from_str_error() {
 #[case::multicenter(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "*"}]}"##)]
 #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"##)]
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
-#[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
 fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip_zeroed(#[case] source: &str) {
     let molecule = mol_dsl!(source);
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
@@ -578,7 +578,7 @@ fn test_molecule_dsl_edn_roundtrip_bond_keyword_shorthands(#[case] source: &str)
 #[case::atom_out_of_range_site(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 99 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::atom_unknown_ligand(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [:nope 2 3 4] :attrs "Th1"}]}"##)]
 #[case::atom_out_of_range_ligand(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [99 2 3 4] :attrs "Th1"}]}"##)]
-#[case::bond_unknown_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site :nope :ligands [0 3] :attrs "Ct1"}]}"##)]
+#[case::bond_unknown_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site :nope :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
 #[case::bond_out_of_range_ligand(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [99 3] :attrs "Ct1"}]}"##)]
 fn test_molecule_dsl_stereo_ref_errors(#[case] source: &str) {
     let edn = read_string(source).unwrap();
@@ -641,9 +641,9 @@ fn test_molecule_dsl_attrs_required_streaming(#[case] source: &str) {
 #[case::stereo_atom_missing_site(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::stereo_atom_missing_ligands(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :attrs "Th1"}]}"##)]
 #[case::stereo_atom_missing_attrs(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4]}]}"##)]
-#[case::stereo_bond_missing_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:ligands [0 3] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond_missing_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
 #[case::stereo_bond_missing_ligands(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :attrs "Ct1"}]}"##)]
-#[case::stereo_bond_missing_attrs(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3]}]}"##)]
+#[case::stereo_bond_missing_attrs(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]]}]}"##)]
 fn test_molecule_dsl_required_field_missing_tree(#[case] source: &str) {
     let edn = read_string(source).unwrap();
     let err = MoleculeDsl::from_edn(&edn).unwrap_err();
@@ -665,9 +665,9 @@ fn test_molecule_dsl_required_field_missing_tree(#[case] source: &str) {
 #[case::stereo_atom_missing_site(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::stereo_atom_missing_ligands(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :attrs "Th1"}]}"##)]
 #[case::stereo_atom_missing_attrs(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4]}]}"##)]
-#[case::stereo_bond_missing_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:ligands [0 3] :attrs "Ct1"}]}"##)]
+#[case::stereo_bond_missing_site(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
 #[case::stereo_bond_missing_ligands(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :attrs "Ct1"}]}"##)]
-#[case::stereo_bond_missing_attrs(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3]}]}"##)]
+#[case::stereo_bond_missing_attrs(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]]}]}"##)]
 fn test_molecule_dsl_required_field_missing_streaming(#[case] source: &str) {
     let err = MoleculeDsl::from_edn_str(source).unwrap_err();
     let de = match err {

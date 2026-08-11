@@ -1,25 +1,7 @@
-//! Tier-1 (data-integrity) and tier-2 (invariant) validators for molecules and reactions.
-//!  
-//! - [`entity`] (data-integrity): structural shape checks on molecules.
-//! - [`constraint`] (data-integrity): cross-entity / molecule-scope constraint evaluation.
-//! - [`dpo`] (invariant): DPO reaction invariant (dangling-freedom).
+//! Transitional reaction checks retained by graph-IR operations.
 
-pub mod connectivity;
-pub mod constraint;
 pub mod dpo;
-pub mod entity;
 pub mod reaction;
 
-pub use connectivity::{
-    ConnectivityContradiction, ConnectivityError, ConnectivityModel, ConnectivityValidator,
-};
-pub use constraint::{
-    ConstraintContradiction, ConstraintError, ConstraintValidateConfig, ConstraintValidator,
-    IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    MoleculeConstraintContradiction, MoleculeConstraintValidator,
-    RelationalConstraintContradiction, RelationalConstraintValidator, RingConstraintContradiction,
-    RingConstraintValidator,
-};
-pub use dpo::{DpoContradiction, DpoError, DpoValidator};
-pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
+pub use dpo::{check_reaction_dpo, DpoContradiction};
 pub use reaction::ReactionIntegrityError;

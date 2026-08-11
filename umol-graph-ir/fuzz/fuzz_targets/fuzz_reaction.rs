@@ -20,7 +20,7 @@ fuzz_target!(|data: &str| {
 
     if let Some(dsl) = stream {
         let reaction = dsl.into_ir(&ReactionDefaults::default());
-        let _ = reaction.validate_application(&reaction.lhs);
+        let _ = reaction.check_preconditions(&reaction.lhs);
         if let Ok(applications) = reaction.apply(
             &reaction.lhs,
             SubstructureMatchConfig {

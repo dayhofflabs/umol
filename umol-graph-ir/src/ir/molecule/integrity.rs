@@ -32,8 +32,6 @@ pub enum MoleculeIntegrityError {
     },
     #[error("{entity}: stereo kind {kind:?} is not permitted for this entity family")]
     StereoKindNotPermitted { entity: Entity, kind: StereoKind },
-    #[error("{entity}: stereo kind is required to interpret positional constraints")]
-    StereoKindRequired { entity: Entity },
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
     StereoLigandArity {
         entity: Entity,
@@ -49,11 +47,10 @@ pub enum MoleculeIntegrityError {
         count: usize,
     },
     #[error(
-        "{entity}: permutation has degree {actual}, expected {expected} for stereo kind {kind:?}"
+        "{entity}: permutation has degree {actual}, expected {expected} for the stored ligand frame"
     )]
     StereoPermutationDegree {
         entity: Entity,
-        kind: StereoKind,
         expected: usize,
         actual: usize,
     },
@@ -201,7 +198,7 @@ fn check_stereo_atom(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    let kind = check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
+    check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
         matches!(
             kind,
             StereoKind::Tetrahedral
@@ -212,16 +209,14 @@ fn check_stereo_atom(
     })?;
     for constraint in attributes.constraints.iter() {
         match constraint {
-            StereoAtomConstraintForm::LigandSymmetry(value) => check_permutation(
-                entity,
-                kind_required(entity, kind)?,
-                value.permutation.permutation.0,
-            )?,
+            StereoAtomConstraintForm::LigandSymmetry(value) => {
+                check_permutation(entity, ligand_count, value.permutation.permutation.0)?
+            }
             StereoAtomConstraintForm::Fluxionality(value) => {
-                check_permutation(entity, kind_required(entity, kind)?, value.permutation.0)?
+                check_permutation(entity, ligand_count, value.permutation.0)?
             }
             StereoAtomConstraintForm::Topicity(value) => {
-                check_pair(entity, kind_required(entity, kind)?, value.pair)?
+                check_pair(entity, ligand_count, value.pair)?
             }
             StereoAtomConstraintForm::Stereogenicity(_) => {}
         }
@@ -234,21 +229,19 @@ fn check_stereo_bond(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    let kind = check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
+    check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
         kind == StereoKind::CisTrans
     })?;
     for constraint in attributes.constraints.iter() {
         match constraint {
-            StereoBondConstraintForm::LigandSymmetry(value) => check_permutation(
-                entity,
-                kind_required(entity, kind)?,
-                value.permutation.permutation.0,
-            )?,
+            StereoBondConstraintForm::LigandSymmetry(value) => {
+                check_permutation(entity, ligand_count, value.permutation.permutation.0)?
+            }
             StereoBondConstraintForm::Fluxionality(value) => {
-                check_permutation(entity, kind_required(entity, kind)?, value.permutation.0)?
+                check_permutation(entity, ligand_count, value.permutation.0)?
             }
             StereoBondConstraintForm::Topicity(value) => {
-                check_pair(entity, kind_required(entity, kind)?, value.pair)?
+                check_pair(entity, ligand_count, value.pair)?
             }
             StereoBondConstraintForm::Stereogenicity(_) => {}
         }
@@ -261,9 +254,9 @@ fn check_configuration(
     ligand_count: usize,
     configuration: &StereoConfigurationForm,
     permitted: impl FnOnce(StereoKind) -> bool,
-) -> Result<Option<StereoKind>, MoleculeIntegrityError> {
+) -> Result<(), MoleculeIntegrityError> {
     let StereoConfigurationForm::Kinded(kind, coset) = configuration else {
-        return Ok(None);
+        return Ok(());
     };
     if !permitted(*kind) {
         return Err(MoleculeIntegrityError::StereoKindNotPermitted {
@@ -280,7 +273,7 @@ fn check_configuration(
         });
     }
     check_coset(entity, *kind, coset)?;
-    Ok(Some(*kind))
+    Ok(())
 }
 
 fn check_coset(
@@ -324,7 +317,7 @@ fn check_term(
         }
         StereoTerm::Swap(inner) | StereoTerm::Mirror(inner) => check_term(entity, kind, inner),
         StereoTerm::Apply(inner, permutation) => {
-            check_permutation(entity, kind, *permutation)?;
+            check_permutation(entity, kind.degree(), *permutation)?;
             check_term(entity, kind, inner)
         }
     }
@@ -347,23 +340,15 @@ fn check_coset_index(
     }
 }
 
-fn kind_required(
-    entity: Entity,
-    kind: Option<StereoKind>,
-) -> Result<StereoKind, MoleculeIntegrityError> {
-    kind.ok_or(MoleculeIntegrityError::StereoKindRequired { entity })
-}
-
 fn check_permutation(
     entity: Entity,
-    kind: StereoKind,
+    expected: usize,
     permutation: Permutation,
 ) -> Result<(), MoleculeIntegrityError> {
-    if permutation.degree() != kind.degree() {
+    if permutation.degree() != expected {
         Err(MoleculeIntegrityError::StereoPermutationDegree {
             entity,
-            kind,
-            expected: kind.degree(),
+            expected,
             actual: permutation.degree(),
         })
     } else {
@@ -373,15 +358,15 @@ fn check_permutation(
 
 fn check_pair(
     entity: Entity,
-    kind: StereoKind,
+    degree: usize,
     pair: StereoLigandPair,
 ) -> Result<(), MoleculeIntegrityError> {
     for position in [pair.first(), pair.second()] {
-        if position.index() >= kind.degree() {
+        if position.index() >= degree {
             return Err(MoleculeIntegrityError::StereoLigandPositionOutOfRange {
                 entity,
                 position: position.index(),
-                degree: kind.degree(),
+                degree,
             });
         }
     }

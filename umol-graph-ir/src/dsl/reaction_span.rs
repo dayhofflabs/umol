@@ -1703,7 +1703,7 @@ mod tests {
             :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
             :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
             :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-            :stereo-bonds [{:id :sb :site :b :ligands [2 3] :attrs "Ct1"}]
+            :stereo-bonds [{:id :sb :site :b :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
             :atom-aliases [:x "O"]
         }"#
         .parse()
@@ -2068,19 +2068,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(r#"{:site 1 :ligands [0 3] :attrs "Ct1"}"#, (
+    #[case::unchanged(r#"{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}"#, (
         None, BondRef::Index(1),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandRef { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(1) },
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(2) },
         ],
         EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0),
     ))]
-    #[case::remove(r#"{:remove {:site 1 :ligands [0 3] :attrs "Ct1"}}"#, (
+    #[case::remove(r#"{:remove {:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}}"#, (
         None, BondRef::Index(1),
         vec![
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(0) },
+            StereoLigandRef { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(1) },
             StereoLigandRef { kind: StereoLigandKind::Atom, atom: AtomRef::Index(3) },
+            StereoLigandRef { kind: StereoLigandKind::ImplicitHydrogen, atom: AtomRef::Index(2) },
         ],
         EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0),
     ))]
@@ -2281,7 +2285,7 @@ mod tests {
         "s",
     )]
     #[case::stereo_bond(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s :site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s :site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#,
         Entity::StereoBond(StereoBondId(0)),
         "s",
     )]
@@ -2335,19 +2339,19 @@ mod tests {
     #[case::side_local_bond_mismatch(
         r#"{:atoms ["C" {:add "O"}] :bonds [[0 1 :single]]}"#,
         ParseError::InvalidValue(
-            "reaction span entries reference unavailable atom 1".to_string()
+            "reaction span lhs is not a valid molecule representation: molecule references unavailable atom 1".to_string()
         ),
     )]
     #[case::side_local_dative_mismatch(
         r#"{:atoms ["C" {:add "N"}] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         ParseError::InvalidValue(
-            "reaction span entries reference unavailable atom 1".to_string()
+            "reaction span lhs is not a valid molecule representation: molecule references unavailable atom 1".to_string()
         ),
     )]
     #[case::side_local_stereo_bond_mismatch(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#,
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:add [1 2 "2"]} [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#,
         ParseError::InvalidValue(
-            "reaction span entries reference unavailable bond 2".to_string()
+            "reaction span lhs is not a valid molecule representation: molecule references unavailable bond 2".to_string()
         ),
     )]
     fn test_span_input_into_ir_error(#[case] input: &str, #[case] expected: ParseError) {
@@ -2601,13 +2605,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unchanged(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:site 1 :ligands [0 3] :attrs :e}"#)]
-    #[case::remove(EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:site 1 :ligands [0 3] :attrs :e}}"#)]
+    #[case::unchanged(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs :e}"#)]
+    #[case::remove(EntitySpan::Removed(StereoBondDsl::from_str("Ct1").unwrap().0), MoleculeMetadata::new(), r#"{:remove {:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs :e}}"#)]
     #[case::with_id(EntitySpan::Unchanged(StereoBondDsl::from_str("Ct1").unwrap().0), {
         let mut metadata = MoleculeMetadata::new();
         metadata.set_keyword(Entity::StereoBond(StereoBondId(0)), "sb1").unwrap();
         metadata
-    }, r#"{:id :sb1 :site 1 :ligands [0 3] :attrs :e}"#)]
+    }, r#"{:id :sb1 :site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs :e}"#)]
     fn test_render_stereo_bond_span_entry(
         #[case] span: EntitySpan<StereoBondForm>,
         #[case] meta: MoleculeMetadata,
@@ -2615,7 +2619,9 @@ mod tests {
     ) {
         let ligands = vec![
             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
         ];
         assert_eq!(
             render_stereo_bond_span_entry(StereoBondId(0), BondId(1), &ligands, &span, &meta),
@@ -2647,7 +2653,7 @@ mod tests {
         r#"{:atoms ["N" "H"] :noncovalent-bonds [{:remove {:id :n1 :atoms [0 1] :attrs "Hbd"}}]}"#
     )]
     #[case::stereo_atom_keyword(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#)]
-    #[case::stereo_bond_keyword(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s1 :site 1 :ligands [0 3] :attrs "Ct1"}]}"#)]
+    #[case::stereo_bond_keyword(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :s1 :site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#)]
     fn test_reaction_span_dsl_to_edn(#[case] input: &str) {
         let dsl = ReactionSpanDsl::from_str(input).unwrap();
         assert_eq!(ReactionSpanDsl::from_edn(&dsl.to_edn()).unwrap(), dsl);
@@ -2666,7 +2672,7 @@ mod tests {
     )]
     #[case::noncovalent(r#"{:atoms ["N" "H"] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"#)]
     #[case::stereo_atom(r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#)]
-    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :attrs "Ct1"}]}"#)]
+    #[case::stereo_bond(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#)]
     fn test_reaction_span_to_edn(#[case] input: &str) {
         let span = ReactionSpan::from_str(input).unwrap();
         assert_eq!(ReactionSpan::from_edn(&span.to_edn()).unwrap(), span);

@@ -290,6 +290,8 @@ mod tests {
                     vec![
                         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 ),
@@ -298,6 +300,8 @@ mod tests {
                     vec![
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                     ],
                     StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
                 ),
@@ -307,6 +311,8 @@ mod tests {
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],

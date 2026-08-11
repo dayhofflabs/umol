@@ -7,7 +7,6 @@ use umol_graph_core::{
     SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
-use umol_utils::solution::Solution;
 
 use crate::strategies::*;
 
@@ -233,20 +232,15 @@ proptest! {
         }
     }
 
-    /// Every composite is DPO-valid — no deleted atom leaves a dangling bond or overlay. Confirms
-    /// the compose during-check yields dangling-free composites (via the tier-2 `DpoValidator`).
+    /// Every composite materializes a two-sided reaction span, so no deleted atom leaves a
+    /// surviving bond or overlay dangling in the product projection.
     #[test]
     fn test_reaction_compose_dangling_free(
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
         for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
-            prop_assert_eq!(
-                DpoValidator
-                    .validate_reaction(&composite.lhs, &composite.deltas)
-                    .unwrap(),
-                Solution::Determined(())
-            );
+            prop_assert!(composite.to_reaction_span().is_ok());
         }
     }
 

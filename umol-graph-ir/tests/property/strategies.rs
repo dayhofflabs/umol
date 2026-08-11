@@ -34,10 +34,10 @@ pub(crate) use umol_graph_ir::ir::{
     BondFieldChange, BondForm, BondHandle, BondId, BondUpdate, BooleanForm, CisTransStereoForm,
     Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm, DativeBondConstraintKey,
     DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange, DativeBondForm,
-    DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, DpoValidator, Edit, Edits,
+    DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
     ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, Equiv, FluxionalityForm,
     FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryForm, MemOp,
-    Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
+    Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MoleculeIntegrityError,
     MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
     MulticenterBondDelta, MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondHandle,
     MulticenterBondId, MulticenterBondUpdate, MulticenterValenceForm,
@@ -2869,23 +2869,31 @@ impl InvalidTransactionBatch {
             .collect();
         let stereo_atoms = (0..self.count)
             .map(|index| {
+                let site = AtomId((index * 2) as u32);
+                let other = AtomId((index * 2 + 1) as u32);
                 (
-                    AtomId((index * 2) as u32),
-                    vec![StereoLigand::new(
-                        AtomId((index * 2 + 1) as u32),
-                        StereoLigandKind::Atom,
-                    )],
+                    site,
+                    vec![
+                        StereoLigand::new(other, StereoLigandKind::Atom),
+                        StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(site, StereoLigandKind::LonePair),
+                        StereoLigand::new(other, StereoLigandKind::ImplicitHydrogen),
+                    ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )
             })
             .collect();
         let stereo_bonds = (0..self.count)
             .map(|index| {
+                let first = AtomId((index * 2) as u32);
+                let second = AtomId((index * 2 + 1) as u32);
                 (
                     BondId(index as u32),
                     vec![
-                        StereoLigand::new(AtomId((index * 2) as u32), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId((index * 2 + 1) as u32), StereoLigandKind::Atom),
+                        StereoLigand::new(first, StereoLigandKind::Atom),
+                        StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(second, StereoLigandKind::Atom),
+                        StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
                     ],
                     StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 )
@@ -3005,6 +3013,8 @@ impl InvalidTransactionBatch {
             EntityKind::StereoAtom => Edit::RemoveStereoAtoms {
                 removes: (0..self.count)
                     .map(|position| {
+                        let site = AtomId((position * 2) as u32);
+                        let other = AtomId((position * 2 + 1) as u32);
                         (
                             StereoAtomHandle::Id(StereoAtomId(
                                 if position == self.invalid_position {
@@ -3013,11 +3023,13 @@ impl InvalidTransactionBatch {
                                     position as u32
                                 },
                             )),
-                            AtomHandle::Id(AtomId((position * 2) as u32)),
-                            vec![(
-                                AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
-                                StereoLigandKind::Atom,
-                            )],
+                            AtomHandle::Id(site),
+                            vec![
+                                (AtomHandle::Id(other), StereoLigandKind::Atom),
+                                (AtomHandle::Id(site), StereoLigandKind::ImplicitHydrogen),
+                                (AtomHandle::Id(site), StereoLigandKind::LonePair),
+                                (AtomHandle::Id(other), StereoLigandKind::ImplicitHydrogen),
+                            ],
                             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                         )
                     })
@@ -3026,6 +3038,8 @@ impl InvalidTransactionBatch {
             EntityKind::StereoBond => Edit::RemoveStereoBonds {
                 removes: (0..self.count)
                     .map(|position| {
+                        let first = AtomId((position * 2) as u32);
+                        let second = AtomId((position * 2 + 1) as u32);
                         (
                             StereoBondHandle::Id(StereoBondId(
                                 if position == self.invalid_position {
@@ -3036,14 +3050,10 @@ impl InvalidTransactionBatch {
                             )),
                             BondHandle::Id(BondId(position as u32)),
                             vec![
-                                (
-                                    AtomHandle::Id(AtomId((position * 2) as u32)),
-                                    StereoLigandKind::Atom,
-                                ),
-                                (
-                                    AtomHandle::Id(AtomId((position * 2 + 1) as u32)),
-                                    StereoLigandKind::Atom,
-                                ),
+                                (AtomHandle::Id(first), StereoLigandKind::Atom),
+                                (AtomHandle::Id(first), StereoLigandKind::ImplicitHydrogen),
+                                (AtomHandle::Id(second), StereoLigandKind::Atom),
+                                (AtomHandle::Id(second), StereoLigandKind::ImplicitHydrogen),
                             ],
                             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                         )
@@ -3710,7 +3720,12 @@ fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
         .map(|[a, b]| {
             (
                 AtomId(*a),
-                vec![StereoLigand::new(AtomId(*b), StereoLigandKind::Atom)],
+                vec![
+                    StereoLigand::new(AtomId(*b), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(*a), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(*a), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(*b), StereoLigandKind::ImplicitHydrogen),
+                ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )
         })
@@ -3723,7 +3738,9 @@ fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
                 BondId(index as u32),
                 vec![
                     StereoLigand::new(AtomId(*a), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(*a), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(*b), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(*b), StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )
@@ -3840,7 +3857,18 @@ impl ConstraintCompactionCase {
                 removes: vec![(
                     StereoAtomHandle::Id(StereoAtomId(0)),
                     AtomHandle::Id(AtomId(0)),
-                    vec![(AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom)],
+                    vec![
+                        (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            StereoLigandKind::ImplicitHydrogen,
+                        ),
+                        (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            StereoLigandKind::ImplicitHydrogen,
+                        ),
+                    ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )],
             },
@@ -3850,7 +3878,15 @@ impl ConstraintCompactionCase {
                     BondHandle::Id(BondId(0)),
                     vec![
                         (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                        (
+                            AtomHandle::Id(AtomId(0)),
+                            StereoLigandKind::ImplicitHydrogen,
+                        ),
                         (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                        (
+                            AtomHandle::Id(AtomId(1)),
+                            StereoLigandKind::ImplicitHydrogen,
+                        ),
                     ],
                     StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 )],
@@ -4743,7 +4779,8 @@ fn build_reaction(
         }));
     }
     // A removed atom also takes its incident stereo entities (site OR ligand incidence), else
-    // apply / span / DpoValidator dangle. `incident_ids` covers both.
+    // apply and span materialization would otherwise leave dangling references. `incident_ids`
+    // covers both site and ligand incidence.
     let mut removed_stereo_atom: HashSet<StereoAtomId> = HashSet::new();
     let mut removed_stereo_bond: HashSet<StereoBondId> = HashSet::new();
     for &id in &removed_atoms {

@@ -1114,20 +1114,6 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_view_ligands(molecule: Molecule) {
-        let empty = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-            )],
-            ..Default::default()
-        });
-        assert_exact_size_by(
-            empty.stereo_atom(StereoAtomId(0)).ligands(),
-            vec![],
-            |ligand| (ligand.kind(), ligand.atom_id()),
-        );
         assert_exact_size_by(
             molecule.stereo_atom(StereoAtomId(0)).ligands(),
             vec![
@@ -1572,24 +1558,6 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_view_ligands(molecule: Molecule) {
-        let empty = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
-            ],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
-            stereo_bonds: vec![(
-                BondId(0),
-                vec![],
-                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
-            )],
-            ..Default::default()
-        });
-        assert_exact_size_by(
-            empty.stereo_bond(StereoBondId(0)).ligands(),
-            vec![],
-            |ligand| (ligand.kind(), ligand.atom_id()),
-        );
         assert_exact_size_by(
             molecule.stereo_bond(StereoBondId(0)).ligands(),
             vec![

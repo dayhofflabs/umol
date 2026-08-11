@@ -84,11 +84,11 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_symmetry_malformed_coset_is_not_stereogenic(
+    fn test_molecule_try_from_entries_rejects_stereo_coset_out_of_range(
         elements in prop::collection::vec(element_strategy(), 4),
         coset in 2u32..=32,
     ) {
-        let molecule = Molecule::from_entries(MoleculeEntries {
+        let result = Molecule::try_from_entries(MoleculeEntries {
             atoms: iter::once(AtomForm::from_element(Element::C))
                 .chain(elements.into_iter().map(AtomForm::from_element))
                 .collect(),
@@ -104,15 +104,16 @@ proptest! {
             )],
             ..Default::default()
         });
-        let graph = molecule.graph_symmetry(&GraphSymmetryConfig {
-            coloring: ConstitutionColoring::full(),
-            iterate_to_fixpoint: true,
-            max_iterations: 16,
-            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
-        });
-        let symmetry = molecule.stereo_atom_symmetry(&graph, StereoAtomId(0));
 
-        prop_assert!(!symmetry.is_stereogenic());
+        prop_assert_eq!(
+            result,
+            Err(MoleculeIntegrityError::StereoCosetOutOfRange {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                kind: StereoKind::Tetrahedral,
+                coset,
+                count: 2,
+            }),
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! Tier-2 (invariant) DPO validator: a reaction's deletions must be dangling-free, that is
+//! Reaction-application DPO check: a reaction's deletions must be dangling-free, that is
 //! deleting an atom must also delete every bond and overlay incident to it.
 //! Operates on the permissive `Reaction`. A reaction span establishes dangling-free projected
 //! sides as a construction invariant.
@@ -7,7 +7,6 @@ use std::collections::HashSet;
 use std::hash::Hash;
 
 use thiserror::Error;
-use umol_utils::solution::Solution;
 
 use super::super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, DativeBondDelta, Delta, Deltas,
@@ -17,10 +16,6 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::molecule::Molecule;
-
-/// Checks the DPO dangling invariant: a deleted atom leaves no incident bond or overlay.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct DpoValidator;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum DpoContradiction {
@@ -45,90 +40,66 @@ pub enum DpoContradiction {
     },
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum DpoError {}
+/// Check that every lhs bond or overlay incident to a deleted atom is also deleted.
+pub fn check_reaction_dpo(lhs: &Molecule, deltas: &Deltas) -> Result<(), DpoContradiction> {
+    let removed_atoms = removed(deltas, |d| match d {
+        Delta::Atom(AtomDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
+    let removed_bonds = removed(deltas, |d| match d {
+        Delta::Bond(BondDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
+    let removed_dative = removed(deltas, |d| match d {
+        Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
+    let removed_aromatic = removed(deltas, |d| match d {
+        Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
+    let removed_multicenter = removed(deltas, |d| match d {
+        Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
+    let removed_noncovalent = removed(deltas, |d| match d {
+        Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => Some(*id),
+        _ => None,
+    });
 
-impl DpoValidator {
-    /// Over a `Reaction`: every lhs bond/overlay incident to a deleted atom must also be deleted.
-    /// Over a reaction's LHS and deltas: every LHS bond or overlay incident to a deleted atom must
-    /// also be deleted.
-    pub fn validate_reaction(
-        &self,
-        lhs: &Molecule,
-        deltas: &Deltas,
-    ) -> Result<Solution<(), DpoContradiction>, DpoError> {
-        let removed_atoms = removed(deltas, |d| match d {
-            Delta::Atom(AtomDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-        let removed_bonds = removed(deltas, |d| match d {
-            Delta::Bond(BondDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-        let removed_dative = removed(deltas, |d| match d {
-            Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-        let removed_aromatic = removed(deltas, |d| match d {
-            Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-        let removed_multicenter = removed(deltas, |d| match d {
-            Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-        let removed_noncovalent = removed(deltas, |d| match d {
-            Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => Some(*id),
-            _ => None,
-        });
-
-        for &atom in &removed_atoms {
-            let view = lhs.atom(atom);
-            for bond in view.bond_ids() {
-                if !removed_bonds.contains(&bond) {
-                    return contradiction(DpoContradiction::DanglingBond { atom, bond });
-                }
-            }
-            for dative in view.dative_bond_ids() {
-                if !removed_dative.contains(&dative) {
-                    return contradiction(DpoContradiction::DanglingDativeBond { atom, dative });
-                }
-            }
-            if let Some(system) = view.aromatic_system_id() {
-                if !removed_aromatic.contains(&system) {
-                    return contradiction(DpoContradiction::DanglingAromaticSystem {
-                        atom,
-                        system,
-                    });
-                }
-            }
-            for multicenter in view.multicenter_bond_ids() {
-                if !removed_multicenter.contains(&multicenter) {
-                    return contradiction(DpoContradiction::DanglingMulticenterBond {
-                        atom,
-                        multicenter,
-                    });
-                }
-            }
-            for noncovalent in view.noncovalent_bond_ids() {
-                if !removed_noncovalent.contains(&noncovalent) {
-                    return contradiction(DpoContradiction::DanglingNoncovalentBond {
-                        atom,
-                        noncovalent,
-                    });
-                }
+    for &atom in &removed_atoms {
+        let view = lhs.atom(atom);
+        for bond in view.bond_ids() {
+            if !removed_bonds.contains(&bond) {
+                return Err(DpoContradiction::DanglingBond { atom, bond });
             }
         }
-        Ok(Solution::Determined(()))
+        for dative in view.dative_bond_ids() {
+            if !removed_dative.contains(&dative) {
+                return Err(DpoContradiction::DanglingDativeBond { atom, dative });
+            }
+        }
+        if let Some(system) = view.aromatic_system_id() {
+            if !removed_aromatic.contains(&system) {
+                return Err(DpoContradiction::DanglingAromaticSystem { atom, system });
+            }
+        }
+        for multicenter in view.multicenter_bond_ids() {
+            if !removed_multicenter.contains(&multicenter) {
+                return Err(DpoContradiction::DanglingMulticenterBond { atom, multicenter });
+            }
+        }
+        for noncovalent in view.noncovalent_bond_ids() {
+            if !removed_noncovalent.contains(&noncovalent) {
+                return Err(DpoContradiction::DanglingNoncovalentBond { atom, noncovalent });
+            }
+        }
     }
+    Ok(())
 }
 
 fn removed<I: Eq + Hash>(deltas: &Deltas, extract: impl Fn(&Delta) -> Option<I>) -> HashSet<I> {
     deltas.iter().filter_map(extract).collect()
-}
-
-fn contradiction(c: DpoContradiction) -> Result<Solution<(), DpoContradiction>, DpoError> {
-    Ok(Solution::Contradictory(c))
 }
 
 #[cfg(test)]
@@ -186,13 +157,8 @@ mod tests {
             attributes: AtomForm::from_element(Element::C),
         })]),
     ))]
-    fn test_dpo_validator_validate_reaction(#[case] reaction: Reaction) {
-        assert_eq!(
-            DpoValidator
-                .validate_reaction(&reaction.lhs, &reaction.deltas)
-                .unwrap(),
-            Solution::Determined(())
-        );
+    fn test_check_reaction_dpo(#[case] reaction: Reaction) {
+        assert_eq!(check_reaction_dpo(&reaction.lhs, &reaction.deltas), Ok(()));
     }
 
     #[rstest]
@@ -274,15 +240,13 @@ mod tests {
         ),
         DpoContradiction::DanglingNoncovalentBond { atom: AtomId(0), noncovalent: NoncovalentBondId(0) }
     )]
-    fn test_dpo_validator_validate_reaction_error(
+    fn test_check_reaction_dpo_error(
         #[case] reaction: Reaction,
         #[case] expected: DpoContradiction,
     ) {
         assert_eq!(
-            DpoValidator
-                .validate_reaction(&reaction.lhs, &reaction.deltas)
-                .unwrap(),
-            Solution::Contradictory(expected)
+            check_reaction_dpo(&reaction.lhs, &reaction.deltas),
+            Err(expected)
         );
     }
 }

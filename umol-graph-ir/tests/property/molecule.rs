@@ -29,5 +29,3 @@ mod ring;
 mod serialization;
 #[path = "molecule/structure.rs"]
 mod structure;
-#[path = "molecule/validation.rs"]
-mod validation;

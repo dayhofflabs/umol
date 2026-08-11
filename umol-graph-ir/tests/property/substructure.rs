@@ -6,10 +6,7 @@ use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 use umol_graph_ir::ir::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-use umol_graph_ir::ir::{
-    AtomId, EntityStructureValidator, Molecule, SubstructureMatchAlgorithm, SubstructureMatchConfig,
-};
-use umol_utils::solution::Solution;
+use umol_graph_ir::ir::{AtomId, Molecule, SubstructureMatchAlgorithm, SubstructureMatchConfig};
 
 use crate::strategies::molecule_strategy;
 
@@ -25,14 +22,16 @@ const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
 ];
 const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
-/// Cross-strategy / cross-algorithm agreement is asserted only for structurally
-/// well-formed molecules; the generator may emit tier-1-invalid ones (e.g. parallel
-/// relations) on which the strategies legitimately differ.
-fn is_well_formed(molecule: &Molecule) -> bool {
-    !matches!(
-        EntityStructureValidator.validate(molecule).unwrap(),
-        Solution::Contradictory(_)
-    )
+/// Cross-strategy / cross-algorithm agreement is asserted only when every entity family satisfies
+/// the uniqueness assumptions shared by the matching implementations.
+fn has_no_entity_conflicts(molecule: &Molecule) -> bool {
+    !molecule.bonds().has_conflict()
+        && !molecule.dative_bonds().has_conflict()
+        && !molecule.aromatic_systems().has_conflict()
+        && !molecule.multicenter_bonds().has_conflict()
+        && !molecule.noncovalent_bonds().has_conflict()
+        && !molecule.stereo_atoms().has_conflict()
+        && !molecule.stereo_bonds().has_conflict()
 }
 
 fn sorted_matches(
@@ -66,8 +65,8 @@ fn sorted_matches(
 proptest! {
     #[test]
     fn test_substructure_cross_validation(
-        host in molecule_strategy().prop_filter("well-formed", is_well_formed),
-        pattern in molecule_strategy().prop_filter("well-formed", is_well_formed),
+        host in molecule_strategy().prop_filter("no entity conflicts", has_no_entity_conflicts),
+        pattern in molecule_strategy().prop_filter("no entity conflicts", has_no_entity_conflicts),
     ) {
         let reference = sorted_matches(&pattern, &host, GraphAndOverlays, Vf2);
         for strategy in STRATEGIES {
@@ -84,7 +83,7 @@ proptest! {
     #[test]
     fn test_substructure_cross_validation_planted(
         (host, subset) in molecule_strategy()
-            .prop_filter("well-formed", is_well_formed)
+            .prop_filter("no entity conflicts", has_no_entity_conflicts)
             .prop_filter("non-empty", |m| m.atoms().count() > 0)
             .prop_flat_map(|m| {
                 let n = m.atoms().count();
