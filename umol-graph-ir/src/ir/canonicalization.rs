@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, EdgeId, Graph, NodeId,
-    SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, EdgeId, FactorOrdering, Graph,
+    NodeId, ParticipantPosition, SubdivisionNodeSource, Unordered,
 };
 use umol_perm::Permutation;
 
@@ -14,7 +14,8 @@ use super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::bond::BondForm;
 use super::constraint::{
     Constraint, FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
-    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, TopicityForm,
+    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
+    StereoBondConstraintsForm, StereoLigandPair, TopicityForm,
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::electrons::ElectronCountsForm;
@@ -25,14 +26,14 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
-use super::ligand::StereoLigandKind;
+use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
 use super::reaction_span::ReactionSpanIntegrityError;
 use super::spin::UnpairedElectronsForm;
-use super::stereo::StereoKind;
+use super::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
 use super::traits::Normalize;
 use super::validate::ReactionIntegrityError;
 
@@ -1796,6 +1797,113 @@ fn correspondence_from_order(
 }
 
 #[allow(dead_code)]
+fn apply_position_order<T: Clone>(values: &[T], order: &[ParticipantPosition]) -> Option<Vec<T>> {
+    if values.len() != order.len() {
+        return None;
+    }
+    let mut seen = vec![false; order.len()];
+    let mut reordered = Vec::with_capacity(order.len());
+    for position in order {
+        let index = position.index();
+        if index >= order.len() || seen[index] {
+            return None;
+        }
+        seen[index] = true;
+        reordered.push(values[index].clone());
+    }
+    Some(reordered)
+}
+
+#[allow(dead_code)]
+fn inverse_position_order(order: &[ParticipantPosition]) -> Option<Vec<ParticipantPosition>> {
+    let mut inverse = vec![ParticipantPosition(0); order.len()];
+    let mut seen = vec![false; order.len()];
+    for (new, old) in order.iter().enumerate() {
+        let old = old.index();
+        if old >= order.len() || seen[old] {
+            return None;
+        }
+        seen[old] = true;
+        inverse[old] = ParticipantPosition(new as u32);
+    }
+    Some(inverse)
+}
+
+#[allow(dead_code)]
+fn permutation_from_position_order(order: &[ParticipantPosition]) -> Option<Permutation> {
+    let image = order
+        .iter()
+        .map(|position| position.index())
+        .collect::<Vec<_>>();
+    Permutation::try_from(image.as_slice()).ok()
+}
+
+#[allow(dead_code)]
+fn position_order_from_permutation(permutation: Permutation) -> Vec<ParticipantPosition> {
+    (0..permutation.degree())
+        .map(|position| ParticipantPosition(permutation.apply(position) as u32))
+        .collect()
+}
+
+/// Sort a structural ligand multiset and return the position order carrying the original frame
+/// into the sorted frame. Equal occurrences retain their input order; their exchange remains a
+/// structural automorphism rather than becoming an arbitrary tie-break here.
+#[allow(dead_code)]
+fn sort_ligand_frame(ligands: &[StereoLigand]) -> (Vec<StereoLigand>, Vec<ParticipantPosition>) {
+    let mut sorted = ligands.to_vec();
+    let order = Unordered::canonicalize_positions(&mut sorted);
+    (sorted, order)
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MinimumStereoFrames {
+    configuration: StereoConfigurationForm,
+    permutations: Vec<Permutation>,
+}
+
+/// Find every realizable kinded frame action that carries `before` to `after`, retaining all
+/// actions whose normalized configuration is minimal. Retaining ties is essential: constraints
+/// do not select the structural frame and are considered only by the later constraint-placement
+/// search.
+#[allow(dead_code)]
+fn minimum_kinded_stereo_frames(
+    configuration: &StereoConfigurationForm,
+    before: &[StereoLigand],
+    after: &[StereoLigand],
+) -> Result<Option<MinimumStereoFrames>, Contradiction> {
+    let Some(kind) = configuration.kind() else {
+        return Ok(None);
+    };
+    if before.len() != kind.degree() || after.len() != kind.degree() {
+        return Ok(None);
+    }
+
+    let mut minimum: Option<StereoConfigurationForm> = None;
+    let mut permutations = Vec::new();
+    for permutation in Permutation::between_all(before, after)
+        .into_iter()
+        .filter(|permutation| kind.class_key().space().reindex(0, *permutation).is_some())
+    {
+        let candidate = configuration.apply(permutation).normalize()?;
+        match minimum.as_ref().map(|value| candidate.cmp(value)) {
+            None | Some(Ordering::Less) => {
+                minimum = Some(candidate);
+                permutations.clear();
+                permutations.push(permutation);
+            }
+            Some(Ordering::Equal) => permutations.push(permutation),
+            Some(Ordering::Greater) => {}
+        }
+    }
+
+    Ok(minimum.map(|configuration| MinimumStereoFrames {
+        configuration,
+        permutations,
+    }))
+}
+
+#[allow(dead_code)]
 fn reframe_ligand_permutation(
     permutation: LigandPermutation,
     frame: Permutation,
@@ -1804,27 +1912,39 @@ fn reframe_ligand_permutation(
 }
 
 #[allow(dead_code)]
-fn reframe_stereo_ligand_pair(pair: StereoLigandPair, frame: Permutation) -> StereoLigandPair {
-    let inverse = frame.inverse();
-    StereoLigandPair::new(
-        inverse.apply(pair.first().index()).into(),
-        inverse.apply(pair.second().index()).into(),
-    )
+fn reframe_ligand_permutation_by_order(
+    permutation: LigandPermutation,
+    order: &[ParticipantPosition],
+) -> Option<LigandPermutation> {
+    let frame = permutation_from_position_order(order)?;
+    (permutation.0.degree() == frame.degree())
+        .then(|| reframe_ligand_permutation(permutation, frame))
 }
 
 #[allow(dead_code)]
-fn reframe_stereo_atom_constraint(
+fn reframe_stereo_ligand_pair_by_order(
+    pair: StereoLigandPair,
+    inverse: &[ParticipantPosition],
+) -> Option<StereoLigandPair> {
+    let first = inverse.get(pair.first().index())?.index();
+    let second = inverse.get(pair.second().index())?.index();
+    Some(StereoLigandPair::new(first.into(), second.into()))
+}
+
+#[allow(dead_code)]
+fn reframe_stereo_atom_constraint_by_order(
     constraint: StereoAtomConstraintForm,
-    frame: Permutation,
-) -> StereoAtomConstraintForm {
-    match constraint {
+    order: &[ParticipantPosition],
+    inverse: &[ParticipantPosition],
+) -> Option<StereoAtomConstraintForm> {
+    Some(match constraint {
         StereoAtomConstraintForm::LigandSymmetry(symmetry) => {
             StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                 permutation: OrientedLigandPermutation {
-                    permutation: reframe_ligand_permutation(
+                    permutation: reframe_ligand_permutation_by_order(
                         symmetry.permutation.permutation,
-                        frame,
-                    ),
+                        order,
+                    )?,
                     orientation: symmetry.permutation.orientation,
                 },
                 invariant: symmetry.invariant,
@@ -1832,35 +1952,36 @@ fn reframe_stereo_atom_constraint(
         }
         StereoAtomConstraintForm::Fluxionality(fluxionality) => {
             StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: reframe_ligand_permutation(fluxionality.permutation, frame),
+                permutation: reframe_ligand_permutation_by_order(fluxionality.permutation, order)?,
                 active: fluxionality.active,
             })
         }
         StereoAtomConstraintForm::Topicity(topicity) => {
             StereoAtomConstraintForm::Topicity(TopicityForm {
-                pair: reframe_stereo_ligand_pair(topicity.pair, frame),
+                pair: reframe_stereo_ligand_pair_by_order(topicity.pair, inverse)?,
                 relation: topicity.relation,
             })
         }
         StereoAtomConstraintForm::Stereogenicity(stereogenicity) => {
             StereoAtomConstraintForm::Stereogenicity(stereogenicity)
         }
-    }
+    })
 }
 
 #[allow(dead_code)]
-fn reframe_stereo_bond_constraint(
+fn reframe_stereo_bond_constraint_by_order(
     constraint: StereoBondConstraintForm,
-    frame: Permutation,
-) -> StereoBondConstraintForm {
-    match constraint {
+    order: &[ParticipantPosition],
+    inverse: &[ParticipantPosition],
+) -> Option<StereoBondConstraintForm> {
+    Some(match constraint {
         StereoBondConstraintForm::LigandSymmetry(symmetry) => {
             StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
                 permutation: OrientedLigandPermutation {
-                    permutation: reframe_ligand_permutation(
+                    permutation: reframe_ligand_permutation_by_order(
                         symmetry.permutation.permutation,
-                        frame,
-                    ),
+                        order,
+                    )?,
                     orientation: symmetry.permutation.orientation,
                 },
                 invariant: symmetry.invariant,
@@ -1868,54 +1989,117 @@ fn reframe_stereo_bond_constraint(
         }
         StereoBondConstraintForm::Fluxionality(fluxionality) => {
             StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-                permutation: reframe_ligand_permutation(fluxionality.permutation, frame),
+                permutation: reframe_ligand_permutation_by_order(fluxionality.permutation, order)?,
                 active: fluxionality.active,
             })
         }
         StereoBondConstraintForm::Topicity(topicity) => {
             StereoBondConstraintForm::Topicity(TopicityForm {
-                pair: reframe_stereo_ligand_pair(topicity.pair, frame),
+                pair: reframe_stereo_ligand_pair_by_order(topicity.pair, inverse)?,
                 relation: topicity.relation,
             })
         }
         StereoBondConstraintForm::Stereogenicity(stereogenicity) => {
             StereoBondConstraintForm::Stereogenicity(stereogenicity)
         }
-    }
+    })
 }
 
 #[allow(dead_code)]
-fn reframe_molecule_constraint(
+fn reframe_stereo_atom_form_by_order(
+    form: &StereoAtomForm,
+    order: &[ParticipantPosition],
+) -> Option<StereoAtomForm> {
+    let inverse = inverse_position_order(order)?;
+    let configuration = match &form.configuration {
+        StereoConfigurationForm::Undetermined => StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Kinded(kind, _) => {
+            let frame = permutation_from_position_order(order)?;
+            kind.class_key().space().reindex(0, frame)?;
+            form.configuration.apply(frame)
+        }
+    };
+    let mut constraints = StereoAtomConstraintsForm::default();
+    for constraint in form.constraints.iter().cloned() {
+        constraints.set(reframe_stereo_atom_constraint_by_order(
+            constraint, order, &inverse,
+        )?);
+    }
+    Some(StereoAtomForm {
+        configuration,
+        constraints,
+    })
+}
+
+#[allow(dead_code)]
+fn reframe_stereo_bond_form_by_order(
+    form: &StereoBondForm,
+    order: &[ParticipantPosition],
+) -> Option<StereoBondForm> {
+    let inverse = inverse_position_order(order)?;
+    let configuration = match &form.configuration {
+        StereoConfigurationForm::Undetermined => StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::Kinded(kind, _) => {
+            let frame = permutation_from_position_order(order)?;
+            kind.class_key().space().reindex(0, frame)?;
+            form.configuration.apply(frame)
+        }
+    };
+    let mut constraints = StereoBondConstraintsForm::default();
+    for constraint in form.constraints.iter().cloned() {
+        constraints.set(reframe_stereo_bond_constraint_by_order(
+            constraint, order, &inverse,
+        )?);
+    }
+    Some(StereoBondForm {
+        configuration,
+        constraints,
+    })
+}
+
+#[allow(dead_code)]
+fn reframe_molecule_constraint_by_order(
     constraint: Constraint,
     entity: Entity,
-    frame: Permutation,
-) -> Constraint {
-    match constraint {
+    order: &[ParticipantPosition],
+    inverse: &[ParticipantPosition],
+) -> Option<Constraint> {
+    Some(match constraint {
         Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
-            Constraint::StereoAtom(id, kind, reframe_stereo_atom_constraint(constraint, frame))
+            Constraint::StereoAtom(
+                id,
+                kind,
+                reframe_stereo_atom_constraint_by_order(constraint, order, inverse)?,
+            )
         }
         Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
-            Constraint::StereoBond(id, kind, reframe_stereo_bond_constraint(constraint, frame))
+            Constraint::StereoBond(
+                id,
+                kind,
+                reframe_stereo_bond_constraint_by_order(constraint, order, inverse)?,
+            )
         }
         Constraint::And(constraints) => Constraint::And(
             constraints
                 .into_iter()
-                .map(|constraint| reframe_molecule_constraint(constraint, entity, frame))
-                .collect(),
+                .map(|constraint| {
+                    reframe_molecule_constraint_by_order(constraint, entity, order, inverse)
+                })
+                .collect::<Option<Vec<_>>>()?,
         ),
         Constraint::Or(constraints) => Constraint::Or(
             constraints
                 .into_iter()
-                .map(|constraint| reframe_molecule_constraint(constraint, entity, frame))
-                .collect(),
+                .map(|constraint| {
+                    reframe_molecule_constraint_by_order(constraint, entity, order, inverse)
+                })
+                .collect::<Option<Vec<_>>>()?,
         ),
-        Constraint::Not(constraint) => Constraint::Not(Box::new(reframe_molecule_constraint(
-            *constraint,
-            entity,
-            frame,
-        ))),
+        Constraint::Not(constraint) => Constraint::Not(Box::new(
+            reframe_molecule_constraint_by_order(*constraint, entity, order, inverse)?,
+        )),
         constraint => constraint,
-    }
+    })
 }
 
 #[allow(dead_code)]
@@ -1991,38 +2175,68 @@ fn molecule_entries(molecule: &Molecule) -> MoleculeEntries {
 
 #[allow(dead_code)]
 fn reframe_stereo_atom(molecule: &Molecule, id: StereoAtomId, frame: Permutation) -> Molecule {
+    reframe_stereo_atom_by_order(molecule, id, &position_order_from_permutation(frame))
+        .expect("canonicalization generates a valid stereo-atom frame action")
+}
+
+#[allow(dead_code)]
+fn reframe_stereo_atom_by_order(
+    molecule: &Molecule,
+    id: StereoAtomId,
+    order: &[ParticipantPosition],
+) -> Option<Molecule> {
     let mut entries = molecule_entries(molecule);
     let (_, ligands, attributes) = &mut entries.stereo_atoms[id.index()];
-    let before = ligands.clone();
-    let after = frame.act(ligands);
-    *attributes = attributes
-        .transform_frame(&before, &after)
-        .expect("canonicalization generates a valid stereo-atom frame action");
-    *ligands = after;
+    *attributes = reframe_stereo_atom_form_by_order(attributes, order)?;
+    *ligands = apply_position_order(ligands, order)?;
+    let inverse = inverse_position_order(order)?;
     entries.constraints = entries
         .constraints
         .into_iter()
-        .map(|constraint| reframe_molecule_constraint(constraint, Entity::StereoAtom(id), frame))
-        .collect();
-    Molecule::from_entries(entries)
+        .map(|constraint| {
+            reframe_molecule_constraint_by_order(
+                constraint,
+                Entity::StereoAtom(id),
+                order,
+                &inverse,
+            )
+        })
+        .collect::<Option<Vec<_>>>()?
+        .into();
+    Some(Molecule::from_entries(entries))
 }
 
 #[allow(dead_code)]
 fn reframe_stereo_bond(molecule: &Molecule, id: StereoBondId, frame: Permutation) -> Molecule {
+    reframe_stereo_bond_by_order(molecule, id, &position_order_from_permutation(frame))
+        .expect("canonicalization generates a valid stereo-bond frame action")
+}
+
+#[allow(dead_code)]
+fn reframe_stereo_bond_by_order(
+    molecule: &Molecule,
+    id: StereoBondId,
+    order: &[ParticipantPosition],
+) -> Option<Molecule> {
     let mut entries = molecule_entries(molecule);
     let (_, ligands, attributes) = &mut entries.stereo_bonds[id.index()];
-    let before = ligands.clone();
-    let after = frame.act(ligands);
-    *attributes = attributes
-        .transform_frame(&before, &after)
-        .expect("canonicalization generates a valid stereo-bond frame action");
-    *ligands = after;
+    *attributes = reframe_stereo_bond_form_by_order(attributes, order)?;
+    *ligands = apply_position_order(ligands, order)?;
+    let inverse = inverse_position_order(order)?;
     entries.constraints = entries
         .constraints
         .into_iter()
-        .map(|constraint| reframe_molecule_constraint(constraint, Entity::StereoBond(id), frame))
-        .collect();
-    Molecule::from_entries(entries)
+        .map(|constraint| {
+            reframe_molecule_constraint_by_order(
+                constraint,
+                Entity::StereoBond(id),
+                order,
+                &inverse,
+            )
+        })
+        .collect::<Option<Vec<_>>>()?
+        .into();
+    Some(Molecule::from_entries(entries))
 }
 
 #[allow(dead_code)]
@@ -2272,7 +2486,7 @@ mod tests {
         NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation,
         StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
         StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-        StereoLigand, StereoLigandPair, StereogenicityForm, Topicity, TopicityForm,
+        StereoLigand, StereoLigandPair, StereoTerm, StereogenicityForm, Topicity, TopicityForm,
         TopicityRelationForm,
     };
 
@@ -2660,6 +2874,150 @@ mod tests {
         assert_eq!(
             reframe_stereo_bond(&reframed, StereoBondId(0), next_frame),
             reframe_stereo_bond(&source, StereoBondId(0), frame.compose(next_frame))
+        );
+    }
+
+    #[rstest]
+    #[case::literal(
+        StereoCoset::Lit(0),
+        StereoCoset::Lit(0),
+        vec![Permutation::from_image(&[1, 2, 0, 3])]
+    )]
+    #[case::undetermined(
+        StereoCoset::Undetermined,
+        StereoCoset::Undetermined,
+        vec![
+            Permutation::from_image(&[1, 2, 0, 3]),
+            Permutation::from_image(&[2, 1, 0, 3]),
+        ]
+    )]
+    #[case::set_valued(
+        StereoCoset::lit_set([0, 1]),
+        StereoCoset::lit_set([0, 1]),
+        vec![
+            Permutation::from_image(&[1, 2, 0, 3]),
+            Permutation::from_image(&[2, 1, 0, 3]),
+        ]
+    )]
+    #[case::symbolic(
+        StereoCoset::term(StereoTerm::var("x")),
+        StereoCoset::term(StereoTerm::var("x")),
+        vec![Permutation::from_image(&[1, 2, 0, 3])]
+    )]
+    fn test_minimum_kinded_stereo_frames(
+        #[case] coset: StereoCoset,
+        #[case] expected_coset: StereoCoset,
+        #[case] expected_permutations: Vec<Permutation>,
+    ) {
+        let repeated = StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+        let before = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            repeated,
+            repeated,
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        ];
+        let (after, _) = sort_ligand_frame(&before);
+        let result = minimum_kinded_stereo_frames(
+            &StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset),
+            &before,
+            &after,
+        )
+        .expect("fixed configurations normalize")
+        .expect("the frames contain the same ligand multiset");
+
+        assert_eq!(
+            result,
+            MinimumStereoFrames {
+                configuration: StereoConfigurationForm::kinded(
+                    StereoKind::Tetrahedral,
+                    expected_coset,
+                ),
+                permutations: expected_permutations,
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_kindless_stereo_atom_frame_order() {
+        let ligands = (0..7)
+            .rev()
+            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+        let (sorted, order) = sort_ligand_frame(&ligands);
+        let source = StereoAtomForm {
+            configuration: StereoConfigurationForm::Undetermined,
+            constraints: StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+            })
+            .into(),
+        };
+        let expected = StereoAtomForm {
+            configuration: StereoConfigurationForm::Undetermined,
+            constraints: StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(4usize.into(), 6usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+            })
+            .into(),
+        };
+
+        assert_eq!(
+            sorted,
+            (0..7)
+                .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            reframe_stereo_atom_form_by_order(&source, &order),
+            Some(expected)
+        );
+    }
+
+    #[rstest]
+    fn test_kindless_stereo_bond_frame_order() {
+        let ligands = (0..4)
+            .rev()
+            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+        let (_, order) = sort_ligand_frame(&ligands);
+        let source = StereoBondForm {
+            configuration: StereoConfigurationForm::Undetermined,
+            constraints: vec![
+                StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                    permutation: OrientedLigandPermutation {
+                        permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+                        orientation: Orientation::Proper,
+                    },
+                    invariant: BooleanForm::Lit(true),
+                }),
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            ]
+            .into(),
+        };
+        let expected = StereoBondForm {
+            configuration: StereoConfigurationForm::Undetermined,
+            constraints: vec![
+                StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+                    permutation: OrientedLigandPermutation {
+                        permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])),
+                        orientation: Orientation::Proper,
+                    },
+                    invariant: BooleanForm::Lit(true),
+                }),
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(2usize.into(), 3usize.into()),
+                    relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+                }),
+            ]
+            .into(),
+        };
+
+        assert_eq!(
+            reframe_stereo_bond_form_by_order(&source, &order),
+            Some(expected)
         );
     }
 

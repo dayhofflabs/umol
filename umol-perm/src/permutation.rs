@@ -110,9 +110,11 @@ impl Permutation {
         }
     }
 
-    /// The τ that relabels `from` into `to`: `act(τ, from) == to`.
-    /// Returns `None` unless both slices are orderings of the same set. Panics
-    /// when their common length exceeds the fixed representation maximum.
+    /// The unique τ that relabels `from` into `to`: `act(τ, from) == to`.
+    /// Returns `None` unless exactly one such permutation exists. Repeated equal
+    /// values therefore return `None` when their occurrences can be exchanged;
+    /// use [`Self::between_all`] to retain those alternatives. Panics when the
+    /// common length exceeds the fixed representation maximum.
     pub fn between<T: Eq>(from: &[T], to: &[T]) -> Option<Self> {
         if from.len() != to.len() {
             return None;
@@ -130,6 +132,48 @@ impl Permutation {
             image[i] = pos;
         }
         Some(Self::from_image(&image))
+    }
+
+    /// Every τ that relabels `from` into `to`: `act(τ, from) == to`.
+    ///
+    /// Equal repeated values may produce several permutations because their
+    /// occurrences are interchangeable. Returns an empty vector when the slices
+    /// have different lengths or are not orderings of the same multiset. Panics
+    /// when their common length exceeds the fixed representation maximum.
+    pub fn between_all<T: Eq>(from: &[T], to: &[T]) -> Vec<Self> {
+        if from.len() != to.len() {
+            return Vec::new();
+        }
+        let degree = from.len();
+        assert!(degree <= MAX_DEGREE);
+        let mut image = vec![0usize; degree];
+        let mut used = [false; MAX_DEGREE];
+        let mut permutations = Vec::new();
+
+        fn visit<T: Eq>(
+            from: &[T],
+            to: &[T],
+            position: usize,
+            image: &mut [usize],
+            used: &mut [bool; MAX_DEGREE],
+            permutations: &mut Vec<Permutation>,
+        ) {
+            if position == to.len() {
+                permutations.push(Permutation::from_image(image));
+                return;
+            }
+            for source_position in 0..from.len() {
+                if !used[source_position] && from[source_position] == to[position] {
+                    used[source_position] = true;
+                    image[position] = source_position;
+                    visit(from, to, position + 1, image, used, permutations);
+                    used[source_position] = false;
+                }
+            }
+        }
+
+        visit(from, to, 0, &mut image, &mut used, &mut permutations);
+        permutations
     }
 
     /// Lehmer rank in `0..degree!` — the internal canonical numbering.
@@ -370,9 +414,34 @@ mod tests {
     }
 
     #[rstest]
+    #[case::distinct(
+        &['a', 'b', 'c'],
+        &['c', 'a', 'b'],
+        vec![Permutation::from_image(&[2, 0, 1])]
+    )]
+    #[case::repeated(
+        &['a', 'a', 'b'],
+        &['b', 'a', 'a'],
+        vec![
+            Permutation::from_image(&[2, 0, 1]),
+            Permutation::from_image(&[2, 1, 0]),
+        ]
+    )]
+    #[case::membership(&['a', 'b'], &['a', 'c'], vec![])]
+    #[case::length(&['a', 'b'], &['a'], vec![])]
+    fn test_permutation_between_all(
+        #[case] from: &[char],
+        #[case] to: &[char],
+        #[case] expected: Vec<Permutation>,
+    ) {
+        assert_eq!(Permutation::between_all(from, to), expected);
+    }
+
+    #[rstest]
     #[case::length(&['a', 'b'], &['a'])]
     #[case::source_repetition(&['a', 'a'], &['a', 'b'])]
     #[case::target_repetition(&['a', 'b'], &['a', 'a'])]
+    #[case::ambiguous_repetition(&['a', 'a'], &['a', 'a'])]
     #[case::membership(&['a', 'b'], &['a', 'c'])]
     fn test_permutation_between_error(#[case] from: &[char], #[case] to: &[char]) {
         assert_eq!(Permutation::between(from, to), None);
@@ -382,6 +451,12 @@ mod tests {
     #[should_panic]
     fn test_permutation_between_degree_error() {
         Permutation::between(&[0, 1, 2, 3, 4, 5, 6], &[0, 1, 2, 3, 4, 5, 6]);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_permutation_between_all_degree_error() {
+        Permutation::between_all(&[0, 1, 2, 3, 4, 5, 6], &[0, 1, 2, 3, 4, 5, 6]);
     }
 
     #[rstest]

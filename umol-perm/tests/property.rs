@@ -26,6 +26,14 @@ fn permutation_image() -> impl Strategy<Value = Vec<usize>> {
     (0usize..=6).prop_flat_map(|degree| Just((0..degree).collect::<Vec<_>>()).prop_shuffle())
 }
 
+fn repeated_orderings() -> impl Strategy<Value = (Vec<u8>, Vec<u8>)> {
+    prop::collection::vec(0u8..3, 0..=6).prop_flat_map(|source| {
+        Just(source.clone())
+            .prop_shuffle()
+            .prop_map(move |target| (source.clone(), target))
+    })
+}
+
 fn perm_pair() -> impl Strategy<Value = (Permutation, Permutation)> {
     (2usize..=6).prop_flat_map(|d| (perm_of(d), perm_of(d)))
 }
@@ -191,6 +199,23 @@ proptest! {
         let target = p.act(&source);
         prop_assert_eq!(Permutation::between(&source, &target), Some(p));
         prop_assert_eq!(Permutation::between(&target, &source), Some(p.inverse()));
+    }
+
+    #[test]
+    fn test_permutation_between_all((source, target) in repeated_orderings()) {
+        let mut actual = Permutation::between_all(&source, &target);
+        let mut expected = (0..factorial(source.len()))
+            .map(|rank| Permutation::unrank(source.len(), rank))
+            .filter(|permutation| permutation.act(&source) == target)
+            .collect::<Vec<_>>();
+        actual.sort_unstable();
+        expected.sort_unstable();
+
+        prop_assert_eq!(&actual, &expected);
+        prop_assert_eq!(
+            Permutation::between(&source, &target),
+            (actual.len() == 1).then(|| actual[0])
+        );
     }
 
     #[test]

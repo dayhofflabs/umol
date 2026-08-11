@@ -555,19 +555,21 @@ representation integrity bounds it to the corresponding degree and `order` has t
   regain sorted, unique-key storage.
 
 This is one coordinated frame action. Ordinary entity-id remapping alone is insufficient because
-the stereo constraints name ligand positions rather than atom ids. The current `StereoAtomForm` and
-`StereoBondForm` action, which transforms the configuration while cloning constraints unchanged,
-must not be reused as though it were the complete operation.
+the stereo constraints name ligand positions rather than atom ids. `StereoAtomForm::apply` and
+`StereoBondForm::apply` remain deliberately configuration-only; `transform_frame` is the complete
+single-action operation and canonicalization applies the same transport from an explicit position
+order.
 
-Repeated equal ligand values make `Permutation::between` non-unique. For a kinded frame,
-canonicalization enumerates the bounded set of permutations that carry the old ligand sequence to
-the candidate sequence, applies the complete frame action for each, and retains the minimum
-normalized stereo value. The bound is the stereo-class degree, currently at most six, rather than
-the number of molecule atoms. For a fully undetermined, kindless configuration, the ligand sequence
-is sorted through the general position order and the configuration is unchanged. Structurally
-indistinguishable duplicate occurrences remain in one automorphism class; the later constraint
-placement step chooses among their position actions rather than performing an unbounded local
-factorial enumeration. Frame-relative constraints still move in either case. Other non-ground
+Repeated equal ligand values make the frame action non-unique. `Permutation::between_all` exposes
+the general bounded operation, while `Permutation::between` returns a value only when the action is
+unique. For a kinded frame, canonicalization filters all matching permutations through the stereo
+kind's parent group, applies the complete frame action for each, and retains every action attaining
+the minimum normalized stereo value. The bound is the stereo-class degree, currently at most six,
+rather than the number of molecule atoms. For a fully undetermined, kindless configuration, the
+ligand sequence is sorted through the general position order and the configuration is unchanged.
+Structurally indistinguishable duplicate occurrences remain in one automorphism class; the later
+constraint placement step chooses among their position actions rather than performing an unbounded
+local factorial enumeration. Frame-relative constraints still move in either case. Other non-ground
 configuration terms use the existing total permutation action; no literal extraction is introduced.
 
 Stereo-sensitive partition refinement uses the same action before the partition is discrete. For a
@@ -1534,6 +1536,14 @@ and the semantic properties validated by the corresponding property tests.
   automorphism and S9b constraint-placement search. Verify undetermined configurations as invariant
   while their constraints move, and verify symbolic and set-valued configurations through the
   existing total permutation action without literal extraction. This is additive. [dep: S8a]
+  **Done.** `Permutation::between_all` now returns every bounded action between equal multisets,
+  while `between` preserves its unique-action contract. Canonicalization filters those actions by
+  the stereo parent group and retains all ties at the minimum normalized configuration, leaving
+  constraints out of the structural choice. A general `ParticipantPosition` order handles
+  arbitrarily long kindless frames, keeps undetermined configurations fixed, and transports
+  topicity and any representable permutation-valued constraint together. Exact and exhaustive
+  tests cover repeated ligands, literal, undetermined, set-valued, and symbolic configurations,
+  both stereo entity forms, and position orders beyond the fixed permutation degree.
 - **S8c — One-pass stereo refinement and full frame.** Extend the typed key and refinement to stereo
   atoms and bonds. Ligand occurrences and kinds enter the exact carrier, while configuration values
   enter covariantly through the candidate frame action rather than as raw input-frame colors. For
