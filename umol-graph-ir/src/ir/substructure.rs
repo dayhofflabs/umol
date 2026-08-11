@@ -24,7 +24,7 @@ use super::correspondence::{
 };
 use super::entity::Entity;
 use super::id::{AtomId, BondId};
-use super::incidence::IncidenceLevel;
+use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
 use super::ring::{RingConfig, RingModel, RingSetKind};
 use super::stereo::coset_matches;
@@ -305,7 +305,17 @@ impl Molecule {
                 }
                 (pe, he) => pe.kind() == he.kind(),
             },
-            &mut |_, _| true,
+            &mut |pattern_edge, host_edge| match (
+                pattern_levi.incidence(pattern_edge),
+                host_levi.incidence(host_edge),
+            ) {
+                (Incidence::AromaticParticipant(pattern), Incidence::AromaticParticipant(host))
+                | (
+                    Incidence::MulticenterParticipant(pattern),
+                    Incidence::MulticenterParticipant(host),
+                ) => pattern.matches(host),
+                (pattern, host) => pattern == host,
+            },
             subiso,
             |embedding| {
                 let atoms = Correspondence::new(
