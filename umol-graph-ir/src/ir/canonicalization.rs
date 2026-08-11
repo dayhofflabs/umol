@@ -33,7 +33,9 @@ use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
 use super::reaction_span::ReactionSpanIntegrityError;
 use super::spin::UnpairedElectronsForm;
-use super::stereo::{StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind};
+use super::stereo::{
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
+};
 use super::traits::Normalize;
 use super::validate::ReactionIntegrityError;
 
@@ -571,6 +573,83 @@ fn stereo_ligand_kind_key(kind: StereoLigandKind) -> CanonicalKeyValue {
         },
         [],
     )
+}
+
+fn permutation_key(permutation: Permutation) -> CanonicalKeyValue {
+    product([
+        CanonicalKeyValue::Unsigned(permutation.degree() as u64),
+        sequence(
+            (0..permutation.degree())
+                .map(|position| CanonicalKeyValue::Unsigned(permutation.apply(position) as u64)),
+        ),
+    ])
+}
+
+fn stereo_term_key(term: &StereoTerm) -> CanonicalKeyValue {
+    match term {
+        StereoTerm::Var(variable) => {
+            let (name, domain) = variable.as_ref();
+            variant(
+                0,
+                [
+                    CanonicalKeyValue::Text(name.clone()),
+                    option(domain.as_ref().map(|values| {
+                        sequence(
+                            values
+                                .iter()
+                                .map(|&value| CanonicalKeyValue::Unsigned(value.into())),
+                        )
+                    })),
+                ],
+            )
+        }
+        StereoTerm::Lit(value) => variant(1, [CanonicalKeyValue::Unsigned((*value).into())]),
+        StereoTerm::LitSet(values) => variant(
+            2,
+            [sequence(
+                values
+                    .iter()
+                    .map(|&value| CanonicalKeyValue::Unsigned(value.into())),
+            )],
+        ),
+        StereoTerm::Swap(inner) => variant(3, [stereo_term_key(inner)]),
+        StereoTerm::Mirror(inner) => variant(4, [stereo_term_key(inner)]),
+        StereoTerm::Apply(inner, permutation) => {
+            variant(5, [stereo_term_key(inner), permutation_key(*permutation)])
+        }
+    }
+}
+
+fn stereo_coset_key(coset: &StereoCoset) -> CanonicalKeyValue {
+    match coset {
+        StereoCoset::Undetermined => variant(0, []),
+        StereoCoset::Lit(value) => variant(1, [CanonicalKeyValue::Unsigned((*value).into())]),
+        StereoCoset::LitSet(values) => variant(
+            2,
+            [sequence(
+                values
+                    .iter()
+                    .map(|&value| CanonicalKeyValue::Unsigned(value.into())),
+            )],
+        ),
+        StereoCoset::Term(term) => variant(3, [stereo_term_key(term)]),
+    }
+}
+
+fn stereo_configuration_form_key(configuration: &StereoConfigurationForm) -> CanonicalKeyValue {
+    match configuration {
+        StereoConfigurationForm::Undetermined => variant(0, []),
+        StereoConfigurationForm::Kinded(kind, coset) => {
+            variant(1, [stereo_kind_key(*kind), stereo_coset_key(coset)])
+        }
+    }
+}
+
+fn stereo_ligand_key(atom: u32, kind: StereoLigandKind) -> CanonicalKeyValue {
+    product([
+        CanonicalKeyValue::Unsigned(atom.into()),
+        stereo_ligand_kind_key(kind),
+    ])
 }
 
 fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradiction> {
@@ -1267,6 +1346,146 @@ fn constitution_partition_descriptors(
         .collect()
 }
 
+#[allow(dead_code)]
+fn constitution_entity_classes(molecule: &Molecule) -> Result<Vec<u32>, Contradiction> {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
+    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
+    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+    let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
+    let classes = partition.cell_indices(adapter.graph().node_count());
+    Ok(classes[..adapter.source_node_count].to_vec())
+}
+
+#[allow(dead_code)]
+fn stereo_frame_permutations(kind: StereoKind) -> impl Iterator<Item = Permutation> {
+    let degree = kind.degree();
+    let count = (1..=degree).product::<usize>().max(1);
+    (0..count)
+        .map(move |rank| Permutation::unrank(degree, rank))
+        .filter(move |permutation| kind.class_key().space().reindex(0, *permutation).is_some())
+}
+
+#[allow(dead_code)]
+fn stereo_refinement_descriptor(
+    site_class: u32,
+    ligand_classes: &[(u32, StereoLigandKind)],
+    configuration: &StereoConfigurationForm,
+) -> Result<CanonicalKeyValue, Contradiction> {
+    let descriptor = |ligands: Vec<(u32, StereoLigandKind)>,
+                      configuration: StereoConfigurationForm| {
+        product([
+            CanonicalKeyValue::Unsigned(site_class.into()),
+            sequence(
+                ligands
+                    .into_iter()
+                    .map(|(class, kind)| stereo_ligand_key(class, kind)),
+            ),
+            stereo_configuration_form_key(&configuration),
+        ])
+    };
+
+    match configuration {
+        StereoConfigurationForm::Undetermined => {
+            let mut ligands = ligand_classes.to_vec();
+            ligands.sort_unstable();
+            Ok(descriptor(ligands, StereoConfigurationForm::Undetermined))
+        }
+        StereoConfigurationForm::Kinded(kind, _) => stereo_frame_permutations(*kind)
+            .map(|permutation| {
+                configuration
+                    .apply(permutation)
+                    .normalize()
+                    .map(|configuration| descriptor(permutation.act(ligand_classes), configuration))
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .min()
+            .ok_or(Contradiction),
+    }
+}
+
+#[allow(dead_code)]
+fn full_partition_descriptors(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    adapter: &AutomorphismAdapter,
+    entity_keys: &[InitialClassKey],
+    constitution_classes: &[u32],
+) -> Result<Vec<InitialClassKey>, Contradiction> {
+    let constitution_class =
+        |entity: Entity| constitution_classes[incidence_graph.node_of(entity).index()];
+
+    adapter
+        .node_sources
+        .iter()
+        .map(|source| match *source {
+            SubdivisionNodeSource::Node(node) => {
+                let entity = incidence_graph.entity(node);
+                let InitialClassKey::Entity { position, .. } = entity_keys[node.index()] else {
+                    unreachable!("entity key corresponds to an entity node")
+                };
+                let value = match entity {
+                    Entity::StereoAtom(id) => {
+                        let stereo = molecule
+                            .stereo_atoms()
+                            .get(id)
+                            .expect("full incidence stereo atom is in range");
+                        let ligand_classes = stereo
+                            .ligands()
+                            .map(|ligand| {
+                                (
+                                    constitution_class(Entity::Atom(ligand.atom_id())),
+                                    ligand.kind(),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        stereo_refinement_descriptor(
+                            constitution_class(Entity::Atom(stereo.site_id())),
+                            &ligand_classes,
+                            &stereo.attributes.configuration,
+                        )?
+                    }
+                    Entity::StereoBond(id) => {
+                        let stereo = molecule
+                            .stereo_bonds()
+                            .get(id)
+                            .expect("full incidence stereo bond is in range");
+                        let ligand_classes = stereo
+                            .ligands()
+                            .map(|ligand| {
+                                (
+                                    constitution_class(Entity::Atom(ligand.atom_id())),
+                                    ligand.kind(),
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        stereo_refinement_descriptor(
+                            constitution_class(Entity::Bond(stereo.site_id())),
+                            &ligand_classes,
+                            &stereo.attributes.configuration,
+                        )?
+                    }
+                    _ => product([CanonicalKeyValue::Unsigned(
+                        constitution_class(entity).into(),
+                    )]),
+                };
+                Ok(InitialClassKey::Entity { position, value })
+            }
+            SubdivisionNodeSource::Edge(edge) => {
+                let value = match incidence_graph.incidence(edge) {
+                    Incidence::DativeDonor | Incidence::DativeAcceptor => variant(1, []),
+                    Incidence::AromaticParticipant(_) => variant(3, []),
+                    Incidence::MulticenterParticipant(_) => variant(4, []),
+                    incidence => incidence_key(incidence)?,
+                };
+                Ok(InitialClassKey::Incidence(value))
+            }
+        })
+        .collect()
+}
+
 fn rank_initial_classes(
     entity_keys: &[InitialClassKey],
     incidence_keys: &[InitialClassKey],
@@ -1720,6 +1939,196 @@ fn constitution_candidate(
         (EntityBlockPosition::AROMATIC_SYSTEM, &aromatic),
         (EntityBlockPosition::MULTICENTER_BOND, &multicenter),
         (EntityBlockPosition::NONCOVALENT_BOND, &noncovalent),
+    ] {
+        if !rows.is_empty() {
+            candidate.key.entity_blocks.push(PositionedKey {
+                position,
+                value: sequence(rows.iter().map(|(key, _)| key.clone())),
+            });
+            candidate
+                .entity_order
+                .extend(rows.iter().map(|(_, node)| *node));
+        }
+    }
+
+    Ok(candidate)
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CanonicalStereoFrame {
+    ligands: Vec<StereoLigand>,
+    configuration: StereoConfigurationForm,
+    permutations: Vec<Permutation>,
+}
+
+#[allow(dead_code)]
+fn full_comparison_key(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalComparisonKey, Contradiction> {
+    Ok(full_candidate(molecule, incidence_graph, order)?.key)
+}
+
+#[allow(dead_code)]
+fn canonical_kinded_stereo_frame(
+    ligands: &[StereoLigand],
+    configuration: &StereoConfigurationForm,
+) -> Result<Option<CanonicalStereoFrame>, Contradiction> {
+    let Some(kind) = configuration.kind() else {
+        return Ok(None);
+    };
+    if ligands.len() != kind.degree() {
+        return Ok(None);
+    }
+
+    let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
+    let mut permutations = Vec::new();
+    for permutation in stereo_frame_permutations(kind) {
+        let candidate = (
+            permutation.act(ligands),
+            configuration.apply(permutation).normalize()?,
+        );
+        match minimum.as_ref().map(|value| candidate.cmp(value)) {
+            None | Some(Ordering::Less) => {
+                minimum = Some(candidate);
+                permutations.clear();
+                permutations.push(permutation);
+            }
+            Some(Ordering::Equal) => permutations.push(permutation),
+            Some(Ordering::Greater) => {}
+        }
+    }
+
+    Ok(
+        minimum.map(|(ligands, configuration)| CanonicalStereoFrame {
+            ligands,
+            configuration,
+            permutations,
+        }),
+    )
+}
+
+#[allow(dead_code)]
+fn full_candidate(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    let mut candidate = constitution_candidate(molecule, incidence_graph, order)?;
+    let mut atom_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Atom)];
+    let mut bond_images = vec![0_usize; incidence_graph.entity_count(EntityKind::Bond)];
+    for (image, &node) in candidate.entity_order.iter().enumerate() {
+        match incidence_graph.entity(node) {
+            Entity::Atom(id) => atom_images[id.index()] = image,
+            Entity::Bond(id) => {
+                bond_images[id.index()] = image - atom_images.len();
+            }
+            _ => {}
+        }
+    }
+
+    let remap_ligands = |ligands: Vec<StereoLigand>| {
+        ligands
+            .into_iter()
+            .map(|ligand| {
+                StereoLigand::new(
+                    AtomId(atom_images[ligand.atom_id.index()] as u32),
+                    ligand.kind,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let canonical_frame =
+        |ligands: Vec<StereoLigand>,
+         configuration: &StereoConfigurationForm|
+         -> Result<(Vec<StereoLigand>, StereoConfigurationForm), Contradiction> {
+            let ligands = remap_ligands(ligands);
+            match configuration {
+                StereoConfigurationForm::Undetermined => {
+                    let (ligands, _) = sort_ligand_frame(&ligands);
+                    Ok((ligands, StereoConfigurationForm::Undetermined))
+                }
+                StereoConfigurationForm::Kinded(..) => {
+                    let frame = canonical_kinded_stereo_frame(&ligands, configuration)?
+                        .expect("integrity established the kinded frame degree");
+                    Ok((frame.ligands, frame.configuration))
+                }
+            }
+        };
+
+    let mut stereo_atoms = molecule
+        .stereo_atoms()
+        .iter()
+        .map(|stereo| {
+            let (ligands, configuration) =
+                canonical_frame(stereo.ligand_frame(), &stereo.attributes.configuration)?;
+            let fields = vec![
+                field(
+                    0,
+                    CanonicalKeyValue::Unsigned(atom_images[stereo.site_id().index()] as u64),
+                ),
+                field(
+                    1,
+                    sequence(
+                        ligands
+                            .iter()
+                            .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
+                    ),
+                ),
+                field(2, stereo_configuration_form_key(&configuration)),
+            ];
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                stereo.id,
+                incidence_graph.node_of(Entity::StereoAtom(stereo.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    stereo_atoms.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let stereo_atoms = stereo_atoms
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    let mut stereo_bonds = molecule
+        .stereo_bonds()
+        .iter()
+        .map(|stereo| {
+            let (ligands, configuration) =
+                canonical_frame(stereo.ligand_frame(), &stereo.attributes.configuration)?;
+            let fields = vec![
+                field(
+                    0,
+                    CanonicalKeyValue::Unsigned(bond_images[stereo.site_id().index()] as u64),
+                ),
+                field(
+                    1,
+                    sequence(
+                        ligands
+                            .iter()
+                            .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
+                    ),
+                ),
+                field(2, stereo_configuration_form_key(&configuration)),
+            ];
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                stereo.id,
+                incidence_graph.node_of(Entity::StereoBond(stereo.id)),
+            ))
+        })
+        .collect::<Result<Vec<_>, Contradiction>>()?;
+    stereo_bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    let stereo_bonds = stereo_bonds
+        .into_iter()
+        .map(|(key, _, node)| (key, node))
+        .collect::<Vec<_>>();
+
+    for (position, rows) in [
+        (EntityBlockPosition::STEREO_ATOM, &stereo_atoms),
+        (EntityBlockPosition::STEREO_BOND, &stereo_bonds),
     ] {
         if !rows.is_empty() {
             candidate.key.entity_blocks.push(PositionedKey {
@@ -2240,6 +2649,65 @@ fn reframe_stereo_bond_by_order(
 }
 
 #[allow(dead_code)]
+fn canonicalize_stereo_frames(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
+    let stereo_atom_count = molecule.stereo_atoms().count();
+    for index in 0..stereo_atom_count {
+        let id = StereoAtomId(index as u32);
+        let (ligands, configuration) = {
+            let stereo = molecule
+                .stereo_atoms()
+                .get(id)
+                .expect("dense stereo-atom id is in range");
+            (
+                stereo.ligand_frame(),
+                stereo.attributes.configuration.clone(),
+            )
+        };
+        molecule = match configuration {
+            StereoConfigurationForm::Undetermined => {
+                let (_, order) = sort_ligand_frame(&ligands);
+                reframe_stereo_atom_by_order(&molecule, id, &order)
+                    .expect("integrity established a valid kindless stereo-atom frame")
+            }
+            StereoConfigurationForm::Kinded(..) => {
+                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
+                    .expect("integrity established the kinded stereo-atom frame degree");
+                reframe_stereo_atom(&molecule, id, frame.permutations[0])
+            }
+        };
+    }
+
+    let stereo_bond_count = molecule.stereo_bonds().count();
+    for index in 0..stereo_bond_count {
+        let id = StereoBondId(index as u32);
+        let (ligands, configuration) = {
+            let stereo = molecule
+                .stereo_bonds()
+                .get(id)
+                .expect("dense stereo-bond id is in range");
+            (
+                stereo.ligand_frame(),
+                stereo.attributes.configuration.clone(),
+            )
+        };
+        molecule = match configuration {
+            StereoConfigurationForm::Undetermined => {
+                let (_, order) = sort_ligand_frame(&ligands);
+                reframe_stereo_bond_by_order(&molecule, id, &order)
+                    .expect("integrity established a valid kindless stereo-bond frame")
+            }
+            StereoConfigurationForm::Kinded(..) => {
+                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
+                    .expect("integrity established the kinded stereo-bond frame degree");
+                reframe_stereo_bond(&molecule, id, frame.permutations[0])
+            }
+        };
+    }
+
+    Ok(molecule)
+}
+
+#[allow(dead_code)]
 fn normalize_molecule(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
     let mut atoms = molecule
         .atoms()
@@ -2432,6 +2900,63 @@ fn canonicalize_constitution_with_options(
     Ok((canonical, correspondence))
 }
 
+#[allow(dead_code)]
+fn canonicalize_full_one_pass(
+    molecule: &Molecule,
+    context: &CanonicalizationContext,
+) -> Result<Molecule, MoleculeCanonicalizationError> {
+    canonicalize_full_one_pass_with_options(
+        molecule,
+        context,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: BranchOrder::BackendCanonical,
+        },
+    )
+    .map(|(molecule, _)| molecule)
+}
+
+#[allow(dead_code)]
+fn canonicalize_full_one_pass_with_options(
+    molecule: &Molecule,
+    context: &CanonicalizationContext,
+    options: CanonicalSearchOptions,
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizationError> {
+    molecule.check_integrity()?;
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
+    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let constitution_classes = constitution_entity_classes(molecule)?;
+    let descriptors = full_partition_descriptors(
+        molecule,
+        &incidence_graph,
+        &adapter,
+        &entity_keys,
+        &constitution_classes,
+    )?;
+    let leaf_candidate = |order: &[NodeId]| {
+        full_candidate(molecule, &incidence_graph, order)
+            .expect("full descriptors established entity normalization")
+    };
+    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let selected = canonical_search(
+        &adapter,
+        &descriptors,
+        context.automorphism_algorithm,
+        options,
+        &leaf_candidate,
+        &no_prefix,
+    );
+    let correspondence =
+        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+
+    let canonical = canonicalize_stereo_frames(molecule.remap(&correspondence))?;
+    let canonical = normalize_molecule(canonical)?;
+    Ok((canonical, correspondence))
+}
+
 /// Failure to construct a canonical [`Molecule`](super::Molecule).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizationError {
@@ -2486,8 +3011,8 @@ mod tests {
         NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation,
         StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
         StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-        StereoLigand, StereoLigandPair, StereoTerm, StereogenicityForm, Topicity, TopicityForm,
-        TopicityRelationForm,
+        StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
+        TopicityForm, TopicityRelationForm,
     };
 
     mod benchmark_cases {
@@ -2631,6 +3156,68 @@ mod tests {
             para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
+    }
+
+    #[fixture]
+    fn stereo_atom_canonicalization_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        })
+    }
+
+    #[fixture]
+    fn stereo_bond_canonicalization_molecule() -> Molecule {
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, 1u32),
+            )],
+            ..Default::default()
+        })
     }
 
     #[rstest]
@@ -3019,6 +3606,144 @@ mod tests {
             reframe_stereo_bond_form_by_order(&source, &order),
             Some(expected)
         );
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral)]
+    #[case::cis_trans(StereoKind::CisTrans)]
+    #[case::axial(StereoKind::Axial)]
+    #[case::square_planar(StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral(StereoKind::Octahedral)]
+    fn test_stereo_refinement_descriptor_frame_invariant(#[case] kind: StereoKind) {
+        let degree = kind.degree();
+        let frame = if matches!(kind, StereoKind::CisTrans | StereoKind::Axial) {
+            Permutation::from_image(&[2, 3, 0, 1])
+        } else {
+            Permutation::from_image(&(1..degree).chain(once(0)).collect::<Vec<_>>())
+        };
+        let ligands = (0..degree)
+            .map(|class| (class as u32, StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+        let configuration = StereoConfigurationForm::kinded(kind, 0u32);
+
+        assert_eq!(
+            stereo_refinement_descriptor(7, &ligands, &configuration),
+            stereo_refinement_descriptor(7, &frame.act(&ligands), &configuration.apply(frame),),
+        );
+    }
+
+    #[rstest]
+    fn test_full_comparison_key_excludes_constraints(
+        stereo_atom_canonicalization_molecule: Molecule,
+    ) {
+        let mut constrained_entries = molecule_entries(&stereo_atom_canonicalization_molecule);
+        constrained_entries.stereo_atoms[0].2.constraints =
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            ))
+            .into();
+        let constrained = Molecule::from_entries(constrained_entries);
+        let incidence_graph =
+            stereo_atom_canonicalization_molecule.incidence_graph(IncidenceLevel::Full);
+        let constrained_incidence_graph = constrained.incidence_graph(IncidenceLevel::Full);
+        let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+
+        assert_eq!(
+            full_comparison_key(
+                &stereo_atom_canonicalization_molecule,
+                &incidence_graph,
+                &order,
+            ),
+            full_comparison_key(&constrained, &constrained_incidence_graph, &order),
+        );
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_stereo_atom(
+        canonicalization_context: CanonicalizationContext,
+        stereo_atom_canonicalization_molecule: Molecule,
+    ) {
+        let renumbering = molecule_correspondence(&[
+            vec![4, 2, 0, 3, 1],
+            vec![2, 0, 3, 1],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![0],
+            Vec::new(),
+        ]);
+        let renumbered = stereo_atom_canonicalization_molecule.remap(&renumbering);
+        let canonical = canonicalize_full_one_pass(
+            &stereo_atom_canonicalization_molecule,
+            &canonicalization_context,
+        )
+        .expect("fixed molecule canonicalizes");
+
+        assert_eq!(
+            canonicalize_full_one_pass(&renumbered, &canonicalization_context),
+            Ok(canonical.clone()),
+        );
+        assert_eq!(
+            canonicalize_full_one_pass(&canonical, &canonicalization_context),
+            Ok(canonical.clone()),
+        );
+        assert_eq!(canonical.check_integrity(), Ok(()));
+        assert_eq!(canonical.stereo_atoms().count(), 1);
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_distinguishes_stereo_configuration(
+        canonicalization_context: CanonicalizationContext,
+        stereo_atom_canonicalization_molecule: Molecule,
+    ) {
+        let mut opposite_entries = molecule_entries(&stereo_atom_canonicalization_molecule);
+        opposite_entries.stereo_atoms[0].2.configuration =
+            StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32);
+        let opposite = Molecule::from_entries(opposite_entries);
+
+        assert_ne!(
+            canonicalize_full_one_pass(
+                &stereo_atom_canonicalization_molecule,
+                &canonicalization_context,
+            ),
+            canonicalize_full_one_pass(&opposite, &canonicalization_context),
+        );
+    }
+
+    #[rstest]
+    fn test_canonicalize_full_one_pass_stereo_bond(
+        canonicalization_context: CanonicalizationContext,
+        stereo_bond_canonicalization_molecule: Molecule,
+    ) {
+        let renumbering = molecule_correspondence(&[
+            vec![5, 3, 1, 4, 2, 0],
+            vec![4, 2, 0, 3, 1],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![0],
+        ]);
+        let renumbered = stereo_bond_canonicalization_molecule.remap(&renumbering);
+        let canonical = canonicalize_full_one_pass(
+            &stereo_bond_canonicalization_molecule,
+            &canonicalization_context,
+        )
+        .expect("fixed molecule canonicalizes");
+
+        assert_eq!(
+            canonicalize_full_one_pass(&renumbered, &canonicalization_context),
+            Ok(canonical.clone()),
+        );
+        assert_eq!(
+            canonicalize_full_one_pass(&canonical, &canonicalization_context),
+            Ok(canonical.clone()),
+        );
+        assert_eq!(canonical.check_integrity(), Ok(()));
+        assert_eq!(canonical.stereo_bonds().count(), 1);
     }
 
     fn rank_paired_initial_classes(

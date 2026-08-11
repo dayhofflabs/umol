@@ -534,9 +534,11 @@ level.
 
 The ligand order stored on a stereo entity is a participant frame, not structural identity. The
 typed incidence carrier therefore records each ligand occurrence and ligand kind but does not color
-an occurrence by its raw position. At a candidate leaf, the candidate ligand sequence is the
-lexicographically ordered sequence of `(remapped atom id, ligand kind)` values under the frozen
-typed order. The general frame change is the position order for which
+an occurrence by its raw position. At a candidate leaf, a kinded ligand sequence is the
+lexicographically minimum sequence of `(remapped atom id, ligand kind)` values reachable through
+the stereo kind's parent group under the frozen typed order. For unrestricted parent groups this is
+the globally sorted sequence; axial and cis/trans retain their side structure. A kindless sequence
+is globally sorted. The general frame change is the position order for which
 `after[i] == before[order[i]]`; it is not restricted to `umol_perm::Permutation`, because a fully
 undetermined, kindless stereo form has no class-degree arity. When the frame has a declared kind,
 representation integrity bounds it to the corresponding degree and `order` has the permutation
@@ -1551,7 +1553,17 @@ and the semantic properties validated by the corresponding property tests.
   select the minimum full structural key, and preserve every stereo entity without perception,
   resolution, or conformance validation. Constraints remain excluded from this selected-layer tie
   break. The public trait surface waits for the para-stereo path in S9a. This is additive.
-  [dep: S5d, S8b]
+  [dep: S5d, S8b] **Done.** The constitution equitable partition now supplies the fixed input
+  classes for one covariant stereo-descriptor round on the full incidence carrier. Kinded
+  descriptors minimize the coupled ligand-class sequence and normalized configuration over the
+  stereo parent group; kindless descriptors sort the structural ligand multiset and keep the
+  undetermined configuration fixed. The existing individualization/refinement search selects a
+  full typed key with stereo-atom and stereo-bond rows, then remaps every entity and applies the
+  selected frame actions before intrinsic normalization. Constraints are absent from descriptors
+  and the selected-layer key but are transported with the chosen frame. Exact cases cover every
+  stereo kind's frame covariance, constraint exclusion, stereo-configuration distinction, both
+  stereo entity families, dense renumbering, integrity, preservation, and idempotence. The public
+  trait remains deferred to S9a together with the para-stereo fixpoint.
 - **S8d — Stereo properties.** Validate full frame/coset/constraint covariance, exact idempotence of
   the selected full structural layer, renumbering invariance, bounded-exhaustive-minimum agreement,
   pruning independence, meso cases, repeated ligands, undetermined configurations, and selected-layer
