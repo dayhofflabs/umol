@@ -421,6 +421,7 @@ def test_molecule_from_smiles_io_config_error():
 def test_molecule_from_smiles_chemistry_model_valence(valence_model, expected):
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
+        connectivity=ChemistryModel.default().connectivity,
         valence=valence_model,
         aromaticity=default.aromaticity,
         stereo=default.stereo,
@@ -434,6 +435,7 @@ def test_molecule_from_smiles_chemistry_model_valence(valence_model, expected):
 def test_molecule_from_smiles_chemistry_model_aromaticity():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
+        connectivity=ChemistryModel.default().connectivity,
         valence=default.valence,
         aromaticity=AromaticityModel.Hmo(
             scope=ElementScope.Any(), stabilization_threshold=0.375
@@ -506,6 +508,7 @@ def test_molecule_from_smiles_aromaticity_policy(source, expected):
     assert Molecule.from_smiles(
         source,
         chemistry_model=ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
             valence=default.valence,
             aromaticity=AromaticityModel.mdl(),
             stereo=default.stereo,
@@ -522,6 +525,7 @@ def test_molecule_from_smiles_aromaticity_policy(source, expected):
 def test_molecule_from_smiles_chemistry_model_stereo():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
+        connectivity=ChemistryModel.default().connectivity,
         valence=default.valence,
         aromaticity=default.aromaticity,
         stereo=StereoModel(
@@ -653,6 +657,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "[nH]1cccc1",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.Clar(
                         scope=ElementScope.Any(), ring_limits=RingLimits()
@@ -668,6 +673,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "o1cccc1",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -682,6 +688,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "s1cccc1",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -696,6 +703,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "[nH]1cccc1",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -719,6 +727,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "c1ccccc1",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ValenceModel.Counts(
                         table=ValenceTable(
                             entries={

@@ -858,6 +858,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
     assert Reaction.from_reaction_smiles(
         source,
         chemistry_model=ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
             valence=default.valence,
             aromaticity=AromaticityModel.mdl(),
             stereo=default.stereo,
@@ -887,6 +888,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "[nH]1cccc1>>",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.Clar(
                         scope=ElementScope.Any(),
@@ -904,6 +906,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "o1cccc1>>C",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -918,6 +921,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "s1cccc1>>C",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -932,6 +936,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "[nH]1cccc1>>C",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel.mdl(),
                     stereo=ChemistryModel.default().stereo,
@@ -953,6 +958,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             "c1ccccc1>>",
             {
                 "chemistry_model": ChemistryModel(
+                    connectivity=ChemistryModel.default().connectivity,
                     valence=ValenceModel.Counts(
                         table=ValenceTable(
                             entries={

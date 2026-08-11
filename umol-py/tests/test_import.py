@@ -57,6 +57,7 @@ PUBLIC_EXPORTS = frozenset(
     CisTransStereoForm
     CommonSubgraphEnumerationAlgorithm
     ConnectedComponentsAlgorithm
+    ConnectivityModel
     Constraint
     ConstraintDelta
     ConstraintEdit
@@ -425,7 +426,17 @@ def test_public_operation_signature(operation, expected):
             "reset_stereo_constraints=False)",
         ),
         (umol.ResolveConfig, "(*, aromaticity, stereo)"),
-        (umol.ChemistryModel, "(*, valence, aromaticity, stereo)"),
+        (
+            umol.ConnectivityModel,
+            "(*, allow_disconnected, allow_disconnected_dative, "
+            "allow_disconnected_aromatic, allow_disconnected_multicenter, "
+            "allow_disconnected_noncovalent, allow_disconnected_stereo_atom, "
+            "allow_disconnected_stereo_bond, allow_disconnected_constraints)",
+        ),
+        (
+            umol.ChemistryModel,
+            "(*, connectivity, valence, aromaticity, stereo)",
+        ),
         (
             umol.ReactionApplicationConfig,
             "(*, match_algorithm=Ellipsis, subgraph_isomorphism_algorithm=Ellipsis, "

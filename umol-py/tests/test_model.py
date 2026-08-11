@@ -9,6 +9,7 @@ from umol import (
     AtomTypeRegistry,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
+    ConnectivityModel,
     Element,
     ElementScope,
     MaximumIndependentSetAlgorithm,
@@ -1079,9 +1080,40 @@ def test_stereo_model_mutation(field, value):
         setattr(model, field, value)
 
 
+def test_connectivity_model_default():
+    model = ConnectivityModel.default()
+
+    assert model.allow_disconnected is True
+    assert model.allow_disconnected_dative is True
+    assert model.allow_disconnected_aromatic is False
+    assert model.allow_disconnected_multicenter is True
+    assert model.allow_disconnected_noncovalent is True
+    assert model.allow_disconnected_stereo_atom is False
+    assert model.allow_disconnected_stereo_bond is False
+    assert model.allow_disconnected_constraints is True
+    assert repr(model) == "ConnectivityModel.default()"
+
+
+def test_connectivity_model_new():
+    model = ConnectivityModel(
+        allow_disconnected=False,
+        allow_disconnected_dative=False,
+        allow_disconnected_aromatic=False,
+        allow_disconnected_multicenter=False,
+        allow_disconnected_noncovalent=False,
+        allow_disconnected_stereo_atom=False,
+        allow_disconnected_stereo_bond=False,
+        allow_disconnected_constraints=False,
+    )
+
+    assert model.allow_disconnected is False
+    assert model != ConnectivityModel.default()
+
+
 def test_chemistry_model_default():
     model = ChemistryModel.default()
 
+    assert model.connectivity == ConnectivityModel.default()
     assert model.valence == ValenceModel.AtomTyping(
         registry=AtomTypeRegistry.default()
     )
@@ -1107,12 +1139,16 @@ def test_chemistry_model_new():
         kind_models=StereoModel.default().kind_models,
         para_stereo=True,
     )
+    connectivity = ConnectivityModel.default()
     model = ChemistryModel(
+        connectivity=connectivity,
         valence=valence,
         aromaticity=aromaticity,
         stereo=stereo,
     )
 
+    assert model.connectivity == connectivity
+    assert model.connectivity is not connectivity
     assert model.valence == valence
     assert model.valence is not valence
     assert model.aromaticity == aromaticity
@@ -1134,11 +1170,28 @@ def test_chemistry_model_new_error():
     "other",
     [
         ChemistryModel(
+            connectivity=ConnectivityModel(
+                allow_disconnected=False,
+                allow_disconnected_dative=True,
+                allow_disconnected_aromatic=False,
+                allow_disconnected_multicenter=True,
+                allow_disconnected_noncovalent=True,
+                allow_disconnected_stereo_atom=False,
+                allow_disconnected_stereo_bond=False,
+                allow_disconnected_constraints=True,
+            ),
+            valence=ChemistryModel.default().valence,
+            aromaticity=AromaticityModel.daylight(),
+            stereo=StereoModel.default(),
+        ),
+        ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.Counts(table=ValenceTable(entries={})),
             aromaticity=AromaticityModel.daylight(),
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.AtomTyping(
                 registry=AtomTypeRegistry.default()
             ),
@@ -1146,6 +1199,7 @@ def test_chemistry_model_new_error():
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
+            connectivity=ChemistryModel.default().connectivity,
             valence=ValenceModel.AtomTyping(
                 registry=AtomTypeRegistry.default()
             ),
@@ -1167,6 +1221,7 @@ def test_chemistry_model_equality(other):
         (ChemistryModel.default(), "ChemistryModel.default()"),
         (
             ChemistryModel(
+                connectivity=ChemistryModel.default().connectivity,
                 valence=ValenceModel.Counts(
                     table=ValenceTable(
                         entries={
@@ -1183,7 +1238,8 @@ def test_chemistry_model_equality(other):
                     para_stereo=True,
                 ),
             ),
-            "ChemistryModel(valence=ValenceModel.Counts(table="
+            "ChemistryModel(connectivity=ConnectivityModel.default(), "
+            "valence=ValenceModel.Counts(table="
             "ValenceTable(entries={Element('C'): ValenceEntry("
             "target_covalences=[4], aromatic_valences=[])})), aromaticity="
             "AromaticityModel.Hmo(scope=ElementScope.Any(), "
@@ -1201,6 +1257,19 @@ def test_chemistry_model_repr(model, expected):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        (
+            "connectivity",
+            ConnectivityModel(
+                allow_disconnected=False,
+                allow_disconnected_dative=True,
+                allow_disconnected_aromatic=False,
+                allow_disconnected_multicenter=True,
+                allow_disconnected_noncovalent=True,
+                allow_disconnected_stereo_atom=False,
+                allow_disconnected_stereo_bond=False,
+                allow_disconnected_constraints=True,
+            ),
+        ),
         (
             "valence",
             ValenceModel.Counts(table=ValenceTable(entries={})),

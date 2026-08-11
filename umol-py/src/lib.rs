@@ -82,6 +82,7 @@ use crate::{
     metadata::{Entity, MoleculeMetadata, ReactionMetadata},
     model::{
         aromaticity::{AromaticityConfig, AromaticityModel, RingLimits},
+        connectivity::ConnectivityModel,
         stereo::{StereoKindModel, StereoModel},
         valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
         ChemistryModel, ElementScope,
@@ -245,6 +246,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<StereoMismatchPolicy>()?;
         module.add_class::<StereoKindModel>()?;
         module.add_class::<StereoModel>()?;
+        module.add_class::<ConnectivityModel>()?;
         module.add_class::<ChemistryModel>()?;
         module.add_class::<AromaticityResolveConfig>()?;
         module.add_class::<StereoResolveConfig>()?;

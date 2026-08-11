@@ -1,6 +1,7 @@
 //! Python bindings for chemistry-model values.
 
 pub(crate) mod aromaticity;
+pub(crate) mod connectivity;
 pub(crate) mod stereo;
 pub(crate) mod valence;
 
@@ -11,14 +12,16 @@ use umol_graph::ops::model::{
 };
 
 use self::aromaticity::AromaticityModel;
+use self::connectivity::ConnectivityModel;
 use self::stereo::StereoModel;
 use self::valence::ValenceModel;
 use crate::element::Element;
 
-/// Semantic configuration for valence, aromaticity, and stereo perception.
+/// Semantic configuration for connectivity, valence, aromaticity, and stereo perception.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChemistryModel {
+    connectivity: ConnectivityModel,
     valence: ValenceModel,
     aromaticity: AromaticityModel,
     stereo: StereoModel,
@@ -27,9 +30,15 @@ pub struct ChemistryModel {
 #[pymethods]
 impl ChemistryModel {
     #[new]
-    #[pyo3(signature = (*, valence, aromaticity, stereo))]
-    fn new(valence: ValenceModel, aromaticity: AromaticityModel, stereo: StereoModel) -> Self {
+    #[pyo3(signature = (*, connectivity, valence, aromaticity, stereo))]
+    fn new(
+        connectivity: ConnectivityModel,
+        valence: ValenceModel,
+        aromaticity: AromaticityModel,
+        stereo: StereoModel,
+    ) -> Self {
         Self {
+            connectivity,
             valence,
             aromaticity,
             stereo,
@@ -39,6 +48,11 @@ impl ChemistryModel {
     #[staticmethod]
     fn default() -> Self {
         Self::from_rust(&GraphChemistryModel::default())
+    }
+
+    #[getter]
+    fn connectivity(&self) -> ConnectivityModel {
+        self.connectivity
     }
 
     #[getter]
@@ -61,7 +75,8 @@ impl ChemistryModel {
             return "ChemistryModel.default()".to_owned();
         }
         format!(
-            "ChemistryModel(valence={}, aromaticity={}, stereo={})",
+            "ChemistryModel(connectivity={}, valence={}, aromaticity={}, stereo={})",
+            self.connectivity.__repr__(),
             self.valence.__repr__(),
             self.aromaticity.__repr__(),
             self.stereo.__repr__(),
@@ -72,6 +87,7 @@ impl ChemistryModel {
 impl ChemistryModel {
     pub(crate) fn from_rust(model: &GraphChemistryModel) -> Self {
         Self {
+            connectivity: ConnectivityModel::from_rust(&model.connectivity),
             valence: ValenceModel::from_rust(&model.valence),
             aromaticity: AromaticityModel::from_rust(&model.aromaticity),
             stereo: StereoModel::from_rust(&model.stereo),
@@ -80,6 +96,7 @@ impl ChemistryModel {
 
     pub(crate) fn to_rust(&self) -> GraphChemistryModel {
         GraphChemistryModel {
+            connectivity: self.connectivity.to_rust(),
             valence: self.valence.to_rust(),
             aromaticity: self.aromaticity.to_rust(),
             stereo: self.stereo.to_rust(),
@@ -148,6 +165,7 @@ mod tests {
         AromaticityModel as GraphAromaticityModel, RingLimits as GraphRingLimits,
         StereoModel as GraphStereoModel, ValenceModel as GraphValenceModel,
     };
+    use umol_graph::ops::validate::ConnectivityModel as GraphConnectivityModel;
     use umol_graph::valence_table;
 
     use super::*;
@@ -159,6 +177,7 @@ mod tests {
         assert_eq!(
             ChemistryModel::default(),
             ChemistryModel {
+                connectivity: ConnectivityModel::from_rust(&model.connectivity),
                 valence: ValenceModel::from_rust(&model.valence),
                 aromaticity: AromaticityModel::from_rust(&model.aromaticity),
                 stereo: StereoModel::from_rust(&model.stereo),
@@ -170,6 +189,7 @@ mod tests {
     #[case::default(ChemistryModel::default(), "ChemistryModel.default()")]
     #[case::configured(
         ChemistryModel::new(
+            ConnectivityModel::from_rust(&GraphConnectivityModel::default()),
             ValenceModel::from_rust(&GraphValenceModel::Counts {
                 table: Cow::Owned(valence_table![C => [4]]),
             }),
@@ -182,7 +202,7 @@ mod tests {
                 ..GraphStereoModel::default()
             }),
         ),
-        "ChemistryModel(valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
+        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -191,6 +211,10 @@ mod tests {
     #[rstest]
     fn test_chemistry_model_from_rust() {
         let model = GraphChemistryModel {
+            connectivity: GraphConnectivityModel {
+                allow_disconnected: false,
+                ..GraphConnectivityModel::default()
+            },
             valence: GraphValenceModel::Counts {
                 table: Cow::Owned(valence_table![C => [4], O => [2]]),
             },
@@ -210,6 +234,7 @@ mod tests {
         assert_eq!(
             ChemistryModel::from_rust(&model),
             ChemistryModel {
+                connectivity: ConnectivityModel::from_rust(&model.connectivity),
                 valence: ValenceModel::from_rust(&model.valence),
                 aromaticity: AromaticityModel::from_rust(&model.aromaticity),
                 stereo: StereoModel::from_rust(&model.stereo),
@@ -220,6 +245,10 @@ mod tests {
     #[rstest]
     fn test_chemistry_model_to_rust() {
         let expected = GraphChemistryModel {
+            connectivity: GraphConnectivityModel {
+                allow_disconnected: false,
+                ..GraphConnectivityModel::default()
+            },
             valence: GraphValenceModel::Counts {
                 table: Cow::Owned(valence_table![C => [4], O => [2]]),
             },
@@ -236,6 +265,7 @@ mod tests {
             },
         };
         let model = ChemistryModel {
+            connectivity: ConnectivityModel::from_rust(&expected.connectivity),
             valence: ValenceModel::from_rust(&expected.valence),
             aromaticity: AromaticityModel::from_rust(&expected.aromaticity),
             stereo: StereoModel::from_rust(&expected.stereo),
