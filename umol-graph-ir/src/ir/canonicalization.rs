@@ -5,8 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, SubdividedGraph,
-    SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, SubdivisionNodeSource,
 };
 
 use super::atom::{ElementForm, IsotopeMassForm};
@@ -620,9 +619,14 @@ enum AutomorphismClass {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct AutomorphismAdapter {
-    // Source entity nodes retain their ids; each source incidence edge becomes one additional node.
-    subdivision: SubdividedGraph,
+    // Source entity nodes retain their ids. Role- or value-bearing incidence edges become colored
+    // occurrence nodes; single-role endpoints remain direct unless duplicates require subdivision.
+    graph: Graph,
     classes: Vec<AutomorphismClass>,
+    node_sources: Vec<SubdivisionNodeSource>,
+    incidence_nodes: Vec<Option<NodeId>>,
+    edge_sources: Vec<EdgeId>,
+    incidence_edges: Vec<Vec<EdgeId>>,
     source_node_count: usize,
     entity_blocks: Vec<Vec<NodeId>>,
 }
@@ -643,7 +647,6 @@ impl AutomorphismAdapter {
         debug_assert_eq!(initial_classes.entities.len(), source.node_count());
         debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
 
-        let subdivision = source.subdivide_edges();
         let mut entity_blocks = Vec::<Vec<NodeId>>::new();
         let mut previous_kind = None;
         for node in source.node_ids() {
@@ -657,30 +660,77 @@ impl AutomorphismAdapter {
                 .expect("current entity block is present")
                 .push(node);
         }
-        let classes = initial_classes
+        let mut classes = initial_classes
             .entities
             .iter()
             .copied()
             .map(AutomorphismClass::Entity)
-            .chain(
-                initial_classes
-                    .incidences
-                    .iter()
-                    .copied()
-                    .map(AutomorphismClass::Incidence),
-            )
-            .collect();
+            .collect::<Vec<_>>();
+        let mut node_sources = source
+            .node_ids()
+            .map(SubdivisionNodeSource::Node)
+            .collect::<Vec<_>>();
+        let mut incidence_nodes = vec![None; source.edge_count()];
+        let mut edge_sources = Vec::new();
+        let mut incidence_edges = vec![Vec::new(); source.edge_count()];
+        let mut edges = Vec::new();
+
+        let direct_pair_counts = source
+            .edge_ids()
+            .filter(|&edge| {
+                matches!(
+                    incidence_graph.incidence(edge),
+                    Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
+                )
+            })
+            .fold(BTreeMap::<[NodeId; 2], usize>::new(), |mut counts, edge| {
+                *counts.entry(source.edge_endpoints(edge)).or_default() += 1;
+                counts
+            });
+
+        let mut push_edge = |endpoints: [NodeId; 2], source_edge: EdgeId| {
+            let edge = EdgeId(edges.len() as u32);
+            edges.push([endpoints[0].0, endpoints[1].0]);
+            edge_sources.push(source_edge);
+            incidence_edges[source_edge.index()].push(edge);
+        };
+        for edge in source.edge_ids() {
+            let endpoints = source.edge_endpoints(edge);
+            let direct = matches!(
+                incidence_graph.incidence(edge),
+                Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
+            ) && direct_pair_counts[&endpoints] == 1;
+            if direct {
+                push_edge(endpoints, edge);
+                continue;
+            }
+
+            let occurrence = NodeId(node_sources.len() as u32);
+            node_sources.push(SubdivisionNodeSource::Edge(edge));
+            incidence_nodes[edge.index()] = Some(occurrence);
+            classes.push(AutomorphismClass::Incidence(
+                initial_classes.incidences[edge.index()],
+            ));
+            push_edge([endpoints[0], occurrence], edge);
+            push_edge([occurrence, endpoints[1]], edge);
+        }
+        let graph = Graph::new(node_sources.len(), &edges);
+        debug_assert!(graph.is_simple());
 
         Self {
-            subdivision,
+            graph,
             classes,
+            node_sources,
+            incidence_nodes,
+            edge_sources,
+            incidence_edges,
             source_node_count: source.node_count(),
             entity_blocks,
         }
     }
 
     fn graph(&self) -> &Graph {
-        self.subdivision.graph()
+        &self.graph
     }
 
     fn class(&self, node: NodeId) -> AutomorphismClass {
@@ -688,19 +738,22 @@ impl AutomorphismAdapter {
     }
 
     fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
-        self.subdivision.node_source(node)
+        self.node_sources[node.index()]
     }
 
-    fn node_of(&self, source: SubdivisionNodeSource) -> NodeId {
-        self.subdivision.node_of(source)
+    fn node_of(&self, source: SubdivisionNodeSource) -> Option<NodeId> {
+        match source {
+            SubdivisionNodeSource::Node(node) => Some(node),
+            SubdivisionNodeSource::Edge(edge) => self.incidence_nodes[edge.index()],
+        }
     }
 
     fn edge_source(&self, edge: EdgeId) -> EdgeId {
-        self.subdivision.edge_source(edge)
+        self.edge_sources[edge.index()]
     }
 
-    fn incidence_edges_of(&self, edge: EdgeId) -> [EdgeId; 2] {
-        self.subdivision.incidence_edges_of(edge)
+    fn incidence_edges_of(&self, edge: EdgeId) -> &[EdgeId] {
+        &self.incidence_edges[edge.index()]
     }
 
     fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> ProjectedAutomorphismOutput {
@@ -784,18 +837,17 @@ impl OrderedPartition {
     fn refine(mut self, graph: &Graph) -> Self {
         loop {
             let cell_indices = self.cell_indices(graph.node_count());
+            let cell_count = self.cells.len();
             let mut refined = Vec::with_capacity(self.cells.len());
             let mut changed = false;
 
             for cell in self.cells {
                 let mut splits = BTreeMap::<Vec<u32>, Vec<NodeId>>::new();
                 for node in cell {
-                    let mut signature = graph
-                        .neighbors(node)
-                        .iter()
-                        .map(|neighbor| cell_indices[neighbor.node.index()])
-                        .collect::<Vec<_>>();
-                    signature.sort_unstable();
+                    let mut signature = vec![0; cell_count];
+                    for neighbor in graph.neighbors(node) {
+                        signature[cell_indices[neighbor.node.index()] as usize] += 1;
+                    }
                     splits.entry(signature).or_default().push(node);
                 }
                 changed |= splits.len() > 1;
@@ -1123,6 +1175,14 @@ fn initial_classes(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
 ) -> Result<InitialClasses, Contradiction> {
+    let (entity_keys, incidence_keys) = initial_class_keys(molecule, incidence_graph)?;
+    Ok(rank_initial_classes(&entity_keys, &incidence_keys))
+}
+
+fn initial_class_keys(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
     let entity_keys = incidence_graph
         .graph()
         .node_ids()
@@ -1132,6 +1192,14 @@ fn initial_classes(
         .incidences()
         .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
         .collect::<Result<Vec<_>, _>>()?;
+
+    Ok((entity_keys, incidence_keys))
+}
+
+fn rank_initial_classes(
+    entity_keys: &[InitialClassKey],
+    incidence_keys: &[InitialClassKey],
+) -> InitialClasses {
     let keys = entity_keys
         .iter()
         .chain(incidence_keys.iter())
@@ -1143,10 +1211,10 @@ fn initial_classes(
         .map(|(class, key)| (key, class as u32))
         .collect::<BTreeMap<_, _>>();
 
-    Ok(InitialClasses {
+    InitialClasses {
         entities: entity_keys.iter().map(|key| classes[key]).collect(),
         incidences: incidence_keys.iter().map(|key| classes[key]).collect(),
-    })
+    }
 }
 
 fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassKey, Contradiction> {
@@ -1314,18 +1382,27 @@ pub enum ReactionCanonicalizationError {
 
 #[cfg(test)]
 mod tests {
+    use std::array;
     use std::cmp::Ordering;
+    use std::hint::black_box;
+    use std::time::{Duration, Instant};
 
     use rstest::{fixture, rstest};
     use umol_chem::element::Element;
+    use umol_graph_core::Correspondence;
 
     use super::*;
     use crate::ir::{
         AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm,
-        BondId, DativeBondForm, DativeBondId, Entity, IncidenceLevel, MoleculeEntries,
-        MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-        StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoLigand,
+        BondId, Constraints, DativeBondForm, DativeBondId, Entity, IncidenceLevel,
+        MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
+        NoncovalentBondForm, NoncovalentBondId, StereoAtomForm, StereoAtomId, StereoBondForm,
+        StereoBondId, StereoCoset, StereoLigand,
     };
+
+    mod benchmark_cases {
+        include!("../../benches/canonicalization_cases.rs");
+    }
 
     #[fixture]
     fn initial_class_molecule() -> Molecule {
@@ -1447,6 +1524,301 @@ mod tests {
             ],
             ..Default::default()
         })
+    }
+
+    fn rank_paired_initial_classes(
+        left: (&[InitialClassKey], &[InitialClassKey]),
+        right: (&[InitialClassKey], &[InitialClassKey]),
+    ) -> (InitialClasses, InitialClasses) {
+        let ranks = left
+            .0
+            .iter()
+            .chain(left.1)
+            .chain(right.0)
+            .chain(right.1)
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .enumerate()
+            .map(|(rank, key)| (key, rank as u32))
+            .collect::<BTreeMap<_, _>>();
+        let rank =
+            |entity_keys: &[InitialClassKey], incidence_keys: &[InitialClassKey]| InitialClasses {
+                entities: entity_keys.iter().map(|key| ranks[key]).collect(),
+                incidences: incidence_keys.iter().map(|key| ranks[key]).collect(),
+            };
+
+        (rank(left.0, left.1), rank(right.0, right.1))
+    }
+
+    fn colored_encoding_equivalent(
+        left: &Molecule,
+        right: &Molecule,
+        level: IncidenceLevel,
+    ) -> bool {
+        fn key(adapter: &AutomorphismAdapter) -> Vec<u8> {
+            adapter.graph().canonical_key(
+                |node| {
+                    let (domain, rank) = match adapter.class(node) {
+                        AutomorphismClass::Entity(rank) => (0, rank),
+                        AutomorphismClass::Incidence(rank) => (1, rank),
+                    };
+                    let mut color = vec![domain];
+                    color.extend_from_slice(&rank.to_be_bytes());
+                    color
+                },
+                |_| Vec::new(),
+                AutomorphismAlgorithm::Nauty,
+            )
+        }
+
+        let left_incidence = left.incidence_graph(level);
+        let right_incidence = right.incidence_graph(level);
+        let (left_entity_keys, left_incidence_keys) =
+            initial_class_keys(left, &left_incidence).unwrap();
+        let (right_entity_keys, right_incidence_keys) =
+            initial_class_keys(right, &right_incidence).unwrap();
+        let (left_classes, right_classes) = rank_paired_initial_classes(
+            (&left_entity_keys, &left_incidence_keys),
+            (&right_entity_keys, &right_incidence_keys),
+        );
+        let left_adapter = AutomorphismAdapter::new(&left_incidence, &left_classes);
+        let right_adapter = AutomorphismAdapter::new(&right_incidence, &right_classes);
+
+        key(&left_adapter) == key(&right_adapter)
+    }
+
+    fn permutations(count: usize) -> Vec<Vec<usize>> {
+        fn visit(values: &mut [usize], position: usize, output: &mut Vec<Vec<usize>>) {
+            if position == values.len() {
+                output.push(values.to_vec());
+                return;
+            }
+            for next in position..values.len() {
+                values.swap(position, next);
+                visit(values, position + 1, output);
+                values.swap(position, next);
+            }
+        }
+
+        let mut values = (0..count).collect::<Vec<_>>();
+        let mut output = Vec::new();
+        visit(&mut values, 0, &mut output);
+        output
+    }
+
+    fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
+        [
+            molecule.atoms().count(),
+            molecule.bonds().count(),
+            molecule.dative_bonds().count(),
+            molecule.aromatic_systems().count(),
+            molecule.multicenter_bonds().count(),
+            molecule.noncovalent_bonds().count(),
+            molecule.stereo_atoms().count(),
+            molecule.stereo_bonds().count(),
+        ]
+    }
+
+    fn molecule_correspondence(images: &[Vec<usize>; 8]) -> MoleculeCorrespondence {
+        fn correspondence<Id>(images: &[usize]) -> Correspondence<Id>
+        where
+            Id: Copy + Ord + From<usize>,
+        {
+            let images = images.iter().copied().map(Id::from).collect::<Vec<_>>();
+            Correspondence::from_images(&images, images.len())
+        }
+
+        MoleculeCorrespondence::new(
+            correspondence::<AtomId>(&images[0]),
+            correspondence::<BondId>(&images[1]),
+            correspondence::<DativeBondId>(&images[2]),
+            correspondence::<AromaticSystemId>(&images[3]),
+            correspondence::<MulticenterBondId>(&images[4]),
+            correspondence::<NoncovalentBondId>(&images[5]),
+            correspondence::<StereoAtomId>(&images[6]),
+            correspondence::<StereoBondId>(&images[7]),
+        )
+    }
+
+    fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> bool {
+        fn visit(
+            family: usize,
+            permutations: &[Vec<Vec<usize>>; 8],
+            images: &mut [Vec<usize>; 8],
+            left: &Molecule,
+            right: &Molecule,
+        ) -> bool {
+            if family == images.len() {
+                return left.equiv_under(right, &molecule_correspondence(images));
+            }
+
+            permutations[family].iter().any(|permutation| {
+                images[family].clone_from(permutation);
+                visit(family + 1, permutations, images, left, right)
+            })
+        }
+
+        let left_counts = molecule_counts(left);
+        if left_counts != molecule_counts(right) {
+            return false;
+        }
+        let permutations = left_counts.map(permutations);
+        visit(
+            0,
+            &permutations,
+            &mut array::from_fn(|_| Vec::new()),
+            left,
+            right,
+        )
+    }
+
+    fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
+        let images = molecule_counts(molecule).map(|count| (0..count).rev().collect::<Vec<_>>());
+        molecule_correspondence(&images)
+    }
+
+    fn direct_graph_adapter(source: &Graph) -> AutomorphismAdapter {
+        AutomorphismAdapter {
+            graph: source.clone(),
+            classes: vec![AutomorphismClass::Entity(0); source.node_count()],
+            node_sources: source.node_ids().map(SubdivisionNodeSource::Node).collect(),
+            incidence_nodes: vec![None; source.edge_count()],
+            edge_sources: source.edge_ids().collect(),
+            incidence_edges: source.edge_ids().map(|edge| vec![edge]).collect(),
+            source_node_count: source.node_count(),
+            entity_blocks: vec![source.node_ids().collect()],
+        }
+    }
+
+    fn correspondence_from_order(
+        molecule: &Molecule,
+        incidence_graph: &IncidenceGraph,
+        order: &[NodeId],
+    ) -> MoleculeCorrespondence {
+        let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
+        let mut next = [0; 8];
+        for &node in order {
+            let (family, source) = match incidence_graph.entity(node) {
+                Entity::Atom(id) => (0, id.index()),
+                Entity::Bond(id) => (1, id.index()),
+                Entity::DativeBond(id) => (2, id.index()),
+                Entity::AromaticSystem(id) => (3, id.index()),
+                Entity::MulticenterBond(id) => (4, id.index()),
+                Entity::NoncovalentBond(id) => (5, id.index()),
+                Entity::StereoAtom(id) => (6, id.index()),
+                Entity::StereoBond(id) => (7, id.index()),
+            };
+            images[family][source] = next[family];
+            next[family] += 1;
+        }
+        molecule_correspondence(&images)
+    }
+
+    fn structural_leaf_key(
+        order: &[NodeId],
+        source: &Graph,
+        classes: &InitialClasses,
+    ) -> (Vec<u32>, Vec<(u32, u32, u32)>) {
+        let mut positions = vec![0_u32; source.node_count()];
+        for (position, node) in order.iter().enumerate() {
+            positions[node.index()] = position as u32;
+        }
+        let entity_classes = order
+            .iter()
+            .map(|node| classes.entities[node.index()])
+            .collect::<Vec<_>>();
+        let mut incidences = source
+            .edge_ids()
+            .map(|edge| {
+                let [first, second] = source.edge_endpoints(edge);
+                let first = positions[first.index()];
+                let second = positions[second.index()];
+                (
+                    classes.incidences[edge.index()],
+                    first.min(second),
+                    first.max(second),
+                )
+            })
+            .collect::<Vec<_>>();
+        incidences.sort_unstable();
+
+        (entity_classes, incidences)
+    }
+
+    fn project_entries(mut entries: MoleculeEntries, level: IncidenceLevel) -> MoleculeEntries {
+        entries.constraints = Constraints::new();
+        match level {
+            IncidenceLevel::Topology => {
+                entries.dative.clear();
+                entries.aromatic.clear();
+                entries.multicenter.clear();
+                entries.noncovalent.clear();
+                entries.stereo_atoms.clear();
+                entries.stereo_bonds.clear();
+            }
+            IncidenceLevel::Constitution => {
+                entries.stereo_atoms.clear();
+                entries.stereo_bonds.clear();
+            }
+            IncidenceLevel::Full => {}
+        }
+        entries
+    }
+
+    fn encoding_entries(repeated_occurrences: bool) -> MoleculeEntries {
+        let occurrence = if repeated_occurrences {
+            AtomId(0)
+        } else {
+            AtomId(1)
+        };
+        MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(0), BondForm::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            ],
+            dative: vec![(
+                vec![AtomId(0), occurrence],
+                AtomId(2),
+                DativeBondForm::from_order(1),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), occurrence, AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 2, 3]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(1), occurrence, AtomId(3)],
+                MulticenterBondForm::from_electrons(vec![2, 0, 1]),
+            )],
+            noncovalent: vec![(
+                AtomId(2),
+                AtomId(3),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(occurrence, StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            )],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(occurrence, StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        }
     }
 
     #[rstest]
@@ -1645,6 +2017,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case::localized_bond(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..Default::default()
+        }),
+        vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
+        0,
+    )]
     #[case::localized_self_loop(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
@@ -1652,6 +2033,7 @@ mod tests {
             ..Default::default()
         }),
         vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
+        2,
     )]
     #[case::parallel_bonds(
         Molecule::from_entries(MoleculeEntries {
@@ -1671,6 +2053,7 @@ mod tests {
             Incidence::BondEndpoint,
             Incidence::BondEndpoint,
         ],
+        0,
     )]
     #[case::repeated_relation_participant(
         Molecule::from_entries(MoleculeEntries {
@@ -1690,10 +2073,12 @@ mod tests {
             Incidence::DativeDonor,
             Incidence::DativeAcceptor,
         ],
+        3,
     )]
     fn test_automorphism_adapter_new(
         #[case] molecule: Molecule,
         #[case] expected_incidences: Vec<Incidence>,
+        #[case] expected_occurrence_nodes: usize,
     ) {
         let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
         let classes = initial_classes(&molecule, &incidence_graph).unwrap();
@@ -1709,13 +2094,21 @@ mod tests {
         );
         assert_eq!(
             adapter.graph().node_count(),
-            source.node_count() + source.edge_count(),
+            source.node_count() + expected_occurrence_nodes,
         );
-        assert_eq!(adapter.graph().edge_count(), 2 * source.edge_count());
+        assert_eq!(
+            adapter.graph().edge_count(),
+            source
+                .edge_ids()
+                .map(|edge| adapter.incidence_edges_of(edge).len())
+                .sum(),
+        );
         assert!(adapter.graph().is_simple());
 
         for node in source.node_ids() {
-            let adapter_node = adapter.node_of(SubdivisionNodeSource::Node(node));
+            let adapter_node = adapter
+                .node_of(SubdivisionNodeSource::Node(node))
+                .expect("every source entity remains an adapter node");
             assert_eq!(
                 adapter.node_source(adapter_node),
                 SubdivisionNodeSource::Node(node),
@@ -1726,16 +2119,17 @@ mod tests {
             );
         }
         for edge in source.edge_ids() {
-            let adapter_node = adapter.node_of(SubdivisionNodeSource::Edge(edge));
-            assert_eq!(
-                adapter.node_source(adapter_node),
-                SubdivisionNodeSource::Edge(edge),
-            );
-            assert_eq!(
-                adapter.class(adapter_node),
-                AutomorphismClass::Incidence(classes.incidences[edge.index()]),
-            );
-            for incidence_edge in adapter.incidence_edges_of(edge) {
+            if let Some(adapter_node) = adapter.node_of(SubdivisionNodeSource::Edge(edge)) {
+                assert_eq!(
+                    adapter.node_source(adapter_node),
+                    SubdivisionNodeSource::Edge(edge),
+                );
+                assert_eq!(
+                    adapter.class(adapter_node),
+                    AutomorphismClass::Incidence(classes.incidences[edge.index()]),
+                );
+            }
+            for &incidence_edge in adapter.incidence_edges_of(edge) {
                 assert_eq!(adapter.edge_source(incidence_edge), edge);
             }
         }
@@ -1944,12 +2338,7 @@ mod tests {
     #[rstest]
     fn test_canonical_search_prefix() {
         let source = Graph::new(4, &[]);
-        let adapter = AutomorphismAdapter {
-            subdivision: source.subdivide_edges(),
-            classes: vec![AutomorphismClass::Entity(0); 4],
-            source_node_count: 4,
-            entity_blocks: vec![(0..4).map(NodeId).collect()],
-        };
+        let adapter = direct_graph_adapter(&source);
         let leaf_key = |order: &[NodeId]| order.to_vec();
         let prefix_worse = |partition: &OrderedPartition,
                             best: &CanonicalCandidate<Vec<NodeId>>| {
@@ -1987,15 +2376,7 @@ mod tests {
                 .filter_map(|(position, &edge)| ((edge_mask >> position) & 1 == 1).then_some(edge))
                 .collect::<Vec<_>>();
             let source = Graph::new(node_count, &edges);
-            let adapter = AutomorphismAdapter {
-                subdivision: source.subdivide_edges(),
-                classes: (0..node_count)
-                    .map(|_| AutomorphismClass::Entity(0))
-                    .chain((0..edges.len()).map(|_| AutomorphismClass::Incidence(1)))
-                    .collect(),
-                source_node_count: node_count,
-                entity_blocks: vec![(0..node_count as u32).map(NodeId).collect()],
-            };
+            let adapter = direct_graph_adapter(&source);
             let leaf_key = |order: &[NodeId]| {
                 let mut positions = vec![0_u32; node_count];
                 for (position, node) in order.iter().enumerate() {
@@ -2039,6 +2420,170 @@ mod tests {
                     .candidate,
                     expected,
                     "edge mask {edge_mask:#08b}",
+                );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::topology(IncidenceLevel::Topology, false)]
+    #[case::constitution(IncidenceLevel::Constitution, false)]
+    #[case::constitution_repeated_occurrences(IncidenceLevel::Constitution, true)]
+    #[case::full(IncidenceLevel::Full, false)]
+    #[case::full_repeated_occurrences(IncidenceLevel::Full, true)]
+    fn test_colored_encoding_dense_remapping_equivalence(
+        #[case] level: IncidenceLevel,
+        #[case] repeated_occurrences: bool,
+    ) {
+        let entries = encoding_entries(repeated_occurrences);
+        let complete = Molecule::from_entries(entries.clone());
+        let molecule = Molecule::from_entries(project_entries(entries, level));
+        let remapped = molecule.remap(&reverse_correspondence(&molecule));
+
+        assert!(colored_encoding_equivalent(&complete, &molecule, level));
+        assert_eq!(
+            colored_encoding_equivalent(&molecule, &remapped, level),
+            explicitly_dense_equivalent(&molecule, &remapped),
+        );
+        assert!(explicitly_dense_equivalent(&molecule, &remapped));
+
+        let mut distinguished = remapped;
+        distinguished.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::O);
+        assert_eq!(
+            colored_encoding_equivalent(&molecule, &distinguished, level),
+            explicitly_dense_equivalent(&molecule, &distinguished),
+        );
+        assert!(!explicitly_dense_equivalent(&molecule, &distinguished));
+    }
+
+    #[rstest]
+    #[case::order_four(4)]
+    fn test_colored_encoding_exhaustive_graph_domain(#[case] atom_count: usize) {
+        let endpoint_pairs = (0..atom_count as u32)
+            .flat_map(|first| ((first + 1)..atom_count as u32).map(move |second| [first, second]))
+            .collect::<Vec<_>>();
+
+        for edge_mask in 0..(1_u64 << endpoint_pairs.len()) {
+            let bonds = endpoint_pairs
+                .iter()
+                .enumerate()
+                .filter(|(position, _)| (edge_mask >> position) & 1 == 1)
+                .map(|(_, &[first, second])| {
+                    (AtomId(first), AtomId(second), BondForm::from_order(1))
+                })
+                .collect();
+            let molecule = Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); atom_count],
+                bonds,
+                ..Default::default()
+            });
+            let remapped = molecule.remap(&reverse_correspondence(&molecule));
+            assert_eq!(
+                colored_encoding_equivalent(&molecule, &remapped, IncidenceLevel::Topology),
+                explicitly_dense_equivalent(&molecule, &remapped),
+                "edge mask {edge_mask:#08b}",
+            );
+
+            let mut distinguished = remapped;
+            distinguished.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::O);
+            assert_eq!(
+                colored_encoding_equivalent(&molecule, &distinguished, IncidenceLevel::Topology,),
+                explicitly_dense_equivalent(&molecule, &distinguished),
+                "edge mask {edge_mask:#08b}",
+            );
+        }
+    }
+
+    #[rstest]
+    #[ignore = "manual optimized-build canonicalization benchmark"]
+    fn benchmark_exact_canonicalization_carrier() {
+        const ITERATIONS: u32 = 100;
+
+        eprintln!(
+            "case\tlevel\tincidence\tadapter\tincidence_ns\tclasses_ns\tadapter_ns\tbackend_ns\tsearch_ns\tremap_ns\trefinements\tleaves\tprefix_pruned\torbit_pruned"
+        );
+        for case in benchmark_cases::corpus() {
+            for level in benchmark_cases::LEVELS {
+                let mut incidence_time = Duration::ZERO;
+                let mut classes_time = Duration::ZERO;
+                let mut adapter_time = Duration::ZERO;
+                let mut backend_time = Duration::ZERO;
+                let mut search_time = Duration::ZERO;
+                let mut remap_time = Duration::ZERO;
+                let mut sizes = (0, 0, 0, 0);
+                let mut stats = CanonicalSearchStats::default();
+
+                for _ in 0..ITERATIONS {
+                    let start = Instant::now();
+                    let incidence = case.molecule.incidence_graph(level);
+                    incidence_time += start.elapsed();
+
+                    let start = Instant::now();
+                    let classes = initial_classes(&case.molecule, &incidence).unwrap();
+                    classes_time += start.elapsed();
+
+                    let start = Instant::now();
+                    let adapter = AutomorphismAdapter::new(&incidence, &classes);
+                    adapter_time += start.elapsed();
+
+                    let start = Instant::now();
+                    black_box(adapter.automorphisms(AutomorphismAlgorithm::Nauty));
+                    backend_time += start.elapsed();
+
+                    let source = incidence.graph();
+                    let leaf_key = |order: &[NodeId]| structural_leaf_key(order, source, &classes);
+                    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+                    let start = Instant::now();
+                    let result = canonical_search(
+                        &adapter,
+                        AutomorphismAlgorithm::Nauty,
+                        CanonicalSearchOptions {
+                            automorphism_pruning: true,
+                            prefix_pruning: false,
+                            branch_order: BranchOrder::BackendCanonical,
+                        },
+                        &leaf_key,
+                        &no_prefix,
+                    );
+                    search_time += start.elapsed();
+
+                    let correspondence = correspondence_from_order(
+                        &case.molecule,
+                        &incidence,
+                        &result.candidate.entity_order,
+                    );
+                    let start = Instant::now();
+                    black_box(case.molecule.remap(&correspondence));
+                    remap_time += start.elapsed();
+
+                    sizes = (
+                        incidence.graph().node_count(),
+                        incidence.graph().edge_count(),
+                        adapter.graph().node_count(),
+                        adapter.graph().edge_count(),
+                    );
+                    stats = result.stats;
+                }
+
+                let average = |duration: Duration| duration.as_nanos() / u128::from(ITERATIONS);
+                eprintln!(
+                    "{}\t{}\tn{}_e{}\tn{}_e{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    case.name,
+                    benchmark_cases::level_name(level),
+                    sizes.0,
+                    sizes.1,
+                    sizes.2,
+                    sizes.3,
+                    average(incidence_time),
+                    average(classes_time),
+                    average(adapter_time),
+                    average(backend_time),
+                    average(search_time),
+                    average(remap_time),
+                    stats.refinement_calls,
+                    stats.visited_leaves,
+                    stats.prefix_pruned_branches,
+                    stats.orbit_pruned_branches,
                 );
             }
         }

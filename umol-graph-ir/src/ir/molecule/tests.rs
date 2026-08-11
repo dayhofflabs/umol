@@ -840,6 +840,33 @@ fn test_molecule_equiv_under_non_identity(
 }
 
 #[rstest]
+fn test_molecule_equiv_under_non_simple_topology() {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        bonds: vec![
+            (AtomId(0), AtomId(0), BondForm::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+        ],
+        ..Default::default()
+    });
+    let correspondence = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[AtomId(1), AtomId(0)], 2),
+        Correspondence::from_images(&[BondId(2), BondId(0), BondId(1)], 3),
+        Correspondence::from_images(&[], 0),
+        Correspondence::from_images(&[], 0),
+        Correspondence::from_images(&[], 0),
+        Correspondence::from_images(&[], 0),
+        Correspondence::from_images(&[], 0),
+        Correspondence::from_images(&[], 0),
+    );
+    let remapped = molecule.remap(&correspondence);
+
+    assert!(molecule.equiv_under(&remapped, &correspondence));
+    assert!(remapped.equiv_under(&molecule, &correspondence.reverse()));
+}
+
+#[rstest]
 fn test_molecule_equiv_under_rejects_partial_correspondence(
     #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {

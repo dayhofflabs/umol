@@ -408,6 +408,47 @@ canonicalization carrier. If the compact representation wins materially, the com
 facility should be revised to retain localized bonds as graph edges and lift only the entities or
 typed incidences that require it. A second canonicalization-only molecule graph must not be added.
 
+### S5e carrier decision
+
+The exact encoding was checked against exhaustive dense entity remapping for all 64 simple graphs
+on four atoms and for topology, constitution, and full DAMNSS fixtures. The latter include
+tier-2-invalid but representation-intact repeated participants, localized self-loops, and parallel
+bonds. The comparison exposed and fixed an independent `Molecule::equiv_under` defect: the method
+must inspect the endpoints of the explicitly mapped localized bond rather than ask the graph for an
+arbitrary edge between the mapped atoms.
+
+The first backend adapter subdivided every incidence edge. That doubled the already subdivided
+localized-bond topology and materially increased labeling time: ordinary naphthalene rose from
+about 2.66 microseconds for the incidence graph to 4.96 microseconds, and two disconnected rings
+rose from about 7.31 to 9.08 microseconds. The exact adapter now keeps unique `BondEndpoint` and
+`NoncovalentEndpoint` incidences as direct edges. It subdivides role- or value-bearing incidences
+and duplicate endpoint pairs, preserving their occurrence identity while always presenting a
+simple vertex-colored graph to the backend. Ordinary topology therefore retains the incidence
+carrier's node and edge counts instead of subdividing it a second time.
+
+An optimized 100-iteration run over the six-case S0 corpus measured the following per-operation
+ranges across all three levels:
+
+| Operation | Range |
+| --- | ---: |
+| incidence-carrier construction | 0.27-0.92 microseconds |
+| exact initial-class construction | 4.57-14.25 microseconds |
+| backend-adapter construction | 0.61-2.25 microseconds |
+| backend automorphism call | 1.16-8.58 microseconds |
+| typed canonical search | 2.23-60.80 microseconds |
+| complete molecule remapping | 2.73-6.84 microseconds |
+
+Every case visited one leaf after one to five refinement calls. Prefix pruning was disabled for the
+measurement; automorphism-orbit pruning removed zero to eighteen branches. The topology adapter
+had exactly the carrier size in every corpus case. Constitution and full adapters added occurrence
+nodes only for typed overlay incidences; the largest full case grew from `n22_e38` to `n42_e58`.
+
+The raw atom-and-bond graph remains faster, but it is not an exact alternative: a vertex-color-only
+backend cannot represent bond identity and attributes as colored edges. The measured penalty was
+the redundant adapter subdivision, not the shared `IncidenceGraph` carrier. `IncidenceGraph` is
+therefore retained as the single molecular carrier, with the selective simple-graph adapter kept as
+an automorphism-backend detail. No parallel canonicalization graph is introduced.
+
 ## Canonicalization graph encoding
 
 There is no separate "exact canonicalization graph." The existing incidence-graph facility must be
@@ -1310,13 +1351,15 @@ and the semantic properties validated by the corresponding property tests.
   selectable hashed colors, but canonicalization never treats a `u64` hash as identity. Add cases
   proving equal represented values share a class and every selected distinction separates classes.
   This is additive. [dep: S1a, S4b, S5a] **Done.**
-- **S5c — Simple backend adapter.** Translate every incidence edge into a distinct colored
-  occurrence vertex at the selected automorphism backend boundary. Use disjoint source-class colors
-  so an occurrence vertex cannot map to a molecule-entity vertex. Preserve mappings from adapter
-  nodes and edges back to common-carrier entities and occurrences, and project generators and orbits
-  to entity nodes. Verify that localized self-loops, parallel bonds, and repeated relation
-  participants produce a simple adapter graph without losing multiplicity or role. Backend
-  canonical labels are an optimization input only. This is additive. [dep: S5a, S5b] **Done.**
+- **S5c — Simple backend adapter.** Keep unique single-role localized-bond and noncovalent-bond
+  endpoint incidences as direct edges. Translate role- or value-bearing incidences and duplicate
+  endpoint pairs into distinct colored occurrence vertices at the selected automorphism backend
+  boundary. Use disjoint source-class colors so an occurrence vertex cannot map to a
+  molecule-entity vertex. Preserve mappings from adapter nodes and edges back to common-carrier
+  entities and occurrences, and project generators and orbits to entity nodes. Verify that
+  localized self-loops, parallel bonds, and repeated relation participants produce a simple adapter
+  graph without losing multiplicity or role. Backend canonical labels are an optimization input
+  only. This is additive. [dep: S5a, S5b] **Done.**
 - **S5d — Typed-order canonical search.** Add the private graph-IR individualization-refinement
   search described above: ordered exact partitions, collision-free equitable refinement, fixed
   non-singleton-cell selection, typed leaf keys, prefix pruning, and automorphism-orbit pruning.
@@ -1331,7 +1374,7 @@ and the semantic properties validated by the corresponding property tests.
   visited leaves, pruned branches, backend time, and remapping time. If a compact raw-graph plus
   typed-overlay carrier wins materially, revise `IncidenceGraph` itself while preserving the same
   occurrence contract; do not retain two molecular encodings. This is additive or a measured
-  breaking red-to-green carrier replacement. [dep: S0b, S5d]
+  breaking red-to-green carrier replacement. [dep: S0b, S5d] **Done.**
 
 ### S6 — Topology canonicalization
 

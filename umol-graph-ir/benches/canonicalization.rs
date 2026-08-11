@@ -1,292 +1,36 @@
-//! Baselines for molecule canonicalization carriers.
+//! Molecule canonicalization carrier benchmarks.
 //!
-//! The raw-topology path and the incidence paths do not yet implement the same
-//! semantics: the former labels only the stored atom/bond graph, while the
-//! latter includes the entity kinds selected by `IncidenceLevel`.
-//! Criterion ids include the measured graph's node and edge counts. The exact
-//! compact-versus-incidence comparison belongs to the later canonicalization
-//! carrier benchmark once a compact overlay-aware labeling path exists.
+//! The raw-topology path labels only atoms in the stored graph and is therefore
+//! a performance reference, not an exact semantic alternative to the incidence
+//! paths. The exact adapter retains single-role localized endpoints as direct
+//! edges and subdivides role-bearing or duplicate incidences. Criterion ids
+//! include the measured graph's node and edge counts.
 
+use std::collections::BTreeMap;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_chem::element::Element;
-use umol_graph_core::AutomorphismAlgorithm;
+use umol_graph_core::{AutomorphismAlgorithm, Correspondence, Graph, NodeId};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomForm, AtomId, BondForm, BondId, ConstitutionColoring, DativeBondForm,
-    Entity, IncidenceGraph, IncidenceLevel, Molecule, MoleculeColoring, MoleculeEntries,
-    MulticenterBondForm, NoncovalentBondForm, NoncovalentBondKind, StereoAtomForm, StereoBondForm,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    AromaticSystemForm, AromaticSystemId, AtomForm, AtomId, BondForm, BondId, ConstitutionColoring,
+    DativeBondForm, DativeBondId, Entity, Incidence, IncidenceGraph, IncidenceLevel, Molecule,
+    MoleculeColoring, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
+    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, StereoAtomForm,
+    StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind, StereoLigand,
+    StereoLigandKind,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
 
-struct CorpusCase {
-    name: &'static str,
-    molecule: Molecule,
-}
+mod canonicalization_cases;
 
-const LEVELS: [IncidenceLevel; 3] = [
-    IncidenceLevel::Topology,
-    IncidenceLevel::Constitution,
-    IncidenceLevel::Full,
-];
+use canonicalization_cases::{corpus, level_name, LEVELS};
 
-fn level_name(level: IncidenceLevel) -> &'static str {
-    match level {
-        IncidenceLevel::Topology => "topology",
-        IncidenceLevel::Constitution => "constitution",
-        IncidenceLevel::Full => "full",
-    }
-}
-
-fn atom(element: Element) -> AtomForm {
-    AtomForm::from_element(element)
-}
-
-fn bond(first: u32, second: u32, order: u8) -> (AtomId, AtomId, BondForm) {
-    (AtomId(first), AtomId(second), BondForm::from_order(order))
-}
-
-fn ligand(atom: u32) -> StereoLigand {
-    StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)
-}
-
-fn implicit_hydrogen(site: u32) -> StereoLigand {
-    StereoLigand::new(AtomId(site), StereoLigandKind::ImplicitHydrogen)
-}
-
-fn carbon_graph(atom_count: usize, edges: &[(u32, u32)]) -> Molecule {
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![atom(Element::C); atom_count],
-        bonds: edges
-            .iter()
-            .map(|&(first, second)| bond(first, second, 1))
-            .collect(),
-        ..Default::default()
-    })
-}
-
-fn ordinary_naphthalene() -> Molecule {
-    carbon_graph(
-        10,
-        &[
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 4),
-            (4, 5),
-            (5, 0),
-            (5, 6),
-            (6, 7),
-            (7, 8),
-            (8, 9),
-            (9, 4),
-        ],
-    )
-}
-
-fn disconnected_rings() -> Molecule {
-    carbon_graph(
-        12,
-        &[
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 4),
-            (4, 5),
-            (5, 0),
-            (6, 7),
-            (7, 8),
-            (8, 9),
-            (9, 10),
-            (10, 11),
-            (11, 6),
-        ],
-    )
-}
-
-fn overlay_heavy() -> Molecule {
-    Molecule::from_entries(MoleculeEntries {
-        atoms: [
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::N,
-            Element::O,
-            Element::F,
-            Element::Cl,
-        ]
-        .into_iter()
-        .map(atom)
-        .collect(),
-        bonds: vec![
-            bond(0, 1, 1),
-            bond(1, 2, 2),
-            bond(2, 3, 1),
-            bond(3, 0, 1),
-            bond(1, 4, 1),
-            bond(1, 5, 1),
-            bond(2, 6, 1),
-            bond(2, 7, 1),
-        ],
-        dative: vec![(
-            vec![AtomId(4), AtomId(5)],
-            AtomId(3),
-            DativeBondForm::from_order(1),
-        )],
-        aromatic: vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-            AromaticSystemForm::default(),
-        )],
-        multicenter: vec![(
-            vec![AtomId(0), AtomId(4), AtomId(5)],
-            MulticenterBondForm::default(),
-        )],
-        noncovalent: vec![(
-            AtomId(6),
-            AtomId(7),
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        )],
-        stereo_atoms: vec![(
-            AtomId(1),
-            vec![ligand(0), ligand(2), ligand(4), ligand(5)],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        )],
-        stereo_bonds: vec![(
-            BondId(1),
-            vec![ligand(0), ligand(4), ligand(3), ligand(6)],
-            StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
-        )],
-        ..Default::default()
-    })
-}
-
-fn tetrahedral_stereo() -> Molecule {
-    Molecule::from_entries(MoleculeEntries {
-        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .into_iter()
-            .map(atom)
-            .collect(),
-        bonds: vec![bond(0, 1, 1), bond(0, 2, 1), bond(0, 3, 1), bond(0, 4, 1)],
-        stereo_atoms: vec![(
-            AtomId(0),
-            vec![ligand(1), ligand(2), ligand(3), ligand(4)],
-            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-        )],
-        ..Default::default()
-    })
-}
-
-fn meso_dichlorobutane() -> Molecule {
-    Molecule::from_entries(MoleculeEntries {
-        atoms: [
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::Cl,
-            Element::Cl,
-        ]
-        .into_iter()
-        .map(atom)
-        .collect(),
-        bonds: vec![
-            bond(0, 1, 1),
-            bond(0, 2, 1),
-            bond(1, 3, 1),
-            bond(0, 4, 1),
-            bond(1, 5, 1),
-        ],
-        stereo_atoms: vec![
-            (
-                AtomId(0),
-                vec![ligand(1), ligand(2), ligand(4), implicit_hydrogen(0)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            ),
-            (
-                AtomId(1),
-                vec![ligand(0), ligand(3), ligand(5), implicit_hydrogen(1)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-            ),
-        ],
-        ..Default::default()
-    })
-}
-
-fn para_stereo_trichloropentane() -> Molecule {
-    Molecule::from_entries(MoleculeEntries {
-        atoms: [
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::C,
-            Element::Cl,
-            Element::Cl,
-            Element::Cl,
-        ]
-        .into_iter()
-        .map(atom)
-        .collect(),
-        bonds: vec![
-            bond(0, 1, 1),
-            bond(1, 2, 1),
-            bond(2, 3, 1),
-            bond(3, 4, 1),
-            bond(1, 5, 1),
-            bond(2, 6, 1),
-            bond(3, 7, 1),
-        ],
-        stereo_atoms: vec![
-            (
-                AtomId(1),
-                vec![ligand(0), ligand(2), ligand(5), implicit_hydrogen(1)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            ),
-            (
-                AtomId(2),
-                vec![ligand(1), ligand(3), ligand(6), implicit_hydrogen(2)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
-            ),
-            (
-                AtomId(3),
-                vec![ligand(2), ligand(4), ligand(7), implicit_hydrogen(3)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
-            ),
-        ],
-        ..Default::default()
-    })
-}
-
-fn corpus() -> [CorpusCase; 6] {
-    [
-        CorpusCase {
-            name: "ordinary_naphthalene",
-            molecule: ordinary_naphthalene(),
-        },
-        CorpusCase {
-            name: "disconnected_rings",
-            molecule: disconnected_rings(),
-        },
-        CorpusCase {
-            name: "overlay_heavy",
-            molecule: overlay_heavy(),
-        },
-        CorpusCase {
-            name: "tetrahedral_stereo",
-            molecule: tetrahedral_stereo(),
-        },
-        CorpusCase {
-            name: "meso_dichlorobutane",
-            molecule: meso_dichlorobutane(),
-        },
-        CorpusCase {
-            name: "para_stereo_trichloropentane",
-            molecule: para_stereo_trichloropentane(),
-        },
-    ]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum AdapterColor {
+    Entity(u64),
+    Incidence(Incidence),
 }
 
 fn graph_size(nodes: usize, edges: usize) -> String {
@@ -300,6 +44,67 @@ fn incidence_colors(molecule: &Molecule, incidence: &IncidenceGraph) -> Vec<u64>
         .node_ids()
         .map(|node| coloring.color(molecule, incidence.entity(node)))
         .collect()
+}
+
+fn build_adapter(molecule: &Molecule, incidence: &IncidenceGraph) -> (Graph, Vec<AdapterColor>) {
+    let source = incidence.graph();
+    let entity_colors = incidence_colors(molecule, incidence);
+    let mut colors = entity_colors
+        .into_iter()
+        .map(AdapterColor::Entity)
+        .collect::<Vec<_>>();
+    let direct_pair_counts = source
+        .edge_ids()
+        .filter(|&edge| {
+            matches!(
+                incidence.incidence(edge),
+                Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
+            )
+        })
+        .fold(BTreeMap::<[NodeId; 2], usize>::new(), |mut counts, edge| {
+            *counts.entry(source.edge_endpoints(edge)).or_default() += 1;
+            counts
+        });
+    let mut edges = Vec::new();
+    for edge in source.edge_ids() {
+        let endpoints = source.edge_endpoints(edge);
+        let direct = matches!(
+            incidence.incidence(edge),
+            Incidence::BondEndpoint | Incidence::NoncovalentEndpoint
+        ) && direct_pair_counts[&endpoints] == 1;
+        if direct {
+            edges.push([endpoints[0].0, endpoints[1].0]);
+            continue;
+        }
+
+        let occurrence = colors.len() as u32;
+        colors.push(AdapterColor::Incidence(incidence.incidence(edge).clone()));
+        edges.push([endpoints[0].0, occurrence]);
+        edges.push([occurrence, endpoints[1].0]);
+    }
+
+    (Graph::new(colors.len(), &edges), colors)
+}
+
+fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
+    fn reverse<Id>(count: usize) -> Correspondence<Id>
+    where
+        Id: Copy + Ord + From<usize>,
+    {
+        let images = (0..count).rev().map(Id::from).collect::<Vec<_>>();
+        Correspondence::from_images(&images, count)
+    }
+
+    MoleculeCorrespondence::new(
+        reverse::<AtomId>(molecule.atoms().count()),
+        reverse::<BondId>(molecule.bonds().count()),
+        reverse::<DativeBondId>(molecule.dative_bonds().count()),
+        reverse::<AromaticSystemId>(molecule.aromatic_systems().count()),
+        reverse::<MulticenterBondId>(molecule.multicenter_bonds().count()),
+        reverse::<NoncovalentBondId>(molecule.noncovalent_bonds().count()),
+        reverse::<StereoAtomId>(molecule.stereo_atoms().count()),
+        reverse::<StereoBondId>(molecule.stereo_bonds().count()),
+    )
 }
 
 fn bench_raw_topology_labeling(c: &mut Criterion) {
@@ -365,10 +170,85 @@ fn bench_incidence_labeling(c: &mut Criterion) {
     }
 }
 
+fn bench_adapter_construction(c: &mut Criterion) {
+    let corpus = corpus();
+
+    for level in LEVELS {
+        let mut group = c.benchmark_group(format!(
+            "canonicalization/adapter_construction/{}",
+            level_name(level)
+        ));
+        for case in &corpus {
+            let incidence = case.molecule.incidence_graph(level);
+            let (adapter, _) = build_adapter(&case.molecule, &incidence);
+            let size = graph_size(adapter.node_count(), adapter.edge_count());
+            group.bench_function(BenchmarkId::new(case.name, size), |b| {
+                b.iter(|| build_adapter(black_box(&case.molecule), black_box(&incidence)))
+            });
+        }
+        group.finish();
+    }
+}
+
+fn bench_adapter_labeling(c: &mut Criterion) {
+    let corpus = corpus();
+
+    for level in LEVELS {
+        let mut group = c.benchmark_group(format!(
+            "canonicalization/adapter_labeling/{}",
+            level_name(level)
+        ));
+        for case in &corpus {
+            let incidence = case.molecule.incidence_graph(level);
+            let (graph, colors) = build_adapter(&case.molecule, &incidence);
+            let size = graph_size(graph.node_count(), graph.edge_count());
+            group.bench_function(BenchmarkId::new(case.name, size), |b| {
+                b.iter(|| black_box(graph.automorphisms(|node| &colors[node.index()], ALGORITHM)))
+            });
+        }
+        group.finish();
+    }
+}
+
+fn bench_remapping(c: &mut Criterion) {
+    let corpus = corpus();
+    let mut group = c.benchmark_group("canonicalization/remapping");
+
+    for case in &corpus {
+        let correspondence = reverse_correspondence(&case.molecule);
+        let counts = molecule_counts(&case.molecule)
+            .into_iter()
+            .map(|count| count.to_string())
+            .collect::<Vec<_>>()
+            .join("_");
+        group.bench_function(BenchmarkId::new(case.name, counts), |b| {
+            b.iter(|| black_box(&case.molecule).remap(black_box(&correspondence)))
+        });
+    }
+
+    group.finish();
+}
+
+fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
+    [
+        molecule.atoms().count(),
+        molecule.bonds().count(),
+        molecule.dative_bonds().count(),
+        molecule.aromatic_systems().count(),
+        molecule.multicenter_bonds().count(),
+        molecule.noncovalent_bonds().count(),
+        molecule.stereo_atoms().count(),
+        molecule.stereo_bonds().count(),
+    ]
+}
+
 criterion_group!(
     canonicalization,
     bench_raw_topology_labeling,
     bench_incidence_construction,
     bench_incidence_labeling,
+    bench_adapter_construction,
+    bench_adapter_labeling,
+    bench_remapping,
 );
 criterion_main!(canonicalization);

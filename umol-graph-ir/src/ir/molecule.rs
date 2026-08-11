@@ -651,7 +651,9 @@ impl Molecule {
             ) else {
                 return false;
             };
-            if other.graph.find_edge(mapped_first, mapped_second) != Some(EdgeId::from(right))
+            let mut mapped_endpoints = [mapped_first, mapped_second];
+            mapped_endpoints.sort_unstable();
+            if other.graph.edge_endpoints(EdgeId::from(right)) != mapped_endpoints
                 || !left_attributes.equiv(right_attributes)
             {
                 return false;
