@@ -1283,7 +1283,7 @@ and the semantic properties validated by the corresponding property tests.
   `context(&StereoModel)` method constructs the graph-IR `CanonicalizationContext` from the config
   and `StereoModel::para_stereo`. Do not add a duplicate one-field canonicalization model, a
   forwarding operation object, or an extension trait, and do not move graph-IR reconstruction into
-  `umol-graph`. This is additive. [dep: S4a]
+  `umol-graph`. This is additive. [dep: S4a] **Done.**
 
 ### S5 — Exact incidence and canonical search
 
