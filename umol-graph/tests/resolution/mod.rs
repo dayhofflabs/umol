@@ -10,7 +10,9 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, ValenceModel};
+use umol_graph::ops::model::{
+    AromaticityModel, ChemistryModel, ConnectivityModel, StereoModel, ValenceModel,
+};
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
@@ -85,6 +87,7 @@ fn counts_chemistry() -> ChemistryModel {
         valence: ValenceModel::Counts {
             table: Cow::Borrowed(ValenceTable::default_table()),
         },
+        connectivity: ConnectivityModel::default(),
         aromaticity: AromaticityModel::daylight(),
         stereo: StereoModel::default(),
     }

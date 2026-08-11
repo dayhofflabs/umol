@@ -2,14 +2,14 @@
 //! defined in [`crate::ops::valence`].
 
 use thiserror::Error;
-use umol_graph_ir::ir::{
-    AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    Molecule, TransactionError,
-};
+use umol_graph_ir::ir::{AtomConstraintKey, Edits, Molecule, TransactionError};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::ValenceModel;
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
+use crate::ops::validate::{
+    IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
+};
 
 #[derive(Clone, Debug)]
 pub enum ValenceResolver<'a> {
@@ -20,7 +20,7 @@ pub enum ValenceResolver<'a> {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceContradiction {
     #[error(transparent)]
-    Constraint(#[from] IncidenceConstraintContradiction),
+    Constraint(#[from] IncidenceConstraintInvariantsContradiction),
     #[error(transparent)]
     AtomTyping(#[from] AtomTypingError),
     #[error(transparent)]
@@ -54,7 +54,7 @@ impl<'a> ValenceResolver<'a> {
                 AtomConstraintKey::DonatedPairs,
                 AtomConstraintKey::AcceptedPairs,
             ] {
-                match IncidenceConstraintValidator
+                match IncidenceConstraintInvariantsValidator
                     .validate_molecule_atom_constraint(molecule, atom, key)
                     .expect("atom id came from the molecule atom store")
                 {
@@ -161,7 +161,7 @@ mod tests {
         },
         mol_dsl!(r#"{:atoms ["C#v1"]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
-            IncidenceConstraintContradiction::Atom {
+            IncidenceConstraintInvariantsContradiction::Atom {
                 atom: AtomId(0),
                 constraint: AtomConstraintForm::valence(1),
             },
@@ -173,7 +173,7 @@ mod tests {
         },
         mol_dsl!(r#"{:atoms ["C#v1"]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
-            IncidenceConstraintContradiction::Atom {
+            IncidenceConstraintInvariantsContradiction::Atom {
                 atom: AtomId(0),
                 constraint: AtomConstraintForm::valence(1),
             },
@@ -199,7 +199,7 @@ mod tests {
         },
         mol_dsl!(r#"{:atoms ["N#d0" "B"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
-            IncidenceConstraintContradiction::Atom {
+            IncidenceConstraintInvariantsContradiction::Atom {
                 atom: AtomId(0),
                 constraint: AtomConstraintForm::donated_pairs(0),
             },
@@ -211,7 +211,7 @@ mod tests {
         },
         mol_dsl!(r#"{:atoms ["N" "B#t0"] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
         Solution::Contradictory(ValenceContradiction::Constraint(
-            IncidenceConstraintContradiction::Atom {
+            IncidenceConstraintInvariantsContradiction::Atom {
                 atom: AtomId(1),
                 constraint: AtomConstraintForm::accepted_pairs(0),
             },

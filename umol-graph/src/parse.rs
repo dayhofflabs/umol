@@ -68,6 +68,7 @@ mod tests {
     };
     use crate::ops::resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig};
     use crate::ops::valence::{CountsValence, ValenceTable};
+    use crate::ops::validate::ConnectivityModel;
 
     const METHANE_MOL: &str = "Methane\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
 
@@ -119,6 +120,7 @@ mod tests {
     #[case::counts(
         CtfileIoConfig::basic(),
         ChemistryModel {
+            connectivity: ConnectivityModel::default(),
             valence: ValenceModel::Counts {
                 table: Cow::Borrowed(ValenceTable::default_table()),
             },

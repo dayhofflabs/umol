@@ -3,11 +3,14 @@
 
 use thiserror::Error;
 use umol_graph_ir::ir::{
-    AtomConstraintKey, Edits, IncidenceConstraintContradiction, IncidenceConstraintValidator,
-    Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate, NumForm, TransactionError,
-    UnpairedElectronsForm,
+    AtomConstraintKey, Edits, Lattice, Molecule, MulticenterBondHandle, MulticenterBondUpdate,
+    NumForm, TransactionError, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
+
+use crate::ops::validate::{
+    IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct MulticenterBondsResolver;
@@ -15,7 +18,7 @@ pub struct MulticenterBondsResolver;
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum MulticenterBondsContradiction {
     #[error(transparent)]
-    Constraint(#[from] IncidenceConstraintContradiction),
+    Constraint(#[from] IncidenceConstraintInvariantsContradiction),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -32,7 +35,7 @@ impl MulticenterBondsResolver {
     /// Construct charge and unpaired-electron default edits without mutating `molecule`.
     pub fn plan(&self, molecule: &Molecule) -> Solution<Edits, MulticenterBondsContradiction> {
         for atom in molecule.atoms().ids() {
-            match IncidenceConstraintValidator
+            match IncidenceConstraintInvariantsValidator
                 .validate_molecule_atom_constraint(
                     molecule,
                     atom,
@@ -157,7 +160,7 @@ mod tests {
     #[case::contradictory(
         mol_dsl!(r#"{:atoms ["C#m1"]}"#),
         Solution::Contradictory(MulticenterBondsContradiction::Constraint(
-            IncidenceConstraintContradiction::Atom {
+            IncidenceConstraintInvariantsContradiction::Atom {
                 atom: AtomId(0),
                 constraint: AtomConstraintForm::multicenter_valence(
                     MulticenterValenceForm::multicenter(1),

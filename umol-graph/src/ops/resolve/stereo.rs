@@ -391,7 +391,7 @@ mod tests {
             r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0] :attrs "Th1"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Sp1"}]
         }"#
         )
     }
@@ -400,9 +400,9 @@ mod tests {
     fn cis_trans_entity_failure_molecule() -> Molecule {
         mol_dsl_ground!(
             r#"{
-            :atoms ["C#h3" "C#h" "C#h" "C#h3"]
-            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
-            :stereo-bonds [{:site 1 :ligands [0] :attrs "Ct1"}]
+            :atoms ["C#h3" "C#h0" "C#h" "C#h3"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
         }"#
         )
     }
@@ -611,8 +611,16 @@ mod tests {
             removes: vec![(
                 StereoAtomHandle::Id(StereoAtomId(0)),
                 AtomHandle::Id(AtomId(1)),
-                vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(2)), StereoLigandKind::Atom),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
+                StereoAtomForm::new(StereoKind::SquarePlanar, StereoCoset::Lit(1)),
             )],
         }]))
     )]
@@ -651,7 +659,18 @@ mod tests {
             removes: vec![(
                 StereoBondHandle::Id(StereoBondId(0)),
                 BondHandle::Id(BondId(1)),
-                vec![(AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom)],
+                vec![
+                    (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(1)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                    (AtomHandle::Id(AtomId(3)), StereoLigandKind::Atom),
+                    (
+                        AtomHandle::Id(AtomId(2)),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ),
+                ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],
         }]))

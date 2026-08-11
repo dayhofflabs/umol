@@ -18,6 +18,12 @@ use umol_utils::solution::Solution;
 
 pub struct ValenceInvariants;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ValenceInvariantsValidator;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ValenceInvariantsError {}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceMismatch {
     #[error("atom {atom_id:?}: orbital count {orbital_count} != electron count {electron_count}")]
@@ -32,7 +38,7 @@ impl ValenceInvariants {
     /// Molecule-wide verdict: `Underdetermined` if any atom has a non-`Lit`
     /// field the check can't fire on, `Contradictory` on the first orbital !=
     /// electron mismatch, else `Determined`.
-    pub fn check(molecule: &Molecule) -> Solution<(), ValenceMismatch> {
+    fn check(molecule: &Molecule) -> Solution<(), ValenceMismatch> {
         for id in molecule.atoms().ids() {
             match Self::check_molecule_atom(molecule, id) {
                 Solution::Determined(()) => {}
@@ -47,7 +53,7 @@ impl ValenceInvariants {
     /// only a non-negative literal constraint raises them. `Underdetermined`
     /// when element / charge / implicit-H / lone-pairs / unpaired electrons are not all
     /// `Lit`.
-    pub fn check_atom(atom: &AtomForm) -> Solution<(), ValenceMismatch> {
+    fn check_atom(atom: &AtomForm) -> Solution<(), ValenceMismatch> {
         let (
             Some(element),
             Some(charge),
@@ -409,6 +415,22 @@ impl ValenceInvariants {
         }
 
         candidates
+    }
+}
+
+impl ValenceInvariantsValidator {
+    pub fn validate(
+        &self,
+        molecule: &Molecule,
+    ) -> Result<Solution<(), ValenceMismatch>, ValenceInvariantsError> {
+        Ok(ValenceInvariants::check(molecule))
+    }
+
+    pub fn validate_atom(
+        &self,
+        atom: &AtomForm,
+    ) -> Result<Solution<(), ValenceMismatch>, ValenceInvariantsError> {
+        Ok(ValenceInvariants::check_atom(atom))
     }
 }
 

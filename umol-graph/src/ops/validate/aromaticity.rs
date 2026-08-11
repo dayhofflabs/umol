@@ -18,7 +18,7 @@ pub struct AromaticityConformanceValidator {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum AromaticityValidatorContradiction {
+pub enum AromaticityConformanceContradiction {
     #[error("perception rejected the input: {0}")]
     Perception(AromaticityContradiction),
     #[error(transparent)]
@@ -40,7 +40,7 @@ impl AromaticityConformanceValidator {
     pub fn validate(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
+    ) -> Result<Solution<(), AromaticityConformanceContradiction>, AromaticityError> {
         match self.perception.derive(molecule, self.config)? {
             Solution::Determined(derivation) => {
                 if let Some(&inconsistency) = derivation.inconsistencies.first() {
@@ -51,7 +51,7 @@ impl AromaticityConformanceValidator {
             }
             Solution::Underdetermined(_) => Ok(Solution::Underdetermined(())),
             Solution::Contradictory(contradiction) => Ok(Solution::Contradictory(
-                AromaticityValidatorContradiction::Perception(contradiction),
+                AromaticityConformanceContradiction::Perception(contradiction),
             )),
         }
     }
@@ -123,7 +123,7 @@ mod tests {
     #[case::assertion_without_system(
         AromaticityModel::daylight(),
         mol_dsl!(r#"{:atoms ["C#a"]}"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
         )),
     )]
@@ -134,7 +134,7 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
                 system: AromaticSystemId(0),
             },
@@ -147,7 +147,7 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,1,1,1,1,1]"}]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
                 system: AromaticSystemId(0),
             },
@@ -161,7 +161,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticBondConstraintMismatch {
                 bond: BondId(0),
                 system: AromaticSystemId(0),
@@ -176,7 +176,7 @@ mod tests {
                     [4 5 "1#a"] [5 0 "1#a"]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[2,0,1,1,1,1]"}]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceMismatch {
                 atom: AtomId(0),
                 system: AromaticSystemId(0),
@@ -190,7 +190,7 @@ mod tests {
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Inconsistency(
+        Solution::Contradictory(AromaticityConformanceContradiction::Inconsistency(
             AromaticityInconsistency::AromaticSystemFailure {
                 system: AromaticSystemId(0),
             },
@@ -205,7 +205,7 @@ mod tests {
             :atoms ["N#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
         }"#),
-        Solution::Contradictory(AromaticityValidatorContradiction::Perception(
+        Solution::Contradictory(AromaticityConformanceContradiction::Perception(
             AromaticityContradiction::ClarNonBenzenoid(
                 "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
                     .to_string(),
@@ -252,7 +252,7 @@ mod tests {
     fn test_aromaticity_conformance_validator_validate(
         #[case] model: AromaticityModel,
         #[case] molecule: Molecule,
-        #[case] expected: Solution<(), AromaticityValidatorContradiction>,
+        #[case] expected: Solution<(), AromaticityConformanceContradiction>,
     ) {
         assert_eq!(
             AromaticityConformanceValidator::new(&model).validate(&molecule),

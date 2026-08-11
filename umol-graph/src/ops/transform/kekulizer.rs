@@ -21,16 +21,16 @@ use umol_graph_core::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsForm, EntityStructureContradiction, EntityStructureError,
-    EntityStructureValidator, Molecule, NumForm,
+    ElectronCountsForm, Molecule, NumForm,
 };
 use umol_utils::solution::Solution;
 
 use crate::ops::invariant::ValenceMismatch;
 use crate::ops::transform::Transformer;
 use crate::ops::validate::{
-    SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator,
-    ValenceInvariantsError, ValenceInvariantsValidator,
+    EntityStructureInvariantsContradiction, EntityStructureInvariantsError,
+    EntityStructureInvariantsValidator, SpinInvariantsContradiction, SpinInvariantsError,
+    SpinInvariantsValidator, ValenceInvariantsError, ValenceInvariantsValidator,
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -98,9 +98,9 @@ pub enum KekulizerError {
         atom: AtomId,
     },
     #[error("post-localization entity-structure contradiction: {0}")]
-    PostLocalizationEntityStructure(EntityStructureContradiction),
+    PostLocalizationEntityStructure(EntityStructureInvariantsContradiction),
     #[error("post-localization entity-structure validation error: {0}")]
-    PostLocalizationEntityStructureError(EntityStructureError),
+    PostLocalizationEntityStructureInvariantsError(EntityStructureInvariantsError),
     #[error("post-localization valence-invariant contradiction: {0}")]
     PostLocalizationValenceInvariant(ValenceMismatch),
     #[error("post-localization valence-invariant validation error: {0}")]
@@ -328,9 +328,9 @@ impl Transformer for Kekulizer {
 }
 
 fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizerError> {
-    match EntityStructureValidator
+    match EntityStructureInvariantsValidator
         .validate(candidate)
-        .map_err(KekulizerError::PostLocalizationEntityStructureError)?
+        .map_err(KekulizerError::PostLocalizationEntityStructureInvariantsError)?
     {
         Solution::Determined(()) | Solution::Underdetermined(()) => {}
         Solution::Contradictory(contradiction) => {
@@ -617,14 +617,6 @@ mod tests {
     #[case::undetermined_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u0"}]}"#),
         KekulizerError::UndeterminedUnpairedElectrons(AromaticSystemId(0))
-    )]
-    #[case::electron_count_mismatch(
-        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1]#c0#u0#s1"}]}"#),
-        KekulizerError::ElectronCountMismatch {
-            system: AromaticSystemId(0),
-            member_count: 2,
-            electron_count: 1,
-        }
     )]
     #[case::unsupported_contribution_at_positional_atom(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,3]#c0#u0#s1"}]}"#),

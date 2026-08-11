@@ -16,9 +16,11 @@ use umol_chem::element::Element;
 use umol_graph_ir::ir::StereoKind;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
+use crate::ops::validate::ConnectivityModel;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChemistryModel {
+    pub connectivity: ConnectivityModel,
     pub valence: ValenceModel,
     pub aromaticity: AromaticityModel,
     pub stereo: StereoModel,
@@ -27,6 +29,7 @@ pub struct ChemistryModel {
 impl Default for ChemistryModel {
     fn default() -> Self {
         Self {
+            connectivity: ConnectivityModel::default(),
             valence: ValenceModel::AtomTyping {
                 registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
             },
@@ -211,6 +214,7 @@ mod tests {
         assert_eq!(
             model,
             ChemistryModel {
+                connectivity: ConnectivityModel::default(),
                 valence: ValenceModel::AtomTyping {
                     registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
                 },

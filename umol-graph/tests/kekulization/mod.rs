@@ -2,8 +2,9 @@ use std::collections::HashSet;
 
 use rstest::rstest;
 use umol_chem::element::Element;
-use umol_graph::ops::invariant::{ValenceInvariants, ValenceMismatch};
+use umol_graph::ops::invariant::ValenceMismatch;
 use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, Transformer};
+use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
     AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
@@ -392,7 +393,10 @@ fn test_kekulization_fixture_output(
     assert_eq!(double_bonds, expected_double_bonds);
     assert_eq!(covered_atoms, expected_covered_atoms);
     assert_eq!(output_total_charge, input_total_charge);
-    assert_eq!(ValenceInvariants::check(&first), Solution::Determined(()));
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&first),
+        Ok(Solution::Determined(()))
+    );
     assert_eq!(first.aromatic_systems().count(), 0);
     assert!(first.atoms().iter().all(|atom| !atom
         .attributes

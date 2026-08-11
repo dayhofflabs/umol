@@ -481,11 +481,11 @@ mod tests {
     #[case::entity_failures(
         mol_dsl_ground!(r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"
-                    "C#h3" "C#h" "C#h" "C#h3"]
+                    "C#h3" "C#h0" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
                     [4 5 "1"] [5 6 "2"] [6 7 "1"]]
-            :stereo-atoms [{:site 1 :ligands [0] :attrs "Th1"}]
-            :stereo-bonds [{:site 4 :ligands [4] :attrs "Ct1"}]
+            :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Sp1"}]
+            :stereo-bonds [{:site 4 :ligands [4 [:h 5] 7 [:h 6]] :attrs "Ct1"}]
         }"#),
         StereoDerivation {
             atoms: vec![],

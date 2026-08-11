@@ -355,10 +355,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{
-        AtomConstraintForm, AtomId, EntityKind, IncidenceConstraintContradiction,
-        MulticenterValenceForm,
-    };
+    use umol_graph_ir::ir::{AtomConstraintForm, AtomId, EntityKind, MulticenterValenceForm};
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -368,10 +365,12 @@ mod tests {
     };
     use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
+    use crate::ops::validate::{ConnectivityModel, IncidenceConstraintInvariantsContradiction};
 
     #[fixture]
     fn chemistry_model() -> ChemistryModel {
         ChemistryModel {
+            connectivity: ConnectivityModel::default(),
             valence: ValenceModel::Counts {
                 table: Cow::Borrowed(ValenceTable::default_table()),
             },
@@ -529,6 +528,7 @@ mod tests {
     })]
     fn test_resolver_resolve(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
+            connectivity: ConnectivityModel::default(),
             valence,
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
@@ -710,7 +710,7 @@ mod tests {
         }"#),
         Solution::Contradictory(ResolverContradiction::MulticenterBonds(
             MulticenterBondsContradiction::Constraint(
-                IncidenceConstraintContradiction::Atom {
+                IncidenceConstraintInvariantsContradiction::Atom {
                     atom: AtomId(0),
                     constraint: AtomConstraintForm::multicenter_valence(
                         MulticenterValenceForm::multicenter(1),
