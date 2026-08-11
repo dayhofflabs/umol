@@ -1462,7 +1462,14 @@ and the semantic properties validated by the corresponding property tests.
   to its existing `None`. A transaction or editor may retain incomplete or conflicting transient
   state; the gate applies when it publishes a `Molecule`. Add exact cases showing checked failure,
   asserted-producer behavior, and application or composition conflict without panic. This is
-  additive, then breaking red-to-green as callers move. [dep: S7a]
+  additive, then breaking red-to-green as callers move. [dep: S7a] **Done.** `try_build` is the
+  shared checked publication path and `build` is its asserted counterpart. `snapshot` now performs
+  the same integrity check without consuming the editor. Reaction application maps relation
+  collisions to `StructuralConflict` and other publication failures to `InternalInvariant`, while
+  pushout treats failed checked publication as inadmissible. Exact tests cover checked and asserted
+  editor publication, snapshot failure, reaction-application conflict, and inadmissible pushout.
+  Python editor publication maps integrity failures to `InvalidStructureError` rather than exposing
+  an asserted Rust publication path.
 - **S7c — Redundant structure-check removal.** Remove
   `EntityStructureInvariantsValidator`, its composite-validator stage, and the global
   reaction-application structure precondition: checked `Molecule` inputs already establish every

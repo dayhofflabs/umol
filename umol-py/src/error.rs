@@ -11,7 +11,8 @@ use umol_graph::ingest::{
 };
 use umol_graph_ir::dsl::{MetadataError as GraphIrMetadataError, ParseError as GraphIrParseError};
 use umol_graph_ir::ir::{
-    Contradiction as GraphIrContradiction, TransactionError as GraphIrTransactionError,
+    Contradiction as GraphIrContradiction, MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
+    TransactionError as GraphIrTransactionError,
 };
 
 create_exception!(
@@ -81,6 +82,11 @@ pub(crate) fn metadata_error(error: GraphIrMetadataError) -> PyErr {
 /// Map an `umol_graph_ir` transaction failure onto the catchable `umol.TransactionError`.
 pub(crate) fn transaction_error(error: GraphIrTransactionError) -> PyErr {
     TransactionError::new_err(error.to_string())
+}
+
+/// Map an `umol_graph_ir` molecule-integrity failure onto the public Python taxonomy.
+pub(crate) fn molecule_integrity_error(error: GraphIrMoleculeIntegrityError) -> PyErr {
+    InvalidStructureError::new_err(error.to_string())
 }
 
 /// Map the resolved SMILES operation error onto the public Python taxonomy.

@@ -18,7 +18,6 @@ from umol import (
     Edit,
     Edits,
     HashedFingerprintConfig,
-    InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     Molecule,
     ParseError,
@@ -350,13 +349,3 @@ def test_reaction_application_workflow():
     assert derivations[0].rhs.hashed_fingerprint(
         config=HashedFingerprintConfig.Morgan(radius=0)
     ).ids == [2246728737]
-
-    invalid_host = Reaction.parse(
-        '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
-    ).lhs
-
-    with pytest.raises(
-        InvalidStructureError,
-        match=r"^host violates the application invariant for bond$",
-    ):
-        reaction.apply(invalid_host, config=config)

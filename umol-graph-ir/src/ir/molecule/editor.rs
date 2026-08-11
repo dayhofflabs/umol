@@ -1568,11 +1568,17 @@ impl MoleculeEditor {
             FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
-    /// Materialize the editor's current state without consuming it.
+    /// Materialize the editor's current state without consuming it, after checking molecule
+    /// integrity.
     ///
     /// Subsequent editor changes are independent of the returned immutable snapshot.
-    pub fn snapshot(&self) -> Molecule {
-        self.clone().build()
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError`] when the transient editor state cannot be published as a
+    /// molecule.
+    pub fn snapshot(&self) -> Result<Molecule, MoleculeIntegrityError> {
+        self.clone().try_build()
     }
 
     /// Publish the editor's current state after checking molecule integrity.
@@ -1797,7 +1803,9 @@ mod tests {
 
     #[rstest]
     fn test_molecule_editor_snapshot(mut triatomic: MoleculeEditor) {
-        let snapshot = triatomic.snapshot();
+        let snapshot = triatomic
+            .snapshot()
+            .expect("the editor contains an integral molecule");
         triatomic.add_atom(AtomForm::from_element(Element::F));
 
         assert_eq!(
@@ -1808,6 +1816,19 @@ mod tests {
             triatomic.build(),
             mol_dsl!(r#"{:atoms ["C" "N" "O" "F"] :bonds [[0 1 "1"] [1 2 "2"]]}"#)
         );
+    }
+
+    #[rstest]
+    #[case::parallel_bond(MoleculeIntegrityError::BondsParallel {
+        atoms: [AtomId(0), AtomId(1)],
+    })]
+    fn test_molecule_editor_snapshot_error(
+        #[from(triatomic)] mut editor: MoleculeEditor,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        editor.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
+
+        assert_eq!(editor.snapshot(), Err(expected));
     }
 
     #[rstest]

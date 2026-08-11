@@ -262,9 +262,9 @@ def test_molecule_from_entries():
                 0,
                 [
                     StereoLigand(2, StereoLigandKind.Atom),
+                    StereoLigand(0, StereoLigandKind.ImplicitHydrogen),
                     StereoLigand(3, StereoLigandKind.Atom),
-                    StereoLigand(2, StereoLigandKind.Atom),
-                    StereoLigand(3, StereoLigandKind.Atom),
+                    StereoLigand(1, StereoLigandKind.ImplicitHydrogen),
                 ],
                 StereoBondForm.parse("Ct0"),
             )

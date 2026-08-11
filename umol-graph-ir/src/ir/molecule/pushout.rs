@@ -156,8 +156,7 @@ impl Molecule {
         // coincides with a `self` site (same site + ligand multiset), its coset is aligned to `self`'s
         // frame (`transform_frame`) before the full-participant relation `pushout` `meet`s the two
         // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
-        // collision leaves two overlays on one site — over-coordination, rejected by the `has_conflict`
-        // gate below.
+        // collision leaves two overlays on one site, which checked molecule publication rejects.
         let remapped_stereo_atoms = other.stereo_atoms.remap(&participant_remapping);
 
         let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
@@ -322,7 +321,7 @@ fn glue_var_overlays<D: Lattice + RelationData>(
 /// Align already-remapped right-side stereo entries to coincident left-side ligand frames, carrying
 /// each coset through `transform_frame`. Right-only entries retain their remapped frame. A right
 /// entry whose site collides with a left entry under a different ligand set remains distinct;
-/// `meet_pushout` rejects the resulting over-coordination through its conflict gate.
+/// `meet_pushout` rejects the resulting over-coordination when publishing the molecule.
 #[allow(clippy::type_complexity)]
 fn stereo_glue_entries<S, D>(
     left: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
@@ -418,8 +417,7 @@ mod tests {
     // The glue is inadmissible (`None`) when it would be malformed: a coincident-atom meet is `⊥`
     // (`carbon_nitrogen` / `oxygen_nitrogen`), or an emit-compliance invariant fails — here two aromatic
     // systems that share glue atom 0 (`[0,1]` from left, `[0,2]` from right's unmatched atom), which
-    // the
-    // `has_conflict` gate rejects.
+    // checked molecule publication rejects.
     #[rstest]
     #[case::carbon_nitrogen(
         Molecule::from_entries(MoleculeEntries {

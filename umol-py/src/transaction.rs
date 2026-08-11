@@ -7,7 +7,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::edit::Edits;
-use crate::error::transaction_error;
+use crate::error::{molecule_integrity_error, transaction_error};
 use crate::molecule::Molecule;
 
 /// A mutable molecule editor that can be inspected before it is finalized.
@@ -30,16 +30,20 @@ impl MoleculeEditor {
     fn snapshot(&self) -> PyResult<Molecule> {
         self.inner
             .as_ref()
-            .map(|editor| Molecule::from_rust(editor.snapshot()))
-            .ok_or_else(consumed_editor_error)
+            .ok_or_else(consumed_editor_error)?
+            .snapshot()
+            .map(Molecule::from_rust)
+            .map_err(molecule_integrity_error)
     }
 
     /// Finalize the editor and consume its mutable state.
     fn build(&mut self) -> PyResult<Molecule> {
         self.inner
             .take()
-            .map(|editor| Molecule::from_rust(editor.build()))
-            .ok_or_else(consumed_editor_error)
+            .ok_or_else(consumed_editor_error)?
+            .try_build()
+            .map(Molecule::from_rust)
+            .map_err(molecule_integrity_error)
     }
 
     /// Apply a checked edit batch atomically and return its rollback journal.
@@ -92,13 +96,13 @@ mod tests {
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{
         AtomFieldChange as GraphIrAtomFieldChange, AtomForm as GraphIrAtomForm,
-        AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, Edit as GraphIrEdit,
-        Edits as GraphIrEdits, NumForm as GraphIrNumForm,
+        AtomHandle as GraphIrAtomHandle, AtomId as GraphIrAtomId, BondForm as GraphIrBondForm,
+        Edit as GraphIrEdit, Edits as GraphIrEdits, NumForm as GraphIrNumForm,
     };
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::error::TransactionError;
+    use crate::error::{InvalidStructureError, TransactionError};
 
     #[fixture]
     fn carbon_editor() -> MoleculeEditor {
@@ -170,6 +174,53 @@ mod tests {
                     .extract::<String>()
                     .unwrap(),
                 "molecule editor has been consumed"
+            );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_editor_publication_error() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        let mut snapshot_editor = MoleculeEditor {
+            inner: Some(molecule.clone().edit()),
+        };
+        snapshot_editor.inner.as_mut().unwrap().add_bond(
+            GraphIrAtomId(0),
+            GraphIrAtomId(1),
+            GraphIrBondForm::from_order(1),
+        );
+        let mut build_editor = MoleculeEditor {
+            inner: Some(molecule.edit()),
+        };
+        build_editor.inner.as_mut().unwrap().add_bond(
+            GraphIrAtomId(0),
+            GraphIrAtomId(1),
+            GraphIrBondForm::from_order(1),
+        );
+
+        let snapshot_error = snapshot_editor.snapshot().unwrap_err();
+        let build_error = build_editor.build().unwrap_err();
+
+        Python::attach(|py| {
+            assert!(snapshot_error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(
+                snapshot_error
+                    .value(py)
+                    .str()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
+            );
+            assert!(build_error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(
+                build_error
+                    .value(py)
+                    .str()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
         });
     }

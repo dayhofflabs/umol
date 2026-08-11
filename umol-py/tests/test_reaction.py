@@ -18,7 +18,6 @@ from umol import (
     Element,
     ElementScope,
     Entity,
-    InvalidStructureError,
     MetadataError,
     ModelConversionError,
     Molecule,
@@ -478,9 +477,9 @@ def test_reaction_parse_keyword_error():
             ':bonds [{:id :first :atoms [0 1] :attrs "2"} '
             '{:id :second :atoms [2 3] :attrs "2"}] '
             ':stereo-bonds [{:id :lhs :site :first '
-            ':ligands [2 3 2 3] :attrs "Ct1"}]} '
+            ':ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]} '
             ':deltas [{:stereo-bond {:add '
-            '{:id :delta :site :second :ligands [0 1 0 1] :attrs "Ct2"}}}]}',
+            '{:id :delta :site :second :ligands [0 [:h 2] 1 [:h 3]] :attrs "Ct2"}}}]}',
             Entity.StereoBond(0),
             Entity.StereoBond(1),
             id="stereo-bond",
@@ -1437,19 +1436,6 @@ def test_reaction_apply_rejection():
     ]
 
     assert [derivation.rhs for derivation in reaction.apply(host)] == expected
-
-
-def test_reaction_apply_precondition_error():
-    reaction = Reaction()
-    host = Reaction.parse(
-        '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"] [0 1 "2"]]} :deltas []}'
-    ).lhs
-
-    with pytest.raises(
-        InvalidStructureError,
-        match=r"^host violates the application invariant for bond$",
-    ):
-        reaction.apply(host)
 
 
 def test_reaction_apply_iteration_error():
