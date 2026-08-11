@@ -15,8 +15,9 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
 
 use super::constraint::{
+    FluxionalityForm, LigandPermutation, LigandSymmetryForm, OrientedLigandPermutation,
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm,
+    StereoBondConstraintsForm, StereoLigandPair, TopicityForm,
 };
 use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
@@ -86,7 +87,9 @@ macro_rules! stereo_element {
                 self
             }
 
-            /// Relabel the ligand positions (`^`); constraints are positionless and unchanged.
+            /// Apply a ligand-position permutation to the configuration in its current frame.
+            /// Frame-relative constraints are unchanged; use [`Self::transform_frame`] when the
+            /// stored ligand frame itself is reordered.
             pub fn apply(&self, permutation: Permutation) -> Self {
                 Self {
                     configuration: self.configuration.apply(permutation),
@@ -110,17 +113,64 @@ macro_rules! stereo_element {
                 }
             }
 
-            /// Restate the coset in the `after` ligand frame given it was stated in `before` — the
-            /// coset action of the induced frame permutation. Mechanical bookkeeping for a relabel
-            /// that leaves the physical configuration unchanged; self-inverting. `before`/`after`
-            /// must be the same ligand multiset reordered (a genuine ligand-set change is membership,
-            /// not a frame permutation).
+            /// Restate the complete form in the `after` ligand frame given it was stated in
+            /// `before`. Configuration, permutation-valued constraints, and topicity positions
+            /// move together. `before` and `after` must be the same ligand multiset reordered, and
+            /// a kinded configuration additionally requires a frame action in the stereo kind's
+            /// parent group.
             pub fn transform_frame(
                 &self,
                 before: &[StereoLigand],
                 after: &[StereoLigand],
             ) -> Option<Self> {
-                Permutation::between(before, after).map(|permutation| self.apply(permutation))
+                let frame = Permutation::between(before, after)?;
+                if self.configuration.kind().is_some_and(|kind| {
+                    kind.class_key().space().reindex(0, frame).is_none()
+                }) {
+                    return None;
+                }
+                let inverse = frame.inverse();
+                let reframe_permutation = |permutation: LigandPermutation| {
+                    LigandPermutation(inverse.compose(permutation.0).compose(frame))
+                };
+                let mut constraints = $constraints::new();
+                for constraint in self.constraints.iter().cloned() {
+                    constraints.set(match constraint {
+                        $constraint::LigandSymmetry(symmetry) => {
+                            $constraint::LigandSymmetry(LigandSymmetryForm {
+                                permutation: OrientedLigandPermutation {
+                                    permutation: reframe_permutation(
+                                        symmetry.permutation.permutation,
+                                    ),
+                                    orientation: symmetry.permutation.orientation,
+                                },
+                                invariant: symmetry.invariant,
+                            })
+                        }
+                        $constraint::Fluxionality(fluxionality) => {
+                            $constraint::Fluxionality(FluxionalityForm {
+                                permutation: reframe_permutation(fluxionality.permutation),
+                                active: fluxionality.active,
+                            })
+                        }
+                        $constraint::Topicity(topicity) => {
+                            $constraint::Topicity(TopicityForm {
+                                pair: StereoLigandPair::new(
+                                    inverse.apply(topicity.pair.first().index()).into(),
+                                    inverse.apply(topicity.pair.second().index()).into(),
+                                ),
+                                relation: topicity.relation,
+                            })
+                        }
+                        $constraint::Stereogenicity(stereogenicity) => {
+                            $constraint::Stereogenicity(stereogenicity)
+                        }
+                    });
+                }
+                Some(Self {
+                    configuration: self.configuration.apply(frame),
+                    constraints,
+                })
             }
         }
 
@@ -2034,6 +2084,11 @@ mod tests {
     #[case::membership(
         &[StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
         &[StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::LonePair)],
+        None,
+    )]
+    #[case::outside_parent(
+        &[StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
+        &[StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
         None,
     )]
     fn test_stereo_bond_form_transform_frame(

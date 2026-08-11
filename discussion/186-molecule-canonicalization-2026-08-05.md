@@ -1516,7 +1516,16 @@ and the semantic properties validated by the corresponding property tests.
   fluxionality permutations, inline constraints, and molecule-level stereo constraints together.
   Rebuild transformed constraint containers through their keyed insertion API. Add covariance,
   inverse, and composition cases for every stereo kind and both constraint locations. This is
-  additive. [dep: S2b, S7f]
+  additive. [dep: S2b, S7f] **Done.** The existing form-level `transform_frame` now restates the
+  configuration, permutation-valued constraints, topicity positions, and keyed inline constraint
+  container together. The private molecule action delegates to it while also restating the ligand
+  frame and recursively nested molecule constraints. Frame actions are drawn from the stereo kind's
+  parent group: axial and cis/trans frames therefore preserve their two-side structure rather than
+  admitting arbitrary degree-four permutations. Exact covariance, inverse, and composition cases
+  cover all five stereo-atom kinds and cis/trans stereo bonds at both constraint locations.
+  Molecule integrity now checks only the structural safety required by this action—frame arity,
+  coset range, permutation degree, and topicity positions. It deliberately imposes no atom/bond
+  stereo-kind allow-list; kind admissibility belongs to invariant or model conformance validation.
 - **S8b — Duplicate-frame and non-ground handling.** Add the general ligand-position order needed
   by fully undetermined, kindless stereo forms. For kinded forms, enumerate every bounded ligand
   permutation consistent with equal repeated ligands, apply S8a, and retain the minimum normalized

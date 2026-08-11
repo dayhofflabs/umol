@@ -7,7 +7,7 @@ use thiserror::Error;
 use umol_perm::Permutation;
 
 use super::super::constraint::{
-    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
+    Constraint, StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
 };
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
@@ -56,8 +56,6 @@ pub enum MoleculeIntegrityError {
     StereoAtomSitesDuplicate { atom: AtomId },
     #[error("stereo bond: duplicate site {bond:?}")]
     StereoBondSitesDuplicate { bond: BondId },
-    #[error("{entity}: stereo kind {kind:?} is not permitted for this entity family")]
-    StereoKindNotPermitted { entity: Entity, kind: StereoKind },
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
     StereoLigandArity {
         entity: Entity,
@@ -249,6 +247,7 @@ impl Molecule {
         for constraint in self.constraints.iter() {
             super::validate_constraint_references(constraint, &contains)
                 .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })?;
+            check_molecule_constraint(self, constraint)?;
         }
         Ok(())
     }
@@ -318,28 +317,9 @@ fn check_stereo_atom(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
-        matches!(
-            kind,
-            StereoKind::Tetrahedral
-                | StereoKind::SquarePlanar
-                | StereoKind::TrigonalBipyramidal
-                | StereoKind::Octahedral
-        )
-    })?;
+    check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
-        match constraint {
-            StereoAtomConstraintForm::LigandSymmetry(value) => {
-                check_permutation(entity, ligand_count, value.permutation.permutation.0)?
-            }
-            StereoAtomConstraintForm::Fluxionality(value) => {
-                check_permutation(entity, ligand_count, value.permutation.0)?
-            }
-            StereoAtomConstraintForm::Topicity(value) => {
-                check_pair(entity, ligand_count, value.pair)?
-            }
-            StereoAtomConstraintForm::Stereogenicity(_) => {}
-        }
+        check_stereo_atom_constraint(entity, ligand_count, constraint)?;
     }
     Ok(())
 }
@@ -349,49 +329,100 @@ fn check_stereo_bond(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    check_configuration(entity, ligand_count, &attributes.configuration, |kind| {
-        kind == StereoKind::CisTrans
-    })?;
+    check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
-        match constraint {
-            StereoBondConstraintForm::LigandSymmetry(value) => {
-                check_permutation(entity, ligand_count, value.permutation.permutation.0)?
-            }
-            StereoBondConstraintForm::Fluxionality(value) => {
-                check_permutation(entity, ligand_count, value.permutation.0)?
-            }
-            StereoBondConstraintForm::Topicity(value) => {
-                check_pair(entity, ligand_count, value.pair)?
-            }
-            StereoBondConstraintForm::Stereogenicity(_) => {}
-        }
+        check_stereo_bond_constraint(entity, ligand_count, constraint)?;
     }
     Ok(())
+}
+
+fn check_molecule_constraint(
+    molecule: &Molecule,
+    constraint: &Constraint,
+) -> Result<(), MoleculeIntegrityError> {
+    match constraint {
+        Constraint::StereoAtom(id, kind, constraint) => {
+            let entity = Entity::StereoAtom(*id);
+            let ligand_count = molecule.stereo_atom(*id).ligand_count();
+            check_stereo_frame_arity(entity, ligand_count, *kind)?;
+            check_stereo_atom_constraint(entity, ligand_count, constraint)
+        }
+        Constraint::StereoBond(id, kind, constraint) => {
+            let entity = Entity::StereoBond(*id);
+            let ligand_count = molecule.stereo_bond(*id).ligand_count();
+            check_stereo_frame_arity(entity, ligand_count, *kind)?;
+            check_stereo_bond_constraint(entity, ligand_count, constraint)
+        }
+        Constraint::And(constraints) | Constraint::Or(constraints) => {
+            for constraint in constraints {
+                check_molecule_constraint(molecule, constraint)?;
+            }
+            Ok(())
+        }
+        Constraint::Not(constraint) => check_molecule_constraint(molecule, constraint),
+        _ => Ok(()),
+    }
+}
+
+fn check_stereo_frame_arity(
+    entity: Entity,
+    ligand_count: usize,
+    kind: StereoKind,
+) -> Result<(), MoleculeIntegrityError> {
+    if ligand_count != kind.degree() {
+        return Err(MoleculeIntegrityError::StereoLigandArity {
+            entity,
+            kind,
+            expected: kind.degree(),
+            actual: ligand_count,
+        });
+    }
+    Ok(())
+}
+
+fn check_stereo_atom_constraint(
+    entity: Entity,
+    ligand_count: usize,
+    constraint: &StereoAtomConstraintForm,
+) -> Result<(), MoleculeIntegrityError> {
+    match constraint {
+        StereoAtomConstraintForm::LigandSymmetry(value) => {
+            check_permutation(entity, ligand_count, value.permutation.permutation.0)
+        }
+        StereoAtomConstraintForm::Fluxionality(value) => {
+            check_permutation(entity, ligand_count, value.permutation.0)
+        }
+        StereoAtomConstraintForm::Topicity(value) => check_pair(entity, ligand_count, value.pair),
+        StereoAtomConstraintForm::Stereogenicity(_) => Ok(()),
+    }
+}
+
+fn check_stereo_bond_constraint(
+    entity: Entity,
+    ligand_count: usize,
+    constraint: &StereoBondConstraintForm,
+) -> Result<(), MoleculeIntegrityError> {
+    match constraint {
+        StereoBondConstraintForm::LigandSymmetry(value) => {
+            check_permutation(entity, ligand_count, value.permutation.permutation.0)
+        }
+        StereoBondConstraintForm::Fluxionality(value) => {
+            check_permutation(entity, ligand_count, value.permutation.0)
+        }
+        StereoBondConstraintForm::Topicity(value) => check_pair(entity, ligand_count, value.pair),
+        StereoBondConstraintForm::Stereogenicity(_) => Ok(()),
+    }
 }
 
 fn check_configuration(
     entity: Entity,
     ligand_count: usize,
     configuration: &StereoConfigurationForm,
-    permitted: impl FnOnce(StereoKind) -> bool,
 ) -> Result<(), MoleculeIntegrityError> {
     let StereoConfigurationForm::Kinded(kind, coset) = configuration else {
         return Ok(());
     };
-    if !permitted(*kind) {
-        return Err(MoleculeIntegrityError::StereoKindNotPermitted {
-            entity,
-            kind: *kind,
-        });
-    }
-    if ligand_count != kind.degree() {
-        return Err(MoleculeIntegrityError::StereoLigandArity {
-            entity,
-            kind: *kind,
-            expected: kind.degree(),
-            actual: ligand_count,
-        });
-    }
+    check_stereo_frame_arity(entity, ligand_count, *kind)?;
     check_coset(entity, *kind, coset)?;
     Ok(())
 }

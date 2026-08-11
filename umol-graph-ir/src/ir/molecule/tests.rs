@@ -12,6 +12,7 @@ use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
+use umol_perm::Permutation;
 
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
@@ -20,9 +21,10 @@ use super::super::boolean::BooleanForm;
 use super::super::constraint::{
     AromaticSystemConstraintForm, AtomConstraintForm, AtomConstraintsForm, BondConstraintForm,
     BondConstraintsForm, Constraint, Constraints, DativeBondConstraintForm,
-    DativeBondConstraintsForm, MoleculeConstraint, MulticenterBondConstraintForm,
-    NoncovalentBondConstraintForm, RelationalConstraint, RingScope, StereoAtomConstraintForm,
-    StereoBondConstraintForm, StereogenicityForm,
+    DativeBondConstraintsForm, FluxionalityForm, LigandPermutation, MoleculeConstraint,
+    MulticenterBondConstraintForm, NoncovalentBondConstraintForm, RelationalConstraint, RingScope,
+    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
+    TopicityForm, TopicityRelationForm,
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
@@ -533,28 +535,56 @@ fn test_molecule_try_from_entries_error(
     },
     MoleculeIntegrityError::StereoBondSitesDuplicate { bond: BondId(1) },
 )]
-#[case::stereo_atom_kind(
+#[case::molecule_stereo_atom_arity(
     |entries: &mut MoleculeEntries| {
-        entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::kinded(
-            StereoKind::CisTrans,
-            StereoCoset::Lit(0),
-        );
+        entries.constraints = Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::TrigonalBipyramidal,
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        )
+        .into();
     },
-    MoleculeIntegrityError::StereoKindNotPermitted {
+    MoleculeIntegrityError::StereoLigandArity {
         entity: Entity::StereoAtom(StereoAtomId(0)),
-        kind: StereoKind::CisTrans,
+        kind: StereoKind::TrigonalBipyramidal,
+        expected: 5,
+        actual: 4,
     },
 )]
-#[case::stereo_bond_kind(
+#[case::molecule_stereo_atom_permutation(
     |entries: &mut MoleculeEntries| {
-        entries.stereo_bonds[0].2.configuration = StereoConfigurationForm::kinded(
+        entries.constraints = Constraint::StereoAtom(
+            StereoAtomId(0),
             StereoKind::Tetrahedral,
-            StereoCoset::Lit(0),
-        );
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::identity(3)),
+                active: BooleanForm::Lit(true),
+            }),
+        )
+        .into();
     },
-    MoleculeIntegrityError::StereoKindNotPermitted {
+    MoleculeIntegrityError::StereoPermutationDegree {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        expected: 4,
+        actual: 3,
+    },
+)]
+#[case::molecule_stereo_bond_position(
+    |entries: &mut MoleculeEntries| {
+        entries.constraints = Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(0usize.into(), 4usize.into()),
+                relation: TopicityRelationForm::Undetermined,
+            }),
+        )
+        .into();
+    },
+    MoleculeIntegrityError::StereoLigandPositionOutOfRange {
         entity: Entity::StereoBond(StereoBondId(0)),
-        kind: StereoKind::Tetrahedral,
+        position: 4,
+        degree: 4,
     },
 )]
 #[case::stereo_ligand_arity(
@@ -610,6 +640,37 @@ fn test_molecule_try_from_entries(
         molecule.stereo_atom(StereoAtomId(0)).ligand_frame(),
         ligands
     );
+}
+
+#[rstest]
+#[case::axial_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::Axial)]
+#[case::cis_trans_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::CisTrans)]
+#[case::tetrahedral_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Tetrahedral)]
+fn test_molecule_try_from_entries_stereo_kind(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] entity: Entity,
+    #[case] kind: StereoKind,
+) {
+    match entity {
+        Entity::StereoAtom(id) => {
+            entries.stereo_atoms[id.index()].2.configuration =
+                StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0));
+        }
+        Entity::StereoBond(id) => {
+            entries.stereo_bonds[id.index()].2.configuration =
+                StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0));
+        }
+        _ => unreachable!("test cases contain only stereo entities"),
+    }
+
+    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
+    let actual = match entity {
+        Entity::StereoAtom(id) => molecule.stereo_atom(id).kind(),
+        Entity::StereoBond(id) => molecule.stereo_bond(id).kind(),
+        _ => unreachable!("test cases contain only stereo entities"),
+    };
+
+    assert_eq!(actual, kind);
 }
 
 #[rstest]
