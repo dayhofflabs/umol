@@ -1370,9 +1370,13 @@ and the semantic properties validated by the corresponding property tests.
   search described above: ordered exact partitions, collision-free equitable refinement, fixed
   non-singleton-cell selection, typed leaf keys, prefix pruning, and automorphism-orbit pruning.
   Supply a no-pruning mode and a bounded exhaustive dense-remapping implementation as correctness
-  references. Prove that both return the same minimum and that backend canonical labels or branch
-  order cannot determine the result. No new public canonicalizer object or graph-core molecule
-  schema is introduced. This is additive. [dep: S4b, S5b, S5c] **Done.**
+  references. Exact backend colors are opaque equivalence labels: typed semantic descriptors order
+  the search partition, while the selected typed leaf key alone determines the minimum. Entity
+  rows whose schema begins with remapped references, including localized bonds, are ordered from
+  those references before their inherent fields rather than from color-class rank. Prove that both
+  searches return the same minimum and that color-label numbering, backend canonical labels, or
+  branch order cannot determine the result. No new public canonicalizer object or graph-core
+  molecule schema is introduced. This is additive. [dep: S4b, S5b, S5c] **Done.**
 - **S5e — Encoding verification and benchmark decision.** On bounded generated molecules, compare
   colored-encoding isomorphism with explicit dense-remapping equivalence at each implemented level,
   including tier-2-invalid but representation-intact repeated occurrences. Re-run S0's benchmark
@@ -1390,11 +1394,13 @@ and the semantic properties validated by the corresponding property tests.
   against hand-built dense remappings before using it in search. This is additive. [dep: S4b, S5e]
   **Done.**
 - **S6b — Topology frame selection.** Run the typed-order search to derive dense atom and localized
-  bond mappings. Complete the `MoleculeCorrespondence` with identity mappings for the six excluded
-  entity-id families, transport all references and participant frames through the public molecule
-  remapping operation, and normalize every carried value. The selected topology alone determines
-  the frame; excluded entities and constraints never break a tie. The public trait surface waits
-  until every level is complete. This is additive. [dep: S3c, S6a]
+  bond mappings. Localized-bond rows are ordered by their canonical endpoint pair before all
+  inherent fields; source ids only choose among identical topology rows and do not enter the typed
+  key. Complete the `MoleculeCorrespondence` with identity mappings for the six excluded entity-id
+  families, transport all references and participant frames through the public molecule remapping
+  operation, and normalize every carried value. The selected topology alone determines the frame;
+  excluded entities and constraints never break a tie. The public trait surface waits until every
+  level is complete. This is additive. [dep: S3c, S6a] **Done.**
 - **S6c — Topology properties.** Validate exact idempotence and renumbering invariance of the
   selected topology layer, agreement with bounded exhaustive minimization, semantic preservation of
   the complete result under the induced remapping, post-result integrity, disconnected structures,

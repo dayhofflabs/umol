@@ -5,14 +5,20 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, EdgeId, Graph, NodeId, SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, EdgeId, Graph, NodeId,
+    SubdivisionNodeSource,
 };
 
 use super::atom::{AtomForm, ElementForm, IsotopeMassForm};
 use super::bond::BondForm;
+use super::correspondence::MoleculeCorrespondence;
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
-use super::incidence::{Incidence, IncidenceGraph};
+use super::id::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
+};
+use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::ligand::StereoLigandKind;
 use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
@@ -824,10 +830,13 @@ struct OrderedPartition {
 
 #[allow(dead_code)]
 impl OrderedPartition {
-    fn from_classes<C: Copy + Ord>(classes: &[C]) -> Self {
+    fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
         let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
-        for (index, &class) in classes.iter().enumerate() {
-            cells.entry(class).or_default().push(NodeId(index as u32));
+        for (index, descriptor) in descriptors.iter().enumerate() {
+            cells
+                .entry(descriptor.clone())
+                .or_default()
+                .push(NodeId(index as u32));
         }
 
         Self {
@@ -961,24 +970,27 @@ struct CanonicalSearchResult<K> {
 }
 
 #[allow(dead_code)]
-/// Minimize a typed leaf key over the adapter's ordered exact partition.
+/// Minimize a typed leaf candidate over an exact partition ordered by semantic descriptors.
 ///
-/// Automorphism pruning requires the leaf key to be invariant under adapter automorphisms.
+/// Adapter colors are opaque equality labels and do not order the partition. Automorphism pruning
+/// requires the leaf key to be invariant under adapter automorphisms.
 /// Prefix pruning requires `prefix_worse` to reject only partitions whose every leaf is greater
 /// than the current best key.
-fn canonical_search<K, LeafKey, PrefixWorse>(
+fn canonical_search<K, Descriptor, LeafCandidate, PrefixWorse>(
     adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
-    leaf_key: &LeafKey,
+    leaf_candidate: &LeafCandidate,
     prefix_worse: &PrefixWorse,
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
-    LeafKey: Fn(&[NodeId]) -> K,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
 {
-    let initial = OrderedPartition::from_classes(&adapter.classes).refine(adapter.graph());
+    let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
     let mut best = None;
     let mut stats = CanonicalSearchStats {
         refinement_calls: 1,
@@ -990,7 +1002,7 @@ where
         initial,
         algorithm,
         options,
-        leaf_key,
+        leaf_candidate,
         prefix_worse,
         &mut best,
         &mut stats,
@@ -1003,18 +1015,18 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search_partition<K, LeafKey, PrefixWorse>(
+fn search_partition<K, LeafCandidate, PrefixWorse>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
-    leaf_key: &LeafKey,
+    leaf_candidate: &LeafCandidate,
     prefix_worse: &PrefixWorse,
     best: &mut Option<CanonicalCandidate<K>>,
     stats: &mut CanonicalSearchStats,
 ) where
     K: Ord,
-    LeafKey: Fn(&[NodeId]) -> K,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
 {
     if options.prefix_pruning
@@ -1030,13 +1042,8 @@ fn search_partition<K, LeafKey, PrefixWorse>(
     else {
         stats.visited_leaves += 1;
         let entity_order = partition.entity_order(adapter.source_node_count);
-        let candidate = CanonicalCandidate {
-            key: leaf_key(&entity_order),
-            entity_order,
-        };
-        if best.as_ref().is_none_or(|best| {
-            (&candidate.key, &candidate.entity_order) < (&best.key, &best.entity_order)
-        }) {
+        let candidate = leaf_candidate(&entity_order);
+        if best.as_ref().is_none_or(|best| candidate.key < best.key) {
             *best = Some(candidate);
         }
         return;
@@ -1089,7 +1096,7 @@ fn search_partition<K, LeafKey, PrefixWorse>(
             child,
             algorithm,
             options,
-            leaf_key,
+            leaf_candidate,
             prefix_worse,
             best,
             stats,
@@ -1098,64 +1105,59 @@ fn search_partition<K, LeafKey, PrefixWorse>(
 }
 
 #[allow(dead_code)]
-fn exhaustive_minimum<K, LeafKey>(
+fn exhaustive_minimum<K, LeafCandidate>(
     adapter: &AutomorphismAdapter,
-    leaf_key: &LeafKey,
+    leaf_candidate: &LeafCandidate,
 ) -> CanonicalCandidate<K>
 where
     K: Ord,
-    LeafKey: Fn(&[NodeId]) -> K,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
 {
-    fn visit_cells<K, LeafKey>(
+    fn visit_cells<K, LeafCandidate>(
         cells: &mut [Vec<NodeId>],
         cell_index: usize,
         order: &mut Vec<NodeId>,
-        leaf_key: &LeafKey,
+        leaf_candidate: &LeafCandidate,
         best: &mut Option<CanonicalCandidate<K>>,
     ) where
         K: Ord,
-        LeafKey: Fn(&[NodeId]) -> K,
+        LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     {
-        fn visit_permutations<K, LeafKey>(
+        fn visit_permutations<K, LeafCandidate>(
             cells: &mut [Vec<NodeId>],
             cell_index: usize,
             position: usize,
             order: &mut Vec<NodeId>,
-            leaf_key: &LeafKey,
+            leaf_candidate: &LeafCandidate,
             best: &mut Option<CanonicalCandidate<K>>,
         ) where
             K: Ord,
-            LeafKey: Fn(&[NodeId]) -> K,
+            LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
         {
             if position == cells[cell_index].len() {
                 let old_len = order.len();
                 order.extend_from_slice(&cells[cell_index]);
-                visit_cells(cells, cell_index + 1, order, leaf_key, best);
+                visit_cells(cells, cell_index + 1, order, leaf_candidate, best);
                 order.truncate(old_len);
                 return;
             }
 
             for next in position..cells[cell_index].len() {
                 cells[cell_index].swap(position, next);
-                visit_permutations(cells, cell_index, position + 1, order, leaf_key, best);
+                visit_permutations(cells, cell_index, position + 1, order, leaf_candidate, best);
                 cells[cell_index].swap(position, next);
             }
         }
 
         if cell_index == cells.len() {
-            let candidate = CanonicalCandidate {
-                key: leaf_key(order),
-                entity_order: order.clone(),
-            };
-            if best.as_ref().is_none_or(|best| {
-                (&candidate.key, &candidate.entity_order) < (&best.key, &best.entity_order)
-            }) {
+            let candidate = leaf_candidate(order);
+            if best.as_ref().is_none_or(|best| candidate.key < best.key) {
                 *best = Some(candidate);
             }
             return;
         }
 
-        visit_permutations(cells, cell_index, 0, order, leaf_key, best);
+        visit_permutations(cells, cell_index, 0, order, leaf_candidate, best);
     }
 
     let mut cells = adapter.entity_blocks.clone();
@@ -1164,7 +1166,7 @@ where
         &mut cells,
         0,
         &mut Vec::with_capacity(adapter.source_node_count),
-        leaf_key,
+        leaf_candidate,
         &mut best,
     );
 
@@ -1195,6 +1197,22 @@ fn initial_class_keys(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((entity_keys, incidence_keys))
+}
+
+#[allow(dead_code)]
+fn partition_descriptors(
+    adapter: &AutomorphismAdapter,
+    entity_keys: &[InitialClassKey],
+    incidence_keys: &[InitialClassKey],
+) -> Vec<InitialClassKey> {
+    adapter
+        .node_sources
+        .iter()
+        .map(|source| match *source {
+            SubdivisionNodeSource::Node(node) => entity_keys[node.index()].clone(),
+            SubdivisionNodeSource::Edge(edge) => incidence_keys[edge.index()].clone(),
+        })
+        .collect()
 }
 
 fn rank_initial_classes(
@@ -1373,36 +1391,40 @@ fn topology_comparison_key(
     incidence_graph: &IncidenceGraph,
     order: &[NodeId],
 ) -> Result<CanonicalComparisonKey, Contradiction> {
+    Ok(topology_candidate(molecule, incidence_graph, order)?.key)
+}
+
+fn topology_candidate(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let atom_count = incidence_graph.entity_count(EntityKind::Atom);
     let bond_count = incidence_graph.entity_count(EntityKind::Bond);
     let mut atom_images = vec![0_usize; atom_count];
     let mut atom_order = Vec::with_capacity(atom_count);
-    let mut bond_order = Vec::with_capacity(bond_count);
 
     for &node in order {
-        match incidence_graph.entity(node) {
-            Entity::Atom(id) => {
-                atom_images[id.index()] = atom_order.len();
-                atom_order.push(id);
-            }
-            Entity::Bond(id) => bond_order.push(id),
-            _ => unreachable!("topology incidence graph contains only atoms and bonds"),
+        if let Entity::Atom(id) = incidence_graph.entity(node) {
+            atom_images[id.index()] = atom_order.len();
+            atom_order.push(id);
         }
     }
 
     debug_assert_eq!(atom_order.len(), atom_count);
-    debug_assert_eq!(bond_order.len(), bond_count);
 
     let atoms = atom_order
-        .into_iter()
+        .iter()
+        .copied()
         .map(|id| {
             atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let bonds = bond_order
-        .into_iter()
+    let mut bonds = molecule
+        .bonds()
+        .iter()
         .map(|id| {
-            let bond = molecule.bond(id);
+            let bond = id;
             let mut fields = Vec::with_capacity(4);
             let [first, second] = bond.atom_ids().map(|atom| atom_images[atom.index()] as u64);
             fields.push(field(
@@ -1413,9 +1435,22 @@ fn topology_comparison_key(
                 ]),
             ));
             fields.extend(bond_inherent_fields(bond.attributes)?);
-            Ok(CanonicalKeyValue::Product(fields))
+            Ok((
+                CanonicalKeyValue::Product(fields),
+                bond.id,
+                incidence_graph.node_of(Entity::Bond(bond.id)),
+            ))
         })
         .collect::<Result<Vec<_>, Contradiction>>()?;
+    debug_assert_eq!(bonds.len(), bond_count);
+    bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+
+    let mut entity_order = atom_order
+        .into_iter()
+        .map(|id| incidence_graph.node_of(Entity::Atom(id)))
+        .collect::<Vec<_>>();
+    entity_order.extend(bonds.iter().map(|(_, _, node)| *node));
+    let bonds = bonds.into_iter().map(|(key, _, _)| key).collect::<Vec<_>>();
 
     let mut entity_blocks = Vec::with_capacity(2);
     if !atoms.is_empty() {
@@ -1431,10 +1466,203 @@ fn topology_comparison_key(
         });
     }
 
-    Ok(CanonicalComparisonKey {
-        entity_blocks,
-        constraints: Vec::new(),
+    Ok(CanonicalCandidate {
+        key: CanonicalComparisonKey {
+            entity_blocks,
+            constraints: Vec::new(),
+        },
+        entity_order,
     })
+}
+
+#[allow(dead_code)]
+fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
+    [
+        molecule.atoms().count(),
+        molecule.bonds().count(),
+        molecule.dative_bonds().count(),
+        molecule.aromatic_systems().count(),
+        molecule.multicenter_bonds().count(),
+        molecule.noncovalent_bonds().count(),
+        molecule.stereo_atoms().count(),
+        molecule.stereo_bonds().count(),
+    ]
+}
+
+#[allow(dead_code)]
+fn molecule_correspondence(images: &[Vec<usize>; 8]) -> MoleculeCorrespondence {
+    fn correspondence<Id>(images: &[usize]) -> Correspondence<Id>
+    where
+        Id: Copy + Ord + From<usize>,
+    {
+        let images = images.iter().copied().map(Id::from).collect::<Vec<_>>();
+        Correspondence::from_images(&images, images.len())
+    }
+
+    MoleculeCorrespondence::new(
+        correspondence::<AtomId>(&images[0]),
+        correspondence::<BondId>(&images[1]),
+        correspondence::<DativeBondId>(&images[2]),
+        correspondence::<AromaticSystemId>(&images[3]),
+        correspondence::<MulticenterBondId>(&images[4]),
+        correspondence::<NoncovalentBondId>(&images[5]),
+        correspondence::<StereoAtomId>(&images[6]),
+        correspondence::<StereoBondId>(&images[7]),
+    )
+}
+
+#[allow(dead_code)]
+fn correspondence_from_order(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> MoleculeCorrespondence {
+    let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
+    let mut next = [0; 8];
+    for &node in order {
+        let (family, source) = match incidence_graph.entity(node) {
+            Entity::Atom(id) => (0, id.index()),
+            Entity::Bond(id) => (1, id.index()),
+            Entity::DativeBond(id) => (2, id.index()),
+            Entity::AromaticSystem(id) => (3, id.index()),
+            Entity::MulticenterBond(id) => (4, id.index()),
+            Entity::NoncovalentBond(id) => (5, id.index()),
+            Entity::StereoAtom(id) => (6, id.index()),
+            Entity::StereoBond(id) => (7, id.index()),
+        };
+        images[family][source] = next[family];
+        next[family] += 1;
+    }
+    molecule_correspondence(&images)
+}
+
+#[allow(dead_code)]
+fn normalize_molecule(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
+    let mut atoms = molecule
+        .atoms()
+        .iter()
+        .map(|atom| atom.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_atoms(|_| atoms.next().expect("one normalized form per atom"));
+
+    let mut bonds = molecule
+        .bonds()
+        .iter()
+        .map(|bond| bond.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_bonds(|_| bonds.next().expect("one normalized form per bond"));
+
+    let mut dative_bonds = molecule
+        .dative_bonds()
+        .iter()
+        .map(|bond| bond.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_dative_bonds(|_| {
+        dative_bonds
+            .next()
+            .expect("one normalized form per dative bond")
+    });
+
+    let mut aromatic_systems = molecule
+        .aromatic_systems()
+        .iter()
+        .map(|system| system.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_aromatic_systems(|_| {
+        aromatic_systems
+            .next()
+            .expect("one normalized form per aromatic system")
+    });
+
+    let mut multicenter_bonds = molecule
+        .multicenter_bonds()
+        .iter()
+        .map(|bond| bond.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_multicenter_bonds(|_| {
+        multicenter_bonds
+            .next()
+            .expect("one normalized form per multicenter bond")
+    });
+
+    let mut noncovalent_bonds = molecule
+        .noncovalent_bonds()
+        .iter()
+        .map(|bond| bond.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_noncovalent_bonds(|_| {
+        noncovalent_bonds
+            .next()
+            .expect("one normalized form per noncovalent bond")
+    });
+
+    let mut stereo_atoms = molecule
+        .stereo_atoms()
+        .iter()
+        .map(|stereo| stereo.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_stereo_atoms(|_| {
+        stereo_atoms
+            .next()
+            .expect("one normalized form per stereo atom")
+    });
+
+    let mut stereo_bonds = molecule
+        .stereo_bonds()
+        .iter()
+        .map(|stereo| stereo.attributes.clone().normalize())
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter();
+    molecule.modify_stereo_bonds(|_| {
+        stereo_bonds
+            .next()
+            .expect("one normalized form per stereo bond")
+    });
+
+    let constraints = molecule.constraints().clone().normalize()?;
+    *molecule.constraints_mut() = constraints;
+    Ok(molecule)
+}
+
+#[allow(dead_code)]
+fn canonicalize_topology(
+    molecule: &Molecule,
+    context: &CanonicalizationContext,
+) -> Result<Molecule, MoleculeCanonicalizationError> {
+    molecule.check_integrity()?;
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
+    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+    let leaf_candidate = |order: &[NodeId]| {
+        topology_candidate(molecule, &incidence_graph, order)
+            .expect("initial classes established topology normalization")
+    };
+    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let selected = canonical_search(
+        &adapter,
+        &descriptors,
+        context.automorphism_algorithm,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: BranchOrder::BackendCanonical,
+        },
+        &leaf_candidate,
+        &no_prefix,
+    );
+    let correspondence =
+        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+
+    Ok(normalize_molecule(molecule.remap(&correspondence))?)
 }
 
 /// Failure to construct a canonical [`Molecule`](super::Molecule).
@@ -1479,7 +1707,6 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use umol_chem::element::Element;
-    use umol_graph_core::Correspondence;
 
     use super::*;
     use crate::ir::{
@@ -1616,6 +1843,14 @@ mod tests {
         })
     }
 
+    #[fixture]
+    fn canonicalization_context() -> CanonicalizationContext {
+        CanonicalizationContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        }
+    }
+
     fn rank_paired_initial_classes(
         left: (&[InitialClassKey], &[InitialClassKey]),
         right: (&[InitialClassKey], &[InitialClassKey]),
@@ -1697,40 +1932,6 @@ mod tests {
         output
     }
 
-    fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
-        [
-            molecule.atoms().count(),
-            molecule.bonds().count(),
-            molecule.dative_bonds().count(),
-            molecule.aromatic_systems().count(),
-            molecule.multicenter_bonds().count(),
-            molecule.noncovalent_bonds().count(),
-            molecule.stereo_atoms().count(),
-            molecule.stereo_bonds().count(),
-        ]
-    }
-
-    fn molecule_correspondence(images: &[Vec<usize>; 8]) -> MoleculeCorrespondence {
-        fn correspondence<Id>(images: &[usize]) -> Correspondence<Id>
-        where
-            Id: Copy + Ord + From<usize>,
-        {
-            let images = images.iter().copied().map(Id::from).collect::<Vec<_>>();
-            Correspondence::from_images(&images, images.len())
-        }
-
-        MoleculeCorrespondence::new(
-            correspondence::<AtomId>(&images[0]),
-            correspondence::<BondId>(&images[1]),
-            correspondence::<DativeBondId>(&images[2]),
-            correspondence::<AromaticSystemId>(&images[3]),
-            correspondence::<MulticenterBondId>(&images[4]),
-            correspondence::<NoncovalentBondId>(&images[5]),
-            correspondence::<StereoAtomId>(&images[6]),
-            correspondence::<StereoBondId>(&images[7]),
-        )
-    }
-
     fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> bool {
         fn visit(
             family: usize,
@@ -1779,30 +1980,6 @@ mod tests {
             source_node_count: source.node_count(),
             entity_blocks: vec![source.node_ids().collect()],
         }
-    }
-
-    fn correspondence_from_order(
-        molecule: &Molecule,
-        incidence_graph: &IncidenceGraph,
-        order: &[NodeId],
-    ) -> MoleculeCorrespondence {
-        let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
-        let mut next = [0; 8];
-        for &node in order {
-            let (family, source) = match incidence_graph.entity(node) {
-                Entity::Atom(id) => (0, id.index()),
-                Entity::Bond(id) => (1, id.index()),
-                Entity::DativeBond(id) => (2, id.index()),
-                Entity::AromaticSystem(id) => (3, id.index()),
-                Entity::MulticenterBond(id) => (4, id.index()),
-                Entity::NoncovalentBond(id) => (5, id.index()),
-                Entity::StereoAtom(id) => (6, id.index()),
-                Entity::StereoBond(id) => (7, id.index()),
-            };
-            images[family][source] = next[family];
-            next[family] += 1;
-        }
-        molecule_correspondence(&images)
     }
 
     fn structural_leaf_key(
@@ -2245,6 +2422,22 @@ mod tests {
     }
 
     #[rstest]
+    #[case::dative(Entity::DativeBond(DativeBondId(0)))]
+    #[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)))]
+    #[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)))]
+    #[case::noncovalent(Entity::NoncovalentBond(NoncovalentBondId(0)))]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)))]
+    #[case::stereo_bond(Entity::StereoBond(StereoBondId(0)))]
+    fn test_correspondence_from_order(initial_class_molecule: Molecule, #[case] excluded: Entity) {
+        let incidence_graph = initial_class_molecule.incidence_graph(IncidenceLevel::Topology);
+        let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
+        let correspondence =
+            correspondence_from_order(&initial_class_molecule, &incidence_graph, &order);
+
+        assert_eq!(correspondence.right_of(excluded), Some(excluded));
+    }
+
+    #[rstest]
     #[case::localized_bond(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
@@ -2398,11 +2591,11 @@ mod tests {
             ],
         },
     )]
-    fn test_ordered_partition_from_classes(
-        #[case] classes: Vec<u32>,
+    fn test_ordered_partition_from_descriptors(
+        #[case] descriptors: Vec<u32>,
         #[case] expected: OrderedPartition,
     ) {
-        assert_eq!(OrderedPartition::from_classes(&classes), expected);
+        assert_eq!(OrderedPartition::from_descriptors(&descriptors), expected,);
     }
 
     #[rstest]
@@ -2414,7 +2607,7 @@ mod tests {
     )]
     fn test_ordered_partition_refine(#[case] graph: Graph, #[case] expected: OrderedPartition) {
         assert_eq!(
-            OrderedPartition::from_classes(&[0_u32; 4]).refine(&graph),
+            OrderedPartition::from_descriptors(&[0_u32; 4]).refine(&graph),
             expected,
         );
     }
@@ -2492,78 +2685,199 @@ mod tests {
     )]
     fn test_canonical_search(#[case] molecule: Molecule) {
         let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-        let classes = initial_classes(&molecule, &incidence_graph).unwrap();
+        let (entity_keys, incidence_keys) =
+            initial_class_keys(&molecule, &incidence_graph).unwrap();
+        let classes = rank_initial_classes(&entity_keys, &incidence_keys);
         let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
-        let leaf_key = |order: &[NodeId]| {
-            topology_comparison_key(&molecule, &incidence_graph, order)
+        let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+        let leaf_candidate = |order: &[NodeId]| {
+            topology_candidate(&molecule, &incidence_graph, order)
                 .expect("selected topology values normalize")
         };
         let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
-        let expected = exhaustive_minimum(&adapter, &leaf_key);
+        let expected = exhaustive_minimum(&adapter, &leaf_candidate);
         let unpruned = canonical_search(
             &adapter,
+            &descriptors,
             AutomorphismAlgorithm::Nauty,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
                 prefix_pruning: false,
                 branch_order: BranchOrder::Node,
             },
-            &leaf_key,
+            &leaf_candidate,
             &no_prefix,
         );
         let reversed = canonical_search(
             &adapter,
+            &descriptors,
             AutomorphismAlgorithm::Nauty,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
                 prefix_pruning: false,
                 branch_order: BranchOrder::ReverseNode,
             },
-            &leaf_key,
+            &leaf_candidate,
             &no_prefix,
         );
         let pruned = canonical_search(
             &adapter,
+            &descriptors,
             AutomorphismAlgorithm::Nauty,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
                 branch_order: BranchOrder::BackendCanonical,
             },
-            &leaf_key,
+            &leaf_candidate,
             &no_prefix,
         );
 
-        assert_eq!(unpruned.candidate, expected);
-        assert_eq!(reversed.candidate, expected);
-        assert_eq!(pruned.candidate, expected);
+        assert_eq!(unpruned.candidate.key, expected.key);
+        assert_eq!(reversed.candidate.key, expected.key);
+        assert_eq!(pruned.candidate.key, expected.key);
         assert!(pruned.stats.visited_leaves <= unpruned.stats.visited_leaves);
+    }
+
+    #[rstest]
+    fn test_canonical_search_color_classes() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+        let (entity_keys, incidence_keys) =
+            initial_class_keys(&molecule, &incidence_graph).unwrap();
+        let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let mut relabeled = adapter.clone();
+        relabeled.classes.iter_mut().for_each(|class| {
+            *class = match *class {
+                AutomorphismClass::Entity(value) => AutomorphismClass::Entity(u32::MAX - value),
+                AutomorphismClass::Incidence(value) => {
+                    AutomorphismClass::Incidence(u32::MAX - value)
+                }
+            }
+        });
+        let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+        let leaf_candidate = |order: &[NodeId]| {
+            topology_candidate(&molecule, &incidence_graph, order)
+                .expect("selected topology values normalize")
+        };
+        let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+        let options = CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: BranchOrder::BackendCanonical,
+        };
+
+        let expected = canonical_search(
+            &adapter,
+            &descriptors,
+            AutomorphismAlgorithm::Nauty,
+            options,
+            &leaf_candidate,
+            &no_prefix,
+        );
+        let actual = canonical_search(
+            &relabeled,
+            &descriptors,
+            AutomorphismAlgorithm::Nauty,
+            options,
+            &leaf_candidate,
+            &no_prefix,
+        );
+
+        assert_eq!(actual.candidate.key, expected.candidate.key);
+    }
+
+    #[rstest]
+    fn test_canonicalize_topology(canonicalization_context: CanonicalizationContext) {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::C).with_charge(NumForm::ArithExpr(Box::new(
+                    ArithExpr::Sum(vec![ArithExpr::Lit(1), ArithExpr::Lit(2)]),
+                ))),
+                AtomForm::from_element(Element::N),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (
+                    AtomId(1),
+                    AtomId(2),
+                    BondForm::new(NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+                        ArithExpr::Lit(0),
+                        ArithExpr::Lit(1),
+                    ])))),
+                ),
+            ],
+            dative: vec![(
+                vec![AtomId(0)],
+                AtomId(2),
+                DativeBondForm::new(NumForm::ArithExpr(Box::new(ArithExpr::Sum(vec![
+                    ArithExpr::Lit(0),
+                    ArithExpr::Lit(1),
+                ])))),
+            )],
+            ..Default::default()
+        });
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(3_i64),
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::O),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(2)),
+            ],
+            dative: vec![(vec![AtomId(2)], AtomId(1), DativeBondForm::from_order(1))],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            canonicalize_topology(&molecule, &canonicalization_context),
+            Ok(expected),
+        );
     }
 
     #[rstest]
     fn test_canonical_search_prefix() {
         let source = Graph::new(4, &[]);
         let adapter = direct_graph_adapter(&source);
-        let leaf_key = |order: &[NodeId]| order.to_vec();
+        let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
+            key: order.to_vec(),
+            entity_order: order.to_vec(),
+        };
         let prefix_worse = |partition: &OrderedPartition,
                             best: &CanonicalCandidate<Vec<NodeId>>| {
             let prefix = partition.fixed_entity_prefix(4);
             prefix.as_slice() > &best.key[..prefix.len()]
         };
-        let expected = exhaustive_minimum(&adapter, &leaf_key);
+        let expected = exhaustive_minimum(&adapter, &leaf_candidate);
         let actual = canonical_search(
             &adapter,
+            &adapter.classes,
             AutomorphismAlgorithm::Nauty,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
                 prefix_pruning: true,
                 branch_order: BranchOrder::Node,
             },
-            &leaf_key,
+            &leaf_candidate,
             &prefix_worse,
         );
 
-        assert_eq!(actual.candidate, expected);
+        assert_eq!(actual.candidate.key, expected.key);
         assert_ne!(actual.stats.prefix_pruned_branches, 0);
     }
 
@@ -2582,7 +2896,7 @@ mod tests {
                 .collect::<Vec<_>>();
             let source = Graph::new(node_count, &edges);
             let adapter = direct_graph_adapter(&source);
-            let leaf_key = |order: &[NodeId]| {
+            let leaf_candidate = |order: &[NodeId]| {
                 let mut positions = vec![0_u32; node_count];
                 for (position, node) in order.iter().enumerate() {
                     positions[node.index()] = position as u32;
@@ -2597,10 +2911,13 @@ mod tests {
                     })
                     .collect::<Vec<_>>();
                 mapped_edges.sort_unstable();
-                mapped_edges
+                CanonicalCandidate {
+                    key: mapped_edges,
+                    entity_order: order.to_vec(),
+                }
             };
             let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
-            let expected = exhaustive_minimum(&adapter, &leaf_key);
+            let expected = exhaustive_minimum(&adapter, &leaf_candidate);
 
             for options in [
                 CanonicalSearchOptions {
@@ -2617,13 +2934,15 @@ mod tests {
                 assert_eq!(
                     canonical_search(
                         &adapter,
+                        &adapter.classes,
                         AutomorphismAlgorithm::Nauty,
                         options,
-                        &leaf_key,
+                        &leaf_candidate,
                         &no_prefix,
                     )
-                    .candidate,
-                    expected,
+                    .candidate
+                    .key,
+                    expected.key,
                     "edge mask {edge_mask:#08b}",
                 );
             }
@@ -2724,11 +3043,15 @@ mod tests {
                     incidence_time += start.elapsed();
 
                     let start = Instant::now();
-                    let classes = initial_classes(&case.molecule, &incidence).unwrap();
+                    let (entity_keys, incidence_keys) =
+                        initial_class_keys(&case.molecule, &incidence).unwrap();
+                    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
                     classes_time += start.elapsed();
 
                     let start = Instant::now();
                     let adapter = AutomorphismAdapter::new(&incidence, &classes);
+                    let descriptors =
+                        partition_descriptors(&adapter, &entity_keys, &incidence_keys);
                     adapter_time += start.elapsed();
 
                     let start = Instant::now();
@@ -2736,18 +3059,22 @@ mod tests {
                     backend_time += start.elapsed();
 
                     let source = incidence.graph();
-                    let leaf_key = |order: &[NodeId]| structural_leaf_key(order, source, &classes);
+                    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
+                        key: structural_leaf_key(order, source, &classes),
+                        entity_order: order.to_vec(),
+                    };
                     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
                     let start = Instant::now();
                     let result = canonical_search(
                         &adapter,
+                        &descriptors,
                         AutomorphismAlgorithm::Nauty,
                         CanonicalSearchOptions {
                             automorphism_pruning: true,
                             prefix_pruning: false,
                             branch_order: BranchOrder::BackendCanonical,
                         },
-                        &leaf_key,
+                        &leaf_candidate,
                         &no_prefix,
                     );
                     search_time += start.elapsed();
