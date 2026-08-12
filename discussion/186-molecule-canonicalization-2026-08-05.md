@@ -1927,7 +1927,17 @@ and the semantic properties validated by the corresponding property tests.
   structural equality. Include non-materializable and intrinsically contradictory cases with exact
   errors and no panics. `Nauty` is currently the sole selector, so algorithm agreement is a frozen
   future requirement for the planned edge-colored individualization-refinement backend rather than
-  a second executable case in this stage. This is additive. [dep: S10c, S12b]
+  a second executable case in this stage. This is additive. [dep: S10c, S12b] **Done.** Reaction
+  properties now cover exact idempotence, complete renumbering at every level, normalization,
+  total canonical equality, the weakened reversal law, application-result preservation under the
+  induced product correspondence, and exact integrity and contradiction errors. The application
+  property exposed a frame-equivalence gap: `Molecule::equiv_under` previously required ordered
+  stereo ligand frames to match exactly. `StereoAtomForm` and `StereoBondForm` now provide
+  `transform_frame_by`; canonicalization and equivalence share that operation, and equivalence
+  considers every admissible bounded repeated-ligand frame action while transporting inline and
+  molecule-level stereo constraints. The persisted counterexample, focused 64-case stereo frame
+  properties, the complete 32-case reaction canonicalization group, and strict graph-IR clippy are
+  green.
 
 ### S13 — Python canonicalization API
 

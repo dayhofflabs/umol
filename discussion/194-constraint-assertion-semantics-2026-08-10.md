@@ -63,7 +63,7 @@ assertion; validation reports it, consistent with edits enforcing no chemistry.
 | --------------------------- | --------------------------------------------------- | --------------------------------------------------------------- |
 | projection materialization  | `derive_constraints` extended into storage          | eliminated; replaced by transient per-key reads                 |
 | model-supplied narrowing    | registry rows surviving for one atom                | candidate sets in solver state; never stored; commit lands primary data |
-| input assertions            | raised SMILES `#a` negatives, user-supplied `#v4`   | stored; consumed at the commit that realizes them (aromaticity does this now) |
+| input assertions            | raised SMILES `#a` negatives, user-supplied `#v4`   | stored; removed by discharge once the structure determines them |
 
 A single registry row meeting into an atom would be an assertion *by the chemistry model*, but the
 valence phase does not produce a single row: it produces the set of rows that survive narrowing,
@@ -76,27 +76,31 @@ join `#h{0,1} #a{1,2}` admits the non-candidate `#h1 #a1`. Any single stored val
 premature collapse or correlation loss. The candidate set is solver state by type — the doc 053
 phase shape `Set<CandidateState> → Set<CandidateState>`: the valence phase emits the surviving
 set, the aromaticity phase selects with the criterion it alone has, and only the committed outcome
-reaches the molecule, as primary data, with the input assertions it realizes consumed in the same
-transaction. The stored channel thus holds only input assertions, with consumption semantics, not
-cache-invalidation semantics; nothing derivable-from-structure is ever stored.
+reaches the molecule, as primary data. The stored channel thus holds only input assertions, and
+discharge — not cache invalidation — removes them once the structure determines them; nothing
+derivable-from-structure is ever stored.
 
 ## Read-side restructure
 
 The `Lattice` trait is untouched: `meet`, `join`, and `matches` on values are already
 source-agnostic. What restructures are the container-level comparison entry points (`matches`,
 `is_compatible`, match-target construction), which currently demand two materialized containers.
-They become generic over a per-key value source:
+They move onto a per-entity constraints view — `AtomConstraintsView` and the per-entity family —
+constructed per call from the assertions container, the entity's relational context, and a reading
+mode, exposing the per-key *effective value*:
 
 ```
 effective(key) = asserted(key) ∧ projected(key)    // meet; either side may be absent
 ```
 
+The view is always the receiver of a comparison, never a function argument.
+
 - Evaluation is driven by the pattern's keys, so only requested projections are computed. The
   per-key selector of doc 125 falls out, and the monolithic `derive_constraints` retires.
 - A `⊥` effective value needs no special path: `matches`/`is_compatible` return false.
 - A standalone entity form (no molecule context, e.g. the electron-count invariant check) is the
-  same abstraction with an assertion-only source.
-- Ring keys obtain their `RingViews` context inside the source, as `ConstraintEvaluation` already
+  same abstraction with an assertion-only view.
+- Ring keys obtain their `RingViews` context inside the view, as `ConstraintEvaluation` already
   memoizes for validation.
 
 This restructure is unconditional, not an alternative to consumption: matching takes the host by
@@ -111,16 +115,24 @@ Consumers that change:
   surviving candidate set instead of writing narrowed constraints back — derived values
   participate in admission but are never written.
 - the electron-count invariant check: assertion-only source, semantics unchanged.
-- `ConstraintValidator`: already per-key derived-versus-asserted; may reuse the source.
+- `ConstraintValidator`: already per-key derived-versus-asserted; may reuse the view.
 
-## Consumption at commit
+## Discharge
 
-Only input assertions are ever stored, so consumption concerns them alone. The commit that
-realizes an assertion into relations removes it in the same transaction. The aromaticity resolver
-already does exactly this for `#a`; the kekulizer and aromatizer removals are the same contract.
-The final commit of a resolution consumes the input assertions its chosen completion realizes
-(`#v4` once implicit hydrogens and all incident bond orders are literal). Keys no single commit
-owns are verified and removed by a final normalization stage, gated on presence.
+Only input assertions are ever stored, so removal concerns them alone, and it has one home: the
+resolve pipeline ends with a *discharge* pass, after which no stored assertion is
+determined-redundant. Per key, discharge asks whether the structure now determines the key: the
+projection refines the assertion ⇒ redundant ⇒ removed; the meet is `⊥` ⇒ contradiction; the
+assertion is strictly narrower than a not-yet-determined projection ⇒ kept. An operation that
+realizes an assertion may remove it early in its own transaction — the aromaticity resolver does
+this for `#a` today — but that is an implementation liberty inside the pipeline, not a second
+concept; the guarantee is the closing pass. Distributed keys are why the pass must exist: `#v` is
+realized by no single operation, only by all incident bond orders and the implicit hydrogen count
+becoming literal, and nothing creates rings, so `#R` is determined by topology alone.
+
+The kekulizer and aromatizer removals are a different contract: a transform that deletes a
+relation must delete the assertions its output no longer satisfies, which is the existing
+emit-compliance policy and stays per-operation.
 
 Determination criteria per key (to be confirmed row by row during implementation planning):
 
@@ -130,14 +142,40 @@ Determination criteria per key (to be confirmed row by row during implementation
 | `#D` degree                  | always (topology)                                                  |
 | `#X`, `#H`, `#V` totals      | implicit hydrogens literal (+ explicit H neighbors' elements literal) |
 | `#d`, `#t` dative pairs      | dative overlay incidence, closed-world reading                     |
-| `#a` aromatic valence        | consumed when the aromatic system is created                       |
-| `#m` multicenter valence     | consumed when the multicenter bond is created                      |
-| `#T`, `#C` stereo            | consumed when the stereo overlay is created (design 103 flow)      |
-| `#R`, `#x`, `#y` ring keys   | always (pure function of topology); verified and removed by final normalization, gated on presence |
+| `#a` aromatic valence        | when the aromatic system is created (removable early)              |
+| `#m` multicenter valence     | when the multicenter bond is created (removable early)             |
+| `#T`, `#C` stereo            | when the stereo overlay is created (design 103 flow)               |
+| `#R`, `#x`, `#y` ring keys   | always (pure function of topology); checked by discharge, gated on presence |
 | overlay-entity constraints   | at the resolution stage of the owning overlay                      |
 
-Direction of the check: the projection `matches` the assertion ⇒ redundant ⇒ remove; meet is `⊥` ⇒
-resolution error; assertion strictly narrower than a not-yet-determined projection ⇒ keep.
+## Resolution carrier
+
+Settled 2026-08-12. The valence phase's output for an atom is a set of *completions* — one per
+registry row surviving admission against the atom's effective values:
+
+- `AtomFields` is the inherent-field completion (implicit hydrogens, lone pairs, unpaired
+  electrons, spin); element and charge are fixed inputs of admission.
+- `AtomCompletion` pairs `AtomFields` with the model values selection votes on: valence, donated
+  and accepted pairs, aromatic valence, multicenter valence.
+- The carrier maps `AtomId` to `SmallVec<[AtomCompletion; 1]>`; nearly all atoms are singletons.
+
+Phase composition keeps early commit: the valence phase applies edits for singleton atoms as today
+and forwards only plural sets; the aromaticity phase selects jointly per candidate aromatic system
+— enumerating assignments over the product of the member atoms' candidate sets and keeping those
+whose π-electron sum satisfies the model — and emits its edits including the chosen completions.
+Survivor count zero is `Contradictory`; one is `Determined`; more than one falls to
+`compare_valence_preference` as a tie-break of last resort whose use is visible in the verdict,
+else `Underdetermined`. Single commit was considered and rejected: every failure path — error,
+contradiction, mid-pipeline underdetermined — already rolls back the whole journal, and `resolve`
+holds the molecule exclusively, so intermediate states are unobservable either way.
+
+The `Underdetermined` payload of `Resolver::resolve` becomes the carrier itself — per-atom
+surviving completions, not a cardinality summary — so a caller can inspect and refine: assert what
+disambiguates through ordinary edits and re-resolve. The normal path subsumes a select-and-commit
+interface, so none is added; `Solution` itself is unchanged. The SMILES reader stops pinning
+`#h0` on bare aromatic heteroatoms (the doc 174 prerequisite). Acceptance: the doc 174 regression
+triple and the pyrrolyl DSL case; the corrected F420 structure joins once the zero-contributor
+perception and registry-coverage items of doc 174 land.
 
 ## World assumption is per-call
 
@@ -152,8 +190,9 @@ property of the consuming operation, not of the molecule:
 - a two-type split (ground versus staging molecule) is the type-level version but is heavy and
   Python-visible, and the boundary is per key, not per molecule.
 
-The existing `include_missing: bool` therefore becomes a named reading mode supplied when
-constructing the value source.
+The existing `include_missing: bool` therefore becomes the reading mode supplied when
+constructing the constraints view: `Complete` (the deriving relation set is complete; absence is a
+definite negative) versus `Partial` (the relation set is partial; absence is no evidence).
 
 ## Rejected alternatives
 
@@ -186,20 +225,93 @@ constructing the value source.
 - Lowering: nothing to elide on resolved molecules; the constraint-elision role of `zeroed()` is
   retired. Conformance snapshots change wholesale (the 652-snapshot experiment of doc 125, in
   reverse: outputs carry only primary data).
-- Raising is unchanged: input dialect assertions land as staging and are consumed by resolution.
+- Raising is unchanged: input dialect assertions land as staging and are discharged by resolution.
 - Whitepaper: the Mutation section states that edits operate on relations and inherent fields;
   projections are computed, so they cannot go stale; stored assertions may become unsatisfiable,
-  which validation reports; resolution consumes assertions the structure comes to determine.
+  which validation reports; resolution discharges assertions the structure comes to determine.
+
+## Staged implementation plan
+
+Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-graph`
+(valence, aromaticity, resolve, invariant), `umol-io` (SMILES ingest), `umol-py`, conformance.
+
+### S0 — constraints-view foundation (`umol-graph-ir`); all additive, green throughout
+
+- S0a: reading-mode enum with `Complete`/`Partial` in the view module (type name proposal:
+  `RelationReading`, to confirm at review). Additive.
+- S0b: `AtomConstraintsView`: construction from assertions container, atom relational context,
+  reading mode, optional ring context; `effective(key)` over every `AtomConstraintKey`. Additive.
+  [dep: S0a]
+- S0c: comparison methods on the view — pattern-driven `matches`/`is_compatible` against a pattern
+  container; the view is the receiver. Additive. [dep: S0b]
+- S0d: `BondConstraintsView`, same shape. Additive. [dep: S0a]
+- S0e: views for the remaining six entity families (uniform surface). Additive. [dep: S0a] —
+  gates only S6a.
+- S0f: nomenclature entries: view family, reading mode, effective value, discharge. Additive.
+
+### S1 — matching on views (`umol-graph-ir::ir::substructure`)
+
+- S1a: `host_match_targets` and the predicate closures evaluate per pattern key on the views
+  (`Complete` reading); ring context built once per run as today; the `Cow` target
+  materialization is deleted. Breaking, green at stage end: substructure, fingerprint, and
+  reaction-matching suites unchanged. A host carrying unconsumed input assertions now meets them
+  against `Complete` projections; any test relying on such a staging host is surfaced, not
+  silently rewritten. [dep: S0c, S0d]
+
+### S2 — standalone reads (`umol-graph::ops::invariant`)
+
+- S2a: the electron-count invariant check reads through an assertion-only `AtomConstraintsView`;
+  semantics unchanged. Green. [dep: S0b]
+
+### S3 — completion vocabulary (`umol-graph::ops::valence`); additive, green
+
+- S3a: `AtomFields`, `AtomCompletion`. Additive.
+- S3b: the carrier map (`AtomId → SmallVec<[AtomCompletion; 1]>`) and the resolver report payload.
+  Additive. [dep: S3a]
+
+### S4 — pipeline rework; the one red stage, green only at its end
+
+- S4a: atom-typing: admission against effective values via the view; no stored-constraint
+  extension, no narrowed write-back; singleton atoms produce edits, plural atoms produce
+  completions. Breaking. [dep: S0c, S3b]
+- S4b: counts: plural `#h` candidates emitted through the same carrier; `CountsInput` readings
+  aligned with the view. Breaking. [dep: S3b]
+- S4c: aromaticity resolve: joint selection per candidate system over the carrier;
+  `compare_valence_preference` demoted to a visible last-resort tie-break. Breaking. [dep: S4a]
+- S4d: `Resolver::resolve`: thread the carrier valence → aromaticity; `Solution<(), _>` →
+  `Solution<Report, _>`; rollback paths preserved. Breaking. [dep: S4c]
+- S4e: SMILES ingest stops pinning `#h0` on bare aromatic heteroatoms (`umol-io`). Breaking.
+  [dep: S4d]
+- S4f: `umol-py`: bind the report for inspection; update the resolution verdict mapping.
+  Breaking. [dep: S4d]
+- S4g: retire `derive_constraints` and `include_missing` (last callers died in S1a/S4a).
+  Breaking. [dep: S4a]
+- S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; full suite green
+  (`--all-features --tests`, clippy). [dep: S4a–S4g]
+
+### S5 — discharge and output cleanup; one conformance regeneration
+
+- S5a: per-key determination checks on the view layer; the determination table is confirmed row
+  by row here. Additive. [dep: S0b]
+- S5b: the discharge pass as the closing `Resolver` stage in the same journal; `⊥` ⇒
+  `Contradictory`. Breaking — resolved outputs lose stored assertions. [dep: S4d, S5a]
+- S5c: lowering: retire the `zeroed()` elision-only paths; raise-side dialect filling stays.
+  Breaking. [dep: S5b]
+- S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
+  [dep: S5b, S5c]
+
+### S6 — deferrable
+
+- S6a: `ConstraintValidator` internals on the entity views; semantics unchanged. [dep: S0e]
+- S6b: the F420 acceptance case; requires the doc 174 zero-contributor perception fix and the
+  `#a0`-carbon registry coverage, tracked there.
+
+Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge strips assertions
+from resolved hosts, after which matching must project every pattern key. S2 floats after S0; S3
+is parallel to S1. The core deliverable — staleness-free semantics and the whitepaper Mutation
+story — completes at S5; S6 is not required for it.
 
 ## Open items
 
-- Naming, subject to the nomenclature process: the combined per-key read (candidate: *effective
-  value*); the per-entity value source abstraction (candidates: `*ConstraintSource`,
-  `*ValueSource`); the realization-time removal (candidate: *consume*); the final pipeline
-  normalization stage (candidate: *discharge*); the reading mode (candidates: perceived/staging,
-  closed/open world).
-- Confirmation of the per-key determination table.
-- The candidate-set carrier between resolution phases: its types (doc 053 shape; the existing
-  `Solution`/`Progress` vocabulary), how surviving multiplicity surfaces in verdicts, and the doc
-  174 regression triple as its acceptance test.
-- Staged implementation plan, to be added here once the above are fixed.
+- Reading-mode enum type name (S0a) at review.
+- F420 enablement via the doc 174 zero-contributor and registry-coverage items (S6b).

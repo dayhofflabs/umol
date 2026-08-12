@@ -4353,6 +4353,18 @@ pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
     comprehensive_reaction_strategy()
 }
 
+pub(crate) fn reaction_application_strategy(
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
+        let (host, correspondences) = Molecule::combine_all([&reaction.lhs, &extra]);
+        let correspondence = correspondences
+            .into_iter()
+            .next()
+            .expect("two input molecules produce two correspondences");
+        (reaction, host, correspondence)
+    })
+}
+
 /// A reaction with one discontinuous atom-field update. The second update's `old` value differs
 /// from the first update's `new` value, so delta normalization reaches `Contradiction`.
 pub(crate) fn discontinuous_atom_update_reaction_strategy() -> impl Strategy<Value = Reaction> {

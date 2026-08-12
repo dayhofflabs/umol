@@ -118,44 +118,45 @@ proptest! {
 
     #[test]
     fn test_stereo_atom_form_transform_frame(
-        args in stereo_atom_kind_strategy().prop_flat_map(|kind| {
-            (
-                Just(kind),
-                0..kind.count() as u32,
-                stereo_frame_permutation_strategy(kind),
-            )
+        args in stereo_atom_form_strategy().prop_flat_map(|form| {
+            let kind = form.configuration.kind().expect("strategy generates a kinded form");
+            (Just(form), stereo_frame_permutation_strategy(kind))
         }),
     ) {
-        let (kind, coset, permutation) = args;
+        let (form, permutation) = args;
+        let kind = form.configuration.kind().expect("strategy generates a kinded form");
         let before: Vec<StereoLigand> = (0..kind.degree() as u32)
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let form = StereoAtomForm::new(kind, coset);
         let transformed = form.transform_frame(&before, &after);
 
-        prop_assert_eq!(transformed.as_ref(), Some(&form.apply(permutation)));
+        prop_assert_eq!(transformed, form.transform_frame_by(permutation));
         prop_assert_eq!(
-            transformed.and_then(|form| form.transform_frame(&after, &before)),
+            form.transform_frame_by(permutation)
+                .and_then(|form| form.transform_frame_by(permutation.inverse())),
             Some(form),
         );
     }
 
     #[test]
     fn test_stereo_bond_form_transform_frame(
-        coset in 0..StereoKind::CisTrans.count() as u32,
-        permutation in stereo_frame_permutation_strategy(StereoKind::CisTrans),
+        args in stereo_bond_form_strategy().prop_flat_map(|form| (
+            Just(form),
+            stereo_frame_permutation_strategy(StereoKind::CisTrans),
+        )),
     ) {
+        let (form, permutation) = args;
         let before: Vec<StereoLigand> = (0..StereoKind::CisTrans.degree() as u32)
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
         let after = permutation.act(&before);
-        let form = StereoBondForm::new(StereoKind::CisTrans, coset);
         let transformed = form.transform_frame(&before, &after);
 
-        prop_assert_eq!(transformed.as_ref(), Some(&form.apply(permutation)));
+        prop_assert_eq!(transformed, form.transform_frame_by(permutation));
         prop_assert_eq!(
-            transformed.and_then(|form| form.transform_frame(&after, &before)),
+            form.transform_frame_by(permutation)
+                .and_then(|form| form.transform_frame_by(permutation.inverse())),
             Some(form),
         );
     }

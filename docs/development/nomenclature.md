@@ -332,6 +332,19 @@ remapping, which gives every source id an image and never expresses removal.
 **In code:** `IdCompaction`, `UndoCompaction`, `umol_graph_core::Compaction`; `compact`,
 `compact_*`, `uncompact_*`.
 
+### Completion
+
+A **completion** is one admissible ground assignment for an entity's underdetermined attributes,
+produced by a resolution phase from the chemistry model. `AtomCompletion` pairs the inherent-field
+completion (`AtomFields`: implicit hydrogens, lone pairs, unpaired electrons, spin) with the model
+values that selection votes on (valence, donated and accepted pairs, aromatic and multicenter
+valence). A phase emits the set of completions that survive narrowing; a later phase selects among
+them, and an underdetermined verdict reports the survivors.
+
+**Not:** a stored assertion — completions live in solver state and are never written to the
+constraint channel; not the resolution result, which is the committed outcome.
+**In code:** `AtomCompletion`, `AtomFields`.
+
 ### Config
 
 A **config** contains operational choices controlling how an operation is performed, including

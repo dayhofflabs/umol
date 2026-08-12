@@ -14,6 +14,7 @@ use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
     RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
 };
+use umol_perm::Permutation;
 
 use self::transact::TransactionError;
 use super::aromatic::AromaticSystemForm;
@@ -43,6 +44,71 @@ use super::view::{
     StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
     StereoBondViews,
 };
+
+fn transform_constraint_stereo_frame(
+    constraint: Constraint,
+    entity: Entity,
+    permutation: Permutation,
+) -> Option<Constraint> {
+    Some(match constraint {
+        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
+            let form = StereoAtomForm {
+                configuration: Default::default(),
+                constraints: constraint.into(),
+            }
+            .transform_frame_by(permutation)?;
+            Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
+        }
+        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
+            let form = StereoBondForm {
+                configuration: Default::default(),
+                constraints: constraint.into(),
+            }
+            .transform_frame_by(permutation)?;
+            Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
+        }
+        Constraint::And(constraints) => Constraint::And(
+            constraints
+                .into_iter()
+                .map(|constraint| {
+                    transform_constraint_stereo_frame(constraint, entity, permutation)
+                })
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Constraint::Or(constraints) => Constraint::Or(
+            constraints
+                .into_iter()
+                .map(|constraint| {
+                    transform_constraint_stereo_frame(constraint, entity, permutation)
+                })
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Constraint::Not(constraint) => Constraint::Not(Box::new(
+            transform_constraint_stereo_frame(*constraint, entity, permutation)?,
+        )),
+        constraint => constraint,
+    })
+}
+
+fn constraints_equiv_under_stereo_frames(
+    constraints: Constraints,
+    other: &Constraints,
+    frames: &[(Entity, Vec<Permutation>)],
+) -> bool {
+    let Some(((entity, permutations), remaining)) = frames.split_first() else {
+        return constraints.equiv(other);
+    };
+    permutations.iter().copied().any(|permutation| {
+        let transformed = constraints
+            .clone()
+            .into_iter()
+            .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, permutation))
+            .collect::<Option<Constraints>>();
+        transformed.is_some_and(|constraints| {
+            constraints_equiv_under_stereo_frames(constraints, other, remaining)
+        })
+    })
+}
 
 mod build;
 mod editor;
@@ -563,7 +629,9 @@ impl Molecule {
     ///
     /// The correspondence supplies the target id and participant frame. It must cover the actual
     /// id spaces of both molecules, and every mapped topology edge, relation participant, stereo
-    /// site, and stereo ligand must agree with its matched entity.
+    /// site, and stereo ligand must agree with its matched entity. Stereo ligand frames may differ
+    /// by any admissible permutation, including alternatives caused by repeated equal ligands;
+    /// configuration and frame-relative inline and molecule-level constraints move together.
     pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
         let counts_match = [
             (
@@ -817,6 +885,10 @@ impl Molecule {
             }
         }
 
+        let mut stereo_frames = Vec::with_capacity(
+            correspondence.stereo_atoms().matched_pair_count()
+                + correspondence.stereo_bonds().matched_pair_count(),
+        );
         for &(left, right) in correspondence.stereo_atoms().matched_pairs() {
             if left.index() >= self.stereo_atoms.count()
                 || right.index() >= other.stereo_atoms.count()
@@ -850,20 +922,36 @@ impl Molecule {
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
                 return false;
             };
-            let Some((site_order, ligand_order)) =
-                other
-                    .stereo_atoms
-                    .participant_permutation(right_id, &mapped_site, &mapped_ligands)
-            else {
-                return false;
-            };
-            if !self.stereo_atoms.data(left_id).equiv_under(
-                other.stereo_atoms.data(right_id),
-                &site_order,
-                &ligand_order,
-            ) {
+            if mapped_site != other.stereo_atoms.participants_1(right_id) {
                 return false;
             }
+            if mapped_ligands == other.stereo_atoms.participants_2(right_id)
+                && self
+                    .stereo_atoms
+                    .data(left_id)
+                    .equiv(other.stereo_atoms.data(right_id))
+            {
+                continue;
+            }
+            if mapped_ligands.len() > 6 {
+                return false;
+            }
+            let frames = Permutation::between_all(
+                &mapped_ligands,
+                other.stereo_atoms.participants_2(right_id),
+            )
+            .into_iter()
+            .filter(|&permutation| {
+                self.stereo_atoms
+                    .data(left_id)
+                    .transform_frame_by(permutation)
+                    .is_some_and(|attributes| attributes.equiv(other.stereo_atoms.data(right_id)))
+            })
+            .collect::<Vec<_>>();
+            if frames.is_empty() {
+                return false;
+            }
+            stereo_frames.push((Entity::StereoAtom(right), frames));
         }
 
         for &(left, right) in correspondence.stereo_bonds().matched_pairs() {
@@ -899,20 +987,36 @@ impl Molecule {
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
                 return false;
             };
-            let Some((site_order, ligand_order)) =
-                other
-                    .stereo_bonds
-                    .participant_permutation(right_id, &mapped_site, &mapped_ligands)
-            else {
-                return false;
-            };
-            if !self.stereo_bonds.data(left_id).equiv_under(
-                other.stereo_bonds.data(right_id),
-                &site_order,
-                &ligand_order,
-            ) {
+            if mapped_site != other.stereo_bonds.participants_1(right_id) {
                 return false;
             }
+            if mapped_ligands == other.stereo_bonds.participants_2(right_id)
+                && self
+                    .stereo_bonds
+                    .data(left_id)
+                    .equiv(other.stereo_bonds.data(right_id))
+            {
+                continue;
+            }
+            if mapped_ligands.len() > 6 {
+                return false;
+            }
+            let frames = Permutation::between_all(
+                &mapped_ligands,
+                other.stereo_bonds.participants_2(right_id),
+            )
+            .into_iter()
+            .filter(|&permutation| {
+                self.stereo_bonds
+                    .data(left_id)
+                    .transform_frame_by(permutation)
+                    .is_some_and(|attributes| attributes.equiv(other.stereo_bonds.data(right_id)))
+            })
+            .collect::<Vec<_>>();
+            if frames.is_empty() {
+                return false;
+            }
+            stereo_frames.push((Entity::StereoBond(right), frames));
         }
 
         let Some(remapping) = correspondence.to_remapping() else {
@@ -924,7 +1028,11 @@ impl Molecule {
             .into_iter()
             .map(|constraint| constraint.remap(&remapping))
             .collect();
-        mapped_constraints.equiv(&other.constraints)
+        constraints_equiv_under_stereo_frames(
+            mapped_constraints,
+            &other.constraints,
+            &stereo_frames,
+        )
     }
 
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.

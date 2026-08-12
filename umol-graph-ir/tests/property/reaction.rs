@@ -11,6 +11,8 @@ const REGRESSION_FILE: &str = concat!(
 
 #[path = "reaction/application.rs"]
 mod application;
+#[path = "reaction/canonicalize.rs"]
+mod canonicalize;
 #[path = "reaction/composition.rs"]
 mod composition;
 #[path = "reaction/lifecycle.rs"]

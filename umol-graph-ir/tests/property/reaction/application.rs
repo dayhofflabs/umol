@@ -19,18 +19,6 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
 };
 
-fn reaction_application_strategy(
-) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
-    (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
-        let (host, correspondences) = Molecule::combine_all([&reaction.lhs, &extra]);
-        let correspondence = correspondences
-            .into_iter()
-            .next()
-            .expect("two input molecules produce two correspondences");
-        (reaction, host, correspondence)
-    })
-}
-
 proptest! {
     #![proptest_config(Config {
         failure_persistence: Some(Box::new(FileFailurePersistence::Direct(

@@ -401,13 +401,13 @@ fn dense_union_correspondence(span: &ReactionSpan, seed: u64) -> MoleculeCorresp
 }
 
 #[derive(Debug)]
-struct ReactionSpanScenario {
-    span: ReactionSpan,
-    first: MoleculeCorrespondence,
-    second: MoleculeCorrespondence,
+pub(super) struct ReactionSpanScenario {
+    pub(super) span: ReactionSpan,
+    pub(super) first: MoleculeCorrespondence,
+    pub(super) second: MoleculeCorrespondence,
 }
 
-fn reaction_span_scenario_strategy() -> impl Strategy<Value = ReactionSpanScenario> {
+pub(super) fn reaction_span_scenario_strategy() -> impl Strategy<Value = ReactionSpanScenario> {
     (reaction_span_strategy(), any::<u64>(), any::<u64>()).prop_map(
         |(span, first_seed, second_seed)| ReactionSpanScenario {
             first: dense_union_correspondence(&span, first_seed),

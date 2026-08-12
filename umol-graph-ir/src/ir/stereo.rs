@@ -123,52 +123,76 @@ macro_rules! stereo_element {
                 before: &[StereoLigand],
                 after: &[StereoLigand],
             ) -> Option<Self> {
-                let frame = Permutation::between(before, after)?;
+                self.transform_frame_by(Permutation::between(before, after)?)
+            }
+
+            /// Restate the complete form after applying `permutation` to its ligand frame.
+            ///
+            /// Configuration, permutation-valued constraints, and topicity positions move
+            /// together. Returns `None` when the permutation is not an action of the configured
+            /// stereo kind or its degree is incompatible with a frame-relative constraint.
+            pub fn transform_frame_by(&self, permutation: Permutation) -> Option<Self> {
                 if self.configuration.kind().is_some_and(|kind| {
-                    kind.class_key().space().reindex(0, frame).is_none()
+                    kind.degree() != permutation.degree()
+                        || kind
+                            .class_key()
+                            .space()
+                            .reindex(0, permutation)
+                            .is_none()
                 }) {
                     return None;
                 }
-                let inverse = frame.inverse();
-                let reframe_permutation = |permutation: LigandPermutation| {
-                    LigandPermutation(inverse.compose(permutation.0).compose(frame))
+                let inverse = permutation.inverse();
+                let reframe_permutation = |value: LigandPermutation| {
+                    (value.0.degree() == permutation.degree()).then(|| {
+                        LigandPermutation(inverse.compose(value.0).compose(permutation))
+                    })
                 };
-                let mut constraints = $constraints::new();
-                for constraint in self.constraints.iter().cloned() {
-                    constraints.set(match constraint {
-                        $constraint::LigandSymmetry(symmetry) => {
-                            $constraint::LigandSymmetry(LigandSymmetryForm {
-                                permutation: OrientedLigandPermutation {
-                                    permutation: reframe_permutation(
-                                        symmetry.permutation.permutation,
+                let constraints = self
+                    .constraints
+                    .iter()
+                    .cloned()
+                    .map(|constraint| {
+                        Some(match constraint {
+                            $constraint::LigandSymmetry(symmetry) => {
+                                $constraint::LigandSymmetry(LigandSymmetryForm {
+                                    permutation: OrientedLigandPermutation {
+                                        permutation: reframe_permutation(
+                                            symmetry.permutation.permutation,
+                                        )?,
+                                        orientation: symmetry.permutation.orientation,
+                                    },
+                                    invariant: symmetry.invariant,
+                                })
+                            }
+                            $constraint::Fluxionality(fluxionality) => {
+                                $constraint::Fluxionality(FluxionalityForm {
+                                    permutation: reframe_permutation(fluxionality.permutation)?,
+                                    active: fluxionality.active,
+                                })
+                            }
+                            $constraint::Topicity(topicity) => {
+                                let first = topicity.pair.first().index();
+                                let second = topicity.pair.second().index();
+                                if first >= permutation.degree() || second >= permutation.degree() {
+                                    return None;
+                                }
+                                $constraint::Topicity(TopicityForm {
+                                    pair: StereoLigandPair::new(
+                                        inverse.apply(first).into(),
+                                        inverse.apply(second).into(),
                                     ),
-                                    orientation: symmetry.permutation.orientation,
-                                },
-                                invariant: symmetry.invariant,
-                            })
-                        }
-                        $constraint::Fluxionality(fluxionality) => {
-                            $constraint::Fluxionality(FluxionalityForm {
-                                permutation: reframe_permutation(fluxionality.permutation),
-                                active: fluxionality.active,
-                            })
-                        }
-                        $constraint::Topicity(topicity) => {
-                            $constraint::Topicity(TopicityForm {
-                                pair: StereoLigandPair::new(
-                                    inverse.apply(topicity.pair.first().index()).into(),
-                                    inverse.apply(topicity.pair.second().index()).into(),
-                                ),
-                                relation: topicity.relation,
-                            })
-                        }
-                        $constraint::Stereogenicity(stereogenicity) => {
-                            $constraint::Stereogenicity(stereogenicity)
-                        }
-                    });
-                }
+                                    relation: topicity.relation,
+                                })
+                            }
+                            $constraint::Stereogenicity(stereogenicity) => {
+                                $constraint::Stereogenicity(stereogenicity)
+                            }
+                        })
+                    })
+                    .collect::<Option<$constraints>>()?;
                 Some(Self {
-                    configuration: self.configuration.apply(frame),
+                    configuration: self.configuration.apply(permutation),
                     constraints,
                 })
             }
@@ -2024,9 +2048,24 @@ mod tests {
         #[case] expected_coset: u32,
     ) {
         let atom = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
+        let permutation = Permutation::between(&before, &after).expect("case has a unique frame");
         assert_eq!(
             atom.transform_frame(&before, &after),
             Some(StereoAtomForm::new(StereoKind::Tetrahedral, expected_coset,)),
+        );
+        assert_eq!(
+            atom.transform_frame_by(permutation),
+            atom.transform_frame(&before, &after),
+        );
+    }
+
+    #[rstest]
+    #[case::degree(Permutation::identity(3))]
+    #[case::outside_parent(Permutation::from_image(&[1, 2, 0, 3]))]
+    fn test_stereo_bond_form_transform_frame_by_error(#[case] permutation: Permutation) {
+        assert_eq!(
+            StereoBondForm::new(StereoKind::CisTrans, 0u32).transform_frame_by(permutation),
+            None,
         );
     }
 
