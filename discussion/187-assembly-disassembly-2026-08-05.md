@@ -181,7 +181,11 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   derivation yields the right-hand side's conservative connected components as `Vec<Molecule>`;
   application errors pass through unchanged and split correspondences are intentionally discarded.
   Cover zero, one, and multiple components, error forwarding, order preservation, and one-shot
-  exhaustion. This is additive. [dep: S0b]
+  exhaustion. This is additive. [dep: S0b] **Done.** The public operation-issued iterator has no
+  constructor surface and stores only the owned application iterator. Successful items map the
+  right-hand side through the existing conservative split and discard its correspondences; exact
+  cases cover zero, one, and ordered multiple components plus fatal-error forwarding and terminal
+  exhaustion.
 - **S1b — `React` capability.** Add and export `React::react` with the mandatory
   `SubstructureMatchConfig`, implemented for `Molecule` and `[Molecule]`. The molecule
   implementation delegates to owned reaction application. The slice implementation uses

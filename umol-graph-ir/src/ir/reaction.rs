@@ -114,6 +114,34 @@ impl Iterator for ReactionApplicationIter {
     }
 }
 
+/// One-shot product component collections derived lazily from reaction applications.
+///
+/// Each successful application is replaced by the conservative connected-component split of its
+/// right-hand side. Component order is inherited from [`Molecule::split`]. The split
+/// correspondences and the rest of the derivation are intentionally discarded. Application errors
+/// pass through unchanged.
+#[derive(Debug)]
+pub struct ReactionProductsIter {
+    applications: ReactionApplicationIter,
+}
+
+impl Iterator for ReactionProductsIter {
+    type Item = Result<Vec<Molecule>, ApplyError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.applications.next().map(|application| {
+            application.map(|derivation| {
+                derivation
+                    .rhs()
+                    .split()
+                    .into_iter()
+                    .map(|(component, _)| component)
+                    .collect()
+            })
+        })
+    }
+}
+
 fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
     fn permutation_is_valid(kind: StereoKind, permutation: Permutation) -> bool {
         permutation.degree() == kind.degree()
@@ -1669,6 +1697,78 @@ mod tests {
                 ..Default::default()
             }),
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::zero_components(
+        Reaction::default(),
+        Molecule::default(),
+        vec![vec![]],
+    )]
+    #[case::one_component(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Deltas::new(),
+        ),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+        vec![vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() })]],
+    )]
+    #[case::multiple_components(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], ..Default::default() }),
+            Deltas::new(),
+        ),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], ..Default::default() }),
+        vec![vec![
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], ..Default::default() }),
+        ]],
+    )]
+    fn test_reaction_products_iter(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected: Vec<Vec<Molecule>>,
+    ) {
+        let mut products = ReactionProductsIter {
+            applications: ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap(),
+        };
+        let actual = products
+            .by_ref()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+        assert_eq!(products.next(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter_error() {
+        let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0)]),
+            sum: NumForm::Lit(0),
+        });
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraints::from(constraint.clone()),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(constraint))]),
+        );
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let mut products = ReactionProductsIter {
+            applications: ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap(),
+        };
+
+        assert_eq!(
+            products.next(),
+            Some(Err(ApplyError::Transaction(TransactionError::MissingEntry))),
+        );
+        assert_eq!(products.next(), None);
     }
 
     #[rstest]

@@ -334,6 +334,9 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
   Breaking. [dep: S4a]
 - S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; full suite green
   (`--all-features --tests`, clippy). [dep: S4a–S4g]
+- S4i: audit the stereo phase for the same premature collapse (doc 174's remaining open item) —
+  whether a local preference selects before a later criterion can vote. Read-and-report while the
+  pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d]
 
 ### S5 — discharge and output cleanup; one conformance regeneration
 
