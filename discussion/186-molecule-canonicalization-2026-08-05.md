@@ -1020,6 +1020,31 @@ sets of participant-indexed electron counts and both stereo configurations. Cons
 outside the structural coloring, like molecule constraints, and participate post-hoc in selecting
 the complete canonical span among structurally equivalent frames.
 
+Construction permits any dense union-frame ordering whose two projections satisfy reaction-span
+integrity. LHS anchoring is instead the canonical ordering convention: within each entity family,
+entries present on the LHS form the dense prefix in canonical LHS order, and right-only `Added`
+entries follow in their canonical order. A reordered span represents the same reaction span but
+offers no additional semantic information. Lowering such a span to `Reaction` therefore reanchors
+its ids, and aggregate canonicalization always emits this LHS-anchored form. This preserves the
+general construction domain while keeping the canonical span directly aligned with the
+LHS-plus-deltas representation of `Reaction`.
+
+`ReactionSpan` uses the same public asserted and checked dense-remapping pair as `Molecule`:
+
+```rust
+ReactionSpan::remap(&self, correspondence: &MoleculeCorrespondence) -> ReactionSpan
+ReactionSpan::try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<ReactionSpan>
+```
+
+The correspondence covers all eight union tables, its source counts must equal the span's table
+sizes, and every family must be a total dense bijection. The operation transports both entity
+states, topology, relation participants, participant-indexed values, stereo frames, and constraint
+references together. It does not normalize values, repair integrity, or impose LHS anchoring unless
+the supplied target order is itself LHS-anchored. `remap` asserts the contract established by a
+trusted producer; `try_remap` returns `None` for an integrity-invalid source or unsuitable
+correspondence. Canonicalization derives an LHS-anchored correspondence and consumes this ordinary
+operation rather than implementing private span transport.
+
 Molecule constraints have set-like conjunction semantics in this process, not multiset semantics.
 Normalize each constraint value, discard duplicate normal-form values, then classify each value by
 side membership: present on both sides is `Unchanged`, left only is `Removed`, and right only is
@@ -1073,7 +1098,8 @@ N(r) = r.to_reaction_span()?.to_reaction()
 
 The reaction/span APIs and aggregate canonicalization assert the following properties:
 
-- `N(r).lhs == r.lhs`;
+- `N(r).lhs` has the same structural entities as `r.lhs` and canonically equal constraint-set
+  semantics; redundant raw constraint order or occurrences need not be preserved;
 - `N(r).to_reaction_span() == r.to_reaction_span()`;
 - `N(N(r)) == N(r)` by exact structural equality;
 - for every host `h` and explicit molecule correspondence `c` satisfying the correspondence
@@ -1087,9 +1113,9 @@ S(s) = s.to_reaction().to_reaction_span().expect("constructed span materializes"
 ```
 
 Then `S(S(s)) == S(s)`. If `s` already uses canonical constraint values in the set-difference normal
-form, `S(s) == s`; otherwise the two spans have the same structural entities and canonically equal
-side constraints, but need not be structurally equal. This is deliberate normalization, not loss of
-reaction semantics.
+form and is LHS-anchored, `S(s) == s`; otherwise the two spans have the same structural entities and
+canonically equal side constraints but may differ in union-frame ordering or raw constraint
+storage. This is deliberate normalization, not loss of reaction semantics.
 
 The application property uses `apply_at` so that it tests reaction semantics independently of
 substructure enumeration and its algorithm selectors. It must be exercised on generated hosts and
@@ -1754,20 +1780,38 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S11 — Reaction-span canonicalization
 
-- **S11a — Span comparison schema.** Extend the private typed schema with fixed `Unchanged`, `Added`,
-  `Removed`, and `Modified { lhs, rhs }` tags and ordered lhs/rhs components. Apply participant-frame
-  actions to both modified values. Normalize constraint spans as set difference rather than a
-  multiset and align that semantics with `ConstraintDelta` normalization. This is additive.
+- **S11a — Span normalization and comparison schema.** Extend the private typed schema with fixed
+  `Unchanged`, `Added`, `Removed`, and `Modified { lhs, rhs }` tags and ordered lhs/rhs components.
+  Apply participant-frame actions to both modified values. Normalize constraint spans as set
+  difference rather than a multiset and align that semantics with `ConstraintDelta` normalization.
+  Correct lowering from any integrity-valid dense union order so that `to_reaction` assigns the
+  compact projected LHS ids first and appends right-only additions. Do not reject reordered spans at
+  construction. This is breaking red-to-green for span lowering and constraint normalization.
   [dep: S4b, S10c]
+  **Done.** The typed comparison schema now has production `Unchanged`, `Added`, `Removed`, and
+  ordered `Modified { lhs, rhs }` keys, while relation-data permutation already transports both
+  modified values. `Deltas::normalize` treats molecule constraints as normalized set differences:
+  duplicates collapse and values appearing in both directions cancel. Reaction materialization
+  normalizes and deduplicates LHS constraints, rejects additions already present and removals that
+  are absent, and emits a sorted set span. Superimposition applies the same normal-form set
+  comparison. `ReactionSpan::to_reaction` now transports ids, participants, stereo frames, and
+  constraint references from any integrity-valid union order into the LHS-anchored reaction frame;
+  construction remains permissive. Focused and complete graph-IR unit suites are green.
 - **S11b — Span remapping and canonical frame.** Reuse the molecule incidence, exact class ranking,
-  and remapping facilities for `EntitySpan<T>` values in the union namespace. Implement all four
-  `Canonicalize` operations for `ReactionSpan`; do not canonicalize either side independently. This
-  is additive. [dep: S9c, S11a]
+  and remapping facilities for `EntitySpan<T>` values in the union namespace. Add public `remap`
+  and `try_remap` operations taking a total dense `MoleculeCorrespondence` over all eight union
+  tables; canonicalization must consume this ordinary transport path. Search the LHS-anchored
+  candidate domain: each entity family's LHS-present entries form the canonical dense prefix and
+  right-only additions follow. Implement all four `Canonicalize` operations for `ReactionSpan`; do
+  not canonicalize either side independently. This is additive. [dep: S9c, S11a]
 - **S11c — Span properties.** Validate exact canonical idempotence, invariance under every valid
-  dense union-frame renumbering, preservation of lhs/rhs projections under induced side remappings,
-  reversal distinction, integrity, and algorithm agreement. Freeze canonical-span fixtures with
-  additions, removals, modifications, all entity kinds, and constraint-only changes. This is
-  additive. [dep: S11b]
+  dense union-frame renumbering, LHS anchoring of every canonical output, preservation of lhs/rhs
+  projections under induced side remappings, reversal distinction, integrity, and algorithm
+  agreement. For `S(s) = s.to_reaction().to_reaction_span()?` and canonicalization `C`, require
+  `S(C(s)) == C(s)`, `S(S(s)) == S(s)`, and `C(S(s)) == C(s)`. Verify remapping identity, inverse,
+  composition, and projection preservation, and that reordered input lowers to the same
+  LHS-anchored reaction normal form. Freeze canonical-span fixtures with additions, removals,
+  modifications, all entity kinds, and constraint-only changes. This is additive. [dep: S11b]
 
 ### S12 — Reaction canonicalization
 

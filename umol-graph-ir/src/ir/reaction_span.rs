@@ -6,7 +6,7 @@
 //! a `Molecule`. `Modified` (a preserved entity relabeled across the reaction) is the
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 
 use thiserror::Error;
@@ -955,14 +955,23 @@ impl ReactionSpan {
             union_map(stereo_atom_corr, lhs.stereo_atoms().count()),
             union_map(stereo_bond_corr, lhs.stereo_bonds().count()),
         );
-        let rhs_constraints: Vec<Constraint> = rhs
+        let lhs_constraints: BTreeSet<Constraint> = lhs
+            .constraints()
+            .iter()
+            .cloned()
+            .map(Normalize::normalize)
+            .collect::<Result<_, _>>()
+            .ok()?;
+        let rhs_constraints: BTreeSet<Constraint> = rhs
             .constraints()
             .iter()
             .cloned()
             .map(|c| c.remap(&remapping))
-            .collect();
+            .map(Normalize::normalize)
+            .collect::<Result<_, _>>()
+            .ok()?;
         let mut constraints: Vec<ConstraintSpan> = Vec::new();
-        for c in lhs.constraints().iter() {
+        for c in lhs_constraints.iter() {
             if rhs_constraints.contains(c) {
                 constraints.push(ConstraintSpan::Unchanged(c.clone()));
             } else {
@@ -970,7 +979,7 @@ impl ReactionSpan {
             }
         }
         for c in &rhs_constraints {
-            if !lhs.constraints().iter().any(|l| l == c) {
+            if !lhs_constraints.contains(c) {
                 constraints.push(ConstraintSpan::Added(c.clone()));
             }
         }
@@ -1108,13 +1117,76 @@ impl ReactionSpan {
     /// structural equality. When this span already uses canonical set-difference semantics for
     /// constraints, converting the returned reaction back to a span reproduces `self` exactly.
     pub fn to_reaction(&self) -> Reaction {
+        let atom_ids: HashMap<AtomId, AtomId> =
+            projected_ids(self.atoms.iter().map(|span| span.lhs().is_some()));
+        let bond_ids: HashMap<BondId, BondId> =
+            projected_ids(self.bonds.iter().map(|span| span.lhs().is_some()));
+        let dative_ids: HashMap<DativeBondId, DativeBondId> =
+            projected_ids((0..self.dative_bonds.count()).map(|index| {
+                self.dative_bonds
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let aromatic_ids: HashMap<AromaticSystemId, AromaticSystemId> =
+            projected_ids((0..self.aromatic_systems.count()).map(|index| {
+                self.aromatic_systems
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let multicenter_ids: HashMap<MulticenterBondId, MulticenterBondId> =
+            projected_ids((0..self.multicenter_bonds.count()).map(|index| {
+                self.multicenter_bonds
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let noncovalent_ids: HashMap<NoncovalentBondId, NoncovalentBondId> =
+            projected_ids((0..self.noncovalent_bonds.count()).map(|index| {
+                self.noncovalent_bonds
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let stereo_atom_ids: HashMap<StereoAtomId, StereoAtomId> =
+            projected_ids((0..self.stereo_atoms.count()).map(|index| {
+                self.stereo_atoms
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let stereo_bond_ids: HashMap<StereoBondId, StereoBondId> =
+            projected_ids((0..self.stereo_bonds.count()).map(|index| {
+                self.stereo_bonds
+                    .data(RelationId(index as u32))
+                    .lhs()
+                    .is_some()
+            }));
+        let remapping = IdRemapping::new(
+            atom_ids.clone(),
+            bond_ids.clone(),
+            dative_ids.clone(),
+            aromatic_ids.clone(),
+            multicenter_ids.clone(),
+            noncovalent_ids.clone(),
+            stereo_atom_ids.clone(),
+            stereo_bond_ids.clone(),
+        );
+
         let mut deltas = Deltas::new();
-        AtomDelta::append_deltas_from_states(&self.atoms, |_| (), &mut deltas);
+        AtomDelta::append_deltas_from_states(
+            &self.atoms,
+            |index| atom_ids[&AtomId::from(index)],
+            |_| (),
+            &mut deltas,
+        );
         BondDelta::append_deltas_from_states(
             &self.bonds,
+            |index| bond_ids[&BondId::from(index)],
             |edge| {
                 let [a, b] = self.graph.edge_endpoints(EdgeId(edge as u32));
-                [AtomId::from(a), AtomId::from(b)]
+                [atom_ids[&AtomId::from(a)], atom_ids[&AtomId::from(b)]]
             },
             &mut deltas,
         );
@@ -1123,15 +1195,16 @@ impl ReactionSpan {
             .collect();
         DativeBondDelta::append_deltas_from_states(
             &dative_states,
+            |index| dative_ids[&DativeBondId::from(index)],
             |index| {
                 let rid = RelationId(index as u32);
                 (
                     self.dative_bonds
                         .participants_2(rid)
                         .iter()
-                        .map(|&n| AtomId::from(n))
+                        .map(|&n| atom_ids[&AtomId::from(n)])
                         .collect(),
-                    AtomId::from(self.dative_bonds.participants_1(rid)[0]),
+                    atom_ids[&AtomId::from(self.dative_bonds.participants_1(rid)[0])],
                 )
             },
             &mut deltas,
@@ -1142,11 +1215,12 @@ impl ReactionSpan {
                 .collect();
         AromaticSystemDelta::append_deltas_from_states(
             &aromatic_states,
+            |index| aromatic_ids[&AromaticSystemId::from(index)],
             |index| {
                 self.aromatic_systems
                     .participants(RelationId(index as u32))
                     .iter()
-                    .map(|&n| AtomId::from(n))
+                    .map(|&n| atom_ids[&AtomId::from(n)])
                     .collect()
             },
             &mut deltas,
@@ -1157,11 +1231,12 @@ impl ReactionSpan {
                 .collect();
         MulticenterBondDelta::append_deltas_from_states(
             &multicenter_states,
+            |index| multicenter_ids[&MulticenterBondId::from(index)],
             |index| {
                 self.multicenter_bonds
                     .participants(RelationId(index as u32))
                     .iter()
-                    .map(|&n| AtomId::from(n))
+                    .map(|&n| atom_ids[&AtomId::from(n)])
                     .collect()
             },
             &mut deltas,
@@ -1172,22 +1247,28 @@ impl ReactionSpan {
                 .collect();
         NoncovalentBondDelta::append_deltas_from_states(
             &noncovalent_states,
+            |index| noncovalent_ids[&NoncovalentBondId::from(index)],
             |index| {
                 let [a, b] = *self
                     .noncovalent_bonds
                     .participants(RelationId(index as u32));
-                [AtomId::from(a), AtomId::from(b)]
+                [atom_ids[&AtomId::from(a)], atom_ids[&AtomId::from(b)]]
             },
             &mut deltas,
         );
         // Stereo overlays have no `EntityFold`, so recover their deltas here: `Removed`/`Added` carry
         // the relation's site + ligand frame; `Modified` is the field/constraint diff. Site/ligand
-        // ids are the union frame (lhs ids for preserved/removed entities).
+        // ids are transported from the union frame into the LHS-anchored reaction frame.
         for i in 0..self.stereo_atoms.count() {
             let rid = RelationId(i as u32);
-            let id = StereoAtomId::from(rid);
-            let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
-            let ligands = self.stereo_atoms.participants_2(rid).to_vec();
+            let id = stereo_atom_ids[&StereoAtomId::from(rid)];
+            let site = atom_ids[&AtomId::from(self.stereo_atoms.participants_1(rid)[0])];
+            let ligands = self
+                .stereo_atoms
+                .participants_2(rid)
+                .iter()
+                .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
+                .collect();
             match self.stereo_atoms.data(rid) {
                 EntitySpan::Unchanged(_) => {}
                 EntitySpan::Added(attributes) => {
@@ -1218,9 +1299,14 @@ impl ReactionSpan {
         }
         for i in 0..self.stereo_bonds.count() {
             let rid = RelationId(i as u32);
-            let id = StereoBondId::from(rid);
-            let site = BondId::from(self.stereo_bonds.participants_1(rid)[0]);
-            let ligands = self.stereo_bonds.participants_2(rid).to_vec();
+            let id = stereo_bond_ids[&StereoBondId::from(rid)];
+            let site = bond_ids[&BondId::from(self.stereo_bonds.participants_1(rid)[0])];
+            let ligands = self
+                .stereo_bonds
+                .participants_2(rid)
+                .iter()
+                .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
+                .collect();
             match self.stereo_bonds.data(rid) {
                 EntitySpan::Unchanged(_) => {}
                 EntitySpan::Added(attributes) => {
@@ -1251,12 +1337,12 @@ impl ReactionSpan {
         }
         for span in &self.constraints {
             match span {
-                ConstraintSpan::Added(c) => {
-                    deltas.push(Delta::Constraint(ConstraintDelta::Add(c.clone())))
-                }
-                ConstraintSpan::Removed(c) => {
-                    deltas.push(Delta::Constraint(ConstraintDelta::Remove(c.clone())))
-                }
+                ConstraintSpan::Added(c) => deltas.push(Delta::Constraint(ConstraintDelta::Add(
+                    c.clone().remap(&remapping),
+                ))),
+                ConstraintSpan::Removed(c) => deltas.push(Delta::Constraint(
+                    ConstraintDelta::Remove(c.clone().remap(&remapping)),
+                )),
                 ConstraintSpan::Unchanged(_) => {}
             }
         }
@@ -1473,10 +1559,11 @@ impl Reaction {
     /// # Semantic properties
     ///
     /// For every reaction `r` for which this operation succeeds, let
-    /// `n = r.to_reaction_span()?.to_reaction()`. Then `n.lhs == r.lhs`, `n` materializes the same
-    /// span, and applying `n` or `r` to the same host at the same explicit correspondence returns
-    /// the same exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the
-    /// span/reaction conversion on `n` returns `n` by exact structural equality.
+    /// `n = r.to_reaction_span()?.to_reaction()`. Then `n.lhs` has the same structural entities as
+    /// `r.lhs` and canonically equal constraint-set semantics, `n` materializes the same span, and
+    /// applying `n` or `r` to the same host at the same explicit correspondence returns the same
+    /// exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the span/reaction
+    /// conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
         let deltas = self.deltas.clone().normalize()?;
         let lhs = &self.lhs;
@@ -1973,19 +2060,34 @@ impl Reaction {
             stereo_bonds.push((site, ligands, EntitySpan::Added(attributes)));
         }
 
+        let lhs_constraints: BTreeSet<Constraint> = lhs
+            .constraints()
+            .iter()
+            .cloned()
+            .map(Normalize::normalize)
+            .collect::<Result<_, _>>()?;
+        let added_constraints: BTreeSet<Constraint> = added_constraints.into_iter().collect();
+        let removed_constraints: BTreeSet<Constraint> = removed_constraints.into_iter().collect();
+        if added_constraints
+            .iter()
+            .any(|constraint| lhs_constraints.contains(constraint))
+            || removed_constraints
+                .iter()
+                .any(|constraint| !lhs_constraints.contains(constraint))
+        {
+            return Err(Contradiction);
+        }
         let mut constraints: Vec<ConstraintSpan> =
-            Vec::with_capacity(lhs.constraints().len() + added_constraints.len());
-        for c in lhs.constraints().iter() {
-            match removed_constraints.iter().position(|r| r == c) {
-                Some(pos) => {
-                    removed_constraints.remove(pos);
-                    constraints.push(ConstraintSpan::Removed(c.clone()));
-                }
-                None => constraints.push(ConstraintSpan::Unchanged(c.clone())),
+            Vec::with_capacity(lhs_constraints.len() + added_constraints.len());
+        for constraint in lhs_constraints {
+            if removed_constraints.contains(&constraint) {
+                constraints.push(ConstraintSpan::Removed(constraint));
+            } else {
+                constraints.push(ConstraintSpan::Unchanged(constraint));
             }
         }
-        for c in added_constraints {
-            constraints.push(ConstraintSpan::Added(c));
+        for constraint in added_constraints {
+            constraints.push(ConstraintSpan::Added(constraint));
         }
 
         ReactionSpan::try_from_entries(ReactionSpanEntries {
@@ -3404,7 +3506,7 @@ mod tests {
                 }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(1),
-                    atoms: [AtomId(0), AtomId(2)],
+                    atoms: [AtomId(2), AtomId(0)],
                     attributes: BondForm::from_order(1),
                 }),
             ]),
@@ -3603,6 +3705,31 @@ mod tests {
             reaction.to_reaction_span().unwrap().constraints(),
             expected.as_slice(),
         );
+    }
+
+    #[rstest]
+    #[case::add_present(ConstraintDelta::Add(Constraint::Molecule(
+        MoleculeConstraint::Connected { atoms: None },
+    )))]
+    #[case::remove_absent(ConstraintDelta::Remove(Constraint::Molecule(
+        MoleculeConstraint::ChargeSum {
+            atoms: None,
+            sum: NumForm::Lit(0),
+        },
+    )))]
+    fn test_reaction_to_reaction_span_constraint_continuity(#[case] delta: ConstraintDelta) {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraints::from(Constraint::Molecule(
+                    MoleculeConstraint::Connected { atoms: None },
+                )),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Constraint(delta)]),
+        );
+
+        assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
     }
 
     #[rstest]
@@ -3831,6 +3958,80 @@ mod tests {
         assert_eq!(
             reaction.clone().to_reaction_span().unwrap().to_reaction(),
             reaction,
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_to_reaction_reordered() {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::N)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![
+                (
+                    AtomId(1),
+                    AtomId(0),
+                    EntitySpan::Added(BondForm::from_order(1)),
+                ),
+                (
+                    AtomId(1),
+                    AtomId(2),
+                    EntitySpan::Unchanged(BondForm::from_order(2)),
+                ),
+            ],
+            ..Default::default()
+        });
+        let reaction = span.to_reaction();
+
+        assert_eq!(
+            reaction.lhs,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::O),
+                ],
+                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                ..Default::default()
+            }),
+        );
+        assert_eq!(
+            reaction.deltas,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::N),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(2), AtomId(0)],
+                    attributes: BondForm::from_order(1),
+                }),
+            ]),
+        );
+        assert_eq!(
+            reaction.to_reaction_span().unwrap(),
+            ReactionSpan::from_entries(ReactionSpanEntries {
+                atoms: vec![
+                    EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                    EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+                    EntitySpan::Added(AtomForm::from_element(Element::N)),
+                ],
+                bonds: vec![
+                    (
+                        AtomId(0),
+                        AtomId(1),
+                        EntitySpan::Unchanged(BondForm::from_order(2)),
+                    ),
+                    (
+                        AtomId(0),
+                        AtomId(2),
+                        EntitySpan::Added(BondForm::from_order(1)),
+                    ),
+                ],
+                ..Default::default()
+            }),
         );
     }
 
@@ -4165,6 +4366,34 @@ mod tests {
                     },)),
                 ],
             })),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_span_superimpose_constraint_set() {
+        let constraint = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
+        let left = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            constraints: Constraints::from_iter([constraint.clone(), constraint.clone()]),
+            ..Default::default()
+        });
+        let right = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            constraints: Constraints::from(constraint.clone()),
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::induce(
+            &left,
+            &right,
+            Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 1).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            ReactionSpan::superimpose(&left, &right, &correspondence)
+                .unwrap()
+                .constraints(),
+            &[ConstraintSpan::Unchanged(constraint)],
         );
     }
 

@@ -223,7 +223,7 @@ fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
 
 fn constraint_delta_strategy() -> impl Strategy<Value = ConstraintDelta> {
     // A small set of distinct constraints so adds/removes collide and exercise the
-    // multiset fold.
+    // set-difference fold.
     let constraint = (0i64..3).prop_map(|sum| {
         Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: None,

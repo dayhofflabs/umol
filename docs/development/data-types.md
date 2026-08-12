@@ -779,13 +779,40 @@ span must contain both objects of the span. Consequently:
 - projection retains every entity and constraint present on the selected side and remaps its
   references without repair or silent loss.
 
-The union frame is lhs-anchored. Preserved entities retain their lhs ids and rhs-only entities are
-appended. Consequently, `superimpose(lhs, rhs, correspondence).lhs() == lhs`, while the rhs
-projection is equivalent to the supplied `rhs` under the induced total correspondence rather than
-necessarily structurally equal to it. A crossing source correspondence changes rhs entity order;
-neither a reaction's deltas nor the span membership columns encode that otherwise semantically
-irrelevant permutation. `ReactionSpan::correspondence` relates the normalized projections and
-does not retain a source correspondence whose rhs frame differs.
+Construction permits any dense union-frame ordering whose two projections satisfy the integrity
+contract. LHS anchoring is a normal-form property, not an additional construction invariant. In the
+LHS-anchored form, entries present on the LHS form each entity family's dense prefix and right-only
+entries are appended. `ReactionSpan::to_reaction` reanchors an arbitrary valid union order into this
+form by assigning compact projected LHS ids first and fresh ids to additions. Aggregate
+canonicalization likewise always emits the LHS-anchored form because it carries no less information
+and corresponds directly to the LHS-plus-deltas representation of `Reaction`.
+
+`ReactionSpan::superimpose` already produces the LHS-anchored form: preserved entities retain their
+lhs ids and rhs-only entities are appended. Consequently,
+`superimpose(lhs, rhs, correspondence).lhs() == lhs`, while the rhs projection is equivalent to the
+supplied `rhs` under the induced total correspondence rather than necessarily structurally equal to
+it. A crossing source correspondence changes rhs entity order; neither a reaction's deltas nor the
+span membership columns encode that otherwise semantically irrelevant permutation.
+`ReactionSpan::correspondence` relates the normalized projections and does not retain a source
+correspondence whose rhs frame differs. A span-to-reaction-to-span roundtrip is therefore exact only
+for an LHS-anchored span in the documented constraint normal form; for another valid union order it
+returns the equivalent LHS-anchored normal form.
+
+Dense span remapping follows the molecule remapping API. `ReactionSpan::remap` and
+`ReactionSpan::try_remap` accept a `MoleculeCorrespondence` over the eight union tables. Its source
+counts must equal the span's table sizes and each component must be a total bijection onto a dense
+target id space. The operation transports both values of every `EntitySpan`, relation participants,
+position-sensitive relation data, stereo frames, and all constraint references. It does not
+normalize, repair, project, or reanchor the span implicitly. The asserted route panics when its
+documented producer contract is violated; the checked route returns `None` for an integrity-invalid
+source or unsuitable correspondence.
+
+Canonicalization derives an LHS-anchored correspondence and applies this ordinary remapping
+operation. It does not maintain a second canonicalization-only transport path. For
+`S(s) = s.to_reaction().to_reaction_span()?` and span canonicalization `C`, the normal-form laws are
+`S(C(s)) == C(s)`, `S(S(s)) == S(s)`, and `C(S(s)) == C(s)`. Only the first requires exact
+roundtripping of the canonicalized input; arbitrary valid union ordering is normalized rather than
+preserved.
 
 The two reaction representations deliberately have different construction boundaries.
 `Reaction` is a permissive lhs-plus-deltas carrier and may contain deltas that cannot materialize

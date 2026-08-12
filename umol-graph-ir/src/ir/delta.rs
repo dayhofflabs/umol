@@ -1211,14 +1211,15 @@ pub(crate) trait EntityFold: EntityPatch {
 
     /// Recover this kind's deltas from its lhs/rhs state column: `Added`/`Removed` become
     /// structural `Add`/`Remove` (their `atoms` from `atoms(index)`), `Modified` becomes the
-    /// field/constraint `diff`. The id of entity `i` is `i` (the column is id-indexed).
+    /// field/constraint `diff`. `id(index)` selects the output id for each union-frame entry.
     fn append_deltas_from_states(
         states: &[EntitySpan<Self::Attributes>],
+        id: impl Fn(usize) -> Self::Id,
         atoms: impl Fn(usize) -> Self::Atoms,
         deltas: &mut Deltas,
     ) {
         for (index, state) in states.iter().enumerate() {
-            let id = Self::Id::from(index);
+            let id = id(index);
             match state {
                 EntitySpan::Unchanged(_) => {}
                 EntitySpan::Added(attributes) => deltas.push(
@@ -3022,26 +3023,24 @@ impl Normalize for Deltas {
             }
             out.extend(folded.into_iter().map(Delta::StereoBond));
         }
-        // Molecule-level constraints are a multiset: net multiplicity per constraint
-        // (`Add`/`Remove` cancel one-for-one; duplicates are kept, not deduped).
-        let mut net: BTreeMap<Constraint, i64> = BTreeMap::new();
+        // Molecule-level constraints are a set difference. Normalize each value, collapse repeated
+        // operations, and cancel values present in both the add and remove sets.
+        let mut net: BTreeMap<Constraint, (bool, bool)> = BTreeMap::new();
         for delta in constraints {
             match delta {
-                ConstraintDelta::Add(constraint) => *net.entry(constraint).or_insert(0) += 1,
-                ConstraintDelta::Remove(constraint) => *net.entry(constraint).or_insert(0) -= 1,
+                ConstraintDelta::Add(constraint) => {
+                    net.entry(constraint.normalize()?).or_default().0 = true;
+                }
+                ConstraintDelta::Remove(constraint) => {
+                    net.entry(constraint.normalize()?).or_default().1 = true;
+                }
             }
         }
-        for (constraint, count) in net {
-            if count > 0 {
-                for _ in 0..count {
-                    out.push(Delta::Constraint(ConstraintDelta::Add(constraint.clone())));
-                }
-            } else if count < 0 {
-                for _ in 0..(-count) {
-                    out.push(Delta::Constraint(ConstraintDelta::Remove(
-                        constraint.clone(),
-                    )));
-                }
+        for (constraint, (add, remove)) in net {
+            match (add, remove) {
+                (true, false) => out.push(Delta::Constraint(ConstraintDelta::Add(constraint))),
+                (false, true) => out.push(Delta::Constraint(ConstraintDelta::Remove(constraint))),
+                _ => {}
             }
         }
 
@@ -4194,33 +4193,54 @@ mod tests {
         assert!(matches!(deltas.normalize(), Err(Contradiction)));
     }
 
-    fn charge_sum(sum: i64) -> Constraint {
-        Constraint::Molecule(MoleculeConstraint::ChargeSum {
+    #[rstest]
+    #[case::add_remove(vec![
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
+        ))),
+        Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
+        ))),
+    ])]
+    #[case::duplicate_add_remove(vec![
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
+        ))),
+        Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
+        ))),
+        Delta::Constraint(ConstraintDelta::Remove(Constraint::Molecule(
+            MoleculeConstraint::ChargeSum { atoms: None, sum: NumForm::Lit(0) },
+        ))),
+    ])]
+    fn test_deltas_normalize_molecule_constraint_identity(#[case] values: Vec<Delta>) {
+        assert_eq!(
+            Deltas::from_iter(values).normalize().unwrap(),
+            Deltas::new()
+        );
+    }
+
+    #[rstest]
+    #[case::duplicate_add(
+        ConstraintDelta::Add(Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: None,
-            sum: NumForm::Lit(sum),
-        })
-    }
-
-    #[rstest]
-    fn test_deltas_normalize_molecule_constraint_cancels() {
+            sum: NumForm::Lit(0),
+        })),
+    )]
+    #[case::duplicate_remove(
+        ConstraintDelta::Remove(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: None,
+            sum: NumForm::Lit(0),
+        })),
+    )]
+    fn test_deltas_normalize_molecule_constraint_set(#[case] value: ConstraintDelta) {
         let deltas = Deltas::from_iter([
-            Delta::Constraint(ConstraintDelta::Add(charge_sum(0))),
-            Delta::Constraint(ConstraintDelta::Remove(charge_sum(0))),
-        ]);
-        assert_eq!(deltas.normalize().unwrap(), Deltas::new());
-    }
-
-    #[rstest]
-    fn test_deltas_normalize_molecule_constraint_multiplicity() {
-        // Two adds and one remove net to one add — multiset, not dedup.
-        let deltas = Deltas::from_iter([
-            Delta::Constraint(ConstraintDelta::Add(charge_sum(0))),
-            Delta::Constraint(ConstraintDelta::Add(charge_sum(0))),
-            Delta::Constraint(ConstraintDelta::Remove(charge_sum(0))),
+            Delta::Constraint(value.clone()),
+            Delta::Constraint(value.clone()),
         ]);
         assert_eq!(
             deltas.normalize().unwrap(),
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(charge_sum(0)))]),
+            Deltas::from_iter([Delta::Constraint(value)]),
         );
     }
 }

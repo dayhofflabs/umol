@@ -23,6 +23,7 @@ use super::constraint::{
     TopicityForm, TopicityRelationForm,
 };
 use super::correspondence::MoleculeCorrespondence;
+use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
@@ -175,10 +176,8 @@ pub struct FieldPosition(u16);
 pub struct VariantPosition(u16);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg(test)]
-struct SpanTagPosition(u16);
+pub struct SpanTagPosition(u16);
 
-#[cfg(test)]
 impl SpanTagPosition {
     const UNCHANGED: Self = Self(0);
     const ADDED: Self = Self(1);
@@ -278,13 +277,11 @@ impl PartialOrd for VariantKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg(test)]
 pub struct SpanKey {
     position: SpanTagPosition,
     values: Vec<CanonicalKeyValue>,
 }
 
-#[cfg(test)]
 impl Ord for SpanKey {
     fn cmp(&self, other: &Self) -> Ordering {
         self.position
@@ -293,7 +290,6 @@ impl Ord for SpanKey {
     }
 }
 
-#[cfg(test)]
 impl PartialOrd for SpanKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -311,7 +307,6 @@ pub enum CanonicalKeyValue {
     Sequence(Vec<Self>),
     Product(Vec<FieldKey>),
     Variant(VariantKey),
-    #[cfg(test)]
     Span(SpanKey),
 }
 
@@ -327,7 +322,6 @@ impl CanonicalKeyValue {
             Self::Sequence(_) => 5,
             Self::Product(_) => 6,
             Self::Variant(_) => 7,
-            #[cfg(test)]
             Self::Span(_) => 8,
         }
     }
@@ -347,7 +341,6 @@ impl Ord for CanonicalKeyValue {
                 (Self::Sequence(lhs), Self::Sequence(rhs)) => lhs.cmp(rhs),
                 (Self::Product(lhs), Self::Product(rhs)) => lhs.cmp(rhs),
                 (Self::Variant(lhs), Self::Variant(rhs)) => lhs.cmp(rhs),
-                #[cfg(test)]
                 (Self::Span(lhs), Self::Span(rhs)) => lhs.cmp(rhs),
                 _ => Ordering::Equal,
             })
@@ -431,6 +424,23 @@ fn option(value: Option<CanonicalKeyValue>) -> CanonicalKeyValue {
         None => variant(0, []),
         Some(value) => variant(1, [value]),
     }
+}
+
+/// Lift one entity value key into the fixed reaction-span comparison schema.
+pub fn entity_span_key<T>(
+    span: &EntitySpan<T>,
+    value_key: impl Fn(&T) -> CanonicalKeyValue,
+) -> CanonicalKeyValue {
+    let (position, values) = match span {
+        EntitySpan::Unchanged(value) => (SpanTagPosition::UNCHANGED, vec![value_key(value)]),
+        EntitySpan::Added(value) => (SpanTagPosition::ADDED, vec![value_key(value)]),
+        EntitySpan::Removed(value) => (SpanTagPosition::REMOVED, vec![value_key(value)]),
+        EntitySpan::Modified { lhs, rhs } => (
+            SpanTagPosition::MODIFIED,
+            vec![value_key(lhs), value_key(rhs)],
+        ),
+    };
+    CanonicalKeyValue::Span(SpanKey { position, values })
 }
 
 fn boolean_form_key(value: BooleanForm) -> CanonicalKeyValue {
@@ -8178,6 +8188,38 @@ mod tests {
     )]
     fn test_span_key_cmp(#[case] lhs: SpanKey, #[case] rhs: SpanKey, #[case] expected: Ordering) {
         assert_eq!(lhs.cmp(&rhs), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        EntitySpan::Unchanged(1),
+        SpanTagPosition::UNCHANGED,
+        vec![CanonicalKeyValue::Signed(1)],
+    )]
+    #[case::added(
+        EntitySpan::Added(1),
+        SpanTagPosition::ADDED,
+        vec![CanonicalKeyValue::Signed(1)],
+    )]
+    #[case::removed(
+        EntitySpan::Removed(1),
+        SpanTagPosition::REMOVED,
+        vec![CanonicalKeyValue::Signed(1)],
+    )]
+    #[case::modified(
+        EntitySpan::Modified { lhs: 1, rhs: 2 },
+        SpanTagPosition::MODIFIED,
+        vec![CanonicalKeyValue::Signed(1), CanonicalKeyValue::Signed(2)],
+    )]
+    fn test_entity_span_key(
+        #[case] span: EntitySpan<i64>,
+        #[case] position: SpanTagPosition,
+        #[case] values: Vec<CanonicalKeyValue>,
+    ) {
+        assert_eq!(
+            entity_span_key(&span, |value| CanonicalKeyValue::Signed(*value)),
+            CanonicalKeyValue::Span(SpanKey { position, values }),
+        );
     }
 
     #[rstest]
