@@ -23,7 +23,10 @@ use super::constraint::{
     TopicityForm, TopicityRelationForm,
 };
 use super::correspondence::MoleculeCorrespondence;
-use super::delta::{ConstraintSpan, EntitySpan};
+use super::delta::{
+    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas,
+    EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+};
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
@@ -37,6 +40,7 @@ use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
+use super::reaction::Reaction;
 use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
@@ -5339,6 +5343,114 @@ pub enum ReactionCanonicalizationError {
     Contradiction(#[from] Contradiction),
 }
 
+fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizationLevel) -> bool {
+    let includes_non_stereo = level != CanonicalizationLevel::Topology;
+    let includes_stereo = matches!(
+        level,
+        CanonicalizationLevel::Structure | CanonicalizationLevel::Full
+    );
+    let includes_constraints = level == CanonicalizationLevel::Full;
+    match delta {
+        Delta::Atom(AtomDelta::ModifyConstraint { .. })
+        | Delta::Bond(BondDelta::ModifyConstraint { .. })
+        | Delta::Constraint(_) => includes_constraints,
+        Delta::Atom(_) | Delta::Bond(_) => true,
+        Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. })
+        | Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. })
+        | Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. })
+        | Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
+            includes_non_stereo && includes_constraints
+        }
+        Delta::DativeBond(_)
+        | Delta::AromaticSystem(_)
+        | Delta::MulticenterBond(_)
+        | Delta::NoncovalentBond(_) => includes_non_stereo,
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. })
+        | Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => {
+            includes_stereo && includes_constraints
+        }
+        Delta::StereoAtom(_) | Delta::StereoBond(_) => includes_stereo,
+    }
+}
+
+fn project_reaction(reaction: &Reaction, level: CanonicalizationLevel) -> Reaction {
+    let deltas = reaction
+        .deltas
+        .iter()
+        .filter(|delta| reaction_delta_is_selected(delta, level))
+        .cloned()
+        .collect::<Deltas>();
+    Reaction::new(reaction.lhs.clone(), deltas)
+}
+
+fn canonicalize_reaction_by(
+    reaction: &Reaction,
+    level: CanonicalizationLevel,
+    context: &CanonicalizationContext,
+) -> Result<Reaction, ReactionCanonicalizationError> {
+    reaction.check_integrity()?;
+    let span = reaction.to_reaction_span()?;
+    Ok(canonicalize_integrity_valid_reaction_span_by(&span, level, context)?.to_reaction())
+}
+
+impl Canonicalize for Reaction {
+    type Error = ReactionCanonicalizationError;
+
+    fn canonicalize(self, context: &CanonicalizationContext) -> Result<Self, Self::Error> {
+        canonicalize_reaction_by(&self, CanonicalizationLevel::Full, context)
+    }
+
+    fn canonicalize_by(
+        self,
+        level: CanonicalizationLevel,
+        context: &CanonicalizationContext,
+    ) -> Result<Self, Self::Error> {
+        canonicalize_reaction_by(&self, level, context)
+    }
+
+    fn canonical_eq(&self, other: &Self, context: &CanonicalizationContext) -> bool {
+        if self == other {
+            return true;
+        }
+        match (
+            canonicalize_reaction_by(self, CanonicalizationLevel::Full, context),
+            canonicalize_reaction_by(other, CanonicalizationLevel::Full, context),
+        ) {
+            (Ok(left), Ok(right)) => left == right,
+            (
+                Err(ReactionCanonicalizationError::Contradiction(_)),
+                Err(ReactionCanonicalizationError::Contradiction(_)),
+            ) => true,
+            _ => false,
+        }
+    }
+
+    fn canonical_eq_by(
+        &self,
+        other: &Self,
+        level: CanonicalizationLevel,
+        context: &CanonicalizationContext,
+    ) -> bool {
+        if self == other {
+            return true;
+        }
+        if level == CanonicalizationLevel::Full {
+            return self.canonical_eq(other, context);
+        }
+        if self.check_integrity().is_err() || other.check_integrity().is_err() {
+            return false;
+        }
+        match (
+            project_reaction(self, level).to_reaction_span(),
+            project_reaction(other, level).to_reaction_span(),
+        ) {
+            (Ok(left), Ok(right)) => left.canonical_eq_by(&right, level, context),
+            (Err(_), Err(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
@@ -5350,15 +5462,15 @@ mod tests {
 
     use super::*;
     use crate::ir::{
-        AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm,
-        BondId, BooleanForm, Constraint, Constraints, DativeBondForm, DativeBondId, Entity,
-        FluxionalityForm, IncidenceLevel, LigandPermutation, LigandSymmetryForm,
-        MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-        NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation, ReactionSpanEntries,
-        StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
-        StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
-        StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
-        TopicityForm, TopicityRelationForm,
+        AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomFieldChange, AtomForm,
+        AtomId, BondForm, BondId, BooleanForm, Constraint, ConstraintDelta, Constraints,
+        DativeBondForm, DativeBondId, Entity, FluxionalityForm, IncidenceLevel, LigandPermutation,
+        LigandSymmetryForm, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
+        MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation,
+        ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId,
+        StereoBondConstraintForm, StereoBondForm, StereoBondId, StereoConfigurationForm,
+        StereoCoset, StereoKind, StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity,
+        StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
     };
 
     #[fixture]
@@ -6694,6 +6806,192 @@ mod tests {
             ),
             plain.canonical_eq(&constrained, &canonicalization_context),
         );
+    }
+
+    fn reaction_canonicalization_fixture() -> Reaction {
+        let atom = AtomForm::from_element(Element::C).with_charge(0_i64);
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![atom.clone(), atom],
+                ..Default::default()
+            }),
+            [Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(1),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(0),
+                    new: NumForm::Lit(1),
+                },
+            })]
+            .into_iter()
+            .collect(),
+        )
+    }
+
+    #[rstest]
+    #[case::topology(CanonicalizationLevel::Topology)]
+    #[case::constitution(CanonicalizationLevel::Constitution)]
+    #[case::structure(CanonicalizationLevel::Structure)]
+    #[case::full(CanonicalizationLevel::Full)]
+    fn test_reaction_canonicalize_by(
+        canonicalization_context: CanonicalizationContext,
+        #[case] level: CanonicalizationLevel,
+    ) {
+        let source = reaction_canonicalization_fixture();
+        let expected = source
+            .to_reaction_span()
+            .expect("fixed reaction materializes")
+            .canonicalize_by(level, &canonicalization_context)
+            .expect("fixed span canonicalizes")
+            .to_reaction();
+
+        assert_eq!(
+            source
+                .clone()
+                .canonicalize_by(level, &canonicalization_context),
+            Ok(expected.clone()),
+        );
+        if level == CanonicalizationLevel::Full {
+            assert_eq!(source.canonicalize(&canonicalization_context), Ok(expected),);
+        }
+    }
+
+    #[rstest]
+    #[case::integrity(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                ..Default::default()
+            }),
+            [Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(1),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(0),
+                    new: NumForm::Lit(1),
+                },
+            })].into_iter().collect(),
+        ),
+        ReactionCanonicalizationError::Integrity(ReactionIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(1)),
+        }),
+    )]
+    #[case::contradiction(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+                ..Default::default()
+            }),
+            [Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })].into_iter().collect(),
+        ),
+        ReactionCanonicalizationError::Contradiction(Contradiction),
+    )]
+    fn test_reaction_canonicalize_error(
+        canonicalization_context: CanonicalizationContext,
+        #[case] reaction: Reaction,
+        #[case] expected: ReactionCanonicalizationError,
+    ) {
+        assert_eq!(
+            reaction.canonicalize(&canonicalization_context),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_canonical_eq(canonicalization_context: CanonicalizationContext) {
+        let source = reaction_canonicalization_fixture();
+        let canonical = source
+            .clone()
+            .canonicalize(&canonicalization_context)
+            .expect("fixed reaction canonicalizes");
+
+        assert!(source.canonical_eq(&canonical, &canonicalization_context));
+        assert_eq!(
+            source.canonical_eq_by(
+                &canonical,
+                CanonicalizationLevel::Full,
+                &canonicalization_context,
+            ),
+            source.canonical_eq(&canonical, &canonicalization_context),
+        );
+    }
+
+    #[rstest]
+    #[case::topology(CanonicalizationLevel::Topology)]
+    #[case::constitution(CanonicalizationLevel::Constitution)]
+    #[case::structure(CanonicalizationLevel::Structure)]
+    fn test_reaction_canonical_eq_by(
+        canonicalization_context: CanonicalizationContext,
+        #[case] level: CanonicalizationLevel,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let identity = Reaction::new(lhs.clone(), Deltas::new());
+        let excluded_contradiction = Reaction::new(
+            lhs,
+            [Delta::Constraint(ConstraintDelta::Remove(
+                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+            ))]
+            .into_iter()
+            .collect(),
+        );
+
+        assert!(excluded_contradiction.canonical_eq_by(
+            &identity,
+            level,
+            &canonicalization_context,
+        ));
+        assert!(!excluded_contradiction.canonical_eq(&identity, &canonicalization_context));
+    }
+
+    #[rstest]
+    fn test_reaction_canonical_eq_error(canonicalization_context: CanonicalizationContext) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
+            ..Default::default()
+        });
+        let contradiction = |new| {
+            Reaction::new(
+                lhs.clone(),
+                [Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Lit(1),
+                        new: NumForm::Lit(new),
+                    },
+                })]
+                .into_iter()
+                .collect(),
+            )
+        };
+        let left_contradiction = contradiction(2);
+        let right_contradiction = contradiction(3);
+        let malformed = Reaction::new(
+            lhs,
+            [Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(1),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Lit(0),
+                    new: NumForm::Lit(1),
+                },
+            })]
+            .into_iter()
+            .collect(),
+        );
+
+        assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalization_context));
+        assert!(malformed.canonical_eq(&malformed, &canonicalization_context));
+        assert!(!malformed.canonical_eq_by(
+            &left_contradiction,
+            CanonicalizationLevel::Topology,
+            &canonicalization_context,
+        ));
     }
 
     #[rstest]

@@ -1910,7 +1910,15 @@ and the semantic properties validated by the corresponding property tests.
   contradiction, and integrity-failure totalization. After checking complete reaction integrity,
   `canonical_eq_by` projects to the selected level before materialization and delegates to the
   corresponding span relation, so excluded contradictions remain excluded. Do not add a direct
-  LHS-only canonicalizer. This is additive. [dep: S12a]
+  LHS-only canonicalizer. This is additive. [dep: S12a] **Done.** `Reaction` now implements all
+  four `Canonicalize` operations through checked reaction materialization, the integrity-established
+  span core, and infallible span lowering. Complete equality distinguishes integrity failures,
+  totalizes two intrinsic contradictions as equal, and preserves the structural-identity shortcut.
+  Reduced equality retains the complete checked LHS while projecting delta operations to the
+  selected entity families and removing constraint changes before materialization, so excluded
+  contradictions do not affect the selected relation. Focused cases cover every level, the `Full`
+  aliases, both error causes, and equality totalization. All 5,913 graph-IR unit tests and strict
+  graph-IR clippy pass.
 - **S12c — Reaction properties.** Validate exact idempotence, invariance under complete reaction
   renumbering, `C_R(N(r)) == C_R(r)`, the weakened reversal law
   `C_R(reverse(C_R(r))) == C_R(reverse(r))`, preservation of match domain and application result,
