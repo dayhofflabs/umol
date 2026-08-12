@@ -1743,6 +1743,14 @@ and the semantic properties validated by the corresponding property tests.
   `apply_at` failure or exact derivation on generated hosts and explicit correspondences. Generate
   materializable successes by construction and introduce one named defect for exact failure cases.
   This is additive. [dep: S2b, S10b]
+  **Done.** The reaction property suite now distinguishes materializable reactions, constructed
+  spans, and deliberately discontinuous delta chains. It verifies exact reaction-normalization
+  idempotence, LHS and span preservation, span-normalization idempotence, and exact `apply_at`
+  agreement on generated non-identity hosts and explicit correspondences. A correspondence with one
+  added unavailable pattern atom establishes exact failure parity, while a discontinuous atom-field
+  chain establishes the exact `Contradiction` materialization boundary. Reaction-span DSL and
+  defaults strategies no longer filter failed materializations. The public conversion rustdoc states
+  the normalization contract. Graph-IR unit and 256-case property suites and clippy are green.
 
 ### S11 — Reaction-span canonicalization
 

@@ -2,8 +2,10 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
-use umol_graph_ir::ir::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_core::{
+    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+};
+use umol_graph_ir::ir::{ApplyError, Entity, SubstructureMatchAlgorithm, SubstructureMatchConfig};
 
 use crate::strategies::*;
 
@@ -16,6 +18,18 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     subgraph_isomorphism_algorithm: SUBISO_ALGORITHM,
     relevant_cycle_algorithm: RELEVANT_CYCLE_ALGORITHM,
 };
+
+fn reaction_application_strategy(
+) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
+    (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
+        let (host, correspondences) = Molecule::combine_all([&reaction.lhs, &extra]);
+        let correspondence = correspondences
+            .into_iter()
+            .next()
+            .expect("two input molecules produce two correspondences");
+        (reaction, host, correspondence)
+    })
+}
 
 proptest! {
     #![proptest_config(Config {
@@ -450,36 +464,88 @@ proptest! {
         prop_assert!(products[0].equiv(&expected));
     }
 
+    /// Delta normalization preserves exact application at an explicit occurrence in a generated,
+    /// non-identity host.
+    #[test]
+    fn test_reaction_apply_at_roundtrip(
+        (reaction, host, correspondence) in reaction_application_strategy(),
+    ) {
+        let normalized = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span")
+            .to_reaction();
+
+        prop_assert_eq!(
+            normalized.apply_at(&host, &correspondence),
+            reaction.apply_at(&host, &correspondence),
+        );
+    }
+
+    /// Adding one unavailable pattern atom to an otherwise valid explicit correspondence produces
+    /// the same exact application failure before and after delta normalization.
+    #[test]
+    fn test_reaction_apply_at_roundtrip_error(
+        (reaction, host, correspondence) in reaction_application_strategy(),
+    ) {
+        let defective_atoms = Correspondence::new(
+            correspondence.atoms().matched_pairs().to_vec(),
+            correspondence.atoms().left_count() + 1,
+            correspondence.atoms().right_count(),
+        ).expect("the named defect changes only the declared pattern size");
+        let defective = MoleculeCorrespondence::new(
+            defective_atoms,
+            correspondence.bonds().clone(),
+            correspondence.dative_bonds().clone(),
+            correspondence.aromatic_systems().clone(),
+            correspondence.multicenter_bonds().clone(),
+            correspondence.noncovalent_bonds().clone(),
+            correspondence.stereo_atoms().clone(),
+            correspondence.stereo_bonds().clone(),
+        );
+        let normalized = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span")
+            .to_reaction();
+        let expected = Err(ApplyError::CorrespondenceMismatch {
+            entity: Entity::Atom(AtomId(0)),
+        });
+
+        prop_assert_eq!(reaction.apply_at(&host, &defective), expected.clone());
+        prop_assert_eq!(normalized.apply_at(&host, &defective), expected);
+    }
+
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]
     fn test_reaction_apply_reproduces_right(reaction in reaction_strategy()) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let right = span.rhs();
-            prop_assert!(reaction
-                .apply(
-                    &reaction.lhs,
-                    MATCH_CONFIG,
-                )
-                .unwrap()
-                .any(|derivation| derivation.unwrap().rhs() == &right));
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let right = span.rhs();
+        prop_assert!(reaction
+            .apply(
+                &reaction.lhs,
+                MATCH_CONFIG,
+            )
+            .unwrap()
+            .any(|derivation| derivation.unwrap().rhs() == &right));
     }
 
     /// Isolation probe: a plain overlay reaction's `apply` at its own `lhs` reproduces its
     /// `right()`. If this fails, the discrepancy is in apply-vs-span for overlays, not compose.
     #[test]
     fn test_reaction_apply_reproduces_right_overlay(reaction in overlay_reaction_strategy()) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let right = span.rhs();
-            prop_assert!(reaction
-                .apply(
-                    &reaction.lhs,
-                    MATCH_CONFIG,
-                )
-                .unwrap()
-                .any(|derivation| derivation.unwrap().rhs() == &right));
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated overlay reaction materializes a span");
+        let right = span.rhs();
+        prop_assert!(reaction
+            .apply(
+                &reaction.lhs,
+                MATCH_CONFIG,
+            )
+            .unwrap()
+            .any(|derivation| derivation.unwrap().rhs() == &right));
     }
 
     #[test]

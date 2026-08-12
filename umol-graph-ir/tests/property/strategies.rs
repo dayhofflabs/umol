@@ -2590,9 +2590,11 @@ pub(crate) fn invalid_reaction_dsl_parts_strategy(
 }
 
 pub(crate) fn reaction_span_dsl_strategy() -> impl Strategy<Value = ReactionSpanDsl> {
-    comprehensive_reaction_strategy()
-        .prop_filter_map("reaction must have a materializable span", |reaction| {
-            reaction.to_reaction_span().ok()
+    materializable_reaction_strategy()
+        .prop_map(|reaction| {
+            reaction
+                .to_reaction_span()
+                .expect("generated reaction materializes a span")
         })
         .prop_flat_map(|span| {
             metadata_for(ConstraintCounts {
@@ -2614,9 +2616,11 @@ pub(crate) fn reaction_span_dsl_strategy() -> impl Strategy<Value = ReactionSpan
 
 pub(crate) fn invalid_reaction_span_dsl_parts_strategy(
 ) -> impl Strategy<Value = (ReactionSpan, MoleculeMetadata, Entity)> {
-    comprehensive_reaction_strategy()
-        .prop_filter_map("reaction must have a materializable span", |reaction| {
-            reaction.to_reaction_span().ok()
+    materializable_reaction_strategy()
+        .prop_map(|reaction| {
+            reaction
+                .to_reaction_span()
+                .expect("generated reaction materializes a span")
         })
         .prop_map(|span| {
             let entity = Entity::Atom(AtomId(span.atoms().len() as u32));
@@ -4340,6 +4344,45 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
         1 => replacement_reaction_strategy(),
     ]
     .boxed()
+}
+
+/// Reactions whose delta collection materializes a reaction span by construction. The generated
+/// cases cover replacement reactions and reactions over every entity family without filtering out
+/// failed materializations.
+pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
+    comprehensive_reaction_strategy()
+}
+
+/// A reaction with one discontinuous atom-field update. The second update's `old` value differs
+/// from the first update's `new` value, so delta normalization reaches `Contradiction`.
+pub(crate) fn discontinuous_atom_update_reaction_strategy() -> impl Strategy<Value = Reaction> {
+    (-16i64..=16, 1i64..=4, 1i64..=4, 1i64..=4).prop_map(|(old, first_step, gap, second_step)| {
+        let first = old + first_step;
+        let discontinuous_old = first + gap;
+        let new = discontinuous_old + second_step;
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::default().with_charge(old)],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Lit(old),
+                        new: NumForm::Lit(first),
+                    },
+                }),
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Lit(discontinuous_old),
+                        new: NumForm::Lit(new),
+                    },
+                }),
+            ]),
+        )
+    })
 }
 
 /// A localized molecule with DAMN overlays (dative / aromatic / multicenter / noncovalent) plus

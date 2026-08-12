@@ -1101,6 +1101,12 @@ impl ReactionSpan {
     /// `Reaction::to_reaction_span`, up to delta normal form. The reaction's `lhs` is `self.lhs()`
     /// (which preserves the original lhs id space); each entity's `EntitySpan` yields its delta, a
     /// `Modified` one via a form difference of its left/right values.
+    ///
+    /// # Semantic properties
+    ///
+    /// Converting the result back to a span and then to a reaction is idempotent by exact
+    /// structural equality. When this span already uses canonical set-difference semantics for
+    /// constraints, converting the returned reaction back to a span reproduces `self` exactly.
     pub fn to_reaction(&self) -> Reaction {
         let mut deltas = Deltas::new();
         AtomDelta::append_deltas_from_states(&self.atoms, |_| (), &mut deltas);
@@ -1454,11 +1460,23 @@ fn entity_side<T>(span: &EntitySpan<T>, side: Side) -> Option<&T> {
 }
 
 impl Reaction {
-    /// Materialize the superimposed reaction span. Canonicalizes the deltas, then annotates
+    /// Materialize the superimposed reaction span. Normalizes the deltas, then annotates
     /// each `lhs` entity (in its own id space) with its before/after state — `Removed` /
     /// `Added` / `Modified` / `Unchanged` — appending created entities. A `Modified` entity's
     /// right value is its left value with the entity's field/constraint changes applied.
-    /// `Err(Contradiction)` if the deltas are inconsistent (or inconsistent with `lhs`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Contradiction`] when the deltas are internally inconsistent or inconsistent with
+    /// `lhs`.
+    ///
+    /// # Semantic properties
+    ///
+    /// For every reaction `r` for which this operation succeeds, let
+    /// `n = r.to_reaction_span()?.to_reaction()`. Then `n.lhs == r.lhs`, `n` materializes the same
+    /// span, and applying `n` or `r` to the same host at the same explicit correspondence returns
+    /// the same exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the
+    /// span/reaction conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
         let deltas = self.deltas.clone().normalize()?;
         let lhs = &self.lhs;

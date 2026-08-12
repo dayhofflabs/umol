@@ -15,7 +15,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::strategies::{
-    comprehensive_reaction_strategy, molecule_entries_strategy,
+    materializable_reaction_strategy, molecule_entries_strategy,
     molecule_entries_structurally_unambiguous_strategy, overlay_reaction_strategy,
     reaction_strategy,
 };
@@ -354,11 +354,11 @@ proptest! {
     /// span and reassemble; a mismatch flags a diff-completeness or frame gap between the paths.
     #[test]
     fn test_reaction_span_superimpose_matches_delta_path(reaction in reaction_strategy()) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let rebuilt =
-                ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
-            prop_assert_eq!(rebuilt, Some(span));
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let rebuilt = ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
+        prop_assert_eq!(rebuilt, Some(span));
     }
 
     /// `reverse` swaps the span's sides and reverses its correspondence. Constructing that span
@@ -366,16 +366,21 @@ proptest! {
     /// frame chosen for entities unmatched on only one side.
     #[test]
     fn test_reaction_reverse_swaps_sides(reaction in reaction_strategy()) {
-        if let (Ok(span), Ok(reverse)) = (reaction.to_reaction_span(), reaction.reverse()) {
-            if let Ok(reverse_span) = reverse.to_reaction_span() {
-                let expected = ReactionSpan::superimpose(
-                    &span.rhs(),
-                    &span.lhs(),
-                    &span.correspondence().reverse(),
-                );
-                prop_assert_eq!(Some(reverse_span), expected);
-            }
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let reverse = reaction
+            .reverse()
+            .expect("materializable generated reaction reverses");
+        let reverse_span = reverse
+            .to_reaction_span()
+            .expect("reversed generated reaction materializes a span");
+        let expected = ReactionSpan::superimpose(
+            &span.rhs(),
+            &span.lhs(),
+            &span.correspondence().reverse(),
+        );
+        prop_assert_eq!(Some(reverse_span), expected);
     }
 
     /// Cross-validate the two span constructions with overlays present: the direct `superimpose`
@@ -384,22 +389,29 @@ proptest! {
     fn test_reaction_span_superimpose_matches_delta_path_overlay(
         reaction in overlay_reaction_strategy(),
     ) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let rebuilt =
-                ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
-            prop_assert_eq!(rebuilt, Some(span));
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated overlay reaction materializes a span");
+        let rebuilt = ReactionSpan::superimpose(&span.lhs(), &span.rhs(), &span.correspondence());
+        prop_assert_eq!(rebuilt, Some(span));
     }
 
-    /// Reaction → span → reaction may fold adjacent absolute changes while preserving the
-    /// materialized span, including all overlay families.
+    /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs and
+    /// materialized span, including all entity families.
     #[test]
-    fn test_reaction_span_roundtrip(reaction in comprehensive_reaction_strategy()) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            if let Ok(rebuilt) = span.to_reaction().to_reaction_span() {
-                prop_assert_eq!(rebuilt, span);
-            }
-        }
+    fn test_reaction_span_roundtrip(reaction in materializable_reaction_strategy()) {
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let normalized = span.to_reaction();
+        let normalized_span = normalized
+            .to_reaction_span()
+            .expect("reaction derived from a constructed span materializes");
+        let normalized_twice = normalized_span.to_reaction();
+
+        prop_assert_eq!(&normalized.lhs, &reaction.lhs);
+        prop_assert_eq!(normalized_span, span);
+        prop_assert_eq!(normalized_twice, normalized);
     }
 
     /// `from_sides` retains the lhs frame exactly. Its materialized rhs is the supplied rhs
@@ -447,5 +459,27 @@ proptest! {
 
         prop_assert_eq!(parsed, direct.clone());
         prop_assert_eq!(superimposed, Some(direct));
+    }
+
+    /// Span → reaction → span is idempotent. The generated domain has no redundant constraint-span
+    /// occurrences, so its first reaction-derived normal form is structurally equal to the input.
+    #[test]
+    fn test_reaction_span_to_reaction_roundtrip(
+        entries in reaction_span_entries_strategy(),
+    ) {
+        let span = ReactionSpan::try_from_entries(entries).map_err(|error| {
+            TestCaseError::fail(format!("generated entries were invalid: {error}"))
+        })?;
+        let normalized = span
+            .to_reaction()
+            .to_reaction_span()
+            .expect("reaction derived from a constructed span materializes");
+        let normalized_twice = normalized
+            .to_reaction()
+            .to_reaction_span()
+            .expect("reaction-derived span normal form materializes");
+
+        prop_assert_eq!(&normalized, &span);
+        prop_assert_eq!(normalized_twice, normalized);
     }
 }

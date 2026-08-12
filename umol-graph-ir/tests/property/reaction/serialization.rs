@@ -83,14 +83,15 @@ proptest! {
 
     #[test]
     fn test_reaction_span_defaults_roundtrip_ground(
-        reaction in comprehensive_reaction_strategy(),
+        reaction in materializable_reaction_strategy(),
     ) {
-        if let Ok(span) = reaction.to_reaction_span() {
-            let required = MoleculeDefaults::new();
-            let ground = MoleculeDefaults::ground();
-            let grounded = ReactionSpanDsl::from_ir(&span, &required).into_ir(&ground);
-            let rebuilt = ReactionSpanDsl::from_ir(&grounded, &ground).into_ir(&ground);
-            prop_assert_eq!(rebuilt, grounded);
-        }
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let required = MoleculeDefaults::new();
+        let ground = MoleculeDefaults::ground();
+        let grounded = ReactionSpanDsl::from_ir(&span, &required).into_ir(&ground);
+        let rebuilt = ReactionSpanDsl::from_ir(&grounded, &ground).into_ir(&ground);
+        prop_assert_eq!(rebuilt, grounded);
     }
 }

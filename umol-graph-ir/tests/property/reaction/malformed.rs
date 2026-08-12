@@ -5,8 +5,9 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_graph_ir::ir::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
-    DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
-    StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig, TransactionError,
+    Contradiction, DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta,
+    StereoAtomDelta, StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    TransactionError,
 };
 
 use crate::strategies::*;
@@ -403,35 +404,6 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
 }
 
 fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
-    let discontinuous_field = (-16i64..=16, 1i64..=4, 1i64..=4, 1i64..=4).prop_map(
-        |(old, first_step, gap, second_step)| {
-            let first = old + first_step;
-            let discontinuous_old = first + gap;
-            let new = discontinuous_old + second_step;
-            Reaction::new(
-                Molecule::from_entries(MoleculeEntries {
-                    atoms: vec![AtomForm::default().with_charge(old)],
-                    ..Default::default()
-                }),
-                Deltas::from_iter([
-                    Delta::Atom(AtomDelta::ModifyField {
-                        id: AtomId(0),
-                        change: AtomFieldChange::Charge {
-                            old: NumForm::Lit(old),
-                            new: NumForm::Lit(first),
-                        },
-                    }),
-                    Delta::Atom(AtomDelta::ModifyField {
-                        id: AtomId(0),
-                        change: AtomFieldChange::Charge {
-                            old: NumForm::Lit(discontinuous_old),
-                            new: NumForm::Lit(new),
-                        },
-                    }),
-                ]),
-            )
-        },
-    );
     let stereo_atom = (stereo_atom_kind_strategy(), 0u32..16).prop_map(|(kind, offset)| {
         let ligands: Vec<StereoLigand> = (1..=kind.degree() as u32)
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
@@ -476,7 +448,11 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
         )
     });
 
-    prop_oneof![discontinuous_field, stereo_atom, stereo_bond]
+    prop_oneof![
+        discontinuous_atom_update_reaction_strategy(),
+        stereo_atom,
+        stereo_bond
+    ]
 }
 
 proptest! {
@@ -516,6 +492,15 @@ proptest! {
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InconsistentReaction),
         );
+    }
+
+    /// One discontinuous field-update chain is rejected at the reaction/span materialization
+    /// boundary with the exact normalization error.
+    #[test]
+    fn test_reaction_to_reaction_span_error(
+        reaction in discontinuous_atom_update_reaction_strategy(),
+    ) {
+        prop_assert_eq!(reaction.to_reaction_span(), Err(Contradiction));
     }
 
     #[test]
