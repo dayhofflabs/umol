@@ -220,7 +220,13 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
 - **S2b — Product iterator binding.** Add a non-constructible Python wrapper around
   `ReactionProductsIter`, yielding owned `list[Molecule]` values lazily and translating the same
   precondition and item errors as reaction application. Test iteration, exhaustion, errors,
-  ownership, component order, and multiplicity. This is additive. [dep: S1a, S2a]
+  ownership, component order, and multiplicity. This is additive. [dep: S1a, S2a] **Done.** The
+  internal Python iterator owns exactly the Rust product iterator and maps each successful item to
+  an owned Python molecule list. It has no public constructor or module export. Exact tests cover
+  Python iterator identity and list conversion, two-match multiplicity and order, three-component
+  order, output independence, empty iteration, transaction-error translation, and repeated
+  exhaustion. All 1,620 Rust binding tests, strict clippy, and the 1,287-test rebuilt Python 3.13
+  suite pass.
 - **S2c — `Molecule.react` and `Molecule.react_all`.** Expose
   `molecule.react(reaction, *, config=None)` and
   `Molecule.react_all(reactants, reaction, *, config=None)`. The static operation accepts any Python

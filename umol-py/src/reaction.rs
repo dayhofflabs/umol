@@ -23,6 +23,7 @@ use umol_graph_ir::ir::{
     ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Reaction as GraphIrReaction,
     ReactionApplicationIter as GraphIrReactionApplicationIter,
     ReactionDerivation as GraphIrReactionDerivation,
+    ReactionProductsIter as GraphIrReactionProductsIter,
     SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
@@ -575,9 +576,33 @@ impl ReactionApplicationIter {
     }
 }
 
+/// One-shot product component collections derived lazily from reaction applications.
+#[pyclass(skip_from_py_object)]
+pub(crate) struct ReactionProductsIter {
+    inner: GraphIrReactionProductsIter,
+}
+
+#[pymethods]
+impl ReactionProductsIter {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> PyResult<Option<Vec<Molecule>>> {
+        match self.inner.next() {
+            Some(Ok(products)) => Ok(Some(
+                products.into_iter().map(Molecule::from_rust).collect(),
+            )),
+            Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
+            Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
+            None => Ok(None),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::PyTypeError;
+    use pyo3::exceptions::{PyStopIteration, PyTypeError};
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -608,7 +633,8 @@ mod tests {
         NoncovalentBondForm as GraphIrNoncovalentBondForm,
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, Normalize, NumForm as GraphIrNumForm,
-        ReactionSpan as GraphIrReactionSpan, ReactionSpanEntries as GraphIrReactionSpanEntries,
+        React as GraphIrReact, ReactionSpan as GraphIrReactionSpan,
+        ReactionSpanEntries as GraphIrReactionSpanEntries,
         StereoAtomDelta as GraphIrStereoAtomDelta,
         StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
         StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
@@ -3237,5 +3263,205 @@ mod tests {
         });
         assert_eq!(application.__next__().unwrap(), None);
         assert_eq!(application.__next__().unwrap(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter_identity() {
+        let reaction = GraphIrReaction::default();
+        let host = GraphIrMolecule::default();
+        Python::attach(|py| {
+            let products = Py::new(
+                py,
+                ReactionProductsIter {
+                    inner: host
+                        .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                        .unwrap(),
+                },
+            )
+            .unwrap();
+
+            let iter = products.bind(py).call_method0("__iter__").unwrap();
+            assert!(iter.is(products.bind(py)));
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter_python() {
+        let reaction = GraphIrReaction::default();
+        let host = GraphIrMolecule::default();
+        Python::attach(|py| {
+            let products = Py::new(
+                py,
+                ReactionProductsIter {
+                    inner: host
+                        .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                        .unwrap(),
+                },
+            )
+            .unwrap();
+
+            let first = products.bind(py).call_method0("__next__").unwrap();
+            assert!(first.cast::<PyList>().unwrap().is_empty());
+            assert!(products
+                .bind(py)
+                .call_method0("__next__")
+                .unwrap_err()
+                .is_instance_of::<PyStopIteration>(py));
+            assert!(products
+                .bind(py)
+                .call_method0("__next__")
+                .unwrap_err()
+                .is_instance_of::<PyStopIteration>(py));
+        });
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter() {
+        let reaction = GraphIrReaction::new(
+            GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                ..Default::default()
+            }),
+            GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
+                id: GraphIrAtomId(0),
+                change: GraphIrAtomFieldChange::Charge {
+                    old: GraphIrNumForm::Undetermined,
+                    new: GraphIrNumForm::Lit(1),
+                },
+            })]),
+        );
+        let host = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+            atoms: vec![
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::C),
+                GraphIrAtomForm::from_element(ChemElement::N),
+            ],
+            ..Default::default()
+        });
+        let expected_host = host.clone();
+        let mut products = ReactionProductsIter {
+            inner: host
+                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
+        };
+
+        let mut first = products.__next__().unwrap().unwrap();
+        let second = products.__next__().unwrap().unwrap();
+
+        assert_eq!(
+            first
+                .iter()
+                .map(|molecule| molecule.to_rust().clone())
+                .collect::<Vec<_>>(),
+            vec![
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(1)],
+                    ..Default::default()
+                }),
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                    ..Default::default()
+                }),
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
+                    ..Default::default()
+                }),
+            ]
+        );
+        assert_eq!(
+            second
+                .iter()
+                .map(|molecule| molecule.to_rust().clone())
+                .collect::<Vec<_>>(),
+            vec![
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                    ..Default::default()
+                }),
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::C).with_charge(1)],
+                    ..Default::default()
+                }),
+                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
+                    ..Default::default()
+                }),
+            ]
+        );
+        assert_eq!(products.__next__().unwrap(), None);
+        assert_eq!(products.__next__().unwrap(), None);
+
+        *first[0].to_rust_mut().atom_mut(GraphIrAtomId(0)).attributes =
+            GraphIrAtomForm::from_element(ChemElement::F);
+        assert_eq!(host, expected_host);
+        assert_eq!(
+            second[0].to_rust(),
+            &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter_empty() {
+        let reaction = GraphIrReaction::new(
+            GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
+                ..Default::default()
+            }),
+            GraphIrDeltas::new(),
+        );
+        let host = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+            ..Default::default()
+        });
+        let mut products = ReactionProductsIter {
+            inner: host
+                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
+        };
+
+        assert_eq!(products.__next__().unwrap(), None);
+        assert_eq!(products.__next__().unwrap(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_products_iter_error() {
+        let constraint = GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::ChargeSum {
+            atoms: Some(vec![GraphIrAtomId(0)]),
+            sum: GraphIrNumForm::Lit(0),
+        });
+        let reaction = GraphIrReaction::new(
+            GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                constraints: constraint.clone().into(),
+                ..Default::default()
+            }),
+            GraphIrDeltas::from_iter([GraphIrDelta::Constraint(GraphIrConstraintDelta::Remove(
+                constraint,
+            ))]),
+        );
+        let host = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+            ..Default::default()
+        });
+        let mut products = ReactionProductsIter {
+            inner: host
+                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
+        };
+
+        let error = products.__next__().unwrap_err();
+
+        Python::attach(|py| {
+            assert!(error.is_instance_of::<TransactionError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "missing constraint entry on remove"
+            );
+        });
+        assert_eq!(products.__next__().unwrap(), None);
+        assert_eq!(products.__next__().unwrap(), None);
     }
 }
