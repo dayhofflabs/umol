@@ -2,7 +2,6 @@
 #![allow(clippy::absolute_paths)] // the `#[pyclass(hash)]` macro expands to absolute paths
 
 use std::str::FromStr;
-use std::vec::IntoIter;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -21,8 +20,8 @@ use umol_graph_ir::dsl::ReactionDsl as GraphIrReactionDsl;
 #[cfg(test)]
 use umol_graph_ir::ir::SubstructureMatchAlgorithm as GraphIrSubstructureMatchAlgorithm;
 use umol_graph_ir::ir::{
-    ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Molecule as GraphIrMolecule,
-    MoleculeCorrespondence as GraphIrMoleculeCorrespondence, Reaction as GraphIrReaction,
+    ApplyError as GraphIrApplyError, AtomId, FromIr, IntoIr, Reaction as GraphIrReaction,
+    ReactionApplicationIter as GraphIrReactionApplicationIter,
     ReactionDerivation as GraphIrReactionDerivation,
     SubstructureMatchConfig as GraphIrSubstructureMatchConfig,
 };
@@ -423,16 +422,12 @@ impl Reaction {
     ) -> PyResult<Py<ReactionApplicationIter>> {
         let reaction = self.to_rust(py);
         let host = host.bind(py).borrow().to_rust().clone();
-        reaction
-            .check_preconditions()
-            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
         let config = config.unwrap_or_default().to_rust();
-        let correspondences = reaction.lhs.substructure_matches(&host, config);
+        let application = reaction
+            .apply(&host, config)
+            .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
 
-        Py::new(
-            py,
-            ReactionApplicationIter::new(reaction, host, correspondences),
-        )
+        Py::new(py, ReactionApplicationIter::from_rust(application))
     }
 
     /// Generate a combined fingerprint over the reactant and product sides.
@@ -552,25 +547,15 @@ impl ReactionDerivation {
     }
 }
 
-/// One-shot application results over an eagerly enumerated correspondence set.
+/// One-shot application results with eager matching and lazy derivation construction.
 #[pyclass(skip_from_py_object)]
 pub(crate) struct ReactionApplicationIter {
-    reaction: GraphIrReaction,
-    host: GraphIrMolecule,
-    correspondences: IntoIter<GraphIrMoleculeCorrespondence>,
+    inner: GraphIrReactionApplicationIter,
 }
 
 impl ReactionApplicationIter {
-    pub(crate) fn new(
-        reaction: GraphIrReaction,
-        host: GraphIrMolecule,
-        correspondences: Vec<GraphIrMoleculeCorrespondence>,
-    ) -> Self {
-        Self {
-            reaction,
-            host,
-            correspondences: correspondences.into_iter(),
-        }
+    pub(crate) fn from_rust(inner: GraphIrReactionApplicationIter) -> Self {
+        Self { inner }
     }
 }
 
@@ -581,22 +566,11 @@ impl ReactionApplicationIter {
     }
 
     fn __next__(&mut self) -> PyResult<Option<ReactionDerivation>> {
-        loop {
-            let Some(correspondence) = self.correspondences.next() else {
-                return Ok(None);
-            };
-            match self.reaction.apply_at(&self.host, &correspondence) {
-                Ok(derivation) => return Ok(Some(ReactionDerivation::from_rust(derivation))),
-                Err(error) if error.is_match_rejection() => {}
-                Err(GraphIrApplyError::Transaction(error)) => {
-                    self.correspondences = Vec::new().into_iter();
-                    return Err(transaction_error(error));
-                }
-                Err(error) => {
-                    self.correspondences = Vec::new().into_iter();
-                    return Err(PyRuntimeError::new_err(error.to_string()));
-                }
-            }
+        match self.inner.next() {
+            Some(Ok(derivation)) => Ok(Some(ReactionDerivation::from_rust(derivation))),
+            Some(Err(GraphIrApplyError::Transaction(error))) => Err(transaction_error(error)),
+            Some(Err(error)) => Err(PyRuntimeError::new_err(error.to_string())),
+            None => Ok(None),
         }
     }
 }
@@ -2022,27 +1996,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_apply(
-        reaction_application: (
-            GraphIrReaction,
-            GraphIrMolecule,
-            Vec<GraphIrMoleculeCorrespondence>,
-        ),
-    ) {
-        let (expected_reaction, expected_host, _) = reaction_application;
+    fn test_reaction_apply(reaction_application: (GraphIrReaction, GraphIrMolecule)) {
+        let (expected_reaction, expected_host) = reaction_application;
         Python::attach(|py| {
             let reaction = Reaction::from_rust(py, expected_reaction.clone()).unwrap();
             let host = Py::new(py, Molecule::from_rust(expected_host.clone())).unwrap();
             let application = reaction.apply(py, host.clone_ref(py), None).unwrap();
 
-            assert_eq!(application.borrow(py).correspondences.len(), 2);
             assert_eq!(reaction.to_rust(py), expected_reaction);
             assert_eq!(host.bind(py).borrow().to_rust(), &expected_host);
 
             let first = application.borrow_mut(py).__next__().unwrap().unwrap();
-            assert_eq!(application.borrow(py).correspondences.len(), 1);
             let second = application.borrow_mut(py).__next__().unwrap().unwrap();
-            assert_eq!(application.borrow(py).correspondences.len(), 0);
             assert_eq!(application.borrow_mut(py).__next__().unwrap(), None);
             assert_eq!(
                 [
@@ -2070,14 +2035,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_apply_snapshot(
-        reaction_application: (
-            GraphIrReaction,
-            GraphIrMolecule,
-            Vec<GraphIrMoleculeCorrespondence>,
-        ),
-    ) {
-        let (expected_reaction, expected_host, _) = reaction_application;
+    fn test_reaction_apply_snapshot(reaction_application: (GraphIrReaction, GraphIrMolecule)) {
+        let (expected_reaction, expected_host) = reaction_application;
         Python::attach(|py| {
             let mut reaction = Reaction::from_rust(py, expected_reaction).unwrap();
             let host = Py::new(py, Molecule::from_rust(expected_host)).unwrap();
@@ -2162,14 +2121,10 @@ mod tests {
         RelevantCycleEnumerationAlgorithm::Vismara(),
     ))]
     fn test_reaction_apply_config(
-        reaction_application: (
-            GraphIrReaction,
-            GraphIrMolecule,
-            Vec<GraphIrMoleculeCorrespondence>,
-        ),
+        reaction_application: (GraphIrReaction, GraphIrMolecule),
         #[case] config: ReactionApplicationConfig,
     ) {
-        let (reaction, host, _) = reaction_application;
+        let (reaction, host) = reaction_application;
         Python::attach(|py| {
             let reaction = Reaction::from_rust(py, reaction).unwrap();
             let host = Py::new(py, Molecule::from_rust(host)).unwrap();
@@ -3132,11 +3087,7 @@ mod tests {
     }
 
     #[fixture]
-    fn reaction_application() -> (
-        GraphIrReaction,
-        GraphIrMolecule,
-        Vec<GraphIrMoleculeCorrespondence>,
-    ) {
+    fn reaction_application() -> (GraphIrReaction, GraphIrMolecule) {
         let reaction = GraphIrReaction::new(
             GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                 atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
@@ -3157,33 +3108,22 @@ mod tests {
             ],
             ..Default::default()
         });
-        let correspondences = [GraphIrAtomId(0), GraphIrAtomId(1)]
-            .into_iter()
-            .map(|host_atom| {
-                GraphIrMoleculeCorrespondence::induce(
-                    &reaction.lhs,
-                    &host,
-                    Correspondence::from_images(&[host_atom], host.atoms().count()),
-                )
-                .expect("the atom correspondence describes the molecule pair")
-            })
-            .collect();
-        (reaction, host, correspondences)
+        (reaction, host)
     }
 
     #[rstest]
     fn test_reaction_application_iter_identity(
-        reaction_application: (
-            GraphIrReaction,
-            GraphIrMolecule,
-            Vec<GraphIrMoleculeCorrespondence>,
-        ),
+        reaction_application: (GraphIrReaction, GraphIrMolecule),
     ) {
-        let (reaction, host, correspondences) = reaction_application;
+        let (reaction, host) = reaction_application;
         Python::attach(|py| {
             let application = Py::new(
                 py,
-                ReactionApplicationIter::new(reaction, host, correspondences),
+                ReactionApplicationIter::from_rust(
+                    reaction
+                        .apply(&host, ReactionApplicationConfig::default().to_rust())
+                        .unwrap(),
+                ),
             )
             .unwrap();
 
@@ -3193,15 +3133,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_application_iter(
-        reaction_application: (
-            GraphIrReaction,
-            GraphIrMolecule,
-            Vec<GraphIrMoleculeCorrespondence>,
-        ),
-    ) {
-        let (reaction, host, correspondences) = reaction_application;
-        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
+    fn test_reaction_application_iter(reaction_application: (GraphIrReaction, GraphIrMolecule)) {
+        let (reaction, host) = reaction_application;
+        let mut application = ReactionApplicationIter::from_rust(
+            reaction
+                .apply(&host, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
+        );
 
         let first = application.__next__().unwrap().unwrap();
         let second = application.__next__().unwrap().unwrap();
@@ -3241,92 +3179,24 @@ mod tests {
 
     #[rstest]
     fn test_reaction_application_iter_empty() {
-        let mut application = ReactionApplicationIter::new(
-            GraphIrReaction::default(),
-            GraphIrMolecule::default(),
-            Vec::new(),
-        );
-
-        assert_eq!(application.__next__().unwrap(), None);
-        assert_eq!(application.__next__().unwrap(), None);
-    }
-
-    #[rstest]
-    fn test_reaction_application_iter_rejection() {
         let reaction = GraphIrReaction::new(
             GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
+                atoms: vec![GraphIrAtomForm::from_element(ChemElement::N)],
                 ..Default::default()
             }),
-            GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
-                id: GraphIrAtomId(0),
-                attributes: GraphIrAtomForm::from_element(ChemElement::C),
-            })]),
+            GraphIrDeltas::new(),
         );
         let host = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-            atoms: vec![
-                GraphIrAtomForm::from_element(ChemElement::C),
-                GraphIrAtomForm::from_element(ChemElement::C),
-                GraphIrAtomForm::from_element(ChemElement::C),
-                GraphIrAtomForm::from_element(ChemElement::O),
-            ],
-            bonds: vec![(
-                GraphIrAtomId(1),
-                GraphIrAtomId(3),
-                GraphIrBondForm::from_order(1),
-            )],
+            atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         });
-        let correspondences = [GraphIrAtomId(0), GraphIrAtomId(1), GraphIrAtomId(2)]
-            .into_iter()
-            .map(|host_atom| {
-                GraphIrMoleculeCorrespondence::induce(
-                    &reaction.lhs,
-                    &host,
-                    Correspondence::from_images(&[host_atom], host.atoms().count()),
-                )
-                .expect("the atom correspondence describes the molecule pair")
-            })
-            .collect();
-        let mut application = ReactionApplicationIter::new(reaction, host, correspondences);
-
-        let first = application.__next__().unwrap().unwrap();
-        let second = application.__next__().unwrap().unwrap();
-
-        assert_eq!(
-            [
-                first.rhs().to_rust().clone(),
-                second.rhs().to_rust().clone()
-            ],
-            [
-                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![
-                        GraphIrAtomForm::from_element(ChemElement::C),
-                        GraphIrAtomForm::from_element(ChemElement::C),
-                        GraphIrAtomForm::from_element(ChemElement::O),
-                    ],
-                    bonds: vec![(
-                        GraphIrAtomId(0),
-                        GraphIrAtomId(2),
-                        GraphIrBondForm::from_order(1)
-                    )],
-                    ..Default::default()
-                }),
-                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
-                    atoms: vec![
-                        GraphIrAtomForm::from_element(ChemElement::C),
-                        GraphIrAtomForm::from_element(ChemElement::C),
-                        GraphIrAtomForm::from_element(ChemElement::O),
-                    ],
-                    bonds: vec![(
-                        GraphIrAtomId(1),
-                        GraphIrAtomId(2),
-                        GraphIrBondForm::from_order(1)
-                    )],
-                    ..Default::default()
-                }),
-            ]
+        let mut application = ReactionApplicationIter::from_rust(
+            reaction
+                .apply(&host, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
         );
+
+        assert_eq!(application.__next__().unwrap(), None);
         assert_eq!(application.__next__().unwrap(), None);
     }
 
@@ -3350,16 +3220,10 @@ mod tests {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         });
-        let correspondence = GraphIrMoleculeCorrespondence::induce(
-            &reaction.lhs,
-            &host,
-            Correspondence::from_images(&[GraphIrAtomId(0)], 1),
-        )
-        .expect("the atom correspondence describes the molecule pair");
-        let mut application = ReactionApplicationIter::new(
-            reaction,
-            host,
-            vec![correspondence.clone(), correspondence],
+        let mut application = ReactionApplicationIter::from_rust(
+            reaction
+                .apply(&host, ReactionApplicationConfig::default().to_rust())
+                .unwrap(),
         );
 
         let error = application.__next__().unwrap_err();
@@ -3371,7 +3235,6 @@ mod tests {
                 "missing constraint entry on remove"
             );
         });
-        assert_eq!(application.correspondences.len(), 0);
         assert_eq!(application.__next__().unwrap(), None);
         assert_eq!(application.__next__().unwrap(), None);
     }

@@ -210,7 +210,13 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   `ReactionApplicationConfig`. Preserve the existing Python one-shot iteration, exception mapping,
   defaults, signatures, result ownership, order, and snapshot semantics. Remove the duplicated
   `apply_at` loop and its owned reaction/host/correspondence storage. This is breaking internally
-  but green at subitem completion. [dep: S0b]
+  but green at subitem completion. [dep: S0b] **Done.** `Reaction.apply` lowers its optional config
+  and delegates directly to the Rust owned application operation. The non-constructible Python
+  iterator stores only `ReactionApplicationIter`; `__next__` converts the next owned derivation or
+  maps its error, with no Python correspondence loop or duplicate reaction and host storage.
+  Behavior-level tests retain ordering, snapshots, all configured algorithms, both error channels,
+  iterator identity, and repeated exhaustion. All 1,615 Rust binding tests, strict clippy, and the
+  1,287-test Python 3.13 suite pass.
 - **S2b — Product iterator binding.** Add a non-constructible Python wrapper around
   `ReactionProductsIter`, yielding owned `list[Molecule]` values lazily and translating the same
   precondition and item errors as reaction application. Test iteration, exhaustion, errors,
