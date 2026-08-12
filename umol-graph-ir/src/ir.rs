@@ -100,7 +100,7 @@ pub use noncovalent::{
 };
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
-pub use reaction::{DpoContradiction, Reaction, ReactionIntegrityError};
+pub use reaction::{DpoContradiction, Reaction, ReactionApplicationIter, ReactionIntegrityError};
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};

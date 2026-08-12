@@ -348,9 +348,22 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
 
 ### S6 — deferrable
 
-- S6a: `ConstraintValidator` internals on the entity views; semantics unchanged. [dep: S0e]
-- S6b: the F420 acceptance case; requires the doc 174 zero-contributor perception fix and the
-  `#a0`-carbon registry coverage, tracked there.
+- S6a: `ConstraintValidator` internals on the entity views. After S5 the constraint pass is
+  vacuous on resolved molecules, so the validator becomes a staging/pattern tool; the per-kind
+  hand-built comparisons collapse to "violation ⇔ `effective(key)` is `None`". Adds a
+  `RelationCoverage` field to `ConstraintValidateConfig` (current per-kind absence semantics to be
+  read off `incidence.rs` and preserved as the default). [dep: S0e]
+- S6b: registry row `"C #v4 #a0"` (grounds as `#h0 #n0 #v4 #a0`; the exocyclic-carbonyl aromatic
+  carbon of 2-pyridone, uracil, 4-pyranone, tropone, and tropolone) plus their snapshots. Pure
+  data; independent — may land as early as S4h.
+- S6c: zero-contributor perception fix in `ops/aromaticity.rs` (`find_systems`/`derive` member
+  handling; the refusal at `aromaticity.rs:91`). Different layer from S6b — this answers doc
+  174's open question: the two defects do not share a root cause. Doc 174 scope; blast radius
+  borepin, borazine, 1,2-azaborine from SMILES. Tropone and tropolone compose S6b + S6c without
+  S4 (all-carbon ring, no hydrogen completion), and show the zero contributor is not a heteroatom
+  phenomenon; whether a model calls them aromatic is a model decision the machinery must not
+  preclude.
+- S6d: the F420 acceptance case (unique completion, C29H36N5O18P). [dep: S4, S6b, S6c]
 
 Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge strips assertions
 from resolved hosts, after which matching must project every pattern key. S2 floats after S0; S3

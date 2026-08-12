@@ -9,7 +9,7 @@ mod dpo;
 mod integrity;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::iter;
+use std::vec::IntoIter;
 
 use dpo::check_reaction_dpo;
 pub use dpo::DpoContradiction;
@@ -55,6 +55,63 @@ use super::traits::Normalize;
 pub struct Reaction {
     pub lhs: Molecule,
     pub deltas: Deltas,
+}
+
+/// One-shot reaction applications over an eagerly enumerated correspondence set.
+///
+/// The iterator owns snapshots of the reaction and host. Derivations are constructed lazily in
+/// match order. Match-local rejection is skipped; another application failure is yielded once and
+/// terminates the iterator.
+#[derive(Debug)]
+pub struct ReactionApplicationIter {
+    reaction: Reaction,
+    host: Molecule,
+    deltas: Deltas,
+    correspondences: IntoIter<MoleculeCorrespondence>,
+    failed: bool,
+}
+
+impl ReactionApplicationIter {
+    fn new(
+        reaction: Reaction,
+        host: Molecule,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<Self, ApplyPreconditionError> {
+        let deltas = reaction.application_deltas()?;
+        let correspondences = reaction
+            .lhs
+            .substructure_matches(&host, match_config)
+            .into_iter();
+        Ok(Self {
+            reaction,
+            host,
+            deltas,
+            correspondences,
+            failed: false,
+        })
+    }
+}
+
+impl Iterator for ReactionApplicationIter {
+    type Item = Result<ReactionDerivation, ApplyError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.failed {
+            let correspondence = self.correspondences.next()?;
+            match self
+                .reaction
+                .apply_at_canonical(&self.host, &correspondence, self.deltas.clone())
+            {
+                Ok(derivation) => return Some(Ok(derivation)),
+                Err(error) if error.is_match_rejection() => {}
+                Err(error) => {
+                    self.failed = true;
+                    return Some(Err(error));
+                }
+            }
+        }
+        None
+    }
 }
 
 fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
@@ -1324,27 +1381,7 @@ impl Reaction {
         impl Iterator<Item = Result<ReactionDerivation, ApplyError>> + 'h,
         ApplyPreconditionError,
     > {
-        let deltas = self.application_deltas()?;
-        let mut correspondences = self
-            .lhs
-            .substructure_matches(host, match_config)
-            .into_iter();
-        let mut failed = false;
-
-        Ok(iter::from_fn(move || {
-            while !failed {
-                let correspondence = correspondences.next()?;
-                match self.apply_at_canonical(host, &correspondence, deltas.clone()) {
-                    Ok(derivation) => return Some(Ok(derivation)),
-                    Err(error) if error.is_match_rejection() => {}
-                    Err(error) => {
-                        failed = true;
-                        return Some(Err(error));
-                    }
-                }
-            }
-            None
-        }))
+        ReactionApplicationIter::new(self.clone(), host.clone(), match_config)
     }
 }
 
@@ -1494,6 +1531,148 @@ mod tests {
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::successful(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField { id: BondId(0), change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) } })]),
+        ),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() }),
+        vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], ..Default::default() })],
+    )]
+    #[case::match_rejection(
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove { id: AtomId(0), attributes: AtomForm::from_element(Element::C) })]),
+        ),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(1), AtomId(2), BondForm::from_order(1))], ..Default::default() }),
+        vec![Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], ..Default::default() })],
+    )]
+    fn test_reaction_application_iter(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected: Vec<Molecule>,
+    ) {
+        let mut applications =
+            ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap();
+        let products = applications
+            .by_ref()
+            .map(Result::unwrap)
+            .map(|derivation| derivation.rhs().clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(products, expected);
+        assert_eq!(applications.next(), None);
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_error() {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C)],
+                constraints: Constraints::from(Constraint::Molecule(
+                    MoleculeConstraint::ChargeSum {
+                        atoms: Some(vec![AtomId(0)]),
+                        sum: NumForm::Lit(0),
+                    },
+                )),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
+                Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                    atoms: Some(vec![AtomId(0)]),
+                    sum: NumForm::Lit(0),
+                }),
+            ))]),
+        );
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let mut applications = ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap();
+
+        assert_eq!(
+            applications.next(),
+            Some(Err(ApplyError::Transaction(TransactionError::MissingEntry))),
+        );
+        assert_eq!(applications.next(), None);
+    }
+
+    #[rstest]
+    #[case::invalid_reference(
+        Reaction::new(
+            Molecule::default(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::default(),
+            })]),
+        ),
+        Molecule::default(),
+        ApplyPreconditionError::InvalidReactionReference {
+            entity: Entity::Atom(AtomId(0)),
+        },
+    )]
+    fn test_reaction_application_iter_new_error(
+        #[case] reaction: Reaction,
+        #[case] host: Molecule,
+        #[case] expected: ApplyPreconditionError,
+    ) {
+        assert_eq!(
+            ReactionApplicationIter::new(reaction, host, MATCH_CONFIG).unwrap_err(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_application_iter_snapshot() {
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(
+            host.clone(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+                id: AtomId(0),
+                change: AtomFieldChange::Charge {
+                    old: NumForm::Undetermined,
+                    new: NumForm::Lit(1),
+                },
+            })]),
+        );
+        let mut applications =
+            ReactionApplicationIter::new(reaction.clone(), host.clone(), MATCH_CONFIG).unwrap();
+        let mut changed_reaction = reaction;
+        changed_reaction.deltas = Deltas::new();
+        let expected_changed_reaction = Reaction::new(changed_reaction.lhs.clone(), Deltas::new());
+        let mut changed_host = host;
+        changed_host.combine_from(&Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::O)],
+            ..Default::default()
+        }));
+
+        let derivation = applications.next().unwrap().unwrap();
+        assert_eq!(
+            derivation.rhs(),
+            &Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64)],
+                ..Default::default()
+            }),
+        );
+        assert_eq!(applications.next(), None);
+        assert_eq!(changed_reaction, expected_changed_reaction);
+        assert_eq!(
+            changed_host,
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::O),
+                ],
+                ..Default::default()
+            }),
+        );
+    }
 
     #[rstest]
     #[case::empty(Reaction::default())]
