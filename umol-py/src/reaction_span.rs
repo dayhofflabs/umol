@@ -284,7 +284,6 @@ impl ReactionSpan {
         Self(span)
     }
 
-    #[cfg(test)]
     pub(crate) fn to_rust(&self) -> &GraphIrReactionSpan {
         &self.0
     }

@@ -9,6 +9,7 @@ from umol import (
     AtomForm,
     AtomDelta,
     AtomFieldChange,
+    CanonicalizationLevel,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
@@ -1065,6 +1066,59 @@ def test_reaction_parse_repr():
         "deltas=Deltas([Delta.Atom(AtomDelta.Add("
         "id=1, attributes=AtomForm.parse('O')))]))"
     )
+
+
+def test_reaction_canonicalize():
+    source = Reaction.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} '
+        ':deltas [{:atom {:modify [0 "#c1"]}}]}'
+    )
+    expected = Reaction.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} '
+        ':deltas [{:atom {:modify [1 "#c1"]}}]}'
+    )
+
+    canonical = source.canonicalize()
+
+    assert canonical is not source
+    assert canonical == expected
+    assert source != expected
+    assert source.canonical_eq(expected)
+    assert source.canonicalize_by(CanonicalizationLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, CanonicalizationLevel.Full)
+
+
+def test_reaction_canonicalize_by():
+    plain = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
+    constrained = Reaction.parse('{:lhs {:atoms ["C#v4"]} :deltas []}')
+
+    assert plain.canonical_eq_by(
+        constrained,
+        CanonicalizationLevel.Structure,
+    )
+    assert not plain.canonical_eq(constrained)
+
+
+def test_reaction_canonicalize_error():
+    reaction = Reaction(
+        Molecule.from_entries([AtomForm(Element("C"))]),
+        Deltas(
+            [
+                Delta.Atom(
+                    AtomDelta.ModifyField(
+                        id=0,
+                        change=AtomFieldChange.Charge(
+                            old=NumForm.Lit(1),
+                            new=NumForm.Lit(2),
+                        ),
+                    )
+                )
+            ]
+        ),
+    )
+
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        reaction.canonicalize()
 
 
 def test_reaction_reverse():

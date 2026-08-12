@@ -51,6 +51,8 @@ PUBLIC_EXPORTS = frozenset(
     BondView
     BondViews
     BooleanForm
+    CanonicalizationConfig
+    CanonicalizationLevel
     ChemistryModel
     CisTransConfiguration
     CisTransStereo
@@ -332,6 +334,22 @@ def test_deferred_member(owner, name):
         (umol.Molecule.combine_all, "(molecules)"),
         (umol.Molecule.split, "(self, /)"),
         (
+            umol.Molecule.canonicalize,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Molecule.canonicalize_by,
+            "(self, /, level, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Molecule.canonical_eq,
+            "(self, /, other, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Molecule.canonical_eq_by,
+            "(self, /, other, level, *, stereo_model=None, config=None)",
+        ),
+        (
             umol.Molecule.substructure_matches,
             "(self, /, host, *, config=None)",
         ),
@@ -352,6 +370,38 @@ def test_deferred_member(owner, name):
         ),
         (umol.Reaction.apply, "(self, /, host, *, config=None)"),
         (umol.Reaction.combined_fingerprint, "(self, /, *, config)"),
+        (
+            umol.Reaction.canonicalize,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Reaction.canonicalize_by,
+            "(self, /, level, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Reaction.canonical_eq,
+            "(self, /, other, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.Reaction.canonical_eq_by,
+            "(self, /, other, level, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.ReactionSpan.canonicalize,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.ReactionSpan.canonicalize_by,
+            "(self, /, level, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.ReactionSpan.canonical_eq,
+            "(self, /, other, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.ReactionSpan.canonical_eq_by,
+            "(self, /, other, level, *, stereo_model=None, config=None)",
+        ),
         (umol.Transaction.rollback, "(self, /, editor)"),
     ],
 )
@@ -445,6 +495,10 @@ def test_public_operation_signature(operation, expected):
         (
             umol.ReactionCompositionConfig,
             "(*, common_subgraph_enumeration_algorithm=Ellipsis)",
+        ),
+        (
+            umol.CanonicalizationConfig,
+            "(*, automorphism_algorithm=Ellipsis)",
         ),
         (
             umol.SubstructureSearchConfig,

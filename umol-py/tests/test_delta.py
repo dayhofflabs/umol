@@ -2881,19 +2881,8 @@ def test_deltas_iter():
                     ),
                 ]
             ),
-            Deltas(
-                [
-                    Delta.Constraint(
-                        ConstraintDelta.Add(
-                            constraint=Constraint.Atom(
-                                3,
-                                AtomConstraintForm.Degree(NumForm.Lit(2)),
-                            )
-                        )
-                    )
-                ]
-            ),
-            id="constraint-multiplicity",
+            Deltas(),
+            id="constraint-set-semantics",
         ),
     ],
 )

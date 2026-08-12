@@ -9,9 +9,12 @@ from umol import (
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityResolveConfig,
+    AutomorphismAlgorithm,
     AtomForm,
     AtomTypeRegistry,
     BondForm,
+    CanonicalizationConfig,
+    CanonicalizationLevel,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     Constraint,
@@ -23,6 +26,7 @@ from umol import (
     ElementForm,
     ElementScope,
     Entity,
+    InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     MetadataError,
     ModelConversionError,
@@ -44,6 +48,7 @@ from umol import (
     SmilesSyntaxFlags,
     StereoAtomForm,
     StereoBondForm,
+    StereoConfigurationForm,
     StereoCoset,
     StereoFailurePolicy,
     StereoKind,
@@ -58,6 +63,30 @@ from umol import (
     ValenceTable,
     NumForm,
 )
+
+
+def test_canonicalization_config():
+    config = CanonicalizationConfig()
+
+    assert config == CanonicalizationConfig.default()
+    assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
+    assert repr(config) == "CanonicalizationConfig.default()"
+    with pytest.raises(AttributeError):
+        config.automorphism_algorithm = AutomorphismAlgorithm.Nauty()
+
+
+@pytest.mark.parametrize(
+    ("level", "expected_repr"),
+    [
+        (CanonicalizationLevel.Topology, "CanonicalizationLevel.Topology"),
+        (CanonicalizationLevel.Constitution, "CanonicalizationLevel.Constitution"),
+        (CanonicalizationLevel.Structure, "CanonicalizationLevel.Structure"),
+        (CanonicalizationLevel.Full, "CanonicalizationLevel.Full"),
+    ],
+)
+def test_canonicalization_level(level, expected_repr):
+    assert repr(level) == expected_repr
+    assert {level: expected_repr}[level] == expected_repr
 
 
 def test_molecule_new():
@@ -348,6 +377,66 @@ def test_molecule_from_entries_constraint_reference_error():
             [AtomForm(Element("C"))],
             constraints=[Constraint.Molecule(MoleculeConstraint.Connected([1]))],
         )
+
+
+def test_molecule_canonicalize():
+    source = Molecule.parse(
+        '{:atoms ["C#c+" "C"] :constraints '
+        '[{:charge-sum {:atoms [0 0] :sum 0}}]}'
+    )
+    expected = Molecule.parse(
+        '{:atoms ["C" "C#c+"] :constraints '
+        '[{:charge-sum {:atoms [1] :sum 0}}]}'
+    )
+
+    canonical = source.canonicalize()
+
+    assert canonical is not source
+    assert canonical == expected
+    assert source != expected
+    assert source.canonical_eq(expected)
+    assert source.canonicalize_by(CanonicalizationLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, CanonicalizationLevel.Full)
+
+
+def test_molecule_canonicalize_by():
+    plain = Molecule.parse('{:atoms ["C" "C"]}')
+    constrained = Molecule.parse(
+        '{:atoms ["C#v4" "C"]}'
+    )
+
+    assert plain.canonical_eq_by(
+        constrained,
+        CanonicalizationLevel.Structure,
+        stereo_model=StereoModel.default(),
+        config=CanonicalizationConfig.default(),
+    )
+    assert not plain.canonical_eq(constrained)
+
+
+def test_molecule_canonicalize_error():
+    molecule = Molecule.from_entries(
+        [AtomForm(Element("C"), charge=NumForm.LitSet(set()))]
+    )
+
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.canonicalize()
+
+
+def test_molecule_canonicalize_integrity_error():
+    molecule = Molecule.parse(
+        '{:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}'
+    )
+    molecule.stereo_atoms[0].configuration = (
+        StereoConfigurationForm.Kinded(
+            StereoKind.Octahedral,
+            StereoCoset.Lit(0),
+        )
+    )
+
+    with pytest.raises(InvalidStructureError, match="ligands"):
+        molecule.canonicalize()
 
 
 def test_molecule_from_smiles():

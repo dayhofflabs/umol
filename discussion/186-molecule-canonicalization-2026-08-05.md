@@ -1949,6 +1949,9 @@ and the semantic properties validated by the corresponding property tests.
   semantics in each binding. Use a keyword-only config constructor and represent the graph-layer
   default explicitly in `default()` and `repr`. Register and export both new types from the flat
   module. This is additive. [dep: S4a, S4c]
+  **Done.** The frozen level enum maps all four Rust levels directly, and the frozen config delegates
+  its default and context construction to the graph-layer configuration. Both types are available
+  from the flat Python module with keyword-only construction, accessors, and stable representations.
 - **S13b — Aggregate methods and errors.** Expose `canonicalize`, `canonicalize_by`, `canonical_eq`,
   and `canonical_eq_by` on Python `Molecule`, `ReactionSpan`, and `Reaction`. Canonicalization returns
   a new owned aggregate and does not mutate the receiver. Use the call shapes
@@ -1960,11 +1963,18 @@ and the semantic properties validated by the corresponding property tests.
   total equality semantics. Map integrity failures to `InvalidStructureError` and intrinsic
   contradictions to `ContradictionError`; do not introduce a Python-only canonicalization error.
   This is additive. [dep: S12b, S13a]
+  **Done.** All four operations are exposed on the three aggregate carriers with the specified
+  keyword-only model and config inputs. Canonicalization returns a new Python aggregate, equality
+  remains total, and fallible operations use the existing structure and contradiction exceptions.
 - **S13c — Python surface tests.** Cover construction, defaults, accessors, `repr`, module exports,
   all four methods on all three aggregate types, level-specific comparison, returned-object
   ownership, exact errors, and agreement with the Rust canonical forms used by the existing corpus.
   Run the Rust binding tests and Python integration suite under the Python 3.13 virtual environment.
   This is additive. [dep: S13b]
+  **Done.** Rust binding tests cover the conversions and context construction, while Python tests
+  cover exports, signatures, configuration, all carrier operations, levels, ownership, and error
+  mapping against fixed canonical forms. The 1,616-test Rust binding suite, 1,287-test Python suite,
+  and strict `umol-py` clippy pass under the Python 3.13 virtual environment.
 
 ### S14 — Surface audit and closeout
 

@@ -4,6 +4,7 @@ from umol import (
     BondForm,
     BondDelta,
     BondFieldChange,
+    CanonicalizationLevel,
     ContradictionError,
     Delta,
     Deltas,
@@ -170,6 +171,53 @@ def test_reaction_span_to_reaction_roundtrip():
 
     assert reaction.lhs == span.lhs()
     assert reaction.to_reaction_span() == span
+
+
+def test_reaction_span_canonicalize():
+    source = ReactionSpan.parse(
+        '{:atoms [{:add "O"} {:modify ["C" "N"]} {:remove "F"} "Cl"] '
+        ':bonds [{:remove [2 3 :single]} {:add [0 1 :double]} '
+        '{:modify [1 3 [:single :double]]}]}'
+    )
+    expected = ReactionSpan.parse(
+        '{:atoms ["Cl" {:remove "F"} {:modify ["C" "N"]} {:add "O"}] '
+        ':bonds [{:remove [0 1 :single]} {:modify [0 2 [:single :double]]} '
+        '{:add [2 3 :double]}]}'
+    )
+
+    canonical = source.canonicalize()
+
+    assert canonical is not source
+    assert canonical == expected
+    assert source != expected
+    assert source.canonical_eq(expected)
+    assert source.canonicalize_by(CanonicalizationLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, CanonicalizationLevel.Full)
+
+
+def test_reaction_span_canonicalize_by():
+    plain = ReactionSpan.parse('{:atoms ["C"]}')
+    constrained = ReactionSpan.parse('{:atoms ["C#v4"]}')
+
+    assert plain.canonical_eq_by(
+        constrained,
+        CanonicalizationLevel.Structure,
+    )
+    assert not plain.canonical_eq(constrained)
+
+
+def test_reaction_span_canonicalize_error():
+    span = ReactionSpan.from_entries(
+        [
+            (
+                AtomForm(Element("C"), charge=NumForm.LitSet(set())),
+                AtomForm(Element("C"), charge=NumForm.LitSet(set())),
+            )
+        ]
+    )
+
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        span.canonicalize()
 
 
 def test_reaction_to_reaction_span_error():
