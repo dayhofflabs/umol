@@ -502,6 +502,31 @@ proptest! {
         prop_assert_eq!(normalized.apply_at(&host, &defective), expected);
     }
 
+    /// The public owned iterator is exactly explicit match enumeration followed by `apply_at`,
+    /// including skipped match-local failures and termination after the first other failure.
+    #[test]
+    fn test_reaction_apply(
+        (reaction, host, _) in reaction_application_strategy(),
+    ) {
+        let mut expected = Vec::new();
+        for correspondence in reaction.lhs.substructure_matches(&host, MATCH_CONFIG) {
+            match reaction.apply_at(&host, &correspondence) {
+                Ok(derivation) => expected.push(Ok(derivation)),
+                Err(error) if error.is_match_rejection() => {}
+                Err(error) => {
+                    expected.push(Err(error));
+                    break;
+                }
+            }
+        }
+        let actual = reaction
+            .apply(&host, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
+            .collect::<Vec<_>>();
+
+        prop_assert_eq!(actual, expected);
+    }
+
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]

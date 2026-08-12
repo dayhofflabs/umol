@@ -1373,14 +1373,11 @@ impl Reaction {
     /// match-local DPO and structural conditions.
     /// Structural preconditions are checked before match enumeration. Match-local rejection is
     /// skipped; an internal application failure is yielded once and terminates the iterator.
-    pub fn apply<'h>(
-        &'h self,
-        host: &'h Molecule,
+    pub fn apply(
+        &self,
+        host: &Molecule,
         match_config: SubstructureMatchConfig,
-    ) -> Result<
-        impl Iterator<Item = Result<ReactionDerivation, ApplyError>> + 'h,
-        ApplyPreconditionError,
-    > {
+    ) -> Result<ReactionApplicationIter, ApplyPreconditionError> {
         ReactionApplicationIter::new(self.clone(), host.clone(), match_config)
     }
 }

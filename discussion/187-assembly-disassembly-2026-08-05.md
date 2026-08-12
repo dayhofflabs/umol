@@ -168,7 +168,11 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   caller, test, rustdoc example, and benchmark without changing item order or error behavior. Add a
   generated equivalence property between the public iterator and explicit matching followed by
   `apply_at`, including match rejection and the terminal-error rule. This is breaking red-to-green.
-  [dep: S0a]
+  [dep: S0a] **Done.** `Reaction::apply` now returns the named owned iterator without a lifetime in
+  its signature. Every workspace consumer compiles unchanged against the concrete return type. A
+  256-case property compares the complete stream with explicit correspondence enumeration and
+  `apply_at`; the separate malformed-reaction property retains exact fatal-error and terminal
+  exhaustion coverage.
 
 ### S1 — Product-oriented Rust operation (`umol-graph-ir`)
 
