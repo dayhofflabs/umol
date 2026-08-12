@@ -288,10 +288,18 @@ constraints are not redundant with the structural description.
 Entity and molecular structural identity is established from inherent fields and structural
 incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
 that structural identity. They therefore do not distinguish the initial structural automorphism
-orbits. Aggregate canonicalization may use normalized constraints after structural labeling to
-select among the remaining structurally equivalent frames. Remapping transports every reference
-they contain. This post-hoc participation gives the complete IR assertion a unique canonical form
-without turning constraints into structural identity features.
+orbits. After structural labeling establishes the minimum structure key, aggregate canonicalization
+normalizes entity-level and molecule-level constraints and minimizes the frozen canonical constraint
+key over every admissible entity remapping and participant-frame action that attains that structure
+minimum. Equivalently, complete canonicalization minimizes `(structure key, constraint key)`
+lexicographically: constraints distinguish only tied structural frames and never make a larger
+structure key win. Remapping transports every reference they contain. Graph-only automorphism
+orbits may discard a tied frame only when the orbit action carries the complete covariant
+participant-frame and constraint action; otherwise those frames are searched exactly. This
+post-hoc participation gives the complete IR assertion a unique canonical form without turning
+constraints into structural identity features. Complete canonicalization must therefore retain or
+reconstruct every action attaining the minimum structure key until the constraint minimum is
+selected; it cannot commit the single `Structure` representative and inspect only that frame.
 
 ## Aggregate canonicalization
 
@@ -367,7 +375,14 @@ diagnostic invoke `canonicalize` directly.
 Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
 para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
 partition. With it enabled, feed each stereo-sensitive partition back into refinement until the
-partition stabilizes. Do not expose an iteration cutoff that can change the canonical form.
+partition stabilizes. The refinement state is the ordered partition of the complete structure-level
+incidence graph. Each round recomputes stereo descriptors from the current classes of the stereo
+entity's site and ligand occurrences, refines every incidence node by its previous class together
+with its applicable stereo descriptor, and then applies ordinary exact graph refinement. Including
+the previous class makes refinement split-only. Stability means equality of the ordered partition
+cells, not merely an unchanged cell count or unchanged backend color integers. Every non-stable
+round strictly increases the number of cells, so the finite incidence-node set supplies the
+termination bound. Do not expose an iteration cutoff that can change the canonical form.
 
 A parameterized operation may select a frame using only a coarser structural layer while returning
 the complete original molecule in that frame. Its guarantee is deliberately limited:
@@ -379,14 +394,16 @@ the complete original molecule in that frame. Its guarantee is deliberately limi
   determined.
 
 An excluded feature must not break such a tie. Complete outputs from differently numbered inputs
-may therefore differ by an automorphism of the selected layer. Complete `canonical_eq` does not use
-this coarser operation; it compares canonical representatives formed from every available entity
-kind and constraint.
+may therefore differ by an automorphism of the selected layer. `CanonicalizationLevel::Full` is not
+a coarser operation: it includes normalized constraints and is exactly equivalent to the
+unqualified operation. `canonicalize_by(Full, context)` equals `canonicalize(context)`, and
+`canonical_eq_by(other, Full, context)` equals `canonical_eq(other, context)`.
 
 Because `canonicalize_by` returns the complete normalized aggregate, an intrinsic contradiction in
-excluded data still makes that transformation fail. `canonical_eq_by` compares only the selected
-layer and must not be implemented by comparing complete `canonicalize_by` results; contradictions
-outside the selected layer do not affect that reduced relation.
+excluded data still makes that transformation fail. For `Topology`, `Constitution`, and `Structure`,
+`canonical_eq_by` compares only the selected layer and must not be implemented by comparing complete
+`canonicalize_by` results; contradictions outside the selected layer do not affect that reduced
+relation. `Full` has no excluded data and is identical to unqualified `canonical_eq`.
 
 Backend canonical labels are search inputs, not the stable numbering contract. The canonical frame
 is the minimum under the library's typed comparison order. Automorphism generators and orbits may
@@ -394,18 +411,23 @@ prune equivalent branches, but changing the selected graph algorithm must not ch
 canonical representative.
 
 The typed comparison schema is a compatibility contract, but that contract must admit additive
-entity-model extensions. Existing entity-kind blocks, field components, constraint variants, and
-their order have explicit stable schema positions. New entity kinds and constraint variants occupy
-append-only extension positions and do not renumber or reinterpret existing positions. Schema
-positions must not be inferred from Rust enum declaration order.
+entity- and constraint-model extensions. Existing entity-kind blocks, field components, constraint
+variants, and their order have explicit stable schema positions. New entity kinds and constraint
+variants occupy append-only extension positions and do not renumber or reinterpret existing
+positions. A new inherent field is appended to its entity row. Its introduction must define one
+uniform migration value for every earlier value; otherwise the extension cannot make the
+compatibility promise below because the new field could split an earlier symmetry class. Values
+that determine the new field acquire their frozen order from the version introducing it onward.
+Schema positions must not be inferred from Rust enum declaration order.
 
-Adding an extension must leave the canonical numbering and canonical form of every molecule that
-contains none of the new entity kinds or constraint variants unchanged. Molecules that use the new
-extension acquire a coherent order that is frozen from the version introducing the extension
-onward. No comparison exists with versions that could not represent that extension. More generally,
-if one schema is an append-only extension of another, every molecule expressible in the earlier
-schema has the same canonical representative under both. This cumulative promise concerns the
-canonical IR, not an internal comparison-key encoding.
+Adding an extension must leave the canonical numbering and the earlier-schema portion of the
+canonical form unchanged for every molecule expressible in the earlier schema. Molecules that use a
+new entity kind, a determined value of a new inherent field, or a new constraint variant acquire a
+coherent order that is frozen from the version introducing the extension onward. No comparison
+exists with versions that could not represent that extension. More generally, if one schema is an
+append-only extension of another, every earlier-schema molecule embedded through the defined
+neutral values retains its canonical numbering. This cumulative promise concerns the canonical IR,
+not an internal comparison-key encoding.
 
 ### Canonical comparison schema
 
@@ -415,10 +437,11 @@ move in Rust, but an existing position must not be reused or assigned another me
 are appended after the highest assigned position in their table or structural domain.
 
 The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
-stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. Thus the
-public cumulative canonicalization levels are `Topology`, `Constitution`, and `Full`, where `Full`
-is topology plus overlays. `NonStereo` names the middle entity domain; it is not another cumulative
-level.
+stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. The
+public cumulative canonicalization levels are `Topology`, `Constitution`, `Structure`, and `Full`.
+`Structure` is topology plus overlays and excludes constraints. `Full` appends normalized
+entity-level and molecule-level constraints and is identical to unqualified canonicalization.
+`NonStereo` names the middle entity domain; it is not another cumulative level.
 
 | Domain position | Structural domain | Entity slots |
 | ---: | --- | --- |
@@ -428,10 +451,10 @@ level.
 
 An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
 this position and then by their dense row sequence. This hierarchy makes `Topology`, `Constitution`,
-and `Full` exact domain prefixes while allowing a future entity kind to be appended within the
-domain to which it belongs. An absent block contributes no entry. Constraints form a separate
-terminal section, so extending an entity domain does not move the constraint section or alter keys
-for molecules that lack the new kind.
+and `Structure` exact domain prefixes while allowing a future entity kind to be appended within the
+domain to which it belongs. An absent block contributes no entry. `Full` adds the separate terminal
+constraint section. Extending an entity domain does not move that section or alter keys for
+molecules that lack the new kind.
 
 Rows compare their components in the following local field order. Every entity family included at
 the selected structural level contributes all of its inherent fields; participant topology,

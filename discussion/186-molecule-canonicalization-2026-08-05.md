@@ -90,18 +90,22 @@ inputs compare equal immediately. Two successful normal or canonical forms compa
 Two intrinsic `Contradiction` results compare equal because both denote the empty semantic value;
 one contradiction and one successful form do not. Integrity failures do not make distinct inputs
 equal. Each aggregate implements this distinction directly rather than relying on a
-generic comparison of its error values. All four operations belong to the same trait: the
-level-specific pair selects or compares one of the nested structural layers, while the unqualified
-pair constructs or compares the complete canonical form.
+generic comparison of its error values. All four operations belong to the same trait. The
+level-specific pair selects or compares one of the nested canonicalization levels. `Topology`,
+`Constitution`, and `Structure` are structural levels; `Full` adds normalized constraints and is
+exactly equivalent to the unqualified pair. The explicit `Full` variant lets a caller select the
+complete operation programmatically without creating a second meaning for `canonicalize` or
+`canonical_eq`.
 
 `canonicalize_by` still returns a complete normalized aggregate, so an intrinsic contradiction in
 any carried value makes that transformation fail even when the value is excluded from frame
-selection. `canonical_eq_by` is the selected-layer relation and does not call `canonicalize_by` and
-compare its complete results. It normalizes and compares only the selected structural layer;
-contradictions in excluded fields, entity families, or constraints do not affect that relation.
-Within the selected layer, two contradictions compare equal under the rule above. This deliberate
-asymmetry follows from the two return types: the transformation must construct a valid complete
-normal form, while the equality operation answers only the requested reduced relation.
+selection. For `Topology`, `Constitution`, and `Structure`, `canonical_eq_by` is the selected-level
+relation and does not call `canonicalize_by` and compare its complete results. It normalizes and
+compares only the selected level; contradictions in excluded fields, entity families, or constraints
+do not affect that relation. Within the selected level, two contradictions compare equal under the
+rule above. `Full` has no excluded data and is identical to unqualified `canonical_eq`. This
+deliberate asymmetry follows from the two return types: the transformation must construct a valid
+complete normal form, while a reduced equality operation answers only its requested relation.
 
 The aggregate error types are operation- and carrier-specific:
 `MoleculeCanonicalizationError`, `ReactionSpanCanonicalizationError`, and
@@ -181,8 +185,15 @@ canonicalization performs one stereo-sensitive refinement from the constitution-
 and does not feed the result back into another stereo refinement. When it is true, the
 stereo-sensitive result is fed back until the partition stabilizes. The context does not carry a
 configurable maximum iteration count: an operational cutoff must not determine the canonical form.
-The implementation must make the fixpoint refinement monotonic and establish its finite termination
-condition.
+The fixpoint state is the ordered partition of the complete structure-level incidence graph, not a
+separate partition of atoms or stereo entities. In each round, a stereo descriptor is recomputed
+from the current classes of the stereo entity's site and ligand occurrences. Every incidence node
+is then refined by its previous class together with its applicable stereo descriptor, followed by
+ordinary exact graph refinement. Including the previous class makes the process split-only: cells
+may split but never merge. Stability means equality of the ordered partition cells, not merely an
+unchanged cell count or unchanged backend color integers. Every non-stable round strictly increases
+the number of cells, so the finite incidence-node set supplies the termination bound without a
+caller-selected iteration limit.
 
 ### Domain and failure semantics
 
@@ -473,9 +484,10 @@ The current graph representations are:
   once. It is not a molecule incidence graph; it is a mechanism for presenting edge distinctions to
   a vertex-colored algorithm.
 
-The semantic coverage of `IncidenceGraph::full()` is the starting point for canonicalization
-because it includes all eight entity kinds, but neither its current information nor its fully
-materialized representation is assumed to be sufficient for exact, efficient canonicalization:
+The semantic coverage of `IncidenceGraph` at `IncidenceLevel::Full` is the starting point for
+canonicalization because it includes all eight entity kinds, but neither its current information
+nor its fully materialized representation is assumed to be sufficient for exact, efficient
+canonicalization:
 
 - dative donor and acceptor roles are not distinguished structurally;
 - stereo nodes attach only to their sites, while their ligand frames and cosets are interpreted by
@@ -584,18 +596,29 @@ the descriptor. Reordering the input ligand frame therefore leaves the descripto
 a stereo assignment that distinguishes constitutionally equivalent ligands can split their classes.
 
 With `para_stereo == false`, this descriptor is computed once from the constitution partition. With
-`para_stereo == true`, it is recomputed from each successively refined partition until stable. Each
-round refines by the pair `(previous class, stereo descriptor)`, so classes only split and never
-merge. The finite entity set then gives the termination bound without a caller-selected iteration
-limit.
+`para_stereo == true`, the refinement state is the ordered partition of the complete
+structure-level incidence graph. Each round recomputes stereo descriptors from the current site and
+ligand-occurrence classes, refines every incidence node by its previous class together with its
+applicable stereo descriptor, and then applies ordinary exact graph refinement. The previous class
+makes the process split-only: cells never merge. Stability means equality of the ordered cells, not
+merely an unchanged cell count or unchanged backend color integers. Every non-stable round strictly
+increases the number of cells, so the finite incidence-node set gives the termination bound without
+a caller-selected iteration limit.
 
 Entity-level and molecule-level constraints do not participate in canonical labeling. They are not
 part of constitution and do not establish entity or molecular structural identity. They therefore
 neither distinguish incidence nodes nor break structural automorphism orbits. After structural
-canonical labeling establishes the canonical image and its remaining automorphisms, normalized
-entity-level and molecule-level constraints select a canonical placement among those structurally
-equivalent frames. The resulting remapping transports every constraint reference together with the
-entities it names.
+canonical labeling establishes the minimum structure key, normalize entity-level and molecule-level
+constraints and minimize the frozen canonical constraint key over every admissible entity remapping
+and participant-frame action that attains that minimum structure key. Equivalently, complete
+canonicalization minimizes the lexicographic pair `(structure key, constraint key)`: the structure
+key is primary, and the constraint key can only distinguish tied structural frames. The resulting
+remapping transports every constraint reference together with the entities it names. Graph-only
+automorphism orbits may discard a tied frame only when the orbit action carries the complete
+covariant participant-frame and constraint action; otherwise the tied frames must be searched
+exactly. Complete canonicalization therefore cannot first commit the single frame returned by
+`canonicalize_by(Structure)` and then normalize its constraints; it must retain or reconstruct the
+entire set of actions attaining the minimum structure key until the constraint minimum is selected.
 
 Derived `==` is exact equality of the stored IR and therefore includes constraints, ids, ordering,
 and non-normal value encodings. `canonical_eq` compares complete canonical IR forms and also
@@ -626,7 +649,8 @@ non-stereo; overlays are non-stereo plus stereo; full structure is topology plus
 straightforward implementation may contain positioned entity blocks followed by constraints, with
 typed row keys for participants, frames, and normalized form values. Each entity position is the
 composite `(domain position, slot within domain)`, so the cumulative `Topology`, `Constitution`, and
-`Full` levels are exact prefixes while future kinds can be appended within their semantic domain.
+`Structure` levels are exact prefixes while future kinds can be appended within their semantic
+domain. `Full` appends the canonical constraint section.
 `NonStereo` names the middle domain and is not a fourth cumulative level. The storage shape is
 private; its comparison order is the contract. The choice among valid total orders is mathematically
 arbitrary, like choosing a fixed seed, but becomes a public compatibility contract once published.
@@ -657,30 +681,33 @@ The comparison scheme is fixed by the library contract rather than selected thro
 context. If an incompatible replacement ever becomes unavoidable, it requires a separately
 versioned API and cannot silently change the published scheme or its existing results.
 
-Freezing the schema does not freeze the entity model. The compatibility unit is the canonical
-representative of a value expressible in the schema version that first covered it. The existing
-entity-kind blocks, field components, constraint variants, and their comparison order receive
-explicit stable schema positions. A future entity kind is appended within topology, non-stereo, or
-stereo according to its semantics; a genuinely new structural category may be appended after the
-stereo domain. Constraint positions mirror the same entity hierarchy, with molecule-level
-constraints terminal. A future constraint variant is appended within its owning local table. No
-extension may renumber, reorder, or reinterpret an existing position, and the implementation must
-not derive positions from a Rust enum's declaration order. Moving an existing entity kind between
-domains or inserting a domain is schema-breaking because it changes cumulative-level semantics.
+Freezing the schema does not freeze the entity or constraint model. The compatibility unit is the
+canonical representative of a value expressible in the schema version that first covered it. The
+existing entity-kind blocks, field components, constraint variants, and their comparison order
+receive explicit stable schema positions. A future entity kind is appended within topology,
+non-stereo, or stereo according to its semantics; a genuinely new structural category may be
+appended after the stereo domain. Constraint positions mirror the same entity hierarchy, with
+molecule-level constraints terminal. A future constraint variant is appended within its owning
+local table and participates through the same post-hoc canonical constraint order. A future
+inherent field is appended to its entity row. Its introduction must define one uniform migration
+value for every earlier value; otherwise the field could split an earlier symmetry class and the
+compatibility promise would not hold. Values that determine the new field acquire their frozen
+order from the version introducing it onward. No extension
+may renumber, reorder, or reinterpret an existing position, and the implementation must not derive
+positions from a Rust enum's declaration order. Moving an existing entity kind between domains or
+inserting a domain is schema-breaking because it changes cumulative-level semantics.
 
-Consequently, extending the schema must leave the canonical numbering and complete canonical form
-of every molecule containing none of the new entity kinds or constraint variants unchanged. For a
-molecule that does use an extension, the extended schema defines a coherent total order, but its
+Consequently, extending the schema must leave the canonical numbering and the earlier-schema
+portion of the canonical form unchanged for every molecule expressible in the earlier schema. For a
+molecule that uses an extension, the extended schema defines a coherent total order, but its
 structure and canonical ordering carry no compatibility guarantee with library versions predating
 that extension because those versions could not represent the molecule. From the version that
 introduces the extension onward, the new schema positions are themselves frozen: every later
-append-only extension must preserve the molecule's canonical numbering and complete canonical form
-whenever the molecule uses none of the still-later additions. Equivalently, if one schema is an
-append-only extension of another, every molecule expressible in the earlier schema has the same
-canonical representative under both. This cumulative promise permits the entity-model growth
-described in doc 117 while keeping already representable molecules stable. It applies to the public
-canonical representative; an internal comparison-key encoding may change provided it reproduces
-that representative.
+append-only extension must preserve canonical numbering for values embedded through the defined
+neutral defaults and for values that use none of the still-later additions. This cumulative promise
+permits the entity-model growth described in doc 117 while keeping already representable molecules
+stable. It applies to the public canonical representative; an internal comparison-key encoding may
+change provided it reproduces that representative.
 
 ### Stable canonical-frame search
 
@@ -713,11 +740,11 @@ separation is what makes canonical numbering stable across supported backends wi
 typed molecule schema into `umol-graph-core`.
 
 At topology and constitution levels, the projected graph automorphisms preserve the corresponding
-typed leaf key and can prune entity branches directly. At full stereo level, a graph automorphism
+typed leaf key and can prune entity branches directly. At the structure level, a graph automorphism
 also induces a ligand-frame action that can change the stored stereo configuration. Projecting only
 the entity-id action does not prove leaf-key equality and is therefore not a sound pruning basis.
-The initial full-level implementation disables orbit pruning while retaining exact refinement and
-backend-selected branch order. Full-level orbit pruning may be restored only when its orbit
+The initial structure-level implementation disables orbit pruning while retaining exact refinement and
+backend-selected branch order. Structure-level orbit pruning may be restored only when its orbit
 representatives carry the covariant stereo action as well.
 
 The nominal search space contains every dense entity remapping, but it is not enumerated naively.
@@ -867,15 +894,18 @@ The closed selector is:
 pub enum CanonicalizationLevel {
     Topology,
     Constitution,
+    Structure,
     Full,
 }
 ```
 
 `Topology` contains atoms and localized bonds. `Constitution` adds dative bonds, aromatic systems,
-multicenter bonds, and noncovalent bonds. `Full` adds stereo atoms and stereo bonds. Constraints are
-excluded from the structural levels. Para-stereo is not a fourth level: both one-pass stereo
-refinement and the para-stereo fixpoint operate at `Full`, with the behavior selected by
-`CanonicalizationContext::para_stereo`.
+multicenter bonds, and noncovalent bonds. `Structure` adds stereo atoms and stereo bonds while
+continuing to exclude constraints. `Full` adds normalized entity-level and molecule-level
+constraints through the post-hoc canonical constraint order. Para-stereo changes refinement within
+the shared structure pass used by `Structure` and `Full`; it is not another level. `Full` is exactly
+equivalent to the unqualified operation, so `canonicalize_by(Full, context) ==
+canonicalize(context)` and `canonical_eq_by(other, Full, context) == canonical_eq(other, context)`.
 
 The parameterized operation returns the complete original `Molecule` in the frame selected under
 the requested relation. Every entity, field, stereo assignment, and constraint is retained and
@@ -895,34 +925,39 @@ therefore produce complete outputs that differ by an automorphism of the selecte
 their selected layers have the same canonical form. Breaking such a tie with an excluded feature
 would make that feature part of the ordering and is deliberately not done.
 
-Constraints are excluded from all of these structural levels.
+Constraints are excluded from the first three structural levels and included only by `Full`.
 
 The public operations are `canonicalize_by(level, context)` and
 `canonical_eq_by(other, level, context)`. The first returns the complete input transported into the
-frame selected at `level`; the second compares only the selected structural layers. It must not be
-implemented by comparing the complete outputs of `canonicalize_by`, because excluded features may
-remain differently ordered within an automorphism class of the selected level.
+frame selected at `level`. For the first three levels, the second compares only the selected layer
+and must not be implemented by comparing complete `canonicalize_by` outputs, because excluded
+features may remain differently ordered within an automorphism class of that level. At `Full`, it
+uses the complete structure-plus-constraints key and is identical to unqualified `canonical_eq`.
 
-These operations are distinct from `Molecule::canonical_eq`, whose name and semantics are not
-parameterized by a structural level. `canonical_eq` compares the complete set of available entity
-kinds, including stereo entities. It must not adopt the reduced equality relation supplied to the
-ordering operation or use the coarser result as its canonical representative.
+The first three level-specific operations are reduced relations. `Full` is deliberately different:
+it provides the complete operation through the same programmatic selector and is identical to
+`Molecule::canonical_eq`. `Structure` compares the complete set of available entity kinds,
+including stereo entities, without constraints; `Full` and unqualified `canonical_eq` add the
+normalized constraint section and use it only after the structure minimum has been established.
 
 Feature and level selectors follow one repository rule. A `*Features` type is a bitflag set of
 independently combinable switches; a `*Level` type is a closed enum of nested named layers.
 Accordingly, rename `ConstitutionFeatures` to `MoleculeColoringFeatures`, because it also contains
 `STEREO_KIND`, and retain its bitflag semantics. Replace `IncidenceNodeSelection` with the
-`IncidenceLevel` enum using `Topology`, `Constitution`, and `Full`. Canonicalization uses the parallel
-`CanonicalizationLevel`. The level enums remove the misleading `OVERLAYS` flag: overlays are the
-non-stereo and stereo domains together and therefore are not a nested level between topology and
-full structure.
+`IncidenceLevel` enum using `Topology`, `Constitution`, and `Full`. Its `Full` means the complete
+incidence carrier and includes no constraints. Canonicalization uses
+`CanonicalizationLevel::{Topology, Constitution, Structure, Full}`; here `Structure` selects that
+complete incidence structure, while `Full` additionally includes constraints. The level enums
+remove the misleading `OVERLAYS` flag: overlays are the non-stereo and stereo domains together and
+therefore are not a nested level between topology and structure.
 
 ### Progressive implementation
 
 Implementation proceeds in four stages: complete and verify topology-level canonicalization; extend
 it to all non-stereo structural entities and typed incidences; add one-pass stereo refinement with
-`para_stereo == false`; then add the full para-stereo fixpoint. The latter two stages both implement
-the `Full` structural level. Each implementation stage must provide a complete, tested contract for
+`para_stereo == false`; then add the para-stereo fixpoint. The latter two stages both implement the
+`Structure` level. Constraint placement subsequently adds `Full`. Each implementation stage must
+provide a complete, tested contract for
 its supported level and reuse the same incidence and remapping facilities; it is not a temporary
 parallel implementation that is discarded at the next stage. The unqualified complete
 `canonicalize` and `canonical_eq` surface lands only with the final stage.
@@ -1186,7 +1221,7 @@ and the semantic properties validated by the corresponding property tests.
 - **S0a — Canonicalization benchmark baseline.** Add a dedicated graph-IR canonicalization benchmark
   target with a fixed corpus covering ordinary, disconnected, overlay-heavy, stereo, meso, and
   para-stereo structures. Measure raw atom/bond topology canonical labeling, then separately measure
-  incidence construction and canonical labeling at topology, constitution, and full levels. Record
+  incidence construction and canonical labeling at topology, constitution, and structure levels. Record
   raw and incidence node and edge counts in the benchmark ids. The raw and incidence paths are not
   semantic parity beyond topology: the exact compact overlay-aware path does not yet exist, so its
   comparison with incidence remains S5e. This is additive and establishes the measurable baseline
@@ -1521,7 +1556,7 @@ and the semantic properties validated by the corresponding property tests.
   frozen constitution numbering, and topology fixtures are unchanged. `Nauty` remains the sole
   supported automorphism algorithm, so cross-algorithm agreement is currently vacuous.
 
-### S8 — Full canonicalization without para-stereo refinement
+### S8 — Structure canonicalization without para-stereo refinement
 
 - **S8a — Complete stereo frame action.** Implement one frame action for stereo atom and bond forms
   that transports the configuration, topicity positions, ligand-symmetry permutations,
@@ -1554,11 +1589,11 @@ and the semantic properties validated by the corresponding property tests.
   topicity and any representable permutation-valued constraint together. Exact and exhaustive
   tests cover repeated ligands, literal, undetermined, set-valued, and symbolic configurations,
   both stereo entity forms, and position orders beyond the fixed permutation degree.
-- **S8c — One-pass stereo refinement and full frame.** Extend the typed key and refinement to stereo
+- **S8c — One-pass stereo refinement and structure frame.** Extend the typed key and refinement to stereo
   atoms and bonds. Ligand occurrences and kinds enter the exact carrier, while configuration values
   enter covariantly through the candidate frame action rather than as raw input-frame colors. For
   `para_stereo == false`, perform one stereo-sensitive refinement from the constitution partition,
-  select the minimum full structural key, and preserve every stereo entity without perception,
+  select the minimum structure key, and preserve every stereo entity without perception,
   resolution, or conformance validation. Constraints remain excluded from this selected-layer tie
   break. The public trait surface waits for the para-stereo path in S9a. This is additive.
   [dep: S5d, S8b] **Done.** The constitution equitable partition now supplies the fixed input
@@ -1572,18 +1607,20 @@ and the semantic properties validated by the corresponding property tests.
   stereo kind's frame covariance, constraint exclusion, stereo-configuration distinction, both
   stereo entity families, dense renumbering, integrity, preservation, and idempotence. The public
   trait remains deferred to S9a together with the para-stereo fixpoint.
-- **S8d — Stereo properties.** Validate full frame/coset/constraint covariance, exact idempotence of
-  the selected full structural layer, renumbering invariance, bounded-exhaustive-minimum agreement,
+- **S8d — Stereo properties.** Validate structure frame/coset/constraint covariance, exact
+  idempotence of the selected structure layer, renumbering invariance,
+  bounded-exhaustive-minimum agreement,
   pruning independence, meso cases, repeated ligands, undetermined configurations, and selected-layer
   algorithm agreement. Malformed stereo reaches the exact integrity-error cases and never a panic.
   Do not require complete-output identity before S9b has used constraints to select the remaining
   structural automorphism. This is additive. [dep: S8c] **Done.** Exact frame-action cases and the
-  one-pass full canonicalizer jointly cover frame, coset, inline-constraint, and molecule-constraint
-  covariance for stereo atoms and bonds. The selected full layer is idempotent and invariant across
+  one-pass structure canonicalizer jointly cover frame, coset, inline-constraint, and
+  molecule-constraint covariance for stereo atoms and bonds. The selected structure layer is
+  idempotent and invariant across
   all 120 atom renumberings of a bounded symmetric stereo carrier. Its result agrees with exhaustive
   minimization under both forward and reverse branch order, including the sole currently supported
   nauty selector. The exhaustive comparison exposed that graph-only orbit pruning was unsound for
-  covariant stereo values: full-level search now disables it until orbit representatives carry the
+  covariant stereo values: structure-level search now disables it until orbit representatives carry the
   induced frame action, and the enabled/disabled private search settings produce the same exact
   minimum. Focused cases cover a meso pair, repeated virtual ligands, and kinded and kindless
   undetermined configurations. Malformed arity and coset values are rejected without panic by the
@@ -1593,25 +1630,37 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S9 — Para-stereo fixpoint and complete molecule API
 
-- **S9a — Monotonic para-stereo refinement and level-specific API.** Implement the
-  `para_stereo == true` fixpoint with no caller-selected iteration cutoff. Establish monotonic
-  partition refinement and finite termination, then validate cases where constitution and stereo
-  symmetry interact. Introduce `Canonicalize` with `canonicalize_by` and `canonical_eq_by`, and
-  implement the pair for `Molecule` now that all three levels and both para-stereo modes are
-  complete. This is additive. [dep: S4a, S8d]
-- **S9b — Constraint placement and complete canonical form.** After full structural labeling,
-  normalize entity and molecule constraints and use their frozen typed order only to select among
-  remaining structurally equivalent frames. Constraints do not alter structural orbits. Preserve
-  set-like conjunction semantics and transport every reference. This is additive. [dep: S4b, S9a]
+- **S9a — Monotonic para-stereo refinement and canonicalization levels.** Rename the current
+  structural `CanonicalizationLevel::Full` to `Structure`, add the new terminal `Full` variant, and
+  migrate canonicalization-level callers without changing `IncidenceLevel::Full`. Implement the
+  `para_stereo == true` fixpoint over the ordered partition of the complete structure-level
+  incidence graph with no caller-selected iteration cutoff. Each round recomputes stereo
+  descriptors from current site and ligand-occurrence classes, refines by `(previous class,
+  descriptor)`, and applies exact graph refinement. Stop only when the ordered cells are equal;
+  split-only refinement over the finite incidence-node set establishes termination. Validate cases
+  where constitution and stereo symmetry interact. The public trait waits until `Full` is
+  implementable in S9c. This is breaking red-to-green for the selector migration. [dep: S4a, S8d]
+- **S9b — Constraint placement and complete canonical form.** After structure labeling,
+  normalize entity and molecule constraints and minimize the canonical constraint key over every
+  admissible entity remapping and participant-frame action attaining the minimum structure key.
+  This is lexicographic minimization of `(structure key, constraint key)`: constraints do not alter
+  structural orbits or allow a larger structure key to win. Preserve set-like conjunction semantics
+  and transport every reference. Do not prune tied frames using graph-only orbits unless the orbit
+  action carries the complete covariant participant-frame and constraint action. Do not commit the
+  single `Structure` frame before this tie break; retain or reconstruct every action attaining the
+  structure minimum. This is additive.
+  [dep: S4b, S9a]
 - **S9c — Complete `Canonicalize` for molecules.** Extend `Canonicalize` with unqualified
-  `canonicalize` and `canonical_eq`, and implement them for `Molecule` using `Full` plus the
-  context's para-stereo behavior and S9b's complete-key selection. Add contradiction and integrity
-  totalization cases, exact canonical-number fixtures, full idempotence, renumbering invariance,
+  `canonicalize`, `canonicalize_by`, `canonical_eq`, and `canonical_eq_by`, and implement them for
+  `Molecule`. `Topology`, `Constitution`, and `Structure` select the corresponding constraint-free
+  level; `Full` uses S9b's complete key. Require `canonicalize_by(Full, context) ==
+  canonicalize(context)` and the corresponding equality identity. Add contradiction and integrity
+  totalization cases, exact canonical-number fixtures, complete idempotence, renumbering invariance,
   equality laws for both pairs, and cross-algorithm identity. This is additive. [dep: S9a, S9b]
-- **S9d — Molecule benchmark gate.** Re-run the S0 corpus for topology, constitution, one-pass full,
-  and para-stereo full operations. Record construction, refinement, labeling, key comparison, and
-  remapping costs separately; optimization may change internals only if canonical fixtures remain
-  identical. This is additive. [dep: S9c]
+- **S9d — Molecule benchmark gate.** Re-run the S0 corpus for topology, constitution, one-pass
+  structure, para-stereo structure, and complete `Full` operations. Record construction,
+  refinement, labeling, constraint-key comparison, and remapping costs separately; optimization may
+  change internals only if canonical fixtures remain identical. This is additive. [dep: S9c]
 
 ### S10 — Absolute stereo delta vocabulary
 

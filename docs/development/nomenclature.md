@@ -79,7 +79,7 @@ should be chosen here rather than by analogy with whichever neighbour was read l
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
-| `*Level` | closed enum selecting one of several nested named layers | 1 | graph-ir |
+| `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
@@ -368,7 +368,7 @@ contradiction.
 dative bonds, aromatic systems, multicenter bonds, and noncovalent bonds. It distinguishes
 structural composition and connectivity without adding stereo configuration.
 
-**Not:** all overlays, because stereo atoms and stereo bonds belong only to the full level. Not
+**Not:** all overlays, because stereo atoms and stereo bonds belong only to the structure level. Not
 constraints, which do not contribute to structural identity.
 **In code:** the `Constitution` variants of `IncidenceLevel` and `CanonicalizationLevel`.
 
@@ -663,13 +663,19 @@ because they are complete graph-model objects, not lattice values. Role-bearing 
 
 ### Full
 
-**Full** is the structural level containing topology plus every overlay: AB + DAMN + SS. It is the
-complete structural entity model, but it still excludes constraints because constraints do not
-contribute to structural identity. Para-stereo changes refinement behavior within this level rather
-than defining another level.
+**Full** is the terminal aggregate canonicalization level: the complete molecular structure plus
+normalized entity-level and molecule-level constraints. Constraints enter only after the minimum
+structure key has been established and distinguish only tied structural frames. `Full` is exactly
+equivalent to the unqualified canonicalization operation, so callers may opt into the complete
+operation either directly or through the level selector.
 
-**Not:** a claim that every constraint, model choice, or future operation participates.
-**In code:** the `Full` variants of `IncidenceLevel` and `CanonicalizationLevel`.
+`IncidenceLevel::Full` has a narrower carrier-specific use: it means every structural entity is
+present in the incidence graph. Constraints are not incidence entities, so this carrier corresponds
+to `CanonicalizationLevel::Structure`, not to its `Full` constraint-selection step.
+
+**Not:** a chemistry model or conformance pass. Full canonicalization preserves and orders the
+complete represented assertion; it does not validate it.
+**In code:** `CanonicalizationLevel::Full`; `IncidenceLevel::Full` in its carrier-specific sense.
 
 ### Ground term
 
@@ -759,9 +765,10 @@ bonds; the only new information a stereo node carries is its site and, at colour
 Bond direction is not encoded structurally either: the colouring separates the endpoints of a
 directed bond, so a dative donor and acceptor are never automorphism-equivalent.
 
-`IncidenceLevel` names three levels, which land on the chemist's own hierarchy: `Topology` is atoms
-and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds the
-stereo domain (SS). That makes "the same molecule" a parameter rather than three code paths.
+`IncidenceLevel` names three carrier levels, which land on the chemist's own hierarchy: `Topology`
+is atoms and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds
+the stereo domain (SS). The final name means the complete incidence carrier; constraints have no
+incidence nodes. The parallel canonicalization level for this carrier is `Structure`.
 
 **Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
 bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
@@ -858,11 +865,18 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 A **level** is one member of a closed enum of nested named layers. Selecting a level includes every
 lower layer; the alternatives cannot be combined independently.
 
-The structural levels are `Topology`, `Constitution`, and `Full`. `Topology` contains atoms and
-localized bonds. `Constitution` adds dative bonds, aromatic systems, multicenter bonds, and
-noncovalent bonds. `Full` adds stereo atoms and stereo bonds. Constraints are not structural levels,
-and para-stereo is context-dependent behavior within `Full`, not a fourth level. Future structural
-entity kinds extend the first applicable level without changing the meanings of the earlier ones.
+The aggregate canonicalization levels are `Topology`, `Constitution`, `Structure`, and `Full`.
+`Topology` contains atoms and localized bonds. `Constitution` adds dative bonds, aromatic systems,
+multicenter bonds, and noncovalent bonds. `Structure` adds stereo atoms and stereo bonds while
+excluding constraints. `Full` adds normalized constraints through post-hoc selection among tied
+structural frames and is identical to unqualified canonicalization. Para-stereo is context-dependent
+refinement within the structure pass shared by `Structure` and `Full`, not another level. Future
+structural entity kinds extend the first applicable structural level without changing the meanings
+of the earlier ones; future constraint variants extend `Full` append-only.
+
+`IncidenceLevel` stops at `Full`, using that name for the complete structural carrier because
+constraints do not occur in an incidence graph. Thus `IncidenceLevel::Full` supplies the carrier for
+`CanonicalizationLevel::Structure` and for the structural phase of `CanonicalizationLevel::Full`.
 
 The corresponding entity domains are topology (AB), non-stereo (DAMN), and stereo (SS).
 Constitution is topology plus non-stereo; overlays are non-stereo plus stereo. Domains are
@@ -1301,6 +1315,17 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 **Not:** a partition by any other criterion.
 **In code:** `split`.
+
+### Structure
+
+**Structure** is the complete structural canonicalization level: topology plus every overlay,
+AB + DAMN + SS. It includes all inherent fields and typed incidences of every entity kind while
+excluding constraints. Para-stereo changes refinement within this level rather than defining
+another level.
+
+**Not:** `Full`, which additionally uses normalized constraints to select among tied structure
+frames; molecular topology, which excludes overlays.
+**In code:** `CanonicalizationLevel::Structure`.
 
 ### Topology
 
