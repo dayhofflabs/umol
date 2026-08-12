@@ -3,7 +3,7 @@
 //! normalization under crossing partial correspondences; generated span entries cross-validate
 //! direct construction, DSL parsing, and superimposition.
 
-use std::iter::once;
+use std::iter;
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -235,7 +235,7 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                         donors
                             .iter()
                             .copied()
-                            .chain(once(acceptor))
+                            .chain(iter::once(acceptor))
                             .map(presence_of_atom),
                     )?;
                     Some(((donors, acceptor, attributes), presence))
@@ -265,7 +265,7 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
             let stereo_atoms = lhs_anchored(entries.stereo_atoms.into_iter().filter_map(
                 |(site, ligands, attributes)| {
                     let presence = intersection_presence(
-                        once(site)
+                        iter::once(site)
                             .chain(ligands.iter().map(|ligand| ligand.atom_id))
                             .map(presence_of_atom),
                     )?;
@@ -277,7 +277,7 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                     let site_presence = bond_presence.get(site.0 as usize).copied().flatten()?;
                     let site = bond_ids.get(site.0 as usize).copied().flatten()?;
                     let presence = intersection_presence(
-                        once(site_presence).chain(
+                        iter::once(site_presence).chain(
                             ligands
                                 .iter()
                                 .map(|ligand| presence_of_atom(ligand.atom_id)),

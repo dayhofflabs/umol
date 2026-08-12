@@ -9,6 +9,8 @@ const REGRESSION_FILE: &str = concat!(
     "/tests/property/molecule.proptest-regressions"
 );
 
+#[path = "molecule/canonicalize.rs"]
+mod canonicalize;
 #[path = "molecule/compaction.rs"]
 mod compaction;
 #[path = "molecule/comparison.rs"]

@@ -1675,6 +1675,16 @@ and the semantic properties validated by the corresponding property tests.
   canonicalize(context)` and the corresponding equality identity. Add contradiction and integrity
   totalization cases, exact canonical-number fixtures, complete idempotence, renumbering invariance,
   equality laws for both pairs, and cross-algorithm identity. This is additive. [dep: S9a, S9b]
+  **Done.** The public trait now exposes all four operations and `Molecule` implements them over the
+  staged topology, constitution, structure, and complete searches. Selected-layer equality compares
+  the corresponding canonical key directly, so excluded contradictions stay excluded; complete
+  transformations still normalize every carried value. Structural identity short-circuits equality,
+  two intrinsic contradictions compare equal, and integrity failures never make distinct values
+  equal. Exact fixtures cover stable canonical numbering and stereo-frame actions, while a generated
+  suite covers complete idempotence, dense-renumbering invariance, the equality laws at every level,
+  and the `Full` aliases. `Nauty` remains the sole automorphism selector, so a genuine
+  cross-algorithm pair is not yet available; the frozen exact fixtures are the compatibility target
+  that every future selector must reproduce.
 - **S9d — Molecule benchmark gate.** Re-run the S0 corpus for topology, constitution, one-pass
   structure, para-stereo structure, and complete `Full` operations. Record construction,
   refinement, labeling, constraint-key comparison, and remapping costs separately; optimization may

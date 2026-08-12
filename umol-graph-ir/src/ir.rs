@@ -42,7 +42,7 @@ pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use canonicalize::{
-    CanonicalizationContext, CanonicalizationLevel, MoleculeCanonicalizationError,
+    CanonicalizationContext, CanonicalizationLevel, Canonicalize, MoleculeCanonicalizationError,
     ReactionCanonicalizationError, ReactionSpanCanonicalizationError,
 };
 pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
