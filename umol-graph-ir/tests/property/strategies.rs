@@ -4469,10 +4469,8 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = Molecule> {
         )
 }
 
-/// Cosets valid for `kind`: `Undetermined` or an in-range `Lit` index (`0..kind.count()`). Relative
-/// reaction ops (`Swap` / `Mirror` / `Apply`) act on the coset through the kind's algebra, which
-/// panics on an out-of-range index — so unlike the generic `stereo_coset_strategy`, indices are
-/// bounded by the kind's coset count.
+/// Cosets valid for `kind`: `Undetermined` or an in-range `Lit` index (`0..kind.count()`). Unlike
+/// the generic `stereo_coset_strategy`, indices are bounded by the kind's coset count.
 pub(crate) fn stereo_coset_for_kind(kind: StereoKind) -> impl Strategy<Value = StereoCoset> {
     let count = kind.count() as u32;
     prop_oneof![
@@ -4670,9 +4668,7 @@ pub(crate) fn overlay_reaction_strategy() -> impl Strategy<Value = Reaction> {
     reaction_over(overlay_molecule_strategy())
 }
 
-/// An optional edit to a surviving stereo entity. The relative ops (`Swap` / `Mirror` / `Apply`)
-/// resolve `old` from the matched host coset at apply, carrying no pre-state; `SetCoset` becomes a
-/// `ModifyField { Configuration }` whose `old` is read from `lhs`, so apply's precondition holds.
+/// An optional source operation used to derive an absolute stereo configuration delta.
 #[derive(Clone, Debug)]
 enum StereoOp {
     Swap,
@@ -4681,11 +4677,8 @@ enum StereoOp {
     SetCoset(StereoCoset),
 }
 
-/// Per-surviving-stereo-entity optional op: `Swap` / `Mirror` use the kind's in-group generators,
-/// `SetCoset` is bounded to the kind's in-range cosets, and `Apply` a permutation in the kind's
-/// parent group. The coset algebra rejects out-of-group permutations (`reindex` → `None`, which
-/// `act` unwraps), so `Apply` only draws arbitrary permutations for kinds whose parent is the full
-/// symmetric group (Tetrahedral); other kinds omit it and lean on the in-group `Swap` / `Mirror`.
+/// Generate optional source operations over valid configurations. These operations are evaluated
+/// while constructing the reaction and emitted as absolute before/after deltas.
 fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp>> {
     let base = prop_oneof![
         Just(StereoOp::Swap),
@@ -4706,7 +4699,7 @@ fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp
 }
 
 /// A valid reaction over any generated `lhs`: DPO-valid atom deletions (each removed atom takes its
-/// incident bonds, overlays, and stereo entities), per-surviving-entity optional field / relative
+/// incident bonds, overlays, and stereo entities), per-surviving-entity optional field
 /// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
 /// atoms bonded to the lowest survivor. No dangling by construction.
 fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Value = Reaction> {
@@ -5001,12 +4994,9 @@ fn build_reaction(
             new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         }));
     }
-    // Part B — stereo edits on survivors. Relative ops resolve `old` from the host at apply;
-    // `SetCoset` reads `old` from `lhs`. Every op is emitted only when it *changes* the entity's
-    // configuration value: a value no-op (a relative op on an `Undetermined` coset, a `Mirror` on an
-    // achiral kind, a stabilizer permutation, or a `SetCoset` to the current value) would materialize
-    // a spurious `Modified { X, X }` span state that `to_reaction` diffs back to empty, breaking the
-    // span roundtrip.
+    // Part B — stereo edits on survivors. Source operations are evaluated against the lhs and
+    // emitted as absolute before/after deltas. Value no-ops are omitted because they would
+    // materialize a spurious `Modified { X, X }` span state.
     let (stereo_atom_ops, stereo_bond_ops) = stereo_ops;
     for (index, op) in stereo_atom_ops.into_iter().enumerate() {
         let id = StereoAtomId(index as u32);
@@ -5016,30 +5006,18 @@ fn build_reaction(
         let Some(op) = op else { continue };
         let kind = lhs.stereo_atom(id).kind();
         let old = lhs.stereo_atom(id).attributes.configuration.clone();
-        let (new, delta) = match &op {
-            StereoOp::Swap => (old.swap(), StereoAtomDelta::Swap { id, kind }),
-            StereoOp::Mirror => (old.mirror(), StereoAtomDelta::Mirror { id, kind }),
-            StereoOp::Apply(permutation) => (
-                old.apply(*permutation),
-                StereoAtomDelta::Apply {
-                    id,
-                    kind,
-                    permutation: *permutation,
-                },
-            ),
-            StereoOp::SetCoset(coset) => {
-                let new = StereoConfigurationForm::kinded(kind, coset.clone());
-                (
-                    new.clone(),
-                    StereoAtomDelta::ModifyField {
-                        id,
-                        change: StereoAtomFieldChange::Configuration {
-                            old: old.clone(),
-                            new,
-                        },
-                    },
-                )
-            }
+        let new = match &op {
+            StereoOp::Swap => old.swap(),
+            StereoOp::Mirror => old.mirror(),
+            StereoOp::Apply(permutation) => old.apply(*permutation),
+            StereoOp::SetCoset(coset) => StereoConfigurationForm::kinded(kind, coset.clone()),
+        };
+        let delta = StereoAtomDelta::ModifyField {
+            id,
+            change: StereoAtomFieldChange::Configuration {
+                old: old.clone(),
+                new: new.clone(),
+            },
         };
         if new != old {
             deltas.push(Delta::StereoAtom(delta));
@@ -5053,30 +5031,18 @@ fn build_reaction(
         let Some(op) = op else { continue };
         let kind = lhs.stereo_bond(id).kind();
         let old = lhs.stereo_bond(id).attributes.configuration.clone();
-        let (new, delta) = match &op {
-            StereoOp::Swap => (old.swap(), StereoBondDelta::Swap { id, kind }),
-            StereoOp::Mirror => (old.mirror(), StereoBondDelta::Mirror { id, kind }),
-            StereoOp::Apply(permutation) => (
-                old.apply(*permutation),
-                StereoBondDelta::Apply {
-                    id,
-                    kind,
-                    permutation: *permutation,
-                },
-            ),
-            StereoOp::SetCoset(coset) => {
-                let new = StereoConfigurationForm::kinded(kind, coset.clone());
-                (
-                    new.clone(),
-                    StereoBondDelta::ModifyField {
-                        id,
-                        change: StereoBondFieldChange::Configuration {
-                            old: old.clone(),
-                            new,
-                        },
-                    },
-                )
-            }
+        let new = match &op {
+            StereoOp::Swap => old.swap(),
+            StereoOp::Mirror => old.mirror(),
+            StereoOp::Apply(permutation) => old.apply(*permutation),
+            StereoOp::SetCoset(coset) => StereoConfigurationForm::kinded(kind, coset.clone()),
+        };
+        let delta = StereoBondDelta::ModifyField {
+            id,
+            change: StereoBondFieldChange::Configuration {
+                old: old.clone(),
+                new: new.clone(),
+            },
         };
         if new != old {
             deltas.push(Delta::StereoBond(delta));

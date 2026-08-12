@@ -1622,10 +1622,7 @@ impl Reaction {
                         added_stereo_atom.insert(*id, (*site, ligands.clone(), attributes.clone()));
                     }
                     StereoAtomDelta::ModifyField { id, .. }
-                    | StereoAtomDelta::ModifyConstraint { id, .. }
-                    | StereoAtomDelta::Apply { id, .. }
-                    | StereoAtomDelta::Swap { id, .. }
-                    | StereoAtomDelta::Mirror { id, .. } => {
+                    | StereoAtomDelta::ModifyConstraint { id, .. } => {
                         stereo_atom_changes
                             .entry(*id)
                             .or_default()
@@ -1645,10 +1642,7 @@ impl Reaction {
                         added_stereo_bond.insert(*id, (*site, ligands.clone(), attributes.clone()));
                     }
                     StereoBondDelta::ModifyField { id, .. }
-                    | StereoBondDelta::ModifyConstraint { id, .. }
-                    | StereoBondDelta::Apply { id, .. }
-                    | StereoBondDelta::Swap { id, .. }
-                    | StereoBondDelta::Mirror { id, .. } => {
+                    | StereoBondDelta::ModifyConstraint { id, .. } => {
                         stereo_bond_changes
                             .entry(*id)
                             .or_default()

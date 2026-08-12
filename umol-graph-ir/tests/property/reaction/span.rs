@@ -391,8 +391,8 @@ proptest! {
         }
     }
 
-    /// Reaction → span → reaction may normalize relative deltas into absolute updates. The
-    /// resulting reaction nevertheless materializes the same span, including all overlay families.
+    /// Reaction → span → reaction may fold adjacent absolute changes while preserving the
+    /// materialized span, including all overlay families.
     #[test]
     fn test_reaction_span_roundtrip(reaction in comprehensive_reaction_strategy()) {
         if let Ok(span) = reaction.to_reaction_span() {

@@ -347,8 +347,7 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::iter;
-    use std::thread;
+    use std::{iter, thread};
 
     use rstest::*;
 

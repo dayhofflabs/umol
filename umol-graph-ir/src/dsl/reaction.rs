@@ -6,7 +6,6 @@
 //! `:deltas` (a vector of `:add` / `:remove` / `:modify` / `:constraint` operations). Each
 //! entity delegates to its own entity DSL.
 
-use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -49,8 +48,8 @@ use super::refs::{
     NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
 use super::stereo::{
-    parse_permutation, render_edn_stereo_kind, stereo_kind_from_name, StereoAtomDsl,
-    StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl,
+    parse_permutation, stereo_kind_from_name, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl,
+    StereoBondUpdateDsl,
 };
 use crate::ir::atom::{AtomForm, AtomUpdate};
 use crate::ir::bond::{BondForm, BondUpdate};
@@ -1007,7 +1006,7 @@ impl ReactionInput {
                         resolved.push(Delta::StereoAtom(d));
                     }
                 }
-                DeltaInput::StereoAtomSwap(r, kind) => {
+                DeltaInput::StereoAtomSwap(r, _kind) => {
                     let id = r.resolve(&context)?;
                     if context.stereo_atom_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
@@ -1016,32 +1015,43 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }));
-                }
-                DeltaInput::StereoAtomMirror(r, kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo atom",
-                            index: id.index(),
-                        });
-                    }
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }));
-                }
-                DeltaInput::StereoAtomApply(r, kind, permutation) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo atom",
-                            index: id.index(),
-                        });
-                    }
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::Apply {
+                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
+                    let new = old.swap();
+                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
                         id,
-                        kind,
-                        permutation,
+                        change: StereoAtomFieldChange::Configuration { old, new },
+                    }));
+                }
+                DeltaInput::StereoAtomMirror(r, _kind) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
+                    }
+                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
+                    let new = old.mirror();
+                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                        id,
+                        change: StereoAtomFieldChange::Configuration { old, new },
+                    }));
+                }
+                DeltaInput::StereoAtomApply(r, _kind, permutation) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo atom",
+                            index: id.index(),
+                        });
+                    }
+                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
+                    let new = old.apply(permutation);
+                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                        id,
+                        change: StereoAtomFieldChange::Configuration { old, new },
                     }));
                 }
                 DeltaInput::StereoBondAdd(entry) => {
@@ -1092,7 +1102,7 @@ impl ReactionInput {
                         resolved.push(Delta::StereoBond(d));
                     }
                 }
-                DeltaInput::StereoBondSwap(r, kind) => {
+                DeltaInput::StereoBondSwap(r, _kind) => {
                     let id = r.resolve(&context)?;
                     if context.stereo_bond_scope(id) == EntityScope::Deltas {
                         return Err(ParseError::DeltaTargetAdded {
@@ -1101,32 +1111,43 @@ impl ReactionInput {
                             index: id.index(),
                         });
                     }
-                    resolved.push(Delta::StereoBond(StereoBondDelta::Swap { id, kind }));
-                }
-                DeltaInput::StereoBondMirror(r, kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo bond",
-                            index: id.index(),
-                        });
-                    }
-                    resolved.push(Delta::StereoBond(StereoBondDelta::Mirror { id, kind }));
-                }
-                DeltaInput::StereoBondApply(r, kind, permutation) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo bond",
-                            index: id.index(),
-                        });
-                    }
-                    resolved.push(Delta::StereoBond(StereoBondDelta::Apply {
+                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
+                    let new = old.swap();
+                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
                         id,
-                        kind,
-                        permutation,
+                        change: StereoBondFieldChange::Configuration { old, new },
+                    }));
+                }
+                DeltaInput::StereoBondMirror(r, _kind) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
+                    }
+                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
+                    let new = old.mirror();
+                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
+                        id,
+                        change: StereoBondFieldChange::Configuration { old, new },
+                    }));
+                }
+                DeltaInput::StereoBondApply(r, _kind, permutation) => {
+                    let id = r.resolve(&context)?;
+                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
+                        return Err(ParseError::DeltaTargetAdded {
+                            action: "transform",
+                            kind: "stereo bond",
+                            index: id.index(),
+                        });
+                    }
+                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
+                    let new = old.apply(permutation);
+                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
+                        id,
+                        change: StereoBondFieldChange::Configuration { old, new },
                     }));
                 }
                 DeltaInput::ConstraintAdd(dsl) => {
@@ -2564,53 +2585,6 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     single_key_map("modify", payload),
                 ));
             }
-            Delta::StereoAtom(StereoAtomDelta::Swap { id, kind }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoAtomRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-atom",
-                    single_key_map("swap", payload),
-                ));
-                i += 1;
-            }
-            Delta::StereoAtom(StereoAtomDelta::Mirror { id, kind }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoAtomRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-atom",
-                    single_key_map("mirror", payload),
-                ));
-                i += 1;
-            }
-            Delta::StereoAtom(StereoAtomDelta::Apply {
-                id,
-                kind,
-                permutation,
-            }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoAtomRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                        Edn::Str(Cow::Owned(permutation.to_string())),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-atom",
-                    single_key_map("apply", payload),
-                ));
-                i += 1;
-            }
             Delta::StereoBond(StereoBondDelta::Add {
                 id,
                 site,
@@ -2713,53 +2687,6 @@ fn render_deltas(deltas: &Deltas, meta: &ReactionMetadata) -> Vec<Edn<'static>> 
                     "stereo-bond",
                     single_key_map("modify", payload),
                 ));
-            }
-            Delta::StereoBond(StereoBondDelta::Swap { id, kind }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoBondRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-bond",
-                    single_key_map("swap", payload),
-                ));
-                i += 1;
-            }
-            Delta::StereoBond(StereoBondDelta::Mirror { id, kind }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoBondRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-bond",
-                    single_key_map("mirror", payload),
-                ));
-                i += 1;
-            }
-            Delta::StereoBond(StereoBondDelta::Apply {
-                id,
-                kind,
-                permutation,
-            }) => {
-                let payload = Edn::Vector(
-                    vec![
-                        StereoBondRef::denote(*id, meta.lhs()).to_edn(),
-                        render_edn_stereo_kind(*kind),
-                        Edn::Str(Cow::Owned(permutation.to_string())),
-                    ]
-                    .into(),
-                );
-                out.push(single_key_map(
-                    "stereo-bond",
-                    single_key_map("apply", payload),
-                ));
-                i += 1;
             }
         }
     }

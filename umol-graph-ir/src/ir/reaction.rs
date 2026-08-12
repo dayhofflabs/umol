@@ -145,24 +145,6 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
             old,
             new,
         ),
-        Delta::StereoAtom(StereoAtomDelta::Apply {
-            id,
-            kind,
-            permutation,
-        }) => {
-            lhs.stereo_atoms()
-                .get(*id)
-                .and_then(|view| view.attributes.configuration.kind())
-                .is_none_or(|lhs_kind| lhs_kind == *kind)
-                && permutation_is_valid(*kind, *permutation)
-        }
-        Delta::StereoAtom(
-            StereoAtomDelta::Swap { id, kind } | StereoAtomDelta::Mirror { id, kind },
-        ) => lhs
-            .stereo_atoms()
-            .get(*id)
-            .and_then(|view| view.attributes.configuration.kind())
-            .is_none_or(|lhs_kind| lhs_kind == *kind),
         Delta::StereoBond(StereoBondDelta::Add { attributes, .. }) => {
             configuration_is_valid(&attributes.configuration)
         }
@@ -187,24 +169,6 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
             old,
             new,
         ),
-        Delta::StereoBond(StereoBondDelta::Apply {
-            id,
-            kind,
-            permutation,
-        }) => {
-            lhs.stereo_bonds()
-                .get(*id)
-                .and_then(|view| view.attributes.configuration.kind())
-                .is_none_or(|lhs_kind| lhs_kind == *kind)
-                && permutation_is_valid(*kind, *permutation)
-        }
-        Delta::StereoBond(
-            StereoBondDelta::Swap { id, kind } | StereoBondDelta::Mirror { id, kind },
-        ) => lhs
-            .stereo_bonds()
-            .get(*id)
-            .and_then(|view| view.attributes.configuration.kind())
-            .is_none_or(|lhs_kind| lhs_kind == *kind),
         _ => true,
     })
 }
@@ -741,10 +705,9 @@ impl Reaction {
                         removed_host_noncovalent.insert(host_noncovalent(*id)?);
                     }
                 },
-                // Stereo: the four set-ops lower directly; the relative ops resolve against the
-                // matched host config (same frame — no reindex, like the other overlays) and emit an
-                // absolute `Configuration`. `Add` is lowered in the second pass; `Remove` tracks the
-                // host id for the DPO dangling check.
+                // Stereo modifications lower directly after reframing into the matched host frame.
+                // `Add` is lowered in the second pass; `Remove` tracks the host id for the DPO
+                // dangling check.
                 Delta::StereoAtom(s) => match s {
                     StereoAtomDelta::ModifyField { id, change } => {
                         let host_id = host_stereo_atom(*id)?;
@@ -772,46 +735,6 @@ impl Reaction {
                                 new: new.clone(),
                             })
                         }
-                    }
-                    StereoAtomDelta::Apply {
-                        id,
-                        kind,
-                        permutation,
-                    } => {
-                        let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_atom(host_id).coset().clone(),
-                        );
-                        let new = old.apply(*permutation);
-                        sets.push(Edit::ModifyStereoAtomField {
-                            id: StereoAtomHandle::Id(host_id),
-                            change: StereoAtomFieldChange::Configuration { old, new },
-                        })
-                    }
-                    StereoAtomDelta::Swap { id, kind } => {
-                        let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_atom(host_id).coset().clone(),
-                        );
-                        let new = old.swap();
-                        sets.push(Edit::ModifyStereoAtomField {
-                            id: StereoAtomHandle::Id(host_id),
-                            change: StereoAtomFieldChange::Configuration { old, new },
-                        })
-                    }
-                    StereoAtomDelta::Mirror { id, kind } => {
-                        let host_id = host_stereo_atom(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_atom(host_id).coset().clone(),
-                        );
-                        let new = old.mirror();
-                        sets.push(Edit::ModifyStereoAtomField {
-                            id: StereoAtomHandle::Id(host_id),
-                            change: StereoAtomFieldChange::Configuration { old, new },
-                        })
                     }
                     StereoAtomDelta::Add { .. } => {}
                     StereoAtomDelta::Remove { id, .. } => {
@@ -845,46 +768,6 @@ impl Reaction {
                                 new: new.clone(),
                             })
                         }
-                    }
-                    StereoBondDelta::Apply {
-                        id,
-                        kind,
-                        permutation,
-                    } => {
-                        let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_bond(host_id).coset().clone(),
-                        );
-                        let new = old.apply(*permutation);
-                        sets.push(Edit::ModifyStereoBondField {
-                            id: StereoBondHandle::Id(host_id),
-                            change: StereoBondFieldChange::Configuration { old, new },
-                        })
-                    }
-                    StereoBondDelta::Swap { id, kind } => {
-                        let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_bond(host_id).coset().clone(),
-                        );
-                        let new = old.swap();
-                        sets.push(Edit::ModifyStereoBondField {
-                            id: StereoBondHandle::Id(host_id),
-                            change: StereoBondFieldChange::Configuration { old, new },
-                        })
-                    }
-                    StereoBondDelta::Mirror { id, kind } => {
-                        let host_id = host_stereo_bond(*id)?;
-                        let old = StereoConfigurationForm::Kinded(
-                            *kind,
-                            host.stereo_bond(host_id).coset().clone(),
-                        );
-                        let new = old.mirror();
-                        sets.push(Edit::ModifyStereoBondField {
-                            id: StereoBondHandle::Id(host_id),
-                            change: StereoBondFieldChange::Configuration { old, new },
-                        })
                     }
                     StereoBondDelta::Add { .. } => {}
                     StereoBondDelta::Remove { id, .. } => {
@@ -1459,9 +1342,9 @@ impl Reaction {
 /// The coset is meaningful only per ligand ordering, so a `ModifyField`/`Remove` delta lowered onto a
 /// host whose matching center is numbered differently must carry its cosets across — the delta-side
 /// mirror of the matcher's `coset_for`. `before` is the rule's ligand order mapped into the host id
-/// space, `after` the host's stored order; identity when they agree. The relative ops
-/// (`Apply`/`Swap`/`Mirror`) resolve against the host coset, `Add` creates a fresh overlay, and stereo
-/// constraints are positionless — none are reframed; a delta with no host correspondent is skipped.
+/// space, `after` the host's stored order; identity when they agree. `Add` creates a fresh overlay,
+/// stereo constraints are positionless and are not reframed, and a delta with no host correspondent
+/// is skipped.
 fn reframe_stereo(
     deltas: &mut Deltas,
     lhs: &Molecule,

@@ -635,9 +635,12 @@ mod tests {
         NoncovalentBondId as GraphIrNoncovalentBondId,
         NoncovalentBondKind as GraphIrNoncovalentBondKind, Normalize, NumForm as GraphIrNumForm,
         ReactionSpan as GraphIrReactionSpan, ReactionSpanEntries as GraphIrReactionSpanEntries,
-        StereoAtomDelta as GraphIrStereoAtomDelta, StereoAtomForm as GraphIrStereoAtomForm,
-        StereoAtomId as GraphIrStereoAtomId, StereoBondDelta as GraphIrStereoBondDelta,
-        StereoBondForm as GraphIrStereoBondForm, StereoBondId as GraphIrStereoBondId,
+        StereoAtomDelta as GraphIrStereoAtomDelta,
+        StereoAtomFieldChange as GraphIrStereoAtomFieldChange,
+        StereoAtomForm as GraphIrStereoAtomForm, StereoAtomId as GraphIrStereoAtomId,
+        StereoBondDelta as GraphIrStereoBondDelta, StereoBondForm as GraphIrStereoBondForm,
+        StereoBondId as GraphIrStereoBondId,
+        StereoConfigurationForm as GraphIrStereoConfigurationForm,
         StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
         StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
     };
@@ -975,9 +978,18 @@ mod tests {
     #[case::stereo_mirror(
         r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##,
         5,
-        vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Mirror {
+        vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(0),
-            kind: GraphIrStereoKind::Tetrahedral,
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+            },
         })],
     )]
     #[case::molecule_constraint(

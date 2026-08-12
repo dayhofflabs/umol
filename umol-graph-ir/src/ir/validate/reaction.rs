@@ -326,10 +326,7 @@ impl ReactionIntegrityCheck {
                 }
             }
             StereoAtomDelta::ModifyField { id, .. }
-            | StereoAtomDelta::ModifyConstraint { id, .. }
-            | StereoAtomDelta::Apply { id, .. }
-            | StereoAtomDelta::Swap { id, .. }
-            | StereoAtomDelta::Mirror { id, .. } => {
+            | StereoAtomDelta::ModifyConstraint { id, .. } => {
                 self.require_available(lhs, created, Entity::StereoAtom(*id))
             }
         }
@@ -370,10 +367,7 @@ impl ReactionIntegrityCheck {
                 }
             }
             StereoBondDelta::ModifyField { id, .. }
-            | StereoBondDelta::ModifyConstraint { id, .. }
-            | StereoBondDelta::Apply { id, .. }
-            | StereoBondDelta::Swap { id, .. }
-            | StereoBondDelta::Mirror { id, .. } => {
+            | StereoBondDelta::ModifyConstraint { id, .. } => {
                 self.require_available(lhs, created, Entity::StereoBond(*id))
             }
         }

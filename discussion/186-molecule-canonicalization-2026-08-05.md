@@ -1717,6 +1717,16 @@ and the semantic properties validated by the corresponding property tests.
   inversion, normalization, remapping, composition, and reaction-span conversion. Migrate generated
   strategies and verify closure under inversion and faithful absolute before/after semantics. This is
   breaking red-to-green. [dep: S1c]
+  **Done.** Both stereo delta enums now have the same absolute `Add`, `Remove`, `ModifyField`, and
+  `ModifyConstraint` vocabulary as the other entity deltas. Application, integrity checks,
+  inversion, normalization, remapping, composition, and span materialization no longer contain
+  relative stereo branches. Generated reactions still exercise swap, mirror, and permutation as
+  construction-time operations, but emit only explicit old/new configuration deltas. The inverse,
+  delta-difference, reaction-application, and reaction/span property suites pass at 256 cases; the
+  graph-IR unit suite, dependent Python binding unit suite, and clippy checks are green. The binding
+  adapters were reduced to the four surviving variants to keep the workspace buildable; removing
+  the relative DSL tokens, specification entries, fixtures, seeds, and remaining Python-facing
+  syntax is S10b.
 - **S10b — DSL, specification, and Python.** Remove the relative variants from reaction DSL parsing
   and rendering, the DSL specification, examples, fixtures, fuzz seeds, and Python bindings. Do not
   retain compatibility variants or a second core route. Higher-level generic “invert” operations

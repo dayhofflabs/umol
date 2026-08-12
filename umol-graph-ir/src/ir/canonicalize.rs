@@ -6585,7 +6585,7 @@ mod tests {
             source
                 .edge_ids()
                 .map(|edge| adapter.incidence_edges_of(edge).len())
-                .sum(),
+                .sum::<usize>(),
         );
         assert!(adapter.graph().is_simple());
 

@@ -54,7 +54,7 @@ use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use crate::num::NumForm;
 use crate::spin::UnpairedElectronsForm;
 use crate::stereo::{
-    Permutation, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, StereoLigand,
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoKind, StereoLigand,
 };
 
 /// Render a named old/new complex-enum variant using the child objects' reprs.
@@ -1280,19 +1280,6 @@ pub enum StereoAtomDelta {
         old: Option<Py<StereoAtomConstraintForm>>,
         new: Option<Py<StereoAtomConstraintForm>>,
     },
-    Apply {
-        id: u32,
-        kind: StereoKind,
-        permutation: Permutation,
-    },
-    Swap {
-        id: u32,
-        kind: StereoKind,
-    },
-    Mirror {
-        id: u32,
-        kind: StereoKind,
-    },
 }
 
 #[pymethods]
@@ -1307,9 +1294,6 @@ impl StereoAtomDelta {
             Self::Remove { .. } => ("Remove", &["id", "site", "ligands", "attributes"]),
             Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
             Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "kind", "old", "new"]),
-            Self::Apply { .. } => ("Apply", &["id", "kind", "permutation"]),
-            Self::Swap { .. } => ("Swap", &["id", "kind"]),
-            Self::Mirror { .. } => ("Mirror", &["id", "kind"]),
         };
         entity_delta_repr(slf.bind(py).as_any(), "StereoAtomDelta", variant, fields)
     }
@@ -1381,23 +1365,6 @@ impl StereoAtomDelta {
                         .transpose()?,
                 }
             }
-            GraphIrStereoAtomDelta::Apply {
-                id,
-                kind,
-                permutation,
-            } => Self::Apply {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-                permutation: Permutation::from_rust(*permutation),
-            },
-            GraphIrStereoAtomDelta::Swap { id, kind } => Self::Swap {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-            },
-            GraphIrStereoAtomDelta::Mirror { id, kind } => Self::Mirror {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-            },
         })
     }
 
@@ -1441,23 +1408,6 @@ impl StereoAtomDelta {
                         .map(|constraint| constraint.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::Apply {
-                id,
-                kind,
-                permutation,
-            } => GraphIrStereoAtomDelta::Apply {
-                id: GraphIrStereoAtomId(*id),
-                kind: kind.to_rust(),
-                permutation: permutation.to_rust(),
-            },
-            Self::Swap { id, kind } => GraphIrStereoAtomDelta::Swap {
-                id: GraphIrStereoAtomId(*id),
-                kind: kind.to_rust(),
-            },
-            Self::Mirror { id, kind } => GraphIrStereoAtomDelta::Mirror {
-                id: GraphIrStereoAtomId(*id),
-                kind: kind.to_rust(),
-            },
         }
     }
 }
@@ -1487,19 +1437,6 @@ pub enum StereoBondDelta {
         old: Option<Py<StereoBondConstraintForm>>,
         new: Option<Py<StereoBondConstraintForm>>,
     },
-    Apply {
-        id: u32,
-        kind: StereoKind,
-        permutation: Permutation,
-    },
-    Swap {
-        id: u32,
-        kind: StereoKind,
-    },
-    Mirror {
-        id: u32,
-        kind: StereoKind,
-    },
 }
 
 #[pymethods]
@@ -1513,9 +1450,6 @@ impl StereoBondDelta {
             Self::Remove { .. } => ("Remove", &["id", "site", "ligands", "attributes"]),
             Self::ModifyField { .. } => ("ModifyField", &["id", "change"]),
             Self::ModifyConstraint { .. } => ("ModifyConstraint", &["id", "kind", "old", "new"]),
-            Self::Apply { .. } => ("Apply", &["id", "kind", "permutation"]),
-            Self::Swap { .. } => ("Swap", &["id", "kind"]),
-            Self::Mirror { .. } => ("Mirror", &["id", "kind"]),
         };
         entity_delta_repr(slf.bind(py).as_any(), "StereoBondDelta", variant, fields)
     }
@@ -1575,23 +1509,6 @@ impl StereoBondDelta {
                         .transpose()?,
                 }
             }
-            GraphIrStereoBondDelta::Apply {
-                id,
-                kind,
-                permutation,
-            } => Self::Apply {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-                permutation: Permutation::from_rust(*permutation),
-            },
-            GraphIrStereoBondDelta::Swap { id, kind } => Self::Swap {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-            },
-            GraphIrStereoBondDelta::Mirror { id, kind } => Self::Mirror {
-                id: id.0,
-                kind: StereoKind::from_rust(*kind),
-            },
         })
     }
     pub(crate) fn to_rust(&self, py: Python<'_>) -> GraphIrStereoBondDelta {
@@ -1630,23 +1547,6 @@ impl StereoBondDelta {
                     new: new.as_ref().map(|c| c.bind(py).borrow().to_rust(py)),
                 }
             }
-            Self::Apply {
-                id,
-                kind,
-                permutation,
-            } => GraphIrStereoBondDelta::Apply {
-                id: GraphIrStereoBondId(*id),
-                kind: kind.to_rust(),
-                permutation: permutation.to_rust(),
-            },
-            Self::Swap { id, kind } => GraphIrStereoBondDelta::Swap {
-                id: GraphIrStereoBondId(*id),
-                kind: kind.to_rust(),
-            },
-            Self::Mirror { id, kind } => GraphIrStereoBondDelta::Mirror {
-                id: GraphIrStereoBondId(*id),
-                kind: kind.to_rust(),
-            },
         }
     }
 }
@@ -1985,7 +1885,6 @@ mod tests {
         Stereogenicity as GraphIrStereogenicity, StereogenicityForm as GraphIrStereogenicityForm,
         UnpairedElectronsForm as GraphIrUnpairedElectronsForm,
     };
-    use umol_perm::Permutation as PermPermutation;
 
     use super::*;
     use crate::error::ContradictionError;
@@ -3944,19 +3843,6 @@ mod tests {
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(GraphIrStereoAtomDelta::Apply {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-    })]
-    #[case::swap(GraphIrStereoAtomDelta::Swap {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-    })]
-    #[case::mirror(GraphIrStereoAtomDelta::Mirror {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-    })]
     fn test_stereo_atom_delta_roundtrip(#[case] delta: GraphIrStereoAtomDelta) {
         Python::attach(|py| {
             assert_eq!(
@@ -3968,15 +3854,31 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        GraphIrStereoAtomDelta::Apply {
+        GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
-        GraphIrStereoAtomDelta::Apply {
+        GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
         true,
     )]
@@ -4007,16 +3909,32 @@ mod tests {
         },
         false,
     )]
-    #[case::different_permutation(
-        GraphIrStereoAtomDelta::Apply {
+    #[case::different_configuration(
+        GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
-        GraphIrStereoAtomDelta::Apply {
+        GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
+            change: GraphIrStereoAtomFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::Tetrahedral,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+            },
         },
         false,
     )]
@@ -4086,28 +4004,6 @@ mod tests {
             )),
         },
         "StereoAtomDelta.ModifyConstraint(id=5, kind=StereoKind.Tetrahedral, old=None, new=StereoAtomConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
-    )]
-    #[case::apply(
-        GraphIrStereoAtomDelta::Apply {
-            id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-        },
-        "StereoAtomDelta.Apply(id=5, kind=StereoKind.Tetrahedral, permutation=Permutation([1, 2, 0, 3]))",
-    )]
-    #[case::swap(
-        GraphIrStereoAtomDelta::Swap {
-            id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-        },
-        "StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)",
-    )]
-    #[case::mirror(
-        GraphIrStereoAtomDelta::Mirror {
-            id: GraphIrStereoAtomId(5),
-            kind: GraphIrStereoKind::Tetrahedral,
-        },
-        "StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)",
     )]
     fn test_stereo_atom_delta_repr(#[case] delta: GraphIrStereoAtomDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -4181,19 +4077,6 @@ mod tests {
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(GraphIrStereoAtomDelta::Apply {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-    })]
-    #[case::swap(GraphIrStereoAtomDelta::Swap {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-    })]
-    #[case::mirror(GraphIrStereoAtomDelta::Mirror {
-        id: GraphIrStereoAtomId(5),
-        kind: GraphIrStereoKind::Tetrahedral,
-    })]
     fn test_stereo_atom_delta_inverse(#[case] delta: GraphIrStereoAtomDelta) {
         Python::attach(|py| {
             let binding = StereoAtomDelta::from_rust(py, &delta).unwrap();
@@ -4263,19 +4146,6 @@ mod tests {
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
     })]
-    #[case::apply(GraphIrStereoBondDelta::Apply {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
-        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-    })]
-    #[case::swap(GraphIrStereoBondDelta::Swap {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
-    })]
-    #[case::mirror(GraphIrStereoBondDelta::Mirror {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
-    })]
     fn test_stereo_bond_delta_roundtrip(#[case] delta: GraphIrStereoBondDelta) {
         Python::attach(|py| {
             assert_eq!(
@@ -4287,15 +4157,31 @@ mod tests {
 
     #[rstest]
     #[case::equal(
-        GraphIrStereoBondDelta::Apply {
+        GraphIrStereoBondDelta::ModifyField {
             id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
-        GraphIrStereoBondDelta::Apply {
+        GraphIrStereoBondDelta::ModifyField {
             id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
         true,
     )]
@@ -4326,16 +4212,32 @@ mod tests {
         },
         false,
     )]
-    #[case::different_permutation(
-        GraphIrStereoBondDelta::Apply {
+    #[case::different_configuration(
+        GraphIrStereoBondDelta::ModifyField {
             id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(1),
+                ),
+            },
         },
-        GraphIrStereoBondDelta::Apply {
+        GraphIrStereoBondDelta::ModifyField {
             id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(&[2, 0, 1, 3]),
+            change: GraphIrStereoBondFieldChange::Configuration {
+                old: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+                new: GraphIrStereoConfigurationForm::Kinded(
+                    GraphIrStereoKind::CisTrans,
+                    GraphIrStereoCoset::Lit(0),
+                ),
+            },
         },
         false,
     )]
@@ -4405,28 +4307,6 @@ mod tests {
             )),
         },
         "StereoBondDelta.ModifyConstraint(id=5, kind=StereoKind.CisTrans, old=None, new=StereoBondConstraintForm.Stereogenicity(StereogenicityForm.Undetermined()))",
-    )]
-    #[case::apply(
-        GraphIrStereoBondDelta::Apply {
-            id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-            permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-        },
-        "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
-    )]
-    #[case::swap(
-        GraphIrStereoBondDelta::Swap {
-            id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-        },
-        "StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)",
-    )]
-    #[case::mirror(
-        GraphIrStereoBondDelta::Mirror {
-            id: GraphIrStereoBondId(5),
-            kind: GraphIrStereoKind::CisTrans,
-        },
-        "StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)",
     )]
     fn test_stereo_bond_delta_repr(#[case] delta: GraphIrStereoBondDelta, #[case] expected: &str) {
         Python::attach(|py| {
@@ -4499,19 +4379,6 @@ mod tests {
         new: Some(GraphIrStereoBondConstraintForm::Stereogenicity(
             GraphIrStereogenicityForm::Lit(GraphIrStereogenicity::Stereogenic),
         )),
-    })]
-    #[case::apply(GraphIrStereoBondDelta::Apply {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
-        permutation: PermPermutation::from_image(&[1, 2, 0, 3]),
-    })]
-    #[case::swap(GraphIrStereoBondDelta::Swap {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
-    })]
-    #[case::mirror(GraphIrStereoBondDelta::Mirror {
-        id: GraphIrStereoBondId(5),
-        kind: GraphIrStereoKind::CisTrans,
     })]
     fn test_stereo_bond_delta_inverse(#[case] delta: GraphIrStereoBondDelta) {
         Python::attach(|py| {
