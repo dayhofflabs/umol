@@ -54,6 +54,15 @@ pub struct Correspondence<Id> {
 }
 
 impl<Id: Copy + Ord + From<usize>> Correspondence<Id> {
+    /// The unique correspondence between two empty id spaces.
+    pub const fn empty() -> Self {
+        Self {
+            matched_pairs: Vec::new(),
+            left_count: 0,
+            right_count: 0,
+        }
+    }
+
     /// A correspondence from its matched `(left, right)` pairs over two id spaces of the given sizes.
     /// Every id of either side not appearing in `matched_pairs` is unmatched on that side. Pairs are
     /// sorted by left id to establish the lookup invariant (cheap when already sorted).
@@ -440,6 +449,16 @@ mod tests {
                     .expect("correspondence producer preserves partial-bijection invariants"),
             ),
         ]
+    }
+
+    #[rstest]
+    fn test_correspondence_empty() {
+        let correspondence = Correspondence::<NodeId>::empty();
+
+        assert_eq!(correspondence.matched_pairs(), []);
+        assert_eq!(correspondence.left_count(), 0);
+        assert_eq!(correspondence.right_count(), 0);
+        assert!(correspondence.is_total());
     }
 
     #[rstest]

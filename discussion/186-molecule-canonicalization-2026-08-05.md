@@ -1804,6 +1804,15 @@ and the semantic properties validated by the corresponding property tests.
   candidate domain: each entity family's LHS-present entries form the canonical dense prefix and
   right-only additions follow. Implement all four `Canonicalize` operations for `ReactionSpan`; do
   not canonicalize either side independently. This is additive. [dep: S9c, S11a]
+  **Done.** `ReactionSpan::remap` and `try_remap` transport all eight union entity tables, topology,
+  relation participants and positional data, stereo frames, both sides of modified values, and
+  constraint references through a total dense `MoleculeCorrespondence`. Span incidence and typed
+  comparison keys retain the complete `EntitySpan` tags and ordered sides. All four `Canonicalize`
+  operations now search the union frame and emit an LHS-anchored result through the public remapping
+  path; level-specific equality ignores contradictions confined to excluded layers. The empty
+  correspondence between empty id spaces has an infallible `Correspondence::empty` constructor.
+  Focused span tests, the complete graph-IR library suite, graph-core tests, canonicalization corpus,
+  and strict graph-IR clippy are green.
 - **S11c — Span properties.** Validate exact canonical idempotence, invariance under every valid
   dense union-frame renumbering, LHS anchoring of every canonical output, preservation of lhs/rhs
   projections under induced side remappings, reversal distinction, integrity, and algorithm

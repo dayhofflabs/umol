@@ -215,6 +215,234 @@ impl ReactionSpan {
             .map_err(ReactionSpanIntegrityError::Rhs)?;
         Ok(())
     }
+
+    /// Relabel this reaction span into the dense union id spaces described by `correspondence`.
+    ///
+    /// The correspondence must describe every union entity and be total on both sides for all
+    /// eight entity families. The operation transports topology, relation participants,
+    /// position-sensitive relation data, stereo frames, both values of modified entities, and
+    /// every constraint reference. It does not normalize, repair, project, or reanchor the span.
+    ///
+    /// # Panics
+    ///
+    /// Panics when this span fails its representation-integrity contract or `correspondence` does
+    /// not describe a complete dense renumbering of it. Use [`Self::try_remap`] for independently
+    /// supplied values.
+    ///
+    /// # Semantic properties
+    ///
+    /// Identity remapping is exact, inverse remapping recovers the original span, and sequential
+    /// remapping agrees with correspondence composition.
+    pub fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
+        self.try_remap(correspondence).expect(
+            "reaction-span remapping requires an integrity-valid source and a complete dense correspondence",
+        )
+    }
+
+    /// Checked form of [`Self::remap`].
+    ///
+    /// Returns `None` when this span fails its representation-integrity contract, when the
+    /// correspondence's source counts differ from the union entity counts, or when any entity
+    /// family is not a bijection onto a dense target id space.
+    pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
+        self.check_integrity().ok()?;
+
+        let counts_match = [
+            (correspondence.atoms().left_count(), self.atoms.len()),
+            (correspondence.bonds().left_count(), self.bonds.len()),
+            (
+                correspondence.dative_bonds().left_count(),
+                self.dative_bonds.count(),
+            ),
+            (
+                correspondence.aromatic_systems().left_count(),
+                self.aromatic_systems.count(),
+            ),
+            (
+                correspondence.multicenter_bonds().left_count(),
+                self.multicenter_bonds.count(),
+            ),
+            (
+                correspondence.noncovalent_bonds().left_count(),
+                self.noncovalent_bonds.count(),
+            ),
+            (
+                correspondence.stereo_atoms().left_count(),
+                self.stereo_atoms.count(),
+            ),
+            (
+                correspondence.stereo_bonds().left_count(),
+                self.stereo_bonds.count(),
+            ),
+        ]
+        .into_iter()
+        .all(|(mapped, actual)| mapped == actual);
+        if !counts_match || !correspondence.is_total() {
+            return None;
+        }
+
+        let graph_remapping = Remapping::new(
+            correspondence
+                .atoms()
+                .matched_pairs()
+                .iter()
+                .map(|&(_, right)| NodeId::from(right))
+                .collect(),
+            correspondence
+                .bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(_, right)| EdgeId::from(right))
+                .collect(),
+        );
+        let id_remapping = correspondence.to_remapping()?;
+
+        let atoms = reorder_dense(
+            self.atoms.clone(),
+            correspondence.atoms().right_count(),
+            correspondence
+                .atoms()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?;
+        let bonds = reorder_dense(
+            self.bonds.clone(),
+            correspondence.bonds().right_count(),
+            correspondence
+                .bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?;
+        let edges = reorder_dense(
+            self.graph
+                .edge_ids()
+                .map(|edge| {
+                    let [first, second] = self.graph.edge_endpoints(edge);
+                    [
+                        graph_remapping.map_node(first).0,
+                        graph_remapping.map_node(second).0,
+                    ]
+                })
+                .collect(),
+            correspondence.bonds().right_count(),
+            correspondence
+                .bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?;
+
+        let dative_bonds = FixedVarBirelationSet::new(reorder_dense(
+            self.dative_bonds.remap(&graph_remapping).into_entries(),
+            correspondence.dative_bonds().right_count(),
+            correspondence
+                .dative_bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let aromatic_systems = VarRelationSet::new(reorder_dense(
+            self.aromatic_systems.remap(&graph_remapping).into_entries(),
+            correspondence.aromatic_systems().right_count(),
+            correspondence
+                .aromatic_systems()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let multicenter_bonds = VarRelationSet::new(reorder_dense(
+            self.multicenter_bonds
+                .remap(&graph_remapping)
+                .into_entries(),
+            correspondence.multicenter_bonds().right_count(),
+            correspondence
+                .multicenter_bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let noncovalent_bonds = FixedRelationSet::new(reorder_dense(
+            self.noncovalent_bonds
+                .remap(&graph_remapping)
+                .into_entries(),
+            correspondence.noncovalent_bonds().right_count(),
+            correspondence
+                .noncovalent_bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let stereo_atoms = FixedVarBirelationSet::new(reorder_dense(
+            self.stereo_atoms.remap(&graph_remapping).into_entries(),
+            correspondence.stereo_atoms().right_count(),
+            correspondence
+                .stereo_atoms()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let stereo_bonds = FixedVarBirelationSet::new(reorder_dense(
+            self.stereo_bonds.remap(&graph_remapping).into_entries(),
+            correspondence.stereo_bonds().right_count(),
+            correspondence
+                .stereo_bonds()
+                .matched_pairs()
+                .iter()
+                .map(|&(left, right)| (left.index(), right.index())),
+        )?);
+        let constraints = self
+            .constraints
+            .iter()
+            .map(|span| match span {
+                ConstraintSpan::Unchanged(value) => {
+                    ConstraintSpan::Unchanged(value.clone().remap(&id_remapping))
+                }
+                ConstraintSpan::Added(value) => {
+                    ConstraintSpan::Added(value.clone().remap(&id_remapping))
+                }
+                ConstraintSpan::Removed(value) => {
+                    ConstraintSpan::Removed(value.clone().remap(&id_remapping))
+                }
+            })
+            .collect();
+
+        let remapped = Self {
+            graph: Graph::new(atoms.len(), &edges),
+            atoms,
+            bonds,
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+            constraints,
+        };
+        remapped.check_integrity().ok()?;
+        Some(remapped)
+    }
+}
+
+fn reorder_dense<T>(
+    values: Vec<T>,
+    target_count: usize,
+    pairs: impl IntoIterator<Item = (usize, usize)>,
+) -> Option<Vec<T>> {
+    let mut source = values.into_iter().map(Some).collect::<Vec<_>>();
+    let mut target = (0..target_count).map(|_| None).collect::<Vec<_>>();
+    for (left, right) in pairs {
+        let value = source.get_mut(left)?.take()?;
+        let slot = target.get_mut(right)?;
+        if slot.replace(value).is_some() {
+            return None;
+        }
+    }
+    if source.iter().any(Option::is_some) {
+        return None;
+    }
+    target.into_iter().collect()
 }
 
 /// R id → union id for one entity family: a matched right id reuses its left partner; a
@@ -1092,6 +1320,106 @@ impl ReactionSpan {
 
     pub fn constraints(&self) -> &[ConstraintSpan] {
         &self.constraints
+    }
+
+    pub(crate) fn entries(&self) -> ReactionSpanEntries {
+        ReactionSpanEntries {
+            atoms: self.atoms.clone(),
+            bonds: self
+                .bonds
+                .iter()
+                .enumerate()
+                .map(|(index, attributes)| {
+                    let [first, second] = self.graph.edge_endpoints(EdgeId(index as u32));
+                    (
+                        AtomId::from(first),
+                        AtomId::from(second),
+                        attributes.clone(),
+                    )
+                })
+                .collect(),
+            dative: self
+                .dative_bonds
+                .relation_ids()
+                .map(|id| {
+                    (
+                        self.dative_bonds
+                            .participants_2(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        AtomId::from(self.dative_bonds.participants_1(id)[0]),
+                        self.dative_bonds.data(id).clone(),
+                    )
+                })
+                .collect(),
+            aromatic: self
+                .aromatic_systems
+                .relation_ids()
+                .map(|id| {
+                    (
+                        self.aromatic_systems
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        self.aromatic_systems.data(id).clone(),
+                    )
+                })
+                .collect(),
+            multicenter: self
+                .multicenter_bonds
+                .relation_ids()
+                .map(|id| {
+                    (
+                        self.multicenter_bonds
+                            .participants(id)
+                            .iter()
+                            .copied()
+                            .map(AtomId::from)
+                            .collect(),
+                        self.multicenter_bonds.data(id).clone(),
+                    )
+                })
+                .collect(),
+            noncovalent: self
+                .noncovalent_bonds
+                .relation_ids()
+                .map(|id| {
+                    let [first, second] = self.noncovalent_bonds.participants(id);
+                    (
+                        AtomId::from(*first),
+                        AtomId::from(*second),
+                        self.noncovalent_bonds.data(id).clone(),
+                    )
+                })
+                .collect(),
+            stereo_atoms: self
+                .stereo_atoms
+                .relation_ids()
+                .map(|id| {
+                    (
+                        AtomId::from(self.stereo_atoms.participants_1(id)[0]),
+                        self.stereo_atoms.participants_2(id).to_vec(),
+                        self.stereo_atoms.data(id).clone(),
+                    )
+                })
+                .collect(),
+            stereo_bonds: self
+                .stereo_bonds
+                .relation_ids()
+                .map(|id| {
+                    (
+                        BondId::from(self.stereo_bonds.participants_1(id)[0]),
+                        self.stereo_bonds.participants_2(id).to_vec(),
+                        self.stereo_bonds.data(id).clone(),
+                    )
+                })
+                .collect(),
+            constraints: self.constraints.clone(),
+        }
     }
 
     /// The left-hand molecule: every entity present on the left, in a compacted id space (created
@@ -2237,7 +2565,11 @@ where
 mod tests {
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_graph_core::AutomorphismAlgorithm;
 
+    use super::super::canonicalize::{
+        CanonicalizationContext, CanonicalizationLevel, Canonicalize,
+    };
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
@@ -2251,6 +2583,14 @@ mod tests {
     use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
     use super::*;
+
+    #[fixture]
+    fn canonicalization_context() -> CanonicalizationContext {
+        CanonicalizationContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        }
+    }
 
     #[rstest]
     fn test_reaction_span_from_entries() {
@@ -2589,6 +2929,177 @@ mod tests {
         assert_eq!(span.atoms(), expected_atoms);
         assert_eq!(span.bonds(), expected_bonds);
         assert_eq!(span.constraints(), expected_constraints);
+    }
+
+    #[rstest]
+    fn test_reaction_span_remap() {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Removed(AtomForm::from_element(Element::N)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(2),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            constraints: vec![ConstraintSpan::Removed(Constraint::Atom(
+                AtomId(2),
+                AtomConstraintForm::valence(NumForm::Lit(3)),
+            ))],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::from_images(&[AtomId(2), AtomId(0), AtomId(1)], 3),
+            Correspondence::from_images(&[BondId(0)], 1),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+        );
+
+        let remapped = span.remap(&correspondence);
+
+        assert_eq!(remapped.atoms()[0], span.atoms()[1]);
+        assert_eq!(remapped.atoms()[1], span.atoms()[2]);
+        assert_eq!(remapped.atoms()[2], span.atoms()[0]);
+        assert_eq!(
+            remapped.graph().edge_endpoints(EdgeId(0)),
+            [NodeId(1), NodeId(2)]
+        );
+        assert_eq!(
+            remapped.constraints(),
+            &[ConstraintSpan::Removed(Constraint::Atom(
+                AtomId(1),
+                AtomConstraintForm::valence(NumForm::Lit(3)),
+            ))]
+        );
+        assert_eq!(remapped.remap(&correspondence.reverse()), span);
+    }
+
+    #[rstest]
+    fn test_reaction_span_try_remap_error() {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C))],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::new(
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+        );
+
+        assert_eq!(span.try_remap(&correspondence), None);
+    }
+
+    #[rstest]
+    fn test_reaction_span_canonicalize(canonicalization_context: CanonicalizationContext) {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::N)),
+            ],
+            bonds: vec![(
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        });
+
+        let canonical = span
+            .clone()
+            .canonicalize(&canonicalization_context)
+            .unwrap();
+
+        assert_eq!(
+            canonical
+                .atoms()
+                .iter()
+                .take_while(|span| span.lhs().is_some())
+                .count(),
+            2,
+        );
+        assert!(canonical
+            .atoms()
+            .iter()
+            .skip(2)
+            .all(|span| span.lhs().is_none()));
+        assert_eq!(
+            canonical.clone().canonicalize(&canonicalization_context),
+            Ok(canonical.clone())
+        );
+        assert!(span.canonical_eq(&canonical, &canonicalization_context));
+    }
+
+    #[rstest]
+    #[case::topology(CanonicalizationLevel::Topology)]
+    #[case::constitution(CanonicalizationLevel::Constitution)]
+    #[case::structure(CanonicalizationLevel::Structure)]
+    #[case::full(CanonicalizationLevel::Full)]
+    fn test_reaction_span_canonicalize_by(
+        canonicalization_context: CanonicalizationContext,
+        #[case] level: CanonicalizationLevel,
+    ) {
+        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::N)),
+            ],
+            bonds: vec![(
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        });
+
+        let canonical = span
+            .clone()
+            .canonicalize_by(level, &canonicalization_context)
+            .unwrap();
+
+        assert_eq!(
+            canonical
+                .clone()
+                .canonicalize_by(level, &canonicalization_context),
+            Ok(canonical.clone()),
+        );
+        assert!(span.canonical_eq_by(&canonical, level, &canonicalization_context));
+    }
+
+    #[rstest]
+    fn test_reaction_span_canonical_eq_by_contradiction(
+        canonicalization_context: CanonicalizationContext,
+    ) {
+        let mut constrained_atom = AtomForm::from_element(Element::C);
+        constrained_atom.constraints =
+            AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
+        let constrained = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(constrained_atom)],
+            ..Default::default()
+        });
+        let plain = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C))],
+            ..Default::default()
+        });
+
+        assert!(constrained.canonical_eq_by(
+            &plain,
+            CanonicalizationLevel::Structure,
+            &canonicalization_context,
+        ));
+        assert!(!constrained.canonical_eq(&plain, &canonicalization_context));
     }
 
     #[rstest]

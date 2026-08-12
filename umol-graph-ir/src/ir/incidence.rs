@@ -5,11 +5,13 @@ use std::cmp::Ordering;
 use strum::EnumCount;
 use umol_graph_core::{EdgeId, Graph, NodeId};
 
+use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
 use super::ligand::StereoLigandKind;
 use super::molecule::Molecule;
 use super::num::NumForm;
+use super::reaction_span::ReactionSpan;
 
 /// Structural level represented by an [`IncidenceGraph`].
 ///
@@ -41,7 +43,9 @@ pub enum Incidence {
     DativeDonor,
     DativeAcceptor,
     AromaticParticipant(NumForm),
+    AromaticParticipantSpan(EntitySpan<NumForm>),
     MulticenterParticipant(NumForm),
+    MulticenterParticipantSpan(EntitySpan<NumForm>),
     NoncovalentEndpoint,
     StereoSite,
     StereoLigand(StereoLigandKind),
@@ -53,8 +57,8 @@ impl Incidence {
             Self::BondEndpoint => 0,
             Self::DativeDonor => 1,
             Self::DativeAcceptor => 2,
-            Self::AromaticParticipant(_) => 3,
-            Self::MulticenterParticipant(_) => 4,
+            Self::AromaticParticipant(_) | Self::AromaticParticipantSpan(_) => 3,
+            Self::MulticenterParticipant(_) | Self::MulticenterParticipantSpan(_) => 4,
             Self::NoncovalentEndpoint => 5,
             Self::StereoSite => 6,
             Self::StereoLigand(_) => 7,
@@ -71,10 +75,51 @@ impl Ord for Incidence {
                 | (Self::MulticenterParticipant(lhs), Self::MulticenterParticipant(rhs)) => {
                     lhs.cmp(rhs)
                 }
+                (Self::AromaticParticipantSpan(lhs), Self::AromaticParticipantSpan(rhs))
+                | (Self::MulticenterParticipantSpan(lhs), Self::MulticenterParticipantSpan(rhs)) => {
+                    entity_span_cmp(lhs, rhs)
+                }
+                (Self::AromaticParticipant(_), Self::AromaticParticipantSpan(_))
+                | (Self::MulticenterParticipant(_), Self::MulticenterParticipantSpan(_)) => {
+                    Ordering::Less
+                }
+                (Self::AromaticParticipantSpan(_), Self::AromaticParticipant(_))
+                | (Self::MulticenterParticipantSpan(_), Self::MulticenterParticipant(_)) => {
+                    Ordering::Greater
+                }
                 (Self::StereoLigand(lhs), Self::StereoLigand(rhs)) => lhs.cmp(rhs),
                 _ => Ordering::Equal,
             })
     }
+}
+
+fn entity_span_cmp<T: Ord>(left: &EntitySpan<T>, right: &EntitySpan<T>) -> Ordering {
+    let position = |span: &EntitySpan<T>| match span {
+        EntitySpan::Unchanged(_) => 0,
+        EntitySpan::Added(_) => 1,
+        EntitySpan::Removed(_) => 2,
+        EntitySpan::Modified { .. } => 3,
+    };
+    position(left)
+        .cmp(&position(right))
+        .then_with(|| match (left, right) {
+            (EntitySpan::Unchanged(left), EntitySpan::Unchanged(right))
+            | (EntitySpan::Added(left), EntitySpan::Added(right))
+            | (EntitySpan::Removed(left), EntitySpan::Removed(right)) => left.cmp(right),
+            (
+                EntitySpan::Modified {
+                    lhs: left_lhs,
+                    rhs: left_rhs,
+                },
+                EntitySpan::Modified {
+                    lhs: right_lhs,
+                    rhs: right_rhs,
+                },
+            ) => left_lhs
+                .cmp(right_lhs)
+                .then_with(|| left_rhs.cmp(right_rhs)),
+            _ => Ordering::Equal,
+        })
 }
 
 impl PartialOrd for Incidence {
@@ -293,6 +338,168 @@ impl Molecule {
             entity_counts,
             incidences,
         }
+    }
+}
+
+impl ReactionSpan {
+    /// Build the incidence graph of the union frame at the selected structural level.
+    /// Entity-span tags and both sides of positional electron-count values remain available to
+    /// canonicalization through the typed entity and incidence values.
+    pub fn incidence_graph(&self, level: IncidenceLevel) -> IncidenceGraph {
+        let atom_count = self.graph().node_count();
+        let constitution = matches!(level, IncidenceLevel::Constitution | IncidenceLevel::Full);
+        let stereo = matches!(level, IncidenceLevel::Full);
+        let entity_counts = [
+            atom_count as u32,
+            self.bonds().len() as u32,
+            if constitution {
+                self.dative_bonds().count() as u32
+            } else {
+                0
+            },
+            if constitution {
+                self.aromatic_systems().count() as u32
+            } else {
+                0
+            },
+            if constitution {
+                self.multicenter_bonds().count() as u32
+            } else {
+                0
+            },
+            if constitution {
+                self.noncovalent_bonds().count() as u32
+            } else {
+                0
+            },
+            if stereo {
+                self.stereo_atoms().count() as u32
+            } else {
+                0
+            },
+            if stereo {
+                self.stereo_bonds().count() as u32
+            } else {
+                0
+            },
+        ];
+
+        let mut edges = Vec::new();
+        let mut incidences = Vec::new();
+        let mut node = atom_count as u32;
+        let mut push = |entity: u32, participant: u32, incidence: Incidence| {
+            edges.push([entity, participant]);
+            incidences.push(incidence);
+        };
+
+        for edge in self.graph().edge_ids() {
+            let [first, second] = self.graph().edge_endpoints(edge);
+            push(node, first.0, Incidence::BondEndpoint);
+            push(node, second.0, Incidence::BondEndpoint);
+            node += 1;
+        }
+
+        if constitution {
+            for id in self.dative_bonds().relation_ids() {
+                for &donor in self.dative_bonds().participants_2(id) {
+                    push(node, donor.0, Incidence::DativeDonor);
+                }
+                push(
+                    node,
+                    self.dative_bonds().participants_1(id)[0].0,
+                    Incidence::DativeAcceptor,
+                );
+                node += 1;
+            }
+            for id in self.aromatic_systems().relation_ids() {
+                for (position, &atom) in self.aromatic_systems().participants(id).iter().enumerate()
+                {
+                    push(
+                        node,
+                        atom.0,
+                        Incidence::AromaticParticipantSpan(electron_span(
+                            self.aromatic_systems().data(id),
+                            position,
+                            |value| &value.electrons,
+                        )),
+                    );
+                }
+                node += 1;
+            }
+            for id in self.multicenter_bonds().relation_ids() {
+                for (position, &atom) in
+                    self.multicenter_bonds().participants(id).iter().enumerate()
+                {
+                    push(
+                        node,
+                        atom.0,
+                        Incidence::MulticenterParticipantSpan(electron_span(
+                            self.multicenter_bonds().data(id),
+                            position,
+                            |value| &value.electrons,
+                        )),
+                    );
+                }
+                node += 1;
+            }
+            for id in self.noncovalent_bonds().relation_ids() {
+                for &atom in self.noncovalent_bonds().participants(id) {
+                    push(node, atom.0, Incidence::NoncovalentEndpoint);
+                }
+                node += 1;
+            }
+        }
+
+        if stereo {
+            for id in self.stereo_atoms().relation_ids() {
+                push(
+                    node,
+                    self.stereo_atoms().participants_1(id)[0].0,
+                    Incidence::StereoSite,
+                );
+                for ligand in self.stereo_atoms().participants_2(id) {
+                    push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
+                }
+                node += 1;
+            }
+            for id in self.stereo_bonds().relation_ids() {
+                push(
+                    node,
+                    atom_count as u32 + self.stereo_bonds().participants_1(id)[0].0,
+                    Incidence::StereoSite,
+                );
+                for ligand in self.stereo_bonds().participants_2(id) {
+                    push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
+                }
+                node += 1;
+            }
+        }
+
+        IncidenceGraph {
+            graph: Graph::new(node as usize, &edges),
+            entity_counts,
+            incidences,
+        }
+    }
+}
+
+fn electron_span<T>(
+    span: &EntitySpan<T>,
+    position: usize,
+    electrons: impl Fn(&T) -> &ElectronCountsForm,
+) -> EntitySpan<NumForm> {
+    let at = |value: &T| match electrons(value) {
+        ElectronCountsForm::Undetermined => NumForm::Undetermined,
+        ElectronCountsForm::Lit(counts) => NumForm::Lit(counts[position]),
+    };
+    match span {
+        EntitySpan::Unchanged(value) => EntitySpan::Unchanged(at(value)),
+        EntitySpan::Added(value) => EntitySpan::Added(at(value)),
+        EntitySpan::Removed(value) => EntitySpan::Removed(at(value)),
+        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
+            lhs: at(lhs),
+            rhs: at(rhs),
+        },
     }
 }
 
