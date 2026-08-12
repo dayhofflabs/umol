@@ -1821,6 +1821,18 @@ and the semantic properties validated by the corresponding property tests.
   composition, and projection preservation, and that reordered input lowers to the same
   LHS-anchored reaction normal form. Freeze canonical-span fixtures with additions, removals,
   modifications, all entity kinds, and constraint-only changes. This is additive. [dep: S11b]
+  **Done.** Reaction-span properties now generate materializable reactions and independently
+  constructed spans, apply arbitrary total dense permutations in every union entity family, and
+  verify remapping identity, inverse, composition, integrity, and exact preservation of both side
+  projections under their induced correspondences. Complete canonicalization is exactly idempotent
+  and permutation-invariant; all level-specific equality relations are reflexive, symmetric,
+  permutation-invariant, and agree with their canonical forms. The reaction-derived span normal
+  form is idempotent, canonicalization commutes with that normalization, every canonical output is
+  LHS-anchored, and the weakened reversal law holds. Exact compatibility fixtures freeze lifecycle
+  changes, all eight entity families, constraint-only changes, and a distinct reversed form.
+  `Nauty` remains the sole selector, so cross-algorithm agreement has no non-tautological case yet;
+  the frozen fixtures are the required target for every future selector. Focused 64-case and
+  32-case property runs, the exact fixture target, and strict graph-IR clippy are green.
 
 ### S12 — Reaction canonicalization
 
@@ -1840,30 +1852,56 @@ and the semantic properties validated by the corresponding property tests.
   and algorithm agreement. Include non-materializable and intrinsically contradictory cases with
   exact errors and no panics. This is additive. [dep: S10c, S12b]
 
-### S13 — Surface audit and closeout
+### S13 — Python canonicalization API
 
-- **S13a — Public API and rustdoc audit.** Review exports for the context, levels, configs, errors,
+- **S13a — Python configuration and level.** Add frozen `CanonicalizationLevel` and
+  `CanonicalizationConfig` Python types. The level maps the four Rust variants directly. The config
+  mirrors the graph-layer operation config and contains only `automorphism_algorithm`; the existing
+  Python `StereoModel` remains the separate source of `para_stereo`. Convert those two inputs through
+  the graph-layer `CanonicalizationConfig::context` operation rather than reconstructing context
+  semantics in each binding. Use a keyword-only config constructor and represent the graph-layer
+  default explicitly in `default()` and `repr`. Register and export both new types from the flat
+  module. This is additive. [dep: S4a, S4c]
+- **S13b — Aggregate methods and errors.** Expose `canonicalize`, `canonicalize_by`, `canonical_eq`,
+  and `canonical_eq_by` on Python `Molecule`, `ReactionSpan`, and `Reaction`. Canonicalization returns
+  a new owned aggregate and does not mutate the receiver. Use the call shapes
+  `canonicalize(*, stereo_model=None, config=None)`,
+  `canonicalize_by(level, *, stereo_model=None, config=None)`,
+  `canonical_eq(other, *, stereo_model=None, config=None)`, and
+  `canonical_eq_by(other, level, *, stereo_model=None, config=None)`. Omitted inputs select
+  `StereoModel.default()` and `CanonicalizationConfig.default()` at the Python layer. Preserve Rust's
+  total equality semantics. Map integrity failures to `InvalidStructureError` and intrinsic
+  contradictions to `ContradictionError`; do not introduce a Python-only canonicalization error.
+  This is additive. [dep: S12b, S13a]
+- **S13c — Python surface tests.** Cover construction, defaults, accessors, `repr`, module exports,
+  all four methods on all three aggregate types, level-specific comparison, returned-object
+  ownership, exact errors, and agreement with the Rust canonical forms used by the existing corpus.
+  Run the Rust binding tests and Python integration suite under the Python 3.13 virtual environment.
+  This is additive. [dep: S13b]
+
+### S14 — Surface audit and closeout
+
+- **S14a — Public API and rustdoc audit.** Review exports for the context, levels, configs, errors,
   traits, integrity checks, and every public validator. State the semantic properties and failure
-  domains in rustdoc; do not cite this dated discussion document from code. Audit Python only for
-  surfaces changed by the migrations above; a new Python canonicalization API requires its own
-  explicit binding design if it has not already been approved. This is additive or a final
-  red-to-green export migration. [dep: S2f, S9c, S12c]
-- **S13b — Repository-wide verification.** Run formatting, clippy, workspace tests, the full
+  domains in rustdoc; do not cite this dated discussion document from code. Audit the Python
+  canonicalization surface for parity with the implemented Rust aggregate operations. This is
+  additive or a final red-to-green export migration. [dep: S2f, S9c, S12c, S13c]
+- **S14b — Repository-wide verification.** Run formatting, clippy, workspace tests, the full
   graph-IR and graph property targets at the agreed larger case count, conformance targets, affected
   fuzz builds, and the canonicalization benchmarks. Confirm that no old `Canonicalize`
   normalization names, relative stereo delta variants, `IncidenceNodeSelection`,
   `ConstitutionFeatures`, graph-IR validator modules, or
   `apply_remapping`/`try_apply_remapping`/`apply_compaction` spellings remain. This is additive.
-  [dep: S13a]
-- **S13c — Permanent documentation and status.** Update the DSL specification, current examples,
+  [dep: S14a]
+- **S14c — Permanent documentation and status.** Update the DSL specification, current examples,
   nomenclature, data-type, and property-test guides to the implemented API; remove the dated doc-186
   TODO markers; record benchmark results and exact compatibility promises; then mark this document
-  completed and update `000-status.md`. The whitepaper remains author-managed. [dep: S13b]
+  completed and update `000-status.md`. The whitepaper remains author-managed. [dep: S14b]
 
 The critical path is S0 → S1 → S2a/S2b → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S11 → S12 →
-S13. S10 is independent after S1 and must complete before S11. S2c–S2f can proceed alongside the
+S13 → S14. S10 is independent after S1 and must complete before S11. S2c–S2f can proceed alongside the
 remapping and benchmark work after the integrity contracts land, but S2f remains a semantic blocker
 until the reaction-application preconditions are approved. No stage in the core path is deferrable.
 The LHS-only reaction shortcut, connected-component optimization, alternate canonical-labeling
-backend, higher-level relative stereo operations, and new Python canonicalization bindings are
-explicitly deferred; none may change the frozen canonical comparison schema or canonical numbering.
+backend, and higher-level relative stereo operations are explicitly deferred; none may change the
+frozen canonical comparison schema or canonical numbering.

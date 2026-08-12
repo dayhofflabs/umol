@@ -1,7 +1,6 @@
-//! Reaction-span bridge properties over three domains: generated reactions cross-validate the
-//! delta and superimposition paths; explicitly reindexed molecule pairs exercise lhs-anchored
-//! normalization under crossing partial correspondences; generated span entries cross-validate
-//! direct construction, DSL parsing, and superimposition.
+//! Reaction-span properties over generated reactions, explicitly reindexed molecule pairs, and
+//! independently generated span entries. The parent module retains the bridge and serialization
+//! properties; its children exercise dense union-frame remapping and aggregate canonicalization.
 
 use std::iter;
 
@@ -10,8 +9,9 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{
-    AtomForm, AtomId, BondId, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries,
-    Reaction, ReactionSpan, ReactionSpanEntries, StereoLigand,
+    AromaticSystemId, AtomForm, AtomId, BondId, DativeBondId, EntitySpan, Molecule,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondId, NoncovalentBondId, Reaction,
+    ReactionSpan, ReactionSpanEntries, StereoAtomId, StereoBondId, StereoLigand,
 };
 
 use crate::strategies::{
@@ -19,6 +19,11 @@ use crate::strategies::{
     molecule_entries_structurally_unambiguous_strategy, overlay_reaction_strategy,
     reaction_strategy,
 };
+
+#[path = "span/canonicalize.rs"]
+mod canonicalize;
+#[path = "span/remapping.rs"]
+mod remapping;
 
 #[derive(Clone, Copy)]
 enum SpanPresence {
@@ -339,6 +344,77 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                 constraints: Vec::new(),
             }
         })
+}
+
+fn reaction_span_strategy() -> impl Strategy<Value = ReactionSpan> {
+    prop_oneof![
+        2 => reaction_span_entries_strategy().prop_map(|entries| {
+            ReactionSpan::try_from_entries(entries)
+                .expect("generated span entries satisfy representation integrity")
+        }),
+        3 => materializable_reaction_strategy().prop_map(|reaction| {
+            reaction
+                .to_reaction_span()
+                .expect("generated reaction materializes a span")
+        }),
+    ]
+}
+
+fn union_count<Id>(correspondence: &Correspondence<Id>) -> usize
+where
+    Id: Copy + Ord + From<usize>,
+{
+    correspondence.left_count() + correspondence.right_count() - correspondence.matched_pair_count()
+}
+
+fn dense_permutation<Id>(count: usize, seed: u64, family: u32) -> Correspondence<Id>
+where
+    Id: Copy + Ord + From<usize>,
+{
+    if count == 0 {
+        return Correspondence::empty();
+    }
+    let mut state = seed ^ (u64::from(family) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut images = (0..count).collect::<Vec<_>>();
+    for index in (1..count).rev() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        images.swap(index, state as usize % (index + 1));
+    }
+    let images = images.into_iter().map(Id::from).collect::<Vec<_>>();
+    Correspondence::from_images(&images, count)
+}
+
+fn dense_union_correspondence(span: &ReactionSpan, seed: u64) -> MoleculeCorrespondence {
+    let side = span.correspondence();
+    MoleculeCorrespondence::new(
+        dense_permutation::<AtomId>(union_count(side.atoms()), seed, 0),
+        dense_permutation::<BondId>(union_count(side.bonds()), seed, 1),
+        dense_permutation::<DativeBondId>(union_count(side.dative_bonds()), seed, 2),
+        dense_permutation::<AromaticSystemId>(union_count(side.aromatic_systems()), seed, 3),
+        dense_permutation::<MulticenterBondId>(union_count(side.multicenter_bonds()), seed, 4),
+        dense_permutation::<NoncovalentBondId>(union_count(side.noncovalent_bonds()), seed, 5),
+        dense_permutation::<StereoAtomId>(union_count(side.stereo_atoms()), seed, 6),
+        dense_permutation::<StereoBondId>(union_count(side.stereo_bonds()), seed, 7),
+    )
+}
+
+#[derive(Debug)]
+struct ReactionSpanScenario {
+    span: ReactionSpan,
+    first: MoleculeCorrespondence,
+    second: MoleculeCorrespondence,
+}
+
+fn reaction_span_scenario_strategy() -> impl Strategy<Value = ReactionSpanScenario> {
+    (reaction_span_strategy(), any::<u64>(), any::<u64>()).prop_map(
+        |(span, first_seed, second_seed)| ReactionSpanScenario {
+            first: dense_union_correspondence(&span, first_seed),
+            second: dense_union_correspondence(&span, second_seed),
+            span,
+        },
+    )
 }
 
 proptest! {

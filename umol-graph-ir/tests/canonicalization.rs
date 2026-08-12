@@ -1,4 +1,4 @@
-//! Exact atom-symmetry cases for molecule canonicalization.
+//! Exact compatibility cases for aggregate canonicalization.
 //!
 //! The CDK and RDKit cases preserve published source-test partitions. The
 //! InChI case preserves the molecule used by its permutation utility test.
@@ -6,6 +6,9 @@
 //! explicitly renumbered inputs are checked in here. The remaining cases cover
 //! the graph-IR-specific dative, aromatic, multicenter, noncovalent, stereo-atom,
 //! and stereo-bond entities.
+
+#[path = "canonicalization/reaction_span.rs"]
+mod reaction_span;
 
 use pretty_assertions::assert_eq;
 use rstest::rstest;
