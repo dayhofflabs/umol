@@ -23,7 +23,10 @@ use umol_graph_ir::ir::{
 };
 
 #[path = "fixtures.rs"]
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    reason = "this bench includes a shared fixture module but uses only the indole fixture"
+)]
 mod fixtures;
 use fixtures::MOL_INDOLE;
 

@@ -24,7 +24,6 @@ use super::{Molecule, MoleculeEntries};
 /// The attributed pushout of two molecules over a graph `overlap`: `self` and `other` glued on their
 /// shared subgraph, with atom / bond data `meet`-combined where they coincide. `object` keeps `self`'s
 /// ids; `left` / `right` embed each side into it.
-#[allow(dead_code)]
 pub struct MoleculePushout {
     pub object: Molecule,
     pub left: MoleculeCorrespondence,
@@ -37,7 +36,6 @@ impl Molecule {
     /// two molecule-constraint sets; `None` when any coincident `meet` is `⊥` (the overlap is
     /// inadmissible). Stereo overlays keep `self`'s ligand frame; `other`'s coincident cosets are
     /// aligned to it (`transform_frame`) before the pushout, so they `meet` in a shared frame.
-    #[allow(dead_code)]
     pub fn meet_pushout(
         &self,
         other: &Molecule,

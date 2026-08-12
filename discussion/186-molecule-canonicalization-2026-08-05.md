@@ -193,7 +193,11 @@ ordinary exact graph refinement. Including the previous class makes the process 
 may split but never merge. Stability means equality of the ordered partition cells, not merely an
 unchanged cell count or unchanged backend color integers. Every non-stable round strictly increases
 the number of cells, so the finite incidence-node set supplies the termination bound without a
-caller-selected iteration limit.
+caller-selected iteration limit. A further stereo-sensitive round can only split a cell containing
+more than one stereo entity. The implementation therefore stops after the initial structure pass
+when every stereo entity already occupies a singleton cell, and after a productive para-stereo pass
+once that condition becomes true. This avoids both unnecessary para-stereo work for molecules with
+no unresolved stereo symmetry and the final no-op pass after the last relevant split.
 
 ### Domain and failure semantics
 
@@ -1687,8 +1691,24 @@ and the semantic properties validated by the corresponding property tests.
   that every future selector must reproduce.
 - **S9d — Molecule benchmark gate.** Re-run the S0 corpus for topology, constitution, one-pass
   structure, para-stereo structure, and complete `Full` operations. Record construction,
-  refinement, labeling, constraint-key comparison, and remapping costs separately; optimization may
+  refinement, labeling, constraint-key construction, and remapping costs separately; optimization may
   change internals only if canonical fixtures remain identical. This is additive. [dep: S9c]
+  **Done.** The `canonicalize` Criterion target calls the production canonicalization phases
+  directly; its seven-case corpus is defined in the benchmark itself, and the duplicate benchmark
+  adapter and ignored timing test are removed. The added para-stereo cascade fixture exercises a
+  productive second refinement pass. The shortcut above reduces that fixture from three passes to
+  two; a quick optimized before-and-after run reduced para-stereo refinement from 0.501 to 0.351
+  milliseconds and its end-to-end para-stereo operation from 0.791 to 0.637 milliseconds. The other
+  fixtures with no unresolved stereo symmetry stop after their initial pass.
+
+  Across the seven-case corpus, incidence construction took 0.11-0.99 microseconds, initial-class
+  construction 4.10-15.38 microseconds, adapter construction 0.15-1.67 microseconds, adapter
+  labeling 0.98-11.07 microseconds, refinement 3.33-352.76 microseconds, constraint-key construction
+  0.05-0.32 microseconds, and remapping 3.26-8.46 microseconds. End-to-end topology and constitution
+  took 16.99-94.49 microseconds; structure, para-stereo structure, and `Full` took 73.42
+  microseconds-8.95 milliseconds, with the disconnected symmetric rings fixture producing the upper
+  bound. All frozen canonical fixtures remain identical, the focused canonicalization suites pass,
+  and the crate is clippy-clean.
 
 ### S10 — Absolute stereo delta vocabulary
 

@@ -81,7 +81,7 @@ name = "ground"
 harness = false
 
 [[bench]]
-name = "canonicalization"
+name = "canonicalize"
 harness = false
 
 [lints.clippy]

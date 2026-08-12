@@ -139,7 +139,7 @@ pub trait Canonicalize: Sized {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct StructuralDomainPosition(u16);
+pub struct StructuralDomainPosition(u16);
 
 impl StructuralDomainPosition {
     const TOPOLOGY: Self = Self(0);
@@ -148,7 +148,7 @@ impl StructuralDomainPosition {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct EntityBlockPosition {
+pub struct EntityBlockPosition {
     domain: StructuralDomainPosition,
     slot: u16,
 }
@@ -169,22 +169,16 @@ impl EntityBlockPosition {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct FieldPosition(u16);
+pub struct FieldPosition(u16);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct VariantPosition(u16);
+pub struct VariantPosition(u16);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[allow(
-    dead_code,
-    reason = "reserved by the frozen schema for S11 reaction-span canonicalization"
-)]
+#[cfg(test)]
 struct SpanTagPosition(u16);
 
-#[allow(
-    dead_code,
-    reason = "reserved by the frozen schema for S11 reaction-span canonicalization"
-)]
+#[cfg(test)]
 impl SpanTagPosition {
     const UNCHANGED: Self = Self(0);
     const ADDED: Self = Self(1);
@@ -193,7 +187,7 @@ impl SpanTagPosition {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ConstraintBlockPosition {
+pub enum ConstraintBlockPosition {
     Inline(EntityBlockPosition),
     Molecule,
 }
@@ -240,7 +234,7 @@ impl RelationalConstraintPosition {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct PositionedKey<P> {
+pub struct PositionedKey<P> {
     position: P,
     value: CanonicalKeyValue,
 }
@@ -259,12 +253,12 @@ impl<P: Ord> PartialOrd for PositionedKey<P> {
     }
 }
 
-type FieldKey = PositionedKey<FieldPosition>;
-type EntityBlockKey = PositionedKey<EntityBlockPosition>;
-type ConstraintBlockKey = PositionedKey<ConstraintBlockPosition>;
+pub type FieldKey = PositionedKey<FieldPosition>;
+pub type EntityBlockKey = PositionedKey<EntityBlockPosition>;
+pub type ConstraintBlockKey = PositionedKey<ConstraintBlockPosition>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct VariantKey {
+pub struct VariantKey {
     position: VariantPosition,
     fields: Vec<FieldKey>,
 }
@@ -284,15 +278,13 @@ impl PartialOrd for VariantKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(
-    dead_code,
-    reason = "reserved by the frozen schema for S11 reaction-span canonicalization"
-)]
-struct SpanKey {
+#[cfg(test)]
+pub struct SpanKey {
     position: SpanTagPosition,
     values: Vec<CanonicalKeyValue>,
 }
 
+#[cfg(test)]
 impl Ord for SpanKey {
     fn cmp(&self, other: &Self) -> Ordering {
         self.position
@@ -301,6 +293,7 @@ impl Ord for SpanKey {
     }
 }
 
+#[cfg(test)]
 impl PartialOrd for SpanKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -308,11 +301,8 @@ impl PartialOrd for SpanKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum CanonicalKeyValue {
-    #[allow(
-        dead_code,
-        reason = "reserved by the frozen schema for empty reaction-span values"
-    )]
+pub enum CanonicalKeyValue {
+    #[cfg(test)]
     Unit,
     Bool(bool),
     Unsigned(u64),
@@ -321,16 +311,14 @@ enum CanonicalKeyValue {
     Sequence(Vec<Self>),
     Product(Vec<FieldKey>),
     Variant(VariantKey),
-    #[allow(
-        dead_code,
-        reason = "reserved by the frozen schema for S11 reaction-span canonicalization"
-    )]
+    #[cfg(test)]
     Span(SpanKey),
 }
 
 impl CanonicalKeyValue {
     fn position(&self) -> u16 {
         match self {
+            #[cfg(test)]
             Self::Unit => 0,
             Self::Bool(_) => 1,
             Self::Unsigned(_) => 2,
@@ -339,6 +327,7 @@ impl CanonicalKeyValue {
             Self::Sequence(_) => 5,
             Self::Product(_) => 6,
             Self::Variant(_) => 7,
+            #[cfg(test)]
             Self::Span(_) => 8,
         }
     }
@@ -349,6 +338,7 @@ impl Ord for CanonicalKeyValue {
         self.position()
             .cmp(&other.position())
             .then_with(|| match (self, other) {
+                #[cfg(test)]
                 (Self::Unit, Self::Unit) => Ordering::Equal,
                 (Self::Bool(lhs), Self::Bool(rhs)) => lhs.cmp(rhs),
                 (Self::Unsigned(lhs), Self::Unsigned(rhs)) => lhs.cmp(rhs),
@@ -357,6 +347,7 @@ impl Ord for CanonicalKeyValue {
                 (Self::Sequence(lhs), Self::Sequence(rhs)) => lhs.cmp(rhs),
                 (Self::Product(lhs), Self::Product(rhs)) => lhs.cmp(rhs),
                 (Self::Variant(lhs), Self::Variant(rhs)) => lhs.cmp(rhs),
+                #[cfg(test)]
                 (Self::Span(lhs), Self::Span(rhs)) => lhs.cmp(rhs),
                 _ => Ordering::Equal,
             })
@@ -370,7 +361,7 @@ impl PartialOrd for CanonicalKeyValue {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct CanonicalComparisonKey {
+pub struct CanonicalComparisonKey {
     entity_blocks: Vec<EntityBlockKey>,
     constraints: Vec<ConstraintBlockKey>,
 }
@@ -1319,7 +1310,8 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
     }
 }
 
-fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
+/// Construct the ordered constraint blocks used by complete canonicalization.
+pub fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
     let mut blocks = Vec::new();
     macro_rules! inline_block {
         ($position:expr, $entities:expr, $key:expr) => {{
@@ -1422,7 +1414,7 @@ fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradicti
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum InitialClassKey {
+pub enum InitialClassKey {
     Entity {
         position: EntityBlockPosition,
         value: CanonicalKeyValue,
@@ -1459,19 +1451,19 @@ impl PartialOrd for InitialClassKey {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct InitialClasses {
+pub struct InitialClasses {
     entities: Vec<u32>,
     incidences: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum AutomorphismClass {
+pub enum AutomorphismClass {
     Entity(u32),
     Incidence(u32),
 }
 
 #[derive(Clone, Debug)]
-struct AutomorphismAdapter {
+pub struct AutomorphismAdapter {
     // Source entity nodes retain their ids. Role- or value-bearing incidence edges become colored
     // occurrence nodes; single-role endpoints remain direct unless duplicates require subdivision.
     graph: Graph,
@@ -1488,7 +1480,7 @@ struct AutomorphismAdapter {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ProjectedAutomorphismOutput {
+pub struct ProjectedAutomorphismOutput {
     orbits: Vec<NodeId>,
     // Backend canonical labels are branch-order hints, not the canonical molecule numbering.
     canonical_labels: Vec<NodeId>,
@@ -1496,7 +1488,8 @@ struct ProjectedAutomorphismOutput {
 }
 
 impl AutomorphismAdapter {
-    fn new(incidence_graph: &IncidenceGraph, initial_classes: &InitialClasses) -> Self {
+    /// Construct the exact graph adapter used by canonicalization.
+    pub fn new(incidence_graph: &IncidenceGraph, initial_classes: &InitialClasses) -> Self {
         let source = incidence_graph.graph();
         debug_assert_eq!(initial_classes.entities.len(), source.node_count());
         debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
@@ -1596,7 +1589,7 @@ impl AutomorphismAdapter {
         }
     }
 
-    fn graph(&self) -> &Graph {
+    pub fn graph(&self) -> &Graph {
         &self.graph
     }
 
@@ -1625,8 +1618,7 @@ impl AutomorphismAdapter {
         &self.incidence_edges[edge.index()]
     }
 
-    #[cfg(test)]
-    fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> ProjectedAutomorphismOutput {
+    pub fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> ProjectedAutomorphismOutput {
         let output = self
             .graph()
             .automorphisms(|node| self.class(node), algorithm);
@@ -1689,12 +1681,12 @@ impl AutomorphismAdapter {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct OrderedPartition {
+pub struct OrderedPartition {
     cells: Vec<Vec<NodeId>>,
 }
 
 impl OrderedPartition {
-    fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
+    pub fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
         let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
         for (index, descriptor) in descriptors.iter().enumerate() {
             cells
@@ -1708,7 +1700,7 @@ impl OrderedPartition {
         }
     }
 
-    fn refine(mut self, graph: &Graph) -> Self {
+    pub fn refine(mut self, graph: &Graph) -> Self {
         loop {
             let cell_indices = self.cell_indices(graph.node_count());
             let cell_count = self.cells.len();
@@ -1784,7 +1776,7 @@ impl OrderedPartition {
             .collect()
     }
 
-    fn cell_indices(&self, node_count: usize) -> Vec<u32> {
+    pub fn cell_indices(&self, node_count: usize) -> Vec<u32> {
         let mut indices = vec![0; node_count];
         for (cell_index, cell) in self.cells.iter().enumerate() {
             for node in cell {
@@ -2045,7 +2037,8 @@ fn initial_classes(
     Ok(rank_initial_classes(&entity_keys, &incidence_keys))
 }
 
-fn initial_class_keys(
+/// Construct the normalized entity and incidence keys used for initial classes.
+pub fn initial_class_keys(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
 ) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
@@ -2062,7 +2055,8 @@ fn initial_class_keys(
     Ok((entity_keys, incidence_keys))
 }
 
-fn partition_descriptors(
+/// Construct topology-level partition descriptors for the exact adapter.
+pub fn partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialClassKey],
     incidence_keys: &[InitialClassKey],
@@ -2082,7 +2076,8 @@ fn partition_descriptors(
 /// Dative roles and positional electron counts remain exact automorphism colors, but they do not
 /// fix the search partition: their order is selected by the typed leaf key. Using them for both
 /// purposes would exclude valid dense relabelings before the key can compare them.
-fn constitution_partition_descriptors(
+/// Construct constitution-level partition descriptors for the exact adapter.
+pub fn constitution_partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialClassKey],
     incidence_graph: &IncidenceGraph,
@@ -2302,7 +2297,8 @@ fn para_stereo_partition_descriptors(
         .collect()
 }
 
-fn structure_partition(
+/// Refine the structure partition, including para-stereo rounds when requested.
+pub fn structure_partition(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     adapter: &AutomorphismAdapter,
@@ -2319,8 +2315,22 @@ fn structure_partition(
     )?;
     let mut partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
     let mut rounds = 1;
+    let has_unresolved_stereo = |partition: &OrderedPartition| {
+        partition.cells.iter().any(|cell| {
+            cell.len() > 1
+                && cell.iter().any(|&node| {
+                    let SubdivisionNodeSource::Node(node) = adapter.node_source(node) else {
+                        return false;
+                    };
+                    matches!(
+                        incidence_graph.entity(node),
+                        Entity::StereoAtom(_) | Entity::StereoBond(_)
+                    )
+                })
+        })
+    };
 
-    if !para_stereo {
+    if !para_stereo || !has_unresolved_stereo(&partition) {
         return Ok((partition, rounds));
     }
 
@@ -2335,10 +2345,14 @@ fn structure_partition(
         }
         debug_assert!(next.cells.len() > cell_count);
         partition = next;
+        if !has_unresolved_stereo(&partition) {
+            return Ok((partition, rounds));
+        }
     }
 }
 
-fn rank_initial_classes(
+/// Assign dense ordered classes to normalized entity and incidence keys.
+pub fn rank_initial_classes(
     entity_keys: &[InitialClassKey],
     incidence_keys: &[InitialClassKey],
 ) -> InitialClasses {
@@ -4160,8 +4174,6 @@ pub enum ReactionCanonicalizationError {
 #[cfg(test)]
 mod tests {
     use std::cmp::Ordering;
-    use std::hint::black_box;
-    use std::time::{Duration, Instant};
     use std::{array, iter};
 
     use rstest::{fixture, rstest};
@@ -4180,10 +4192,6 @@ mod tests {
         StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
         TopicityForm, TopicityRelationForm,
     };
-
-    mod benchmark_cases {
-        include!("../../benches/canonicalization_cases.rs");
-    }
 
     #[fixture]
     fn initial_class_molecule() -> Molecule {
@@ -4981,7 +4989,7 @@ mod tests {
 
     #[rstest]
     #[case::one_pass(false, 1)]
-    #[case::fixpoint(true, 3)]
+    #[case::fixpoint(true, 2)]
     fn test_structure_partition(
         para_stereo_canonicalization_molecule: Molecule,
         #[case] para_stereo: bool,
@@ -5003,6 +5011,40 @@ mod tests {
         .expect("fixed molecule has a structure partition");
 
         assert_eq!(rounds, expected_rounds);
+    }
+
+    #[rstest]
+    fn test_structure_partition_no_stereo() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..Default::default()
+        });
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+        let (entity_keys, incidence_keys) = initial_class_keys(&molecule, &incidence_graph)
+            .expect("fixed molecule has initial classes");
+        let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let (_, rounds) =
+            structure_partition(&molecule, &incidence_graph, &adapter, &entity_keys, true)
+                .expect("fixed molecule has a structure partition");
+
+        assert_eq!(rounds, 1);
+    }
+
+    #[rstest]
+    fn test_structure_partition_distinct_stereo(stereo_atom_canonicalization_molecule: Molecule) {
+        let molecule = stereo_atom_canonicalization_molecule;
+        let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+        let (entity_keys, incidence_keys) = initial_class_keys(&molecule, &incidence_graph)
+            .expect("fixed molecule has initial classes");
+        let classes = rank_initial_classes(&entity_keys, &incidence_keys);
+        let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+        let (_, rounds) =
+            structure_partition(&molecule, &incidence_graph, &adapter, &entity_keys, true)
+                .expect("fixed molecule has a structure partition");
+
+        assert_eq!(rounds, 1);
     }
 
     #[rstest]
@@ -5836,37 +5878,6 @@ mod tests {
             source_node_count: source.node_count(),
             entity_blocks: vec![source.node_ids().collect()],
         }
-    }
-
-    fn structural_leaf_key(
-        order: &[NodeId],
-        source: &Graph,
-        classes: &InitialClasses,
-    ) -> (Vec<u32>, Vec<(u32, u32, u32)>) {
-        let mut positions = vec![0_u32; source.node_count()];
-        for (position, node) in order.iter().enumerate() {
-            positions[node.index()] = position as u32;
-        }
-        let entity_classes = order
-            .iter()
-            .map(|node| classes.entities[node.index()])
-            .collect::<Vec<_>>();
-        let mut incidences = source
-            .edge_ids()
-            .map(|edge| {
-                let [first, second] = source.edge_endpoints(edge);
-                let first = positions[first.index()];
-                let second = positions[second.index()];
-                (
-                    classes.incidences[edge.index()],
-                    first.min(second),
-                    first.max(second),
-                )
-            })
-            .collect::<Vec<_>>();
-        incidences.sort_unstable();
-
-        (entity_classes, incidences)
     }
 
     fn project_entries(mut entries: MoleculeEntries, level: IncidenceLevel) -> MoleculeEntries {
@@ -7887,109 +7898,6 @@ mod tests {
                 explicitly_dense_equivalent(&molecule, &distinguished),
                 "edge mask {edge_mask:#08b}",
             );
-        }
-    }
-
-    #[rstest]
-    #[ignore = "manual optimized-build canonicalization benchmark"]
-    fn benchmark_exact_canonicalization_carrier() {
-        const ITERATIONS: u32 = 100;
-
-        eprintln!(
-            "case\tlevel\tincidence\tadapter\tincidence_ns\tclasses_ns\tadapter_ns\tbackend_ns\tsearch_ns\tremap_ns\trefinements\tleaves\tprefix_pruned\torbit_pruned"
-        );
-        for case in benchmark_cases::corpus() {
-            for level in benchmark_cases::LEVELS {
-                let mut incidence_time = Duration::ZERO;
-                let mut classes_time = Duration::ZERO;
-                let mut adapter_time = Duration::ZERO;
-                let mut backend_time = Duration::ZERO;
-                let mut search_time = Duration::ZERO;
-                let mut remap_time = Duration::ZERO;
-                let mut sizes = (0, 0, 0, 0);
-                let mut stats = CanonicalSearchStats::default();
-
-                for _ in 0..ITERATIONS {
-                    let start = Instant::now();
-                    let incidence = case.molecule.incidence_graph(level);
-                    incidence_time += start.elapsed();
-
-                    let start = Instant::now();
-                    let (entity_keys, incidence_keys) =
-                        initial_class_keys(&case.molecule, &incidence).unwrap();
-                    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-                    classes_time += start.elapsed();
-
-                    let start = Instant::now();
-                    let adapter = AutomorphismAdapter::new(&incidence, &classes);
-                    let descriptors =
-                        partition_descriptors(&adapter, &entity_keys, &incidence_keys);
-                    adapter_time += start.elapsed();
-
-                    let start = Instant::now();
-                    black_box(adapter.automorphisms(AutomorphismAlgorithm::Nauty));
-                    backend_time += start.elapsed();
-
-                    let source = incidence.graph();
-                    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
-                        key: structural_leaf_key(order, source, &classes),
-                        entity_order: order.to_vec(),
-                    };
-                    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
-                    let start = Instant::now();
-                    let result = canonical_search(
-                        &adapter,
-                        &descriptors,
-                        AutomorphismAlgorithm::Nauty,
-                        CanonicalSearchOptions {
-                            automorphism_pruning: true,
-                            prefix_pruning: false,
-                            branch_order: BranchOrder::BackendCanonical,
-                        },
-                        &leaf_candidate,
-                        &no_prefix,
-                    );
-                    search_time += start.elapsed();
-
-                    let correspondence = correspondence_from_order(
-                        &case.molecule,
-                        &incidence,
-                        &result.candidate.entity_order,
-                    );
-                    let start = Instant::now();
-                    black_box(case.molecule.remap(&correspondence));
-                    remap_time += start.elapsed();
-
-                    sizes = (
-                        incidence.graph().node_count(),
-                        incidence.graph().edge_count(),
-                        adapter.graph().node_count(),
-                        adapter.graph().edge_count(),
-                    );
-                    stats = result.stats;
-                }
-
-                let average = |duration: Duration| duration.as_nanos() / u128::from(ITERATIONS);
-                eprintln!(
-                    "{}\t{}\tn{}_e{}\tn{}_e{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    case.name,
-                    benchmark_cases::level_name(level),
-                    sizes.0,
-                    sizes.1,
-                    sizes.2,
-                    sizes.3,
-                    average(incidence_time),
-                    average(classes_time),
-                    average(adapter_time),
-                    average(backend_time),
-                    average(search_time),
-                    average(remap_time),
-                    stats.refinement_calls,
-                    stats.visited_leaves,
-                    stats.prefix_pruned_branches,
-                    stats.orbit_pruned_branches,
-                );
-            }
         }
     }
 
