@@ -5,7 +5,9 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{
     Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
-use umol_graph_ir::ir::{ApplyError, Entity, SubstructureMatchAlgorithm, SubstructureMatchConfig};
+use umol_graph_ir::ir::{
+    ApplyError, Entity, React, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+};
 
 use crate::strategies::*;
 
@@ -521,6 +523,63 @@ proptest! {
         }
         let actual = reaction
             .apply(&host, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
+            .collect::<Vec<_>>();
+
+        prop_assert_eq!(actual, expected);
+    }
+
+    /// `Molecule::react` is exactly reaction application followed by conservative splitting.
+    #[test]
+    fn test_react_react(
+        (reaction, host, _) in reaction_application_strategy(),
+    ) {
+        let expected = reaction
+            .apply(&host, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
+            .map(|application| {
+                application.map(|derivation| {
+                    derivation
+                        .rhs()
+                        .split()
+                        .into_iter()
+                        .map(|(component, _)| component)
+                        .collect()
+                })
+            })
+            .collect::<Vec<_>>();
+        let actual = host
+            .react(&reaction, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
+            .collect::<Vec<_>>();
+
+        prop_assert_eq!(actual, expected);
+    }
+
+    /// Slice reaction preserves manual combination, application, and split order and multiplicity.
+    #[test]
+    fn test_react_react_slice(
+        reaction in materializable_reaction_strategy(),
+        extra in molecule_strategy(),
+    ) {
+        let reactants = vec![reaction.lhs.clone(), extra];
+        let (host, _) = Molecule::combine_all(&reactants);
+        let expected = reaction
+            .apply(&host, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
+            .map(|application| {
+                application.map(|derivation| {
+                    derivation
+                        .rhs()
+                        .split()
+                        .into_iter()
+                        .map(|(component, _)| component)
+                        .collect()
+                })
+            })
+            .collect::<Vec<_>>();
+        let actual = reactants
+            .react(&reaction, MATCH_CONFIG)
             .map_err(|error| TestCaseError::fail(format!("application precondition: {error}")))?
             .collect::<Vec<_>>();
 

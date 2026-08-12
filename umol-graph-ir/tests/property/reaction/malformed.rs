@@ -5,12 +5,18 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
 use umol_graph_ir::ir::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
-    Contradiction, DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta,
+    Contradiction, DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, React,
     StereoAtomDelta, StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig,
     TransactionError,
 };
 
 use crate::strategies::*;
+
+const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
+    match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+    subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
+    relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+};
 
 fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPreconditionError)> {
     prop_oneof![
@@ -504,6 +510,16 @@ proptest! {
     }
 
     #[test]
+    fn test_react_react_precondition_error(
+        (reaction, expected) in unavailable_entity_strategy(),
+    ) {
+        prop_assert_eq!(
+            Molecule::default().react(&reaction, MATCH_CONFIG).unwrap_err(),
+            expected,
+        );
+    }
+
+    #[test]
     fn test_reaction_apply_error(host_atom_count in 1usize..=8) {
         let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(0)]),
@@ -538,5 +554,16 @@ proptest! {
         );
         prop_assert_eq!(applications.next(), None);
         prop_assert_eq!(applications.next(), None);
+
+        let mut products = host
+            .react(&reaction, MATCH_CONFIG)
+            .map_err(|error| TestCaseError::fail(format!("application precondition: {error:?}")))?;
+
+        prop_assert_eq!(
+            products.next(),
+            Some(Err(ApplyError::Transaction(TransactionError::MissingEntry))),
+        );
+        prop_assert_eq!(products.next(), None);
+        prop_assert_eq!(products.next(), None);
     }
 }

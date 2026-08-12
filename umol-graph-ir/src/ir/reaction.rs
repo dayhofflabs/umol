@@ -125,6 +125,12 @@ pub struct ReactionProductsIter {
     applications: ReactionApplicationIter,
 }
 
+impl ReactionProductsIter {
+    fn new(applications: ReactionApplicationIter) -> Self {
+        Self { applications }
+    }
+}
+
 impl Iterator for ReactionProductsIter {
     type Item = Result<Vec<Molecule>, ApplyError>;
 
@@ -139,6 +145,52 @@ impl Iterator for ReactionProductsIter {
                     .collect()
             })
         })
+    }
+}
+
+/// Apply a reaction and emit only the connected product components of each successful match.
+///
+/// Implementations preserve reaction match order, [`Molecule::split`] component order, and both
+/// application error channels. The operation borrows reusable reactants and takes an explicit
+/// matching configuration; its returned iterator owns snapshots of every input.
+///
+/// # Semantic properties
+///
+/// For a molecule slice `reactants`, the result is identical to combining `reactants` in slice
+/// order, applying `reaction`, and splitting every successful derivation's right-hand side while
+/// discarding the split correspondences. An empty slice follows the same rule through the empty
+/// combined molecule.
+pub trait React {
+    /// Apply `reaction` and lazily emit the connected product components for every successful
+    /// match.
+    fn react(
+        &self,
+        reaction: &Reaction,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionProductsIter, ApplyPreconditionError>;
+}
+
+impl React for Molecule {
+    fn react(
+        &self,
+        reaction: &Reaction,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
+        reaction
+            .apply(self, match_config)
+            .map(ReactionProductsIter::new)
+    }
+}
+
+impl React for [Molecule] {
+    fn react(
+        &self,
+        reaction: &Reaction,
+        match_config: SubstructureMatchConfig,
+    ) -> Result<ReactionProductsIter, ApplyPreconditionError> {
+        let (host, _) = Molecule::combine_all(self);
+        ReactionApplicationIter::new(reaction.clone(), host, match_config)
+            .map(ReactionProductsIter::new)
     }
 }
 
@@ -1769,6 +1821,86 @@ mod tests {
             Some(Err(ApplyError::Transaction(TransactionError::MissingEntry))),
         );
         assert_eq!(products.next(), None);
+    }
+
+    #[rstest]
+    fn test_react_react() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(molecule.clone(), Deltas::new());
+
+        let products = molecule
+            .react(&reaction, MATCH_CONFIG)
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(products, vec![vec![molecule]]);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::multiple(
+        vec![
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], ..Default::default() }),
+        ],
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)], ..Default::default() }),
+            Deltas::new(),
+        ),
+        vec![vec![
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C)], ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], ..Default::default() }),
+        ]],
+    )]
+    #[case::empty(
+        vec![],
+        Reaction::default(),
+        vec![vec![]],
+    )]
+    fn test_react_react_slice(
+        #[case] reactants: Vec<Molecule>,
+        #[case] reaction: Reaction,
+        #[case] expected: Vec<Vec<Molecule>>,
+    ) {
+        let products = reactants
+            .react(&reaction, MATCH_CONFIG)
+            .unwrap()
+            .map(Result::unwrap)
+            .collect::<Vec<_>>();
+
+        assert_eq!(products, expected);
+    }
+
+    #[rstest]
+    fn test_react_react_error() {
+        let reaction = Reaction::new(
+            Molecule::default(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::default(),
+            })]),
+        );
+
+        assert_eq!(
+            Molecule::default()
+                .react(&reaction, MATCH_CONFIG)
+                .unwrap_err(),
+            ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Atom(AtomId(0)),
+            },
+        );
+        assert_eq!(
+            Vec::<Molecule>::new()
+                .react(&reaction, MATCH_CONFIG)
+                .unwrap_err(),
+            ApplyPreconditionError::InvalidReactionReference {
+                entity: Entity::Atom(AtomId(0)),
+            },
+        );
     }
 
     #[rstest]

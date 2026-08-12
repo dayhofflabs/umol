@@ -194,7 +194,13 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   molecule. `Vec<Molecule>` participates through slice dereferencing, with no blanket
   `IntoIterator` implementation. Add exact cases and generated properties proving equality with
   the manual combine → apply → split pipeline for results, order, multiplicity, and both error
-  channels. This is additive. [dep: S1a]
+  channels. This is additive. [dep: S1a] **Done.** The exported trait is implemented only for
+  `Molecule` and `[Molecule]`; `Vec<Molecule>` participates through dereferencing. A slice is
+  combined once in input order and the fresh host is moved into the owned application iterator,
+  while the reusable borrowed reaction is snapshotted. Exact cases cover molecule, multiple
+  reactants, and the empty slice. The generated properties compare both receivers with the manual
+  pipeline at 256 cases and cover precondition errors, fatal item errors, terminal exhaustion,
+  result order, component order, and multiplicity.
 
 ### S2 — Python ownership and convenience surface (`umol-py`)
 

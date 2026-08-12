@@ -101,7 +101,7 @@ pub use noncovalent::{
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
 pub use reaction::{
-    DpoContradiction, Reaction, ReactionApplicationIter, ReactionIntegrityError,
+    DpoContradiction, React, Reaction, ReactionApplicationIter, ReactionIntegrityError,
     ReactionProductsIter,
 };
 pub use reaction_derivation::ReactionDerivation;
