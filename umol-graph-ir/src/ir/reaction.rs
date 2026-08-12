@@ -59,9 +59,11 @@ pub struct Reaction {
 
 /// One-shot reaction applications over an eagerly enumerated correspondence set.
 ///
-/// The iterator owns snapshots of the reaction and host. Derivations are constructed lazily in
-/// match order. Match-local rejection is skipped; another application failure is yielded once and
-/// terminates the iterator.
+/// This operation-issued iterator is created by [`Reaction::apply`] and has no independent public
+/// constructor. It owns snapshots of the reaction and host plus the reaction's normalized deltas,
+/// so later changes to the inputs cannot affect iteration. Matching is completed when the iterator
+/// is created; derivations are constructed lazily in match order. Match-local rejection is skipped;
+/// another application failure is yielded once and terminates the iterator.
 #[derive(Debug)]
 pub struct ReactionApplicationIter {
     reaction: Reaction,
@@ -116,10 +118,12 @@ impl Iterator for ReactionApplicationIter {
 
 /// One-shot product component collections derived lazily from reaction applications.
 ///
-/// Each successful application is replaced by the conservative connected-component split of its
-/// right-hand side. Component order is inherited from [`Molecule::split`]. The split
-/// correspondences and the rest of the derivation are intentionally discarded. Application errors
-/// pass through unchanged.
+/// This operation-issued iterator is created through [`React`] and has no independent public
+/// constructor. It owns the underlying [`ReactionApplicationIter`] and therefore the reaction and
+/// reactant snapshots. Each successful application is replaced lazily by the conservative
+/// connected-component split of its right-hand side. Component order is inherited from
+/// [`Molecule::split`]. The split correspondences and the rest of the derivation are intentionally
+/// discarded. Application errors pass through unchanged.
 #[derive(Debug)]
 pub struct ReactionProductsIter {
     applications: ReactionApplicationIter,
@@ -160,9 +164,45 @@ impl Iterator for ReactionProductsIter {
 /// order, applying `reaction`, and splitting every successful derivation's right-hand side while
 /// discarding the split correspondences. An empty slice follows the same rule through the empty
 /// combined molecule.
+///
+/// # Examples
+///
+/// ```
+/// use umol_graph_core::{
+///     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+/// };
+/// use umol_graph_ir::ir::{
+///     Molecule, React, Reaction, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+/// };
+///
+/// let reactants = [Molecule::new(), Molecule::new()];
+/// let reaction = Reaction::default();
+/// let config = SubstructureMatchConfig {
+///     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
+///     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2Rdkit,
+///     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+/// };
+/// let product_sets = reactants.react(&reaction, config)?;
+///
+/// for products in product_sets {
+///     for product in products? {
+///         println!("{product:?}");
+///     }
+/// }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub trait React {
     /// Apply `reaction` and lazily emit the connected product components for every successful
     /// match.
+    ///
+    /// The returned iterator owns snapshots of the reaction and reactants. Matching is eager;
+    /// product construction and splitting are lazy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApplyPreconditionError`] before issuing an iterator when the reaction fails a
+    /// reaction-wide application precondition. Once issued, the iterator yields [`ApplyError`] for
+    /// a non-rejection failure while realizing a selected match.
     fn react(
         &self,
         reaction: &Reaction,
@@ -1448,11 +1488,18 @@ impl Reaction {
         Ok(deltas)
     }
 
-    /// Every product of applying the reaction to `host`: one per injective match of `lhs` into
-    /// `host` (using `match_config`) that satisfies the
-    /// match-local DPO and structural conditions.
-    /// Structural preconditions are checked before match enumeration. Match-local rejection is
-    /// skipped; an internal application failure is yielded once and terminates the iterator.
+    /// Every derivation of applying the reaction to `host`: one per injective match of `lhs` into
+    /// `host` under `match_config` that satisfies the match-local DPO and structural conditions.
+    ///
+    /// The returned iterator owns snapshots of this reaction and `host`. Matching is eager;
+    /// derivation construction is lazy and follows match order. Match-local rejection is skipped;
+    /// another application failure is yielded once and terminates the iterator.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApplyPreconditionError`] before match enumeration when this reaction fails a
+    /// reaction-wide structural precondition. Failures arising while realizing a selected match
+    /// remain [`ApplyError`] iterator items.
     pub fn apply(
         &self,
         host: &Molecule,

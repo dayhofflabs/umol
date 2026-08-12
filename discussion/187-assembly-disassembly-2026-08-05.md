@@ -1,6 +1,6 @@
 # 187 — Multimolecular reaction convenience
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-05
 Relates: [005](005-mutability-2025-03-01.md),
 [151](151-python-molecule-workflows-2026-07-13.md)
@@ -250,12 +250,26 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   operation-issued construction, error placement, ordering, multiplicity, and manual-pipeline
   equivalence. Update current Rust and Python examples plus the permanent data-type, nomenclature,
   and property-test guides where these contracts are user-facing; do not change the author-managed
-  whitepaper. This is additive. [dep: S1b, S2c]
+  whitepaper. This is additive. [dep: S1b, S2c] **Done.** Rust publicly exports `React` and both
+  named operation-issued iterator return types, while Python exports only `Reaction.apply`,
+  `Molecule.react`, and `Molecule.react_all` and keeps the iterator classes internal. Rustdoc and
+  Python docstrings state snapshot ownership, eager matching, lazy derivation/product construction,
+  match and component ordering, and the split between eager precondition errors and iterator-item
+  errors. A compiling Rust example and a Python guide example show the derivation-preserving and
+  product-only paths. The permanent data-type, nomenclature, Python-API, and property-test guides
+  record the operation-issued lifecycle, `apply`/`react` distinction, manual-pipeline law, and its
+  verification domains. The Rust doctest, focused broken-link rustdoc, and strict graph-IR and
+  Python clippy checks pass; the whitepaper is unchanged.
 - **S3b — Repository-wide verification and status.** Run formatting, strict workspace clippy,
   workspace tests, the affected graph-IR property targets at the agreed larger case count, Python
   3.13 integration tests, and affected fuzz builds. Confirm the borrowed application iterator and
   duplicated Python application driver are gone, then mark this document completed and update
-  `000-status.md`. This is additive. [dep: S3a]
+  `000-status.md`. This is additive. [dep: S3a] **Done.** Formatting, strict workspace clippy, and
+  the complete workspace test suite pass. The graph-IR reaction property target passes all 79 tests
+  at 256 generated cases, the rebuilt Python 3.13 integration suite passes all 1,296 tests, and both
+  affected reaction fuzz targets build. The final structural audit confirms that `Reaction::apply`
+  returns the owned named iterator and the Python iterator contains only that Rust iterator; no
+  borrowed application iterator or duplicate Python application driver remains.
 
 The critical path is S0a → S0b → S1a → S1b → S2a/S2b → S2c → S3. No stage is deferrable: the
 owned application iterator is required by both the Rust multi-reactant operation and the single

@@ -607,6 +607,15 @@ for independently asserting that provenance. Replacing it with another transacti
 object independently violates the operation contract; rollback must not panic, but it does not owe
 correct restoration for the compromised pairing.
 
+Reaction iterators are operation-issued values with a different lifecycle. `Reaction::apply`
+checks reaction-wide preconditions and then issues a `ReactionApplicationIter` that owns snapshots
+of the reaction and host, normalized application state, and an eagerly enumerated correspondence
+set. `React::react` issues a `ReactionProductsIter` over the same application lifecycle. Neither
+iterator has a public constructor. Derivations and product-component lists are realized lazily in
+match order, so failures at that stage remain iterator items; a fatal item error is yielded once and
+terminates the iterator. Later mutation of the source reaction or molecules cannot change the
+issued operation.
+
 The resulting rules are:
 
 - do not add validation merely to defend against swapping an opaque, provenance-bound result into a

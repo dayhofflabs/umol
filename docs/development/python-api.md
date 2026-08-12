@@ -81,6 +81,32 @@ For molecules, the editor is the structural mutation boundary: adding or removin
 overlays goes through `MoleculeEditor`. Ordinary attribute and constraint mutation does not require
 an editor; it writes through the molecule's entity and constraint views.
 
+### Operation-issued iterator
+
+An operation-issued iterator captures one configured execution and cannot be constructed
+independently. Reaction application is the reference case. `Reaction.apply` performs the
+reaction-wide precondition check and returns a one-shot iterator over derivations;
+`Molecule.react` and `Molecule.react_all` return a one-shot iterator over product-component lists.
+These iterator classes are not exported or directly constructible.
+
+The iterator owns snapshots of every input needed by the operation, so mutating the source reaction
+or molecules after the call does not change the pending results. Matching is completed when the
+iterator is issued; derivations, products, and product splitting are realized lazily in match order.
+An eager reaction-wide failure is raised by the operation call. A non-rejection failure while
+realizing a selected match is raised by `next` once and terminates the iterator. This placement
+parallels the outer `Result` and fallible iterator item on the Rust side.
+
+Use `apply` when the derivation and correspondence are required; use `react` when only disconnected
+product molecules are needed:
+
+```python
+for derivation in reaction.apply(host):
+    print(derivation.comap)
+
+for products in Molecule.react_all([first, second], reaction):
+    print(products)
+```
+
 ## Choosing the Python mutation model
 
 Begin with the public behavior of the corresponding Rust type. An owned transformation normally

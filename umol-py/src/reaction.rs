@@ -413,7 +413,12 @@ impl Reaction {
             .collect()
     }
 
-    /// Return one-shot application results with eager matching and lazy derivation construction.
+    /// Return one derivation per successful match through a one-shot iterator.
+    ///
+    /// Matching is eager; derivation construction is lazy. The iterator owns snapshots of the
+    /// reaction and host, so later mutations do not affect it. Reaction-wide precondition failures
+    /// raise `InvalidStructureError` here; failures while realizing a match are raised by
+    /// iteration.
     #[pyo3(signature = (host, *, config=None))]
     fn apply(
         &self,

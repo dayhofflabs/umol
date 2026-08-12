@@ -254,11 +254,14 @@ higher layers follow the same suffix.
 
 ### Application
 
-**Application** executes a complete edit plan transactionally and publishes the result only when
-every edit succeeds.
+**Application** realizes an operation against a concrete host. Edit application executes a complete
+edit plan transactionally and publishes the result only when every edit succeeds. Reaction
+application matches a reaction rule against a host and emits one `ReactionDerivation` per successful
+match.
 
-**Not:** plan (which is derived without mutating), transformation.
-**In code:** `apply`, `apply_at`.
+**Not:** plan (which is derived without mutating), `react` (which intentionally discards the
+derivation and emits only product components).
+**In code:** `apply`, `apply_at`, `ReactionApplicationIter`.
 
 ### Attributes
 
@@ -1125,6 +1128,18 @@ may be used descriptively when explaining that an entity relation induces partic
 
 **Not:** the public name of stored constraints, or of the incidence-constraint category.
 **In code:** —
+
+### React
+
+**React** is the product-oriented convenience operation over reaction application. For one molecule
+it applies the reaction and splits each successful right-hand side. For several molecules it first
+combines them by disjoint union in input order, then performs the same apply-and-split operation. It
+emits one product-component collection per successful match and discards the derivation and split
+correspondences.
+
+**Not:** `apply`, which returns complete `ReactionDerivation` values; reaction construction or
+composition.
+**In code:** `React`, `react`, `react_all`, `ReactionProductsIter`.
 
 ### Reaction
 

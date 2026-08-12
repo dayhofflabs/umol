@@ -311,7 +311,14 @@ impl Molecule {
         ))
     }
 
-    /// Apply `reaction` and lazily emit the connected product components for each match.
+    /// Apply `reaction` and lazily emit one connected product-component list per match.
+    ///
+    /// Matching is eager; product construction and splitting are lazy. The returned one-shot
+    /// iterator owns snapshots of this molecule and the reaction. Reaction-wide precondition
+    /// failures raise `InvalidStructureError` here; failures while realizing a match are raised by
+    /// iteration.
+    ///
+    /// Example: `product_sets = molecule.react(reaction)`.
     #[pyo3(signature = (reaction, *, config=None))]
     fn react(
         &self,
@@ -331,6 +338,13 @@ impl Molecule {
     }
 
     /// Combine `reactants` in iterable order, apply `reaction`, and lazily emit product components.
+    ///
+    /// Any iterable is accepted, including an empty iterable. Matching is eager; product
+    /// construction and splitting are lazy. The returned one-shot iterator owns snapshots of all
+    /// inputs. Reaction-wide precondition failures raise `InvalidStructureError` here; failures
+    /// while realizing a match are raised by iteration.
+    ///
+    /// Example: `product_sets = Molecule.react_all([first, second], reaction)`.
     #[staticmethod]
     #[pyo3(signature = (reactants, reaction, *, config=None))]
     fn react_all(
