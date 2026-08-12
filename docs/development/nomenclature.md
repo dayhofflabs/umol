@@ -272,10 +272,6 @@ graph-IR value; do not extend `attributes` to values that are not complete entit
 
 ### Canonical and canonicalize
 
-> **TODO (2026-08-07):** The definitions below are the approved target semantics from discussion
-> doc 186. Fixed-frame form normalization now uses `Normalize` and `Equiv`; the aggregate
-> canonicalization API remains to be implemented. Remove this marker when that API lands.
-
 **Canonicalize** selects a canonical entity-id and participant frame for a complete indexed graph IR
 modulo the admissible remappings. It uses canonical labeling, transports every entity and reference
 through the selected frame, applies the corresponding participant actions, and normalizes the
@@ -981,6 +977,18 @@ carrying no aromatic, stereo, or coordination information.
 
 **Not:** molecular structure, which includes the overlay entities.
 **In code:** —
+
+### Molecule atom
+
+A **molecule atom** is an atom addressed within its molecule, passed as `&Molecule` plus `AtomId`
+per the view rule. Operation names distinguish it from the owned form: `*_molecule_atom` takes the
+molecule and the id, while bare `*_atom` takes an `AtomForm` outside any molecule context. The
+pairs `check_atom`/`check_molecule_atom`, `for_atom`/`for_molecule_atom`, and
+`resolve_atom`/`resolve_molecule_atom` follow this convention, which extends to every entity kind.
+
+**Not:** "standalone atom" or "free-standing atom" for the form-level case — the bare operation
+name with its `AtomForm` parameter already carries it.
+**In code:** `*_molecule_atom` operations; bare `*_atom` operations on `AtomForm`.
 
 ### Narrow and widen
 

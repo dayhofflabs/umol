@@ -16,14 +16,25 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
+/// Low-level electron-conservation checks and candidate enumeration.
+///
+/// Validation callers should normally use [`ValenceInvariantsValidator`]. Candidate enumeration
+/// is exposed separately because it returns possible ground atom forms rather than a validation
+/// verdict.
 pub struct ValenceInvariants;
 
+/// Validates the model-independent electron-conservation invariant.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ValenceInvariantsValidator;
 
+/// Setup failures from valence-invariant validation.
+///
+/// The current implementation has no setup failure, but the distinct error channel preserves the
+/// common validator result contract.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceInvariantsError {}
 
+/// A model-independent electron-conservation contradiction.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceMismatch {
     #[error("atom {atom_id:?}: orbital count {orbital_count} != electron count {electron_count}")]
@@ -419,6 +430,10 @@ impl ValenceInvariants {
 }
 
 impl ValenceInvariantsValidator {
+    /// Validate electron conservation for every molecule atom.
+    ///
+    /// Non-literal required values produce [`Solution::Underdetermined`]; a literal orbital/electron
+    /// mismatch produces [`Solution::Contradictory`].
     pub fn validate(
         &self,
         molecule: &Molecule,
@@ -426,6 +441,7 @@ impl ValenceInvariantsValidator {
         Ok(ValenceInvariants::check(molecule))
     }
 
+    /// Validate electron conservation for a free-standing atom with zero topology contribution.
     pub fn validate_atom(
         &self,
         atom: &AtomForm,

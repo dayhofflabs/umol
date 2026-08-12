@@ -70,16 +70,19 @@ pub enum ConnectivityConformanceContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ConnectivityConformanceError {}
 
+/// Validates molecule connectivity against a [`ConnectivityModel`].
 #[derive(Clone, Debug)]
 pub struct ConnectivityConformanceValidator<'a> {
     model: &'a ConnectivityModel,
 }
 
 impl<'a> ConnectivityConformanceValidator<'a> {
+    /// Construct a validator borrowing its connectivity model.
     pub fn new(model: &'a ConnectivityModel) -> Self {
         Self { model }
     }
 
+    /// Validate every enabled connectivity condition without modifying the molecule.
     pub fn validate(
         &self,
         molecule: &Molecule,

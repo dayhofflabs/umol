@@ -5,9 +5,15 @@
 //! map, R-side, condensed (CGR) form, and reverse reaction are all *derived* from
 //! `(lhs, deltas)` rather than stored (those derivations live in `reaction_span.rs`).
 
+mod dpo;
+mod integrity;
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::iter;
 
+use dpo::check_reaction_dpo;
+pub use dpo::DpoContradiction;
+pub use integrity::ReactionIntegrityError;
 use umol_graph_core::Correspondence;
 use umol_perm::Permutation;
 
@@ -43,7 +49,6 @@ use super::reaction_derivation::ReactionDerivation;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
 use super::traits::Normalize;
-use super::validate::{check_reaction_dpo, ReactionIntegrityError};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -174,6 +179,11 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
 }
 
 impl Reaction {
+    /// Construct a reaction from an lhs and deltas without checking representation integrity or
+    /// reaction semantics.
+    ///
+    /// Call [`Self::check_integrity`] before contextual use when the parts come from an untrusted
+    /// source.
     pub fn new(lhs: Molecule, deltas: Deltas) -> Self {
         Self { lhs, deltas }
     }
@@ -1477,7 +1487,6 @@ mod tests {
     use super::super::num::NumForm;
     use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
     use super::super::substructure::SubstructureMatchAlgorithm;
-    use super::super::validate::DpoContradiction;
     use super::*;
 
     const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {

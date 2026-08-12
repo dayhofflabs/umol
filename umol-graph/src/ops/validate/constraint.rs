@@ -86,10 +86,16 @@ pub enum ConstraintInvariantsError {
 }
 
 impl ConstraintInvariantsValidator {
+    /// Construct a validator with explicit model-independent algorithm choices.
     pub fn new(config: ConstraintValidateConfig) -> Self {
         Self { config }
     }
 
+    /// Validate all inline, relational, and molecule constraints.
+    ///
+    /// A non-ground predicate produces [`Solution::Underdetermined`], a false predicate produces
+    /// [`Solution::Contradictory`], and unavailable references or unsupported dative-ring
+    /// semantics use the error channel.
     pub fn validate(
         &self,
         molecule: &Molecule,

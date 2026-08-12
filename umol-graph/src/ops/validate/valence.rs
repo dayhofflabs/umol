@@ -9,6 +9,7 @@ use umol_utils::solution::Solution;
 use crate::ops::model::ValenceModel;
 use crate::ops::valence::{AtomTypingMismatch, AtomTypingValence, CountsMismatch, CountsValence};
 
+/// Validates atoms against the selected valence model.
 #[derive(Clone, Debug)]
 pub enum ValenceConformanceValidator<'a> {
     AtomTyping(AtomTypingValence<'a>),
@@ -27,6 +28,7 @@ pub enum ValenceConformanceContradiction {
 pub enum ValenceConformanceError {}
 
 impl<'a> ValenceConformanceValidator<'a> {
+    /// Construct the validator engine selected by the valence model.
     pub fn new(model: &'a ValenceModel) -> Self {
         match model {
             ValenceModel::AtomTyping { registry } => {
@@ -36,6 +38,10 @@ impl<'a> ValenceConformanceValidator<'a> {
         }
     }
 
+    /// Validate every molecule atom without modifying the molecule.
+    ///
+    /// An unresolved classification produces [`Solution::Underdetermined`]; the first model
+    /// mismatch produces [`Solution::Contradictory`].
     pub fn validate(
         &self,
         molecule: &Molecule,

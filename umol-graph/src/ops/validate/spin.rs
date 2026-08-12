@@ -12,6 +12,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
+/// Validates model-independent unpaired-electron count and multiplicity pairs.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SpinInvariantsValidator;
 
@@ -44,6 +45,10 @@ pub enum SpinInvariantsContradiction {
 pub enum SpinInvariantsError {}
 
 impl SpinInvariantsValidator {
+    /// Validate spin invariants on all applicable entities and molecule constraints.
+    ///
+    /// Incomplete pairs produce [`Solution::Underdetermined`]; invalid complete pairs produce
+    /// [`Solution::Contradictory`].
     pub fn validate(
         &self,
         molecule: &Molecule,
@@ -126,6 +131,7 @@ impl SpinInvariantsValidator {
         })
     }
 
+    /// Validate the unpaired-electron pair on one free-standing atom.
     pub fn validate_atom(
         &self,
         atom: &AtomForm,

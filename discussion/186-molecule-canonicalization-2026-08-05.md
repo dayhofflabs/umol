@@ -1,6 +1,6 @@
 # 186 - Molecule canonicalization
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-05
 Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
@@ -1983,6 +1983,13 @@ and the semantic properties validated by the corresponding property tests.
   domains in rustdoc; do not cite this dated discussion document from code. Audit the Python
   canonicalization surface for parity with the implemented Rust aggregate operations. This is
   additive or a final red-to-green export migration. [dep: S2f, S9c, S12c, S13c]
+  **Done.** The canonicalization context, levels, config, trait, carrier errors, integrity checks,
+  and tier-2/tier-3 validators now document their semantic roles and failure channels. Benchmark
+  phase components remain directly callable by Criterion but are hidden from the stable rustdoc
+  surface. Reaction integrity and DPO checks now live under the reaction implementation rather than
+  a graph-IR validator module. The Python surface has both configuration classes and all four
+  aggregate operations for molecules, reaction spans, and reactions, with the same level and error
+  semantics as Rust.
 - **S14b — Repository-wide verification.** Run formatting, clippy, workspace tests, the full
   graph-IR and graph property targets at the agreed larger case count, conformance targets, affected
   fuzz builds, and the canonicalization benchmarks. Confirm that no old `Canonicalize`
@@ -1990,10 +1997,24 @@ and the semantic properties validated by the corresponding property tests.
   `ConstitutionFeatures`, graph-IR validator modules, or
   `apply_remapping`/`try_apply_remapping`/`apply_compaction` spellings remain. This is additive.
   [dep: S14a]
+  **Done.** Formatting, strict workspace clippy, strict graph-IR proptest-target clippy, workspace
+  tests, the 256-case graph-IR and graph property runs, the graph resolution and 10,032-case SMILES
+  conformance suites, all graph-IR fuzz builds, and the 1,287-test Python 3.13 integration suite
+  pass. The stale-name and removed-variant scan is clean. A generated application case clarified
+  the partial-operation property: canonical relabeling preserves success or failure, and successful
+  products remain equivalent under the induced total correspondence, but the first diagnostic
+  among multiple failures is not itself a canonical value.
 - **S14c — Permanent documentation and status.** Update the DSL specification, current examples,
   nomenclature, data-type, and property-test guides to the implemented API; remove the dated doc-186
   TODO markers; record benchmark results and exact compatibility promises; then mark this document
   completed and update `000-status.md`. The whitepaper remains author-managed. [dep: S14b]
+  **Done.** The permanent data-type, nomenclature, and property-test guides describe the shipped
+  aggregate API, fixed typed schema, append-only compatibility contract, and executable comparison
+  laws without dated implementation markers. The DSL specification and current examples contained
+  no stale aggregate-canonicalization or relative-delta surface. The final quick benchmark retained
+  the established envelope: full canonicalization ranged from about 112 us for the tetrahedral
+  case to 9.34 ms for the deliberately symmetric disconnected-rings case; the para-stereo cascade
+  completed in about 0.91 ms. The whitepaper was not changed.
 
 The critical path is S0 → S1 → S2a/S2b → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S11 → S12 →
 S13 → S14. S10 is independent after S1 and must complete before S11. S2c–S2f can proceed alongside the

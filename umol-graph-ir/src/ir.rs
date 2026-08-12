@@ -34,7 +34,6 @@ pub(crate) mod stereo;
 pub(crate) mod substructure;
 pub(crate) mod symmetry;
 pub(crate) mod traits;
-pub(crate) mod validate;
 pub(crate) mod view;
 
 pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
@@ -101,7 +100,7 @@ pub use noncovalent::{
 };
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
-pub use reaction::Reaction;
+pub use reaction::{DpoContradiction, Reaction, ReactionIntegrityError};
 pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
@@ -121,7 +120,6 @@ pub use traits::{
     AsLit, BiRelationEquiv, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized,
     RelationEquiv, TryFromIr, TryIntoIr,
 };
-pub use validate::{DpoContradiction, ReactionIntegrityError};
 pub use view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism, AtomView,
     AtomViewMut, AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,

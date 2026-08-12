@@ -385,12 +385,14 @@ impl Molecule {
         MoleculeBuilder::new()
     }
 
-    /// Full structural constructor from a flat [`MoleculeEntries`]: every
-    /// entity-type field is supplied directly. The topology-only case fills
-    /// just `atoms` and `bonds`; relations and molecule-level constraints go
-    /// in the remaining fields. Panics if an entry references an unavailable
-    /// entity or otherwise violates molecule representation integrity; use
-    /// [`Self::try_from_entries`] for untrusted input.
+    /// Full structural constructor from a flat [`MoleculeEntries`]: every entity-type field is
+    /// supplied directly. The topology-only case fills just `atoms` and `bonds`; relations and
+    /// molecule-level constraints go in the remaining fields.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an entry references an unavailable entity or otherwise violates molecule
+    /// representation integrity. Use [`Self::try_from_entries`] for untrusted input.
     pub fn from_entries(entries: MoleculeEntries) -> Self {
         Self::try_from_entries(entries)
             .unwrap_or_else(|error| panic!("invalid molecule entries: {error}"))

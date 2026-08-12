@@ -1,4 +1,4 @@
-//! Reaction integrity validation for entity references and structural incidence.
+//! Reaction representation-integrity checks.
 
 use std::collections::HashSet;
 use std::iter;
@@ -14,18 +14,22 @@ use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
 use super::super::molecule::{Molecule, MoleculeIntegrityError};
-use super::super::reaction::Reaction;
+use super::Reaction;
 
 /// Internal implementation of reaction integrity checking.
 #[derive(Clone, Copy, Debug, Default)]
 struct ReactionIntegrityCheck;
 
+/// Failure of the representation contract required to interpret a [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionIntegrityError {
+    /// The left-hand-side molecule is not representation-integrity valid.
     #[error("reaction lhs is not a valid molecule representation: {0}")]
     Lhs(#[from] MoleculeIntegrityError),
+    /// A delta refers to an entity unavailable from either the lhs or the reaction's additions.
     #[error("reaction references unavailable entity {entity:?}")]
     InvalidReference { entity: Entity },
+    /// A removal records incidence that disagrees with the referenced lhs entity.
     #[error("reaction incidence does not match lhs entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
 }

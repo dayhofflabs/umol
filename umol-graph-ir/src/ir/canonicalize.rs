@@ -40,7 +40,7 @@ use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
-use super::reaction::Reaction;
+use super::reaction::{Reaction, ReactionIntegrityError};
 use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
@@ -48,7 +48,6 @@ use super::stereo::{
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
 };
 use super::traits::Normalize;
-use super::validate::ReactionIntegrityError;
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -143,6 +142,10 @@ pub trait Canonicalize: Sized {
     ) -> bool;
 }
 
+// The public items marked hidden below expose individual phases to the Criterion benchmark. They
+// are not an alternative canonicalization API; aggregate callers should use `Canonicalize`.
+
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StructuralDomainPosition(u16);
 
@@ -152,6 +155,7 @@ impl StructuralDomainPosition {
     const STEREO: Self = Self(2);
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct EntityBlockPosition {
     domain: StructuralDomainPosition,
@@ -173,12 +177,15 @@ impl EntityBlockPosition {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FieldPosition(u16);
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VariantPosition(u16);
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SpanTagPosition(u16);
 
@@ -189,6 +196,7 @@ impl SpanTagPosition {
     const MODIFIED: Self = Self(3);
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConstraintBlockPosition {
     Inline(EntityBlockPosition),
@@ -236,6 +244,7 @@ impl RelationalConstraintPosition {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PositionedKey<P> {
     position: P,
@@ -256,10 +265,14 @@ impl<P: Ord> PartialOrd for PositionedKey<P> {
     }
 }
 
+#[doc(hidden)]
 pub type FieldKey = PositionedKey<FieldPosition>;
+#[doc(hidden)]
 pub type EntityBlockKey = PositionedKey<EntityBlockPosition>;
+#[doc(hidden)]
 pub type ConstraintBlockKey = PositionedKey<ConstraintBlockPosition>;
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VariantKey {
     position: VariantPosition,
@@ -280,6 +293,7 @@ impl PartialOrd for VariantKey {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpanKey {
     position: SpanTagPosition,
@@ -300,6 +314,7 @@ impl PartialOrd for SpanKey {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanonicalKeyValue {
     #[cfg(test)]
@@ -357,6 +372,7 @@ impl PartialOrd for CanonicalKeyValue {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanonicalComparisonKey {
     entity_blocks: Vec<EntityBlockKey>,
@@ -430,8 +446,7 @@ fn option(value: Option<CanonicalKeyValue>) -> CanonicalKeyValue {
     }
 }
 
-/// Lift one entity value key into the fixed reaction-span comparison schema.
-pub fn entity_span_key<T>(
+fn entity_span_key<T>(
     span: &EntitySpan<T>,
     value_key: impl Fn(&T) -> CanonicalKeyValue,
 ) -> CanonicalKeyValue {
@@ -1341,6 +1356,7 @@ fn constraint_key(value: &Constraint) -> CanonicalKeyValue {
 }
 
 /// Construct the ordered constraint blocks used by complete canonicalization.
+#[doc(hidden)]
 pub fn constraint_blocks(molecule: &Molecule) -> Vec<ConstraintBlockKey> {
     let mut blocks = Vec::new();
     macro_rules! inline_block {
@@ -1455,6 +1471,7 @@ fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradicti
     })
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InitialClassKey {
     Entity {
@@ -1492,18 +1509,21 @@ impl PartialOrd for InitialClassKey {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InitialClasses {
     entities: Vec<u32>,
     incidences: Vec<u32>,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AutomorphismClass {
     Entity(u32),
     Incidence(u32),
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug)]
 pub struct AutomorphismAdapter {
     // Source entity nodes retain their ids. Role- or value-bearing incidence edges become colored
@@ -1521,6 +1541,7 @@ pub struct AutomorphismAdapter {
     entity_blocks: Vec<Vec<NodeId>>,
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProjectedAutomorphismOutput {
     orbits: Vec<NodeId>,
@@ -1722,6 +1743,7 @@ impl AutomorphismAdapter {
     }
 }
 
+#[doc(hidden)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OrderedPartition {
     cells: Vec<Vec<NodeId>>,
@@ -2080,6 +2102,7 @@ fn initial_classes(
 }
 
 /// Construct the normalized entity and incidence keys used for initial classes.
+#[doc(hidden)]
 pub fn initial_class_keys(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -2098,6 +2121,7 @@ pub fn initial_class_keys(
 }
 
 /// Construct topology-level partition descriptors for the exact adapter.
+#[doc(hidden)]
 pub fn partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialClassKey],
@@ -2119,6 +2143,7 @@ pub fn partition_descriptors(
 /// fix the search partition: their order is selected by the typed leaf key. Using them for both
 /// purposes would exclude valid dense relabelings before the key can compare them.
 /// Construct constitution-level partition descriptors for the exact adapter.
+#[doc(hidden)]
 pub fn constitution_partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialClassKey],
@@ -2343,6 +2368,7 @@ fn para_stereo_partition_descriptors(
 }
 
 /// Refine the structure partition, including para-stereo rounds when requested.
+#[doc(hidden)]
 pub fn structure_partition(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -2397,6 +2423,7 @@ pub fn structure_partition(
 }
 
 /// Assign dense ordered classes to normalized entity and incidence keys.
+#[doc(hidden)]
 pub fn rank_initial_classes(
     entity_keys: &[InitialClassKey],
     incidence_keys: &[InitialClassKey],

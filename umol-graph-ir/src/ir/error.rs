@@ -5,7 +5,7 @@ use thiserror::Error;
 use super::entity::Entity;
 use super::id::AtomId;
 use super::molecule::transact::TransactionError;
-use super::validate::DpoContradiction;
+use super::reaction::DpoContradiction;
 
 /// Unsatisfiable operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]

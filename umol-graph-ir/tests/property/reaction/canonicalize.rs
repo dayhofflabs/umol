@@ -340,7 +340,10 @@ proptest! {
         let canonical_application = canonical.apply_at(&host, &canonical_match);
 
         match (source_application, canonical_application) {
-            (Err(left), Err(right)) => prop_assert_eq!(left, right),
+            // Application is a partial operation. Canonical relabeling preserves its domain, but
+            // the first diagnostic need not be stable when several embeddings or stereo frames
+            // fail and their entity order changes.
+            (Err(_), Err(_)) => {}
             (Ok(left), Ok(right)) => {
                 let products = product_correspondence(
                     &source_span,

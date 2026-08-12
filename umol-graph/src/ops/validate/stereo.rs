@@ -46,6 +46,7 @@ impl StereoValidateConfig {
     }
 }
 
+/// Validates stored stereo entities and constraints against a stereo model.
 #[derive(Clone, Debug)]
 pub struct StereoConformanceValidator {
     model: StereoModel,
@@ -75,10 +76,12 @@ pub enum StereoConformanceContradiction {
 pub enum StereoConformanceError {}
 
 impl StereoConformanceValidator {
+    /// Construct a validator with the default stereo operation configuration.
     pub fn new(model: &StereoModel) -> Self {
         Self::with_config(model, StereoValidateConfig::default())
     }
 
+    /// Construct a validator with explicit stereo operation configuration.
     pub fn with_config(model: &StereoModel, config: StereoValidateConfig) -> Self {
         Self {
             model: model.clone(),

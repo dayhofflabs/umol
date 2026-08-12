@@ -24,6 +24,7 @@ pub struct RelationalConstraintInvariantsContradiction {
 }
 
 impl RelationalConstraintInvariantsValidator {
+    /// Validate one cross-entity relation, enumerating relevant rings only when required.
     pub fn validate(
         &self,
         molecule: &Molecule,

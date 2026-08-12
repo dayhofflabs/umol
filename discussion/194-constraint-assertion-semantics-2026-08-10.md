@@ -86,8 +86,8 @@ The `Lattice` trait is untouched: `meet`, `join`, and `matches` on values are al
 source-agnostic. What restructures are the container-level comparison entry points (`matches`,
 `is_compatible`, match-target construction), which currently demand two materialized containers.
 They move onto a per-entity constraints view — `AtomConstraintsView` and the per-entity family —
-constructed per call from the assertions container, the entity's relational context, and a reading
-mode, exposing the per-key *effective value*:
+constructed per call from the assertions container, the entity's relational context, and a
+`RelationCoverage`, exposing the per-key *effective value*:
 
 ```
 effective(key) = asserted(key) ∧ projected(key)    // meet; either side may be absent
@@ -98,8 +98,9 @@ The view is always the receiver of a comparison, never a function argument.
 - Evaluation is driven by the pattern's keys, so only requested projections are computed. The
   per-key selector of doc 125 falls out, and the monolithic `derive_constraints` retires.
 - A `⊥` effective value needs no special path: `matches`/`is_compatible` return false.
-- A standalone entity form (no molecule context, e.g. the electron-count invariant check) is the
-  same abstraction with an assertion-only view.
+- An entity form outside any molecule context (e.g. the electron-count invariant check) is the
+  same abstraction with an assertion-only view; the form context fixes `Partial`, since with no
+  relations "complete" would read as definite degree and valence zero.
 - Ring keys obtain their `RingViews` context inside the view, as `ConstraintEvaluation` already
   memoizes for validation.
 
@@ -190,7 +191,7 @@ property of the consuming operation, not of the molecule:
 - a two-type split (ground versus staging molecule) is the type-level version but is heavy and
   Python-visible, and the boundary is per key, not per molecule.
 
-The existing `include_missing: bool` therefore becomes the reading mode supplied when
+The existing `include_missing: bool` therefore becomes `RelationCoverage`, supplied when
 constructing the constraints view: `Complete` (the deriving relation set is complete; absence is a
 definite negative) versus `Partial` (the relation set is partial; absence is no evidence).
 
@@ -237,22 +238,67 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
 
 ### S0 — constraints-view foundation (`umol-graph-ir`); all additive, green throughout
 
-- S0a: reading-mode enum with `Complete`/`Partial` in the view module (type name proposal:
-  `RelationReading`, to confirm at review). Additive.
+- S0a: `RelationCoverage` (`Complete`/`Partial`) in the view module. Additive.
 - S0b: `AtomConstraintsView`: construction from assertions container, atom relational context,
-  reading mode, optional ring context; `effective(key)` over every `AtomConstraintKey`. Additive.
-  [dep: S0a]
+  `RelationCoverage`, optional ring context; `effective(key)` over every `AtomConstraintKey`.
+  Additive. [dep: S0a]
 - S0c: comparison methods on the view — pattern-driven `matches`/`is_compatible` against a pattern
   container; the view is the receiver. Additive. [dep: S0b]
 - S0d: `BondConstraintsView`, same shape. Additive. [dep: S0a]
 - S0e: views for the remaining six entity families (uniform surface). Additive. [dep: S0a] —
   gates only S6a.
-- S0f: nomenclature entries: view family, reading mode, effective value, discharge. Additive.
+- S0f: nomenclature entries: view family, `RelationCoverage`, effective value, discharge; reword
+  the two `invariant.rs` "standalone" doc comments to the molecule-atom convention. Additive.
+
+The S0b/S0c surface (settled 2026-08-12):
+
+```rust
+pub struct AtomConstraintsView<'a> {
+    context: AtomConstraintsContext<'a>,
+    coverage: RelationCoverage,   // the Atom context fixes Partial
+    rings: Option<&'a RingSet>,   // ring context is data, never a view
+}
+
+enum AtomConstraintsContext<'a> {   // private: the two constructors are the only entry points
+    MoleculeAtom { molecule: &'a Molecule, atom: AtomId },
+    Atom(&'a AtomForm),
+}
+
+// Molecule::atom_constraints_view(id, coverage); AtomForm::constraints_view();
+// AtomConstraintsView::with_rings(self, &RingSet)
+
+fn asserted(&self, key: AtomConstraintKey) -> Option<&AtomConstraintForm>;
+fn projected(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
+fn effective(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
+fn determined(&self, key: AtomConstraintKey) -> bool;
+fn matches(&self, pattern: &AtomConstraintsForm) -> bool;
+fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
+```
+
+- Constructed from molecule + atom id; per the view rule the view holds no other view. The
+  `MoleculeAtom` context projects through a transient `AtomView` materialized per read and dropped
+  inside the call; the `Atom` context projects nothing, so `effective` collapses to
+  `asserted`. The context enum is private because the `Atom` context must fix `Partial`.
+- `effective` = asserted ∧ projected; absence on either side reads as the undetermined form;
+  `None` is `⊥`, folding to `false` in the comparisons and to `Contradictory` in discharge.
+- Coverage gates only the overlay-incidence keys (`#a`, `#m`, `#d`/`#t`, `#T`); skeleton keys
+  (`#v`, `#D`, `#X`, `#H`, `#V`) project from the graph in both modes, matching current
+  `include_missing` behavior.
+- A ring key requested without ring context is a caller error (the consumer scanning pattern keys
+  decides whether to build the `RingSet`, as matching does today).
+- No full-key iteration: `RingMembership(RingScope)` is open-ended, so evaluation is driven by the
+  consumer's key set; asserted-side iteration stays on the container.
+- Typed accessors (`effective_valence()`, …) deferred until usage shows the need.
+  `BondConstraintsView` mirrors the shape with `BondConstraintKey`.
+- Naming note for the S0f glossary entry: `meet(key)` was considered for `effective(key)` and
+  rejected — `meet` is uniformly binary over like values (`fn meet(&self, other: &Self)`), and a
+  keyed unary form would overload the signature pattern; `None` from `effective` still means `⊥`,
+  matching the `meet` convention.
 
 ### S1 — matching on views (`umol-graph-ir::ir::substructure`)
 
 - S1a: `host_match_targets` and the predicate closures evaluate per pattern key on the views
-  (`Complete` reading); ring context built once per run as today; the `Cow` target
+  (`RelationCoverage::Complete`); ring context built once per run as today; the `Cow` target
   materialization is deleted. Breaking, green at stage end: substructure, fingerprint, and
   reaction-matching suites unchanged. A host carrying unconsumed input assertions now meets them
   against `Complete` projections; any test relying on such a staging host is surfaced, not
@@ -313,5 +359,4 @@ story — completes at S5; S6 is not required for it.
 
 ## Open items
 
-- Reading-mode enum type name (S0a) at review.
 - F420 enablement via the doc 174 zero-contributor and registry-coverage items (S6b).

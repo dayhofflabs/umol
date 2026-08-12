@@ -73,6 +73,7 @@ impl Default for ValidateConfig {
     }
 }
 
+/// Composite tier-2 invariant and tier-3 chemistry-model validator.
 #[derive(Clone, Debug)]
 pub struct Validator<'a> {
     // Invariants validators: model-independent constraint and physical semantics.
@@ -86,6 +87,7 @@ pub struct Validator<'a> {
     pub stereo: StereoConformanceValidator,
 }
 
+/// Semantic contradiction returned by one component of [`Validator`].
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValidatorContradiction {
     #[error(transparent)]
@@ -104,6 +106,7 @@ pub enum ValidatorContradiction {
     Stereo(#[from] StereoConformanceContradiction),
 }
 
+/// Setup, reference, or unsupported-operation failure returned by one validator component.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValidatorError {
     #[error(transparent)]
@@ -123,10 +126,12 @@ pub enum ValidatorError {
 }
 
 impl<'a> Validator<'a> {
+    /// Construct a validator with the operation defaults in [`ValidateConfig`].
     pub fn new(model: &'a ChemistryModel) -> Self {
         Self::with_config(model, ValidateConfig::default())
     }
 
+    /// Construct a validator with explicit operational configuration.
     pub fn with_config(model: &'a ChemistryModel, config: ValidateConfig) -> Self {
         Self {
             constraint: ConstraintInvariantsValidator::new(config.constraint),

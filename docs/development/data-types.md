@@ -303,10 +303,6 @@ selected; it cannot commit the single `Structure` representative and inspect onl
 
 ## Aggregate canonicalization
 
-> **TODO (2026-08-07):** This section records the approved target contract from discussion doc 186.
-> Fixed-frame normalization now uses `Normalize`; the context-bearing aggregate trait remains to be
-> implemented. Remove this marker when doc 186 is implemented.
-
 Aggregate canonicalization selects an entity-id and participant frame for a complete indexed graph IR.
 It is distinct from `Normalize`, which puts values into normal form without changing their id or
 participant frame. `Normalize` is context-free and remains the supertrait of `Lattice`;

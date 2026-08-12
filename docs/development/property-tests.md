@@ -379,10 +379,6 @@ operational domains interchangeable.
 
 ### Molecule comparison
 
-> **TODO (2026-08-07):** These are the approved target relations from discussion doc 186.
-> Fixed-frame normalization now uses `Normalize` and `Equiv`; aggregate `canonical_eq` remains to be
-> implemented. Remove this marker when doc 186 is implemented.
-
 The comparison suite already records distinct relations:
 
 - `==` compares stored representation;
@@ -396,19 +392,27 @@ The properties exercise:
 - agreement of `equiv` with `==` on normalized forms;
 - reduction of `equiv_under` to `equiv` under the identity correspondence;
 - symmetry under reversing a correspondence;
-- composition of correspondence-aware equivalence on generated atom
-  reorderings.
+- composition of correspondence-aware equivalence on generated atom reorderings;
+- exact idempotence and dense-remapping invariance of complete molecule canonicalization;
+- reflexivity, symmetry, and dense-remapping invariance of `canonical_eq` and `canonical_eq_by` at
+  every canonicalization level; and
+- equivalence of the unqualified operations and their explicit `Full` forms.
 
 This example shows why the comparison relation must appear in every public
 property. Writing only “the result equals the input” is ambiguous for a graph-IR value
 with representation equality, normalized equivalence in a fixed or explicitly
 mapped frame, and aggregate canonical equality.
 
-It also exposes a useful documentation question: if `equiv` is publicly
-presented as an equivalence relation, transitivity is part of that claim. The
-current suite directly checks reflexivity and symmetry, while its transitivity
-property is expressed through `equiv_under` on a restricted atom-reordering
-domain. A later documentation and coverage pass should either state and test
+Reaction and reaction-span canonicalization add exact idempotence, dense-remapping invariance,
+LHS-anchored reaction-normal-form convergence, roundtrip invariance, and the weakened reversal law.
+Reaction application is partial: canonical relabeling must preserve whether application succeeds.
+When both applications succeed, their products must be equivalent under the induced total
+correspondence. When both fail, the first diagnostic need not be identical because relabeling may
+change which of several invalid embeddings or stereo frames is encountered first.
+
+If `equiv` is publicly presented as an equivalence relation, transitivity is part of that claim. The
+suite directly checks reflexivity and symmetry, while its transitivity property is expressed through
+`equiv_under` on a restricted atom-reordering domain. A later coverage pass should either test
 general `equiv` transitivity or document a narrower contract.
 
 ### Reaction operations

@@ -20,6 +20,7 @@ pub struct MoleculeConstraintInvariantsContradiction {
 }
 
 impl MoleculeConstraintInvariantsValidator {
+    /// Validate one molecule-scope constraint using the supplied algorithm choices.
     pub fn validate(
         &self,
         molecule: &Molecule,

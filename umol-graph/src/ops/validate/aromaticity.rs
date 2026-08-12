@@ -11,6 +11,7 @@ use crate::ops::aromaticity::{
 };
 use crate::ops::model::AromaticityModel;
 
+/// Validates aromatic systems and aromatic constraints against an aromaticity model.
 #[derive(Clone, Debug)]
 pub struct AromaticityConformanceValidator {
     perception: AromaticityPerception,
@@ -26,10 +27,12 @@ pub enum AromaticityConformanceContradiction {
 }
 
 impl AromaticityConformanceValidator {
+    /// Construct a validator with the default aromaticity operation configuration.
     pub fn new(model: &AromaticityModel) -> Self {
         Self::with_config(model, AromaticityConfig::default())
     }
 
+    /// Construct a validator with explicit aromaticity operation configuration.
     pub fn with_config(model: &AromaticityModel, config: AromaticityConfig) -> Self {
         Self {
             perception: AromaticityPerception::new(model),
@@ -37,6 +40,11 @@ impl AromaticityConformanceValidator {
         }
     }
 
+    /// Validate aromaticity conformance without modifying the molecule.
+    ///
+    /// Non-ground perception produces [`Solution::Underdetermined`], while a rejected perception
+    /// or a mismatch between stored systems and derived aromaticity produces
+    /// [`Solution::Contradictory`]. Setup and algorithm failures use the error channel.
     pub fn validate(
         &self,
         molecule: &Molecule,

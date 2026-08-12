@@ -17,22 +17,28 @@ use super::super::id::{
 };
 use super::super::molecule::Molecule;
 
+/// DPO dangling-condition contradiction encountered before reaction application.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum DpoContradiction {
+    /// Removing an atom would leave a localized bond incident to it.
     #[error("deleted atom {atom:?} leaves dangling bond {bond:?}")]
     DanglingBond { atom: AtomId, bond: BondId },
+    /// Removing an atom would leave a dative bond incident to it.
     #[error("deleted atom {atom:?} leaves dangling dative bond {dative:?}")]
     DanglingDativeBond { atom: AtomId, dative: DativeBondId },
+    /// Removing an atom would leave an aromatic system incident to it.
     #[error("deleted atom {atom:?} leaves dangling aromatic system {system:?}")]
     DanglingAromaticSystem {
         atom: AtomId,
         system: AromaticSystemId,
     },
+    /// Removing an atom would leave a multicenter bond incident to it.
     #[error("deleted atom {atom:?} leaves dangling multicenter bond {multicenter:?}")]
     DanglingMulticenterBond {
         atom: AtomId,
         multicenter: MulticenterBondId,
     },
+    /// Removing an atom would leave a noncovalent bond incident to it.
     #[error("deleted atom {atom:?} leaves dangling noncovalent bond {noncovalent:?}")]
     DanglingNoncovalentBond {
         atom: AtomId,
