@@ -4668,36 +4668,6 @@ pub(crate) fn overlay_reaction_strategy() -> impl Strategy<Value = Reaction> {
     reaction_over(overlay_molecule_strategy())
 }
 
-/// An optional source operation used to derive an absolute stereo configuration delta.
-#[derive(Clone, Debug)]
-enum StereoOp {
-    Swap,
-    Mirror,
-    Apply(Permutation),
-    SetCoset(StereoCoset),
-}
-
-/// Generate optional source operations over valid configurations. These operations are evaluated
-/// while constructing the reaction and emitted as absolute before/after deltas.
-fn stereo_op_strategy(kind: StereoKind) -> impl Strategy<Value = Option<StereoOp>> {
-    let base = prop_oneof![
-        Just(StereoOp::Swap),
-        Just(StereoOp::Mirror),
-        stereo_coset_for_kind(kind).prop_map(StereoOp::SetCoset),
-    ]
-    .boxed();
-    let ops = if kind == StereoKind::Tetrahedral {
-        prop_oneof![
-            base,
-            permutation_strategy(kind.degree()).prop_map(StereoOp::Apply),
-        ]
-        .boxed()
-    } else {
-        base
-    };
-    prop::option::weighted(0.5, ops)
-}
-
 /// A valid reaction over any generated `lhs`: DPO-valid atom deletions (each removed atom takes its
 /// incident bonds, overlays, and stereo entities), per-surviving-entity optional field
 /// edits (the absolute `old` read from `lhs`, so apply's precondition holds), plus up to two new
@@ -4730,18 +4700,18 @@ fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Val
                 ),
                 (
                     prop::collection::vec(
-                        stereo_op_strategy(StereoKind::Tetrahedral),
+                        prop::option::weighted(0.5, stereo_coset_for_kind(StereoKind::Tetrahedral)),
                         stereo_atom_count,
                     ),
                     prop::collection::vec(
-                        stereo_op_strategy(StereoKind::CisTrans),
+                        prop::option::weighted(0.5, stereo_coset_for_kind(StereoKind::CisTrans)),
                         stereo_bond_count,
                     ),
                 ),
             )
         })
         .prop_map(
-            |(lhs, removals, charges, orders, additions, overlay_ops, stereo_ops)| {
+            |(lhs, removals, charges, orders, additions, overlay_ops, stereo_targets)| {
                 build_reaction(
                     lhs,
                     removals,
@@ -4749,7 +4719,7 @@ fn reaction_over(molecule: impl Strategy<Value = Molecule>) -> impl Strategy<Val
                     orders,
                     additions,
                     overlay_ops,
-                    stereo_ops,
+                    stereo_targets,
                 )
             },
         )
@@ -4765,8 +4735,8 @@ type OverlayOps = (
     bool,
 );
 
-/// Per-stereo-entity optional op: stereo atoms, then stereo bonds.
-type StereoOps = (Vec<Option<StereoOp>>, Vec<Option<StereoOp>>);
+/// Per-stereo-entity optional target coset: stereo atoms, then stereo bonds.
+type StereoTargets = (Vec<Option<StereoCoset>>, Vec<Option<StereoCoset>>);
 
 fn build_reaction(
     lhs: Molecule,
@@ -4775,7 +4745,7 @@ fn build_reaction(
     orders: Vec<Option<i64>>,
     additions: Vec<Element>,
     overlay_ops: OverlayOps,
-    stereo_ops: StereoOps,
+    stereo_targets: StereoTargets,
 ) -> Reaction {
     let atom_count = lhs.atoms().count();
     let bond_count = lhs.bonds().count();
@@ -4994,24 +4964,18 @@ fn build_reaction(
             new: Some(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         }));
     }
-    // Part B — stereo edits on survivors. Source operations are evaluated against the lhs and
-    // emitted as absolute before/after deltas. Value no-ops are omitted because they would
+    // Part B — absolute stereo edits on survivors. Value no-ops are omitted because they would
     // materialize a spurious `Modified { X, X }` span state.
-    let (stereo_atom_ops, stereo_bond_ops) = stereo_ops;
-    for (index, op) in stereo_atom_ops.into_iter().enumerate() {
+    let (stereo_atom_targets, stereo_bond_targets) = stereo_targets;
+    for (index, target) in stereo_atom_targets.into_iter().enumerate() {
         let id = StereoAtomId(index as u32);
         if removed_stereo_atom.contains(&id) {
             continue;
         }
-        let Some(op) = op else { continue };
+        let Some(target) = target else { continue };
         let kind = lhs.stereo_atom(id).kind();
         let old = lhs.stereo_atom(id).attributes.configuration.clone();
-        let new = match &op {
-            StereoOp::Swap => old.swap(),
-            StereoOp::Mirror => old.mirror(),
-            StereoOp::Apply(permutation) => old.apply(*permutation),
-            StereoOp::SetCoset(coset) => StereoConfigurationForm::kinded(kind, coset.clone()),
-        };
+        let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoAtomDelta::ModifyField {
             id,
             change: StereoAtomFieldChange::Configuration {
@@ -5023,20 +4987,15 @@ fn build_reaction(
             deltas.push(Delta::StereoAtom(delta));
         }
     }
-    for (index, op) in stereo_bond_ops.into_iter().enumerate() {
+    for (index, target) in stereo_bond_targets.into_iter().enumerate() {
         let id = StereoBondId(index as u32);
         if removed_stereo_bond.contains(&id) {
             continue;
         }
-        let Some(op) = op else { continue };
+        let Some(target) = target else { continue };
         let kind = lhs.stereo_bond(id).kind();
         let old = lhs.stereo_bond(id).attributes.configuration.clone();
-        let new = match &op {
-            StereoOp::Swap => old.swap(),
-            StereoOp::Mirror => old.mirror(),
-            StereoOp::Apply(permutation) => old.apply(*permutation),
-            StereoOp::SetCoset(coset) => StereoConfigurationForm::kinded(kind, coset.clone()),
-        };
+        let new = StereoConfigurationForm::kinded(kind, target);
         let delta = StereoBondDelta::ModifyField {
             id,
             change: StereoBondFieldChange::Configuration {

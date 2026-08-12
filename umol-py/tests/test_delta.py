@@ -39,7 +39,6 @@ from umol import (
     NoncovalentBondFieldChange,
     NoncovalentBondKind,
     NoncovalentBondKindForm,
-    Permutation,
     StereoAtomForm,
     StereoAtomConstraintForm,
     StereoAtomDelta,
@@ -1576,53 +1575,6 @@ def test_stereoatomdelta_modifyconstraint_kind_none():
     assert inverse.inverse() == delta
 
 
-def test_stereoatomdelta_apply_match():
-    delta = StereoAtomDelta.Apply(
-        id=5,
-        kind=StereoKind.Tetrahedral,
-        permutation=Permutation([1, 2, 0, 3]),
-    )
-
-    match delta:
-        case StereoAtomDelta.Apply(id, kind, permutation):
-            assert id == 5
-            assert kind is StereoKind.Tetrahedral
-            assert permutation.degree == 4
-            assert permutation.image() == [1, 2, 0, 3]
-        case _:
-            raise AssertionError("stereo atom delta did not match its apply variant")
-
-    inverse = delta.inverse()
-    assert isinstance(inverse, StereoAtomDelta.Apply)
-    assert inverse.kind is StereoKind.Tetrahedral
-    assert inverse.permutation.degree == 4
-    assert inverse.permutation.image() == [2, 0, 1, 3]
-    assert inverse != delta
-    assert inverse.inverse() == delta
-
-
-def test_stereoatomdelta_involutions():
-    swap = StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
-    mirror = StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)
-
-    match swap:
-        case StereoAtomDelta.Swap(id=id, kind=kind):
-            assert id == 5
-            assert kind is StereoKind.Tetrahedral
-        case _:
-            raise AssertionError("stereo atom delta did not match its swap variant")
-    match mirror:
-        case StereoAtomDelta.Mirror(id=id, kind=kind):
-            assert id == 5
-            assert kind is StereoKind.Tetrahedral
-        case _:
-            raise AssertionError("stereo atom delta did not match its mirror variant")
-
-    assert isinstance(swap.inverse(), StereoAtomDelta.Swap)
-    assert swap.inverse() == swap
-    assert isinstance(mirror.inverse(), StereoAtomDelta.Mirror)
-    assert mirror.inverse() == mirror
-
 def test_stereobonddelta_fields():
     source = StereoBondForm(
         StereoConfigurationForm.Kinded(
@@ -1790,54 +1742,6 @@ def test_stereobonddelta_modifyconstraint_kind_none():
         StereogenicityForm.Undetermined()
     )
     assert inverse.inverse() == delta
-
-
-def test_stereobonddelta_apply_match():
-    delta = StereoBondDelta.Apply(
-        id=5,
-        kind=StereoKind.CisTrans,
-        permutation=Permutation([1, 2, 0, 3]),
-    )
-
-    match delta:
-        case StereoBondDelta.Apply(id, kind, permutation):
-            assert id == 5
-            assert kind is StereoKind.CisTrans
-            assert permutation.degree == 4
-            assert permutation.image() == [1, 2, 0, 3]
-        case _:
-            raise AssertionError("stereo bond delta did not match its apply variant")
-
-    inverse = delta.inverse()
-    assert isinstance(inverse, StereoBondDelta.Apply)
-    assert inverse.kind is StereoKind.CisTrans
-    assert inverse.permutation.degree == 4
-    assert inverse.permutation.image() == [2, 0, 1, 3]
-    assert inverse != delta
-    assert inverse.inverse() == delta
-
-
-def test_stereobonddelta_involutions():
-    swap = StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)
-    mirror = StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)
-
-    match swap:
-        case StereoBondDelta.Swap(id=id, kind=kind):
-            assert id == 5
-            assert kind is StereoKind.CisTrans
-        case _:
-            raise AssertionError("stereo bond delta did not match its swap variant")
-    match mirror:
-        case StereoBondDelta.Mirror(id=id, kind=kind):
-            assert id == 5
-            assert kind is StereoKind.CisTrans
-        case _:
-            raise AssertionError("stereo bond delta did not match its mirror variant")
-
-    assert isinstance(swap.inverse(), StereoBondDelta.Swap)
-    assert swap.inverse() == swap
-    assert isinstance(mirror.inverse(), StereoBondDelta.Mirror)
-    assert mirror.inverse() == mirror
 
 
 
@@ -2183,28 +2087,6 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
             False,
         ),
         (
-            StereoAtomDelta.Apply(
-                id=5,
-                kind=StereoKind.Tetrahedral,
-                permutation=Permutation([1, 2, 0, 3]),
-            ),
-            "StereoAtomDelta.Apply(id=5, kind=StereoKind.Tetrahedral, permutation=Permutation([1, 2, 0, 3]))",
-            StereoAtomDelta.Apply,
-            False,
-        ),
-        (
-            StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral),
-            "StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)",
-            StereoAtomDelta.Swap,
-            True,
-        ),
-        (
-            StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral),
-            "StereoAtomDelta.Mirror(id=5, kind=StereoKind.Tetrahedral)",
-            StereoAtomDelta.Mirror,
-            True,
-        ),
-        (
             StereoBondDelta.Add(
                 id=5,
                 site=3,
@@ -2261,44 +2143,16 @@ def test_overlaydelta_closure(delta, expected_repr, inverse_type):
             StereoBondDelta.ModifyConstraint,
             False,
         ),
-        (
-            StereoBondDelta.Apply(
-                id=5,
-                kind=StereoKind.CisTrans,
-                permutation=Permutation([1, 2, 0, 3]),
-            ),
-            "StereoBondDelta.Apply(id=5, kind=StereoKind.CisTrans, permutation=Permutation([1, 2, 0, 3]))",
-            StereoBondDelta.Apply,
-            False,
-        ),
-        (
-            StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans),
-            "StereoBondDelta.Swap(id=5, kind=StereoKind.CisTrans)",
-            StereoBondDelta.Swap,
-            True,
-        ),
-        (
-            StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans),
-            "StereoBondDelta.Mirror(id=5, kind=StereoKind.CisTrans)",
-            StereoBondDelta.Mirror,
-            True,
-        ),
     ],
     ids=[
         "atom-add",
         "atom-remove",
         "atom-modify-field",
         "atom-modify-constraint",
-        "atom-apply",
-        "atom-swap",
-        "atom-mirror",
         "bond-add",
         "bond-remove",
         "bond-modify-field",
         "bond-modify-constraint",
-        "bond-apply",
-        "bond-swap",
-        "bond-mirror",
     ],
 )
 def test_stereodelta_closure(delta, expected_repr, inverse_type, self_inverse):
@@ -2997,20 +2851,6 @@ def test_deltas_iter():
                 ]
             ),
             id="family-order",
-        ),
-        pytest.param(
-            Deltas(
-                [
-                    Delta.StereoAtom(
-                        StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
-                    ),
-                    Delta.StereoAtom(
-                        StereoAtomDelta.Swap(id=5, kind=StereoKind.Tetrahedral)
-                    ),
-                ]
-            ),
-            Deltas(),
-            id="stereo-involution",
         ),
         pytest.param(
             Deltas(

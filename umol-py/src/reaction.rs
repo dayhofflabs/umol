@@ -975,8 +975,8 @@ mod tests {
             },
         })],
     )]
-    #[case::stereo_mirror(
-        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##,
+    #[case::stereo_modify(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th0"]}}]}"##,
         5,
         vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::ModifyField {
             id: GraphIrStereoAtomId(0),
@@ -2749,8 +2749,8 @@ mod tests {
         r##"{:lhs {:atoms ["C" "O"]} :deltas [{:atom {:add "N"}} {:atom {:remove 1}}]}"##
     )]
     #[case::atom_modify(r##"{:lhs {:atoms ["Br#c0"]} :deltas [{:atom {:modify [0 "#c-1"]}}]}"##)]
-    #[case::stereo_mirror(
-        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##
+    #[case::stereo_modify(
+        r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th0"]}}]}"##
     )]
     #[case::molecule_constraint(
         r##"{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}"##

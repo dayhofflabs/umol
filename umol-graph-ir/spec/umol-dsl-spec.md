@@ -1347,22 +1347,15 @@ noncovalent-bond-delta ::=
   | { :remove noncovalent-bond-ref }
   | { :modify [ noncovalent-bond-ref partial-noncovalent-string ] }
 
-(* Stereo adds three relative-op verbs; each carries an explicit stereo-kind (§7.12). *)
 stereo-atom-delta ::=
     { :add    stereo-atom-entry }
   | { :remove stereo-atom-ref }
   | { :modify [ stereo-atom-ref partial-stereo-string ] }
-  | { :swap   [ stereo-atom-ref stereo-kind ] }
-  | { :mirror [ stereo-atom-ref stereo-kind ] }
-  | { :apply  [ stereo-atom-ref stereo-kind "cycles" ] }
 
 stereo-bond-delta ::=
     { :add    stereo-bond-entry }
   | { :remove stereo-bond-ref }
   | { :modify [ stereo-bond-ref partial-stereo-string ] }
-  | { :swap   [ stereo-bond-ref stereo-kind ] }
-  | { :mirror [ stereo-bond-ref stereo-kind ] }
-  | { :apply  [ stereo-bond-ref stereo-kind "cycles" ] }
 
 constraint-delta ::=
     { :add    constraint-entry }
@@ -1380,8 +1373,6 @@ constraint-delta ::=
 **`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.4**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:modify`** edits to the **same** entity (of any family) **coalesce** on serialization into a **single** **`:modify`** with one merged partial. The overlay partials work the same way over their own strings (**§7.7–7.11**).
 
 **Overlay deltas.** The six overlay families — **`:dative-bond`**, **`:aromatic-system`**, **`:multicenter-bond`**, **`:noncovalent-bond`**, **`:stereo-atom`**, **`:stereo-bond`** — take **singular** delta keys, matching **`:atom`** / **`:bond`** (the **plural** **`:dative-bonds`** … keys name the **`:lhs`** molecule-map **collections**, **§4**, not deltas). Each shares the atom/bond delta shape: **`:add`** an entry, **`:remove`** a ref, **`:modify`** an **`[ref partial]`** pair. A **`:remove`** / **`:modify`** target resolves in the **lhs id space** of that family; **`:add`** allocates the next id of the family and (like a created atom) participants resolve against the lhs ∪ created union.
-
-**Stereo relative ops.** **`:stereo-atom`** / **`:stereo-bond`** add three verbs that transform the coset in place: **`:swap`** (the class involution), **`:mirror`** (the enantiomer), and **`:apply`** (a ligand-frame permutation in disjoint-cycle notation, **§7.11**). Each carries an **explicit `stereo-kind`** — **`[ref stereo-kind]`**, or **`[ref stereo-kind "cycles"]`** for **`:apply`**. The kind is **REQUIRED** because the coset algebra is parametrized by it (a relative op is uninterpretable without it) and carrying it makes the delta **self-contained** — independent of the lhs entity, so it is well-formed even when the lhs coset is open. The **`"cycles"`** permutation's degree is the **`stereo-kind`** degree (**§7.11**).
 
 **Stereo `:modify` partial.** The **`partial-stereo-string`** is the modify-variant of the stereo-string (**§7.11**): the **`coset`** is **optional** (omitted = unchanged — it keeps the lhs coset), but the **`class`** **MUST** be present once a coset or predicate appears, since the predicates render and parse against it. So **`"*"`** alone (undetermined, no predicates), or **`"Th"`** / **`"Th1"`** / **`"Th#o(0,1)="`** — but **`"*#o…"`** (a predicate with no class) is a parse error.
 

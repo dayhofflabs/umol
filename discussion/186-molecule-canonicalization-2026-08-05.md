@@ -1720,8 +1720,9 @@ and the semantic properties validated by the corresponding property tests.
   **Done.** Both stereo delta enums now have the same absolute `Add`, `Remove`, `ModifyField`, and
   `ModifyConstraint` vocabulary as the other entity deltas. Application, integrity checks,
   inversion, normalization, remapping, composition, and span materialization no longer contain
-  relative stereo branches. Generated reactions still exercise swap, mirror, and permutation as
-  construction-time operations, but emit only explicit old/new configuration deltas. The inverse,
+  relative stereo branches. Generated reactions select absolute target configurations directly;
+  permutation expressions remain part of stereo forms and ligand-symmetry constraints, not delta
+  generation. The inverse,
   delta-difference, reaction-application, and reaction/span property suites pass at 256 cases; the
   graph-IR unit suite, dependent Python binding unit suite, and clippy checks are green. The binding
   adapters were reduced to the four surviving variants to keep the workspace buildable; removing
@@ -1731,6 +1732,12 @@ and the semantic properties validated by the corresponding property tests.
   and rendering, the DSL specification, examples, fixtures, fuzz seeds, and Python bindings. Do not
   retain compatibility variants or a second core route. Higher-level generic “invert” operations
   remain separate future work. This is breaking red-to-green. [dep: S10a]
+  **Done.** Reaction DSL parsing, rendering, its specification, fuzz corpus, generated reactions,
+  and Python tests now use only absolute stereo additions, removals, and modifications. The removed
+  delta operations have no compatibility parser or test-only generator representation. Permutation
+  parsing remains available where it belongs: stereo terms, ligand symmetry, and fluxionality.
+  Graph-IR unit and property suites, Rust and Python binding suites, clippy, and the reaction fuzz
+  target build are green.
 - **S10c — Reaction/span normalization properties.** Strengthen the roundtrip suite so
   `N(r) = r.to_reaction_span()?.to_reaction()` is idempotent, reproduces the span, and has the same
   `apply_at` failure or exact derivation on generated hosts and explicit correspondences. Generate

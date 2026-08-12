@@ -349,8 +349,8 @@ def test_reactiondefaults_value(value, expected, expected_repr):
             '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
             ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} '
-            ":deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}",
-            id="stereo-mirror",
+            ':deltas [{:stereo-atom {:modify [0 "Th0"]}}]}',
+            id="stereo-modify",
         ),
         pytest.param(
             '{:lhs {:atoms ["C"]} :deltas [{:constraint {:add {:connected {}}}}]}',

@@ -419,14 +419,6 @@ pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCos
         .map_err(|e| e.into_inner())
 }
 
-/// Parse a permutation in compact cycle notation (`(0,1)(2,3)`) over a `degree`-position
-/// ligand frame. Points are validated in-range and disjoint.
-pub(crate) fn parse_permutation(input: &str, degree: usize) -> Result<Permutation, ParseError> {
-    (move |i: &mut &str| perm_cycles(i, degree))
-        .parse(input)
-        .map_err(|e| e.into_inner())
-}
-
 /// Parse the `coset` grammar into `StereoCoset` over a `degree`-position
 /// ligand frame (a coset-expression's `^` permutation acts on those positions).
 fn stereo_coset(i: &mut &str, degree: usize) -> PResult<StereoCoset> {
@@ -2036,6 +2028,9 @@ mod tests {
     #[case::unknown_predicate("Th1#x", ParseError::UnknownStereoPredicate("#x".to_string()))]
     #[case::duplicate("Th1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
     #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
+    #[case::overlapping_ligand_permutation("Th1#p(0,1)(1,2)", ParseError::InvalidValue("cycle point 1 occurs more than once".to_string()))]
+    #[case::repeated_ligand_position("Th1#f(0,1,0)", ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()))]
+    #[case::ligand_position_out_of_range("Th1#p(0,4)", ParseError::InvalidValue("cycle point 4 at cycle 0, position 1 is outside 0..4".to_string()))]
     fn test_parse_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(parse_stereo_atom(input).unwrap_err(), expected);
     }
@@ -2106,33 +2101,6 @@ mod tests {
     )]
     fn test_stereo_bond_update_from_str_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(input.parse::<StereoBondUpdate>().unwrap_err(), expected);
-    }
-
-    #[rstest]
-    #[case::empty_cycle("()", Permutation::identity(4))]
-    #[case::single_cycle("(0,1,2)", Permutation::from_image(&[1, 2, 0, 3]))]
-    #[case::disjoint_cycles("(0,1)(2,3)", Permutation::from_image(&[1, 0, 3, 2]))]
-    fn test_parse_permutation(#[case] input: &str, #[case] expected: Permutation) {
-        assert_eq!(parse_permutation(input, 4), Ok(expected));
-    }
-
-    #[rstest]
-    #[case::overlap(
-        "(0,1)(1,2)",
-        ParseError::InvalidValue("cycle point 1 occurs more than once".to_string()),
-    )]
-    #[case::repeated(
-        "(0,1,0)",
-        ParseError::InvalidValue("cycle point 0 occurs more than once".to_string()),
-    )]
-    #[case::out_of_range(
-        "(0,4)",
-        ParseError::InvalidValue(
-            "cycle point 4 at cycle 0, position 1 is outside 0..4".to_string(),
-        ),
-    )]
-    fn test_parse_permutation_error(#[case] input: &str, #[case] expected: ParseError) {
-        assert_eq!(parse_permutation(input, 4), Err(expected));
     }
 
     #[rstest]

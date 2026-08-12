@@ -11,7 +11,6 @@ use std::str::FromStr;
 
 use bimap::BiBTreeMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
-use umol_perm::Permutation;
 
 use super::aromatic::{AromaticSystemDsl, AromaticSystemUpdateDsl};
 use super::atom::{lower_atom, raise_atom, AtomDsl, AtomUpdateDsl};
@@ -47,10 +46,7 @@ use super::refs::{
     read_stereo_bond_ref, AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef,
     NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
-use super::stereo::{
-    parse_permutation, stereo_kind_from_name, StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl,
-    StereoBondUpdateDsl,
-};
+use super::stereo::{StereoAtomDsl, StereoAtomUpdateDsl, StereoBondDsl, StereoBondUpdateDsl};
 use crate::ir::atom::{AtomForm, AtomUpdate};
 use crate::ir::bond::{BondForm, BondUpdate};
 use crate::ir::delta::{
@@ -661,15 +657,9 @@ pub(crate) enum DeltaInput {
     StereoAtomAdd(StereoAtomEntryInput),
     StereoAtomRemove(StereoAtomRef),
     StereoAtomModify(StereoAtomRef, StereoAtomUpdate),
-    StereoAtomSwap(StereoAtomRef, StereoKind),
-    StereoAtomMirror(StereoAtomRef, StereoKind),
-    StereoAtomApply(StereoAtomRef, StereoKind, Permutation),
     StereoBondAdd(StereoBondEntryInput),
     StereoBondRemove(StereoBondRef),
     StereoBondModify(StereoBondRef, StereoBondUpdate),
-    StereoBondSwap(StereoBondRef, StereoKind),
-    StereoBondMirror(StereoBondRef, StereoKind),
-    StereoBondApply(StereoBondRef, StereoKind, Permutation),
     ConstraintAdd(ConstraintDsl),
     ConstraintRemove(ConstraintDsl),
 }
@@ -1006,54 +996,6 @@ impl ReactionInput {
                         resolved.push(Delta::StereoAtom(d));
                     }
                 }
-                DeltaInput::StereoAtomSwap(r, _kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo atom",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
-                    let new = old.swap();
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
-                        id,
-                        change: StereoAtomFieldChange::Configuration { old, new },
-                    }));
-                }
-                DeltaInput::StereoAtomMirror(r, _kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo atom",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
-                    let new = old.mirror();
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
-                        id,
-                        change: StereoAtomFieldChange::Configuration { old, new },
-                    }));
-                }
-                DeltaInput::StereoAtomApply(r, _kind, permutation) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_atom_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo atom",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_atom(id).attributes.configuration.clone();
-                    let new = old.apply(permutation);
-                    resolved.push(Delta::StereoAtom(StereoAtomDelta::ModifyField {
-                        id,
-                        change: StereoAtomFieldChange::Configuration { old, new },
-                    }));
-                }
                 DeltaInput::StereoBondAdd(entry) => {
                     let site = entry.site.resolve(&context)?;
                     let ligands = entry
@@ -1101,54 +1043,6 @@ impl ReactionInput {
                     for d in StereoBondDelta::for_update(id, lhs.stereo_bond(id).attributes, &rhs) {
                         resolved.push(Delta::StereoBond(d));
                     }
-                }
-                DeltaInput::StereoBondSwap(r, _kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo bond",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
-                    let new = old.swap();
-                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
-                        id,
-                        change: StereoBondFieldChange::Configuration { old, new },
-                    }));
-                }
-                DeltaInput::StereoBondMirror(r, _kind) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo bond",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
-                    let new = old.mirror();
-                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
-                        id,
-                        change: StereoBondFieldChange::Configuration { old, new },
-                    }));
-                }
-                DeltaInput::StereoBondApply(r, _kind, permutation) => {
-                    let id = r.resolve(&context)?;
-                    if context.stereo_bond_scope(id) == EntityScope::Deltas {
-                        return Err(ParseError::DeltaTargetAdded {
-                            action: "transform",
-                            kind: "stereo bond",
-                            index: id.index(),
-                        });
-                    }
-                    let old = lhs.stereo_bond(id).attributes.configuration.clone();
-                    let new = old.apply(permutation);
-                    resolved.push(Delta::StereoBond(StereoBondDelta::ModifyField {
-                        id,
-                        change: StereoBondFieldChange::Configuration { old, new },
-                    }));
                 }
                 DeltaInput::ConstraintAdd(dsl) => {
                     let c = dsl.into_ir(&context)?;
@@ -1380,11 +1274,6 @@ fn read_delta_bond_input(de: &mut EdnStreamDeserializer<'_>) -> Result<DeltaInpu
     Ok(input)
 }
 
-fn read_stereo_kind(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoKind, EdnError> {
-    let name = de.read_keyword_name()?;
-    stereo_kind_from_name(name.as_ref()).map_err(Into::into)
-}
-
 fn read_delta_dative_bond_input(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DeltaInput, EdnError> {
@@ -1515,40 +1404,6 @@ fn read_delta_stereo_atom_input(
             }
             DeltaInput::StereoAtomModify(r, dsl.into_ir(&()))
         }
-        "swap" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_atom_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            if !de.try_consume_byte(b']')? {
-                return Err(DeError::Custom("stereo-atom :swap expects [ref kind]".into()).into());
-            }
-            DeltaInput::StereoAtomSwap(r, kind)
-        }
-        "mirror" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_atom_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            if !de.try_consume_byte(b']')? {
-                return Err(
-                    DeError::Custom("stereo-atom :mirror expects [ref kind]".into()).into(),
-                );
-            }
-            DeltaInput::StereoAtomMirror(r, kind)
-        }
-        "apply" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_atom_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            let s = de.read_string()?;
-            let permutation = parse_permutation(s.as_ref(), kind.degree())
-                .map_err(|e| DeError::subgrammar("permutation", e))?;
-            if !de.try_consume_byte(b']')? {
-                return Err(
-                    DeError::Custom("stereo-atom :apply expects [ref kind cycles]".into()).into(),
-                );
-            }
-            DeltaInput::StereoAtomApply(r, kind, permutation)
-        }
         o => return Err(DeError::Custom(format!("unknown stereo-atom delta op :{o}")).into()),
     };
     consume_single_key_map_close(de, "stereo-atom delta")?;
@@ -1574,40 +1429,6 @@ fn read_delta_stereo_bond_input(
                 return Err(DeError::Custom("stereo-bond :modify expects [ref dsl]".into()).into());
             }
             DeltaInput::StereoBondModify(r, dsl.into_ir(&()))
-        }
-        "swap" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_bond_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            if !de.try_consume_byte(b']')? {
-                return Err(DeError::Custom("stereo-bond :swap expects [ref kind]".into()).into());
-            }
-            DeltaInput::StereoBondSwap(r, kind)
-        }
-        "mirror" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_bond_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            if !de.try_consume_byte(b']')? {
-                return Err(
-                    DeError::Custom("stereo-bond :mirror expects [ref kind]".into()).into(),
-                );
-            }
-            DeltaInput::StereoBondMirror(r, kind)
-        }
-        "apply" => {
-            de.consume_byte(b'[')?;
-            let r = read_stereo_bond_ref(de)?;
-            let kind = read_stereo_kind(de)?;
-            let s = de.read_string()?;
-            let permutation = parse_permutation(s.as_ref(), kind.degree())
-                .map_err(|e| DeError::subgrammar("permutation", e))?;
-            if !de.try_consume_byte(b']')? {
-                return Err(
-                    DeError::Custom("stereo-bond :apply expects [ref kind cycles]".into()).into(),
-                );
-            }
-            DeltaInput::StereoBondApply(r, kind, permutation)
         }
         o => return Err(DeError::Custom(format!("unknown stereo-bond delta op :{o}")).into()),
     };
@@ -1695,17 +1516,6 @@ fn parse_delta_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
             ))
         }
         o => Err(DeError::Custom(format!("unknown bond delta op :{o}"))),
-    }
-}
-
-fn parse_stereo_kind(edn: &Edn<'_>) -> Result<StereoKind, DeError> {
-    match edn {
-        Edn::Keyword(k) => stereo_kind_from_name(k.name()),
-        other => Err(DeError::TypeMismatch {
-            expected: "stereo kind keyword",
-            got: other.kind(),
-            path: Vec::new(),
-        }),
     }
 }
 
@@ -1869,28 +1679,6 @@ fn parse_delta_stereo_atom_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
                 StereoAtomUpdateDsl::from_edn(&v[1])?.into_ir(&()),
             ))
         }
-        "swap" => {
-            let (r, kind) = parse_stereo_transform(payload, "stereo-atom :swap")?;
-            Ok(DeltaInput::StereoAtomSwap(
-                StereoAtomRef::from_edn(r)?,
-                kind,
-            ))
-        }
-        "mirror" => {
-            let (r, kind) = parse_stereo_transform(payload, "stereo-atom :mirror")?;
-            Ok(DeltaInput::StereoAtomMirror(
-                StereoAtomRef::from_edn(r)?,
-                kind,
-            ))
-        }
-        "apply" => {
-            let (r, kind, permutation) = parse_stereo_apply(payload, "stereo-atom :apply")?;
-            Ok(DeltaInput::StereoAtomApply(
-                StereoAtomRef::from_edn(r)?,
-                kind,
-                permutation,
-            ))
-        }
         o => Err(DeError::Custom(format!(
             "unknown stereo-atom delta op :{o}"
         ))),
@@ -1923,86 +1711,10 @@ fn parse_delta_stereo_bond_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
                 StereoBondUpdateDsl::from_edn(&v[1])?.into_ir(&()),
             ))
         }
-        "swap" => {
-            let (r, kind) = parse_stereo_transform(payload, "stereo-bond :swap")?;
-            Ok(DeltaInput::StereoBondSwap(
-                StereoBondRef::from_edn(r)?,
-                kind,
-            ))
-        }
-        "mirror" => {
-            let (r, kind) = parse_stereo_transform(payload, "stereo-bond :mirror")?;
-            Ok(DeltaInput::StereoBondMirror(
-                StereoBondRef::from_edn(r)?,
-                kind,
-            ))
-        }
-        "apply" => {
-            let (r, kind, permutation) = parse_stereo_apply(payload, "stereo-bond :apply")?;
-            Ok(DeltaInput::StereoBondApply(
-                StereoBondRef::from_edn(r)?,
-                kind,
-                permutation,
-            ))
-        }
         o => Err(DeError::Custom(format!(
             "unknown stereo-bond delta op :{o}"
         ))),
     }
-}
-
-/// Extract the `[<ref> <kind>]` payload shared by the `:swap` / `:mirror` stereo verbs; the
-/// ref element is returned unresolved for the caller's ref type.
-fn parse_stereo_transform<'a>(
-    payload: &'a Edn<'a>,
-    ctx: &'static str,
-) -> Result<(&'a Edn<'a>, StereoKind), DeError> {
-    let Edn::Vector(v) = payload else {
-        return Err(DeError::TypeMismatch {
-            expected: ctx,
-            got: payload.kind(),
-            path: Vec::new(),
-        });
-    };
-    if v.len() != 2 {
-        return Err(DeError::Custom(format!(
-            "{ctx} expects [ref kind], got {} elements",
-            v.len()
-        )));
-    }
-    Ok((&v[0], parse_stereo_kind(&v[1])?))
-}
-
-/// Extract the `[<ref> <kind> <cycles>]` payload for the `:apply` stereo verb; the permutation
-/// degree comes from the explicit kind, not the referenced entity.
-fn parse_stereo_apply<'a>(
-    payload: &'a Edn<'a>,
-    ctx: &'static str,
-) -> Result<(&'a Edn<'a>, StereoKind, Permutation), DeError> {
-    let Edn::Vector(v) = payload else {
-        return Err(DeError::TypeMismatch {
-            expected: ctx,
-            got: payload.kind(),
-            path: Vec::new(),
-        });
-    };
-    if v.len() != 3 {
-        return Err(DeError::Custom(format!(
-            "{ctx} expects [ref kind cycles], got {} elements",
-            v.len()
-        )));
-    }
-    let kind = parse_stereo_kind(&v[1])?;
-    let Edn::Str(s) = &v[2] else {
-        return Err(DeError::TypeMismatch {
-            expected: "permutation cycle string",
-            got: v[2].kind(),
-            path: Vec::new(),
-        });
-    };
-    let permutation =
-        parse_permutation(s.as_ref(), kind.degree()).map_err(|e| DeError::subgrammar(ctx, e))?;
-    Ok((&v[0], kind, permutation))
 }
 
 fn parse_delta_constraint_input(edn: &Edn<'_>) -> Result<DeltaInput, DeError> {
@@ -4326,9 +4038,6 @@ mod tests {
     #[case::stereo_atom_remove(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:remove 0}}]}"##)]
     #[case::stereo_atom_modify(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "Th2"]}}]}"##)]
     #[case::stereo_atom_modify_undetermined(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:modify [0 "*"]}}]}"##)]
-    #[case::stereo_atom_swap(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:swap [0 :tetrahedral]}}]}"##)]
-    #[case::stereo_atom_mirror(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:mirror [0 :tetrahedral]}}]}"##)]
-    #[case::stereo_atom_apply(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]} :deltas [{:stereo-atom {:apply [0 :tetrahedral "(0,1)"]}}]}"##)]
     #[case::stereo_bond_add(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}}}]}"##)]
     #[case::stereo_bond_remove(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]} :deltas [{:stereo-bond {:remove 0}}]}"##)]
     #[case::stereo_bond_modify(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]} :deltas [{:stereo-bond {:modify [0 "Ct1"]}}]}"##)]
@@ -4370,7 +4079,7 @@ mod tests {
             );
             count += 1;
         }
-        assert_eq!(count, 32);
+        assert_eq!(count, 29);
     }
 
     #[rustfmt::skip]
