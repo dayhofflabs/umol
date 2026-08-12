@@ -347,7 +347,7 @@ pub fn run(input: &NautyInput) -> Result<NautyOutput, NautyError> {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
-    use std::iter::once;
+    use std::iter;
     use std::thread;
 
     use rstest::*;
@@ -641,7 +641,7 @@ mod tests {
                         colors,
                         (0..6)
                             .filter(|&vertex| vertex != site as u32)
-                            .chain(once(site as u32))
+                            .chain(iter::once(site as u32))
                             .collect(),
                     )
                     .unwrap();

@@ -344,7 +344,7 @@ pub fn compute_salcs(
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 mod tests {
-    use std::iter::repeat_n;
+    use std::iter;
 
     use rstest::rstest;
 
@@ -550,7 +550,7 @@ mod tests {
         let mut salc_symbols: Vec<String> = result
             .irreps
             .iter()
-            .flat_map(|ib| repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len()))
+            .flat_map(|ib| iter::repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len()))
             .collect();
         salc_symbols.sort();
         let mut expected: Vec<&str> = expected_salc_irreps.to_vec();

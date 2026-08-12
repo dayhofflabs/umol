@@ -1,7 +1,7 @@
 //! Delocalize atom-localized charge over homogeneous aromatic systems.
 
 use std::convert::Infallible;
-use std::iter::once;
+use std::iter;
 
 use umol_graph_ir::ir::{
     AromaticSystemId, AromaticValenceForm, AtomConstraintForm, AtomId, ElectronCountsForm,
@@ -116,7 +116,7 @@ impl Transformer for DelocalizeCharge {
             Ok(transformed) => transformed,
             Err(never) => match never {},
         };
-        Box::new(once(transformed))
+        Box::new(iter::once(transformed))
     }
 }
 

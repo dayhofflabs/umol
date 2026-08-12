@@ -6,7 +6,7 @@
 //! `(lhs, deltas)` rather than stored (those derivations live in `reaction_span.rs`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::iter::from_fn;
+use std::iter;
 
 use umol_graph_core::Correspondence;
 use umol_perm::Permutation;
@@ -1438,7 +1438,7 @@ impl Reaction {
             .into_iter();
         let mut failed = false;
 
-        Ok(from_fn(move || {
+        Ok(iter::from_fn(move || {
             while !failed {
                 let correspondence = correspondences.next()?;
                 match self.apply_at_canonical(host, &correspondence, deltas.clone()) {

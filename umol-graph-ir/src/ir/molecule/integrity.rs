@@ -1,7 +1,7 @@
 //! Representation-integrity checks for [`Molecule`].
 
 use std::collections::{BTreeSet, HashSet};
-use std::iter::once;
+use std::iter;
 
 use thiserror::Error;
 use umol_perm::Permutation;
@@ -208,7 +208,7 @@ impl Molecule {
             )?;
             check_unique_participants(
                 entity,
-                once(site).chain(
+                iter::once(site).chain(
                     view.ligand_frame()
                         .into_iter()
                         .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
