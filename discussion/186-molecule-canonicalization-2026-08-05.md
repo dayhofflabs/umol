@@ -1595,7 +1595,7 @@ and the semantic properties validated by the corresponding property tests.
   `para_stereo == false`, perform one stereo-sensitive refinement from the constitution partition,
   select the minimum structure key, and preserve every stereo entity without perception,
   resolution, or conformance validation. Constraints remain excluded from this selected-layer tie
-  break. The public trait surface waits for the para-stereo path in S9a. This is additive.
+  break. The public trait surface waits until every level is complete in S9c. This is additive.
   [dep: S5d, S8b] **Done.** The constitution equitable partition now supplies the fixed input
   classes for one covariant stereo-descriptor round on the full incidence carrier. Kinded
   descriptors minimize the coupled ligand-class sequence and normalized configuration over the
@@ -1606,7 +1606,7 @@ and the semantic properties validated by the corresponding property tests.
   and the selected-layer key but are transported with the chosen frame. Exact cases cover every
   stereo kind's frame covariance, constraint exclusion, stereo-configuration distinction, both
   stereo entity families, dense renumbering, integrity, preservation, and idempotence. The public
-  trait remains deferred to S9a together with the para-stereo fixpoint.
+  trait remains deferred until the complete `Full` level is available in S9c.
 - **S8d — Stereo properties.** Validate structure frame/coset/constraint covariance, exact
   idempotence of the selected structure layer, renumbering invariance,
   bounded-exhaustive-minimum agreement,
@@ -1640,6 +1640,15 @@ and the semantic properties validated by the corresponding property tests.
   split-only refinement over the finite incidence-node set establishes termination. Validate cases
   where constitution and stereo symmetry interact. The public trait waits until `Full` is
   implementable in S9c. This is breaking red-to-green for the selector migration. [dep: S4a, S8d]
+  **Done.** `CanonicalizationLevel` now exposes the settled
+  `Topology`, `Constitution`, `Structure`, and `Full` hierarchy while
+  `IncidenceLevel::Full` retains its carrier meaning. Structure canonicalization uses the context's
+  `para_stereo` flag: the false path performs the existing single descriptor round, and the true
+  path repeatedly derives stereo descriptors from the current entity and ligand-occurrence
+  classes, refines by the previous ordered class plus descriptor, and stops only when the ordered
+  cells are unchanged. No iteration limit is exposed. Exact cases exercise a constructed
+  constitution/stereo dependency requiring more than one descriptor round, one-pass behavior,
+  renumbering invariance, and idempotence.
 - **S9b — Constraint placement and complete canonical form.** After structure labeling,
   normalize entity and molecule constraints and minimize the canonical constraint key over every
   admissible entity remapping and participant-frame action attaining the minimum structure key.
