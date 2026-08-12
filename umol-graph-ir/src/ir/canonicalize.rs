@@ -5158,7 +5158,7 @@ fn reaction_span_canonical_candidate(
     span: &ReactionSpan,
     level: CanonicalizationLevel,
     context: &CanonicalizationContext,
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, ReactionSpanCanonicalizationError> {
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
         CanonicalizationLevel::Topology => IncidenceLevel::Topology,
         CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
@@ -5242,13 +5242,19 @@ fn canonicalize_reaction_span_by(
     context: &CanonicalizationContext,
 ) -> Result<ReactionSpan, ReactionSpanCanonicalizationError> {
     span.check_integrity()?;
+    Ok(canonicalize_integrity_valid_reaction_span_by(
+        span, level, context,
+    )?)
+}
+
+fn canonicalize_integrity_valid_reaction_span_by(
+    span: &ReactionSpan,
+    level: CanonicalizationLevel,
+    context: &CanonicalizationContext,
+) -> Result<ReactionSpan, Contradiction> {
     let normalized = normalize_reaction_span(span.clone())?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
-    Ok(reaction_span_from_candidate(
-        &normalized,
-        level,
-        &candidate,
-    )?)
+    reaction_span_from_candidate(&normalized, level, &candidate)
 }
 
 fn canonical_reaction_span_key(
@@ -5348,7 +5354,7 @@ mod tests {
         BondId, BooleanForm, Constraint, Constraints, DativeBondForm, DativeBondId, Entity,
         FluxionalityForm, IncidenceLevel, LigandPermutation, LigandSymmetryForm,
         MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-        NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation,
+        NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation, ReactionSpanEntries,
         StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
         StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind,
         StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity,
@@ -9097,6 +9103,56 @@ mod tests {
         #[case] expected: MoleculeCanonicalizationError,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::topology(CanonicalizationLevel::Topology)]
+    #[case::constitution(CanonicalizationLevel::Constitution)]
+    #[case::structure(CanonicalizationLevel::Structure)]
+    #[case::full(CanonicalizationLevel::Full)]
+    fn test_canonicalize_integrity_valid_reaction_span_by(
+        canonicalization_context: CanonicalizationContext,
+        #[case] level: CanonicalizationLevel,
+    ) {
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::N)),
+            ],
+            bonds: vec![(
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        });
+        let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Removed(AtomForm::from_element(Element::N)),
+                EntitySpan::Added(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            )],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            canonicalize_integrity_valid_reaction_span_by(
+                &source,
+                level,
+                &canonicalization_context,
+            ),
+            Ok(expected.clone()),
+        );
+        assert_eq!(
+            canonicalize_reaction_span_by(&source, level, &canonicalization_context),
+            Ok(expected),
+        );
     }
 
     #[rstest]

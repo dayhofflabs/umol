@@ -466,6 +466,21 @@ the redundant adapter subdivision, not the shared `IncidenceGraph` carrier. `Inc
 therefore retained as the single molecular carrier, with the selective simple-graph adapter kept as
 an automorphism-backend detail. No parallel canonicalization graph is introduced.
 
+An edge-colored individualization-refinement backend is a future algorithm requirement. It should
+consume the same `IncidenceGraph` directly, using entity initial classes as node colors and typed
+incidence classes as edge colors, and return the same backend-independent orbits, generators, and
+canonical-label hints as the nauty route. The refinement signature for a vertex is the multiset of
+`(edge color, neighboring cell)` occurrences, so valid parallel incidence occurrences remain
+distinguishable without subdivision; a simple-edge-only implementation would not remove all
+occurrence nodes. The library-owned typed comparison key remains the definition of the canonical
+form. The backend must compute exact orbits and a generating set for the same automorphism group;
+its canonical-label hints need not equal nauty's because they affect search order rather than the
+aggregate representative. Different backend choices must still produce the frozen aggregate
+representatives.
+This backend belongs behind `AutomorphismAlgorithm` in graph core and must be benchmarked on the
+unsubdivided colored carrier against nauty on its selectively subdivided adapter. A slower solver on
+equal-sized graphs may still win end to end by avoiding the larger adapter graph.
+
 ## Canonicalization graph encoding
 
 There is no separate "exact canonicalization graph." The existing incidence-graph facility must be
@@ -1131,6 +1146,18 @@ Let `C_S` be aggregate span canonicalization and define reaction canonicalizatio
 C_R(r) = C_S(r.to_reaction_span()?).to_reaction()
 ```
 
+The transformation and equality routes differ at reduced levels for the same reason as the other
+aggregate implementations. `Reaction::canonicalize_by` returns a complete reaction and therefore
+checks integrity and materializes the complete span before selecting a frame; a contradiction in
+any carried value remains an error even when that value is excluded from frame selection.
+`Reaction::canonical_eq_by`, however, is the selected-level relation. After checking the complete
+reaction's representation integrity, it projects each reaction to the requested level, materializes
+that projection, and delegates to the corresponding span relation. The projection retains the
+selected entity families and inherent fields and excludes constraints unless the level is `Full`.
+Consequently, a contradiction confined to an excluded entity family or constraint does not affect
+reduced reaction equality. This projection is an internal comparison operation, not a second public
+reaction representation or canonicalization API.
+
 For values on which the displayed partial operations succeed, the canonicalization properties
 include:
 
@@ -1148,20 +1175,48 @@ The last property compares exact canonical representatives after transporting th
 deltas, participant frames, position-sensitive relation data, stereo configurations, and constraint
 references. It does not canonicalize the LHS independently of the reaction change structure.
 
-Canonicalizing only the LHS is a possible optimization, not the baseline semantics. With no added
-entities, it is sufficient when every changed or removed LHS entity lies in a singleton LHS
-automorphism orbit; changes applied invariantly across a complete orbit are also harmless. A change
-that distinguishes one member of an LHS orbit must participate in canonical labeling. Added
-entities require additional work even when the LHS is rigid, because the added substructure may
-have its own automorphisms. Constraint-only changes may likewise select among structurally
-equivalent frames during the post-hoc step.
+Preservation of the represented transformation is covariant rather than an exact comparison under
+the original explicit match. Let the canonical span action induce a remapping from the original LHS
+to the canonical LHS. Every explicit match of the original LHS into a host has exactly one
+corresponding match of the canonical LHS, obtained by transporting its source through that
+remapping, and conversely. Applications at corresponding matches must return the same failure. On
+success, their products and derivations agree under the induced product remapping, including the
+ids assigned to newly added entities; they are not required to be structurally equal before that
+transport. The property suite may observe the canonical action internally, but the public
+`Canonicalize` trait continues to return only the canonical aggregate.
 
-The general shortcut condition is invariance of the complete transformation under the remaining
-LHS automorphism group, including a compatible action on added entities. Establishing that condition
-can approach the cost of canonicalizing the span. The initial implementation therefore uses the
-span route uniformly, apart from a possible trivial empty-deltas path. A later measured optimization
-may reuse the LHS refinement or orbit partition as the initial partition for span canonicalization;
-it must not commit to an LHS numbering before reaction changes have refined the remaining symmetry.
+Canonicalizing only the LHS is a possible optimization, not the baseline semantics. The immediate
+sound case is an identity transition at the selected level. For complete canonicalization this means
+that delta normalization produces an empty collection: lifting every LHS entity and constraint to
+the uniform `Unchanged` span preserves the LHS comparison order, so canonicalizing the LHS and
+attaching empty deltas gives the same representative as the span route. For reduced equality, the
+same shortcut applies when projection to the selected level has no remaining deltas; the relation
+then reduces to the corresponding LHS relation. A reduced transformation could also reuse that LHS
+frame while transporting excluded normalized data, but it is not an immediate implementation
+shortcut because all excluded references and added-id spaces must still be remapped consistently.
+
+Singleton LHS automorphism orbits are not by themselves sufficient. Lifecycle tags and ordered
+before/after values replace rather than merely append to the LHS entity keys, so they may change the
+lexicographic minimum even when they do not split an LHS orbit. Added entities also require their
+own canonical ordering. Any broader direct shortcut must prove that the LHS-derived action attains
+the same complete span key and supplies the same canonical ordering of additions; checking only
+orbit invariance does not establish this. Evaluating that condition can approach the cost of the
+span search and a separate direct reaction-key implementation would duplicate the canonicalization
+semantics. A safer later optimization may reuse the LHS refinement or orbit partition as the initial
+partition for span canonicalization, but it must still materialize the reaction structure and must
+not commit to an LHS numbering before reaction changes have refined the remaining symmetry. The
+initial implementation therefore uses the span route uniformly. The identity-transition case is the
+first candidate for a later measured shortcut.
+
+A separate implementation optimization can avoid allocating a public `ReactionSpan` without
+changing this analysis. After normalization and the same materializability check, canonicalization
+could expose the union entries through a reaction-backed transient carrier and feed those entries to
+the existing span incidence, key, and lowering machinery. This route is sound for every reaction
+for which `to_reaction_span` succeeds because it computes the same union value; it does not permit
+LHS-only labeling or weaken the `Contradiction` boundary. It is worthwhile only if profiling shows
+that constructing and then lowering the owned span is material. Do not implement a parallel set of
+reaction keys or remapping rules merely to remove those allocations; the shared carrier must reuse
+the span semantics directly.
 
 ### Remapping nomenclature prerequisite
 
@@ -1836,21 +1891,35 @@ and the semantic properties validated by the corresponding property tests.
 
 ### S12 — Reaction canonicalization
 
-- **S12a — Canonicalize through the span.** Implement `Reaction::canonicalize` and
-  `canonicalize_by` as `to_reaction_span`, the corresponding span operation, then infallible
-  `to_reaction`. Preserve the existing materialization contradiction boundary and wrap
-  integrity/conversion causes in `ReactionCanonicalizationError`; do not add a direct LHS-only
-  canonicalizer. This is additive. [dep: S11c]
-- **S12b — Total reaction equality.** Implement total `Reaction::canonical_eq` and
-  `canonical_eq_by` with the agreed structural-equality, successful-form, contradiction, and
-  integrity-failure semantics. Ensure the unqualified operation compares complete reaction
-  canonical forms rather than canonicalized LHS values, and the level-specific operation delegates
-  to the corresponding span relation. This is additive. [dep: S12a]
+- **S12a — Integrity-established span core.** Split span canonicalization into its checked wrapper
+  and a private integrity-established core. The public span route continues to return
+  `ReactionSpanIntegrityError` or `Contradiction`; a reaction that has checked its own integrity and
+  successfully called `to_reaction_span` can invoke the core without acquiring a caller-originated
+  span-integrity cause. Verify that the core and checked wrapper agree for constructed spans at all
+  levels. Do not expose temporary reaction methods. This is additive. [dep: S11c] **Done.** Span
+  canonicalization now separates the checked wrapper from an integrity-established core whose only
+  failure is intrinsic `Contradiction`. The canonical-candidate helper likewise carries only that
+  error. A focused four-level test proves that the core and checked wrapper return the same exact
+  canonical span. All 5,902 graph-IR unit tests and strict graph-IR clippy pass.
+- **S12b — Reaction trait implementation and total equality.** Implement all four `Canonicalize`
+  methods for `Reaction` together. The transformation core checks `Reaction::check_integrity`,
+  calls `to_reaction_span`, invokes S12a's span core, then lowers through infallible `to_reaction`;
+  preserve `ReactionIntegrityError` and materialization `Contradiction` in
+  `ReactionCanonicalizationError`. Ensure the unqualified operations use complete reaction forms,
+  not canonicalized LHS values, and apply the agreed structural-equality, successful-form,
+  contradiction, and integrity-failure totalization. After checking complete reaction integrity,
+  `canonical_eq_by` projects to the selected level before materialization and delegates to the
+  corresponding span relation, so excluded contradictions remain excluded. Do not add a direct
+  LHS-only canonicalizer. This is additive. [dep: S12a]
 - **S12c — Reaction properties.** Validate exact idempotence, invariance under complete reaction
   renumbering, `C_R(N(r)) == C_R(r)`, the weakened reversal law
   `C_R(reverse(C_R(r))) == C_R(reverse(r))`, preservation of match domain and application result,
-  and algorithm agreement. Include non-materializable and intrinsically contradictory cases with
-  exact errors and no panics. This is additive. [dep: S10c, S12b]
+  and algorithm agreement. Express match preservation through the canonical LHS remapping and
+  compare successful applications under the induced product remapping rather than by untransported
+  structural equality. Include non-materializable and intrinsically contradictory cases with exact
+  errors and no panics. `Nauty` is currently the sole selector, so algorithm agreement is a frozen
+  future requirement for the planned edge-colored individualization-refinement backend rather than
+  a second executable case in this stage. This is additive. [dep: S10c, S12b]
 
 ### S13 — Python canonicalization API
 
