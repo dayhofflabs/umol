@@ -332,6 +332,8 @@ def test_deferred_member(owner, name):
         (umol.Molecule.combine, "(self, /, other)"),
         (umol.Molecule.combine_from, "(self, /, other)"),
         (umol.Molecule.combine_all, "(molecules)"),
+        (umol.Molecule.react, "(self, /, reaction, *, config=None)"),
+        (umol.Molecule.react_all, "(reactants, reaction, *, config=None)"),
         (umol.Molecule.split, "(self, /)"),
         (
             umol.Molecule.canonicalize,

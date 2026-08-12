@@ -234,7 +234,14 @@ matching algorithms. It does not remove the explicit combine/split APIs or the d
   conversion behavior. Both lower `None` through `ReactionApplicationConfig::default` and delegate
   to the Rust `React` implementations. Cover signatures, generators and lists, invalid iterable
   members, single/multiple/empty reactants, multiple matches, errors, and agreement with the manual
-  Python combine → apply → split pipeline. This is additive. [dep: S1b, S2b]
+  Python combine → apply → split pipeline. This is additive. [dep: S1b, S2b] **Done.** Both methods
+  delegate to the corresponding Rust `React` implementation and return the internal operation-issued
+  product iterator. `react_all` accepts lists, generators, and the empty iterable through the same
+  checked conversion as `combine_all`; it snapshots the inputs needed by the Rust slice operation
+  without changing the source molecules. Exact Python tests cover signatures, explicit and default
+  configs, multiple matches, component and reactant order, empty input, invalid members, eager
+  precondition errors, lazy transaction errors, and equality with the manual pipeline. Strict
+  clippy, all 1,620 Rust binding tests, and the rebuilt 1,296-test Python 3.13 suite pass.
 
 ### S3 — Documentation and closeout
 

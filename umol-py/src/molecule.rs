@@ -12,7 +12,7 @@ use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
-    MoleculeEntries as GraphIrMoleculeEntries,
+    MoleculeEntries as GraphIrMoleculeEntries, React as GraphIrReact,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
 
@@ -26,6 +26,7 @@ use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
     fingerprint_error, metadata_error, parse_error, smiles_input_error, transaction_error,
+    InvalidStructureError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -37,6 +38,7 @@ use crate::metadata::MoleculeMetadata;
 use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
+use crate::reaction::{Reaction, ReactionApplicationConfig, ReactionProductsIter};
 use crate::resolve::ResolveConfig;
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
@@ -307,6 +309,53 @@ impl Molecule {
                 .map(MoleculeCorrespondence::from_rust)
                 .collect(),
         ))
+    }
+
+    /// Apply `reaction` and lazily emit the connected product components for each match.
+    #[pyo3(signature = (reaction, *, config=None))]
+    fn react(
+        &self,
+        py: Python<'_>,
+        reaction: &Reaction,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Py<ReactionProductsIter>> {
+        let reaction = reaction.to_rust(py);
+        let products = GraphIrReact::react(
+            self.to_rust(),
+            &reaction,
+            config.unwrap_or_default().to_rust(),
+        )
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+
+        Py::new(py, ReactionProductsIter::from_rust(products))
+    }
+
+    /// Combine `reactants` in iterable order, apply `reaction`, and lazily emit product components.
+    #[staticmethod]
+    #[pyo3(signature = (reactants, reaction, *, config=None))]
+    fn react_all(
+        py: Python<'_>,
+        reactants: &Bound<'_, PyAny>,
+        reaction: &Reaction,
+        config: Option<ReactionApplicationConfig>,
+    ) -> PyResult<Py<ReactionProductsIter>> {
+        let reactants = reactants
+            .try_iter()?
+            .map(|item| -> PyResult<Py<Molecule>> { Ok(item?.cast_into::<Molecule>()?.unbind()) })
+            .collect::<PyResult<Vec<_>>>()?;
+        let reactants = reactants
+            .iter()
+            .map(|molecule| molecule.bind(py).borrow().to_rust().clone())
+            .collect::<Vec<_>>();
+        let reaction = reaction.to_rust(py);
+        let products = GraphIrReact::react(
+            reactants.as_slice(),
+            &reaction,
+            config.unwrap_or_default().to_rust(),
+        )
+        .map_err(|error| InvalidStructureError::new_err(error.to_string()))?;
+
+        Py::new(py, ReactionProductsIter::from_rust(products))
     }
 
     /// Decompose this molecule into components connected by any relation. Each correspondence maps

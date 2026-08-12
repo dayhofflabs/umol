@@ -19,6 +19,7 @@ from umol import (
     Element,
     ElementScope,
     Entity,
+    InvalidStructureError,
     MetadataError,
     ModelConversionError,
     Molecule,
@@ -1511,6 +1512,110 @@ def test_reaction_apply_iteration_error():
         next(application)
     with pytest.raises(StopIteration):
         next(application)
+
+
+def test_molecule_react():
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    host = Reaction.parse('{:lhs {:atoms ["C#c0" "C#c0"]} :deltas []}').lhs
+    expected = [
+        [
+            Reaction.parse('{:lhs {:atoms ["C#c+"]} :deltas []}').lhs,
+            Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
+        ],
+        [
+            Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
+            Reaction.parse('{:lhs {:atoms ["C#c+"]} :deltas []}').lhs,
+        ],
+    ]
+
+    products = host.react(reaction)
+
+    assert iter(products) is products
+    assert list(products) == expected
+    with pytest.raises(StopIteration):
+        next(products)
+
+
+def test_molecule_react_all():
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C#c0" "O"]} '
+        ':deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    reactants = [
+        Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["O"]} :deltas []}').lhs,
+    ]
+    expected = [[
+        Reaction.parse('{:lhs {:atoms ["C#c+"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["O"]} :deltas []}').lhs,
+    ]]
+
+    products = Molecule.react_all(
+        (reactant for reactant in reactants),
+        reaction,
+        config=ReactionApplicationConfig(),
+    )
+
+    assert list(products) == expected
+
+
+def test_molecule_react_all_empty():
+    assert list(Molecule.react_all([], Reaction())) == [[]]
+
+
+def test_molecule_react_all_member_error():
+    with pytest.raises(TypeError):
+        Molecule.react_all([Molecule(), "not a molecule"], Reaction())
+
+
+def test_molecule_react_precondition_error():
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C" "C"] :bonds [[0 1 "1"]]} '
+        ':deltas [{:atom {:remove 0}}]}'
+    )
+
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^invalid reaction: deleted atom AtomId\(0\) leaves dangling bond BondId\(0\)$",
+    ):
+        Molecule().react(reaction)
+
+
+def test_molecule_react_iteration_error():
+    reaction = Reaction.parse(
+        "{:lhs {:atoms [\"C\"] "
+        ":constraints [{:charge-sum {:atoms [0] :sum 0}}]} "
+        ":deltas [{:constraint {:remove {:charge-sum {:atoms [0] :sum 0}}}}]}"
+    )
+    host = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}').lhs
+    products = host.react(reaction)
+
+    with pytest.raises(
+        TransactionError,
+        match=r"^missing constraint entry on remove$",
+    ):
+        next(products)
+    with pytest.raises(StopIteration):
+        next(products)
+
+
+def test_molecule_react_all_pipeline():
+    reaction = Reaction.parse(
+        '{:lhs {:atoms ["C#c0"]} :deltas [{:atom {:modify [0 "#c+"]}}]}'
+    )
+    reactants = [
+        Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
+        Reaction.parse('{:lhs {:atoms ["C#c0"]} :deltas []}').lhs,
+    ]
+    combined, _ = Molecule.combine_all(reactants)
+    expected = [
+        [component for component, _ in derivation.rhs.split()]
+        for derivation in reaction.apply(combined)
+    ]
+
+    assert list(Molecule.react_all(reactants, reaction)) == expected
 
 
 def test_reaction_workflow():

@@ -582,6 +582,12 @@ pub(crate) struct ReactionProductsIter {
     inner: GraphIrReactionProductsIter,
 }
 
+impl ReactionProductsIter {
+    pub(crate) fn from_rust(inner: GraphIrReactionProductsIter) -> Self {
+        Self { inner }
+    }
+}
+
 #[pymethods]
 impl ReactionProductsIter {
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
@@ -3272,11 +3278,10 @@ mod tests {
         Python::attach(|py| {
             let products = Py::new(
                 py,
-                ReactionProductsIter {
-                    inner: host
-                        .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                ReactionProductsIter::from_rust(
+                    host.react(&reaction, ReactionApplicationConfig::default().to_rust())
                         .unwrap(),
-                },
+                ),
             )
             .unwrap();
 
@@ -3292,11 +3297,10 @@ mod tests {
         Python::attach(|py| {
             let products = Py::new(
                 py,
-                ReactionProductsIter {
-                    inner: host
-                        .react(&reaction, ReactionApplicationConfig::default().to_rust())
+                ReactionProductsIter::from_rust(
+                    host.react(&reaction, ReactionApplicationConfig::default().to_rust())
                         .unwrap(),
-                },
+                ),
             )
             .unwrap();
 
@@ -3339,11 +3343,10 @@ mod tests {
             ..Default::default()
         });
         let expected_host = host.clone();
-        let mut products = ReactionProductsIter {
-            inner: host
-                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+        let mut products = ReactionProductsIter::from_rust(
+            host.react(&reaction, ReactionApplicationConfig::default().to_rust())
                 .unwrap(),
-        };
+        );
 
         let mut first = products.__next__().unwrap().unwrap();
         let second = products.__next__().unwrap().unwrap();
@@ -3416,11 +3419,10 @@ mod tests {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         });
-        let mut products = ReactionProductsIter {
-            inner: host
-                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+        let mut products = ReactionProductsIter::from_rust(
+            host.react(&reaction, ReactionApplicationConfig::default().to_rust())
                 .unwrap(),
-        };
+        );
 
         assert_eq!(products.__next__().unwrap(), None);
         assert_eq!(products.__next__().unwrap(), None);
@@ -3446,11 +3448,10 @@ mod tests {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C)],
             ..Default::default()
         });
-        let mut products = ReactionProductsIter {
-            inner: host
-                .react(&reaction, ReactionApplicationConfig::default().to_rust())
+        let mut products = ReactionProductsIter::from_rust(
+            host.react(&reaction, ReactionApplicationConfig::default().to_rust())
                 .unwrap(),
-        };
+        );
 
         let error = products.__next__().unwrap_err();
 
