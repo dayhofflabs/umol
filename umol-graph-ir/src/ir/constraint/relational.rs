@@ -566,10 +566,24 @@ impl RelationalConstraint {
 }
 
 impl Normalize for RelationalConstraint {
-    /// Normalize any inner `AtomConstraintForm` predicate. Refs (`bond`, `atom`,
-    /// `system`, `parallel`, atom sets) are unchanged.
+    /// Normalize any inner `AtomConstraintForm` predicate and canonicalize atom sets.
     fn normalize(self) -> Result<Self, Contradiction> {
+        let normalize_atoms = |mut atoms: Vec<AtomId>| {
+            atoms.sort_unstable();
+            atoms.dedup();
+            atoms
+        };
         Ok(match self {
+            Self::DativeBondDonors { bond, atoms } => Self::DativeBondDonors {
+                bond,
+                atoms: normalize_atoms(atoms),
+            },
+            Self::DativeBondContainsAllDonors { bond, atoms } => {
+                Self::DativeBondContainsAllDonors {
+                    bond,
+                    atoms: normalize_atoms(atoms),
+                }
+            }
             Self::DativeBondAllDonors { bond, predicate } => Self::DativeBondAllDonors {
                 bond,
                 predicate: Box::new((*predicate).normalize()?),
@@ -592,6 +606,14 @@ impl Normalize for RelationalConstraint {
                 system,
                 predicate: Box::new((*predicate).normalize()?),
             },
+            Self::AromaticSystemAtoms { system, atoms } => Self::AromaticSystemAtoms {
+                system,
+                atoms: normalize_atoms(atoms),
+            },
+            Self::AromaticSystemContainsAll { system, atoms } => Self::AromaticSystemContainsAll {
+                system,
+                atoms: normalize_atoms(atoms),
+            },
             Self::MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
                 bond,
                 predicate: Box::new((*predicate).normalize()?),
@@ -600,12 +622,24 @@ impl Normalize for RelationalConstraint {
                 bond,
                 predicate: Box::new((*predicate).normalize()?),
             },
+            Self::MulticenterBondAtoms { bond, atoms } => Self::MulticenterBondAtoms {
+                bond,
+                atoms: normalize_atoms(atoms),
+            },
+            Self::MulticenterBondContainsAll { bond, atoms } => Self::MulticenterBondContainsAll {
+                bond,
+                atoms: normalize_atoms(atoms),
+            },
             Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
                 let [a, b] = predicates;
                 Self::NoncovalentBondEndsSatisfy {
                     bond,
                     predicates: [Box::new((*a).normalize()?), Box::new((*b).normalize()?)],
                 }
+            }
+            Self::NoncovalentBondEnds { bond, mut atoms } => {
+                atoms.sort_unstable();
+                Self::NoncovalentBondEnds { bond, atoms }
             }
             Self::StereoAtomAllLigands {
                 stereo_atom,
@@ -621,6 +655,10 @@ impl Normalize for RelationalConstraint {
                 stereo_atom,
                 predicate: Box::new((*predicate).normalize()?),
             },
+            Self::StereoAtomLigands { stereo_atom, atoms } => Self::StereoAtomLigands {
+                stereo_atom,
+                atoms: normalize_atoms(atoms),
+            },
             Self::StereoBondAllLigands {
                 stereo_bond,
                 predicate,
@@ -635,25 +673,20 @@ impl Normalize for RelationalConstraint {
                 stereo_bond,
                 predicate: Box::new((*predicate).normalize()?),
             },
-            other @ (Self::DativeBondDonors { .. }
-            | Self::DativeBondDonor { .. }
-            | Self::DativeBondContainsAllDonors { .. }
+            Self::StereoBondLigands { stereo_bond, atoms } => Self::StereoBondLigands {
+                stereo_bond,
+                atoms: normalize_atoms(atoms),
+            },
+            other @ (Self::DativeBondDonor { .. }
             | Self::DativeBondAcceptor { .. }
             | Self::DativeBondParallels { .. }
-            | Self::AromaticSystemAtoms { .. }
             | Self::AromaticSystemContains { .. }
-            | Self::AromaticSystemContainsAll { .. }
-            | Self::MulticenterBondAtoms { .. }
             | Self::MulticenterBondContains { .. }
-            | Self::MulticenterBondContainsAll { .. }
-            | Self::NoncovalentBondEnds { .. }
             | Self::NoncovalentBondContains { .. }
             | Self::StereoAtomSite { .. }
             | Self::StereoAtomContains { .. }
-            | Self::StereoAtomLigands { .. }
             | Self::StereoBondSite { .. }
-            | Self::StereoBondContains { .. }
-            | Self::StereoBondLigands { .. }) => other,
+            | Self::StereoBondContains { .. }) => other,
         })
     }
 }
@@ -893,6 +926,12 @@ mod tests {
             predicates: [Box::new(AtomConstraintForm::Valence(NumForm::lit_set([4]))), Box::new(AtomConstraintForm::Degree(NumForm::lit_set([2])))] },
         Ok(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
             predicates: [Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))), Box::new(AtomConstraintForm::Degree(NumForm::Lit(2)))] }))]
+    #[case::unordered_atom_sets(
+        RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(2), AtomId(0), AtomId(2)] },
+        Ok(RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(0), AtomId(2)] }))]
+    #[case::unordered_endpoints(
+        RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(2), AtomId(0)] },
+        Ok(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(2)] }))]
     #[case::predicate_empty_litset_contradiction(
         RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new()))) },
         Err(Contradiction))]
@@ -906,7 +945,6 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::dative_donor(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) })]
-    #[case::dative_donors(RelationalConstraint::DativeBondDonors { bond: DativeBondId(0), atoms: vec![AtomId(1), AtomId(2)] })]
     #[case::aromatic_contains(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) })]
     fn test_relational_constraint_normalize_identity(#[case] input: RelationalConstraint) {
         assert_eq!(input.clone().normalize(), Ok(input));

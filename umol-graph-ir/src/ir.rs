@@ -4,7 +4,7 @@ pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod bond;
 pub(crate) mod boolean;
-pub(crate) mod canonicalization;
+pub(crate) mod canonicalize;
 pub(crate) mod coloring;
 pub(crate) mod compose;
 pub(crate) mod constraint;
@@ -41,7 +41,7 @@ pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
-pub use canonicalization::{
+pub use canonicalize::{
     CanonicalizationContext, CanonicalizationLevel, MoleculeCanonicalizationError,
     ReactionCanonicalizationError, ReactionSpanCanonicalizationError,
 };

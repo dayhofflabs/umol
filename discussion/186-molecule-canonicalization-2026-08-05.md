@@ -1659,6 +1659,15 @@ and the semantic properties validated by the corresponding property tests.
   single `Structure` frame before this tie break; retain or reconstruct every action attaining the
   structure minimum. This is additive.
   [dep: S4b, S9a]
+  **Done.** The complete comparison key now appends explicitly tagged inline and molecule
+  constraint blocks to the structure key. Complete search retains the structure-minimal entity and
+  participant-frame actions and selects among them by the normalized constraint key; graph-only
+  orbit pruning is disabled for this tie break. Remapping and stereo reframing transport inline,
+  relational, molecule, and logical constraints before their keys are compared. Unordered atom and
+  bond subsets, noncovalent endpoint pairs, and nested conjunction/disjunction children are sorted
+  and deduplicated according to their set semantics. Focused cases establish constraint-selected
+  numbering, renumbering invariance, idempotence, set normalization, and constraint-sensitive
+  selection between tied stereo frames.
 - **S9c — Complete `Canonicalize` for molecules.** Extend `Canonicalize` with unqualified
   `canonicalize`, `canonicalize_by`, `canonical_eq`, and `canonical_eq_by`, and implement them for
   `Molecule`. `Topology`, `Constitution`, and `Structure` select the corresponding constraint-free

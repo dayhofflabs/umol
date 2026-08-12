@@ -431,39 +431,32 @@ impl MoleculeConstraint {
 }
 
 impl Normalize for MoleculeConstraint {
-    /// Normalize the value payload (`sum` / `unpaired_electrons`) and sort
+    /// Normalize the value payload (`sum` / `unpaired_electrons`) and sort and deduplicate
     /// each atom/bond subset; refs are otherwise unchanged.
     fn normalize(self) -> Result<Self, Contradiction> {
+        fn normalize_subset<T: Ord>(mut values: Vec<T>) -> Vec<T> {
+            values.sort_unstable();
+            values.dedup();
+            values
+        }
         Ok(match self {
             Self::ChargeSum { atoms, sum } => Self::ChargeSum {
-                atoms: atoms.map(|mut v| {
-                    v.sort_unstable();
-                    v
-                }),
+                atoms: atoms.map(normalize_subset),
                 sum: sum.normalize()?,
             },
             Self::UnpairedElectronCoupling {
                 atoms,
                 unpaired_electrons,
             } => Self::UnpairedElectronCoupling {
-                atoms: atoms.map(|mut v| {
-                    v.sort_unstable();
-                    v
-                }),
+                atoms: atoms.map(normalize_subset),
                 unpaired_electrons: unpaired_electrons.normalize()?,
             },
             Self::BondOrderSum { bonds, sum } => Self::BondOrderSum {
-                bonds: bonds.map(|mut v| {
-                    v.sort_unstable();
-                    v
-                }),
+                bonds: bonds.map(normalize_subset),
                 sum: sum.normalize()?,
             },
             Self::Connected { atoms } => Self::Connected {
-                atoms: atoms.map(|mut v| {
-                    v.sort_unstable();
-                    v
-                }),
+                atoms: atoms.map(normalize_subset),
             },
         })
     }
@@ -1111,7 +1104,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge_sum_sorts_and_folds(
-        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: NumForm::arith_expr(ArithExpr::Lit(1)) },
+        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0), AtomId(2)]), sum: NumForm::arith_expr(ArithExpr::Lit(1)) },
         Ok(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: NumForm::Lit(1) }),
     )]
     #[case::unpaired_electron_coupling_sorts_and_folds(
@@ -1120,7 +1113,7 @@ mod tests {
         Ok(MoleculeConstraint::UnpairedElectronCoupling { atoms: Some(vec![AtomId(0), AtomId(2)]), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_sorts_and_folds(
-        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: NumForm::arith_expr(ArithExpr::Lit(4)) },
+        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0), BondId(2)]), sum: NumForm::arith_expr(ArithExpr::Lit(4)) },
         Ok(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: NumForm::Lit(4) }),
     )]
     #[case::connected_sorts(
