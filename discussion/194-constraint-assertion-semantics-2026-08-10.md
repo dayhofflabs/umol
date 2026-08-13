@@ -302,24 +302,24 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
 ### S0 — constraints-view foundation (`umol-graph-ir`); green throughout
 
 - S0a: `Lattice::satisfies` as a provided method (universal default: `pattern.matches(self)`);
-  the dual recorded in the nomenclature Matching entry. Additive. Done 2026-08-12: duality law
+  the dual recorded in the nomenclature Matching entry. Additive. **Done 2026-08-12:** duality law
   added to `assert_lattice_laws`, covering every `Lattice` impl in the property sweep.
 - S0b: extract the per-quantity derivation functions from the `AtomView`/`RingAtomView` method
   bodies (typed accessors become delegates; signatures and their tests unchanged); retype
   `AtomView::constraints()` to `AtomConstraintsView` — the container's read API inherited with
   meanings intact, plus `asserted`/`derived`/`derived_complete` and `with_rings`. Near-additive:
-  the accessor was read-only, so the retype is almost source-compatible. Done 2026-08-13: two
+  the accessor was read-only, so the retype is almost source-compatible. **Done 2026-08-13:** two
   call-site edits workspace-wide; suite and clippy green.
-- S0c: `satisfies`/`is_compatible` on `AtomConstraintsView`. Additive. [dep: S0b] Done
-  2026-08-13: pattern-key-driven, sides met internally, `⊥` folds to `false`; conflicted-host
+- S0c: `satisfies`/`is_compatible` on `AtomConstraintsView`. Additive. [dep: S0b] **Done
+  2026-08-13:** pattern-key-driven, sides met internally, `⊥` folds to `false`; conflicted-host
   and absent-overlay-skip semantics pinned by cases.
 - S0d: the same retype and keyed surface for `BondView::constraints()` (`BondConstraintsView`
-  with `BondConstraintKey`). Additive. [dep: S0b] Done 2026-08-13: bond `#a` becomes derivable
+  with `BondConstraintKey`). Additive. [dep: S0b] **Done 2026-08-13:** bond `#a` becomes derivable
   for the first time (both-endpoints-in-system incidence, closure negative `Aromatic(false)`);
   `derive_constraints` unchanged in behavior (still emits only `#C`), reimplemented over the
   dispatch; two validator call sites migrated.
 - S0e: the same for the remaining six entity views (uniform surface). Additive. [dep: S0b] —
-  gates only S6a. Done 2026-08-13, mirroring the validator's established derivations: dative
+  gates only S6a. **Done 2026-08-13,** mirroring the validator's established derivations: dative
   aromatic incidence is binary-only (doc 117 stub; ring key unprojected); system/multicenter
   electron counts are self-projections with no absence cell; noncovalent intramolecularity is
   shared localized-bond component membership; the stereo constraint kinds have no projection —
@@ -327,21 +327,21 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   macro plus per-family typed getters.
 - S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
   the `satisfies` dual in the Matching entry; reword the two `invariant.rs` "standalone" doc
-  comments to the molecule-atom convention. Additive. Done 2026-08-13: glossary gains
+  comments to the molecule-atom convention. Additive. **Done 2026-08-13:** glossary gains
   "Constraints view", "Derived and asserted", and "Discharge" (the `satisfies` dual landed with
   S0a); the two comments now say "a bare `AtomForm`".
 - S0g: facade-rule enforcement from the doc 165 ring-view worklist: delete the view-as-argument
   relations `RingView::shared_atoms`/`shared_bonds` (`view/ring.rs:101-105`) — the id-keyed
   `RingSet::shared_atoms`/`shared_bonds` already exist and are the only form retained; the two
   `RingView` unit tests retarget to the `RingSet` forms. No production callers; green. The
-  remaining doc 165 ring-view items (id/view accessor conventions) stay in doc 165. Done
-  2026-08-13: the id-keyed `RingSet` forms already had their own tests, so the two `RingView`
+  remaining doc 165 ring-view items (id/view accessor conventions) stay in doc 165. **Done
+  2026-08-13:** the id-keyed `RingSet` forms already had their own tests, so the two `RingView`
   tests were redundant and deleted rather than retargeted; `intersection` import dropped.
 - S0h: extend the context-free `Normalize` for constraint trees with trivial-wrapper reduction
   (a singleton `:or`/`:and` is its element), completing the conjunction-flattening family. Full
   canonical equality strengthens for those degenerate spellings alone (their canonical keys
   change); placement remains outside canonicalization by the fallibility criterion (Model
-  section). Normal-form change; green. [dep: none] Done 2026-08-13: two existing empty-child
+  section). Normal-form change; green. [dep: none] **Done 2026-08-13:** two existing empty-child
   unit expectations updated per this spec, six new cases (including dedup-to-singleton and
   cross-combinator reduction); new property module `property/constraint.rs` states the tree's
   normalize laws directly — idempotence and wrapper-free normal form — over a raw tree domain
@@ -412,7 +412,7 @@ molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped acc
   gate with evaluation (the current silent ignore admits false positives). Breaking, green at
   stage end: substructure, fingerprint, and reaction-matching suites unchanged. A host carrying
   unconsumed input assertions now meets them against the closure; any test relying on such a
-  staging host is surfaced, not silently rewritten. [dep: S0c, S0d] Done 2026-08-13:
+  staging host is surfaced, not silently rewritten. [dep: S0c, S0d] **Done 2026-08-13:**
   `SubstructureMatchError::MoleculeScopeConstraints`; both public entry points return `Result`;
   propagation through reaction application adds `ApplyPreconditionError::Match(#[from] ...)`;
   `host_match_targets` replaced by `host_ring_context` + per-family satisfies tables; field
@@ -430,7 +430,10 @@ molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped acc
 
 ### S3 — completion carrier (`umol-graph::ops::valence`); additive, green
 
-- S3a: `AtomCompletions`, the keyed carrier. Additive.
+- S3a: `AtomCompletions`, the keyed carrier. Additive. **Done 2026-08-13:**
+  `ops/valence/completion.rs`, re-exported from `ops::valence`; the settled surface exactly
+  (private `BTreeMap` storage, `insert` asserting the non-empty invariant, slice-typed reads);
+  rustdoc carries the invariant and deterministic order only, per the openness note.
 - S3b: `ResolveReport`, the resolver verdict payload. Additive. [dep: S3a]
 
 The S3 surface (settled 2026-08-12):
