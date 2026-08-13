@@ -77,6 +77,7 @@ impl<'a> ValenceResolver<'a> {
                 .map_contradiction(ValenceContradiction::from),
             Self::Counts(resolver) => resolver
                 .plan(molecule)
+                .map(|(edits, _)| edits)
                 .map_contradiction(ValenceContradiction::from),
         }
     }

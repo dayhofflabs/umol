@@ -42,20 +42,20 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
   :counts {
     :output {
       :atoms [
-        "P#v5"
-        "P#v5"
-        "P#v5"
-        "P#v5"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"
-        "O#n2#v2"]
+        "P"
+        "P"
+        "P"
+        "P"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"
+        "O#n2"]
       :bonds [
         [0 4 :single]
         [0 5 :single]

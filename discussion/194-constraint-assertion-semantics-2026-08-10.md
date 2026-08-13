@@ -489,7 +489,18 @@ pub struct ResolveReport {
   S5d regeneration, per the S4h scoping. atom-typing unit tests rewritten to the new
   surface (28/28 green).
 - S4b: counts: plural `#h` candidates emitted through the same carrier; `CountsInput` readings
-  aligned with the view. Breaking. [dep: S3b]
+  aligned with the view. Breaking. [dep: S3b] **Done 2026-08-13:** `select_candidates` returns
+  the full enumeration (implicit hydrogens ascending, then table aromatic valences) with the
+  preference collapse deleted; plan/resolve mirror S4a's carrier shape (singleton restores the
+  atom's own constraint container — the enumeration's `#v`/`#a` values stay candidate
+  bookkeeping; early commit under `Underdetermined`). `CountsInput::for_molecule_atom` reads
+  aromatic evidence as the view's `derived(AromaticValence)` plus the asserted side, retiring
+  the duplicated kekulé-neighbor scan; `resolve_atom` and `CountsInput::for_atom` deleted
+  (zero callers; bare-form resolution existed only to collapse by preference). The 27-case
+  per-atom table retargeted onto `select_candidates` with full candidate lists — the
+  pyridine/pyrrole nitrogen pairs now visibly coexist (doc 174's sets). Red delta vs S4a:
+  +6, all counts consumers, both known classes (plural: MOL methane, resolver stage tests;
+  expectation-delta: benzene/vacuous `#v` write-backs). Counts unit tests 43/43 green.
 - S4c: aromaticity resolve: joint selection per candidate system over the carrier;
   `compare_valence_preference` demoted to a visible last-resort tie-break. Breaking. [dep: S4a]
 - S4d: `Resolver::resolve`: thread the carrier valence → aromaticity; `Solution<(), _>` →

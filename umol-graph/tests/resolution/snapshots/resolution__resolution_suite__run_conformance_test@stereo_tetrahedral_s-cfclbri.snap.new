@@ -12,7 +12,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success true}
   :counts {
     :output {
-      :atoms ["C#v4#T0" "F#n3#v" "Cl#n3#v" "Br#n3#v" "I#n3#v"]
+      :atoms ["C#T0" "F#n3" "Cl#n3" "Br#n3" "I#n3"]
       :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]
       :stereo-atoms [{:attrs :ccw :ligands [1 2 3 4] :site 0}]}
     :success true}}

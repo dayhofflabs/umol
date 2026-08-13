@@ -21,7 +21,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success true}
   :counts {
     :output {
-      :atoms ["C#v4" "C#v4" "C#v4" "C#v4" "C#v4"]
+      :atoms ["C" "C" "C" "C" "C"]
       :bonds [
         [0 1 :single]
         [0 2 :single]

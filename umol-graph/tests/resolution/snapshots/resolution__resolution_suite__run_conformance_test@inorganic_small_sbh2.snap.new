@@ -8,5 +8,5 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :output {:atoms ["Sb#n#u" "H" "H"] :bonds [[0 1 :single] [0 2 :single]]}
     :success true}
   :counts {
-    :output {:atoms ["Sb#n#u#v2" "H#v" "H#v"] :bonds [[0 1 :single] [0 2 :single]]}
+    :output {:atoms ["Sb#n#u" "H" "H"] :bonds [[0 1 :single] [0 2 :single]]}
     :success true}}

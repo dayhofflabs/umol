@@ -11,6 +11,6 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success true}
   :counts {
     :output {
-      :atoms ["As#c+#v4" "H#v" "H#v" "H#v" "H#v"]
+      :atoms ["As#c+" "H" "H" "H" "H"]
       :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}
     :success true}}
