@@ -469,7 +469,25 @@ pub struct ResolveReport {
 
 - S4a: atom-typing: admission via the view's `is_compatible`; no stored-constraint
   extension, no narrowed write-back; singleton atoms produce edits, plural atoms produce
-  completions. Breaking. [dep: S0c, S3b]
+  completions. Breaking. [dep: S0c, S3b] **Done 2026-08-13:** admission = field compatibility
+  plus the view's `is_compatible` over row-constraint keys; disjuncts are full meets (row
+  constraints ride in solver state only — a committed singleton restores the atom's own
+  constraint container, so neither derived nor registry constraints are written back);
+  `plan → Solution<(Edits, AtomCompletions), _>`, `resolve → Solution<AtomCompletions, _>`
+  with singleton edits committed under `Underdetermined` (early commit).
+  `classify_molecule_atom` composes the closure reading from the view's keyed core
+  (meet of asserted, `derived_complete`, and the row entry per key; ring keys asserted-only) —
+  sharpened from the old derived-replaces-asserted pattern, and topology keys outside the old
+  six-key derivation now participate; S6a's reading selector absorbs this composed site.
+  `ValenceResolver::plan` interim-drops the completions payload until S4d threads the carrier.
+  `derive_constraints` has no callers left workspace-wide. Red baseline captured: 517
+  failures in 4 targets — umol-graph lib 81 (ingest/morgan/pattern/parse), conformance
+  resolution 402, fingerprint featurizer 10, umol-py lib 24 — in two classes:
+  plural-admission `Underdetermined` (closed-shell selection returns as the S4c/S4d
+  tie-break) and conformance snapshots whose outputs are already correct but record the
+  retired `#v` write-back (e.g. `atomic_ions_hg+2_dimer`) — expectation deltas awaiting the
+  S5d regeneration, per the S4h scoping. atom-typing unit tests rewritten to the new
+  surface (28/28 green).
 - S4b: counts: plural `#h` candidates emitted through the same carrier; `CountsInput` readings
   aligned with the view. Breaking. [dep: S3b]
 - S4c: aromaticity resolve: joint selection per candidate system over the carrier;
@@ -483,7 +501,12 @@ pub struct ResolveReport {
 - S4g: retire `derive_constraints` and `include_missing` (last callers died in S1a/S4a).
   Breaking. [dep: S4a]
 - S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; full suite green
-  (`--all-features --tests`, clippy). [dep: S4a–S4g]
+  (`--all-features --tests`, clippy) **except conformance snapshots**, whose remaining
+  failures are audited to be exactly the planned expectation-delta class — outputs correct,
+  snapshots recording constraints that are no longer written back (atom-typing `#v` since S4a,
+  counts since S4b, `#h0` pinning since S4e). There is nothing to fix in that class; the
+  expectations changed as planned, and the one regeneration stays at S5d, after discharge
+  (S5b) and elision retirement (S5c) change the outputs once more. [dep: S4a–S4g]
 - S4i: audit the stereo phase for the same premature collapse (doc 174's remaining open item) —
   whether a local preference selects before a later criterion can vote. Read-and-report while the
   pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d]

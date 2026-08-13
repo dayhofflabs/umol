@@ -1,0 +1,16 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 144
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {
+    :output {
+      :atoms ["P#c+" "H" "H" "H" "H"]
+      :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}
+    :success true}
+  :counts {
+    :output {
+      :atoms ["P#c+#v4" "H#v" "H#v" "H#v" "H#v"]
+      :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}
+    :success true}}

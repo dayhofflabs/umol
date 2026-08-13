@@ -69,8 +69,11 @@ impl<'a> ValenceResolver<'a> {
             }
         }
         match self {
+            // Completions are dropped here until the resolver threads the
+            // carrier; plural admissions surface as an underdetermined plan.
             Self::AtomTyping(resolver) => resolver
                 .plan(molecule)
+                .map(|(edits, _)| edits)
                 .map_contradiction(ValenceContradiction::from),
             Self::Counts(resolver) => resolver
                 .plan(molecule)

@@ -1,0 +1,8 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 144
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {:output {:atoms ["I#n3" "I#n3"] :bonds [[0 1 :single]]} :success true}
+  :counts {:output {:atoms ["I#n3#v" "I#n3#v"] :bonds [[0 1 :single]]} :success true}}
