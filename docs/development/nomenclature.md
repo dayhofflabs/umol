@@ -405,6 +405,21 @@ transported and, where required, compared after a structural correspondence has 
 operation over it. Not an inherent field, which does contribute to identity.
 **In code:** `AtomConstraintForm`, `AtomConstraintsForm`, and the per-entity equivalents.
 
+### Constraints view
+
+A **constraints view** is the constraint reading of one entity, reached by accessor chaining
+(`molecule.atom(id).constraints()`): the stored container's read API with its meanings intact —
+the typed getters, `iter`, and `is_empty` read the asserted side — plus the keyed accessors
+`asserted`, `derived`, and `derived_complete` and the comparisons `satisfies` and
+`is_compatible`. Scope lives in the receiver, not in name prefixes: `atom(i).valence()` is the
+derived quantity, `atom(i).constraints().valence()` the asserted payload. Mutation never routes
+through a constraints view; it belongs to the stored container.
+
+**Not:** the container (`*ConstraintsForm`), which is the storage the view reads; like every view
+it is a receiver, never an argument.
+**In code:** `AtomConstraintsView`, `BondConstraintsView`, and the per-entity family, from
+`AtomView::constraints` and its peers.
+
 ### Contradiction
 
 A **contradiction** is a semantic rejection represented by `Solution::Contradictory`. Validators have
@@ -520,6 +535,21 @@ coined sense collides with the established one.
 would be the one to rename if either were.
 **In code:** `ReactionDerivation`, `apply`, `to_reaction`.
 
+### Derived and asserted
+
+A derivable constraint has an **asserted side** — the stored value, open-world by definition:
+absence is the vacuous constraint — and a **derived side**, obtained by projection from the
+relations the entity takes part in. The constraints views name the readings: `asserted(key)`
+reads storage; `derived(key)` reads present relations only and is vacuous on absence;
+`derived_complete(key)` adds the closure — under the caller's claim that the relation set is
+complete, absence of a resolution-written overlay closes to its definite negative. Topology keys
+(valence, degree, the totals, the ring keys) read identically under both derived accessors; only
+the overlay-incidence keys have an absence cell for the closure to fill.
+
+**Not:** `projected` for the reading — *projection* names the operation yielding the derived
+side; not a mode parameter or stored molecule state — the closure choice is per call.
+**In code:** `asserted`, `derived`, `derived_complete` on the constraints views.
+
 ### Determined
 
 **Determined** is an operation outcome: the pass produced a fully resolved result.
@@ -527,6 +557,20 @@ would be the one to rename if either were.
 **Not:** *ground*, which is a property of stored state rather than of an outcome. An operation may
 return `Determined` with a payload that is not ground if the operation's own contract is satisfied.
 **In code:** `Solution::Determined`, `is_determined`, `into_determined`.
+
+### Discharge
+
+**Discharge** is the closing pass of the resolve pipeline that removes stored assertions the
+structure has come to determine: per key, a ground derived value under the closure that refines
+the assertion makes it redundant and removes it; a meet of `⊥` is a contradiction; a non-ground
+derived value keeps the assertion. Discharge is the only removal concept for the constraint
+channel. An operation that realizes an assertion may remove it early in its own transaction as an
+implementation liberty; a transform that deletes a relation removes the assertions its output no
+longer satisfies, which is the separate emit-compliance policy.
+
+**Not:** cache invalidation — nothing derivable from structure is ever stored; not *consume* or a
+per-operation contract.
+**In code:** — (the planned closing `Resolver` stage).
 
 ### Donor and acceptor
 

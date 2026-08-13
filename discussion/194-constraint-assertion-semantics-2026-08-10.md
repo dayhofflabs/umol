@@ -327,7 +327,9 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   macro plus per-family typed getters.
 - S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
   the `satisfies` dual in the Matching entry; reword the two `invariant.rs` "standalone" doc
-  comments to the molecule-atom convention. Additive.
+  comments to the molecule-atom convention. Additive. Done 2026-08-13: glossary gains
+  "Constraints view", "Derived and asserted", and "Discharge" (the `satisfies` dual landed with
+  S0a); the two comments now say "a bare `AtomForm`".
 - S0g: facade-rule enforcement from the doc 165 ring-view worklist: delete the view-as-argument
   relations `RingView::shared_atoms`/`shared_bonds` (`view/ring.rs:101-105`) — the id-keyed
   `RingSet::shared_atoms`/`shared_bonds` already exist and are the only form retained; the two

@@ -1,5 +1,5 @@
 //! Per-atom electron-conservation equation. `check` reports the molecule-wide
-//! verdict; `check_atom` evaluates a standalone `AtomForm` (topology-derived
+//! verdict; `check_atom` evaluates a bare `AtomForm` (topology-derived
 //! valences default to zero); `enumerate_atom` returns the ground `AtomForm`
 //! candidates satisfying the equation when fields are `Undetermined`. Shared
 //! physics, not tied to a specific valence model.
@@ -60,7 +60,7 @@ impl ValenceInvariants {
         Solution::Determined(())
     }
 
-    /// Verdict for a standalone atom. Topology-derived valences default to zero;
+    /// Verdict for a bare `AtomForm`. Topology-derived valences default to zero;
     /// only a non-negative literal constraint raises them. `Underdetermined`
     /// when element / charge / implicit-H / lone-pairs / unpaired electrons are not all
     /// `Lit`.
