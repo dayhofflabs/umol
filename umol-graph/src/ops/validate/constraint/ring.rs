@@ -37,7 +37,11 @@ impl RingConstraintInvariantsValidator {
 
         for id in molecule.atoms().ids() {
             if let Some(contradiction) = observe(
-                validate_atom_constraints(&rings.atom(id), id, molecule.atom(id).constraints()),
+                validate_atom_constraints(
+                    &rings.atom(id),
+                    id,
+                    &molecule.atom(id).attributes.constraints,
+                ),
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -104,7 +108,7 @@ impl RingConstraintInvariantsValidator {
         Ok(validate_atom_constraints(
             &rings.atom(atom_id),
             atom_id,
-            atom.constraints(),
+            &atom.attributes.constraints,
         ))
     }
 

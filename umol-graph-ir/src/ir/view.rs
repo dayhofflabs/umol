@@ -11,6 +11,7 @@ use std::fmt::Debug;
 mod aromatic;
 mod atom;
 mod bond;
+mod constraints;
 mod dative;
 mod graph;
 mod ligand;
@@ -26,6 +27,7 @@ pub use aromatic::{
 };
 pub use atom::{AtomEditorView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews};
 pub use bond::{BondEditorView, BondEditorViewMut, BondView, BondViewMut, BondViews};
+pub use constraints::AtomConstraintsView;
 pub use dative::{
     DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut,
     DativeBondViews,

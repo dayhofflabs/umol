@@ -160,9 +160,11 @@ inside an edit session. Views also exist over derived things, not only entities:
 `*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
 one propagates a borrow through a signature that did not need it.
 
-**Views are presentation facades.** A view never contains or constructs another view; shared
-derivation logic lives beneath the facades, in functions of the molecule and entity ids, which each
-facade presents.
+**Views are presentation facades.** A view never takes another view as an argument nor holds one
+as state, and its implementation lives in functions of the molecule and entity ids beneath it — a
+facade's implementation never builds another facade. Accessor chains that *return* narrower views
+(`atoms().get`, `rings().atom`, `atom().constraints()`) are the namespacing mechanism: scope lives
+in the receiver, not in name prefixes.
 
 **Not:** the owned representation, which is the `*Form` type. A view does not survive its molecule.
 **In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.

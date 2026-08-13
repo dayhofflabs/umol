@@ -135,7 +135,7 @@ impl IncidenceConstraintInvariantsValidator {
                 })?;
         Ok(atom
             .constraints()
-            .get(key)
+            .asserted(key)
             .map_or(Solution::Determined(()), |constraint| {
                 validate_atom_constraint(molecule, atom_id, constraint)
             }))

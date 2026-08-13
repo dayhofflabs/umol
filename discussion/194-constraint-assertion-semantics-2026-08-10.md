@@ -114,29 +114,29 @@ SMARTS-anchored meaning and pattern-as-receiver direction; `satisfies` exists be
 be a receiver and the view stands on the target side.
 
 What restructures are the container-level comparison entry points (`matches`, `is_compatible`,
-match-target construction), which currently demand two materialized containers. They move onto a
-per-entity constraints view — `AtomConstraintsView` and the per-entity family — constructed from
-the molecule and entity id (or a bare entity form), exposing the two sides of every key through
-three accessors:
+match-target construction), which currently demand two materialized containers. They move onto
+per-entity constraint views reached by accessor chaining — `atom(i).constraints()` — exposing the
+two sides of every key:
 
 - `asserted(key)` — the stored side; open-world by definition, absence is the vacuous constraint;
 - `derived(key)` — from present relations only; vacuous on absence;
 - `derived_complete(key)` — the closure reading: under the caller's claim that the relation set
   is complete, absence of a resolution-written table closes to the definite negatives.
 
-The view is always the receiver of a comparison, never a function argument. Comparisons fix the
-reading their semantics implies: `satisfies(&pattern)` evaluates the host under `derived_complete`
-(query against host), `is_compatible(&other)` under `derived` (narrowing admissibility). There is
-no `effective(key)` accessor: no consumer needs the meet of the sides as a value — comparisons
-meet internally, and discharge and validation read the sides and apply value-level `meet`
-directly, where `None` already means `⊥` and folds to `false` or `Contradictory`.
+The view is always the receiver of a comparison, never a function argument; ring context attaches
+as data (`with_rings(&RingSet)`, owned data per the views rule). Comparisons fix the reading
+their semantics implies: `satisfies(&pattern)` evaluates the host under `derived_complete` (query
+against host), `is_compatible(&other)` under `derived` (narrowing admissibility). There is no
+`effective(key)` accessor: no consumer needs the meet of the sides as a value — comparisons meet
+internally, and discharge and validation read the sides and apply value-level `meet` directly,
+where `None` already means `⊥` and folds to `false` or `Contradictory`.
 
 - Evaluation is driven by the pattern's keys, so only requested derivations are computed. The
   per-key selector of doc 125 falls out, and the monolithic `derive_constraints` retires.
-- An entity form outside any molecule context (e.g. the electron-count invariant check) is the
-  same abstraction with both derived accessors vacuous — a bare form has no relations to read.
-- Ring keys obtain their ring context inside the view, as `ConstraintEvaluation` already
-  memoizes for validation.
+- A bare entity form needs no view: its asserted side is its container, read directly (the
+  electron-count invariant check already does), and it has no relations to derive from.
+- Ring context is built once per run by the consumer that scans keys, as `ConstraintEvaluation`
+  already memoizes for validation.
 
 This restructure is unconditional, not an alternative to consumption: matching takes the host by
 shared reference and cannot write-then-remove, and candidate selection needs the combined reading
@@ -149,8 +149,9 @@ Consumers that change:
 - atom-typing candidate admission: `is_compatible` against the view; the phase emits the
   surviving candidate set instead of writing narrowed constraints back — derived values
   participate in admission but are never written.
-- the electron-count invariant check: assertion-only view, semantics unchanged.
-- `ConstraintValidator`: already per-key derived-versus-asserted; may reuse the view.
+- the electron-count invariant check: already reads the container — the asserted side of a bare
+  form — directly; no change.
+- `ConstraintValidator`: already per-key derived-versus-asserted; may reuse the keyed accessors.
 
 ## Discharge
 
@@ -247,7 +248,7 @@ property of the consuming operation, not of the molecule:
 
 The choice therefore lives in the accessor pair, not in a mode parameter: `derived` reads present
 relations only, `derived_complete` adds the closure. The closure's license tracks exactly the
-tables resolution writes: phases create overlays and never atoms or bonds, so the skeleton keys
+tables resolution writes: phases create overlays and never atoms or bonds, so the topology keys
 (`#v`, `#D`, `#X`, `#H`, `#V`) read identically under both accessors, and the overlay-incidence
 keys (`#a`, `#m`, `#d`/`#t`, `#T`) differ in the absence cell alone. The un-closed reading is not
 a resolution internal: patterns are permanently partial public descriptions, and validating one is
@@ -303,13 +304,14 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
 - S0a: `Lattice::satisfies` as a provided method (universal default: `pattern.matches(self)`);
   the dual recorded in the nomenclature Matching entry. Additive.
 - S0b: extract the per-quantity derivation functions from the `AtomView`/`RingAtomView` method
-  bodies (typed accessors become delegates; signatures and their tests unchanged);
-  `AtomConstraintsView` with construction from molecule + atom id or bare `AtomForm`, optional
-  ring context, and `asserted`/`derived`/`derived_complete` over every `AtomConstraintKey`,
-  presenting the same functions. Additive.
-- S0c: `satisfies`/`is_compatible` on the view. Additive. [dep: S0b]
-- S0d: `BondConstraintsView`, same shape. Additive. [dep: S0b]
-- S0e: views for the remaining six entity families (uniform surface). Additive. [dep: S0b] —
+  bodies (typed accessors become delegates; signatures and their tests unchanged); retype
+  `AtomView::constraints()` to `AtomConstraintsView` — the container's read API inherited with
+  meanings intact, plus `asserted`/`derived`/`derived_complete` and `with_rings`. Near-additive:
+  the accessor was read-only, so the retype is almost source-compatible.
+- S0c: `satisfies`/`is_compatible` on `AtomConstraintsView`. Additive. [dep: S0b]
+- S0d: the same retype and keyed surface for `BondView::constraints()` (`BondConstraintsView`
+  with `BondConstraintKey`). Additive. [dep: S0b]
+- S0e: the same for the remaining six entity views (uniform surface). Additive. [dep: S0b] —
   gates only S6a.
 - S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
   the `satisfies` dual in the Matching entry; reword the two `invariant.rs` "standalone" doc
@@ -325,56 +327,59 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   change); placement remains outside canonicalization by the fallibility criterion (Model
   section). Normal-form change; green. [dep: none]
 
-The S0 surface (settled 2026-08-12):
+The S0 surface (final form, settled 2026-08-13 after two revisions: a standalone constraints
+view was built, dissolved into `AtomView` when its accessor proved unnameable, then reinstated as
+a *chained* facade when the dissolution proved to trade the naming problem for a scope problem —
+an atom-scoped receiver with constraint-scoped comparisons):
 
 ```rust
-pub struct AtomConstraintsView<'a> {
-    context: AtomConstraintsContext<'a>,
-    rings: Option<&'a RingSet>,   // ring context is data, never a view
-}
-
-pub enum AtomConstraintsContext<'a> {
-    MoleculeAtom { molecule: &'a Molecule, atom: AtomId },
-    Atom(&'a AtomForm),
-}
-
-// Molecule::atom_constraints_view(id); AtomForm::constraints_view();
-// AtomConstraintsView::with_rings(self, &RingSet)
-
-fn asserted(&self, key: AtomConstraintKey) -> Option<&AtomConstraintForm>;
-fn derived(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
-fn derived_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
-fn satisfies(&self, pattern: &AtomConstraintsForm) -> bool;    // derived_complete reading
-fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;  // derived reading
+molecule.atom(i).valence()            // AtomView typed quantities — unchanged
+molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped accessor)
+    .valence(), .iter(), .is_empty()  // inherited container read API — asserted, meanings intact
+    .asserted(key)                    // keyed core: the stored side
+    .derived(key)                     // present relations only; vacuous on absence
+    .derived_complete(key)            // the closure reading
+    .with_rings(&ring_set)            // ring context; ring keys panic without it
+    .satisfies(&pattern)              // S0c — derived_complete reading
+    .is_compatible(&other)            // S0c — derived reading
 ```
 
-- Constructed from molecule + atom id. Views are presentation facades and never contain or
-  construct one another; the derivation logic both facades present lives beneath them (next
-  bullet). The `Atom` context derives nothing under either accessor — a bare form has no
-  relations — so no construction invariant exists and the context enum stays public.
+- Scope lives in the receiver, not in name prefixes: `atom(i).valence()` is the derived quantity
+  and `atom(i).constraints().valence()` the asserted payload — the pre-existing pattern,
+  preserved verbatim; the view slots under the established names. Accessor chains returning
+  narrower views are the namespacing mechanism (`RingViews::atom → RingAtomView` is the
+  precedent); a facade's *implementation* still never builds another facade — the logic lives in
+  the derivation functions beneath (`view/atom.rs`, `view/ring.rs`), with `derived_constraint` as
+  the keyed dispatch and `derive_constraints` reimplemented over it until S4g deletes it.
+- `AtomConstraintsView { molecule, atom, rings }` — no context enum, no form constructor, no
+  `Molecule` accessor. The bare-form case needs no view (its asserted side is its container,
+  read directly — stage S2 dissolved), and the only path is the chain.
+- No typed derived accessors (`derived_valence()`, …): the keyed core is the complete surface;
+  typed sugar returns if usage shows the need. `.valence(coverage)` on `AtomView` was examined
+  and rejected — the parameter is a no-op for topology-derived quantities and lossy for overlay
+  quantities (`NumForm` cannot carry `NotAromatic` versus `Aromatic(0)`), the same exit that
+  killed `RelationCoverage`.
+- No iteration on the derived side — `RingMembership(RingScope)` is open-ended, so evaluation is
+  driven by the consumer's key set; asserted iteration is the inherited `iter()`.
+- The retype was near-source-compatible: `constraints()` always returned an immutable reference,
+  so no write site existed, and read sites compile through the inherited API. Two call sites
+  needed edits (a validator `get` → `asserted`; ring validation taking the container as a value
+  via `attributes.constraints`).
+- Inherent `satisfies`/`is_compatible` must never land on a type that impls `Lattice` (forms,
+  containers): inherent methods silently shadow trait methods. `AtomConstraintsView` impls no
+  `Lattice`.
 - No `effective` accessor and no `determined` predicate: consumers meet the sides with
   value-level `meet` (`None` = `⊥`, folding to `false` in comparisons and `Contradictory` in
   discharge), and determination is `derived_complete(key)` ground (`is_ground`) — existing
   vocabulary composed.
-- The derivation bottom is functional: per-quantity functions over `(&Molecule, AtomId)` (ring
-  quantities additionally take `&RingSet`), extracted from the `AtomView`/`RingAtomView` method
-  bodies. Both facades present them — the typed accessors as delegates with unchanged signatures
-  and behavior (their existing tests are the parity guarantee), the constraints-view accessors as
-  keyed dispatch plus form packaging, with the closure only in `derived_complete`. The two
-  surfaces cross by demand — keys are the assertable vocabulary, typed accessors the computable
-  one — so keyless projections (`covalence`, `aromatic_covalence`, `heavy_atom_degree`,
-  `heavy_atom_valence`, `multicenter_degree`) remain typed-only, and ring keys have no `AtomView`
-  accessor; consumers of either surface are unaffected.
-- A ring key requested without ring context is a caller error (the consumer scanning pattern keys
-  decides whether to build the `RingSet`, as matching does today).
-- No full-key iteration: `RingMembership(RingScope)` is open-ended, so evaluation is driven by the
-  consumer's key set; asserted-side iteration stays on the container.
-- Typed accessors (`derived_valence()`, …) deferred until usage shows the need.
-  `BondConstraintsView` mirrors the shape with `BondConstraintKey`.
-- Naming record: `effective(key)` (the meet of the sides) was designed and then deleted — no
-  consumer needs the meet as a value; `meet(key)` had already been rejected for it because `meet`
-  is uniformly binary over like values. `derived_partial` was rejected for the unmarked accessor:
-  partiality is not a property of derivation — the closure is the marked extra step.
+- Naming record: `effective(key)` designed then deleted (no consumer needs the meet as a value);
+  `meet(key)` rejected (uniformly binary over like values); `derived_partial` rejected (the
+  closure is the marked step, not the partiality); `projected()`/`projected_complete()`
+  considered and dropped for the paper's side vocabulary (`asserted`/`derived`); the standalone
+  accessor names (`atom_constraints_view`, `atom_constraints`) rejected (convention break versus
+  container-word collision); the full dissolution rejected in turn (hidden scope change); the
+  chained facade is the resolution. "Skeleton keys" retired for *topology keys*, aligning with
+  the molecular-topology glossary term.
 
 ### S1 — matching on views (`umol-graph-ir::ir::substructure`)
 
@@ -388,10 +393,11 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;  // derived readin
   unconsumed input assertions now meets them against the closure; any test relying on such a
   staging host is surfaced, not silently rewritten. [dep: S0c, S0d]
 
-### S2 — standalone reads (`umol-graph::ops::invariant`)
+### S2 — dissolved
 
-- S2a: the electron-count invariant check reads through an assertion-only `AtomConstraintsView`;
-  semantics unchanged. Green. [dep: S0b]
+- S2a is no work: a bare form's asserted side is its container, which the electron-count
+  invariant check already reads directly. The stage label is retained so later references stay
+  stable.
 
 ### S3 — completion carrier (`umol-graph::ops::valence`); additive, green
 
@@ -492,7 +498,7 @@ pub struct ResolveReport {
   Daylight scope, so S6c is not a dependency. [dep: S4, S6b]
 
 Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge strips assertions
-from resolved hosts, after which matching must project every pattern key. S2 floats after S0; S3
+from resolved hosts, after which matching must project every pattern key. S2 is dissolved; S3
 is parallel to S1. The core deliverable — staleness-free semantics and the whitepaper Mutation
 story — completes at S5; S6 is not required for it.
 
