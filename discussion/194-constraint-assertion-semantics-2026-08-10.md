@@ -341,7 +341,12 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   (a singleton `:or`/`:and` is its element), completing the conjunction-flattening family. Full
   canonical equality strengthens for those degenerate spellings alone (their canonical keys
   change); placement remains outside canonicalization by the fallibility criterion (Model
-  section). Normal-form change; green. [dep: none]
+  section). Normal-form change; green. [dep: none] Done 2026-08-13: two existing empty-child
+  unit expectations updated per this spec, six new cases (including dedup-to-singleton and
+  cross-combinator reduction); new property module `property/constraint.rs` states the tree's
+  normalize laws directly — idempotence and wrapper-free normal form — over a raw tree domain
+  whose combinator arity 1..=3 generates the degenerate spellings; zero conformance churn in the
+  full-suite stage-end run.
 
 The S0 surface (final form, settled 2026-08-13 after two revisions: a standalone constraints
 view was built, dissolved into `AtomView` when its accessor proved unnameable, then reinstated as

@@ -2204,6 +2204,23 @@ pub(crate) fn constraint_strategy(counts: ConstraintCounts) -> BoxedStrategy<Con
         .boxed()
 }
 
+/// Raw molecule-scope constraint tree over a fixed small entity-id domain
+/// (a few ids per family), with combinators of arity 1..=3 — singleton
+/// wrappers and duplicate children included, so normalization's
+/// trivial-wrapper reduction is exercised.
+pub(crate) fn raw_constraint_tree_strategy() -> BoxedStrategy<Constraint> {
+    constraint_strategy(ConstraintCounts {
+        atom: 3,
+        bond: 3,
+        dative: 1,
+        aromatic: 1,
+        multicenter: 1,
+        noncovalent: 1,
+        stereo_atom: 1,
+        stereo_bond: 1,
+    })
+}
+
 pub(crate) fn molecule_with_constraints_strategy() -> impl Strategy<Value = Molecule> {
     molecule_entries_with_constraints_strategy().prop_map(Molecule::from_entries)
 }

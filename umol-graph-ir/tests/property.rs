@@ -13,6 +13,8 @@
 #[path = "property/strategies.rs"]
 mod strategies;
 
+#[path = "property/constraint.rs"]
+mod constraint;
 #[path = "property/delta.rs"]
 mod delta;
 #[path = "property/edit.rs"]

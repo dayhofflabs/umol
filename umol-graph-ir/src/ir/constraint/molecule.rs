@@ -173,8 +173,10 @@ impl Constraint {
 
 impl Normalize for Constraint {
     /// Normalize the inner predicate of each leaf; for `And`/`Or`, recurse,
-    /// flatten the same combinator, drop empty `And`/`Or`, then sort + dedup
-    /// children by the `Constraint` order. `Not` canonicalizes its inner node.
+    /// flatten the same combinator, drop empty `And`/`Or`, sort + dedup
+    /// children by the `Constraint` order, then reduce a trivial wrapper — a
+    /// singleton `And`/`Or` is its element. `Not` canonicalizes its inner
+    /// node.
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Atom(id, c) => Self::Atom(id, c.normalize()?),
@@ -187,8 +189,22 @@ impl Normalize for Constraint {
             Self::StereoBond(id, kind, c) => Self::StereoBond(id, kind, c.normalize()?),
             Self::Relational(r) => Self::Relational(r.normalize()?),
             Self::Molecule(m) => Self::Molecule(m.normalize()?),
-            Self::And(xs) => Self::And(normalize_logical_constraints(xs, true)?),
-            Self::Or(xs) => Self::Or(normalize_logical_constraints(xs, false)?),
+            Self::And(xs) => {
+                let mut children = normalize_logical_constraints(xs, true)?;
+                if children.len() == 1 {
+                    children.remove(0)
+                } else {
+                    Self::And(children)
+                }
+            }
+            Self::Or(xs) => {
+                let mut children = normalize_logical_constraints(xs, false)?;
+                if children.len() == 1 {
+                    children.remove(0)
+                } else {
+                    Self::Or(children)
+                }
+            }
             Self::Not(c) => Self::Not(Box::new((*c).normalize()?)),
         })
     }
@@ -597,9 +613,9 @@ mod tests {
             Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
-    #[case::and_drops_empty_or_child(
+    #[case::and_drops_empty_or_child_and_reduces(
         Constraint::And(vec![Constraint::Or(vec![]), Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))]),
-        Ok(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))])),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))),
     )]
     #[case::and_sorts_and_dedups(
         Constraint::And(vec![
@@ -622,9 +638,32 @@ mod tests {
             Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         ])),
     )]
-    #[case::or_drops_empty_and_child(
+    #[case::or_drops_empty_and_child_and_reduces(
         Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))]),
-        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))])),
+        Ok(Constraint::Bond(BondId(0), BondConstraintForm::Aromatic(BooleanForm::Lit(true)))),
+    )]
+    #[case::and_singleton_reduces(
+        Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))]),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))),
+    )]
+    #[case::or_singleton_reduces(
+        Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))]),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))),
+    )]
+    #[case::and_dedup_reduces_to_element(
+        Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+            Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4)),
+        ]),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))),
+    )]
+    #[case::cross_combinator_singleton_reduces(
+        Constraint::And(vec![Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))])]),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))),
+    )]
+    #[case::not_singleton_child_reduces(
+        Constraint::Not(Box::new(Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))]))),
+        Ok(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(4))))),
     )]
     #[case::not_folds_child(
         Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraintForm::Valence(NumForm::arith_expr(ArithExpr::Lit(4)))))),
