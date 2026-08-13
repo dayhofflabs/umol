@@ -3,7 +3,8 @@
 use pyo3::prelude::*;
 use umol_graph::ops::aromaticity::AromaticityConfig as GraphAromaticityConfig;
 use umol_graph::ops::model::{
-    AromaticityModel as GraphAromaticityModel, RingLimits as GraphRingLimits,
+    AromaticityModel as GraphAromaticityModel, AromaticityRule as GraphAromaticityRule,
+    RingLimits as GraphRingLimits,
 };
 
 use super::ElementScope;
@@ -142,32 +143,92 @@ impl RingLimits {
     }
 }
 
-/// Aromaticity perception model and its model parameters.
+/// The aromaticity perception rule and its parameters.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq)]
-pub enum AromaticityModel {
+pub enum AromaticityRule {
     /// Hückel-rule aromaticity over rings within the configured limits.
-    #[pyo3(constructor = (*, scope, ring_limits))]
-    HueckelRule {
-        scope: ElementScope,
-        ring_limits: RingLimits,
-    },
+    #[pyo3(constructor = (*, ring_limits))]
+    Hueckel { ring_limits: RingLimits },
     /// Hückel molecular-orbital aromaticity with a stabilization threshold.
-    #[pyo3(constructor = (*, scope, stabilization_threshold))]
-    Hmo {
-        scope: ElementScope,
-        stabilization_threshold: f64,
-    },
+    #[pyo3(constructor = (*, stabilization_threshold))]
+    Hmo { stabilization_threshold: f64 },
     /// Clar aromaticity over rings within the configured limits.
-    #[pyo3(constructor = (*, scope, ring_limits))]
-    Clar {
-        scope: ElementScope,
-        ring_limits: RingLimits,
-    },
+    #[pyo3(constructor = (*, ring_limits))]
+    Clar { ring_limits: RingLimits },
+}
+
+#[pymethods]
+impl AromaticityRule {
+    pub(crate) fn __repr__(&self) -> String {
+        match self {
+            Self::Hueckel { ring_limits } => format!(
+                "AromaticityRule.Hueckel(ring_limits={})",
+                ring_limits.__repr__(),
+            ),
+            Self::Hmo {
+                stabilization_threshold,
+            } => format!("AromaticityRule.Hmo(stabilization_threshold={stabilization_threshold})"),
+            Self::Clar { ring_limits } => format!(
+                "AromaticityRule.Clar(ring_limits={})",
+                ring_limits.__repr__(),
+            ),
+        }
+    }
+}
+
+impl AromaticityRule {
+    pub(crate) fn from_rust(rule: &GraphAromaticityRule) -> Self {
+        match rule {
+            GraphAromaticityRule::Hueckel { ring_limits } => Self::Hueckel {
+                ring_limits: RingLimits::from_rust(ring_limits),
+            },
+            GraphAromaticityRule::Hmo {
+                stabilization_threshold,
+            } => Self::Hmo {
+                stabilization_threshold: *stabilization_threshold,
+            },
+            GraphAromaticityRule::Clar { ring_limits } => Self::Clar {
+                ring_limits: RingLimits::from_rust(ring_limits),
+            },
+        }
+    }
+
+    pub(crate) fn to_rust(&self) -> GraphAromaticityRule {
+        match self {
+            Self::Hueckel { ring_limits } => GraphAromaticityRule::Hueckel {
+                ring_limits: ring_limits.to_rust().clone(),
+            },
+            Self::Hmo {
+                stabilization_threshold,
+            } => GraphAromaticityRule::Hmo {
+                stabilization_threshold: *stabilization_threshold,
+            },
+            Self::Clar { ring_limits } => GraphAromaticityRule::Clar {
+                ring_limits: ring_limits.to_rust().clone(),
+            },
+        }
+    }
+}
+
+/// Aromaticity model: the participating elements and the perception rule.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct AromaticityModel {
+    #[pyo3(get)]
+    pub(crate) scope: ElementScope,
+    #[pyo3(get)]
+    pub(crate) rule: AromaticityRule,
 }
 
 #[pymethods]
 impl AromaticityModel {
+    #[new]
+    #[pyo3(signature = (*, scope, rule))]
+    fn new(scope: ElementScope, rule: AromaticityRule) -> Self {
+        Self { scope, rule }
+    }
+
     #[staticmethod]
     fn daylight() -> Self {
         Self::from_rust(&GraphAromaticityModel::daylight())
@@ -184,46 +245,19 @@ impl AromaticityModel {
     }
 
     pub(crate) fn __repr__(&self) -> String {
-        match self {
-            Self::HueckelRule { scope, ring_limits } => format!(
-                "AromaticityModel.HueckelRule(scope={}, ring_limits={})",
-                scope.__repr__(),
-                ring_limits.__repr__(),
-            ),
-            Self::Hmo {
-                scope,
-                stabilization_threshold,
-            } => format!(
-                "AromaticityModel.Hmo(scope={}, stabilization_threshold={stabilization_threshold})",
-                scope.__repr__(),
-            ),
-            Self::Clar { scope, ring_limits } => format!(
-                "AromaticityModel.Clar(scope={}, ring_limits={})",
-                scope.__repr__(),
-                ring_limits.__repr__(),
-            ),
-        }
+        format!(
+            "AromaticityModel(scope={}, rule={})",
+            self.scope.__repr__(),
+            self.rule.__repr__(),
+        )
     }
 }
 
 impl AromaticityModel {
     pub(crate) fn from_rust(model: &GraphAromaticityModel) -> Self {
-        match model {
-            GraphAromaticityModel::HueckelRule { scope, ring_limits } => Self::HueckelRule {
-                scope: ElementScope::from_rust(scope),
-                ring_limits: RingLimits::from_rust(ring_limits),
-            },
-            GraphAromaticityModel::Hmo {
-                scope,
-                stabilization_threshold,
-            } => Self::Hmo {
-                scope: ElementScope::from_rust(scope),
-                stabilization_threshold: *stabilization_threshold,
-            },
-            GraphAromaticityModel::Clar { scope, ring_limits } => Self::Clar {
-                scope: ElementScope::from_rust(scope),
-                ring_limits: RingLimits::from_rust(ring_limits),
-            },
+        Self {
+            scope: ElementScope::from_rust(&model.scope),
+            rule: AromaticityRule::from_rust(&model.rule),
         }
     }
 
@@ -232,22 +266,9 @@ impl AromaticityModel {
         reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
     pub(crate) fn to_rust(&self) -> GraphAromaticityModel {
-        match self {
-            Self::HueckelRule { scope, ring_limits } => GraphAromaticityModel::HueckelRule {
-                scope: scope.to_rust(),
-                ring_limits: ring_limits.to_rust().clone(),
-            },
-            Self::Hmo {
-                scope,
-                stabilization_threshold,
-            } => GraphAromaticityModel::Hmo {
-                scope: scope.to_rust(),
-                stabilization_threshold: *stabilization_threshold,
-            },
-            Self::Clar { scope, ring_limits } => GraphAromaticityModel::Clar {
-                scope: scope.to_rust(),
-                ring_limits: ring_limits.to_rust().clone(),
-            },
+        GraphAromaticityModel {
+            scope: self.scope.to_rust(),
+            rule: self.rule.to_rust(),
         }
     }
 }
@@ -257,7 +278,9 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element as ChemElement;
     use umol_graph::ops::aromaticity::AromaticityConfig as GraphAromaticityConfig;
-    use umol_graph::ops::model::ElementScope as GraphElementScope;
+    use umol_graph::ops::model::{
+        AromaticityRule as GraphAromaticityRule, ElementScope as GraphElementScope,
+    };
 
     use super::*;
 
@@ -374,7 +397,7 @@ mod tests {
     fn test_aromaticity_model_daylight() {
         assert_eq!(
             AromaticityModel::daylight(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::AllowList {
                     elements: vec![
                         ChemElement::C.into(),
@@ -385,7 +408,9 @@ mod tests {
                         ChemElement::As.into(),
                     ],
                 },
-                ring_limits: RingLimits::new(3, 22, true, 6, 10_000),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::new(3, 22, true, 6, 10_000)
+                }
             }
         );
     }
@@ -394,11 +419,13 @@ mod tests {
     fn test_aromaticity_model_mdl() {
         assert_eq!(
             AromaticityModel::mdl(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::AllowList {
                     elements: vec![ChemElement::C.into(), ChemElement::N.into()],
                 },
-                ring_limits: RingLimits::new(6, 22, true, 6, 10_000),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::new(6, 22, true, 6, 10_000)
+                }
             }
         );
     }
@@ -407,38 +434,31 @@ mod tests {
     fn test_aromaticity_model_permissive() {
         assert_eq!(
             AromaticityModel::permissive(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::Any {},
-                ring_limits: RingLimits::new(3, 22, true, 6, 10_000),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::new(3, 22, true, 6, 10_000)
+                }
             }
         );
     }
 
     #[rstest]
     #[case::hueckel_rule(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any {},
-            ring_limits: RingLimits::new(4, 18, false, 3, 2_000),
-        },
-        "AromaticityModel.HueckelRule(scope=ElementScope.Any(), ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, include_fused=False, max_fused_combination=3, max_fused_search=2000))"
+        AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) } },
+        "AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, include_fused=False, max_fused_combination=3, max_fused_search=2000)))"
     )]
     #[case::hmo(
-        AromaticityModel::Hmo {
-            scope: ElementScope::AllowList {
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            },
-            stabilization_threshold: 0.375,
-        },
-        "AromaticityModel.Hmo(scope=ElementScope.AllowList([Element('C'), Element('N')]), stabilization_threshold=0.375)"
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 } },
+        "AromaticityModel(scope=ElementScope.AllowList([Element('C'), Element('N')]), rule=AromaticityRule.Hmo(stabilization_threshold=0.375))"
     )]
     #[case::clar(
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList {
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into()],
-            },
-            ring_limits: RingLimits::new(6, 14, true, 4, 1_500),
-        },
-        "AromaticityModel.Clar(scope=ElementScope.AllowList([Element('C')]), ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, include_fused=True, max_fused_combination=4, max_fused_search=1500))"
+            }, rule: AromaticityRule::Clar { ring_limits: RingLimits::new(6, 14, true, 4, 1_500) } },
+        "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), rule=AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, include_fused=True, max_fused_combination=4, max_fused_search=1500)))"
     )]
     fn test_aromaticity_model_repr(#[case] model: AromaticityModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -446,50 +466,32 @@ mod tests {
 
     #[rstest]
     #[case::hueckel_rule(
-        GraphAromaticityModel::HueckelRule {
-            scope: GraphElementScope::Any,
-            ring_limits: GraphRingLimits {
+        GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,
                 max_ring_size: 18,
                 include_fused: false,
                 max_fused_combination: 3,
                 max_fused_search: 2_000,
-            },
-        },
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any {},
-            ring_limits: RingLimits::new(4, 18, false, 3, 2_000),
-        }
+            } } },
+        AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) } }
     )]
     #[case::hmo(
-        GraphAromaticityModel::Hmo {
-            scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]),
-            stabilization_threshold: 0.375,
-        },
-        AromaticityModel::Hmo {
-            scope: ElementScope::AllowList {
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 } },
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            },
-            stabilization_threshold: 0.375,
-        }
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 } }
     )]
     #[case::clar(
-        GraphAromaticityModel::Clar {
-            scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-            ring_limits: GraphRingLimits {
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar { ring_limits: GraphRingLimits {
                 min_ring_size: 6,
                 max_ring_size: 14,
                 include_fused: true,
                 max_fused_combination: 4,
                 max_fused_search: 1_500,
-            },
-        },
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList {
+            } } },
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into()],
-            },
-            ring_limits: RingLimits::new(6, 14, true, 4, 1_500),
-        }
+            }, rule: AromaticityRule::Clar { ring_limits: RingLimits::new(6, 14, true, 4, 1_500) } }
     )]
     fn test_aromaticity_model_from_rust(
         #[case] model: GraphAromaticityModel,
@@ -500,50 +502,32 @@ mod tests {
 
     #[rstest]
     #[case::hueckel_rule(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any {},
-            ring_limits: RingLimits::new(4, 18, false, 3, 2_000),
-        },
-        GraphAromaticityModel::HueckelRule {
-            scope: GraphElementScope::Any,
-            ring_limits: GraphRingLimits {
+        AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) } },
+        GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,
                 max_ring_size: 18,
                 include_fused: false,
                 max_fused_combination: 3,
                 max_fused_search: 2_000,
-            },
-        }
+            } } }
     )]
     #[case::hmo(
-        AromaticityModel::Hmo {
-            scope: ElementScope::AllowList {
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            },
-            stabilization_threshold: 0.375,
-        },
-        GraphAromaticityModel::Hmo {
-            scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]),
-            stabilization_threshold: 0.375,
-        }
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 } },
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 } }
     )]
     #[case::clar(
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList {
+        AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into()],
-            },
-            ring_limits: RingLimits::new(6, 14, true, 4, 1_500),
-        },
-        GraphAromaticityModel::Clar {
-            scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-            ring_limits: GraphRingLimits {
+            }, rule: AromaticityRule::Clar { ring_limits: RingLimits::new(6, 14, true, 4, 1_500) } },
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar { ring_limits: GraphRingLimits {
                 min_ring_size: 6,
                 max_ring_size: 14,
                 include_fused: true,
                 max_fused_combination: 4,
                 max_fused_search: 1_500,
-            },
-        }
+            } } }
     )]
     fn test_aromaticity_model_to_rust(
         #[case] model: AromaticityModel,

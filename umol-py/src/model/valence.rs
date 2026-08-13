@@ -7,7 +7,10 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use umol_chem::element::{Element as ChemElement, MAX_ATOMIC_NUMBER};
-use umol_graph::ops::model::ValenceModel as GraphValenceModel;
+use umol_graph::ops::model::{
+    ValenceCandidateSource as GraphValenceCandidateSource, ValenceModel as GraphValenceModel,
+    ValenceTieBreak as GraphValenceTieBreak,
+};
 use umol_graph::ops::valence::{
     AtomTypeRegistry as GraphAtomTypeRegistry, ValenceEntry as GraphValenceEntry,
     ValenceTable as GraphValenceTable,
@@ -261,41 +264,163 @@ impl ValenceTable {
     }
 }
 
-/// Valence perception model and its owned model data.
+/// Where valence candidate states come from, and the owned source data.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ValenceModel {
-    /// Atom-typing valence model.
+pub enum ValenceCandidateSource {
+    /// The registry of atom patterns.
     #[pyo3(constructor = (*, registry))]
     AtomTyping { registry: AtomTypeRegistry },
-    /// Counts-based valence model.
+    /// The per-element covalence table.
     #[pyo3(constructor = (*, table))]
     Counts { table: ValenceTable },
 }
 
 #[pymethods]
-impl ValenceModel {
+impl ValenceCandidateSource {
     pub(crate) fn __repr__(&self) -> String {
         match self {
             Self::AtomTyping { registry } => {
-                format!("ValenceModel.AtomTyping(registry={})", registry.__repr__())
+                format!(
+                    "ValenceCandidateSource.AtomTyping(registry={})",
+                    registry.__repr__()
+                )
             }
             Self::Counts { table } => {
-                format!("ValenceModel.Counts(table={})", table.__repr__())
+                format!("ValenceCandidateSource.Counts(table={})", table.__repr__())
             }
         }
     }
 }
 
-impl ValenceModel {
-    pub(crate) fn from_rust(model: &GraphValenceModel) -> Self {
-        match model {
-            GraphValenceModel::AtomTyping { registry } => Self::AtomTyping {
+impl ValenceCandidateSource {
+    pub(crate) fn from_rust(source: &GraphValenceCandidateSource) -> Self {
+        match source {
+            GraphValenceCandidateSource::AtomTyping { registry } => Self::AtomTyping {
                 registry: AtomTypeRegistry::from_rust(registry.as_ref()),
             },
-            GraphValenceModel::Counts { table } => Self::Counts {
+            GraphValenceCandidateSource::Counts { table } => Self::Counts {
                 table: ValenceTable::from_rust(table.as_ref()),
             },
+        }
+    }
+
+    pub(crate) fn to_rust(&self) -> GraphValenceCandidateSource {
+        match self {
+            Self::AtomTyping { registry } => GraphValenceCandidateSource::AtomTyping {
+                registry: Cow::Owned(registry.to_rust().clone()),
+            },
+            Self::Counts { table } => GraphValenceCandidateSource::Counts {
+                table: Cow::Owned(table.to_rust().clone()),
+            },
+        }
+    }
+}
+
+/// Disposal policy for plural valence candidate survivors.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValenceTieBreak {
+    /// No selection: plural survivors stay in the report.
+    Strict,
+    /// Max implicit hydrogens, then max lone pairs, then min unpaired
+    /// electrons — the closed-shell most-saturated reading.
+    MostSaturated,
+}
+
+#[pymethods]
+impl ValenceTieBreak {
+    pub(crate) fn __repr__(&self) -> String {
+        match self {
+            Self::Strict => "ValenceTieBreak.Strict".to_owned(),
+            Self::MostSaturated => "ValenceTieBreak.MostSaturated".to_owned(),
+        }
+    }
+}
+
+impl ValenceTieBreak {
+    pub(crate) fn from_rust(tie_break: GraphValenceTieBreak) -> Self {
+        match tie_break {
+            GraphValenceTieBreak::Strict => Self::Strict,
+            GraphValenceTieBreak::MostSaturated => Self::MostSaturated,
+        }
+    }
+
+    pub(crate) fn to_rust(self) -> GraphValenceTieBreak {
+        match self {
+            Self::Strict => GraphValenceTieBreak::Strict,
+            Self::MostSaturated => GraphValenceTieBreak::MostSaturated,
+        }
+    }
+}
+
+/// Valence model: the candidate source and the tie-break policy.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ValenceModel {
+    #[pyo3(get)]
+    pub(crate) candidates: ValenceCandidateSource,
+    #[pyo3(get)]
+    pub(crate) tie_break: ValenceTieBreak,
+}
+
+#[pymethods]
+impl ValenceModel {
+    #[new]
+    #[pyo3(signature = (*, candidates, tie_break=ValenceTieBreak::Strict))]
+    fn new(candidates: ValenceCandidateSource, tie_break: ValenceTieBreak) -> Self {
+        Self {
+            candidates,
+            tie_break,
+        }
+    }
+
+    /// The atom-typing source with the `Strict` tie-break.
+    #[staticmethod]
+    pub(crate) fn atom_typing(registry: AtomTypeRegistry) -> Self {
+        Self {
+            candidates: ValenceCandidateSource::AtomTyping { registry },
+            tie_break: ValenceTieBreak::Strict,
+        }
+    }
+
+    /// The counts source with the `Strict` tie-break.
+    #[staticmethod]
+    pub(crate) fn counts(table: ValenceTable) -> Self {
+        Self {
+            candidates: ValenceCandidateSource::Counts { table },
+            tie_break: ValenceTieBreak::Strict,
+        }
+    }
+
+    /// The umol SMILES reading: the owned SMILES valence table with the
+    /// `MostSaturated` tie-break.
+    #[staticmethod]
+    fn smiles() -> Self {
+        Self::from_rust(&GraphValenceModel::smiles())
+    }
+
+    /// The MDL/CTfile reading: the frozen MDL valence table with the
+    /// `MostSaturated` tie-break.
+    #[staticmethod]
+    fn mdl() -> Self {
+        Self::from_rust(&GraphValenceModel::mdl())
+    }
+
+    pub(crate) fn __repr__(&self) -> String {
+        format!(
+            "ValenceModel(candidates={}, tie_break={})",
+            self.candidates.__repr__(),
+            self.tie_break.__repr__(),
+        )
+    }
+}
+
+impl ValenceModel {
+    pub(crate) fn from_rust(model: &GraphValenceModel) -> Self {
+        Self {
+            candidates: ValenceCandidateSource::from_rust(&model.candidates),
+            tie_break: ValenceTieBreak::from_rust(model.tie_break),
         }
     }
 
@@ -304,13 +429,9 @@ impl ValenceModel {
         reason = "Python-to-Rust conversion API for ChemistryModel configuration"
     )]
     pub(crate) fn to_rust(&self) -> GraphValenceModel {
-        match self {
-            Self::AtomTyping { registry } => GraphValenceModel::AtomTyping {
-                registry: Cow::Owned(registry.to_rust().clone()),
-            },
-            Self::Counts { table } => GraphValenceModel::Counts {
-                table: Cow::Owned(table.to_rust().clone()),
-            },
+        GraphValenceModel {
+            candidates: self.candidates.to_rust(),
+            tie_break: self.tie_break.to_rust(),
         }
     }
 }
@@ -686,20 +807,12 @@ mod tests {
 
     #[rstest]
     #[case::atom_typing(
-        GraphValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4", "O#c0#v2"]),
-        },
-        ValenceModel::AtomTyping {
-            registry: AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
-        }
+        GraphValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4", "O#c0#v2"])),
+        ValenceModel::atom_typing(AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]))
     )]
     #[case::counts(
-        GraphValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4, 2], O => [2]]),
-        },
-        ValenceModel::Counts {
-            table: ValenceTable(valence_table![C => [4, 2], O => [2]]),
-        }
+        GraphValenceModel::counts(Cow::Owned(valence_table![C => [4, 2], O => [2]])),
+        ValenceModel::counts(ValenceTable(valence_table![C => [4, 2], O => [2]]))
     )]
     fn test_valence_model_from_rust(
         #[case] model: GraphValenceModel,
@@ -710,20 +823,12 @@ mod tests {
 
     #[rstest]
     #[case::atom_typing(
-        ValenceModel::AtomTyping {
-            registry: AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
-        },
-        GraphValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4", "O#c0#v2"]),
-        }
+        ValenceModel::atom_typing(AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"])),
+        GraphValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4", "O#c0#v2"]))
     )]
     #[case::counts(
-        ValenceModel::Counts {
-            table: ValenceTable(valence_table![C => [4, 2], O => [2]]),
-        },
-        GraphValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4, 2], O => [2]]),
-        }
+        ValenceModel::counts(ValenceTable(valence_table![C => [4, 2], O => [2]])),
+        GraphValenceModel::counts(Cow::Owned(valence_table![C => [4, 2], O => [2]]))
     )]
     fn test_valence_model_to_rust(
         #[case] model: ValenceModel,
@@ -731,29 +836,42 @@ mod tests {
     ) {
         let rust = model.to_rust();
         assert_eq!(rust, expected);
-        match rust {
-            GraphValenceModel::AtomTyping {
+        match rust.candidates {
+            GraphValenceCandidateSource::AtomTyping {
                 registry: Cow::Owned(_),
             }
-            | GraphValenceModel::Counts {
+            | GraphValenceCandidateSource::Counts {
                 table: Cow::Owned(_),
             } => {}
-            other => panic!("expected owned valence model data, got {other:?}"),
+            other => panic!("expected owned valence source data, got {other:?}"),
         }
     }
 
     #[rstest]
+    #[case::smiles(ValenceModel::smiles(), GraphValenceModel::smiles())]
+    #[case::mdl(ValenceModel::mdl(), GraphValenceModel::mdl())]
+    fn test_valence_model_presets(
+        #[case] model: ValenceModel,
+        #[case] expected: GraphValenceModel,
+    ) {
+        assert_eq!(
+            model.candidates,
+            ValenceCandidateSource::from_rust(&expected.candidates)
+        );
+        assert_eq!(
+            model.tie_break,
+            ValenceTieBreak::from_rust(expected.tie_break)
+        );
+    }
+
+    #[rstest]
     #[case::atom_typing(
-        ValenceModel::AtomTyping {
-            registry: AtomTypeRegistry(registry!["C#c0#v4"]),
-        },
-        "ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")]))"
+        ValenceModel::atom_typing(AtomTypeRegistry(registry!["C#c0#v4"])),
+        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")])), tie_break=ValenceTieBreak.Strict)"
     )]
     #[case::counts(
-        ValenceModel::Counts {
-            table: ValenceTable(valence_table![C => [4, 2]]),
-        },
-        "ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])}))"
+        ValenceModel::counts(ValenceTable(valence_table![C => [4, 2]])),
+        "ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict)"
     )]
     fn test_valence_model_repr(#[case] model: ValenceModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);

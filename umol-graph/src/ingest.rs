@@ -280,7 +280,9 @@ mod tests {
     use crate::ops::aromaticity::{
         AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     };
-    use crate::ops::model::{AromaticityModel, ElementScope, RingLimits, ValenceModel};
+    use crate::ops::model::{
+        AromaticityModel, AromaticityRule, ElementScope, RingLimits, ValenceModel,
+    };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
     };
@@ -641,10 +643,7 @@ mod tests {
     #[case::reactants_contradiction(
         "[nH]1cccc1>>",
         ChemistryModel {
-            aromaticity: AromaticityModel::Clar {
-                scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
-            },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Reactants(
@@ -660,10 +659,7 @@ mod tests {
     #[case::products_contradiction(
         ">>[nH]1cccc1",
         ChemistryModel {
-            aromaticity: AromaticityModel::Clar {
-                scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
-            },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Products(
@@ -679,15 +675,10 @@ mod tests {
     #[case::reactants_execution(
         "c1ccccc1>>",
         ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
                     "C#i=#c0#h0#n0#u0#s#v2#a2"
-                )])),
-            },
-            aromaticity: AromaticityModel::Hmo {
-                scope: ElementScope::Any,
-                stabilization_threshold: 0.5,
-            },
+                )]))),
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Reactants(
@@ -701,15 +692,10 @@ mod tests {
     #[case::products_execution(
         ">>c1ccccc1",
         ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
                     "C#i=#c0#h0#n0#u0#s#v2#a2"
-                )])),
-            },
-            aromaticity: AromaticityModel::Hmo {
-                scope: ElementScope::Any,
-                stabilization_threshold: 0.5,
-            },
+                )]))),
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Products(
@@ -1013,10 +999,7 @@ mod tests {
         "[nH]1cccc1",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel::Clar {
-                scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
-            },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
@@ -1030,9 +1013,7 @@ mod tests {
         "C",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0")])),
-            },
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0")]))),
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
@@ -1191,10 +1172,7 @@ mod tests {
         "[nH]1cccc1>>",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel::Clar {
-                scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
-            },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),

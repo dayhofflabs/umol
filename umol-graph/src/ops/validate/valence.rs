@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_graph_ir::ir::Molecule;
 use umol_utils::solution::Solution;
 
-use crate::ops::model::ValenceModel;
+use crate::ops::model::{ValenceCandidateSource, ValenceModel};
 use crate::ops::valence::{AtomTypingMismatch, AtomTypingValence, CountsMismatch, CountsValence};
 
 /// Validates atoms against the selected valence model.
@@ -30,11 +30,13 @@ pub enum ValenceConformanceError {}
 impl<'a> ValenceConformanceValidator<'a> {
     /// Construct the validator engine selected by the valence model.
     pub fn new(model: &'a ValenceModel) -> Self {
-        match model {
-            ValenceModel::AtomTyping { registry } => {
+        match &model.candidates {
+            ValenceCandidateSource::AtomTyping { registry } => {
                 Self::AtomTyping(AtomTypingValence::new(registry.as_ref()))
             }
-            ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.as_ref())),
+            ValenceCandidateSource::Counts { table } => {
+                Self::Counts(CountsValence::new(table.as_ref()))
+            }
         }
     }
 
@@ -82,12 +84,11 @@ mod tests {
 
     #[rstest]
     fn test_valence_conformance_validator_new() {
-        let counts = ValenceModel::Counts {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        };
-        let atom_typing = ValenceModel::AtomTyping {
-            registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h4")])),
-        };
+        let counts = ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()));
+        let atom_typing =
+            ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+                "C#c0#h4"
+            )])));
 
         assert!(matches!(
             ValenceConformanceValidator::new(&counts),
@@ -100,12 +101,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts {
-        table: Cow::Borrowed(ValenceTable::default_table()),
-    })]
-    #[case::atom_typing(ValenceModel::AtomTyping {
-        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    })]
+    #[case::counts(ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())))]
+    #[case::atom_typing(ValenceModel::atom_typing(Cow::Borrowed(
+        AtomTypeRegistry::default_registry()
+    )))]
     fn test_valence_conformance_validator_validate(#[case] model: ValenceModel) {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let result = ValenceConformanceValidator::new(&model)

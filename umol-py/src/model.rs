@@ -162,8 +162,9 @@ mod tests {
 
     use rstest::rstest;
     use umol_graph::ops::model::{
-        AromaticityModel as GraphAromaticityModel, RingLimits as GraphRingLimits,
-        StereoModel as GraphStereoModel, ValenceModel as GraphValenceModel,
+        AromaticityModel as GraphAromaticityModel, AromaticityRule as GraphAromaticityRule,
+        RingLimits as GraphRingLimits, StereoModel as GraphStereoModel,
+        ValenceModel as GraphValenceModel,
     };
     use umol_graph::ops::validate::ConnectivityModel as GraphConnectivityModel;
     use umol_graph::valence_table;
@@ -190,19 +191,14 @@ mod tests {
     #[case::configured(
         ChemistryModel::new(
             ConnectivityModel::from_rust(&GraphConnectivityModel::default()),
-            ValenceModel::from_rust(&GraphValenceModel::Counts {
-                table: Cow::Owned(valence_table![C => [4]]),
-            }),
-            AromaticityModel::from_rust(&GraphAromaticityModel::Hmo {
-                scope: GraphElementScope::Any,
-                stabilization_threshold: 0.375,
-            }),
+            ValenceModel::from_rust(&GraphValenceModel::counts(Cow::Owned(valence_table![C => [4]]))),
+            AromaticityModel::from_rust(&GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 } }),
             StereoModel::from_rust(&GraphStereoModel {
                 para_stereo: true,
                 ..GraphStereoModel::default()
             }),
         ),
-        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), aromaticity=AromaticityModel.Hmo(scope=ElementScope.Any(), stabilization_threshold=0.375), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
+        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375)), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -215,14 +211,14 @@ mod tests {
                 allow_disconnected: false,
                 ..GraphConnectivityModel::default()
             },
-            valence: GraphValenceModel::Counts {
-                table: Cow::Owned(valence_table![C => [4], O => [2]]),
-            },
-            aromaticity: GraphAromaticityModel::Clar {
+            valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4], O => [2]])),
+            aromaticity: GraphAromaticityModel {
                 scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                ring_limits: GraphRingLimits {
-                    min_ring_size: 6,
-                    ..GraphRingLimits::default()
+                rule: GraphAromaticityRule::Clar {
+                    ring_limits: GraphRingLimits {
+                        min_ring_size: 6,
+                        ..GraphRingLimits::default()
+                    },
                 },
             },
             stereo: GraphStereoModel {
@@ -249,14 +245,14 @@ mod tests {
                 allow_disconnected: false,
                 ..GraphConnectivityModel::default()
             },
-            valence: GraphValenceModel::Counts {
-                table: Cow::Owned(valence_table![C => [4], O => [2]]),
-            },
-            aromaticity: GraphAromaticityModel::Clar {
+            valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4], O => [2]])),
+            aromaticity: GraphAromaticityModel {
                 scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                ring_limits: GraphRingLimits {
-                    min_ring_size: 6,
-                    ..GraphRingLimits::default()
+                rule: GraphAromaticityRule::Clar {
+                    ring_limits: GraphRingLimits {
+                        min_ring_size: 6,
+                        ..GraphRingLimits::default()
+                    },
                 },
             },
             stereo: GraphStereoModel {

@@ -219,9 +219,9 @@ Phase composition keeps early commit: the valence phase applies edits for single
 and forwards only plural sets; the aromaticity phase selects jointly per candidate aromatic system
 — enumerating assignments over the product of the member atoms' candidate sets and keeping those
 whose π-electron sum satisfies the model — and emits its edits including the chosen completions.
-Survivor count zero is `Contradictory`; one is `Determined`; more than one falls to
-`compare_valence_preference` as a tie-break of last resort whose use is visible in the verdict,
-else `Underdetermined`. Single commit was considered and rejected: every failure path — error,
+Survivor count zero is `Contradictory`; one is `Determined`; more than one falls to the
+configured `ValenceTieBreak` (Tie-break configuration section) as a last resort whose use is
+visible in the verdict; under `Strict`, or when the key leaves a tie, `Underdetermined`. Single commit was considered and rejected: every failure path — error,
 contradiction, mid-pipeline underdetermined — already rolls back the whole journal, and `resolve`
 holds the molecule exclusively, so intermediate states are unobservable either way.
 
@@ -232,6 +232,152 @@ interface, so none is added; `Solution` itself is unchanged. The SMILES reader s
 `#h0` on bare aromatic heteroatoms (the doc 174 prerequisite). Acceptance: the doc 174 regression
 triple and the pyrrolyl DSL case; the corrected F420 structure joins once the zero-contributor
 perception and registry-coverage items of doc 174 land.
+
+## Tie-break configuration and model envelopes
+
+Settled 2026-08-13, except the default marked open below. The `compare_valence_preference`
+ordering is chemistry policy — which electronic state an underdetermined atom denotes — and stood
+hard-coded while every other modeling choice is explicit configuration; `ResolveReport.tie_breaks`
+makes each *use* visible but not the policy. Making the policy configurable also exposed a
+structural conflation in both model enums: the old `ValenceModel` equated the model with its
+candidate source (the registry/table data are disjoint, but the disposal policy for plural
+survivors is shared across sources), and `AromaticityModel` duplicated `scope` across all three
+variants. Both envelopes become products:
+
+```rust
+// umol-graph::ops::model
+pub struct ValenceModel {
+    pub candidates: ValenceCandidateSource,
+    pub tie_break: ValenceTieBreak,
+}
+
+pub enum ValenceCandidateSource {
+    AtomTyping { registry: Cow<'static, AtomTypeRegistry> },
+    Counts { table: Cow<'static, ValenceTable> },
+}
+
+pub struct AromaticityModel {
+    pub scope: ElementScope,
+    pub rule: AromaticityRule,
+}
+
+pub enum AromaticityRule {
+    Hueckel { ring_limits: RingLimits },
+    Hmo { stabilization_threshold: f64 },
+    Clar { ring_limits: RingLimits },
+}
+```
+
+`ring_limits` stays per-rule: Hückel and Clar bound ring sizes, HMO does not, and lifting it
+would give HMO a dead field. `scope` lifts because every rule interprets it identically (which
+elements participate — the doc 174 boron exclusion lives here, now first-class). The variant
+sheds the `Rule` suffix (`AromaticityRule::Hueckel`, not `::HueckelRule`); `daylight()` remains
+as an envelope constructor. The admission relation (the view's `is_compatible`) is shared
+machinery with no per-model variation — nothing to configure until a second admission semantics
+exists.
+
+The tie-break is a set of named policies over a data-defined lexicographic key — no open key
+construction; arbitrary (field, direction) combinations are mostly meaningless:
+
+```rust
+// umol-graph-ir::ir::atom — Kind: unit-variant discriminants (a parameterized
+// discriminant is a Key, as AtomConstraintKey's RingMembership(RingScope));
+// mirrors AtomFieldChange's variants.
+pub enum AtomFieldKind {
+    Element,
+    IsotopeMass,
+    Charge,
+    ImplicitHydrogens,
+    LonePairs,
+    UnpairedElectrons,
+}
+
+// umol-graph::utils — new module; general vocabulary, not resolution-local.
+pub enum SortingDirection {
+    Ascending,
+    Descending,
+}
+
+// umol-graph::ops::model
+pub enum ValenceTieBreak {
+    /// No selection: plural survivors stay in the report.
+    Strict,
+    /// max #h, then max #n, then min #u — the SMILES reading convention.
+    MostSaturated,
+}
+impl ValenceTieBreak {
+    pub fn key(&self) -> &'static [(AtomFieldKind, SortingDirection)];  // Strict → empty
+}
+```
+
+Key semantics: candidates are ordered by the pairs in sequence — `Ascending` is the field's
+natural order, `Descending` its reverse — and the greatest candidate under the composed ordering
+is selected, so `MostSaturated = [(ImplicitHydrogens, Ascending), (LonePairs, Ascending),
+(UnpairedElectrons, Descending)]`. A tie surviving the full key stays plural (`Underdetermined`);
+an empty key selects nothing. Comparison is on literal values — the stated precondition, met by
+construction on both sources (registry rows are raised to ground on load; counts candidates are
+enumerated literals) — with `UnpairedElectrons` comparing by count. The generic comparator over
+the key table lives in `compare.rs` and replaces the hand-written ordering;
+`ResolveReport.tie_breaks` recording is unchanged. Consumers: S4c per-system assignment ties
+(after the π-criterion has voted) and S4d pipeline finalization for plural atoms outside any
+candidate system.
+
+**Default and preset (settled 2026-08-13).** The default is `Strict` — the most neutral policy;
+a bare `ValenceModel` (and `ChemistryModel::default()`) assumes no electronic state. The SMILES
+convention becomes a named preset instead:
+
+```rust
+impl ValenceModel {
+    /// The umol SMILES reading: the owned SMILES valence table with the
+    /// `MostSaturated` tie-break.
+    pub fn smiles() -> Self;
+    /// The MDL/CTfile reading: the frozen MDL valence table with the
+    /// `MostSaturated` tie-break.
+    pub fn mdl() -> Self;
+}
+```
+
+Named `smiles()`, not `daylight()`: "Daylight aromaticity model" is an established term and
+`AromaticityModel::daylight()` keeps it, but no named valence policy exists in the literature —
+the convention has always been buried in readers — so the preset names the language whose
+reading it implements. `mdl()` by contrast names the vendor: the *MDL valence model* is the
+attested term, frozen from the CTfile specification (the current default table's content, by
+history). SMILES itself is not well defined — the Daylight normal-valence list exists but the
+surrounding semantics never were rigorous — so umol *owns* its SMILES table the way it owns its
+OpenSMILES parsing spec: documented in the table's config, built as an honest superset of the
+RDKit/CDK/OpenBabel readings — permissive reading matching permissive parsing, never the most
+limited variant. Both preset tables are counts-shaped: the conventions are per-element valence
+lists, and the counts enumeration's smallest-target rule is the implicit-hydrogen rule verbatim;
+no SMILES atom-type registry is needed. The default counts table coincides with the richer of
+the two — the owned SMILES superset — as the most permissive default, and is the living copy,
+while preset tables are frozen. A format's silence has defined meaning — the preset applies the
+format's convention at the reader boundary, the same rule as unit conversion — while the
+tie-break never overrides pinned data (an `M  RAD` radical stays a radical), so the presets are
+safe for well-formed files. Consequences: the convenience entry points select their format's
+preset (`ingest_smiles`/`ingest_smiles_bytes` → `smiles()`, `parse_mol_bytes` → `mdl()`) while
+the `_with` forms stay explicit; the conformance suite's model constructors opt into the
+tie-break explicitly (S4h); a neutral default leaves bare `resolve` underdetermined on most
+format-shaped input, by design.
+
+**Update policy (settled 2026-08-13).** Tie-break selection is default reasoning and therefore
+non-monotonic: no update discipline on a candidate source can make selected results stable
+under row additions, and under `Strict` an addition can demote `Determined` to
+`Underdetermined`. The policy states which observable is stable instead:
+
+- The **per-atom candidate set is the monotone observable**: admission is per-row, so additions
+  only grow the set and never remove or alter existing disjuncts. Consumers that must survive
+  source updates rely on candidate sets, not on selections or verdicts.
+- **Counts covalence targets are the one purely additive edit class**: the smallest-target rule
+  (`find(c ≥ v)`) never changes its answer for previously covered `v` when a larger target is
+  appended — `N: [3] → [3, 5]` extends coverage with existing outcomes bit-identical. Registry
+  rows and `aromatic_valences` lists enumerate rather than pick; they get only set-growth.
+- **Preset tables are frozen releases; revisions are new names** — the parameter-set precedent
+  (basis sets, force fields: def2-TZVP gains diffuse functions only as def2-TZVPD). The default
+  registry and default table are the living copies and promise only candidate-set monotonicity.
+- **Reproducibility is by pinning**: `AtomTypeRegistry` already carries a `content_hash`;
+  `ValenceTable` gains one alongside, so a resolution run (a reaction-network build above all)
+  records its model hashes and reproduces exactly, independent of how the living defaults
+  evolve.
 
 ## The closure is per call
 
@@ -501,17 +647,44 @@ pub struct ResolveReport {
   pyridine/pyrrole nitrogen pairs now visibly coexist (doc 174's sets). Red delta vs S4a:
   +6, all counts consumers, both known classes (plural: MOL methane, resolver stage tests;
   expectation-delta: benzene/vacuous `#v` write-backs). Counts unit tests 43/43 green.
-- S4c: aromaticity resolve: joint selection per candidate system over the carrier;
-  `compare_valence_preference` demoted to a visible last-resort tie-break. Breaking. [dep: S4a]
+- S4b1: model envelopes and tie-break vocabulary (Tie-break configuration section):
+  `AtomFieldKind` in graph-IR `atom.rs`; `SortingDirection` in the new `umol-graph::utils`;
+  `ValenceModel`/`AromaticityModel` products with `ValenceCandidateSource`, `AromaticityRule`,
+  and `ValenceTieBreak` with its key table; the generic key comparator in `compare.rs` replacing
+  the hand-written ordering; the `Strict` default and the `ValenceModel::smiles()`/`mdl()`
+  presets with their frozen tables (`smiles-valence-table.toml` — the owned, documented
+  superset of the RDKit/CDK/OpenBabel readings — and `mdl-valence-table.toml` frozen from the
+  CTfile spec; the living default table takes the superset content); `ValenceTable` gains a
+  `content_hash` for pinning parity with the registry; constructor migration workspace-wide;
+  nomenclature entries (the Kind-versus-Key rule, the tie-break, the presets). Breaking,
+  mechanical; lands at the standing red level. [dep: S3b] **Done 2026-08-13:** all as specced,
+  two corrections — `ValenceTable::content_hash` already existed (no work), and the MDL table
+  is frozen from the historical default content with a spec audit pending, since that content
+  is ad-hoc-permissive rather than a CTfile transcription (`Cl [1,3,5,7]` beside `Br [1]`);
+  its header says so. The SMILES superset delta over it is `N: [3] → [3, 5]`, and the living
+  default takes the superset content (a purely additive change under the smallest-target
+  rule; conformance failure count unchanged at 402). umol-py binds the full mirror
+  (`ValenceCandidateSource`, `ValenceTieBreak`, struct `ValenceModel` with `smiles()`/`mdl()`,
+  `AromaticityRule`, struct `AromaticityModel`). Red level identical to the S4b baseline;
+  clippy zero; new model/compare/table tests green.
+- S4c: aromaticity resolve: joint selection per candidate system over the carrier; assignment
+  ties fall to the configured `ValenceTieBreak`, whose use is visible in the verdict. Breaking.
+  [dep: S4a, S4b1]
 - S4d: `Resolver::resolve`: thread the carrier valence → aromaticity; `Solution<(), _>` →
-  `Solution<ResolveReport, _>`; rollback paths preserved. Breaking. [dep: S4c]
-- S4e: SMILES ingest stops pinning `#h0` on bare aromatic heteroatoms (`umol-io`). Breaking.
-  [dep: S4d]
+  `Solution<ResolveReport, _>`; pipeline finalization applies the configured `ValenceTieBreak`
+  to plural atoms outside any candidate system; rollback paths preserved. Breaking. [dep: S4c]
+- S4e: SMILES ingest stops pinning `#h0` on bare aromatic heteroatoms (`umol-io`); the
+  convenience entry points select their format's preset (`ingest_smiles`,
+  `ingest_smiles_bytes` → `ValenceModel::smiles()`; `parse_mol_bytes` → `ValenceModel::mdl()`)
+  — a reader carries its own convention, the `_with` forms stay explicit. Breaking.
+  [dep: S4b1, S4d]
 - S4f: `umol-py`: bind the report for inspection; update the resolution verdict mapping.
   Breaking. [dep: S4d]
 - S4g: retire `derive_constraints` and `include_missing` (last callers died in S1a/S4a).
   Breaking. [dep: S4a]
-- S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; full suite green
+- S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; the conformance
+  suite's model constructors opt into the `MostSaturated` tie-break explicitly (the default is
+  `Strict`); full suite green
   (`--all-features --tests`, clippy) **except conformance snapshots**, whose remaining
   failures are audited to be exactly the planned expectation-delta class — outputs correct,
   snapshots recording constraints that are no longer written back (atom-typing `#v` since S4a,
@@ -541,7 +714,7 @@ pub struct ResolveReport {
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
   [dep: S5b, S5c]
 
-### S6 — deferrable
+### S6 — deferrable, except S6f
 
 - S6a: `ConstraintValidator` internals on the entity views. After S5 the constraint pass is
   vacuous on resolved molecules, so the validator becomes a staging/pattern tool; the per-kind
@@ -565,11 +738,23 @@ pub struct ResolveReport {
   scope membership stays a model decision that `ElementScope` already expresses.
 - S6d: the F420 acceptance case (unique completion, C29H36N5O18P); its C/N ring is within the
   Daylight scope, so S6c is not a dependency. [dep: S4, S6b]
+- S6e: MDL valence table audit: row-by-row against the CTfile specification's default-valence
+  appendix. The frozen content was inherited from the historical default and is
+  ad-hoc-permissive, not a transcription (`Cl [1, 3, 5, 7]` beside `Br [1]`); deviations are
+  corrected in place — the freeze discipline applies from the audited release onward — or
+  documented as deliberate departures in the table header. [dep: S4b1]
+- S6f: SMILES umbrella table curation — **not deferrable**: verify the superset claim row by
+  row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
+  Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording
+  per-row provenance in the table header. Ordered before S5d: the conformance regeneration
+  bakes table content into snapshots, and regenerating over an uncurated table forces a second
+  regeneration. [dep: S4b1]
 
-Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge strips assertions
-from resolved hosts, after which matching must project every pattern key. S2 is dissolved; S3
-is parallel to S1. The core deliverable — staleness-free semantics and the whitepaper Mutation
-story — completes at S5; S6 is not required for it.
+Critical path: S0 → S1 → S3 → S4 (S6f before S5d) → S5. S1 must precede S5 because discharge
+strips assertions from resolved hosts, after which matching must project every pattern key. S2
+is dissolved; S3 is parallel to S1. The core deliverable — staleness-free semantics and the
+whitepaper Mutation story — completes at S5; S6 is not required for it, except S6f, which
+gates the S5d snapshot regeneration.
 
 ## Open items
 

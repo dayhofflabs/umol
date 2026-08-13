@@ -1,8 +1,11 @@
-# Per-element data for the counts valence model: the living default table.
-# Its content coincides with the SMILES superset table (the most permissive
-# of the frozen releases) and may evolve; additions of larger covalence
-# targets are purely additive under the smallest-target rule, while the
-# frozen preset tables never change in place.
+# umol SMILES valence table for the counts valence model: the frozen release
+# behind `ValenceModel::smiles()`. SMILES itself is not rigorously specified,
+# so umol owns this reading the way it owns its OpenSMILES parsing spec: the
+# organic-subset rows are the Daylight/OpenSMILES normal valences (B 3, C 4,
+# N 3,5, O 2, P 3,5, S 2,4,6, halogens 1), taken as an honest superset of the
+# RDKit/CDK/OpenBabel readings — permissive reading matching permissive
+# parsing; the remaining rows are inherited from the general table. Frozen:
+# revisions are new named files, never edits.
 #
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
 #   largest; Counts uses the first entry >= v + inc when #h is free. Literal

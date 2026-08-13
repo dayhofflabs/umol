@@ -82,10 +82,13 @@ use crate::{
     fingerprint::value::{BitFp, CountedHashedFeatureSet, HashedFeatureSet, StructuralFeatureSet},
     metadata::{Entity, MoleculeMetadata, ReactionMetadata},
     model::{
-        aromaticity::{AromaticityConfig, AromaticityModel, RingLimits},
+        aromaticity::{AromaticityConfig, AromaticityModel, AromaticityRule, RingLimits},
         connectivity::ConnectivityModel,
         stereo::{StereoKindModel, StereoModel},
-        valence::{AtomTypeRegistry, ValenceEntry, ValenceModel, ValenceTable},
+        valence::{
+            AtomTypeRegistry, ValenceCandidateSource, ValenceEntry, ValenceModel, ValenceTable,
+            ValenceTieBreak,
+        },
         ChemistryModel, ElementScope,
     },
     molecule::Molecule,
@@ -238,12 +241,15 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<ReactionDefaults>()?;
         module.add_class::<AtomTypeRegistry>()?;
         module.add_class::<ValenceEntry>()?;
+        module.add_class::<ValenceCandidateSource>()?;
         module.add_class::<ValenceModel>()?;
+        module.add_class::<ValenceTieBreak>()?;
         module.add_class::<ValenceTable>()?;
         module.add_class::<ElementScope>()?;
         module.add_class::<RingLimits>()?;
         module.add_class::<AromaticityConfig>()?;
         module.add_class::<AromaticityModel>()?;
+        module.add_class::<AromaticityRule>()?;
         module.add_class::<AromaticBondConstraintMismatchPolicy>()?;
         module.add_class::<AromaticityFailurePolicy>()?;
         module.add_class::<AromaticityMismatchPolicy>()?;

@@ -42,6 +42,19 @@ pub struct AtomUpdate {
     pub constraints: AtomConstraintsForm,
 }
 
+/// Field discriminants of [`AtomForm`], mirroring `AtomFieldChange`'s variants.
+/// A kind is a unit-variant discriminant; a parameterized discriminant is a
+/// key, as `AtomConstraintKey`'s `RingMembership(RingScope)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AtomFieldKind {
+    Element,
+    IsotopeMass,
+    Charge,
+    ImplicitHydrogens,
+    LonePairs,
+    UnpairedElectrons,
+}
+
 impl AtomForm {
     pub fn new(element: ElementForm) -> Self {
         Self {

@@ -361,7 +361,8 @@ mod tests {
     use super::*;
     use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
+        AromaticityModel, AromaticityRule, ChemistryModel, ElementScope, RingLimits, StereoModel,
+        ValenceModel,
     };
     use crate::ops::stereo::StereoInconsistency;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
@@ -371,12 +372,12 @@ mod tests {
     fn chemistry_model() -> ChemistryModel {
         ChemistryModel {
             connectivity: ConnectivityModel::default(),
-            valence: ValenceModel::Counts {
-                table: Cow::Borrowed(ValenceTable::default_table()),
-            },
-            aromaticity: AromaticityModel::HueckelRule {
+            valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            aromaticity: AromaticityModel {
                 scope: ElementScope::AllowList(vec![Element::C]),
-                ring_limits: RingLimits::default(),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::default(),
+                },
             },
             stereo: StereoModel::default(),
         }
@@ -518,21 +519,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts {
-        table: Cow::Borrowed(ValenceTable::default_table()),
-    })]
-    #[case::atom_typing(ValenceModel::AtomTyping {
-        registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+    #[case::counts(ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())))]
+    #[case::atom_typing(ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
             "C#i=#c0#h4#n0#u0#s#v0#a!"
-        )])),
-    })]
+        )]))))]
     fn test_resolver_resolve(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
             connectivity: ConnectivityModel::default(),
             valence,
-            aromaticity: AromaticityModel::HueckelRule {
+            aromaticity: AromaticityModel {
                 scope: ElementScope::AllowList(vec![Element::C]),
-                ring_limits: RingLimits::default(),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::default(),
+                },
             },
             stereo: StereoModel::default(),
         };
@@ -612,12 +611,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::counts(ValenceModel::Counts {
-        table: Cow::Borrowed(ValenceTable::default_table()),
-    })]
-    #[case::atom_typing(ValenceModel::AtomTyping {
-        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-    })]
+    #[case::counts(ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())))]
+    #[case::atom_typing(ValenceModel::atom_typing(Cow::Borrowed(
+        AtomTypeRegistry::default_registry()
+    )))]
     fn test_resolver_resolve_partial(#[case] valence: ValenceModel) {
         let model = ChemistryModel {
             valence,
@@ -654,15 +651,10 @@ mod tests {
     #[rstest]
     #[case::aromaticity_setup(
         ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
                     "C#i=#c0#h0#n0#u0#s#v2#a2"
-                )])),
-            },
-            aromaticity: AromaticityModel::Hmo {
-                scope: ElementScope::Any,
-                stabilization_threshold: 0.5,
-            },
+                )]))),
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
             ..ChemistryModel::default()
         },
         mol_dsl!(r#"{
@@ -724,11 +716,9 @@ mod tests {
         #[case] expected: Solution<(), ResolverContradiction>,
     ) {
         let model = ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
-                    "C#i=#c0#h0#n0#u0#s#v0#a!#m1"
-                )])),
-            },
+            valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([
+                atom_dsl!("C#i=#c0#h0#n0#u0#s#v0#a!#m1"),
+            ]))),
             ..ChemistryModel::default()
         };
         let original = molecule.clone();
@@ -739,10 +729,7 @@ mod tests {
 
     #[rstest]
     #[case::aromaticity(
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
         mol_dsl!(r#"{
             :atoms ["N#i*#c0#h#n0#u0#s#a2" "C#i=#c0#h#n0#u0#s#a"
                     "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
@@ -768,10 +755,7 @@ mod tests {
         ))
     )]
     #[case::stereo(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
         mol_dsl!(r#"{
             :atoms ["C#i*#c0#h#n0#u0#s#a#T1" "C#i=#c0#h#n0#u0#s#a"
                     "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"

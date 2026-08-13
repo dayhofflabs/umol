@@ -11,6 +11,7 @@ pub(crate) mod constraint;
 pub(crate) mod correspondence;
 pub(crate) mod dative;
 pub(crate) mod delta;
+pub(crate) mod derivation;
 pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod entity;
@@ -25,7 +26,6 @@ pub(crate) mod noncovalent;
 pub(crate) mod num;
 pub(crate) mod operators;
 pub(crate) mod reaction;
-pub(crate) mod reaction_derivation;
 pub(crate) mod reaction_span;
 pub(crate) mod remap;
 pub(crate) mod ring;
@@ -37,7 +37,7 @@ pub(crate) mod traits;
 pub(crate) mod view;
 
 pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
-pub use atom::{AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
+pub use atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use canonicalize::{
@@ -67,6 +67,7 @@ pub use delta::{
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
     StereoBondDelta,
 };
+pub use derivation::ReactionDerivation;
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -104,7 +105,6 @@ pub use reaction::{
     DpoContradiction, React, Reaction, ReactionApplicationIter, ReactionIntegrityError,
     ReactionProductsIter,
 };
-pub use reaction_derivation::ReactionDerivation;
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
 pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
 pub use ring::{

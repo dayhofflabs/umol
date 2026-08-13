@@ -13,10 +13,11 @@ use std::borrow::Cow;
 use strum::EnumCount;
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::StereoKind;
+use umol_graph_ir::ir::{AtomFieldKind, StereoKind};
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 use crate::ops::validate::ConnectivityModel;
+use crate::utils::SortingDirection;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChemistryModel {
@@ -30,45 +31,131 @@ impl Default for ChemistryModel {
     fn default() -> Self {
         Self {
             connectivity: ConnectivityModel::default(),
-            valence: ValenceModel::AtomTyping {
-                registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-            },
+            valence: ValenceModel::default(),
             aromaticity: AromaticityModel::daylight(),
             stereo: StereoModel::default(),
         }
     }
 }
 
+/// Valence model: where candidate states come from, and how plural survivors
+/// are disposed of.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValenceModel {
-    /// Atom-typing valence model: the registry of `AtomForm` patterns.
+pub struct ValenceModel {
+    pub candidates: ValenceCandidateSource,
+    pub tie_break: ValenceTieBreak,
+}
+
+impl ValenceModel {
+    /// The atom-typing source with the `Strict` tie-break.
+    pub fn atom_typing(registry: Cow<'static, AtomTypeRegistry>) -> Self {
+        Self {
+            candidates: ValenceCandidateSource::AtomTyping { registry },
+            tie_break: ValenceTieBreak::Strict,
+        }
+    }
+
+    /// The counts source with the `Strict` tie-break.
+    pub fn counts(table: Cow<'static, ValenceTable>) -> Self {
+        Self {
+            candidates: ValenceCandidateSource::Counts { table },
+            tie_break: ValenceTieBreak::Strict,
+        }
+    }
+
+    /// The umol SMILES reading: the owned SMILES valence table with the
+    /// `MostSaturated` tie-break.
+    pub fn smiles() -> Self {
+        Self {
+            candidates: ValenceCandidateSource::Counts {
+                table: Cow::Borrowed(ValenceTable::smiles_table()),
+            },
+            tie_break: ValenceTieBreak::MostSaturated,
+        }
+    }
+
+    /// The MDL/CTfile reading: the frozen MDL valence table with the
+    /// `MostSaturated` tie-break.
+    pub fn mdl() -> Self {
+        Self {
+            candidates: ValenceCandidateSource::Counts {
+                table: Cow::Borrowed(ValenceTable::mdl_table()),
+            },
+            tie_break: ValenceTieBreak::MostSaturated,
+        }
+    }
+}
+
+impl Default for ValenceModel {
+    /// The default atom-typing registry with the `Strict` tie-break.
+    fn default() -> Self {
+        Self::atom_typing(Cow::Borrowed(AtomTypeRegistry::default_registry()))
+    }
+}
+
+/// Where valence candidate states come from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValenceCandidateSource {
+    /// The registry of `AtomForm` patterns.
     AtomTyping {
         registry: Cow<'static, AtomTypeRegistry>,
     },
-    /// Counts valence model: the per-element covalence table.
+    /// The per-element covalence table.
     Counts { table: Cow<'static, ValenceTable> },
 }
 
+/// Disposal policy for plural candidate survivors: named lexicographic keys
+/// only, no open key construction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ValenceTieBreak {
+    /// No selection: plural survivors stay in the report.
+    #[default]
+    Strict,
+    /// Max implicit hydrogens, then max lone pairs, then min unpaired
+    /// electrons — the closed-shell most-saturated reading.
+    MostSaturated,
+}
+
+impl ValenceTieBreak {
+    /// The policy's lexicographic key: candidates are ordered by each pair in
+    /// sequence and the greatest is selected. An empty key selects nothing;
+    /// a tie surviving the full key stays plural.
+    pub fn key(&self) -> &'static [(AtomFieldKind, SortingDirection)] {
+        match self {
+            Self::Strict => &[],
+            Self::MostSaturated => &[
+                (
+                    AtomFieldKind::ImplicitHydrogens,
+                    SortingDirection::Ascending,
+                ),
+                (AtomFieldKind::LonePairs, SortingDirection::Ascending),
+                (
+                    AtomFieldKind::UnpairedElectrons,
+                    SortingDirection::Descending,
+                ),
+            ],
+        }
+    }
+}
+
+/// Aromaticity model: the participating elements and the perception rule.
 #[derive(Debug, Clone, PartialEq)]
-pub enum AromaticityModel {
-    HueckelRule {
-        scope: ElementScope,
-        ring_limits: RingLimits,
-    },
-    Hmo {
-        scope: ElementScope,
-        stabilization_threshold: f64,
-    },
-    Clar {
-        scope: ElementScope,
-        ring_limits: RingLimits,
-    },
+pub struct AromaticityModel {
+    pub scope: ElementScope,
+    pub rule: AromaticityRule,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AromaticityRule {
+    Hueckel { ring_limits: RingLimits },
+    Hmo { stabilization_threshold: f64 },
+    Clar { ring_limits: RingLimits },
 }
 
 impl AromaticityModel {
     /// Daylight (SMILES) aromaticity scope: C, N, O, S, Se, As.
     pub fn daylight() -> Self {
-        Self::HueckelRule {
+        Self {
             scope: ElementScope::AllowList(vec![
                 Element::C,
                 Element::N,
@@ -77,26 +164,32 @@ impl AromaticityModel {
                 Element::Se,
                 Element::As,
             ]),
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         }
     }
 
     /// MDL (MOL/SDF) aromaticity scope: C and N only, minimum ring size 6.
     pub fn mdl() -> Self {
-        Self::HueckelRule {
+        Self {
             scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-            ring_limits: RingLimits {
-                min_ring_size: 6,
-                ..RingLimits::default()
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits {
+                    min_ring_size: 6,
+                    ..RingLimits::default()
+                },
             },
         }
     }
 
     /// Permissive aromaticity scope: any element.
     pub fn permissive() -> Self {
-        Self::HueckelRule {
+        Self {
             scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         }
     }
 }
@@ -215,15 +308,16 @@ mod tests {
             model,
             ChemistryModel {
                 connectivity: ConnectivityModel::default(),
-                valence: ValenceModel::AtomTyping {
-                    registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-                },
+                valence: ValenceModel::atom_typing(Cow::Borrowed(
+                    AtomTypeRegistry::default_registry()
+                )),
                 aromaticity: AromaticityModel::daylight(),
                 stereo: StereoModel::default(),
             },
         );
-        match model.valence {
-            ValenceModel::AtomTyping {
+        assert_eq!(model.valence.tie_break, ValenceTieBreak::Strict);
+        match model.valence.candidates {
+            ValenceCandidateSource::AtomTyping {
                 registry: Cow::Borrowed(registry),
             } => assert!(ptr::eq(registry, AtomTypeRegistry::default_registry())),
             other => panic!("expected borrowed default atom-typing registry, got {other:?}"),
@@ -231,17 +325,72 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valence(ChemistryModel {
-        valence: ValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4]]),
+    #[case::atom_typing(
+        ValenceModel::atom_typing(Cow::Borrowed(AtomTypeRegistry::default_registry())),
+        ValenceCandidateSource::AtomTyping {
+            registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
         },
+        ValenceTieBreak::Strict,
+    )]
+    #[case::counts(
+        ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+        ValenceCandidateSource::Counts {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        },
+        ValenceTieBreak::Strict,
+    )]
+    #[case::smiles(
+        ValenceModel::smiles(),
+        ValenceCandidateSource::Counts {
+            table: Cow::Borrowed(ValenceTable::smiles_table()),
+        },
+        ValenceTieBreak::MostSaturated,
+    )]
+    #[case::mdl(
+        ValenceModel::mdl(),
+        ValenceCandidateSource::Counts {
+            table: Cow::Borrowed(ValenceTable::mdl_table()),
+        },
+        ValenceTieBreak::MostSaturated,
+    )]
+    fn test_valence_model_constructors(
+        #[case] model: ValenceModel,
+        #[case] candidates: ValenceCandidateSource,
+        #[case] tie_break: ValenceTieBreak,
+    ) {
+        assert_eq!(
+            model,
+            ValenceModel {
+                candidates,
+                tie_break,
+            },
+        );
+    }
+
+    #[rstest]
+    #[case::strict(ValenceTieBreak::Strict, &[])]
+    #[case::most_saturated(
+        ValenceTieBreak::MostSaturated,
+        &[
+            (AtomFieldKind::ImplicitHydrogens, SortingDirection::Ascending),
+            (AtomFieldKind::LonePairs, SortingDirection::Ascending),
+            (AtomFieldKind::UnpairedElectrons, SortingDirection::Descending),
+        ],
+    )]
+    fn test_valence_tie_break_key(
+        #[case] tie_break: ValenceTieBreak,
+        #[case] expected: &[(AtomFieldKind, SortingDirection)],
+    ) {
+        assert_eq!(tie_break.key(), expected);
+    }
+
+    #[rstest]
+    #[case::valence(ChemistryModel {
+        valence: ValenceModel::counts(Cow::Owned(valence_table![C => [4]])),
         ..ChemistryModel::default()
     })]
     #[case::aromaticity(ChemistryModel {
-        aromaticity: AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.5,
-        },
+        aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
         ..ChemistryModel::default()
     })]
     #[case::stereo(ChemistryModel {
@@ -257,20 +406,12 @@ mod tests {
 
     #[rstest]
     #[case::atom_typing(
-        ValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4"]),
-        },
-        ValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4"]),
-        },
+        ValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4"])),
+        ValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4"])),
     )]
     #[case::counts(
-        ValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4], O => [2]]),
-        },
-        ValenceModel::Counts {
-            table: Cow::Owned(valence_table![O => [2], C => [4]]),
-        },
+        ValenceModel::counts(Cow::Owned(valence_table![C => [4], O => [2]])),
+        ValenceModel::counts(Cow::Owned(valence_table![O => [2], C => [4]])),
     )]
     fn test_valence_model_eq(#[case] left: ValenceModel, #[case] right: ValenceModel) {
         assert_eq!(left, right);
@@ -278,27 +419,22 @@ mod tests {
 
     #[rstest]
     #[case::variant(
-        ValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4"]),
-        },
-        ValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4]]),
-        },
+        ValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4"])),
+        ValenceModel::counts(Cow::Owned(valence_table![C => [4]])),
     )]
     #[case::atom_typing(
-        ValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v4"]),
-        },
-        ValenceModel::AtomTyping {
-            registry: Cow::Owned(registry!["C#c0#v3"]),
-        },
+        ValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v4"])),
+        ValenceModel::atom_typing(Cow::Owned(registry!["C#c0#v3"])),
     )]
     #[case::counts(
-        ValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [4]]),
-        },
-        ValenceModel::Counts {
-            table: Cow::Owned(valence_table![C => [3]]),
+        ValenceModel::counts(Cow::Owned(valence_table![C => [4]])),
+        ValenceModel::counts(Cow::Owned(valence_table![C => [3]])),
+    )]
+    #[case::tie_break(
+        ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+        ValenceModel {
+            tie_break: ValenceTieBreak::MostSaturated,
+            ..ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
         },
     )]
     fn test_valence_model_eq_difference(#[case] left: ValenceModel, #[case] right: ValenceModel) {
@@ -307,34 +443,16 @@ mod tests {
 
     #[rstest]
     #[case::hueckel_rule(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
     )]
     #[case::hmo(
-        AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.5,
-        },
-        AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.5,
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
     )]
     #[case::clar(
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
     )]
     fn test_aromaticity_model_eq(#[case] left: AromaticityModel, #[case] right: AromaticityModel) {
         assert_eq!(left, right);
@@ -342,80 +460,38 @@ mod tests {
 
     #[rstest]
     #[case::variant(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
     )]
     #[case::hueckel_scope(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
     )]
     #[case::hueckel_ring_limits(
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::HueckelRule {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits {
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits {
                 min_ring_size: 4,
                 ..RingLimits::default()
-            },
-        },
+            } } },
     )]
     #[case::hmo_scope(
-        AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.5,
-        },
-        AromaticityModel::Hmo {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            stabilization_threshold: 0.5,
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
     )]
     #[case::hmo_threshold(
-        AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.5,
-        },
-        AromaticityModel::Hmo {
-            scope: ElementScope::Any,
-            stabilization_threshold: 0.6,
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.6 } },
     )]
     #[case::clar_scope(
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::Clar {
-            scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
     )]
     #[case::clar_ring_limits(
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits {
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits {
                 include_fused: false,
                 ..RingLimits::default()
-            },
-        },
+            } } },
     )]
     fn test_aromaticity_model_eq_difference(
         #[case] left: AromaticityModel,
@@ -428,7 +504,7 @@ mod tests {
     fn test_aromaticity_model_daylight() {
         assert_eq!(
             AromaticityModel::daylight(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::AllowList(vec![
                     Element::C,
                     Element::N,
@@ -437,7 +513,9 @@ mod tests {
                     Element::Se,
                     Element::As,
                 ]),
-                ring_limits: RingLimits::default(),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::default()
+                }
             },
         );
     }
@@ -446,12 +524,14 @@ mod tests {
     fn test_aromaticity_model_mdl() {
         assert_eq!(
             AromaticityModel::mdl(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-                ring_limits: RingLimits {
-                    min_ring_size: 6,
-                    ..RingLimits::default()
-                },
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits {
+                        min_ring_size: 6,
+                        ..RingLimits::default()
+                    }
+                }
             },
         );
     }
@@ -460,9 +540,11 @@ mod tests {
     fn test_aromaticity_model_permissive() {
         assert_eq!(
             AromaticityModel::permissive(),
-            AromaticityModel::HueckelRule {
+            AromaticityModel {
                 scope: ElementScope::Any,
-                ring_limits: RingLimits::default(),
+                rule: AromaticityRule::Hueckel {
+                    ring_limits: RingLimits::default()
+                }
             },
         );
     }

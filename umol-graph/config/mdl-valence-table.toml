@@ -1,8 +1,7 @@
-# Per-element data for the counts valence model: the living default table.
-# Its content coincides with the SMILES superset table (the most permissive
-# of the frozen releases) and may evolve; additions of larger covalence
-# targets are purely additive under the smallest-target rule, while the
-# frozen preset tables never change in place.
+# MDL/CTfile valence table for the counts valence model: the frozen release
+# behind `ValenceModel::mdl()`. Content inherited from the historical default
+# table; a row-by-row audit against the CTfile specification's default-valence
+# appendix is pending. Frozen: revisions are new named files, never edits.
 #
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
 #   largest; Counts uses the first entry >= v + inc when #h is free. Literal
@@ -28,7 +27,7 @@ target_covalences = [4]
 aromatic_valences = [1]
 
 [N]
-target_covalences = [3, 5]
+target_covalences = [3]
 aromatic_valences = [1, 2]
 
 [O]

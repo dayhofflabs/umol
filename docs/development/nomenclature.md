@@ -899,6 +899,16 @@ model-independent derived value is also an invariant.
 **In code:** `validate_invariants`, `*InvariantsValidator`, including
 `ValenceInvariantsValidator` and `SpinInvariantsValidator`.
 
+### Key and kind
+
+A **kind** is a unit-variant discriminant enum naming a family member without parameters; a
+**key** is a discriminant that carries parameters. `AtomFieldKind` mirrors `AtomFieldChange`'s
+variants; `AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
+Peer entity forms gain `*FieldKind` enums as consumers arrive.
+
+**Not:** interchangeable — a parameterless discriminant enum is a kind, not a key.
+**In code:** `AtomFieldKind`; `AtomConstraintKey` and the per-family constraint keys.
+
 ### Lattice
 
 **Lattice** is the internal term for the partial order on attribute values under which matching,
@@ -1019,7 +1029,11 @@ independently meaningful but disagree.
 
 ### Model
 
-A **model** contains semantic choices defining which result is chemically accepted.
+A **model** contains semantic choices defining which result is chemically accepted. Named preset
+constructors freeze a format's reading — `ValenceModel::smiles()` (the umol-owned SMILES table
+with the `MostSaturated` tie-break), `ValenceModel::mdl()` (the frozen MDL table, likewise),
+`AromaticityModel::daylight()` and `::mdl()`. Preset tables are frozen releases whose revisions
+are new names; the living defaults promise only candidate-set monotonicity under additions.
 
 **Not:** config, policy, algorithm.
 **In code:** `ChemistryModel`, `ValenceModel`, `AromaticityModel`, `StereoModel`, `RingModel`.
@@ -1420,6 +1434,20 @@ another level.
 **Not:** `Full`, which additionally uses normalized constraints to select among tied structure
 frames; molecular topology, which excludes overlays.
 **In code:** `CanonicalizationLevel::Structure`.
+
+### Tie-break
+
+A **tie-break** is the disposal policy for plural valence candidate survivors: a named
+lexicographic key over atom fields — candidates ordered by each (field, direction) pair in
+sequence, greatest selected — evaluated only after every model criterion has voted, aromaticity
+selection included. `Strict` selects nothing and leaves survivors in the resolve report;
+`MostSaturated` prefers max implicit hydrogens, then max lone pairs, then min unpaired
+electrons. Policies are named variants only; keys are not openly constructible.
+
+**Not:** a model criterion — it never preempts aromaticity; not a hidden preference — its use is
+recorded per atom in the resolve report.
+**In code:** `ValenceTieBreak`, `ValenceTieBreak::key`, `compare_by_key`; `SortingDirection` in
+`umol_graph::utils`.
 
 ### Topology
 

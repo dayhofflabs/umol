@@ -64,7 +64,8 @@ mod tests {
 
     use super::{parse_mol_bytes, parse_mol_bytes_with};
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, ElementScope, RingLimits, StereoModel, ValenceModel,
+        AromaticityModel, AromaticityRule, ChemistryModel, ElementScope, RingLimits, StereoModel,
+        ValenceModel,
     };
     use crate::ops::resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig};
     use crate::ops::valence::{CountsValence, ValenceTable};
@@ -121,13 +122,8 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel {
             connectivity: ConnectivityModel::default(),
-            valence: ValenceModel::Counts {
-                table: Cow::Borrowed(ValenceTable::default_table()),
-            },
-            aromaticity: AromaticityModel::HueckelRule {
-                scope: ElementScope::AllowList(vec![Element::C]),
-                ring_limits: RingLimits::default(),
-            },
+            valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            aromaticity: AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
             stereo: StereoModel::default(),
         },
         ResolveConfig::default(),

@@ -83,9 +83,7 @@ fn atom_typing_chemistry() -> ChemistryModel {
 
 fn counts_chemistry() -> ChemistryModel {
     ChemistryModel {
-        valence: ValenceModel::Counts {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        },
+        valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
         connectivity: ConnectivityModel::default(),
         aromaticity: AromaticityModel::daylight(),
         stereo: StereoModel::default(),

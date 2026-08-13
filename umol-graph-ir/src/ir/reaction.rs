@@ -26,6 +26,7 @@ use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
+use super::derivation::ReactionDerivation;
 use super::edit::{
     AddBond, AromaticSystemFieldChange, AromaticSystemHandle, AtomFieldChange, AtomHandle,
     BondFieldChange, BondHandle, ConstraintEdit, DativeBondFieldChange, DativeBondHandle, Edit,
@@ -45,7 +46,6 @@ use super::molecule::MoleculeEntries;
 use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
-use super::reaction_derivation::ReactionDerivation;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
 use super::traits::Normalize;

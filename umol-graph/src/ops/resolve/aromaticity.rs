@@ -333,13 +333,15 @@ mod tests {
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
-    use crate::ops::model::{ElementScope, RingLimits};
+    use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
 
     #[fixture]
     fn aromaticity_model() -> AromaticityModel {
-        AromaticityModel::HueckelRule {
+        AromaticityModel {
             scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         }
     }
 
@@ -773,10 +775,7 @@ mod tests {
 
     #[rstest]
     #[case::clar_heterocycle(
-        AromaticityModel::Clar {
-            scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
         mol_dsl_ground!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AromaticityContradiction::ClarNonBenzenoid(

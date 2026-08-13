@@ -31,7 +31,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
-use crate::ops::model::AromaticityModel;
+use crate::ops::model::{AromaticityModel, AromaticityRule};
 
 /// Chemistry-level rejection: the algorithm decided the input doesn't satisfy
 /// the model. Carried inside `Solution::Contradictory`.
@@ -113,15 +113,17 @@ pub enum AromaticityPerception {
 
 impl AromaticityPerception {
     pub fn new(model: &AromaticityModel) -> Self {
-        match model {
-            AromaticityModel::HueckelRule { scope, ring_limits } => Self::HueckelRule(
-                HueckelRuleAromaticity::new(scope.clone(), ring_limits.clone()),
+        match &model.rule {
+            AromaticityRule::Hueckel { ring_limits } => Self::HueckelRule(
+                HueckelRuleAromaticity::new(model.scope.clone(), ring_limits.clone()),
             ),
-            AromaticityModel::Hmo {
-                scope,
+            AromaticityRule::Hmo {
                 stabilization_threshold,
-            } => Self::Hmo(HmoAromaticity::new(scope.clone(), *stabilization_threshold)),
-            AromaticityModel::Clar { .. } => Self::Clar(ClarAromaticity),
+            } => Self::Hmo(HmoAromaticity::new(
+                model.scope.clone(),
+                *stabilization_threshold,
+            )),
+            AromaticityRule::Clar { .. } => Self::Clar(ClarAromaticity),
         }
     }
 
@@ -424,7 +426,7 @@ mod tests {
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
-    use crate::ops::model::{ElementScope, RingLimits};
+    use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
 
     #[rstest]
     fn test_aromaticity_config_default() {
@@ -442,9 +444,11 @@ mod tests {
     }
 
     fn any_hueckel() -> AromaticityPerception {
-        AromaticityPerception::new(&AromaticityModel::HueckelRule {
+        AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         })
     }
 
@@ -738,9 +742,11 @@ mod tests {
 
     #[rstest]
     fn test_aromaticity_perception_hueckel_rule_benzene_writes_system() {
-        let perception = AromaticityPerception::new(&AromaticityModel::HueckelRule {
+        let perception = AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         });
         let mut molecule = benzene();
         let solution = run_full(&perception, &mut molecule);
@@ -763,9 +769,11 @@ mod tests {
 
     #[rstest]
     fn test_aromaticity_perception_clar_rejects_heterocycle() {
-        let perception = AromaticityPerception::new(&AromaticityModel::Clar {
+        let perception = AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Clar {
+                ring_limits: RingLimits::default(),
+            },
         });
         let mut molecule = pyrrole();
         let solution = run_full(&perception, &mut molecule);
@@ -873,9 +881,11 @@ mod tests {
 
     #[rstest]
     fn test_aromaticity_perception_hueckel_rule_no_aromatic_atom_returns_determined() {
-        let perception = AromaticityPerception::new(&AromaticityModel::HueckelRule {
+        let perception = AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::AllowList(vec![Element::C]),
-            ring_limits: RingLimits::default(),
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
         });
         let atoms: Vec<AtomForm> = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
         let bonds: Vec<_> = (0..6)

@@ -87,6 +87,16 @@ impl ValenceTable {
         &DEFAULT_VALENCE_TABLE
     }
 
+    /// The frozen umol SMILES table behind `ValenceModel::smiles()`.
+    pub fn smiles_table() -> &'static Self {
+        &SMILES_VALENCE_TABLE
+    }
+
+    /// The frozen MDL/CTfile table behind `ValenceModel::mdl()`.
+    pub fn mdl_table() -> &'static Self {
+        &MDL_VALENCE_TABLE
+    }
+
     pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: BTreeMap<String, ValenceEntryToml> =
             toml::from_str(input).map_err(|e| ConfigError::InvalidValenceTable(e.to_string()))?;
@@ -142,6 +152,16 @@ macro_rules! valence_table {
 static DEFAULT_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
     ValenceTable::from_toml_str(include_str!("../../../config/default-valence-table.toml"))
         .expect("built-in default valence table must be valid")
+});
+
+static SMILES_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
+    ValenceTable::from_toml_str(include_str!("../../../config/smiles-valence-table.toml"))
+        .expect("built-in SMILES valence table must be valid")
+});
+
+static MDL_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
+    ValenceTable::from_toml_str(include_str!("../../../config/mdl-valence-table.toml"))
+        .expect("built-in MDL valence table must be valid")
 });
 
 #[cfg(test)]
