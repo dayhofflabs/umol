@@ -80,6 +80,7 @@ pub trait AsLit {
 /// `matches` is the partial-order check: `pattern.matches(target)` is true
 /// iff `target` refines `pattern`, i.e. `pattern.meet(target) == normalized(target)`.
 /// It has a `meet`-derived default; impls override it only as a cheaper shortcut.
+/// `satisfies` is its receiver-inverted reading for target-side receivers.
 pub trait Lattice: Normalize {
     /// Top of the lattice — `self` carries no value information.
     fn is_undetermined(&self) -> bool;
@@ -106,6 +107,13 @@ pub trait Lattice: Normalize {
             (Some(meet), Ok(target)) => meet == *target,
             _ => false,
         }
+    }
+
+    /// Receiver-inverted [`Lattice::matches`]: `target.satisfies(pattern)` is
+    /// true iff `pattern.matches(target)`. For receivers standing on the
+    /// target side; the default is the definition and is never overridden.
+    fn satisfies(&self, pattern: &Self) -> bool {
+        pattern.matches(self)
     }
 
     /// Symmetric compatibility: there exists a ground value that refines

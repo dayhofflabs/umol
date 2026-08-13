@@ -1177,8 +1177,9 @@ pub(crate) fn ring_membership_lattice_strategy() -> impl Strategy<Value = RingMe
 }
 
 /// Universal lattice laws — hold for **any** inputs (normalized or not): meet/join
-/// commutativity and associativity, `matches` ⇔ meet-derived, and the
-/// Lattice→Normalize correspondence that `meet`/`join` land in normal form.
+/// commutativity and associativity, `matches` ⇔ meet-derived, `satisfies` ⇔
+/// receiver-inverted `matches`, and the Lattice→Normalize correspondence that
+/// `meet`/`join` land in normal form.
 pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     a: &L,
     b: &L,
@@ -1195,6 +1196,7 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         b.join(c).and_then(|bc| a.join(&bc))
     );
     prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().normalize().ok());
+    prop_assert_eq!(b.satisfies(a), a.matches(b));
     if let Some(m) = a.meet(b) {
         prop_assert_eq!(m.clone().normalize(), Ok(m));
     }

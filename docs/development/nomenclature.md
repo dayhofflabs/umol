@@ -951,6 +951,11 @@ bonds and matched-atom membership — while `substructure_matches` and `Substruc
 the second. The two sit close together in the module tree, so a reader arriving from substructure
 search will read `BondMatching` as a match result unless told otherwise.
 
+**`satisfies`** is the receiver-inverted reading of the lattice relation:
+`target.satisfies(pattern)` iff `pattern.matches(target)`. It exists because a view must be a
+receiver and stands on the target side; the `Lattice` default is the definition and is never
+overridden.
+
 **Not:** interchangeable, and neither is *correspondence*, which is the *result* of pattern matching
 rather than the operation.
 **In code:** first sense — `Matching`, `BondMatching`, `PerfectMatchingAlgorithm`,

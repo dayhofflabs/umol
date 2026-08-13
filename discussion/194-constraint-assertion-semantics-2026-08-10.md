@@ -1,6 +1,6 @@
 # 194 — Constraint channel: assertions only, projections read on demand
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-10
 Relates: [053](053-molecule-validation-scheme-2026-02-17.md),
 [125](125-constraints-as-projections-2026-06-22.md),
