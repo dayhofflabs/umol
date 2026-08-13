@@ -1,5 +1,5 @@
-//! Constraint reading of an atom, reached by accessor chaining:
-//! `molecule.atom(id).constraints()`.
+//! Constraint reading of an entity, reached by accessor chaining:
+//! `molecule.atom(id).constraints()`, `molecule.bond(id).constraints()`.
 //!
 //! The bare read API is inherited from the stored container and keeps its
 //! meanings — typed getters, `iter`, `is_empty` all read the asserted side,
@@ -12,17 +12,17 @@
 //! overlay keys have an absence cell for the closure to fill. Mutation never
 //! routes through this view; it belongs to the stored container.
 
+use super::super::boolean::BooleanForm;
 use super::super::constraint::{
     AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
-    MulticenterValenceForm,
+    BondConstraintForm, BondConstraintKey, BondConstraintsForm, MulticenterValenceForm,
 };
-use super::super::id::AtomId;
+use super::super::id::{AtomId, BondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
-use super::super::stereo::TetrahedralStereoForm;
+use super::super::stereo::{CisTransStereoForm, TetrahedralStereoForm};
 use super::super::traits::Lattice;
-use super::atom::{asserted_constraints, derived_constraint};
 
 /// Constraint reading of one atom: the asserted side under the container's
 /// read API, and both sides under the keyed accessors.
@@ -50,7 +50,7 @@ impl<'a> AtomConstraintsView<'a> {
 
     /// The stored side of `key`; absence is the vacuous constraint.
     pub fn asserted(&self, key: AtomConstraintKey) -> Option<&'a AtomConstraintForm> {
-        asserted_constraints(self.molecule, self.atom).get(key)
+        super::atom::asserted_constraints(self.molecule, self.atom).get(key)
     }
 
     /// The derived side of `key`, obtained by projection from present
@@ -62,7 +62,7 @@ impl<'a> AtomConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
-        derived_constraint(self.molecule, self.atom, self.rings, key, false)
+        super::atom::derived_constraint(self.molecule, self.atom, self.rings, key, false)
     }
 
     /// The derived side of `key` under the closure: absence of a
@@ -75,7 +75,7 @@ impl<'a> AtomConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
-        derived_constraint(self.molecule, self.atom, self.rings, key, true)
+        super::atom::derived_constraint(self.molecule, self.atom, self.rings, key, true)
     }
 
     /// Whether this atom's constraint reading satisfies `pattern`: every
@@ -137,67 +137,208 @@ impl<'a> AtomConstraintsView<'a> {
     // every accessor below reads the asserted side.
 
     pub fn valence(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).valence()
+        super::atom::asserted_constraints(self.molecule, self.atom).valence()
     }
 
     pub fn aromatic_valence(&self) -> Option<&'a AromaticValenceForm> {
-        asserted_constraints(self.molecule, self.atom).aromatic_valence()
+        super::atom::asserted_constraints(self.molecule, self.atom).aromatic_valence()
     }
 
     pub fn multicenter_valence(&self) -> Option<&'a MulticenterValenceForm> {
-        asserted_constraints(self.molecule, self.atom).multicenter_valence()
+        super::atom::asserted_constraints(self.molecule, self.atom).multicenter_valence()
     }
 
     pub fn tetrahedral_stereo(&self) -> Option<&'a TetrahedralStereoForm> {
-        asserted_constraints(self.molecule, self.atom).tetrahedral_stereo()
+        super::atom::asserted_constraints(self.molecule, self.atom).tetrahedral_stereo()
     }
 
     pub fn degree(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).degree()
+        super::atom::asserted_constraints(self.molecule, self.atom).degree()
     }
 
     pub fn total_degree(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).total_degree()
+        super::atom::asserted_constraints(self.molecule, self.atom).total_degree()
     }
 
     pub fn total_valence(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).total_valence()
+        super::atom::asserted_constraints(self.molecule, self.atom).total_valence()
     }
 
     pub fn ring_degree(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).ring_degree()
+        super::atom::asserted_constraints(self.molecule, self.atom).ring_degree()
     }
 
     pub fn ring_valence(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).ring_valence()
+        super::atom::asserted_constraints(self.molecule, self.atom).ring_valence()
     }
 
     pub fn total_hydrogens(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).total_hydrogens()
+        super::atom::asserted_constraints(self.molecule, self.atom).total_hydrogens()
     }
 
     pub fn donated_pairs(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).donated_pairs()
+        super::atom::asserted_constraints(self.molecule, self.atom).donated_pairs()
     }
 
     pub fn accepted_pairs(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).accepted_pairs()
+        super::atom::asserted_constraints(self.molecule, self.atom).accepted_pairs()
     }
 
     pub fn ring_count(&self) -> Option<&'a NumForm> {
-        asserted_constraints(self.molecule, self.atom).ring_count()
+        super::atom::asserted_constraints(self.molecule, self.atom).ring_count()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a AtomConstraintForm> {
-        asserted_constraints(self.molecule, self.atom).iter()
+        super::atom::asserted_constraints(self.molecule, self.atom).iter()
     }
 
     pub fn is_empty(&self) -> bool {
-        asserted_constraints(self.molecule, self.atom).is_empty()
+        super::atom::asserted_constraints(self.molecule, self.atom).is_empty()
     }
 
     pub fn len(&self) -> usize {
-        asserted_constraints(self.molecule, self.atom).len()
+        super::atom::asserted_constraints(self.molecule, self.atom).len()
+    }
+}
+
+/// Constraint reading of one bond: the asserted side under the container's
+/// read API, and both sides under the keyed accessors.
+#[derive(Clone, Copy, Debug)]
+pub struct BondConstraintsView<'a> {
+    molecule: &'a Molecule,
+    bond: BondId,
+    rings: Option<&'a RingSet>,
+}
+
+impl<'a> BondConstraintsView<'a> {
+    pub(crate) fn new(molecule: &'a Molecule, bond: BondId) -> Self {
+        Self {
+            molecule,
+            bond,
+            rings: None,
+        }
+    }
+
+    /// Attach ring context for the ring key (`#R`).
+    pub fn with_rings(mut self, rings: &'a RingSet) -> Self {
+        self.rings = Some(rings);
+        self
+    }
+
+    /// The stored side of `key`; absence is the vacuous constraint.
+    pub fn asserted(&self, key: BondConstraintKey) -> Option<&'a BondConstraintForm> {
+        super::bond::asserted_constraints(self.molecule, self.bond).get(key)
+    }
+
+    /// The derived side of `key`, obtained by projection from present
+    /// relations only; vacuous on absence.
+    ///
+    /// # Panics
+    ///
+    /// A ring key without ring context ([`Self::with_rings`]) is a caller
+    /// error — the caller scanning keys decides whether to build the ring
+    /// set.
+    pub fn derived(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
+        super::bond::derived_constraint(self.molecule, self.bond, self.rings, key, false)
+    }
+
+    /// The derived side of `key` under the closure: absence of a
+    /// resolution-written overlay yields its definite negative. Positive
+    /// incidence and the topology keys agree with [`Self::derived`].
+    ///
+    /// # Panics
+    ///
+    /// A ring key without ring context ([`Self::with_rings`]) is a caller
+    /// error — the caller scanning keys decides whether to build the ring
+    /// set.
+    pub fn derived_complete(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
+        super::bond::derived_constraint(self.molecule, self.bond, self.rings, key, true)
+    }
+
+    /// Whether this bond's constraint reading satisfies `pattern`: every
+    /// pattern entry is refined by the meet of the asserted and
+    /// [`Self::derived_complete`] sides at its key — the query-against-host
+    /// reading. An internally conflicted key (the sides meet to `⊥`)
+    /// satisfies nothing. Evaluation is driven by the pattern's keys; an
+    /// empty pattern is satisfied.
+    ///
+    /// # Panics
+    ///
+    /// A ring key in `pattern` without ring context ([`Self::with_rings`]) is
+    /// a caller error.
+    pub fn satisfies(&self, pattern: &BondConstraintsForm) -> bool {
+        pattern.iter().all(|entry| {
+            let key = entry.key();
+            let host = match (self.asserted(key), self.derived_complete(key)) {
+                (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
+                    Some(host) => host,
+                    None => return false,
+                },
+                (Some(asserted), None) => asserted.clone(),
+                (None, Some(derived)) => derived,
+                (None, None) => entry.as_undetermined(),
+            };
+            host.satisfies(entry)
+        })
+    }
+
+    /// Whether `other` is compatible with this bond's constraint reading:
+    /// for every key of `other`, a meet with the asserted and
+    /// [`Self::derived`] sides exists — the narrowing-admissibility reading.
+    /// A key on which this bond carries nothing constrains nothing; an
+    /// internally conflicted key (the sides meet to `⊥`) is compatible with
+    /// nothing. Evaluation is driven by `other`'s keys; an empty `other` is
+    /// compatible.
+    ///
+    /// # Panics
+    ///
+    /// A ring key in `other` without ring context ([`Self::with_rings`]) is a
+    /// caller error.
+    pub fn is_compatible(&self, other: &BondConstraintsForm) -> bool {
+        other.iter().all(|entry| {
+            let key = entry.key();
+            let host = match (self.asserted(key), self.derived(key)) {
+                (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
+                    Some(host) => host,
+                    None => return false,
+                },
+                (Some(asserted), None) => asserted.clone(),
+                (None, Some(derived)) => derived,
+                (None, None) => return true,
+            };
+            entry.is_compatible(&host)
+        })
+    }
+
+    // The stored container's read API, inherited with its meanings intact:
+    // every accessor below reads the asserted side.
+
+    pub fn aromatic(&self) -> BooleanForm {
+        super::bond::asserted_constraints(self.molecule, self.bond).aromatic()
+    }
+
+    pub fn cis_trans_stereo(&self) -> Option<&'a CisTransStereoForm> {
+        super::bond::asserted_constraints(self.molecule, self.bond).cis_trans_stereo()
+    }
+
+    pub fn ring_count(&self) -> Option<&'a NumForm> {
+        super::bond::asserted_constraints(self.molecule, self.bond).ring_count()
+    }
+
+    pub fn ring_size_count(&self, s: u8) -> Option<&'a NumForm> {
+        super::bond::asserted_constraints(self.molecule, self.bond).ring_size_count(s)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &'a BondConstraintForm> {
+        super::bond::asserted_constraints(self.molecule, self.bond).iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        super::bond::asserted_constraints(self.molecule, self.bond).is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        super::bond::asserted_constraints(self.molecule, self.bond).len()
     }
 }
 
@@ -210,17 +351,22 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
+    use crate::ir::boolean::BooleanForm;
     use crate::ir::constraint::{
         AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
-        MulticenterValenceForm, RingScope,
+        BondConstraintForm, BondConstraintKey, BondConstraintsForm, MulticenterValenceForm,
+        RingScope,
     };
     use crate::ir::dative::DativeBondForm;
-    use crate::ir::id::AtomId;
+    use crate::ir::id::{AtomId, BondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::num::NumForm;
     use crate::ir::ring::{RingConfig, RingModel};
-    use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind, TetrahedralStereoForm};
+    use crate::ir::stereo::{
+        CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
+        TetrahedralStereoForm,
+    };
     use crate::mol_dsl;
 
     #[rstest]
@@ -595,7 +741,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_view_inherited_getters() {
+    fn test_atom_constraints_view_container_methods() {
         // The container read API is inherited with its meanings intact: every
         // getter reads the asserted side.
         let mut atom = AtomForm::from_element(Element::C);
@@ -646,5 +792,267 @@ mod tests {
         assert_eq!(view.len(), 13);
         assert!(!view.is_empty());
         assert_eq!(view.iter().count(), 13);
+    }
+
+    #[rstest]
+    #[case::present(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(true)))
+    )]
+    #[case::absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintKey::Aromatic,
+        None
+    )]
+    fn test_bond_constraints_view_asserted(
+        #[case] molecule: Molecule,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        assert_eq!(
+            molecule.bond(BondId(0)).constraints().asserted(key),
+            expected.as_ref()
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic_in_system(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(0), BondForm::from_order(1)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+            )],
+            ..Default::default()
+        }),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(true))),
+    )]
+    #[case::aromatic_absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondId(0),
+        BondConstraintKey::Aromatic,
+        None,
+    )]
+    #[case::cis_trans_present(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
+            )],
+            ..Default::default()
+        }),
+        BondId(1),
+        BondConstraintKey::CisTransStereo,
+        Some(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+        )),
+    )]
+    #[case::cis_trans_absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondId(0),
+        BondConstraintKey::CisTransStereo,
+        None,
+    )]
+    fn test_bond_constraints_view_derived(
+        #[case] molecule: Molecule,
+        #[case] bond: BondId,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        assert_eq!(molecule.bond(bond).constraints().derived(key), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic_closed(
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(false)))
+    )]
+    #[case::cis_trans_closed(
+        BondConstraintKey::CisTransStereo,
+        Some(BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo))
+    )]
+    fn test_bond_constraints_view_derived_complete(
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        assert_eq!(
+            molecule.bond(BondId(0)).constraints().derived_complete(key),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::membership_all(
+        BondConstraintKey::RingMembership(RingScope::All),
+        Some(BondConstraintForm::ring_membership(RingScope::All, 1))
+    )]
+    #[case::membership_size_match(
+        BondConstraintKey::RingMembership(RingScope::Size(6)),
+        Some(BondConstraintForm::ring_membership(RingScope::Size(6), 1))
+    )]
+    #[case::membership_size_no_match(
+        BondConstraintKey::RingMembership(RingScope::Size(5)),
+        Some(BondConstraintForm::ring_membership(RingScope::Size(5), 0))
+    )]
+    fn test_bond_constraints_view_derived_ring(
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
+        );
+        let rings = molecule
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        assert_eq!(
+            molecule
+                .bond(BondId(0))
+                .constraints()
+                .with_rings(&rings)
+                .derived(key),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[should_panic(expected = "ring constraint key requires ring context")]
+    fn test_bond_constraints_view_derived_error() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        molecule
+            .bond(BondId(0))
+            .constraints()
+            .derived(BondConstraintKey::RingMembership(RingScope::All));
+    }
+
+    #[rstest]
+    #[case::empty(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintsForm::new(),
+        true
+    )]
+    #[case::closure_not_aromatic(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(false))]),
+        true
+    )]
+    #[case::closure_aromatic_mismatch(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(true))]),
+        false
+    )]
+    #[case::conflicted_host(
+        // Asserted `#a` on a bond outside any system conflicts with the
+        // closure's negative: the sides meet to ⊥, so nothing is satisfied.
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(true))]),
+        false
+    )]
+    #[case::in_system(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(0), BondForm::from_order(1)),
+            ],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+            )],
+            ..Default::default()
+        }),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(true))]),
+        true
+    )]
+    fn test_bond_constraints_view_satisfies(
+        #[case] molecule: Molecule,
+        #[case] pattern: BondConstraintsForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            molecule.bond(BondId(0)).constraints().satisfies(&pattern),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::empty(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintsForm::new(),
+        true
+    )]
+    #[case::absent_overlay_skipped(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(false))]),
+        true
+    )]
+    #[case::asserted_conflict(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        BondConstraintsForm::from_iter([BondConstraintForm::aromatic(BooleanForm::Lit(false))]),
+        false
+    )]
+    fn test_bond_constraints_view_is_compatible(
+        #[case] molecule: Molecule,
+        #[case] other: BondConstraintsForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            molecule.bond(BondId(0)).constraints().is_compatible(&other),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_bond_constraints_view_container_methods() {
+        let mut bond = BondForm::from_order(1);
+        for constraint in [
+            BondConstraintForm::aromatic(BooleanForm::Lit(true)),
+            BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo),
+            BondConstraintForm::ring_membership(RingScope::All, 1),
+        ] {
+            bond.constraints.set(constraint);
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), bond)],
+            ..Default::default()
+        });
+        let view = molecule.bond(BondId(0)).constraints();
+        assert_eq!(view.aromatic(), BooleanForm::Lit(true));
+        assert_eq!(
+            view.cis_trans_stereo(),
+            Some(&CisTransStereoForm::NotStereo)
+        );
+        assert_eq!(view.ring_count(), Some(&NumForm::Lit(1)));
+        assert_eq!(view.ring_size_count(6), None);
+        assert_eq!(view.len(), 3);
+        assert!(!view.is_empty());
+        assert_eq!(view.iter().count(), 3);
     }
 }

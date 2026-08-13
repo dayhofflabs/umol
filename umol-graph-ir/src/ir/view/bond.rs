@@ -4,15 +4,18 @@
 use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondForm;
-use super::super::constraint::{BondConstraintForm, BondConstraintsForm};
+use super::super::boolean::BooleanForm;
+use super::super::constraint::{BondConstraintForm, BondConstraintKey, BondConstraintsForm};
 use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
+use super::super::ring::RingSet;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{CisTransStereoForm, StereoKind};
 use super::super::traits::Lattice;
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
+use super::constraints::BondConstraintsView;
 use super::stereo::StereoBondView;
 
 /// Namespace accessor for bond views on a `Molecule`.
@@ -131,9 +134,12 @@ impl<'a> BondView<'a> {
         &self.attributes.unpaired_electrons
     }
 
+    /// Constraint reading of this bond: the container's read API (asserted
+    /// side, meanings intact) plus the keyed `asserted`/`derived`/
+    /// `derived_complete` accessors. Mutation stays on the stored container.
     #[inline]
-    pub fn constraints(&self) -> &'a BondConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> BondConstraintsView<'a> {
+        BondConstraintsView::new(self.molecule, self.id)
     }
 
     /// The two atom indices incident to this bond.
@@ -182,15 +188,13 @@ impl<'a> BondView<'a> {
     /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
     /// constraint is emitted only when the overlay is present.
     pub fn derive_constraints(&self, include_missing: bool) -> BondConstraintsForm {
-        let cis_trans_stereo = match self
-            .stereo_bond()
-            .filter(|s| s.kind() == StereoKind::CisTrans)
-        {
-            Some(stereo) => Some(CisTransStereoForm::stereo(stereo.coset().clone())),
-            None if include_missing => Some(CisTransStereoForm::NotStereo),
-            None => None,
-        };
-        BondConstraintsForm::from_iter(cis_trans_stereo.map(BondConstraintForm::cis_trans_stereo))
+        BondConstraintsForm::from_iter(derived_constraint(
+            self.molecule,
+            self.id,
+            None,
+            BondConstraintKey::CisTransStereo,
+            include_missing,
+        ))
     }
 
     /// Is bond ground
@@ -201,6 +205,66 @@ impl<'a> BondView<'a> {
     /// Is bond undetermined
     pub fn is_undetermined(&self) -> bool {
         self.attributes.is_undetermined()
+    }
+}
+
+// Derivation layer beneath the bond facades: functions of the molecule and
+// bond id, presented by `BondView` (typed) and `BondConstraintsView` (keyed).
+
+/// Stored constraint container of `bond`.
+pub(crate) fn asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
+    &molecule.bond(bond).attributes.constraints
+}
+
+/// Derived side of one bond constraint key, read from the molecule's
+/// relations.
+///
+/// `complete` selects the closure reading: absence of a resolution-written
+/// overlay yields its definite negative (`Aromatic(false)` / `NotStereo`)
+/// instead of no value. A bond is in an aromatic system iff both endpoints
+/// belong to that system. Ring keys require `rings` and panic without it —
+/// the caller scanning keys decides whether to build the ring set.
+pub(crate) fn derived_constraint(
+    molecule: &Molecule,
+    bond: BondId,
+    rings: Option<&RingSet>,
+    key: BondConstraintKey,
+    complete: bool,
+) -> Option<BondConstraintForm> {
+    match key {
+        BondConstraintKey::Aromatic => {
+            if molecule.bond(bond).is_in_aromatic_system() {
+                Some(BondConstraintForm::aromatic(BooleanForm::Lit(true)))
+            } else if complete {
+                Some(BondConstraintForm::aromatic(BooleanForm::Lit(false)))
+            } else {
+                None
+            }
+        }
+        BondConstraintKey::CisTransStereo => {
+            if let Some(stereo) = molecule
+                .stereo_bonds()
+                .at(bond)
+                .filter(|s| s.kind() == StereoKind::CisTrans)
+            {
+                Some(BondConstraintForm::cis_trans_stereo(
+                    CisTransStereoForm::stereo(stereo.coset().clone()),
+                ))
+            } else if complete {
+                Some(BondConstraintForm::cis_trans_stereo(
+                    CisTransStereoForm::NotStereo,
+                ))
+            } else {
+                None
+            }
+        }
+        BondConstraintKey::RingMembership(scope) => {
+            let rings = rings.expect("ring constraint key requires ring context (with_rings)");
+            Some(BondConstraintForm::ring_membership(
+                scope,
+                super::ring::bond_ring_membership(rings, bond, scope),
+            ))
+        }
     }
 }
 

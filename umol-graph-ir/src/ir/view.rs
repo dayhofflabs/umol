@@ -27,7 +27,7 @@ pub use aromatic::{
 };
 pub use atom::{AtomEditorView, AtomEditorViewMut, AtomView, AtomViewMut, AtomViews};
 pub use bond::{BondEditorView, BondEditorViewMut, BondView, BondViewMut, BondViews};
-pub use constraints::AtomConstraintsView;
+pub use constraints::{AtomConstraintsView, BondConstraintsView};
 pub use dative::{
     DativeBondEditorView, DativeBondEditorViewMut, DativeBondView, DativeBondViewMut,
     DativeBondViews,

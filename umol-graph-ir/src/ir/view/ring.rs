@@ -192,6 +192,16 @@ pub(crate) fn atom_ring_valence(molecule: &Molecule, rings: &RingSet, atom: Atom
         .fold(NumForm::Lit(0), |acc, order| acc + order)
 }
 
+/// Count of rings containing `bond` and matching `scope`. Always `Lit`.
+pub(crate) fn bond_ring_membership(rings: &RingSet, bond: BondId, scope: RingScope) -> NumForm {
+    let containing = rings.iter().filter(|v| v.bonds().contains(&bond));
+    let count = match scope {
+        RingScope::All => containing.count(),
+        RingScope::Size(s) => containing.filter(|r| r.len() == s as usize).count(),
+    };
+    NumForm::Lit(count as i64)
+}
+
 /// Ring bond data with reference to ring set.
 #[derive(Debug, Clone, Copy)]
 pub struct RingBondView<'a> {
@@ -215,11 +225,7 @@ impl<'a> RingBondView<'a> {
     /// `Size(s)` = size `s`). Constraint matching constructs the view with the fixed Relevant
     /// projection through size 22. Always `Lit`.
     pub fn ring_membership(&self, scope: RingScope) -> NumForm {
-        let count = match scope {
-            RingScope::All => self.rings().count(),
-            RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
-        };
-        NumForm::Lit(count as i64)
+        bond_ring_membership(self.rings, self.id, scope)
     }
 
     pub fn ring_count(&self) -> NumForm {

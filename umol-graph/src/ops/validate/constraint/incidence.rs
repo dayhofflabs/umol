@@ -177,7 +177,7 @@ impl IncidenceConstraintInvariantsValidator {
                 })?;
         Ok(bond
             .constraints()
-            .get(key)
+            .asserted(key)
             .and_then(|constraint| validate_bond_constraint(molecule, bond_id, constraint))
             .unwrap_or(Solution::Determined(())))
     }

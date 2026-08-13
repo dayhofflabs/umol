@@ -314,7 +314,10 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   2026-08-13: pattern-key-driven, sides met internally, `⊥` folds to `false`; conflicted-host
   and absent-overlay-skip semantics pinned by cases.
 - S0d: the same retype and keyed surface for `BondView::constraints()` (`BondConstraintsView`
-  with `BondConstraintKey`). Additive. [dep: S0b]
+  with `BondConstraintKey`). Additive. [dep: S0b] Done 2026-08-13: bond `#a` becomes derivable
+  for the first time (both-endpoints-in-system incidence, closure negative `Aromatic(false)`);
+  `derive_constraints` unchanged in behavior (still emits only `#C`), reimplemented over the
+  dispatch; two validator call sites migrated.
 - S0e: the same for the remaining six entity views (uniform surface). Additive. [dep: S0b] —
   gates only S6a.
 - S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
