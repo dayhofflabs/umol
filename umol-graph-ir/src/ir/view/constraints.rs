@@ -13,13 +13,15 @@
 //! routes through this view; it belongs to the stored container.
 
 use super::super::constraint::{
-    AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, MulticenterValenceForm,
+    AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
+    MulticenterValenceForm,
 };
 use super::super::id::AtomId;
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::stereo::TetrahedralStereoForm;
+use super::super::traits::Lattice;
 use super::atom::{asserted_constraints, derived_constraint};
 
 /// Constraint reading of one atom: the asserted side under the container's
@@ -74,6 +76,61 @@ impl<'a> AtomConstraintsView<'a> {
     /// set.
     pub fn derived_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
         derived_constraint(self.molecule, self.atom, self.rings, key, true)
+    }
+
+    /// Whether this atom's constraint reading satisfies `pattern`: every
+    /// pattern entry is refined by the meet of the asserted and
+    /// [`Self::derived_complete`] sides at its key — the query-against-host
+    /// reading. An internally conflicted key (the sides meet to `⊥`)
+    /// satisfies nothing. Evaluation is driven by the pattern's keys; an
+    /// empty pattern is satisfied.
+    ///
+    /// # Panics
+    ///
+    /// A ring key in `pattern` without ring context ([`Self::with_rings`]) is
+    /// a caller error.
+    pub fn satisfies(&self, pattern: &AtomConstraintsForm) -> bool {
+        pattern.iter().all(|entry| {
+            let key = entry.key();
+            let host = match (self.asserted(key), self.derived_complete(key)) {
+                (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
+                    Some(host) => host,
+                    None => return false,
+                },
+                (Some(asserted), None) => asserted.clone(),
+                (None, Some(derived)) => derived,
+                (None, None) => entry.as_undetermined(),
+            };
+            host.satisfies(entry)
+        })
+    }
+
+    /// Whether `other` is compatible with this atom's constraint reading:
+    /// for every key of `other`, a meet with the asserted and
+    /// [`Self::derived`] sides exists — the narrowing-admissibility reading.
+    /// A key on which this atom carries nothing constrains nothing; an
+    /// internally conflicted key (the sides meet to `⊥`) is compatible with
+    /// nothing. Evaluation is driven by `other`'s keys; an empty `other` is
+    /// compatible.
+    ///
+    /// # Panics
+    ///
+    /// A ring key in `other` without ring context ([`Self::with_rings`]) is a
+    /// caller error.
+    pub fn is_compatible(&self, other: &AtomConstraintsForm) -> bool {
+        other.iter().all(|entry| {
+            let key = entry.key();
+            let host = match (self.asserted(key), self.derived(key)) {
+                (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
+                    Some(host) => host,
+                    None => return false,
+                },
+                (Some(asserted), None) => asserted.clone(),
+                (None, Some(derived)) => derived,
+                (None, None) => return true,
+            };
+            entry.is_compatible(&host)
+        })
     }
 
     // The stored container's read API, inherited with its meanings intact:
@@ -154,8 +211,8 @@ mod tests {
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::constraint::{
-        AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, MulticenterValenceForm,
-        RingScope,
+        AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
+        MulticenterValenceForm, RingScope,
     };
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::AtomId;
@@ -404,6 +461,137 @@ mod tests {
             .atom(AtomId(0))
             .constraints()
             .derived(AtomConstraintKey::RingDegree);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::new(),
+        true,
+    )]
+    #[case::valence_match(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(2)]),
+        true,
+    )]
+    #[case::valence_mismatch(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(3)]),
+        false,
+    )]
+    #[case::vacuous_entry(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(NumForm::Undetermined)]),
+        true,
+    )]
+    #[case::closure_not_aromatic(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([
+            AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
+        ]),
+        true,
+    )]
+    #[case::closure_aromatic_mismatch(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([
+            AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(NumForm::Lit(1))),
+        ]),
+        false,
+    )]
+    #[case::conflicted_host_mismatching_pattern(
+        mol_dsl!(r#"{:atoms ["C#v4" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(2)]),
+        false,
+    )]
+    #[case::conflicted_host_matching_pattern(
+        mol_dsl!(r#"{:atoms ["C#v4" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(4)]),
+        false,
+    )]
+    fn test_atom_constraints_view_satisfies(
+        #[case] molecule: Molecule,
+        #[case] pattern: AtomConstraintsForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().satisfies(&pattern),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_atom_constraints_view_satisfies_ring() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
+        );
+        let rings = molecule
+            .rings(RingModel::default(), RingConfig::default())
+            .into_ring_set();
+        let pattern = AtomConstraintsForm::from_iter([AtomConstraintForm::ring_membership(
+            RingScope::Size(6),
+            1,
+        )]);
+        assert!(molecule
+            .atom(AtomId(0))
+            .constraints()
+            .with_rings(&rings)
+            .satisfies(&pattern));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::new(),
+        true,
+    )]
+    #[case::shared_key_compatible(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(2)]),
+        true,
+    )]
+    #[case::shared_key_conflict(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(3)]),
+        false,
+    )]
+    #[case::absent_overlay_skipped(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([
+            AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
+        ]),
+        true,
+    )]
+    #[case::absent_stereo_skipped(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([
+            AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
+        ]),
+        true,
+    )]
+    #[case::asserted_conflict(
+        mol_dsl!(r#"{:atoms ["C#a1"] :bonds []}"#),
+        AtomConstraintsForm::from_iter([
+            AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
+        ]),
+        false,
+    )]
+    #[case::conflicted_host(
+        mol_dsl!(r#"{:atoms ["C#v4" "C"] :bonds [[0 1 "2"]]}"#),
+        AtomConstraintsForm::from_iter([AtomConstraintForm::valence(4)]),
+        false,
+    )]
+    fn test_atom_constraints_view_is_compatible(
+        #[case] molecule: Molecule,
+        #[case] other: AtomConstraintsForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().is_compatible(&other),
+            expected
+        );
     }
 
     #[rstest]

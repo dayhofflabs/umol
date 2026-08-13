@@ -302,13 +302,17 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
 ### S0 — constraints-view foundation (`umol-graph-ir`); green throughout
 
 - S0a: `Lattice::satisfies` as a provided method (universal default: `pattern.matches(self)`);
-  the dual recorded in the nomenclature Matching entry. Additive.
+  the dual recorded in the nomenclature Matching entry. Additive. Done 2026-08-12: duality law
+  added to `assert_lattice_laws`, covering every `Lattice` impl in the property sweep.
 - S0b: extract the per-quantity derivation functions from the `AtomView`/`RingAtomView` method
   bodies (typed accessors become delegates; signatures and their tests unchanged); retype
   `AtomView::constraints()` to `AtomConstraintsView` — the container's read API inherited with
   meanings intact, plus `asserted`/`derived`/`derived_complete` and `with_rings`. Near-additive:
-  the accessor was read-only, so the retype is almost source-compatible.
-- S0c: `satisfies`/`is_compatible` on `AtomConstraintsView`. Additive. [dep: S0b]
+  the accessor was read-only, so the retype is almost source-compatible. Done 2026-08-13: two
+  call-site edits workspace-wide; suite and clippy green.
+- S0c: `satisfies`/`is_compatible` on `AtomConstraintsView`. Additive. [dep: S0b] Done
+  2026-08-13: pattern-key-driven, sides met internally, `⊥` folds to `false`; conflicted-host
+  and absent-overlay-skip semantics pinned by cases.
 - S0d: the same retype and keyed surface for `BondView::constraints()` (`BondConstraintsView`
   with `BondConstraintKey`). Additive. [dep: S0b]
 - S0e: the same for the remaining six entity views (uniform surface). Additive. [dep: S0b] —
