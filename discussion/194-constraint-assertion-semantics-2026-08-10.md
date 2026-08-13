@@ -334,7 +334,9 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   relations `RingView::shared_atoms`/`shared_bonds` (`view/ring.rs:101-105`) — the id-keyed
   `RingSet::shared_atoms`/`shared_bonds` already exist and are the only form retained; the two
   `RingView` unit tests retarget to the `RingSet` forms. No production callers; green. The
-  remaining doc 165 ring-view items (id/view accessor conventions) stay in doc 165.
+  remaining doc 165 ring-view items (id/view accessor conventions) stay in doc 165. Done
+  2026-08-13: the id-keyed `RingSet` forms already had their own tests, so the two `RingView`
+  tests were redundant and deleted rather than retargeted; `intersection` import dropped.
 - S0h: extend the context-free `Normalize` for constraint trees with trivial-wrapper reduction
   (a singleton `:or`/`:and` is its element), completing the conjunction-flattening family. Full
   canonical equality strengthens for those degenerate spellings alone (their canonical keys

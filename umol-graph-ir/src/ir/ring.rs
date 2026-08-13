@@ -692,20 +692,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ring_view_shared_atoms(fused_pair: RingSet) {
-        let va = fused_pair.get(RingId(0)).unwrap();
-        let vb = fused_pair.get(RingId(1)).unwrap();
-        assert_eq!(va.shared_atoms(&vb), vec![AtomId(1), AtomId(2)]);
-    }
-
-    #[rstest]
-    fn test_ring_view_shared_bonds(fused_pair: RingSet) {
-        let va = fused_pair.get(RingId(0)).unwrap();
-        let vb = fused_pair.get(RingId(1)).unwrap();
-        assert_eq!(va.shared_bonds(&vb), vec![BondId(1)]);
-    }
-
-    #[rstest]
     #[case::simple_hexagon(
         Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
         RingModel {

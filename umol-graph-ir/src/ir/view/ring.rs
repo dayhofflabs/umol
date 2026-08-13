@@ -4,7 +4,7 @@ use super::super::constraint::RingScope;
 use super::super::id::{AtomId, BondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
-use super::super::ring::{intersection, RingId, RingSet, RingSetKind};
+use super::super::ring::{RingId, RingSet, RingSetKind};
 
 /// Molecule ring views: owned ring set plus borrow of molecule.
 #[derive(Debug)]
@@ -96,14 +96,6 @@ impl<'a> RingView<'a> {
 
     pub fn is_empty(&self) -> bool {
         self.atoms.is_empty()
-    }
-
-    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomId> {
-        intersection(self.atoms, other.atoms)
-    }
-
-    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondId> {
-        intersection(self.bonds, other.bonds)
     }
 }
 
