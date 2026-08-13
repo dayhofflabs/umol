@@ -319,7 +319,12 @@ Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-grap
   `derive_constraints` unchanged in behavior (still emits only `#C`), reimplemented over the
   dispatch; two validator call sites migrated.
 - S0e: the same for the remaining six entity views (uniform surface). Additive. [dep: S0b] —
-  gates only S6a.
+  gates only S6a. Done 2026-08-13, mirroring the validator's established derivations: dative
+  aromatic incidence is binary-only (doc 117 stub; ring key unprojected); system/multicenter
+  electron counts are self-projections with no absence cell; noncovalent intramolecularity is
+  shared localized-bond component membership; the stereo constraint kinds have no projection —
+  their derived side is vacuous under both modes. The six views are one `constraints_view!`
+  macro plus per-family typed getters.
 - S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
   the `satisfies` dual in the Matching entry; reword the two `invariant.rs` "standalone" doc
   comments to the molecule-atom convention. Additive.

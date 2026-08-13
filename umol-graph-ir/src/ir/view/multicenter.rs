@@ -4,7 +4,9 @@ use std::collections::HashSet;
 
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
-use super::super::constraint::MulticenterBondConstraintsForm;
+use super::super::constraint::{
+    MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
+};
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::Molecule;
@@ -13,6 +15,7 @@ use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
+use super::constraints::MulticenterBondConstraintsView;
 
 /// Namespace accessor for multicenter-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
@@ -175,9 +178,12 @@ impl<'a> MulticenterBondView<'a> {
         &self.attributes.unpaired_electrons
     }
 
+    /// Constraint reading of this multicenter bond: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    pub fn constraints(&self) -> &'a MulticenterBondConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> MulticenterBondConstraintsView<'a> {
+        MulticenterBondConstraintsView::new(self.molecule, self.id)
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -228,6 +234,34 @@ impl<'a> MulticenterBondView<'a> {
     /// Is multicenter bond undetermined
     pub fn is_undetermined(&self) -> bool {
         self.attributes.is_undetermined()
+    }
+}
+
+// Derivation layer beneath the multicenter-bond facades.
+
+/// Stored constraint container of `bond`.
+pub(crate) fn asserted_constraints(
+    molecule: &Molecule,
+    bond: MulticenterBondId,
+) -> &MulticenterBondConstraintsForm {
+    &molecule.multicenter_bond(bond).attributes.constraints
+}
+
+/// Derived side of one multicenter-bond constraint key: the electron count is
+/// the bond's own per-atom contribution sum — a self-projection with no
+/// absence cell, so both modes agree.
+pub(crate) fn derived_constraint(
+    molecule: &Molecule,
+    bond: MulticenterBondId,
+    key: MulticenterBondConstraintKey,
+    _complete: bool,
+) -> Option<MulticenterBondConstraintForm> {
+    match key {
+        MulticenterBondConstraintKey::ElectronCount => {
+            Some(MulticenterBondConstraintForm::electron_count(
+                molecule.multicenter_bond(bond).electron_count(),
+            ))
+        }
     }
 }
 

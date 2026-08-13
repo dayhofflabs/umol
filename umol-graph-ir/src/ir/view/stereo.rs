@@ -16,8 +16,12 @@ use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::bond::BondView;
+use super::constraints::{StereoAtomConstraintsView, StereoBondConstraintsView};
 use super::ligand::StereoLigandView;
-use crate::ir::{StereoAtomConstraintsForm, StereoBondConstraintsForm, StereoCoset};
+use crate::ir::{
+    StereoAtomConstraintForm, StereoAtomConstraintKey, StereoAtomConstraintsForm,
+    StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset,
+};
 
 type StereoAtomSet =
     FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>;
@@ -223,10 +227,12 @@ impl<'a> StereoAtomView<'a> {
             .expect("stereo view has a concrete coset")
     }
 
+    /// Constraint reading of this stereo atom: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    /// The stereo atom constraints.
-    pub fn constraints(&self) -> &'a StereoAtomConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> StereoAtomConstraintsView<'a> {
+        StereoAtomConstraintsView::new(self.molecule, self.id)
     }
 
     /// ID of the stereo site atom.
@@ -568,10 +574,12 @@ impl<'a> StereoBondView<'a> {
             .expect("stereo view has a concrete coset")
     }
 
+    /// Constraint reading of this stereo bond: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    /// The stereo bond constraints.
-    pub fn constraints(&self) -> &'a StereoBondConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> StereoBondConstraintsView<'a> {
+        StereoBondConstraintsView::new(self.molecule, self.id)
     }
 
     /// ID of the stereo site bond.
@@ -776,6 +784,46 @@ fn permutation_for_ligands(
 ) -> Option<Permutation> {
     let requested: Vec<StereoLigand> = ligands.into_iter().collect();
     Permutation::between(current, &requested)
+}
+
+// Derivation layer beneath the stereo facades. No projection is defined for
+// the stereo constraint kinds: they are model assertions about the overlay
+// entity, so the derived side is vacuous under both modes.
+
+/// Stored constraint container of the stereo atom `id`.
+pub(crate) fn stereo_atom_asserted_constraints(
+    molecule: &Molecule,
+    id: StereoAtomId,
+) -> &StereoAtomConstraintsForm {
+    &molecule.stereo_atom(id).attributes.constraints
+}
+
+/// Derived side of one stereo-atom constraint key: always vacuous.
+pub(crate) fn stereo_atom_derived_constraint(
+    _molecule: &Molecule,
+    _id: StereoAtomId,
+    _key: StereoAtomConstraintKey,
+    _complete: bool,
+) -> Option<StereoAtomConstraintForm> {
+    None
+}
+
+/// Stored constraint container of the stereo bond `id`.
+pub(crate) fn stereo_bond_asserted_constraints(
+    molecule: &Molecule,
+    id: StereoBondId,
+) -> &StereoBondConstraintsForm {
+    &molecule.stereo_bond(id).attributes.constraints
+}
+
+/// Derived side of one stereo-bond constraint key: always vacuous.
+pub(crate) fn stereo_bond_derived_constraint(
+    _molecule: &Molecule,
+    _id: StereoBondId,
+    _key: StereoBondConstraintKey,
+    _complete: bool,
+) -> Option<StereoBondConstraintForm> {
+    None
 }
 
 /// Mutable borrowed view of a stereo atom: its id, site atom + ligand frame

@@ -4,12 +4,15 @@ use std::collections::HashSet;
 
 use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
-use super::super::constraint::NoncovalentBondConstraintsForm;
+use super::super::constraint::{
+    NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm,
+};
 use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::Molecule;
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
+use super::constraints::NoncovalentBondConstraintsView;
 
 /// Namespace accessor for noncovalent-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
@@ -165,9 +168,12 @@ impl<'a> NoncovalentBondView<'a> {
         &self.attributes.kind
     }
 
+    /// Constraint reading of this noncovalent bond: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    pub fn constraints(&self) -> &'a NoncovalentBondConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> NoncovalentBondConstraintsView<'a> {
+        NoncovalentBondConstraintsView::new(self.molecule, self.id)
     }
 
     /// The two atom ids in this noncovalent interaction.
@@ -190,6 +196,59 @@ impl<'a> NoncovalentBondView<'a> {
     pub fn is_undetermined(&self) -> bool {
         self.attributes.is_undetermined()
     }
+}
+
+// Derivation layer beneath the noncovalent-bond facades.
+
+/// Stored constraint container of `bond`.
+pub(crate) fn asserted_constraints(
+    molecule: &Molecule,
+    bond: NoncovalentBondId,
+) -> &NoncovalentBondConstraintsForm {
+    &molecule.noncovalent_bond(bond).attributes.constraints
+}
+
+/// Derived side of one noncovalent-bond constraint key: intramolecularity is
+/// whether the two endpoints share a localized-bond component — derived from
+/// the topology with no absence cell, so both modes agree.
+pub(crate) fn derived_constraint(
+    molecule: &Molecule,
+    bond: NoncovalentBondId,
+    key: NoncovalentBondConstraintKey,
+    _complete: bool,
+) -> Option<NoncovalentBondConstraintForm> {
+    match key {
+        NoncovalentBondConstraintKey::Intramolecular => {
+            let [a, b] = molecule.noncovalent_bond(bond).atom_ids();
+            Some(NoncovalentBondConstraintForm::intramolecular(
+                same_bond_component(molecule, a, b),
+            ))
+        }
+    }
+}
+
+/// Whether `a` and `b` lie in one localized-bond component, by breadth-first
+/// reachability over localized bonds.
+fn same_bond_component(molecule: &Molecule, a: AtomId, b: AtomId) -> bool {
+    if a == b {
+        return true;
+    }
+    let mut visited = vec![false; molecule.atoms().count()];
+    visited[a.index()] = true;
+    let mut queue = vec![a];
+    while let Some(current) = queue.pop() {
+        for neighbor in molecule.neighbors(current) {
+            let next = neighbor.atom_id();
+            if next == b {
+                return true;
+            }
+            if !visited[next.index()] {
+                visited[next.index()] = true;
+                queue.push(next);
+            }
+        }
+    }
+    false
 }
 
 /// Mutable borrowed view of a noncovalent bond: its id, the two incident atoms

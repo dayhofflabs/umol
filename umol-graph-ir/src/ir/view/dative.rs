@@ -4,13 +4,16 @@ use std::collections::HashSet;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
-use super::super::constraint::DativeBondConstraintsForm;
+use super::super::constraint::{
+    DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm,
+};
 use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
+use super::constraints::DativeBondConstraintsView;
 
 /// Namespace accessor for dative-bond views on a `Molecule`.
 #[derive(Clone, Copy)]
@@ -169,9 +172,12 @@ impl<'a> DativeBondView<'a> {
         &self.attributes.order
     }
 
+    /// Constraint reading of this dative bond: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    pub fn constraints(&self) -> &'a DativeBondConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> DativeBondConstraintsView<'a> {
+        DativeBondConstraintsView::new(self.molecule, self.id)
     }
 
     /// Donor atom ids.
@@ -229,6 +235,47 @@ impl<'a> DativeBondView<'a> {
     /// Is dative bond undetermined
     pub fn is_undetermined(&self) -> bool {
         self.attributes.is_undetermined()
+    }
+}
+
+// Derivation layer beneath the dative-bond facades.
+
+/// Stored constraint container of `bond`.
+pub(crate) fn asserted_constraints(
+    molecule: &Molecule,
+    bond: DativeBondId,
+) -> &DativeBondConstraintsForm {
+    &molecule.dative_bond(bond).attributes.constraints
+}
+
+/// Derived side of one dative-bond constraint key. Aromatic incidence is
+/// defined only for a binary dative bond (doc 117 stub for multi-donor
+/// entries): the donor and acceptor share an aromatic system. The ring key
+/// has no projection; both read vacuous under either mode where undefined.
+pub(crate) fn derived_constraint(
+    molecule: &Molecule,
+    bond: DativeBondId,
+    key: DativeBondConstraintKey,
+    complete: bool,
+) -> Option<DativeBondConstraintForm> {
+    match key {
+        DativeBondConstraintKey::Aromatic => {
+            let view = molecule.dative_bond(bond);
+            if view.donor_count() != 1 {
+                return None;
+            }
+            let donor_system = view.donors().next().and_then(|d| d.aromatic_system_id());
+            let shared =
+                donor_system.is_some() && donor_system == view.acceptor().aromatic_system_id();
+            if shared {
+                Some(DativeBondConstraintForm::aromatic(true))
+            } else if complete {
+                Some(DativeBondConstraintForm::aromatic(false))
+            } else {
+                None
+            }
+        }
+        DativeBondConstraintKey::RingMembership(_) => None,
     }
 }
 

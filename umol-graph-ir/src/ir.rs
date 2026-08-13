@@ -124,11 +124,13 @@ pub use traits::{
     RelationEquiv, TryFromIr, TryIntoIr,
 };
 pub use view::{
-    AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomAutomorphism,
-    AtomConstraintsView, AtomView, AtomViewMut, AtomViews, BondConstraintsView, BondView,
-    BondViewMut, BondViews, DativeBondView, DativeBondViewMut, DativeBondViews,
-    MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews, NeighborView,
-    NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView, RingBondView,
-    RingView, RingViews, StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView,
-    StereoBondViewMut, StereoBondViews, StereoLigandView,
+    AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
+    AtomAutomorphism, AtomConstraintsView, AtomView, AtomViewMut, AtomViews, BondConstraintsView,
+    BondView, BondViewMut, BondViews, DativeBondConstraintsView, DativeBondView, DativeBondViewMut,
+    DativeBondViews, MulticenterBondConstraintsView, MulticenterBondView, MulticenterBondViewMut,
+    MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView, NoncovalentBondView,
+    NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
+    StereoAtomConstraintsView, StereoAtomView, StereoAtomViewMut, StereoAtomViews,
+    StereoBondConstraintsView, StereoBondView, StereoBondViewMut, StereoBondViews,
+    StereoLigandView,
 };

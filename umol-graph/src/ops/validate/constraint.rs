@@ -420,7 +420,7 @@ impl<'a> ConstraintEvaluation<'a> {
         Ok(evaluate_stereo_constraint(
             stereo.kind() == kind,
             constraint,
-            stereo.constraints().get(constraint.key()),
+            stereo.constraints().asserted(constraint.key()),
             || ConstraintInvariantsContradiction::StereoAtom {
                 id,
                 kind,
@@ -443,7 +443,7 @@ impl<'a> ConstraintEvaluation<'a> {
         Ok(evaluate_stereo_constraint(
             stereo.kind() == kind,
             constraint,
-            stereo.constraints().get(constraint.key()),
+            stereo.constraints().asserted(constraint.key()),
             || ConstraintInvariantsContradiction::StereoBond {
                 id,
                 kind,

@@ -5,7 +5,9 @@ use std::collections::HashSet;
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemForm;
-use super::super::constraint::AromaticSystemConstraintsForm;
+use super::super::constraint::{
+    AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemConstraintsForm,
+};
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AromaticSystemId, AtomId, BondId};
@@ -15,6 +17,7 @@ use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::bond::BondView;
+use super::constraints::AromaticSystemConstraintsView;
 
 /// Namespace accessor for aromatic-system views on a `Molecule`.
 #[derive(Clone, Copy)]
@@ -178,9 +181,12 @@ impl<'a> AromaticSystemView<'a> {
         &self.attributes.unpaired_electrons
     }
 
+    /// Constraint reading of this aromatic system: the container's read API
+    /// (asserted side, meanings intact) plus the keyed accessors. Mutation
+    /// stays on the stored container.
     #[inline]
-    pub fn constraints(&self) -> &'a AromaticSystemConstraintsForm {
-        &self.attributes.constraints
+    pub fn constraints(&self) -> AromaticSystemConstraintsView<'a> {
+        AromaticSystemConstraintsView::new(self.molecule, self.id)
     }
 
     pub fn atom_ids(&self) -> impl ExactSizeIterator<Item = AtomId> + 'a {
@@ -273,6 +279,34 @@ impl<'a> AromaticSystemView<'a> {
     /// Is aromatic system undetermined
     pub fn is_undetermined(&self) -> bool {
         self.attributes.is_undetermined()
+    }
+}
+
+// Derivation layer beneath the aromatic-system facades.
+
+/// Stored constraint container of `system`.
+pub(crate) fn asserted_constraints(
+    molecule: &Molecule,
+    system: AromaticSystemId,
+) -> &AromaticSystemConstraintsForm {
+    &molecule.aromatic_system(system).attributes.constraints
+}
+
+/// Derived side of one aromatic-system constraint key: the electron count is
+/// the system's own per-atom contribution sum — a self-projection with no
+/// absence cell, so both modes agree.
+pub(crate) fn derived_constraint(
+    molecule: &Molecule,
+    system: AromaticSystemId,
+    key: AromaticSystemConstraintKey,
+    _complete: bool,
+) -> Option<AromaticSystemConstraintForm> {
+    match key {
+        AromaticSystemConstraintKey::ElectronCount => {
+            Some(AromaticSystemConstraintForm::electron_count(
+                molecule.aromatic_system(system).electron_count(),
+            ))
+        }
     }
 }
 
