@@ -393,13 +393,15 @@ impl Molecule {
         &self,
         host: &Self,
         config: Option<SubstructureSearchConfig>,
-    ) -> Vec<MoleculeCorrespondence> {
+    ) -> PyResult<Vec<MoleculeCorrespondence>> {
         let config = config.unwrap_or_default().to_rust();
-        self.0
+        Ok(self
+            .0
             .substructure_matches(&host.0, config)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
             .into_iter()
             .map(MoleculeCorrespondence::from_rust)
-            .collect()
+            .collect())
     }
 
     /// Generate an unfolded binary hashed fingerprint.
@@ -1044,7 +1046,7 @@ mod tests {
             ),
         ];
 
-        assert_eq!(pattern.substructure_matches(&host, None), expected);
+        assert_eq!(pattern.substructure_matches(&host, None).unwrap(), expected);
         assert_eq!(pattern.to_rust(), &pattern_before);
         assert_eq!(host.to_rust(), &host_before);
     }
@@ -1087,7 +1089,10 @@ mod tests {
             relevant_cycle_algorithm: GraphCoreRelevantCycleEnumerationAlgorithm::Vismara,
         });
 
-        assert_eq!(pattern.substructure_matches(&host, Some(config)), expected);
+        assert_eq!(
+            pattern.substructure_matches(&host, Some(config)).unwrap(),
+            expected
+        );
     }
 
     #[rstest]
@@ -1101,7 +1106,7 @@ mod tests {
         });
 
         assert_eq!(
-            pattern.substructure_matches(&host, Some(config)),
+            pattern.substructure_matches(&host, Some(config)).unwrap(),
             Vec::new()
         );
     }

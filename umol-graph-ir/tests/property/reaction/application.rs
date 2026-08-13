@@ -511,7 +511,11 @@ proptest! {
         (reaction, host, _) in reaction_application_strategy(),
     ) {
         let mut expected = Vec::new();
-        for correspondence in reaction.lhs.substructure_matches(&host, MATCH_CONFIG) {
+        for correspondence in reaction
+            .lhs
+            .substructure_matches(&host, MATCH_CONFIG)
+            .expect("generated patterns carry no molecule-scope constraints")
+        {
             match reaction.apply_at(&host, &correspondence) {
                 Ok(derivation) => expected.push(Ok(derivation)),
                 Err(error) if error.is_match_rejection() => {}

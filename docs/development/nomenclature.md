@@ -837,7 +837,7 @@ incidence nodes. The parallel canonicalization level for this carrier is `Struct
 
 **Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
 bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
-`SubstructureMatchAlgorithm::GraphAndOverlays` — match the skeleton, then verify overlays against the
+`SubstructureMatchAlgorithm::GraphAndOverlays` — match the topology, then verify overlays against the
 correspondence — is the default, and `Incidence` is chosen when the connectivity a pattern turns on is
 carried by an overlay rather than by bonds. Both return the same matches; the difference is pruning,
 not semantics.

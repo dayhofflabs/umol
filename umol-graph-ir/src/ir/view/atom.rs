@@ -484,7 +484,7 @@ pub(crate) fn total_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
 /// `complete` selects the closure reading: absence of a resolution-written
 /// overlay yields its definite negative (`NotAromatic` / `NotMulticenter` /
 /// `NotStereo`, zero dative pairs) instead of no value. Positive incidence and
-/// the skeleton keys read identically in both modes; a Kekulé-flagged atom
+/// the topology keys read identically in both modes; a Kekulé-flagged atom
 /// (incident bond asserting `#a`) yields `Aromatic(Undetermined)` in both.
 /// Ring keys require `rings` and panic without it — the caller scanning keys
 /// decides whether to build the ring set.

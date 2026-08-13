@@ -3,13 +3,13 @@
 //! pattern, so it parallels `pattern.matches(target)`: `pattern.substructure_matches(host, ...)`.
 //!
 //! Two strategies compose over the chosen subgraph-isomorphism algorithm:
-//! `GraphAndOverlays` matches the localized atom-bond skeleton then post-verifies
+//! `GraphAndOverlays` matches the atom-bond topology then post-verifies
 //! overlays; `Incidence` matches the incidence (Levi) graph for hyperedge-only
 //! connectivity.
 
-use std::borrow::Cow;
 use std::ops::ControlFlow;
 
+use thiserror::Error;
 use umol_graph_core::{
     Correspondence, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
@@ -17,7 +17,7 @@ use umol_graph_core::{
 
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::{AtomConstraintForm, BondConstraintForm, RingScope};
+use super::constraint::{AtomConstraintForm, BondConstraintForm};
 use super::correspondence::{
     induced_aromatic_systems, induced_bonds, induced_dative_bonds, induced_multicenter_bonds,
     induced_noncovalent_bonds, map_atom, map_ligands, MoleculeCorrespondence,
@@ -26,7 +26,7 @@ use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
-use super::ring::{RingConfig, RingModel, RingSetKind};
+use super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
 use super::stereo::coset_matches;
 use super::traits::Lattice;
 
@@ -34,7 +34,7 @@ use super::traits::Lattice;
 /// [`SubgraphIsomorphismAlgorithm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubstructureMatchAlgorithm {
-    /// Match the localized atom-bond skeleton, then post-verify the N-ary / special
+    /// Match the atom-bond topology, then post-verify the N-ary / special
     /// overlays against the atom correspondence.
     GraphAndOverlays,
     /// Match the incidence (Levi) graph — true hypergraph matching for connectivity
@@ -56,23 +56,47 @@ pub struct SubstructureMatchConfig {
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
 }
 
+/// Matching rejected the pattern: it uses a construct matching does not
+/// evaluate. Sound but incomplete — a query carrying an unevaluated construct
+/// fails loudly instead of returning silently weakened results.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+pub enum SubstructureMatchError {
+    /// The pattern's molecule-scope `Constraints` list (relational and
+    /// molecule leaves, combinators) is not evaluated by matching.
+    #[error(
+        "pattern carries {count} molecule-scope constraint(s), which matching does not evaluate"
+    )]
+    MoleculeScopeConstraints { count: usize },
+}
+
 impl Molecule {
     /// Visits each occurrence of `self` (the pattern) within `host` as an injective
     /// pattern→host [`MoleculeCorrespondence`] until traversal completes or the
-    /// visitor returns [`ControlFlow::Break`]. Pattern predicates are evaluated as
-    /// `pattern.matches(host)` against the host atom/bond augmented with its derived
-    /// topological constraints. Traversal is deterministic for a fixed
-    /// representation, but its order is not a canonical ordering contract.
+    /// visitor returns [`ControlFlow::Break`]. Pattern entity predicates are
+    /// evaluated per key against the host's constraint reading under the closure
+    /// (`constraints().satisfies`); ring keys use the fixed Relevant projection
+    /// through size 22. Traversal is deterministic for a fixed representation,
+    /// but its order is not a canonical ordering contract.
+    ///
+    /// # Errors
+    ///
+    /// A pattern carrying molecule-scope constraints is rejected: matching does
+    /// not evaluate them, and failing loudly beats silently weakened results.
     pub fn visit_substructure_matches<B, F>(
         &self,
         host: &Molecule,
         config: SubstructureMatchConfig,
         mut visitor: F,
-    ) -> ControlFlow<B>
+    ) -> Result<ControlFlow<B>, SubstructureMatchError>
     where
         F: FnMut(MoleculeCorrespondence) -> ControlFlow<B>,
     {
-        match config.match_algorithm {
+        if !self.constraints().is_empty() {
+            return Err(SubstructureMatchError::MoleculeScopeConstraints {
+                count: self.constraints().len(),
+            });
+        }
+        Ok(match config.match_algorithm {
             SubstructureMatchAlgorithm::GraphAndOverlays => self
                 .visit_substructure_matches_graph_and_overlays(
                     host,
@@ -86,74 +110,55 @@ impl Molecule {
                 config.relevant_cycle_algorithm,
                 &mut visitor,
             ),
-        }
+        })
     }
 
     /// Occurrences of `self` (the pattern) within `host`, collected from
     /// [`Molecule::visit_substructure_matches`].
+    ///
+    /// # Errors
+    ///
+    /// A pattern carrying molecule-scope constraints is rejected: matching does
+    /// not evaluate them, and failing loudly beats silently weakened results.
     pub fn substructure_matches(
         &self,
         host: &Molecule,
         config: SubstructureMatchConfig,
-    ) -> Vec<MoleculeCorrespondence> {
+    ) -> Result<Vec<MoleculeCorrespondence>, SubstructureMatchError> {
         let mut occurrences = Vec::new();
-        let _: ControlFlow<()> = self.visit_substructure_matches(host, config, |correspondence| {
-            occurrences.push(correspondence);
-            ControlFlow::Continue(())
-        });
-        occurrences
+        let _: ControlFlow<()> =
+            self.visit_substructure_matches(host, config, |correspondence| {
+                occurrences.push(correspondence);
+                ControlFlow::Continue(())
+            })?;
+        Ok(occurrences)
     }
 
-    /// Host atom/bond match-targets: each stored entity with the topological constraints requested
-    /// anywhere in the pattern folded in (last-wins). Ring constraints use the fixed Relevant
-    /// projection through size 22. An unconstrained pattern never consults derived constraints, so
-    /// element/bond patterns over SMILES-raised hosts skip the work.
-    fn host_match_targets<'h>(
+    /// The host ring set, built once per match run iff a pattern constraint
+    /// carries a ring key, with the fixed Relevant projection through size 22.
+    fn host_ring_context(
         &self,
-        host: &'h Molecule,
+        host: &Molecule,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
-    ) -> (Vec<Cow<'h, AtomForm>>, Vec<Cow<'h, BondForm>>) {
-        let derive_atoms = self
+    ) -> Option<RingSet> {
+        let needs_rings = self
             .atoms()
             .iter()
-            .any(|a| !a.attributes.constraints.is_empty());
-        let mut atom_ring_scopes = Vec::new();
-        let mut derive_ring_degree = false;
-        let mut derive_ring_valence = false;
-        for constraint in self
-            .atoms()
-            .iter()
-            .flat_map(|atom| atom.constraints().iter())
-        {
-            match constraint {
-                AtomConstraintForm::RingDegree(_) => derive_ring_degree = true,
-                AtomConstraintForm::RingValence(_) => derive_ring_valence = true,
-                AtomConstraintForm::RingMembership(membership) => {
-                    atom_ring_scopes.push(membership.scope);
-                }
-                _ => {}
-            }
-        }
-        atom_ring_scopes.sort_unstable();
-        atom_ring_scopes.dedup();
-
-        let mut bond_ring_scopes: Vec<RingScope> = self
-            .bonds()
-            .iter()
-            .flat_map(|bond| bond.constraints().iter())
-            .filter_map(|constraint| match constraint {
-                BondConstraintForm::RingMembership(membership) => Some(membership.scope),
-                _ => None,
+            .flat_map(|atom| atom.attributes.constraints.iter())
+            .any(|constraint| {
+                matches!(
+                    constraint,
+                    AtomConstraintForm::RingDegree(_)
+                        | AtomConstraintForm::RingValence(_)
+                        | AtomConstraintForm::RingMembership(_)
+                )
             })
-            .collect();
-        bond_ring_scopes.sort_unstable();
-        bond_ring_scopes.dedup();
-
-        let derive_rings = derive_ring_degree
-            || derive_ring_valence
-            || !atom_ring_scopes.is_empty()
-            || !bond_ring_scopes.is_empty();
-        let rings = derive_rings.then(|| {
+            || self
+                .bonds()
+                .iter()
+                .flat_map(|bond| bond.attributes.constraints.iter())
+                .any(|constraint| matches!(constraint, BondConstraintForm::RingMembership(_)));
+        needs_rings.then(|| {
             host.rings(
                 RingModel {
                     kind: RingSetKind::Relevant,
@@ -164,61 +169,64 @@ impl Molecule {
                     ..RingConfig::default()
                 },
             )
-        });
+            .into_ring_set()
+        })
+    }
 
-        let host_atoms = host
+    /// Per pattern×host entity constraint-satisfaction tables, evaluated once
+    /// per run through the hosts' constraint readings under the closure; `None`
+    /// when no pattern entity of that family carries constraints (the common
+    /// element/bond-pattern case, which then skips all derivation).
+    fn constraint_tables(
+        &self,
+        host: &Molecule,
+        rings: Option<&RingSet>,
+    ) -> (Option<Vec<bool>>, Option<Vec<bool>>) {
+        let host_atom_count = host.atoms().count();
+        let atoms = self
             .atoms()
             .iter()
-            .map(|a| {
-                if derive_atoms {
-                    let mut constraints = a.derive_constraints(true);
-                    if let Some(rings) = rings.as_ref() {
-                        let ring = rings.atom(a.id);
-                        if derive_ring_degree {
-                            constraints.set(AtomConstraintForm::ring_degree(ring.ring_degree()));
-                        }
-                        if derive_ring_valence {
-                            constraints.set(AtomConstraintForm::ring_valence(ring.ring_valence()));
-                        }
-                        for &scope in &atom_ring_scopes {
-                            constraints.set(AtomConstraintForm::ring_membership(
-                                scope,
-                                ring.ring_membership(scope),
-                            ));
-                        }
+            .any(|a| !a.attributes.constraints.is_empty())
+            .then(|| {
+                let mut table = vec![true; self.atoms().count() * host_atom_count];
+                for p in self.atoms().iter() {
+                    if p.attributes.constraints.is_empty() {
+                        continue;
                     }
-                    Cow::Owned(a.attributes.clone().with_constraints(constraints))
-                } else {
-                    Cow::Borrowed(a.attributes)
+                    for h in host.atoms().iter() {
+                        let mut reading = h.constraints();
+                        if let Some(rings) = rings {
+                            reading = reading.with_rings(rings);
+                        }
+                        table[p.id.index() * host_atom_count + h.id.index()] =
+                            reading.satisfies(&p.attributes.constraints);
+                    }
                 }
-            })
-            .collect();
-        let derive_bonds = self
+                table
+            });
+        let host_bond_count = host.bonds().count();
+        let bonds = self
             .bonds()
             .iter()
-            .any(|b| !b.attributes.constraints.is_empty());
-        let host_bonds = host
-            .bonds()
-            .iter()
-            .map(|b| {
-                if derive_bonds {
-                    let mut constraints = b.derive_constraints(true);
-                    if let Some(rings) = rings.as_ref() {
-                        let ring = rings.bond(b.id);
-                        for &scope in &bond_ring_scopes {
-                            constraints.set(BondConstraintForm::ring_membership(
-                                scope,
-                                ring.ring_membership(scope),
-                            ));
-                        }
+            .any(|b| !b.attributes.constraints.is_empty())
+            .then(|| {
+                let mut table = vec![true; self.bonds().count() * host_bond_count];
+                for p in self.bonds().iter() {
+                    if p.attributes.constraints.is_empty() {
+                        continue;
                     }
-                    Cow::Owned(b.attributes.clone().with_constraints(constraints))
-                } else {
-                    Cow::Borrowed(b.attributes)
+                    for h in host.bonds().iter() {
+                        let mut reading = h.constraints();
+                        if let Some(rings) = rings {
+                            reading = reading.with_rings(rings);
+                        }
+                        table[p.id.index() * host_bond_count + h.id.index()] =
+                            reading.satisfies(&p.attributes.constraints);
+                    }
                 }
-            })
-            .collect();
-        (host_atoms, host_bonds)
+                table
+            });
+        (atoms, bonds)
     }
 
     fn visit_substructure_matches_graph_and_overlays<B>(
@@ -232,21 +240,28 @@ impl Molecule {
         if pattern.atoms().count() > host.atoms().count() {
             return ControlFlow::Continue(());
         }
-        let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
+        let rings = pattern.host_ring_context(host, relevant_cycle_algorithm);
+        let (atom_table, bond_table) = pattern.constraint_tables(host, rings.as_ref());
+        let host_atom_count = host.atoms().count();
+        let host_bond_count = host.bonds().count();
 
         host.raw_graph().visit_subgraph_isomorphisms(
             pattern.raw_graph(),
             &mut |query_node, host_node| {
-                pattern
-                    .atom(AtomId::from(query_node))
-                    .attributes
-                    .matches(&host_atoms[host_node.index()])
+                let pa = AtomId::from(query_node);
+                let ha = AtomId::from(host_node);
+                atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                    && atom_table
+                        .as_ref()
+                        .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
             },
             &mut |query_edge, host_edge| {
-                pattern
-                    .bond(BondId::from(query_edge))
-                    .attributes
-                    .matches(&host_bonds[host_edge.index()])
+                let pb = BondId::from(query_edge);
+                let hb = BondId::from(host_edge);
+                bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                    && bond_table
+                        .as_ref()
+                        .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])
             },
             subiso,
             |embedding| {
@@ -289,7 +304,10 @@ impl Molecule {
         }
         let pattern_levi = pattern.incidence_graph(IncidenceLevel::Constitution);
         let host_levi = host.incidence_graph(IncidenceLevel::Constitution);
-        let (host_atoms, host_bonds) = pattern.host_match_targets(host, relevant_cycle_algorithm);
+        let rings = pattern.host_ring_context(host, relevant_cycle_algorithm);
+        let (atom_table, bond_table) = pattern.constraint_tables(host, rings.as_ref());
+        let host_atom_count = host.atoms().count();
+        let host_bond_count = host.bonds().count();
         let atom_count = pattern.atoms().count();
 
         host_levi.graph().visit_subgraph_isomorphisms(
@@ -298,10 +316,16 @@ impl Molecule {
             // kind only (the exact form/participation check is `verify_overlays`).
             &mut |pq, hq| match (pattern_levi.entity(pq), host_levi.entity(hq)) {
                 (Entity::Atom(pa), Entity::Atom(ha)) => {
-                    pattern.atom(pa).attributes.matches(&host_atoms[ha.index()])
+                    atom_fields_match(pattern.atom(pa).attributes, host.atom(ha).attributes)
+                        && atom_table
+                            .as_ref()
+                            .is_none_or(|table| table[pa.index() * host_atom_count + ha.index()])
                 }
                 (Entity::Bond(pb), Entity::Bond(hb)) => {
-                    pattern.bond(pb).attributes.matches(&host_bonds[hb.index()])
+                    bond_fields_match(pattern.bond(pb).attributes, host.bond(hb).attributes)
+                        && bond_table
+                            .as_ref()
+                            .is_none_or(|table| table[pb.index() * host_bond_count + hb.index()])
                 }
                 (pe, he) => pe.kind() == he.kind(),
             },
@@ -339,7 +363,7 @@ impl Molecule {
         )
     }
 
-    /// Post-verify a skeleton occurrence's overlays against the atom correspondence, returning the
+    /// Post-verify a topology occurrence's overlays against the atom correspondence, returning the
     /// injective pattern→host [`MoleculeCorrespondence`] or `None` if any pattern overlay has no
     /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
     /// via the per-family inducer (which already checks dative donor/acceptor roles); the pattern
@@ -494,6 +518,40 @@ impl Molecule {
     }
 }
 
+/// Inherent-field match: each pattern field admits the host's. Constraints are
+/// compared separately through the host's constraint reading; the exhaustive
+/// destructure makes a new `AtomForm` field a compile error here.
+fn atom_fields_match(pattern: &AtomForm, host: &AtomForm) -> bool {
+    let AtomForm {
+        element,
+        isotope_mass,
+        charge,
+        implicit_hydrogens,
+        lone_pairs,
+        unpaired_electrons,
+        constraints: _,
+    } = pattern;
+    element.matches(&host.element)
+        && isotope_mass.matches(&host.isotope_mass)
+        && charge.matches(&host.charge)
+        && implicit_hydrogens.matches(&host.implicit_hydrogens)
+        && lone_pairs.matches(&host.lone_pairs)
+        && unpaired_electrons.matches(&host.unpaired_electrons)
+}
+
+/// Inherent-field match for bonds; see [`atom_fields_match`].
+fn bond_fields_match(pattern: &BondForm, host: &BondForm) -> bool {
+    let BondForm {
+        order,
+        charge,
+        unpaired_electrons,
+        constraints: _,
+    } = pattern;
+    order.matches(&host.order)
+        && charge.matches(&host.charge)
+        && unpaired_electrons.matches(&host.unpaired_electrons)
+}
+
 /// `pattern_form` matches `host_form` for an overlay whose payload is position-indexed by member
 /// (aromatic / multicenter electron counts). The two overlays store their members in their own
 /// participant order and `matches` compares the count vector whole, so the pattern payload is first
@@ -544,7 +602,7 @@ mod tests {
     use super::super::id::AtomId;
     use super::super::molecule::Molecule;
     use super::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
-    use super::{SubstructureMatchAlgorithm, SubstructureMatchConfig};
+    use super::{SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError};
     use crate::mol_dsl;
 
     const SUBISO_ALGS: [SubgraphIsomorphismAlgorithm; 6] = [
@@ -561,7 +619,7 @@ mod tests {
     const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
 
     #[rstest]
-    #[case::skeleton(
+    #[case::topology(
         mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
@@ -589,8 +647,8 @@ mod tests {
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 };
                 let mut occurrences: Vec<Vec<AtomId>> = Vec::new();
-                let flow: ControlFlow<()> =
-                    pattern.visit_substructure_matches(&host, config, |correspondence| {
+                let flow: ControlFlow<()> = pattern
+                    .visit_substructure_matches(&host, config, |correspondence| {
                         occurrences.push(
                             correspondence
                                 .atoms()
@@ -600,7 +658,8 @@ mod tests {
                                 .collect(),
                         );
                         ControlFlow::Continue(())
-                    });
+                    })
+                    .unwrap();
                 assert_eq!(flow, ControlFlow::Continue(()), "{strategy:?}/{subiso:?}");
                 occurrences.sort();
                 assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
@@ -609,7 +668,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::skeleton(
+    #[case::topology(
         mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
@@ -626,16 +685,18 @@ mod tests {
                     subgraph_isomorphism_algorithm: subiso,
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 };
-                let first = pattern.visit_substructure_matches(&host, config, |correspondence| {
-                    ControlFlow::Break(
-                        correspondence
-                            .atoms()
-                            .matched_pairs()
-                            .iter()
-                            .map(|&(_, host)| host)
-                            .collect::<Vec<_>>(),
-                    )
-                });
+                let first = pattern
+                    .visit_substructure_matches(&host, config, |correspondence| {
+                        ControlFlow::Break(
+                            correspondence
+                                .atoms()
+                                .matched_pairs()
+                                .iter()
+                                .map(|&(_, host)| host)
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .unwrap();
                 let ControlFlow::Break(atoms) = first else {
                     panic!("expected Break on first occurrence: {strategy:?}/{subiso:?}");
                 };
@@ -648,7 +709,33 @@ mod tests {
     }
 
     #[rstest]
-    #[case::skeleton(
+    #[case::one_molecule_scope_constraint(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"#),
+        SubstructureMatchError::MoleculeScopeConstraints { count: 1 }
+    )]
+    #[case::two_molecule_scope_constraints(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}} {:charge-sum {:sum 0}}]}"#),
+        SubstructureMatchError::MoleculeScopeConstraints { count: 2 }
+    )]
+    fn test_molecule_visit_substructure_matches_error(
+        #[case] pattern: Molecule,
+        #[case] expected: SubstructureMatchError,
+    ) {
+        let host = mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+        for strategy in STRATEGIES {
+            let config = SubstructureMatchConfig {
+                match_algorithm: strategy,
+                subgraph_isomorphism_algorithm: Vf2,
+                relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+            };
+            let result = pattern
+                .visit_substructure_matches(&host, config, |_| ControlFlow::Continue::<()>(()));
+            assert_eq!(result, Err(expected), "{strategy:?}");
+        }
+    }
+
+    #[rstest]
+    #[case::topology(
         mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
         vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
@@ -700,6 +787,96 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]}"#),
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#R4"]]}"#),
         vec![]
+    )]
+    #[case::atom_valence(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "2"] [1 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#v3"] :bonds []}"#),
+        vec![vec![AtomId(1)]]
+    )]
+    #[case::atom_degree(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#D2"] :bonds []}"#),
+        vec![vec![AtomId(1)]]
+    )]
+    #[case::atom_total_degree(
+        mol_dsl!(r#"{:atoms ["C #h3" "C #h1"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#X4"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_total_hydrogens(
+        mol_dsl!(r#"{:atoms ["C #h1" "H" "C #h0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#H2"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_total_valence(
+        mol_dsl!(r#"{:atoms ["C #h1" "C #h3"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#V4"] :bonds []}"#),
+        vec![vec![AtomId(1)]]
+    )]
+    #[case::atom_aromatic_valence(
+        mol_dsl!(r#"{:atoms ["C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[2,1,1]"}]}"#),
+        mol_dsl!(r#"{:atoms ["C#a2"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_not_aromatic(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
+    )]
+    #[case::atom_aromatic_kekule_flag(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#a+"] :bonds []}"#),
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
+    )]
+    #[case::atom_not_aromatic_kekule_flag(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
+        vec![]
+    )]
+    #[case::atom_multicenter_valence(
+        mol_dsl!(r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#),
+        mol_dsl!(r#"{:atoms ["B#m2"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_not_multicenter(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#m!"] :bonds []}"#),
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
+    )]
+    #[case::atom_donated_pairs(
+        mol_dsl!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["N#d1"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_accepted_pairs(
+        mol_dsl!(r#"{:atoms ["N" "B"] :bonds [] :dative-bonds [{:donors [0] :acceptor 1 :attrs "1"}]}"#),
+        mol_dsl!(r#"{:atoms ["B#t1"] :bonds []}"#),
+        vec![vec![AtomId(1)]]
+    )]
+    #[case::atom_stereo(
+        mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
+        mol_dsl!(r#"{:atoms ["C#T+"] :bonds []}"#),
+        vec![vec![AtomId(0)]]
+    )]
+    #[case::atom_not_stereo(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C#T!"] :bonds []}"#),
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
+    )]
+    #[case::bond_aromatic(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,2]"}]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
+    )]
+    #[case::bond_aromatic_asserted_conflict(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*#a"]]}"#),
+        vec![]
+    )]
+    #[case::bond_not_cis_trans(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#C!"]]}"#),
+        vec![vec![AtomId(0), AtomId(1)], vec![AtomId(1), AtomId(0)]]
     )]
     #[case::noncovalent(
         mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]] :noncovalent-bonds [{:atoms [0 2] :attrs "Hbd"}]}"#),
@@ -772,6 +949,7 @@ mod tests {
                             relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                         },
                     )
+                    .unwrap()
                     .iter()
                     .map(|c| {
                         c.atoms()
@@ -785,5 +963,23 @@ mod tests {
                 assert_eq!(occurrences, expected, "{strategy:?}/{subiso:?}");
             }
         }
+    }
+
+    #[rstest]
+    #[case::one_molecule_scope_constraint(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"#),
+        SubstructureMatchError::MoleculeScopeConstraints { count: 1 }
+    )]
+    fn test_molecule_substructure_matches_error(
+        #[case] pattern: Molecule,
+        #[case] expected: SubstructureMatchError,
+    ) {
+        let host = mol_dsl!(r#"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+        let config = SubstructureMatchConfig {
+            match_algorithm: GraphAndOverlays,
+            subgraph_isomorphism_algorithm: Vf2,
+            relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
+        };
+        assert_eq!(pattern.substructure_matches(&host, config), Err(expected));
     }
 }

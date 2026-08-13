@@ -6,6 +6,7 @@ use super::entity::Entity;
 use super::id::AtomId;
 use super::molecule::transact::TransactionError;
 use super::reaction::DpoContradiction;
+use super::substructure::SubstructureMatchError;
 
 /// Unsatisfiable operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
@@ -68,6 +69,9 @@ pub enum ApplyPreconditionError {
     /// A delta's endpoints, participants, site, or ligands disagree with its identified LHS entity.
     #[error("reaction incidence does not match lhs entity {entity:?}")]
     ReactionIncidenceMismatch { entity: Entity },
+    /// The reaction LHS is not a matchable pattern.
+    #[error(transparent)]
+    Match(#[from] SubstructureMatchError),
 }
 
 impl From<Contradiction> for ApplyError {

@@ -37,6 +37,7 @@ fn sorted_matches(
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
             },
         )
+        .expect("generated molecules carry no molecule-scope constraints")
         .iter()
         .map(|c| {
             c.atoms()

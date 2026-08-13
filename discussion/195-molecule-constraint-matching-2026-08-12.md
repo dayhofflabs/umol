@@ -22,6 +22,18 @@ non-empty (the doc 194 S1a gate), with an error naming the construct. A query us
 unevaluated construct fails loudly rather than returning silently weakened results; fail →
 evaluate is the compatible evolution, while the previous silent ignore admitted false positives.
 
+The gate also closes the matcher path for reactions whose LHS carries a molecule-scope
+constraint (every `ConstraintDelta::Remove`-style rule that asserts the removed constraint on
+its LHS); `apply_at` with a supplied correspondence is ungated. Six tests exercising
+`TransactionError::MissingEntry` through that path are `#[ignore]`d until evaluation lands
+(2026-08-13); dropping the gate must un-ignore them:
+
+- `umol-graph-ir/src/ir/reaction.rs`: `test_reaction_application_iter_error`,
+  `test_reaction_products_iter_error`, `test_reaction_apply_error` (`case_1_transaction`);
+- `umol-graph-ir/tests/property/reaction/malformed.rs`: `test_reaction_apply_error`;
+- `umol-py/src/reaction.rs`: `test_reaction_application_iter_error`,
+  `test_reaction_products_iter_error`.
+
 ## Scope
 
 Doc 194 normalizes constraint placement only through resolution, and patterns are never resolved:

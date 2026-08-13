@@ -67,44 +67,47 @@ impl PatternFingerprinter {
         let mut ids: Vec<u64> = Vec::new();
         for template in TEMPLATES.iter() {
             let mut count_id = template.index + template.atom_count + template.bond_count;
-            let _: ControlFlow<()> = template.pattern.visit_substructure_matches(
-                mol,
-                SubstructureMatchConfig {
-                    match_algorithm: self.match_algorithm,
-                    subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm,
-                    relevant_cycle_algorithm: self.relevant_cycle_algorithm,
-                },
-                |embedding| {
-                    count_id = gboost_combine(count_id, COUNT_SALT);
-                    ids.push(u64::from(count_id));
+            let _: ControlFlow<()> = template
+                .pattern
+                .visit_substructure_matches(
+                    mol,
+                    SubstructureMatchConfig {
+                        match_algorithm: self.match_algorithm,
+                        subgraph_isomorphism_algorithm: self.subgraph_isomorphism_algorithm,
+                        relevant_cycle_algorithm: self.relevant_cycle_algorithm,
+                    },
+                    |embedding| {
+                        count_id = gboost_combine(count_id, COUNT_SALT);
+                        ids.push(u64::from(count_id));
 
-                    let mut bit_id = template.index;
-                    for &(_, atom) in embedding.atoms().matched_pairs() {
-                        let atomic_number = mol
-                            .atom(atom)
-                            .element()
-                            .as_lit()
-                            .expect("ground atom")
-                            .atomic_number();
-                        bit_id = gboost_combine(bit_id, u32::from(atomic_number));
-                    }
-                    for query_bond in 0..template.bond_count {
-                        let bond = embedding
-                            .bonds()
-                            .right_of(BondId(query_bond))
-                            .expect("matched bond");
-                        let bond = mol.bond(bond);
-                        let bond_type = if bond.is_in_aromatic_system() {
-                            12
-                        } else {
-                            bond.order().as_lit().expect("ground bond") as u32
-                        };
-                        bit_id = gboost_combine(bit_id, bond_type);
-                    }
-                    ids.push(u64::from(bit_id));
-                    ControlFlow::Continue(())
-                },
-            );
+                        let mut bit_id = template.index;
+                        for &(_, atom) in embedding.atoms().matched_pairs() {
+                            let atomic_number = mol
+                                .atom(atom)
+                                .element()
+                                .as_lit()
+                                .expect("ground atom")
+                                .atomic_number();
+                            bit_id = gboost_combine(bit_id, u32::from(atomic_number));
+                        }
+                        for query_bond in 0..template.bond_count {
+                            let bond = embedding
+                                .bonds()
+                                .right_of(BondId(query_bond))
+                                .expect("matched bond");
+                            let bond = mol.bond(bond);
+                            let bond_type = if bond.is_in_aromatic_system() {
+                                12
+                            } else {
+                                bond.order().as_lit().expect("ground bond") as u32
+                            };
+                            bit_id = gboost_combine(bit_id, bond_type);
+                        }
+                        ids.push(u64::from(bit_id));
+                        ControlFlow::Continue(())
+                    },
+                )
+                .expect("pattern templates carry no molecule-scope constraints");
         }
         FeatureSet::from_features(ids).fold(self.width)
     }

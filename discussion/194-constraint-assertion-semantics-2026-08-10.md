@@ -412,7 +412,15 @@ molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped acc
   gate with evaluation (the current silent ignore admits false positives). Breaking, green at
   stage end: substructure, fingerprint, and reaction-matching suites unchanged. A host carrying
   unconsumed input assertions now meets them against the closure; any test relying on such a
-  staging host is surfaced, not silently rewritten. [dep: S0c, S0d]
+  staging host is surfaced, not silently rewritten. [dep: S0c, S0d] Done 2026-08-13:
+  `SubstructureMatchError::MoleculeScopeConstraints`; both public entry points return `Result`;
+  propagation through reaction application adds `ApplyPreconditionError::Match(#[from] ...)`;
+  `host_match_targets` replaced by `host_ring_context` + per-family satisfies tables; field
+  matchers destructure exhaustively; matcher table gains rows per derived key (`#v #D #X #H #V`,
+  `#a` positive/negative/Kekulé-flag, `#m`, `#d #t`, `#T`, bond `#a` in-system and
+  asserted-vs-closure `⊥`, bond `#C`). The gate surfaced six `MissingEntry`-via-matcher tests
+  (constraint-remove LHS carries the removed molecule-scope constraint); they are `#[ignore]`d
+  pending doc 195 evaluation, which lists them as an explicit unskip item (2026-08-13).
 
 ### S2 — dissolved
 
