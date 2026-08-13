@@ -160,6 +160,10 @@ inside an edit session. Views also exist over derived things, not only entities:
 `*Form`; it does not take a view. A view borrows its molecule and exists to be called *on*, so passing
 one propagates a borrow through a signature that did not need it.
 
+**Views are presentation facades.** A view never contains or constructs another view; shared
+derivation logic lives beneath the facades, in functions of the molecule and entity ids, which each
+facade presents.
+
 **Not:** the owned representation, which is the `*Form` type. A view does not survive its molecule.
 **In code:** `AtomView`, `AtomViews`, `AtomViewMut`, `AtomEditorView`, `AtomEditorViewMut`.
 
@@ -334,15 +338,18 @@ remapping, which gives every source id an image and never expresses removal.
 ### Completion
 
 A **completion** is one admissible ground assignment for an entity's underdetermined attributes,
-produced by a resolution phase from the chemistry model. `AtomCompletion` pairs the inherent-field
-completion (`AtomFields`: implicit hydrogens, lone pairs, unpaired electrons, spin) with the model
-values that selection votes on (valence, donated and accepted pairs, aromatic and multicenter
-valence). A phase emits the set of completions that survive narrowing; a later phase selects among
-them, and an underdetermined verdict reports the survivors.
+produced by a resolution phase from the chemistry model. It is represented by the entity's form in
+its ground state — completion is a role a ground `AtomForm` plays, as pattern is a role a
+`Molecule` plays — never by a dedicated primitive-valued type, which would reintroduce the retired
+ground/pattern type split. The disjunction of completions for one atom is extensional, a vector of
+forms; a single non-ground form would denote the Cartesian product of its fields and lose the
+coupling between them. A phase emits the set of completions that survive narrowing; a later phase
+selects among them, and an underdetermined verdict reports the survivors.
 
 **Not:** a stored assertion — completions live in solver state and are never written to the
-constraint channel; not the resolution result, which is the committed outcome.
-**In code:** `AtomCompletion`, `AtomFields`.
+constraint channel; not the resolution result, which is the committed outcome; not a struct of
+primitive fields.
+**In code:** ground `AtomForm` members of `AtomCompletions`, the keyed carrier.
 
 ### Config
 

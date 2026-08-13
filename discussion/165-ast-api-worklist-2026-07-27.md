@@ -84,9 +84,16 @@ The follow-up is:
 - retain `RingSet` primitives for algorithms that operate directly on ids;
 - remove view-as-argument APIs rather than duplicating them.
 
+The last two items are folded into doc 194 (S0g): the id-keyed `RingSet::shared_atoms`/
+`shared_bonds` already exist, and the view-as-argument `RingView::shared_atoms`/`shared_bonds`
+are deleted there. The accessor-convention items above remain here.
+
 This is an AST API change, not part of hashing.
 
 ## Substructure matching
+
+Molecule-level pattern constraints (relational and molecule leaves, combinators) are silently
+ignored by the matcher; doc 195 owns that design.
 
 ### Stereo constraints
 

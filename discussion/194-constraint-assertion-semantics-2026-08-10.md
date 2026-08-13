@@ -52,10 +52,35 @@ The rule: **the stored constraint channel holds only assertions; projections are
 
 The pattern/concrete asymmetry dissolves under this rule. The distinction is per key,
 determined versus undetermined: an assertion is redundant exactly when the relational structure
-determines that key and the projection refines the assertion. A pattern's topology never determines
+determines that key and the derived value refines the assertion. A pattern's topology never determines
 its constraint keys, so pattern assertions are primary data — the same rule, not an exception. A
 molecule whose stored assertion conflicts with its structure is carrying an unsatisfiable
 assertion; validation reports it, consistent with edits enforcing no chemistry.
+
+Constraint placement (settled 2026-08-12): an entity's assertion home is its inline container;
+the molecule-scope list carries `Relational` and `Molecule` leaves, combinators, and — as input —
+bare entity leaves, which remain a valid DSL spelling (the spec's lift/inline section stands).
+Invalidating the bare spelling was considered and dropped: a singleton `:or`/`:and` over an
+entity leaf denotes exactly the bare assertion, so a validity rule distinguishing them would
+legislate spelling, not content. Placement is instead normalized by resolution: the pipeline
+opens with a placement stage that applies the context-free constraint normalization, reduces
+trivial wrappers (a singleton `:or`/`:and` is its element), and moves bare entity leaves inline —
+`inline_constraints` gains its production caller, and the bridges stay. After the stage,
+`asserted(key)` is complete for entity-addressed content; assertions inside irreducible
+disjunctions remain molecule-scope logic, evaluated where the list is evaluated (validation,
+discharge, doc 195 matching). Patterns are never resolved, so both spellings persist there and
+pattern evaluation handles them (doc 195).
+
+Canonicalization is unaffected by placement (settled 2026-08-12). Placement normalization is
+fallible — colliding assertions combine by meet, and `⊥` is `Contradictory` — while
+canonicalization preserves the complete represented assertion and cannot fail; placement therefore
+belongs to resolution and to no canonicalization level. Full remains full, the default level
+stands, and differently-placed descriptions stay canonically distinct, exactly as a Kekulé input
+and its perceived form do; the equivalence that merges placements is canonical equality after
+resolution. Trivial-wrapper reduction (a singleton `:or`/`:and` is its element) is by contrast
+infallible and content-preserving and belongs in the context-free `Normalize`, completing the
+conjunction-flattening family; Full canonical equality thereby strengthens for those degenerate
+spellings alone, changing their canonical keys across versions.
 
 ## Three flows, three fates
 
@@ -82,26 +107,35 @@ derivable-from-structure is ever stored.
 
 ## Read-side restructure
 
-The `Lattice` trait is untouched: `meet`, `join`, and `matches` on values are already
-source-agnostic. What restructures are the container-level comparison entry points (`matches`,
-`is_compatible`, match-target construction), which currently demand two materialized containers.
-They move onto a per-entity constraints view — `AtomConstraintsView` and the per-entity family —
-constructed per call from the assertions container, the entity's relational context, and a
-`RelationCoverage`, exposing the per-key *effective value*:
+The `Lattice` trait gains one provided method and is otherwise untouched: `satisfies`, the
+receiver-inverted reading of `matches` — `fn satisfies(&self, pattern: &Self) -> bool
+{ pattern.matches(self) }`, a universal default never overridden. `matches` keeps its
+SMARTS-anchored meaning and pattern-as-receiver direction; `satisfies` exists because a view must
+be a receiver and the view stands on the target side.
 
-```
-effective(key) = asserted(key) ∧ projected(key)    // meet; either side may be absent
-```
+What restructures are the container-level comparison entry points (`matches`, `is_compatible`,
+match-target construction), which currently demand two materialized containers. They move onto a
+per-entity constraints view — `AtomConstraintsView` and the per-entity family — constructed from
+the molecule and entity id (or a bare entity form), exposing the two sides of every key through
+three accessors:
 
-The view is always the receiver of a comparison, never a function argument.
+- `asserted(key)` — the stored side; open-world by definition, absence is the vacuous constraint;
+- `derived(key)` — from present relations only; vacuous on absence;
+- `derived_complete(key)` — the closure reading: under the caller's claim that the relation set
+  is complete, absence of a resolution-written table closes to the definite negatives.
 
-- Evaluation is driven by the pattern's keys, so only requested projections are computed. The
+The view is always the receiver of a comparison, never a function argument. Comparisons fix the
+reading their semantics implies: `satisfies(&pattern)` evaluates the host under `derived_complete`
+(query against host), `is_compatible(&other)` under `derived` (narrowing admissibility). There is
+no `effective(key)` accessor: no consumer needs the meet of the sides as a value — comparisons
+meet internally, and discharge and validation read the sides and apply value-level `meet`
+directly, where `None` already means `⊥` and folds to `false` or `Contradictory`.
+
+- Evaluation is driven by the pattern's keys, so only requested derivations are computed. The
   per-key selector of doc 125 falls out, and the monolithic `derive_constraints` retires.
-- A `⊥` effective value needs no special path: `matches`/`is_compatible` return false.
 - An entity form outside any molecule context (e.g. the electron-count invariant check) is the
-  same abstraction with an assertion-only view; the form context fixes `Partial`, since with no
-  relations "complete" would read as definite degree and valence zero.
-- Ring keys obtain their `RingViews` context inside the view, as `ConstraintEvaluation` already
+  same abstraction with both derived accessors vacuous — a bare form has no relations to read.
+- Ring keys obtain their ring context inside the view, as `ConstraintEvaluation` already
   memoizes for validation.
 
 This restructure is unconditional, not an alternative to consumption: matching takes the host by
@@ -110,21 +144,22 @@ regardless of where narrowing is stored.
 
 Consumers that change:
 
-- `host_match_targets`: per-key source evaluation replaces the `Cow` clone-and-extend path (also
-  the doc 122 direction: do not materialize the host).
-- atom-typing candidate admission: compatibility against effective values; the phase emits the
+- `host_match_targets`: per-key `satisfies` evaluation replaces the `Cow` clone-and-extend path
+  (also the doc 122 direction: do not materialize the host).
+- atom-typing candidate admission: `is_compatible` against the view; the phase emits the
   surviving candidate set instead of writing narrowed constraints back — derived values
   participate in admission but are never written.
-- the electron-count invariant check: assertion-only source, semantics unchanged.
+- the electron-count invariant check: assertion-only view, semantics unchanged.
 - `ConstraintValidator`: already per-key derived-versus-asserted; may reuse the view.
 
 ## Discharge
 
 Only input assertions are ever stored, so removal concerns them alone, and it has one home: the
 resolve pipeline ends with a *discharge* pass, after which no stored assertion is
-determined-redundant. Per key, discharge asks whether the structure now determines the key: the
-projection refines the assertion ⇒ redundant ⇒ removed; the meet is `⊥` ⇒ contradiction; the
-assertion is strictly narrower than a not-yet-determined projection ⇒ kept. An operation that
+determined-redundant. Determination needs no new predicate — it is `derived_complete(key)`
+yielding a ground value (`is_ground`), existing vocabulary composed. A ground derived value that
+refines the assertion ⇒ redundant ⇒ removed; the meet is `⊥` ⇒ contradiction; a non-ground
+derived value with a strictly narrower assertion ⇒ kept. An operation that
 realizes an assertion may remove it early in its own transaction — the aromaticity resolver does
 this for `#a` today — but that is an implementation liberty inside the pipeline, not a second
 concept; the guarantee is the closing pass. Distributed keys are why the pass must exist: `#v` is
@@ -135,14 +170,15 @@ The kekulizer and aromatizer removals are a different contract: a transform that
 relation must delete the assertions its output no longer satisfies, which is the existing
 emit-compliance policy and stays per-operation.
 
-Determination criteria per key (to be confirmed row by row during implementation planning):
+When `derived_complete` is ground, per key (to be confirmed row by row during implementation
+planning):
 
 | key                          | determined when                                                    |
 | ---------------------------- | ------------------------------------------------------------------ |
 | `#v` valence                 | all incident bond orders literal                                   |
 | `#D` degree                  | always (topology)                                                  |
 | `#X`, `#H`, `#V` totals      | implicit hydrogens literal (+ explicit H neighbors' elements literal) |
-| `#d`, `#t` dative pairs      | dative overlay incidence, closed-world reading                     |
+| `#d`, `#t` dative pairs      | dative overlay incidence under the closure                         |
 | `#a` aromatic valence        | when the aromatic system is created (removable early)              |
 | `#m` multicenter valence     | when the multicenter bond is created (removable early)             |
 | `#T`, `#C` stereo            | when the stereo overlay is created (design 103 flow)               |
@@ -152,13 +188,31 @@ Determination criteria per key (to be confirmed row by row during implementation
 ## Resolution carrier
 
 Settled 2026-08-12. The valence phase's output for an atom is a set of *completions* — one per
-registry row surviving admission against the atom's effective values:
+registry row surviving `is_compatible` admission against the atom's constraints view:
 
-- `AtomFields` is the inherent-field completion (implicit hydrogens, lone pairs, unpaired
-  electrons, spin); element and charge are fixed inputs of admission.
-- `AtomCompletion` pairs `AtomFields` with the model values selection votes on: valence, donated
-  and accepted pairs, aromatic valence, multicenter valence.
-- The carrier maps `AtomId` to `SmallVec<[AtomCompletion; 1]>`; nearly all atoms are singletons.
+- A completion is a ground `AtomForm` — the unified form in its ground state, per the doc 080
+  commitment that ground is a state of the one type, not a separate type. No primitive-valued
+  completion struct exists: it would reintroduce the retired ground/pattern split and decouple
+  the coupled spin fields. Element and charge are fields like any other — today every disjunct
+  carries the same literals because admission is keyed on them; a strategy enumerating charge
+  states varies them with no type change.
+- The disjunction is extensional: `SmallVec<[AtomForm; 1]>` per atom, nearly always a singleton.
+  Each emitted disjunct is ground in every key it carries — points, never rectangles; a single
+  non-ground form would denote the Cartesian product of its fields and lose coupling. This is the
+  emit contract of the phase; the type stays the permissive unified form.
+- The carrier maps `AtomId` to its disjunction (`AtomCompletions`). "Completion" is a role a
+  ground `AtomForm` plays, as "pattern" is a role a `Molecule` plays. Admission emits disjuncts
+  by meet; commit applies the chosen form via `difference_to` — existing machinery. A candidate
+  set renders as atom strings for inspection.
+- Openness (recorded 2026-08-12): extensional members and atom-to-atom decoupling are the *emit
+  contract of the current valence phase*, not commitments of the carrier types, and must not be
+  written into their rustdoc. A future relaxation takes the shape of constraint equations over
+  the existing value-expression variables — intensional members are already type-inhabitants
+  (non-ground forms with variables), and inter-atom coupling is an additive molecule-scope
+  component behind the carrier's private storage. The equations build on the variable facility,
+  not beside it — the parallel-mechanism collision is what killed the earlier joint-domain
+  constraint. Consumers read members through the `AsLit` extraction discipline (explicit
+  non-literal handling), so intensional members degrade to defined behavior, not panics.
 
 Phase composition keeps early commit: the valence phase applies edits for singleton atoms as today
 and forwards only plural sets; the aromaticity phase selects jointly per candidate aromatic system
@@ -178,9 +232,9 @@ interface, so none is added; `Solution` itself is unchanged. The SMILES reader s
 triple and the pyrrolyl DSL case; the corrected F420 structure joins once the zero-contributor
 perception and registry-coverage items of doc 174 land.
 
-## World assumption is per-call
+## The closure is per call
 
-Whether absence of an overlay reads as a definite negative (`NotAromatic`) or as unknown is a
+Whether absence of an overlay reads as a definite negative (`NotAromatic`) or as no evidence is a
 property of the consuming operation, not of the molecule:
 
 - a stored molecule-level status flag is itself a materialized projection of "is everything
@@ -191,9 +245,17 @@ property of the consuming operation, not of the molecule:
 - a two-type split (ground versus staging molecule) is the type-level version but is heavy and
   Python-visible, and the boundary is per key, not per molecule.
 
-The existing `include_missing: bool` therefore becomes `RelationCoverage`, supplied when
-constructing the constraints view: `Complete` (the deriving relation set is complete; absence is a
-definite negative) versus `Partial` (the relation set is partial; absence is no evidence).
+The choice therefore lives in the accessor pair, not in a mode parameter: `derived` reads present
+relations only, `derived_complete` adds the closure. The closure's license tracks exactly the
+tables resolution writes: phases create overlays and never atoms or bonds, so the skeleton keys
+(`#v`, `#D`, `#X`, `#H`, `#V`) read identically under both accessors, and the overlay-incidence
+keys (`#a`, `#m`, `#d`/`#t`, `#T`) differ in the absence cell alone. The un-closed reading is not
+a resolution internal: patterns are permanently partial public descriptions, and validating one is
+coherent only under `derived` — the closure would turn every overlay assertion into `⊥` against
+overlays a pattern never stores. An earlier design carried a `RelationCoverage`
+(`Complete`/`Partial`) parameter on view construction; it was replaced because it encoded a 2 × 2
+scheme with an uninhabitable cell (asserted constraints are partial by definition) and a mode that
+every caller fixes statically — the three-accessor surface states the actual structure.
 
 ## Rejected alternatives
 
@@ -236,88 +298,135 @@ definite negative) versus `Partial` (the relation set is partial; absence is no 
 Modules, bottom-up: `umol-graph-ir` (constraint views, substructure), `umol-graph`
 (valence, aromaticity, resolve, invariant), `umol-io` (SMILES ingest), `umol-py`, conformance.
 
-### S0 — constraints-view foundation (`umol-graph-ir`); all additive, green throughout
+### S0 — constraints-view foundation (`umol-graph-ir`); green throughout
 
-- S0a: `RelationCoverage` (`Complete`/`Partial`) in the view module. Additive.
-- S0b: `AtomConstraintsView`: construction from assertions container, atom relational context,
-  `RelationCoverage`, optional ring context; `effective(key)` over every `AtomConstraintKey`.
-  Additive. [dep: S0a]
-- S0c: comparison methods on the view — pattern-driven `matches`/`is_compatible` against a pattern
-  container; the view is the receiver. Additive. [dep: S0b]
-- S0d: `BondConstraintsView`, same shape. Additive. [dep: S0a]
-- S0e: views for the remaining six entity families (uniform surface). Additive. [dep: S0a] —
+- S0a: `Lattice::satisfies` as a provided method (universal default: `pattern.matches(self)`);
+  the dual recorded in the nomenclature Matching entry. Additive.
+- S0b: extract the per-quantity derivation functions from the `AtomView`/`RingAtomView` method
+  bodies (typed accessors become delegates; signatures and their tests unchanged);
+  `AtomConstraintsView` with construction from molecule + atom id or bare `AtomForm`, optional
+  ring context, and `asserted`/`derived`/`derived_complete` over every `AtomConstraintKey`,
+  presenting the same functions. Additive.
+- S0c: `satisfies`/`is_compatible` on the view. Additive. [dep: S0b]
+- S0d: `BondConstraintsView`, same shape. Additive. [dep: S0b]
+- S0e: views for the remaining six entity families (uniform surface). Additive. [dep: S0b] —
   gates only S6a.
-- S0f: nomenclature entries: view family, `RelationCoverage`, effective value, discharge; reword
-  the two `invariant.rs` "standalone" doc comments to the molecule-atom convention. Additive.
+- S0f: nomenclature entries: view family, the `derived`/`derived_complete` readings, discharge,
+  the `satisfies` dual in the Matching entry; reword the two `invariant.rs` "standalone" doc
+  comments to the molecule-atom convention. Additive.
+- S0g: facade-rule enforcement from the doc 165 ring-view worklist: delete the view-as-argument
+  relations `RingView::shared_atoms`/`shared_bonds` (`view/ring.rs:101-105`) — the id-keyed
+  `RingSet::shared_atoms`/`shared_bonds` already exist and are the only form retained; the two
+  `RingView` unit tests retarget to the `RingSet` forms. No production callers; green. The
+  remaining doc 165 ring-view items (id/view accessor conventions) stay in doc 165.
+- S0h: extend the context-free `Normalize` for constraint trees with trivial-wrapper reduction
+  (a singleton `:or`/`:and` is its element), completing the conjunction-flattening family. Full
+  canonical equality strengthens for those degenerate spellings alone (their canonical keys
+  change); placement remains outside canonicalization by the fallibility criterion (Model
+  section). Normal-form change; green. [dep: none]
 
-The S0b/S0c surface (settled 2026-08-12):
+The S0 surface (settled 2026-08-12):
 
 ```rust
 pub struct AtomConstraintsView<'a> {
     context: AtomConstraintsContext<'a>,
-    coverage: RelationCoverage,   // the Atom context fixes Partial
     rings: Option<&'a RingSet>,   // ring context is data, never a view
 }
 
-enum AtomConstraintsContext<'a> {   // private: the two constructors are the only entry points
+pub enum AtomConstraintsContext<'a> {
     MoleculeAtom { molecule: &'a Molecule, atom: AtomId },
     Atom(&'a AtomForm),
 }
 
-// Molecule::atom_constraints_view(id, coverage); AtomForm::constraints_view();
+// Molecule::atom_constraints_view(id); AtomForm::constraints_view();
 // AtomConstraintsView::with_rings(self, &RingSet)
 
 fn asserted(&self, key: AtomConstraintKey) -> Option<&AtomConstraintForm>;
-fn projected(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
-fn effective(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
-fn determined(&self, key: AtomConstraintKey) -> bool;
-fn matches(&self, pattern: &AtomConstraintsForm) -> bool;
-fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
+fn derived(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
+fn derived_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm>;
+fn satisfies(&self, pattern: &AtomConstraintsForm) -> bool;    // derived_complete reading
+fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;  // derived reading
 ```
 
-- Constructed from molecule + atom id; per the view rule the view holds no other view. The
-  `MoleculeAtom` context projects through a transient `AtomView` materialized per read and dropped
-  inside the call; the `Atom` context projects nothing, so `effective` collapses to
-  `asserted`. The context enum is private because the `Atom` context must fix `Partial`.
-- `effective` = asserted ∧ projected; absence on either side reads as the undetermined form;
-  `None` is `⊥`, folding to `false` in the comparisons and to `Contradictory` in discharge.
-- Coverage gates only the overlay-incidence keys (`#a`, `#m`, `#d`/`#t`, `#T`); skeleton keys
-  (`#v`, `#D`, `#X`, `#H`, `#V`) project from the graph in both modes, matching current
-  `include_missing` behavior.
+- Constructed from molecule + atom id. Views are presentation facades and never contain or
+  construct one another; the derivation logic both facades present lives beneath them (next
+  bullet). The `Atom` context derives nothing under either accessor — a bare form has no
+  relations — so no construction invariant exists and the context enum stays public.
+- No `effective` accessor and no `determined` predicate: consumers meet the sides with
+  value-level `meet` (`None` = `⊥`, folding to `false` in comparisons and `Contradictory` in
+  discharge), and determination is `derived_complete(key)` ground (`is_ground`) — existing
+  vocabulary composed.
+- The derivation bottom is functional: per-quantity functions over `(&Molecule, AtomId)` (ring
+  quantities additionally take `&RingSet`), extracted from the `AtomView`/`RingAtomView` method
+  bodies. Both facades present them — the typed accessors as delegates with unchanged signatures
+  and behavior (their existing tests are the parity guarantee), the constraints-view accessors as
+  keyed dispatch plus form packaging, with the closure only in `derived_complete`. The two
+  surfaces cross by demand — keys are the assertable vocabulary, typed accessors the computable
+  one — so keyless projections (`covalence`, `aromatic_covalence`, `heavy_atom_degree`,
+  `heavy_atom_valence`, `multicenter_degree`) remain typed-only, and ring keys have no `AtomView`
+  accessor; consumers of either surface are unaffected.
 - A ring key requested without ring context is a caller error (the consumer scanning pattern keys
   decides whether to build the `RingSet`, as matching does today).
 - No full-key iteration: `RingMembership(RingScope)` is open-ended, so evaluation is driven by the
   consumer's key set; asserted-side iteration stays on the container.
-- Typed accessors (`effective_valence()`, …) deferred until usage shows the need.
+- Typed accessors (`derived_valence()`, …) deferred until usage shows the need.
   `BondConstraintsView` mirrors the shape with `BondConstraintKey`.
-- Naming note for the S0f glossary entry: `meet(key)` was considered for `effective(key)` and
-  rejected — `meet` is uniformly binary over like values (`fn meet(&self, other: &Self)`), and a
-  keyed unary form would overload the signature pattern; `None` from `effective` still means `⊥`,
-  matching the `meet` convention.
+- Naming record: `effective(key)` (the meet of the sides) was designed and then deleted — no
+  consumer needs the meet as a value; `meet(key)` had already been rejected for it because `meet`
+  is uniformly binary over like values. `derived_partial` was rejected for the unmarked accessor:
+  partiality is not a property of derivation — the closure is the marked extra step.
 
 ### S1 — matching on views (`umol-graph-ir::ir::substructure`)
 
-- S1a: `host_match_targets` and the predicate closures evaluate per pattern key on the views
-  (`RelationCoverage::Complete`); ring context built once per run as today; the `Cow` target
-  materialization is deleted. Breaking, green at stage end: substructure, fingerprint, and
-  reaction-matching suites unchanged. A host carrying unconsumed input assertions now meets them
-  against `Complete` projections; any test relying on such a staging host is surfaced, not
-  silently rewritten. [dep: S0c, S0d]
+- S1a: `host_match_targets` and the predicate closures evaluate per pattern key via the views'
+  `satisfies` (the `derived_complete` reading); ring context built once per run as today; the
+  `Cow` target materialization is deleted. The pattern scan gains a gate: a non-empty
+  molecule-scope `Constraints` list on the pattern is an error naming the construct — matching
+  becomes fallible for exactly that input class, sound-but-incomplete until doc 195 replaces the
+  gate with evaluation (the current silent ignore admits false positives). Breaking, green at
+  stage end: substructure, fingerprint, and reaction-matching suites unchanged. A host carrying
+  unconsumed input assertions now meets them against the closure; any test relying on such a
+  staging host is surfaced, not silently rewritten. [dep: S0c, S0d]
 
 ### S2 — standalone reads (`umol-graph::ops::invariant`)
 
 - S2a: the electron-count invariant check reads through an assertion-only `AtomConstraintsView`;
   semantics unchanged. Green. [dep: S0b]
 
-### S3 — completion vocabulary (`umol-graph::ops::valence`); additive, green
+### S3 — completion carrier (`umol-graph::ops::valence`); additive, green
 
-- S3a: `AtomFields`, `AtomCompletion`. Additive.
-- S3b: the carrier map (`AtomId → SmallVec<[AtomCompletion; 1]>`) and the resolver report payload.
-  Additive. [dep: S3a]
+- S3a: `AtomCompletions`, the keyed carrier. Additive.
+- S3b: `ResolveReport`, the resolver verdict payload. Additive. [dep: S3a]
+
+The S3 surface (settled 2026-08-12):
+
+```rust
+pub struct AtomCompletions {
+    entries: BTreeMap<AtomId, SmallVec<[AtomForm; 1]>>,   // deterministic order
+}
+// insert (asserts entry non-empty — the one representation invariant),
+// get, remove, iter, len, is_empty
+
+pub struct ResolveReport {
+    pub unresolved: AtomCompletions,   // plural survivors; empty under Determined
+    pub tie_breaks: Vec<AtomId>,       // preference-selected atoms; sorted, deduplicated
+}
+```
+
+- No completion value type: a completion is a ground `AtomForm` (Resolution carrier section).
+  `AtomFields`, `AtomCompletion`, and ground-literal valence enums were considered and rejected —
+  the retired ground/pattern split, decoupled spin fields.
+- `AtomCompletions` holds the one representation invariant (entries non-empty — an empty set is
+  `Contradictory`, not an entry), hence private storage with accessors; `ResolveReport` is a
+  descriptive record with no invariant, hence public fields. Both are operation-issued but open
+  construction is harmless and undefended.
+- Tie-breaks record use, not an audit trail: the selected completions are committed into the
+  molecule; a richer per-atom record waits for a consumer.
+- Python (S4f): both bound read-only per the doc 192 type roles.
 
 ### S4 — pipeline rework; the one red stage, green only at its end
 
-- S4a: atom-typing: admission against effective values via the view; no stored-constraint
+- S4a: atom-typing: admission via the view's `is_compatible`; no stored-constraint
   extension, no narrowed write-back; singleton atoms produce edits, plural atoms produce
   completions. Breaking. [dep: S0c, S3b]
 - S4b: counts: plural `#h` candidates emitted through the same carrier; `CountsInput` readings
@@ -325,7 +434,7 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
 - S4c: aromaticity resolve: joint selection per candidate system over the carrier;
   `compare_valence_preference` demoted to a visible last-resort tie-break. Breaking. [dep: S4a]
 - S4d: `Resolver::resolve`: thread the carrier valence → aromaticity; `Solution<(), _>` →
-  `Solution<Report, _>`; rollback paths preserved. Breaking. [dep: S4c]
+  `Solution<ResolveReport, _>`; rollback paths preserved. Breaking. [dep: S4c]
 - S4e: SMILES ingest stops pinning `#h0` on bare aromatic heteroatoms (`umol-io`). Breaking.
   [dep: S4d]
 - S4f: `umol-py`: bind the report for inspection; update the resolution verdict mapping.
@@ -342,8 +451,16 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
 
 - S5a: per-key determination checks on the view layer; the determination table is confirmed row
   by row here. Additive. [dep: S0b]
-- S5b: the discharge pass as the closing `Resolver` stage in the same journal; `⊥` ⇒
-  `Contradictory`. Breaking — resolved outputs lose stored assertions. [dep: S4d, S5a]
+- S5b: the placement and discharge stages bookending `Resolver::resolve`, in the same journal.
+  Opening placement stage: apply the context-free constraint normalization (including the S0h
+  trivial-wrapper reduction) and move bare top-level entity leaves inline, colliding assertions
+  combining by meet with `⊥` ⇒ `Contradictory` — `inline_constraints` gains its production
+  caller with its collision policy corrected from last-wins to meet, and the DSL spec's
+  lift/inline collision note updated accordingly. Closing discharge pass: `⊥` ⇒
+  `Contradictory`; also evaluates the remaining molecule-scope list with the validator's
+  machinery: decided true with ground inputs ⇒ implied ⇒ removed; decided false ⇒
+  `Contradictory`; undecided ⇒ kept (patterns are never resolved, so pattern constraints
+  persist). Breaking — resolved outputs lose stored assertions. [dep: S4d, S5a]
 - S5c: lowering: retire the `zeroed()` elision-only paths; raise-side dialect filling stays.
   Breaking. [dep: S5b]
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
@@ -353,20 +470,26 @@ fn is_compatible(&self, other: &AtomConstraintsForm) -> bool;
 
 - S6a: `ConstraintValidator` internals on the entity views. After S5 the constraint pass is
   vacuous on resolved molecules, so the validator becomes a staging/pattern tool; the per-kind
-  hand-built comparisons collapse to "violation ⇔ `effective(key)` is `None`". Adds a
-  `RelationCoverage` field to `ConstraintValidateConfig` (current per-kind absence semantics to be
-  read off `incidence.rs` and preserved as the default). [dep: S0e]
+  hand-built comparisons collapse to "violation ⇔ the per-key meet of `asserted` and the selected
+  derived reading is `⊥`". `ConstraintValidateConfig` selects the reading (`derived` versus
+  `derived_complete`; selector representation decided here) with current per-kind absence
+  semantics read off `incidence.rs` and preserved as the default. [dep: S0e]
 - S6b: registry row `"C #v4 #a0"` (grounds as `#h0 #n0 #v4 #a0`; the exocyclic-carbonyl aromatic
   carbon of 2-pyridone, uracil, 4-pyranone, tropone, and tropolone) plus their snapshots. Pure
   data; independent — may land as early as S4h.
-- S6c: zero-contributor perception fix in `ops/aromaticity.rs` (`find_systems`/`derive` member
-  handling; the refusal at `aromaticity.rs:91`). Different layer from S6b — this answers doc
-  174's open question: the two defects do not share a root cause. Doc 174 scope; blast radius
-  borepin, borazine, 1,2-azaborine from SMILES. Tropone and tropolone compose S6b + S6c without
-  S4 (all-carbon ring, no hydrogen completion), and show the zero contributor is not a heteroatom
-  phenomenon; whether a model calls them aromatic is a model decision the machinery must not
-  preclude.
-- S6d: the F420 acceptance case (unique completion, C29H36N5O18P). [dep: S4, S6b, S6c]
+- S6c: correct the doc 174 "zero-contributor" diagnosis and pin it with tests. The perception
+  refusal is the model's element scope, not zero handling: `AromaticityModel::daylight()` (the
+  `ChemistryModel` default) excludes boron, so `is_atom_eligible` fails on scope
+  (`hueckel_rule.rs:117`), `filter_ring`'s all-members rule drops the ring, and `derive`'s
+  membership sweep (`aromaticity.rs:240-248`) reports `AromaticValenceFailure` for every atom
+  asserting `Aromatic(_)` — doc 174's witnesses (borepin, borazine, 1,2-azaborine) are all boron
+  cases. Zero contributions are handled correctly throughout: `Aromatic(Lit(0))` → `Some(0)`
+  eligibility, plain summation, membership counted. Work: regression tests — the tropone family
+  under `daylight()` (needs only S6b) and the borepin family under a boron-including scope
+  (`permissive()`); a dated correction note in doc 174. No production logic change expected;
+  scope membership stays a model decision that `ElementScope` already expresses.
+- S6d: the F420 acceptance case (unique completion, C29H36N5O18P); its C/N ring is within the
+  Daylight scope, so S6c is not a dependency. [dep: S4, S6b]
 
 Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge strips assertions
 from resolved hosts, after which matching must project every pattern key. S2 floats after S0; S3
@@ -376,3 +499,4 @@ story — completes at S5; S6 is not required for it.
 ## Open items
 
 - F420 enablement via the doc 174 zero-contributor and registry-coverage items (S6b).
+- Matching of molecule-level pattern constraints: doc 195 (out of this document's critical path).

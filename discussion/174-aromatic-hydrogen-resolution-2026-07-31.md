@@ -203,6 +203,15 @@ The same failure appears for `[bH]1[nH][bH][nH][bH][nH]1` (borazine) and `[bH]1c
 (1,2-azaborine), so it is the general zero-contributor case rather than anything about
 seven-membered rings.
 
+> Correction (2026-08-12, doc 194 S6c review): the refusal is the aromaticity model's element
+> scope, not zero-contribution handling — `AromaticityModel::daylight()` (the default) excludes
+> boron, so `is_atom_eligible` fails on scope and the ring is never eligible; the
+> `AromaticValenceFailure` is the downstream membership sweep. All three witnesses are boron
+> cases. Zero contributions are handled correctly throughout perception (`Aromatic(0)` is
+> eligible with `Some(0)` and sums normally); an in-scope zero contributor (tropone-type carbon)
+> needs only the registry coverage below. The boron family perceives under a boron-including
+> scope, which is a model decision `ElementScope` already expresses.
+
 Borepin therefore needs both fixes to be reachable from SMILES. Fixing only the hydrogen
 circularity moves it from the first error to the second.
 
