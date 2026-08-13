@@ -58,6 +58,16 @@ impl AtomCompletions {
     }
 }
 
+/// Resolver verdict payload: a descriptive record with no invariant.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResolveReport {
+    /// Per-atom plural survivors; empty under a `Determined` verdict.
+    pub unresolved: AtomCompletions,
+    /// Atoms whose completion was selected by the valence-preference
+    /// tie-break; sorted and deduplicated.
+    pub tie_breaks: Vec<AtomId>,
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

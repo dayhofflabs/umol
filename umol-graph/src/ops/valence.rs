@@ -10,7 +10,7 @@ pub mod registry;
 pub mod table;
 
 pub use atom_typing::{AtomTypingError, AtomTypingMismatch, AtomTypingValence};
-pub use completion::AtomCompletions;
+pub use completion::{AtomCompletions, ResolveReport};
 pub use counts::{CountsError, CountsMismatch, CountsValence};
 pub use registry::AtomTypeRegistry;
 pub use table::{ValenceEntry, ValenceTable};

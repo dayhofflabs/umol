@@ -434,7 +434,10 @@ molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped acc
   `ops/valence/completion.rs`, re-exported from `ops::valence`; the settled surface exactly
   (private `BTreeMap` storage, `insert` asserting the non-empty invariant, slice-typed reads);
   rustdoc carries the invariant and deterministic order only, per the openness note.
-- S3b: `ResolveReport`, the resolver verdict payload. Additive. [dep: S3a]
+- S3b: `ResolveReport`, the resolver verdict payload. Additive. [dep: S3a] **Done 2026-08-13:**
+  same module as the carrier, re-exported from `ops::valence`; public fields per the settled
+  surface, derives only — no methods and no tests to carry, since a descriptive record with no
+  invariant has nothing but derived behavior.
 
 The S3 surface (settled 2026-08-12):
 
