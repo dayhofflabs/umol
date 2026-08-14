@@ -241,7 +241,7 @@ impl<'a> DativeBondView<'a> {
 // Derivation layer beneath the dative-bond facades.
 
 /// Stored constraint container of `bond`.
-pub(crate) fn asserted_constraints(
+pub(crate) fn dative_bond_asserted_constraints(
     molecule: &Molecule,
     bond: DativeBondId,
 ) -> &DativeBondConstraintsForm {
@@ -252,7 +252,7 @@ pub(crate) fn asserted_constraints(
 /// defined only for a binary dative bond (doc 117 stub for multi-donor
 /// entries): the donor and acceptor share an aromatic system. The ring key
 /// has no projection; both read vacuous under either mode where undefined.
-pub(crate) fn derived_constraint(
+pub(crate) fn dative_bond_derived_constraint(
     molecule: &Molecule,
     bond: DativeBondId,
     key: DativeBondConstraintKey,

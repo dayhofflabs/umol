@@ -1,10 +1,10 @@
-//! `Molecule::is_ground()` benchmarks.
+//! `Molecule::is_concrete()` benchmarks.
 //!
-//! Exercises the groundness check — a hot path during Molecule construction
+//! Exercises the concreteness check — a hot path during Molecule construction
 //! and in matcher inner loops — across three representative shapes:
 //!
-//! - `indole_ground`: realistic, fully-lowered ground molecule (nearly every
-//!   field is `Lit`). Represents the common case.
+//! - `indole_concrete`: realistic, fully-lowered concrete molecule (nearly
+//!   every field is `Lit`). Represents the common case.
 //! - `indole_bool_expr`: indole with a few fields replaced by boolean-domain
 //!   `NumForm::PredExpr` patterns (`Rel`, `Mem`).
 //! - `arith_expr_heavy`: every numeric field on every atom carries an
@@ -30,17 +30,17 @@ use umol_graph_ir::ir::{
 mod fixtures;
 use fixtures::MOL_INDOLE;
 
-fn indole_ground() -> Molecule {
+fn indole_concrete() -> Molecule {
     let dsl = MoleculeDsl::from_edn_str(MOL_INDOLE).unwrap();
     let cfg = MoleculeDefaults::zeroed();
     dsl.into_ir(&cfg)
 }
 
 fn indole_with_bool_expr_fields() -> Molecule {
-    // Realistic pattern: take the ground indole, then splat a few atom
+    // Realistic pattern: take the concrete indole, then splat a few atom
     // fields with boolean-domain ValueExpr patterns (which short-circuit via
     // is_arithmetic()).
-    let mut molecule = indole_ground();
+    let mut molecule = indole_concrete();
     let mut b = molecule.edit();
     b.atom_mut(AtomId(0)).attributes.charge = NumForm::pred_expr(PredExpr::Rel(
         ArithExpr::Var("c".into()),
@@ -58,7 +58,7 @@ fn indole_with_bool_expr_fields() -> Molecule {
 
 fn arith_expr_heavy() -> Molecule {
     // Every numeric field is an arithmetic `ArithExpr` of depth 3 — a
-    // non-ground symbolic value, so `is_ground` (literal-only) returns false.
+    // non-literal symbolic value, so `is_concrete` (literal-only) returns false.
     let arith = || {
         NumForm::arith_expr(ArithExpr::Product(vec![
             ArithExpr::Sum(vec![ArithExpr::Lit(2), ArithExpr::Lit(3)]),
@@ -105,26 +105,26 @@ fn arith_expr_heavy() -> Molecule {
     })
 }
 
-fn bench_is_ground(c: &mut Criterion) {
-    let mut g = c.benchmark_group("molecule_is_ground");
+fn bench_is_concrete(c: &mut Criterion) {
+    let mut g = c.benchmark_group("molecule_is_concrete");
 
-    let indole = indole_ground();
-    g.bench_function("indole_ground", |b| {
-        b.iter(|| black_box(&indole).is_ground())
+    let indole = indole_concrete();
+    g.bench_function("indole_concrete", |b| {
+        b.iter(|| black_box(&indole).is_concrete())
     });
 
     let indole_expr = indole_with_bool_expr_fields();
     g.bench_function("indole_bool_expr", |b| {
-        b.iter(|| black_box(&indole_expr).is_ground())
+        b.iter(|| black_box(&indole_expr).is_concrete())
     });
 
     let heavy = arith_expr_heavy();
     g.bench_function("arith_expr_heavy", |b| {
-        b.iter(|| black_box(&heavy).is_ground())
+        b.iter(|| black_box(&heavy).is_concrete())
     });
 
     g.finish();
 }
 
-criterion_group!(is_ground, bench_is_ground);
-criterion_main!(is_ground);
+criterion_group!(is_concrete, bench_is_concrete);
+criterion_main!(is_concrete);

@@ -479,20 +479,23 @@ impl AromaticityResolver {
         }
 
         // A carrier atom whose every disjunct requires aromaticity but which
-        // no accepted or tied system claims cannot be completed.
-        for (atom, disjuncts) in completions.iter() {
-            if claimed.contains(&atom) {
-                continue;
-            }
-            if disjuncts.iter().all(|form| {
-                matches!(
-                    form.constraints.aromatic_valence(),
-                    Some(AromaticValenceForm::Aromatic(_))
-                )
-            }) {
-                return Ok(Solution::Contradictory(
-                    AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
-                ));
+        // no accepted or tied system claims cannot be completed; the failure
+        // policy decides between contradiction and keeping the assertion.
+        if self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
+            for (atom, disjuncts) in completions.iter() {
+                if claimed.contains(&atom) {
+                    continue;
+                }
+                if disjuncts.iter().all(|form| {
+                    matches!(
+                        form.constraints.aromatic_valence(),
+                        Some(AromaticValenceForm::Aromatic(_))
+                    )
+                }) {
+                    return Ok(Solution::Contradictory(
+                        AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
+                    ));
+                }
             }
         }
 

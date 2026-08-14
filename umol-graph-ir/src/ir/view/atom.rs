@@ -336,7 +336,7 @@ impl<'a> AtomView<'a> {
 // `AtomConstraintsView` (constraint readings).
 
 /// Stored constraint container of `atom`.
-pub(crate) fn asserted_constraints(molecule: &Molecule, atom: AtomId) -> &AtomConstraintsForm {
+pub(crate) fn atom_asserted_constraints(molecule: &Molecule, atom: AtomId) -> &AtomConstraintsForm {
     &molecule.atom(atom).attributes.constraints
 }
 
@@ -461,7 +461,7 @@ pub(crate) fn total_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
 /// (incident bond asserting `#a`) yields `Aromatic(Undetermined)` in both.
 /// Ring keys require `rings` and panic without it — the caller scanning keys
 /// decides whether to build the ring set.
-pub(crate) fn derived_constraint(
+pub(crate) fn atom_derived_constraint(
     molecule: &Molecule,
     atom: AtomId,
     rings: Option<&RingSet>,

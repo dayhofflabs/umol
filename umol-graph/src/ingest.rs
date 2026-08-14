@@ -291,7 +291,7 @@ mod tests {
         AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     };
     use crate::ops::model::{
-        AromaticityModel, AromaticityRule, ElementScope, RingLimits, ValenceModel,
+        AromaticityModel, AromaticityRule, ElementScope, RingLimits, ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
@@ -515,9 +515,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case::default(ChemistryModel::default(), ResolveConfig::default())]
+    #[case::default_aromaticity(
+        ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
+            ..ChemistryModel::default()
+        },
+        ResolveConfig::default()
+    )]
     #[case::permissive(
         ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
             aromaticity: AromaticityModel::permissive(),
             ..ChemistryModel::default()
         },
@@ -525,7 +538,7 @@ mod tests {
     )]
     fn test_smiles_interpret(#[case] model: ChemistryModel, #[case] resolve_config: ResolveConfig) {
         let smiles = Smiles::parse("C").unwrap();
-        let expected = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#);
+        let expected = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}"#);
 
         assert_eq!(smiles.interpret(&model, &resolve_config), Ok(expected));
     }
@@ -550,37 +563,45 @@ mod tests {
     #[rstest]
     #[case::mapped(
         "[CH4:1]>>[CH4:1]",
-        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}"#.parse().unwrap(),
     )]
     #[case::atom_change(
         "[NH4+:1]>>[NH3:1]",
-        r##"{:deltas [{:atom {:modify [0 "#c0#h3#n"]}}] :lhs {:atoms ["N#i=#c+#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"##.parse().unwrap(),
+        r##"{:deltas [{:atom {:modify [0 "#c0#h3#n"]}}] :lhs {:atoms ["N#i=#c+#h4#n0#u0#s#a!"] :bonds []}}"##.parse().unwrap(),
     )]
     #[case::bond_change(
         "[CH2:1]=[CH2:2]>>[CH3:1][CH3:2]",
-        r##"{:deltas [{:atom {:modify [0 "#h3#v"]}} {:atom {:modify [1 "#h3#v"]}} {:bond {:modify [0 "1"]}}] :lhs {:atoms ["C#i=#c0#h2#n0#u0#s#v2#d0#t0#a!#m!" "C#i=#c0#h2#n0#u0#s#v2#d0#t0#a!#m!"] :bonds [[0 1 "2#c0#u0#s"]]}}"##.parse().unwrap(),
+        r##"{:deltas [{:atom {:modify [0 "#h3"]}} {:atom {:modify [1 "#h3"]}} {:bond {:modify [0 "1"]}}] :lhs {:atoms ["C#i=#c0#h2#n0#u0#s#a!" "C#i=#c0#h2#n0#u0#s#a!"] :bonds [[0 1 "2#c0#u0#s"]]}}"##.parse().unwrap(),
     )]
     #[case::reactant_only(
         "[CH4:1].[OH2:2]>>[CH4:1]",
-        r#"{:deltas [{:atom {:remove 1}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!" "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+        r#"{:deltas [{:atom {:remove 1}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!" "O#i=#c0#h2#n2#u0#s#a!"] :bonds []}}"#.parse().unwrap(),
     )]
     #[case::product_only(
         "[CH4:1]>>[CH4:1].[OH2:2]",
-        r#"{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+        r#"{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s#a!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}"#.parse().unwrap(),
     )]
     #[case::unmapped(
         "C>>O",
-        r#"{:deltas [{:atom {:remove 0}} {:atom {:add "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+        r#"{:deltas [{:atom {:remove 0}} {:atom {:add "O#i=#c0#h2#n2#u0#s#a!"}}] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}"#.parse().unwrap(),
     )]
     #[case::reordered(
         "[CH4:1].[OH2:2]>>[OH2:2].[CH4:1]",
-        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!" "O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"] :bonds []}}"#.parse().unwrap(),
+        r#"{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!" "O#i=#c0#h2#n2#u0#s#a!"] :bonds []}}"#.parse().unwrap(),
     )]
     fn test_reaction_smiles_interpret(#[case] input: &str, #[case] expected: Reaction) {
         let reaction = ReactionSmiles::parse(input).unwrap();
 
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
+            ..ChemistryModel::default()
+        };
+
         assert_eq!(
-            reaction.interpret(&ChemistryModel::default(), &ResolveConfig::default()),
+            reaction.interpret(&model, &ResolveConfig::default()),
             Ok(expected)
         );
     }
@@ -822,7 +843,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))); 6]
+        vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 6]
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
@@ -915,6 +936,23 @@ mod tests {
     }
 
     #[rstest]
+    #[case::pyrrole(
+        "c1cccn1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,2]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "N#i=#c0#h#n0#u0#s#a+"] :bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]]}"##)
+    )]
+    #[case::pyridine(
+        "c1ccncc1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "N#i=#c0#h0#n#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+"] :bonds [[0 5 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"] [4 5 "1#c0#u0#s#a"]]}"##)
+    )]
+    #[case::imidazole(
+        "c1cncn1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,2,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "N#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "N#i=#c0#h0#n#u0#s#a+"] :bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]]}"##)
+    )]
+    fn test_ingest_smiles_aromatic_nitrogen(#[case] input: &str, #[case] expected: Molecule) {
+        assert_eq!(ingest_smiles(input).unwrap(), expected);
+    }
+
+    #[rstest]
     #[case::mdl_furan("o1cccc1")]
     #[case::mdl_thiophene("s1cccc1")]
     #[case::mdl_pyrrole("[nH]1cccc1")]
@@ -943,13 +981,7 @@ mod tests {
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
-            vec![
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(2))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            ]
+            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
         );
         assert_eq!(
             molecule
@@ -968,13 +1000,25 @@ mod tests {
     #[rstest]
     #[case::retained(
         SmilesIoConfig::opensmiles(),
-        ChemistryModel::default(),
+        ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
+            ..ChemistryModel::default()
+        },
         ResolveConfig::default(),
         Some(TetrahedralStereoForm::Stereo(StereoCoset::Lit(0)))
     )]
     #[case::reset(
         SmilesIoConfig::opensmiles(),
-        ChemistryModel::default(),
+        ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
+            ..ChemistryModel::default()
+        },
         ResolveConfig {
             aromaticity: AromaticityResolveConfig::default(),
             stereo: StereoResolveConfig {
@@ -1283,7 +1327,7 @@ mod tests {
         SmilesIoConfig::opensmiles(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" "C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
+        Ok(r##"{:deltas [] :lhs {:aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] :atoms ["C#i=#c+#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+"] :bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]]}}"##.parse().unwrap()),
     )]
     fn test_ingest_reaction_smiles_with(
         #[case] input: &str,
@@ -1389,13 +1433,7 @@ mod tests {
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
                 .collect::<Vec<_>>(),
-            vec![
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(2))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-                Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))),
-            ]
+            vec![Some(AromaticValenceForm::Aromatic(NumForm::Undetermined)); 5]
         );
         assert_eq!(
             reaction

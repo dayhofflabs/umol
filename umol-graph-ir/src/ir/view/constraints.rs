@@ -34,6 +34,20 @@ use super::super::num::NumForm;
 use super::super::ring::RingSet;
 use super::super::stereo::{CisTransStereoForm, TetrahedralStereoForm};
 use super::super::traits::Lattice;
+use super::aromatic::{aromatic_system_asserted_constraints, aromatic_system_derived_constraint};
+use super::atom::{atom_asserted_constraints, atom_derived_constraint};
+use super::bond::{bond_asserted_constraints, bond_derived_constraint};
+use super::dative::{dative_bond_asserted_constraints, dative_bond_derived_constraint};
+use super::multicenter::{
+    multicenter_bond_asserted_constraints, multicenter_bond_derived_constraint,
+};
+use super::noncovalent::{
+    noncovalent_bond_asserted_constraints, noncovalent_bond_derived_constraint,
+};
+use super::stereo::{
+    stereo_atom_asserted_constraints, stereo_atom_derived_constraint,
+    stereo_bond_asserted_constraints, stereo_bond_derived_constraint,
+};
 
 /// Constraint reading of one atom: the asserted side under the container's
 /// read API, and both sides under the keyed accessors.
@@ -61,7 +75,7 @@ impl<'a> AtomConstraintsView<'a> {
 
     /// The stored side of `key`; absence is the vacuous constraint.
     pub fn asserted(&self, key: AtomConstraintKey) -> Option<&'a AtomConstraintForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).get(key)
+        atom_asserted_constraints(self.molecule, self.atom).get(key)
     }
 
     /// The derived side of `key`, obtained by projection from present
@@ -73,7 +87,7 @@ impl<'a> AtomConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
-        super::atom::derived_constraint(self.molecule, self.atom, self.rings, key, false)
+        atom_derived_constraint(self.molecule, self.atom, self.rings, key, false)
     }
 
     /// The derived side of `key` under the closure: absence of a
@@ -86,7 +100,7 @@ impl<'a> AtomConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
-        super::atom::derived_constraint(self.molecule, self.atom, self.rings, key, true)
+        atom_derived_constraint(self.molecule, self.atom, self.rings, key, true)
     }
 
     /// Whether this atom's constraint reading satisfies `pattern`: every
@@ -148,67 +162,67 @@ impl<'a> AtomConstraintsView<'a> {
     // every accessor below reads the asserted side.
 
     pub fn valence(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).valence()
+        atom_asserted_constraints(self.molecule, self.atom).valence()
     }
 
     pub fn aromatic_valence(&self) -> Option<&'a AromaticValenceForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).aromatic_valence()
+        atom_asserted_constraints(self.molecule, self.atom).aromatic_valence()
     }
 
     pub fn multicenter_valence(&self) -> Option<&'a MulticenterValenceForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).multicenter_valence()
+        atom_asserted_constraints(self.molecule, self.atom).multicenter_valence()
     }
 
     pub fn tetrahedral_stereo(&self) -> Option<&'a TetrahedralStereoForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).tetrahedral_stereo()
+        atom_asserted_constraints(self.molecule, self.atom).tetrahedral_stereo()
     }
 
     pub fn degree(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).degree()
+        atom_asserted_constraints(self.molecule, self.atom).degree()
     }
 
     pub fn total_degree(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).total_degree()
+        atom_asserted_constraints(self.molecule, self.atom).total_degree()
     }
 
     pub fn total_valence(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).total_valence()
+        atom_asserted_constraints(self.molecule, self.atom).total_valence()
     }
 
     pub fn ring_degree(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).ring_degree()
+        atom_asserted_constraints(self.molecule, self.atom).ring_degree()
     }
 
     pub fn ring_valence(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).ring_valence()
+        atom_asserted_constraints(self.molecule, self.atom).ring_valence()
     }
 
     pub fn total_hydrogens(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).total_hydrogens()
+        atom_asserted_constraints(self.molecule, self.atom).total_hydrogens()
     }
 
     pub fn donated_pairs(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).donated_pairs()
+        atom_asserted_constraints(self.molecule, self.atom).donated_pairs()
     }
 
     pub fn accepted_pairs(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).accepted_pairs()
+        atom_asserted_constraints(self.molecule, self.atom).accepted_pairs()
     }
 
     pub fn ring_count(&self) -> Option<&'a NumForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).ring_count()
+        atom_asserted_constraints(self.molecule, self.atom).ring_count()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &'a AtomConstraintForm> {
-        super::atom::asserted_constraints(self.molecule, self.atom).iter()
+        atom_asserted_constraints(self.molecule, self.atom).iter()
     }
 
     pub fn is_empty(&self) -> bool {
-        super::atom::asserted_constraints(self.molecule, self.atom).is_empty()
+        atom_asserted_constraints(self.molecule, self.atom).is_empty()
     }
 
     pub fn len(&self) -> usize {
-        super::atom::asserted_constraints(self.molecule, self.atom).len()
+        atom_asserted_constraints(self.molecule, self.atom).len()
     }
 }
 
@@ -238,7 +252,7 @@ impl<'a> BondConstraintsView<'a> {
 
     /// The stored side of `key`; absence is the vacuous constraint.
     pub fn asserted(&self, key: BondConstraintKey) -> Option<&'a BondConstraintForm> {
-        super::bond::asserted_constraints(self.molecule, self.bond).get(key)
+        bond_asserted_constraints(self.molecule, self.bond).get(key)
     }
 
     /// The derived side of `key`, obtained by projection from present
@@ -250,7 +264,7 @@ impl<'a> BondConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
-        super::bond::derived_constraint(self.molecule, self.bond, self.rings, key, false)
+        bond_derived_constraint(self.molecule, self.bond, self.rings, key, false)
     }
 
     /// The derived side of `key` under the closure: absence of a
@@ -263,7 +277,7 @@ impl<'a> BondConstraintsView<'a> {
     /// error — the caller scanning keys decides whether to build the ring
     /// set.
     pub fn derived_complete(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
-        super::bond::derived_constraint(self.molecule, self.bond, self.rings, key, true)
+        bond_derived_constraint(self.molecule, self.bond, self.rings, key, true)
     }
 
     /// Whether this bond's constraint reading satisfies `pattern`: every
@@ -325,31 +339,31 @@ impl<'a> BondConstraintsView<'a> {
     // every accessor below reads the asserted side.
 
     pub fn aromatic(&self) -> BooleanForm {
-        super::bond::asserted_constraints(self.molecule, self.bond).aromatic()
+        bond_asserted_constraints(self.molecule, self.bond).aromatic()
     }
 
     pub fn cis_trans_stereo(&self) -> Option<&'a CisTransStereoForm> {
-        super::bond::asserted_constraints(self.molecule, self.bond).cis_trans_stereo()
+        bond_asserted_constraints(self.molecule, self.bond).cis_trans_stereo()
     }
 
     pub fn ring_count(&self) -> Option<&'a NumForm> {
-        super::bond::asserted_constraints(self.molecule, self.bond).ring_count()
+        bond_asserted_constraints(self.molecule, self.bond).ring_count()
     }
 
     pub fn ring_size_count(&self, s: u8) -> Option<&'a NumForm> {
-        super::bond::asserted_constraints(self.molecule, self.bond).ring_size_count(s)
+        bond_asserted_constraints(self.molecule, self.bond).ring_size_count(s)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &'a BondConstraintForm> {
-        super::bond::asserted_constraints(self.molecule, self.bond).iter()
+        bond_asserted_constraints(self.molecule, self.bond).iter()
     }
 
     pub fn is_empty(&self) -> bool {
-        super::bond::asserted_constraints(self.molecule, self.bond).is_empty()
+        bond_asserted_constraints(self.molecule, self.bond).is_empty()
     }
 
     pub fn len(&self) -> usize {
-        super::bond::asserted_constraints(self.molecule, self.bond).len()
+        bond_asserted_constraints(self.molecule, self.bond).len()
     }
 }
 
@@ -456,8 +470,8 @@ constraints_view!(
     DativeBondConstraintForm,
     DativeBondConstraintKey,
     DativeBondConstraintsForm,
-    super::dative::asserted_constraints,
-    super::dative::derived_constraint
+    dative_bond_asserted_constraints,
+    dative_bond_derived_constraint
 );
 
 constraints_view!(
@@ -467,8 +481,8 @@ constraints_view!(
     AromaticSystemConstraintForm,
     AromaticSystemConstraintKey,
     AromaticSystemConstraintsForm,
-    super::aromatic::asserted_constraints,
-    super::aromatic::derived_constraint
+    aromatic_system_asserted_constraints,
+    aromatic_system_derived_constraint
 );
 
 constraints_view!(
@@ -478,8 +492,8 @@ constraints_view!(
     MulticenterBondConstraintForm,
     MulticenterBondConstraintKey,
     MulticenterBondConstraintsForm,
-    super::multicenter::asserted_constraints,
-    super::multicenter::derived_constraint
+    multicenter_bond_asserted_constraints,
+    multicenter_bond_derived_constraint
 );
 
 constraints_view!(
@@ -489,8 +503,8 @@ constraints_view!(
     NoncovalentBondConstraintForm,
     NoncovalentBondConstraintKey,
     NoncovalentBondConstraintsForm,
-    super::noncovalent::asserted_constraints,
-    super::noncovalent::derived_constraint
+    noncovalent_bond_asserted_constraints,
+    noncovalent_bond_derived_constraint
 );
 
 constraints_view!(
@@ -500,8 +514,8 @@ constraints_view!(
     StereoAtomConstraintForm,
     StereoAtomConstraintKey,
     StereoAtomConstraintsForm,
-    super::stereo::stereo_atom_asserted_constraints,
-    super::stereo::stereo_atom_derived_constraint
+    stereo_atom_asserted_constraints,
+    stereo_atom_derived_constraint
 );
 
 constraints_view!(
@@ -511,8 +525,8 @@ constraints_view!(
     StereoBondConstraintForm,
     StereoBondConstraintKey,
     StereoBondConstraintsForm,
-    super::stereo::stereo_bond_asserted_constraints,
-    super::stereo::stereo_bond_derived_constraint
+    stereo_bond_asserted_constraints,
+    stereo_bond_derived_constraint
 );
 
 // The stored containers' typed read API, inherited per family with its
@@ -520,87 +534,85 @@ constraints_view!(
 
 impl<'a> DativeBondConstraintsView<'a> {
     pub fn aromatic(&self) -> BooleanForm {
-        super::dative::asserted_constraints(self.molecule, self.id).aromatic()
+        dative_bond_asserted_constraints(self.molecule, self.id).aromatic()
     }
 
     pub fn ring_count(&self) -> Option<&'a NumForm> {
-        super::dative::asserted_constraints(self.molecule, self.id).ring_count()
+        dative_bond_asserted_constraints(self.molecule, self.id).ring_count()
     }
 
     pub fn ring_size_count(&self, s: u8) -> Option<&'a NumForm> {
-        super::dative::asserted_constraints(self.molecule, self.id).ring_size_count(s)
+        dative_bond_asserted_constraints(self.molecule, self.id).ring_size_count(s)
     }
 }
 
 impl<'a> AromaticSystemConstraintsView<'a> {
     pub fn electron_count(&self) -> NumForm {
-        super::aromatic::asserted_constraints(self.molecule, self.id).electron_count()
+        aromatic_system_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
 
 impl<'a> MulticenterBondConstraintsView<'a> {
     pub fn electron_count(&self) -> NumForm {
-        super::multicenter::asserted_constraints(self.molecule, self.id).electron_count()
+        multicenter_bond_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
 
 impl<'a> NoncovalentBondConstraintsView<'a> {
     pub fn intramolecular(&self) -> BooleanForm {
-        super::noncovalent::asserted_constraints(self.molecule, self.id).intramolecular()
+        noncovalent_bond_asserted_constraints(self.molecule, self.id).intramolecular()
     }
 }
 
 impl<'a> StereoAtomConstraintsView<'a> {
     pub fn ligand_symmetries(&self) -> impl Iterator<Item = &'a LigandSymmetryForm> {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetries()
+        stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
 
     pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id).fluxionalities()
+        stereo_atom_asserted_constraints(self.molecule, self.id).fluxionalities()
     }
 
     pub fn fluxionality(&self, permutation: LigandPermutation) -> FluxionalityForm {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id)
-            .fluxionality(permutation)
+        stereo_atom_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
     }
 
     pub fn topicities(&self) -> impl Iterator<Item = &'a TopicityForm> {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id).topicities()
+        stereo_atom_asserted_constraints(self.molecule, self.id).topicities()
     }
 
     pub fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id).topicity(pair)
+        stereo_atom_asserted_constraints(self.molecule, self.id).topicity(pair)
     }
 
     pub fn stereogenicity(&self) -> StereogenicityForm {
-        super::stereo::stereo_atom_asserted_constraints(self.molecule, self.id).stereogenicity()
+        stereo_atom_asserted_constraints(self.molecule, self.id).stereogenicity()
     }
 }
 
 impl<'a> StereoBondConstraintsView<'a> {
     pub fn ligand_symmetries(&self) -> impl Iterator<Item = &'a LigandSymmetryForm> {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetries()
+        stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
 
     pub fn fluxionalities(&self) -> impl Iterator<Item = &'a FluxionalityForm> {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id).fluxionalities()
+        stereo_bond_asserted_constraints(self.molecule, self.id).fluxionalities()
     }
 
     pub fn fluxionality(&self, permutation: LigandPermutation) -> FluxionalityForm {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id)
-            .fluxionality(permutation)
+        stereo_bond_asserted_constraints(self.molecule, self.id).fluxionality(permutation)
     }
 
     pub fn topicities(&self) -> impl Iterator<Item = &'a TopicityForm> {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id).topicities()
+        stereo_bond_asserted_constraints(self.molecule, self.id).topicities()
     }
 
     pub fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationForm {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id).topicity(pair)
+        stereo_bond_asserted_constraints(self.molecule, self.id).topicity(pair)
     }
 
     pub fn stereogenicity(&self) -> StereogenicityForm {
-        super::stereo::stereo_bond_asserted_constraints(self.molecule, self.id).stereogenicity()
+        stereo_bond_asserted_constraints(self.molecule, self.id).stereogenicity()
     }
 }
 

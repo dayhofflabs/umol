@@ -10,7 +10,9 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{AromaticityModel, ChemistryModel, StereoModel, ValenceModel};
+use umol_graph::ops::model::{
+    AromaticityModel, ChemistryModel, StereoModel, ValenceModel, ValenceTieBreak,
+};
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::ValenceTable;
 use umol_graph::ops::validate::ConnectivityModel;
@@ -78,12 +80,21 @@ fn resolve_test(
 }
 
 fn atom_typing_chemistry() -> ChemistryModel {
-    ChemistryModel::default()
+    ChemistryModel {
+        valence: ValenceModel {
+            tie_break: ValenceTieBreak::MostSaturated,
+            ..ValenceModel::default()
+        },
+        ..ChemistryModel::default()
+    }
 }
 
 fn counts_chemistry() -> ChemistryModel {
     ChemistryModel {
-        valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+        valence: ValenceModel {
+            tie_break: ValenceTieBreak::MostSaturated,
+            ..ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
+        },
         connectivity: ConnectivityModel::default(),
         aromaticity: AromaticityModel::daylight(),
         stereo: StereoModel::default(),

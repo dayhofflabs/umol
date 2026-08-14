@@ -813,11 +813,11 @@ def test_reaction_from_reaction_smiles_resolve_config():
             "[o:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
             "[o:1]1[cH:2][cH:3][cH:4][cH:5]1",
             '{:deltas [] :lhs {:atoms '
-            '["O#i=#c0#h0#n#u0#s#v2#d0#t0#a2#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            '["O#i=#c0#h0#n#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+"] '
             ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
             '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
             '[3 4 "1#c0#u0#s#a"]]}}',
@@ -827,11 +827,11 @@ def test_reaction_from_reaction_smiles_resolve_config():
             "[s:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
             "[s:1]1[cH:2][cH:3][cH:4][cH:5]1",
             '{:deltas [] :lhs {:atoms '
-            '["S#i=#c0#h0#n#u0#s#v2#d0#t0#a2#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            '["S#i=#c0#h0#n#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+"] '
             ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
             '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
             '[3 4 "1#c0#u0#s#a"]]}}',
@@ -841,11 +841,11 @@ def test_reaction_from_reaction_smiles_resolve_config():
             "[nH:1]1[cH:2][cH:3][cH:4][cH:5]1>>"
             "[nH:1]1[cH:2][cH:3][cH:4][cH:5]1",
             '{:deltas [] :lhs {:atoms '
-            '["N#i=#c0#h#n0#u0#s#v2#d0#t0#a2#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-            '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+            '["N#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+" '
+            '"C#i=#c0#h#n0#u0#s#a+"] '
             ':bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
             '[1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"] '
             '[3 4 "1#c0#u0#s#a"]]}}',
@@ -853,7 +853,6 @@ def test_reaction_from_reaction_smiles_resolve_config():
         ),
     ],
 )
-@pytest.mark.skip(reason="Keep-policy resolution pending the doc-194 S4h audit")
 def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
     default = ChemistryModel.default()
 

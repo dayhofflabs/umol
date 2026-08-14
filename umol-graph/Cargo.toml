@@ -100,6 +100,10 @@ name = "fingerprint"
 harness = false
 
 [[bench]]
+name = "resolve"
+harness = false
+
+[[bench]]
 name = "substructure"
 harness = false
 

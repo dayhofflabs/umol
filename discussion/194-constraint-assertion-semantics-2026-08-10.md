@@ -839,7 +839,32 @@ pub struct ResolveReport {
   Keep-policy family (`aromatic_valence_failure: Keep` now contradicts where it previously
   downgraded — rust twins red in the baseline, and seven pytest twins in
   `umol-py/tests/{test_molecule,test_reaction}.py` carry `@pytest.mark.skip` markers naming
-  this item; unskip them here). [dep: S4a–S4g]
+  this item; unskip them here). [dep: S4a–S4g] **Done 2026-08-14:** the Keep-policy family
+  was a production defect, not an expectation delta — `select`'s unclaimed-all-aromatic
+  carrier check contradicted unconditionally, never consulting `aromatic_valence_failure`;
+  it now applies only under `Error`, and `Keep` tolerates the unclaimed carrier (the
+  assertion stays, no system forms). With that fix and the write-back deltas reconciled,
+  the umol-graph lib is fully green (889) — the S4a red period is closed — and the seven
+  pytest skips are removed (1306 passed; only the two doc-195 matcher-gate skips remain).
+  Acceptance: `test_ingest_smiles_aromatic_nitrogen` pins the doc 174 triple through
+  `ingest_smiles` (pyrrole N `#h1`, system `[1,1,1,1,2]`; pyridine N `#h0#n1`,
+  `[1,1,1,1,1,1]`; imidazole `[1,1,2,1,1]`), and `test_resolver_resolve_pyrrolyl` pins the
+  pyrrolyl radical (`N#h0` in → `N#h0#n0#u#s2`, one system `[1,1,1,1,2]`). The conformance
+  model constructors and every explicit-model lib test opt into `MostSaturated`; the
+  equivalence tests name their conveniences' presets. Conformance stands at 399 failures,
+  audited snapshot-by-snapshot: 364 files drop retired `#v` writes, 14 drop retired `#a`
+  writes, the rest of the churn is H-unpinning field fills (`#h/#n/#c/#u`) and line
+  reflow — zero success flips in either direction, stereo cosets identical. The 116 stale
+  tracked `.snap.new` files (committed pre-fix) are deleted; S5d remains the one
+  regeneration. Bench confirmation via the new `umol-graph/benches/resolve.rs`
+  (`ingest_smiles`: methane, octane, benzene, pyridine, naphthalene) against baseline
+  `3e3100787` from a pre-state worktree: every case improved 29–63% (e.g. benzene
+  46.3 → 23.2 µs, octane 50.2 → 19.0 µs) — the single-commit pipeline with the de-cloned
+  select is ~2× the old pipeline; no regression anywhere. Workspace
+  `--all-features --tests`: 28490 passed, 399 failed (conformance snapshots only);
+  clippy zero. Incidental fix surfaced by the bench build: `umol-graph-ir/benches/ground.rs`
+  still called the deleted `Molecule::is_ground` (benches sit outside `--tests`) — migrated
+  to `is_concrete` with matching names.
 - S4i: audit the stereo phase for the same premature collapse (doc 174's remaining open item) —
   whether a local preference selects before a later criterion can vote. Read-and-report while the
   pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d]

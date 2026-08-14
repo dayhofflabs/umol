@@ -201,7 +201,7 @@ impl<'a> NoncovalentBondView<'a> {
 // Derivation layer beneath the noncovalent-bond facades.
 
 /// Stored constraint container of `bond`.
-pub(crate) fn asserted_constraints(
+pub(crate) fn noncovalent_bond_asserted_constraints(
     molecule: &Molecule,
     bond: NoncovalentBondId,
 ) -> &NoncovalentBondConstraintsForm {
@@ -211,7 +211,7 @@ pub(crate) fn asserted_constraints(
 /// Derived side of one noncovalent-bond constraint key: intramolecularity is
 /// whether the two endpoints share a localized-bond component — derived from
 /// the topology with no absence cell, so both modes agree.
-pub(crate) fn derived_constraint(
+pub(crate) fn noncovalent_bond_derived_constraint(
     molecule: &Molecule,
     bond: NoncovalentBondId,
     key: NoncovalentBondConstraintKey,

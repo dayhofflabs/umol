@@ -285,7 +285,7 @@ impl<'a> AromaticSystemView<'a> {
 // Derivation layer beneath the aromatic-system facades.
 
 /// Stored constraint container of `system`.
-pub(crate) fn asserted_constraints(
+pub(crate) fn aromatic_system_asserted_constraints(
     molecule: &Molecule,
     system: AromaticSystemId,
 ) -> &AromaticSystemConstraintsForm {
@@ -295,7 +295,7 @@ pub(crate) fn asserted_constraints(
 /// Derived side of one aromatic-system constraint key: the electron count is
 /// the system's own per-atom contribution sum — a self-projection with no
 /// absence cell, so both modes agree.
-pub(crate) fn derived_constraint(
+pub(crate) fn aromatic_system_derived_constraint(
     molecule: &Molecule,
     system: AromaticSystemId,
     key: AromaticSystemConstraintKey,

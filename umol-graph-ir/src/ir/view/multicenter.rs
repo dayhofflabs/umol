@@ -240,7 +240,7 @@ impl<'a> MulticenterBondView<'a> {
 // Derivation layer beneath the multicenter-bond facades.
 
 /// Stored constraint container of `bond`.
-pub(crate) fn asserted_constraints(
+pub(crate) fn multicenter_bond_asserted_constraints(
     molecule: &Molecule,
     bond: MulticenterBondId,
 ) -> &MulticenterBondConstraintsForm {
@@ -250,7 +250,7 @@ pub(crate) fn asserted_constraints(
 /// Derived side of one multicenter-bond constraint key: the electron count is
 /// the bond's own per-atom contribution sum — a self-projection with no
 /// absence cell, so both modes agree.
-pub(crate) fn derived_constraint(
+pub(crate) fn multicenter_bond_derived_constraint(
     molecule: &Molecule,
     bond: MulticenterBondId,
     key: MulticenterBondConstraintKey,

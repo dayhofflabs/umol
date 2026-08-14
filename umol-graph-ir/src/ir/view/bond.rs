@@ -198,7 +198,7 @@ impl<'a> BondView<'a> {
 // bond id, presented by `BondView` (typed) and `BondConstraintsView` (keyed).
 
 /// Stored constraint container of `bond`.
-pub(crate) fn asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
+pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondConstraintsForm {
     &molecule.bond(bond).attributes.constraints
 }
 
@@ -210,7 +210,7 @@ pub(crate) fn asserted_constraints(molecule: &Molecule, bond: BondId) -> &BondCo
 /// instead of no value. A bond is in an aromatic system iff both endpoints
 /// belong to that system. Ring keys require `rings` and panic without it —
 /// the caller scanning keys decides whether to build the ring set.
-pub(crate) fn derived_constraint(
+pub(crate) fn bond_derived_constraint(
     molecule: &Molecule,
     bond: BondId,
     rings: Option<&RingSet>,

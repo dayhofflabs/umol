@@ -61,14 +61,14 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
-    use umol_graph_ir::ir::{AromaticValenceForm, AtomId, NumForm};
+    use umol_graph_ir::ir::{AromaticValenceForm, AtomId};
     use umol_io::ctfile::config::CtfileIoConfig;
     use umol_io::ctfile::parse_mol_to_ir;
 
     use super::{parse_mol_bytes, parse_mol_bytes_with};
     use crate::ops::model::{
         AromaticityModel, AromaticityRule, ChemistryModel, ElementScope, RingLimits, StereoModel,
-        ValenceModel,
+        ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
         AromaticityResolveConfig, ResolveConfig, Resolver, StereoResolveConfig,
@@ -86,8 +86,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s#v0#a!")]
-    #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s#v2#a")]
+    #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s")]
+    #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s")]
     fn test_parse_mol_to_ir_counts_resolve(
         valence_table: &'static ValenceTable,
         #[case] input: &str,
@@ -96,7 +96,10 @@ mod tests {
     ) {
         let mut molecule = parse_mol_to_ir(input).unwrap();
         let model = ChemistryModel {
-            valence: ValenceModel::counts(Cow::Borrowed(valence_table)),
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::counts(Cow::Borrowed(valence_table))
+            },
             ..ChemistryModel::default()
         };
         Resolver::new(&model).resolve(&mut molecule).unwrap();
@@ -117,7 +120,10 @@ mod tests {
             parse_mol_bytes_with(
                 input.as_bytes(),
                 &CtfileIoConfig::basic(),
-                &ChemistryModel::default(),
+                &ChemistryModel {
+                    valence: ValenceModel::mdl(),
+                    ..ChemistryModel::default()
+                },
                 &ResolveConfig::default(),
             )
             .unwrap()
@@ -129,12 +135,15 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel {
             connectivity: ConnectivityModel::default(),
-            valence: ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table())),
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
+            },
             aromaticity: AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
             stereo: StereoModel::default(),
         },
         ResolveConfig::default(),
-        "C#i=#c0#h4#n0#u0#s#v0#a!"
+        "C#i=#c0#h4#n0#u0#s"
     )]
     fn test_parse_mol_bytes_with(
         #[case] io_config: CtfileIoConfig,
@@ -153,7 +162,7 @@ mod tests {
         CtfileIoConfig::basic(),
         ChemistryModel::default(),
         ResolveConfig::default(),
-        vec![Some(AromaticValenceForm::Aromatic(NumForm::Lit(1))); 6]
+        vec![None; 6]
     )]
     #[case::reset(
         CtfileIoConfig::basic(),

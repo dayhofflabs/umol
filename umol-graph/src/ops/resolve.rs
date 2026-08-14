@@ -628,7 +628,7 @@ mod tests {
                     [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
         mol_dsl_ground!(r#"{
-            :atoms ["C#h#v2#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
+            :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
@@ -641,7 +641,7 @@ mod tests {
             :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
         }"#),
         mol_dsl_ground!(r#"{
-            :atoms ["C#h#v3#a!#T1" "F" "Cl" "Br"]
+            :atoms ["C#h#T1" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
         }"#)
@@ -656,6 +656,43 @@ mod tests {
             Ok(Solution::Determined(ResolveReport::default()))
         );
         assert_eq!(molecule, expected);
+    }
+
+    #[rstest]
+    fn test_resolver_resolve_pyrrolyl() {
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::MostSaturated,
+                ..ValenceModel::default()
+            },
+            aromaticity: AromaticityModel::daylight(),
+            ..ChemistryModel::default()
+        };
+        let mut molecule = mol_dsl!(
+            r#"{:atoms ["C#i=#c0#n0#u0#s#a+" "C#i=#c0#n0#u0#s#a+"
+                        "C#i=#c0#n0#u0#s#a+" "C#i=#c0#n0#u0#s#a+"
+                        "N#i=#c0#h0#a+"]
+                :bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"]
+                        [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"]
+                        [3 4 "1#c0#u0#s#a"]]}"#
+        );
+
+        assert_eq!(
+            Resolver::new(&model).resolve(&mut molecule),
+            Ok(Solution::Determined(ResolveReport::default()))
+        );
+        assert_eq!(
+            molecule,
+            mol_dsl!(
+                r#"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,2]#c0#u0#s"}]
+                    :atoms ["C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+"
+                            "C#i=#c0#h#n0#u0#s#a+" "C#i=#c0#h#n0#u0#s#a+"
+                            "N#i=#c0#h0#n0#u#s2#a+"]
+                    :bonds [[0 4 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"]
+                            [1 2 "1#c0#u0#s#a"] [2 3 "1#c0#u0#s#a"]
+                            [3 4 "1#c0#u0#s#a"]]}"#
+            )
+        );
     }
 
     #[rstest]
