@@ -13,7 +13,7 @@ use umol_utils::solution::Solution;
 
 use crate::ops::model::ChemistryModel;
 use crate::ops::resolve::{
-    ResolveConfig, ResolveUnderdetermined, Resolver, ResolverContradiction, ResolverError,
+    ResolveConfig, ResolveContradiction, ResolveError, ResolveUnderdetermined, Resolver,
 };
 
 /// Convert a parsed external-format value into a graph model.
@@ -35,11 +35,11 @@ pub enum MoleculeInterpretationError {
     #[error("{0}")]
     ModelConversion(#[from] RaiseError),
     #[error("{0}")]
-    Contradiction(#[from] ResolverContradiction),
+    Contradiction(#[from] ResolveContradiction),
     #[error("{0}")]
     Underdetermined(#[from] ResolveUnderdetermined),
     #[error("{0}")]
-    Execution(#[from] ResolverError),
+    Execution(#[from] ResolveError),
 }
 
 impl UmolError for MoleculeInterpretationError {
@@ -82,11 +82,11 @@ pub enum SmilesInputError {
     #[error("{0}")]
     ModelConversion(#[from] RaiseError),
     #[error("{0}")]
-    Contradiction(#[from] ResolverContradiction),
+    Contradiction(#[from] ResolveContradiction),
     #[error("{0}")]
     Underdetermined(#[from] ResolveUnderdetermined),
     #[error("{0}")]
-    Execution(#[from] ResolverError),
+    Execution(#[from] ResolveError),
 }
 
 impl From<MoleculeInterpretationError> for SmilesInputError {
@@ -128,8 +128,8 @@ fn interpret_molecule(
 ) -> Result<Molecule, MoleculeInterpretationError> {
     let mut molecule: Molecule = molecule.try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
-        Solution::Determined(()) => Ok(molecule),
-        Solution::Underdetermined(()) => Err(ResolveUnderdetermined.into()),
+        Solution::Determined(_) => Ok(molecule),
+        Solution::Underdetermined(_) => Err(ResolveUnderdetermined.into()),
         Solution::Contradictory(error) => Err(error.into()),
     }
 }
@@ -294,7 +294,7 @@ mod tests {
         "inconsistent wedge bonds at atom 2"
     )]
     #[case::contradiction(
-        MoleculeInterpretationError::Contradiction(ResolverContradiction::Aromaticity(
+        MoleculeInterpretationError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::HmoInvalidInput(String::from("invalid input")),
         )),
         "hmo: invalid input: invalid input"
@@ -304,7 +304,7 @@ mod tests {
         "resolution underdetermined"
     )]
     #[case::execution(
-        MoleculeInterpretationError::Execution(ResolverError::Aromaticity(
+        MoleculeInterpretationError::Execution(ResolveError::Aromaticity(
             AromaticityError::HmoMissingParameters(String::from("carbon")),
         )),
         "hmo: missing parameters: carbon"
@@ -374,7 +374,7 @@ mod tests {
         "inconsistent wedge bonds at atom 2"
     )]
     #[case::contradiction(
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::HmoInvalidInput(String::from("invalid input")),
         )),
         "hmo: invalid input: invalid input"
@@ -384,7 +384,7 @@ mod tests {
         "resolution underdetermined"
     )]
     #[case::execution(
-        SmilesInputError::Execution(ResolverError::Aromaticity(
+        SmilesInputError::Execution(ResolveError::Aromaticity(
             AromaticityError::HmoMissingParameters(String::from("carbon")),
         )),
         "hmo: missing parameters: carbon"
@@ -403,10 +403,10 @@ mod tests {
         SmilesInputError::ModelConversion(RaiseError::WedgeConflict { atom: 2 })
     )]
     #[case::contradiction(
-        MoleculeInterpretationError::Contradiction(ResolverContradiction::Aromaticity(
+        MoleculeInterpretationError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::HmoInvalidInput(String::from("invalid input")),
         )),
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::HmoInvalidInput(String::from("invalid input")),
         ))
     )]
@@ -415,10 +415,10 @@ mod tests {
         SmilesInputError::Underdetermined(ResolveUnderdetermined)
     )]
     #[case::execution(
-        MoleculeInterpretationError::Execution(ResolverError::Aromaticity(
+        MoleculeInterpretationError::Execution(ResolveError::Aromaticity(
             AromaticityError::HmoMissingParameters(String::from("carbon")),
         )),
-        SmilesInputError::Execution(ResolverError::Aromaticity(
+        SmilesInputError::Execution(ResolveError::Aromaticity(
             AromaticityError::HmoMissingParameters(String::from("carbon")),
         ))
     )]
@@ -648,7 +648,7 @@ mod tests {
         },
         ReactionInterpretationError::Reactants(
             MoleculeInterpretationError::Contradiction(
-                ResolverContradiction::Aromaticity(
+                ResolveContradiction::Aromaticity(
                     AromaticityContradiction::ClarNonBenzenoid(String::from(
                         "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
                     )),
@@ -664,7 +664,7 @@ mod tests {
         },
         ReactionInterpretationError::Products(
             MoleculeInterpretationError::Contradiction(
-                ResolverContradiction::Aromaticity(
+                ResolveContradiction::Aromaticity(
                     AromaticityContradiction::ClarNonBenzenoid(String::from(
                         "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
                     )),
@@ -683,7 +683,7 @@ mod tests {
         },
         ReactionInterpretationError::Reactants(
             MoleculeInterpretationError::Execution(
-                ResolverError::Aromaticity(AromaticityError::HmoMissingParameters(
+                ResolveError::Aromaticity(AromaticityError::HmoMissingParameters(
                     String::from("no Van-Catledge parameters for C with 2 pi-electrons"),
                 )),
             ),
@@ -700,7 +700,7 @@ mod tests {
         },
         ReactionInterpretationError::Products(
             MoleculeInterpretationError::Execution(
-                ResolverError::Aromaticity(AromaticityError::HmoMissingParameters(
+                ResolveError::Aromaticity(AromaticityError::HmoMissingParameters(
                     String::from("no Van-Catledge parameters for C with 2 pi-electrons"),
                 )),
             ),
@@ -746,7 +746,7 @@ mod tests {
     #[case::underdetermined("*", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
     #[case::bare_aromatic_nitrogen(
         "c1cccn1",
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
             ),
@@ -1003,7 +1003,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::ClarNonBenzenoid(String::from(
                 "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
             )),
@@ -1027,7 +1027,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
             ),
@@ -1041,7 +1041,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
             ),
@@ -1055,7 +1055,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Contradiction(ResolverContradiction::Aromaticity(
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
             AromaticityContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
             ),
@@ -1179,7 +1179,7 @@ mod tests {
         Err(ReactionSmilesInputError::Interpretation(
             ReactionInterpretationError::Reactants(
                 MoleculeInterpretationError::Contradiction(
-                    ResolverContradiction::Aromaticity(
+                    ResolveContradiction::Aromaticity(
                         AromaticityContradiction::ClarNonBenzenoid(String::from(
                             "Clar model requires benzenoid input but non-carbon aromatic atoms are present",
                         )),
@@ -1199,7 +1199,7 @@ mod tests {
         Err(ReactionSmilesInputError::Interpretation(
             ReactionInterpretationError::Reactants(
                 MoleculeInterpretationError::Contradiction(
-                    ResolverContradiction::Aromaticity(
+                    ResolveContradiction::Aromaticity(
                         AromaticityContradiction::Inconsistency(
                             AromaticityInconsistency::AromaticValenceFailure {
                                 atom: AtomId(0),
@@ -1221,7 +1221,7 @@ mod tests {
         Err(ReactionSmilesInputError::Interpretation(
             ReactionInterpretationError::Reactants(
                 MoleculeInterpretationError::Contradiction(
-                    ResolverContradiction::Aromaticity(
+                    ResolveContradiction::Aromaticity(
                         AromaticityContradiction::Inconsistency(
                             AromaticityInconsistency::AromaticValenceFailure {
                                 atom: AtomId(0),
@@ -1243,7 +1243,7 @@ mod tests {
         Err(ReactionSmilesInputError::Interpretation(
             ReactionInterpretationError::Reactants(
                 MoleculeInterpretationError::Contradiction(
-                    ResolverContradiction::Aromaticity(
+                    ResolveContradiction::Aromaticity(
                         AromaticityContradiction::Inconsistency(
                             AromaticityInconsistency::AromaticValenceFailure {
                                 atom: AtomId(0),

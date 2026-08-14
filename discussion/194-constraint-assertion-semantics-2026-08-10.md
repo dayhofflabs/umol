@@ -215,15 +215,37 @@ registry row surviving `is_compatible` admission against the atom's constraints 
   constraint. Consumers read members through the `AsLit` extraction discipline (explicit
   non-literal handling), so intensional members degrade to defined behavior, not panics.
 
-Phase composition keeps early commit: the valence phase applies edits for singleton atoms as today
-and forwards only plural sets; the aromaticity phase selects jointly per candidate aromatic system
-— enumerating assignments over the product of the member atoms' candidate sets and keeping those
-whose π-electron sum satisfies the model — and emits its edits including the chosen completions.
-Survivor count zero is `Contradictory`; one is `Determined`; more than one falls to the
-configured `ValenceTieBreak` (Tie-break configuration section) as a last resort whose use is
-visible in the verdict; under `Strict`, or when the key leaves a tie, `Underdetermined`. Single commit was considered and rejected: every failure path — error,
-contradiction, mid-pipeline underdetermined — already rolls back the whole journal, and `resolve`
-holds the molecule exclusively, so intermediate states are unobservable either way.
+Phase composition (corrected 2026-08-13): the constitution round is a candidate-set pipeline with
+a **single commit** at its end. Admission builds the carrier — every atom under resolution gets
+its candidate set, singleton or plural, and the valence phase applies no edits; the aromaticity
+phase selects jointly per candidate aromatic system — enumerating assignments over the product of
+the member atoms' candidate sets and keeping those whose π-electron sum satisfies the model — and
+narrows the carrier; finalization applies the configured `ValenceTieBreak` (Tie-break
+configuration section) to remaining plural atoms outside any candidate system, its use visible in
+the verdict. Survivor count zero is `Contradictory`; one is `Determined`; more than one under
+`Strict`, or when the key leaves a tie, `Underdetermined`. `Determined` commits every singleton
+entry in one transaction (field difference only, the constraint channel untouched);
+`Underdetermined` commits **nothing** and the report carries the survivors — the refine loop
+re-resolves from the unchanged molecule plus the caller's disambiguating assertions.
+
+Early commit was the original design, justified as unobservable (rollback covers failures, the
+molecule is held exclusively); the justification established permissibility, not benefit, and it
+missed inter-phase information flow: the molecule is a *lossy* projection of solver state — a
+committed singleton's fields survive but its model knowledge (`#a`) must not be written back, so
+committing between phases destroys exactly the knowledge later criteria vote on (a kekulé-staged
+benzene carbon admits one aromatic row; committing it drops the `#a1` the ring sum needs). The
+commit is therefore a boundary in the same sense as unit conversion: solver state materializes
+once, at the edge. The phase-placement criterion: a phase belongs *inside* the constitution flow
+iff it reads or narrows constitution candidate sets; it belongs *after* the commit iff it only
+consumes the materialized constitution and feeds nothing back. Stereo resolution sits after —
+stereogenicity is a symmetry property of the resolved constitution, no current criterion lets a
+stereo assertion discriminate a valence completion, and stereo's value domain is already
+lattice-shaped in storage (a coset set is a native candidate set; the para-stereo correlation is
+stereo's own premature-collapse question, audited in S4i). The pipeline is two rounds with one
+commit each — constitution, then stereo — then discharge. Recorded future generalization under
+the carrier's openness clause: promoting stereo assertions to a constitution criterion (a
+`[C@H]`-style assertion can veto an `h3` completion by ligand-distinctness) moves stereo inside
+the flow, voting like aromaticity.
 
 The `Underdetermined` payload of `Resolver::resolve` becomes the carrier itself — per-atom
 surviving completions, not a cardinality summary — so a caller can inspect and refine: assert what
@@ -620,7 +642,9 @@ pub struct ResolveReport {
   constraints ride in solver state only — a committed singleton restores the atom's own
   constraint container, so neither derived nor registry constraints are written back);
   `plan → Solution<(Edits, AtomCompletions), _>`, `resolve → Solution<AtomCompletions, _>`
-  with singleton edits committed under `Underdetermined` (early commit).
+  with singleton edits committed under `Underdetermined` (early commit; **superseded
+  2026-08-13** — the corrected Phase composition commits once at pipeline end, and the
+  standalone `resolve()` conveniences commit only under `Determined`; reworked in S4c/S4d).
   `classify_molecule_atom` composes the closure reading from the view's keyed core
   (meet of asserted, `derived_complete`, and the row entry per key; ring keys asserted-only) —
   sharpened from the old derived-replaces-asserted pattern, and topology keys outside the old
@@ -639,7 +663,7 @@ pub struct ResolveReport {
   the full enumeration (implicit hydrogens ascending, then table aromatic valences) with the
   preference collapse deleted; plan/resolve mirror S4a's carrier shape (singleton restores the
   atom's own constraint container — the enumeration's `#v`/`#a` values stay candidate
-  bookkeeping; early commit under `Underdetermined`). `CountsInput::for_molecule_atom` reads
+  bookkeeping; early commit under `Underdetermined`, **superseded 2026-08-13** as in S4a). `CountsInput::for_molecule_atom` reads
   aromatic evidence as the view's `derived(AromaticValence)` plus the asserted side, retiring
   the duplicated kekulé-neighbor scan; `resolve_atom` and `CountsInput::for_atom` deleted
   (zero callers; bare-form resolution existed only to collapse by preference). The 27-case
@@ -667,12 +691,76 @@ pub struct ResolveReport {
   (`ValenceCandidateSource`, `ValenceTieBreak`, struct `ValenceModel` with `smiles()`/`mdl()`,
   `AromaticityRule`, struct `AromaticityModel`). Red level identical to the S4b baseline;
   clippy zero; new model/compare/table tests green.
-- S4c: aromaticity resolve: joint selection per candidate system over the carrier; assignment
-  ties fall to the configured `ValenceTieBreak`, whose use is visible in the verdict. Breaking.
-  [dep: S4a, S4b1]
-- S4d: `Resolver::resolve`: thread the carrier valence → aromaticity; `Solution<(), _>` →
-  `Solution<ResolveReport, _>`; pipeline finalization applies the configured `ValenceTieBreak`
-  to plural atoms outside any candidate system; rollback paths preserved. Breaking. [dep: S4c]
+- S4c: aromaticity selection: joint selection per candidate system over the carrier, mutating
+  nothing — takes the molecule, the carrier, and the tie-break; contribution sourcing is
+  uniform (an atom's carrier entry if present, else its stored input assertion; no
+  committed-atom case exists under single commit); returns the narrowed carrier, the accepted
+  systems, and the tie-break uses (assignment ties fall to the configured `ValenceTieBreak`).
+  The stored-assertion validation machinery (mismatch and failure policies) keeps its scope.
+  Breaking. [dep: S4a, S4b1] **Done 2026-08-13:** `AromaticityResolver::select` — additive in
+  the end (`plan`/`resolve` untouched; their retirement is S4d's threading). Assignments are
+  enumerated jointly over the aromatic-flexible carrier atoms (those whose disjuncts differ in
+  contribution), bounded by `MAX_JOINT_ASSIGNMENTS = 4096` with excess yielding
+  `Underdetermined` unchanged — a stated bound, not a silent cap; `find_systems` is reused per
+  assignment, so acceptance and system-form construction stay the perception's. Sequential
+  narrowing in ascending member order handles overlapping systems; tie-break comparison is
+  member-wise lexicographic over the candidate forms (`compare_restrictions` →
+  `compare_by_key`); a carrier atom whose every disjunct requires aromaticity and which no
+  accepted or tied system claims is `Contradictory(AromaticValenceFailure)`. Six-case table
+  pins the doc 174 shape: unique-survivor pyrrole-type ring narrows to `#h1 #a2`, the
+  symmetric `#a0`/`#a2` pair stays plural under `Strict` and selects with recorded uses under
+  `MostSaturated`, stored-assertion sourcing with an empty carrier reproduces the benzene
+  system, plus the unclaimed-contradiction and stored-`#a+` gates. Red level unchanged.
+- S4d: the resolver surface made uniform (settled 2026-08-13; no phase trait — one state
+  type and one signature convention). The constitution round threads `ResolveState`; the
+  chemistry verdict rides `Solution`, operational failure rides `Err`, and the `Result` outer
+  is uniform across phases even where the error set is currently empty. Contract sheet:
+
+  ```rust
+  // umol-graph::ops::resolve
+  pub struct ResolveState {
+      pub completions: AtomCompletions,
+      pub systems: Vec<(Vec<AtomId>, AromaticSystemForm)>,
+      pub tie_breaks: Vec<AtomId>,
+  }
+
+  // admission (sources emit no edits; ValenceResolver dispatches)
+  ValenceResolver::admit(&self, &Molecule)
+      -> Result<Solution<ResolveState, ValenceContradiction>, ValenceError>
+  // aromaticity selection (S4c's select retargeted onto the state)
+  AromaticityResolver::select(&self, &Molecule, ResolveState, ValenceTieBreak)
+      -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError>
+  // finalization (outside-system tie-break) and the single commit live inline in
+  Resolver::resolve(&self, &mut Molecule)
+      -> Result<Solution<ResolveReport, ResolveContradiction>, ResolveError>
+  ```
+
+  The single commit materializes the final state in one transaction (field differences from
+  singleton entries, accepted systems, bond marks); `Underdetermined` commits nothing and
+  `ResolveReport` is a projection of the final state. The per-source `plan`/`resolve`
+  surfaces are deleted, not maintained beside the pipeline (the S4a/S4b tuple shapes were
+  interim); the stereo round runs after its own boundary as today. Resolution-family renames
+  per the nomenclature *Operation names* rule land here: `ResolverError` → `ResolveError`,
+  `ResolverContradiction` → `ResolveContradiction`, `ResolverRollbackCause` →
+  `ResolveRollbackCause`. Breaking. [dep: S4c] **Done 2026-08-13:** the contract sheet as
+  specced, plus `ResolveState::to_report` (the projection as a method) and
+  `ResolveError::Commit(TransactionError)` for the one transaction. Sources shed their
+  edit-producing `plan`/`resolve` for `admit` (carrier only, plurality is state not verdict);
+  the pipeline suppresses re-adding systems whose member set is already stored (the old
+  plan's `existing` filter, now at the commit); `Underdetermined` commits nothing — the
+  resolver's own underdetermined test now pins the unchanged molecule, and the final
+  `is_ground` check rolls back uniformly. Net red −15 versus the S4b1 baseline with zero new
+  failures: aromatic SMILES ingest paths (furan/thiophene/pyrrole MDL cases, reaction-SMILES
+  contradiction cases) now resolve end-to-end through admission → joint selection → single
+  commit. The remaining resolver-stage reds are the recorded write-back expectation deltas.
+  Conformance stays at 402 pending S4e's preset wiring and the S6f-gated S5d regeneration.
+  Simple-case overhead audit (2026-08-13): the unambiguous path pays no asymptotic cost for
+  the general scheme — one `find_systems` run (`derive` ran one plus one per stored system),
+  four transactions where the old pipeline ran five, singleton carrier entries inline in the
+  `SmallVec`; the one avoidable cost found, a full carrier clone in `select` (restrictions
+  were recorded as indices into the original entries), is removed — restrictions carry the
+  chosen forms and the owned carrier narrows in place. Bench confirmation belongs with S4h,
+  baselines named by commit SHA.
 - S4e: SMILES ingest stops pinning `#h0` on bare aromatic heteroatoms (`umol-io`); the
   convenience entry points select their format's preset (`ingest_smiles`,
   `ingest_smiles_bytes` → `ValenceModel::smiles()`; `parse_mol_bytes` → `ValenceModel::mdl()`)
@@ -743,6 +831,17 @@ pub struct ResolveReport {
   ad-hoc-permissive, not a transcription (`Cl [1, 3, 5, 7]` beside `Br [1]`); deviations are
   corrected in place — the freeze discipline applies from the audited release onward — or
   documented as deliberate departures in the table header. [dep: S4b1]
+- S6e1: validation-family renames per the *Operation names* rule: `ValidatorError` →
+  `ValidateError`, `ValidatorContradiction` → `ValidateContradiction` (`ValidateConfig`
+  already conforms). [dep: none]
+- S6e2: kekulization/aromatization renames: `KekulizationConfig` → `KekulizeConfig`,
+  `KekulizerError` → `KekulizeError`; audit the aromatizer family alongside. [dep: none]
+- S6e3: canonicalization renames: `CanonicalizationConfig`/`Context`/`Level` →
+  `Canonicalize*`; `MoleculeCanonicalizationError` and peers → `*CanonicalizeError`.
+  [dep: none]
+- S6e4: io and perception naming audit: `ParserError` versus `ParseError` (merge or rename;
+  `ParserType` stays — an agent classification); decide the agent name for
+  `AromaticityPerception`, which is an engine wearing the operation noun. [dep: none]
 - S6f: SMILES umbrella table curation — **not deferrable**: verify the superset claim row by
   row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
   Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording

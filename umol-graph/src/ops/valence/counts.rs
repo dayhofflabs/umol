@@ -13,8 +13,8 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
-    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomHandle, AtomId, AtomView, Edits,
-    IsotopeMassForm, Lattice, Molecule, NumForm, TransactionError, UnpairedElectronsForm,
+    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, AtomView, IsotopeMassForm, Lattice,
+    Molecule, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -74,69 +74,26 @@ impl<'a> CountsValence<'a> {
         Self { table }
     }
 
-    /// Construct the complete plan without mutating `molecule`: singleton
-    /// candidate sets produce edits, plural sets produce completions.
-    ///
-    /// A non-literal element makes the whole plan underdetermined and yields
-    /// nothing; a plural candidate set makes it underdetermined and yields
-    /// both the singleton edits and the completions.
-    pub fn plan(&self, molecule: &Molecule) -> Solution<(Edits, AtomCompletions), CountsError> {
+    /// Admission: every atom under resolution gets its candidate set —
+    /// the counts enumeration per atom — and no edits are produced. A
+    /// non-literal element makes the whole admission underdetermined and
+    /// empty; plurality is state, not a verdict.
+    pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, CountsError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Solution::Underdetermined((Edits::new(), AtomCompletions::new()));
+                return Solution::Underdetermined(AtomCompletions::new());
             }
         }
 
-        let mut edits = Edits::new();
         let mut completions = AtomCompletions::new();
         for id in molecule.atoms().ids() {
-            let candidates = match self.resolve_molecule_atom(molecule, id) {
-                Ok(Some(candidates)) => candidates,
-                Ok(None) => continue,
+            match self.resolve_molecule_atom(molecule, id) {
+                Ok(Some(candidates)) => completions.insert(id, candidates),
+                Ok(None) => {}
                 Err(contradiction) => return Solution::Contradictory(contradiction),
-            };
-            if let [selected] = candidates.as_slice() {
-                let current = molecule.atom(id).attributes;
-                // The constraint channel holds assertions only: a committed
-                // singleton narrows fields; the enumeration's #v/#a values
-                // are candidate bookkeeping and are never written back.
-                let mut selected = selected.clone();
-                selected.constraints = current.constraints.clone();
-                let update = current.difference_to(&selected);
-                edits.update_atom(AtomHandle::Id(id), current, &update);
-            } else {
-                completions.insert(id, candidates);
             }
         }
-        if completions.is_empty() {
-            Solution::Determined((edits, completions))
-        } else {
-            Solution::Underdetermined((edits, completions))
-        }
-    }
-
-    /// Plan and atomically apply counts-valence resolution. Singleton edits
-    /// are committed even under an underdetermined verdict, whose payload is
-    /// the plural survivors.
-    pub fn resolve(
-        &self,
-        molecule: &mut Molecule,
-    ) -> Result<Solution<AtomCompletions, CountsError>, TransactionError> {
-        let (edits, completions, determined) = match self.plan(molecule) {
-            Solution::Determined((edits, completions)) => (edits, completions, true),
-            Solution::Underdetermined((edits, completions)) => (edits, completions, false),
-            Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
-        Ok(if determined {
-            Solution::Determined(completions)
-        } else {
-            Solution::Underdetermined(completions)
-        })
+        Solution::Determined(completions)
     }
 
     fn resolve_molecule_atom(
@@ -433,7 +390,6 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -
 mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
-    use umol_graph_ir::ir::{AtomFieldChange, Edit};
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -492,36 +448,18 @@ mod tests {
     #[rstest]
     #[case::singleton_methane(
         mol_dsl!(r#"{:atoms ["C#c0#h4"]}"#),
-        Solution::Determined((
-            Edits::from_iter([
-                Edit::ModifyAtomField {
-                    id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::IsotopeMass {
-                        old: IsotopeMassForm::Undetermined,
-                        new: IsotopeMassForm::Natural,
-                    },
-                },
-                Edit::ModifyAtomField {
-                    id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::LonePairs {
-                        old: NumForm::Undetermined,
-                        new: NumForm::Lit(0),
-                    },
-                },
-                Edit::ModifyAtomField {
-                    id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::UnpairedElectrons {
-                        old: UnpairedElectronsForm::default(),
-                        new: UnpairedElectronsForm::from((0_u8, 1_u8)),
-                    },
-                },
-            ]),
-            AtomCompletions::new()
-        ))
+        Solution::Determined({
+            let mut completions = AtomCompletions::new();
+            completions.insert(
+                AtomId(0),
+                smallvec![atom_dsl!("C#i=#c0#h4#n0#u0#s#v0#a!")],
+            );
+            completions
+        })
     )]
     #[case::plural_bare_carbon(
         mol_dsl!(r#"{:atoms ["C#c0"]}"#),
-        Solution::Underdetermined((Edits::new(), {
+        Solution::Determined({
             let mut completions = AtomCompletions::new();
             completions.insert(
                 AtomId(0),
@@ -534,51 +472,28 @@ mod tests {
                 ],
             );
             completions
-        }))
+        })
     )]
-    fn test_counts_valence_plan(
-        #[case] molecule: Molecule,
-        #[case] expected: Solution<(Edits, AtomCompletions), CountsError>,
-    ) {
-        let resolver = CountsValence::new(ValenceTable::default_table());
-        assert_eq!(resolver.plan(&molecule), expected);
-    }
-
-    #[rstest]
-    fn test_counts_valence_plan_identity() {
-        let resolver = CountsValence::new(ValenceTable::default_table());
-        let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
-        assert_eq!(
-            resolver.plan(&molecule),
-            Solution::Determined((Edits::new(), AtomCompletions::new()))
-        );
-    }
-
-    #[rstest]
-    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_counts_valence_plan_partial(#[case] molecule: Molecule) {
-        assert_eq!(
-            CountsValence::new(ValenceTable::default_table()).plan(&molecule),
-            Solution::Underdetermined((Edits::new(), AtomCompletions::new()))
-        );
-    }
-
-    #[rstest]
-    #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0#h4" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
-    fn test_counts_valence_plan_error(#[case] molecule: Molecule, #[case] expected: CountsError) {
-        let resolver = CountsValence::new(ValenceTable::default_table());
-        assert_eq!(resolver.plan(&molecule), Solution::Contradictory(expected));
-    }
-
-    #[rstest]
     #[case::water_singletons(
         mol_dsl!(r#"{:atoms ["O #c0" "H #c0" "H #c0"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
-        Solution::Determined(AtomCompletions::new()),
-        vec!["O#i=#c0#h0#n2#u0#s", "H#i=#c0#h0#n0#u0#s", "H#i=#c0#h0#n0#u0#s"]
+        Solution::Determined({
+            let mut completions = AtomCompletions::new();
+            completions.insert(
+                AtomId(0),
+                smallvec![atom_dsl!("O#i=#c0#h0#n2#u0#s#v2#a!")],
+            );
+            for atom in 1..3 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![atom_dsl!("H#i=#c0#h0#n0#u0#s#v#a!")],
+                );
+            }
+            completions
+        })
     )]
     #[case::ethane_carbons_plural(
         mol_dsl!(r#"{:atoms ["C #c0" "C #c0"] :bonds [[0 1 "1"]]}"#),
-        Solution::Underdetermined({
+        Solution::Determined({
             let mut completions = AtomCompletions::new();
             let disjuncts: SmallVec<[AtomForm; 1]> = smallvec![
                 atom_dsl!("C#i=#c0#h0#n#u#s2#v#a!"),
@@ -589,60 +504,40 @@ mod tests {
             completions.insert(AtomId(0), disjuncts.clone());
             completions.insert(AtomId(1), disjuncts);
             completions
-        }),
-        vec!["C#c0", "C#c0"]
+        })
     )]
-    #[case::benzene_carbons_plural(
-        mol_dsl!(r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"] :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#),
-        Solution::Underdetermined({
-            let mut completions = AtomCompletions::new();
-            let disjuncts: SmallVec<[AtomForm; 1]> = smallvec![
-                atom_dsl!("C#i=#c0#h0#n0#u#s2#v2#a"),
-                atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a"),
-            ];
-            for atom in 0..6 {
-                completions.insert(AtomId(atom), disjuncts.clone());
-            }
-            completions
-        }),
-        vec!["C#c0", "C#c0", "C#c0", "C#c0", "C#c0", "C#c0"]
-    )]
-    fn test_counts_valence_resolve(
-        #[case] mut molecule: Molecule,
+    fn test_counts_valence_admit(
+        #[case] molecule: Molecule,
         #[case] expected: Solution<AtomCompletions, CountsError>,
-        #[case] expected_atoms: Vec<&str>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
-        assert_eq!(resolver.resolve(&mut molecule), Ok(expected));
-        for (atom, expected_atom) in molecule.atoms().iter().zip(expected_atoms) {
-            assert_eq!(atom.attributes.to_string(), expected_atom);
-        }
+        assert_eq!(resolver.admit(&molecule), expected);
+    }
+
+    #[rstest]
+    fn test_counts_valence_admit_identity() {
+        let resolver = CountsValence::new(ValenceTable::default_table());
+        let molecule = mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#a!"]}"#);
+        assert_eq!(
+            resolver.admit(&molecule),
+            Solution::Determined(AtomCompletions::new())
+        );
     }
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_counts_valence_resolve_partial(#[case] mut molecule: Molecule) {
-        let original = molecule.clone();
+    fn test_counts_valence_admit_partial(#[case] molecule: Molecule) {
         assert_eq!(
-            CountsValence::new(ValenceTable::default_table()).resolve(&mut molecule),
-            Ok(Solution::Underdetermined(AtomCompletions::new()))
+            CountsValence::new(ValenceTable::default_table()).admit(&molecule),
+            Solution::Underdetermined(AtomCompletions::new())
         );
-        assert_eq!(molecule, original);
     }
 
     #[rstest]
     #[case::later_atom_contradiction(mol_dsl!(r#"{:atoms ["C#c0#h4" "Fe#c0#h0#a+"]}"#), CountsError::UndeterminedAromaticValence)]
-    fn test_counts_valence_resolve_error(
-        #[case] mut molecule: Molecule,
-        #[case] expected: CountsError,
-    ) {
+    fn test_counts_valence_admit_error(#[case] molecule: Molecule, #[case] expected: CountsError) {
         let resolver = CountsValence::new(ValenceTable::default_table());
-        let original = molecule.clone();
-        assert_eq!(
-            resolver.resolve(&mut molecule),
-            Ok(Solution::Contradictory(expected))
-        );
-        assert_eq!(molecule, original);
+        assert_eq!(resolver.admit(&molecule), Solution::Contradictory(expected));
     }
 
     #[rustfmt::skip]

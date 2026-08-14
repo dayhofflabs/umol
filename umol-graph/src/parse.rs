@@ -46,8 +46,8 @@ pub fn parse_mol_bytes_with(
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
-        Solution::Determined(()) => Ok(molecule),
-        Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
+        Solution::Determined(_) => Ok(molecule),
+        Solution::Underdetermined(_) => Err(Box::new(ResolveUnderdetermined)),
         Solution::Contradictory(c) => Err(Box::new(c)),
     }
 }
@@ -67,8 +67,10 @@ mod tests {
         AromaticityModel, AromaticityRule, ChemistryModel, ElementScope, RingLimits, StereoModel,
         ValenceModel,
     };
-    use crate::ops::resolve::{AromaticityResolveConfig, ResolveConfig, StereoResolveConfig};
-    use crate::ops::valence::{CountsValence, ValenceTable};
+    use crate::ops::resolve::{
+        AromaticityResolveConfig, ResolveConfig, Resolver, StereoResolveConfig,
+    };
+    use crate::ops::valence::ValenceTable;
     use crate::ops::validate::ConnectivityModel;
 
     const METHANE_MOL: &str = "Methane\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    1.2345    2.3456    3.4567 C   0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n";
@@ -90,9 +92,11 @@ mod tests {
         #[case] expected_atom: &str,
     ) {
         let mut molecule = parse_mol_to_ir(input).unwrap();
-        CountsValence::new(valence_table)
-            .resolve(&mut molecule)
-            .unwrap();
+        let model = ChemistryModel {
+            valence: ValenceModel::counts(Cow::Borrowed(valence_table)),
+            ..ChemistryModel::default()
+        };
+        Resolver::new(&model).resolve(&mut molecule).unwrap();
         assert_eq!(molecule.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(

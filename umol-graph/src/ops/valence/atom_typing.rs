@@ -5,10 +5,7 @@
 use smallvec::SmallVec;
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{
-    AsLit, AtomConstraintKey, AtomForm, AtomHandle, AtomId, Edits, Lattice, Molecule,
-    TransactionError,
-};
+use umol_graph_ir::ir::{AsLit, AtomConstraintKey, AtomForm, AtomId, Lattice, Molecule};
 use umol_utils::solution::Solution;
 
 use super::{AtomCompletions, AtomTypeRegistry};
@@ -41,69 +38,26 @@ impl<'a> AtomTypingValence<'a> {
         Self { registry }
     }
 
-    /// Construct the complete plan without mutating `molecule`: singleton
-    /// admissions produce edits, plural admissions produce completions.
-    ///
-    /// A non-literal element makes the whole plan underdetermined and yields
-    /// nothing; a plural admission set makes it underdetermined and yields
-    /// both the singleton edits and the completions.
-    pub fn plan(&self, molecule: &Molecule) -> Solution<(Edits, AtomCompletions), AtomTypingError> {
+    /// Admission: every atom under resolution gets its candidate set —
+    /// one disjunct per admitted registry row — and no edits are produced.
+    /// A non-literal element makes the whole admission underdetermined and
+    /// empty; plurality is state, not a verdict.
+    pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
-                return Solution::Underdetermined((Edits::new(), AtomCompletions::new()));
+                return Solution::Underdetermined(AtomCompletions::new());
             }
         }
 
-        let mut edits = Edits::new();
         let mut completions = AtomCompletions::new();
         for id in molecule.atoms().ids() {
-            let admitted = match self.admitted_completions(molecule, id) {
-                Ok(Some(admitted)) => admitted,
-                Ok(None) => continue,
+            match self.admitted_completions(molecule, id) {
+                Ok(Some(admitted)) => completions.insert(id, admitted),
+                Ok(None) => {}
                 Err(contradiction) => return Solution::Contradictory(contradiction),
-            };
-            if let [selected] = admitted.as_slice() {
-                let current = molecule.atom(id).attributes;
-                // The constraint channel holds assertions only: a committed
-                // singleton narrows fields; registry constraints are
-                // admission predicates and are never written back.
-                let mut selected = selected.clone();
-                selected.constraints = current.constraints.clone();
-                let update = current.difference_to(&selected);
-                edits.update_atom(AtomHandle::Id(id), current, &update);
-            } else {
-                completions.insert(id, admitted);
             }
         }
-        if completions.is_empty() {
-            Solution::Determined((edits, completions))
-        } else {
-            Solution::Underdetermined((edits, completions))
-        }
-    }
-
-    /// Plan and atomically apply atom-typing valence resolution. Singleton
-    /// edits are committed even under an underdetermined verdict, whose
-    /// payload is the plural survivors.
-    pub fn resolve(
-        &self,
-        molecule: &mut Molecule,
-    ) -> Result<Solution<AtomCompletions, AtomTypingError>, TransactionError> {
-        let (edits, completions, determined) = match self.plan(molecule) {
-            Solution::Determined((edits, completions)) => (edits, completions, true),
-            Solution::Underdetermined((edits, completions)) => (edits, completions, false),
-            Solution::Contradictory(contradiction) => {
-                return Ok(Solution::Contradictory(contradiction));
-            }
-        };
-        let mut editor = molecule.edit();
-        editor.transact(edits)?;
-        *molecule = editor.build();
-        Ok(if determined {
-            Solution::Determined(completions)
-        } else {
-            Solution::Underdetermined(completions)
-        })
+        Solution::Determined(completions)
     }
 
     /// The admitted completions of an atom: one disjunct per registry row
@@ -205,7 +159,7 @@ mod tests {
 
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
-    use umol_graph_ir::ir::{AtomFieldChange, Edit, Edits, MoleculeEntries, NumForm};
+    use umol_graph_ir::ir::MoleculeEntries;
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
@@ -226,52 +180,35 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_typing_valence_plan(atom_type_registry: AtomTypeRegistry) {
+    fn test_atom_typing_valence_admit(atom_type_registry: AtomTypeRegistry) {
         let resolver = AtomTypingValence::new(&atom_type_registry);
         let molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
-        assert_eq!(
-            resolver.plan(&molecule),
-            Solution::Determined((
-                Edits::from_iter([Edit::ModifyAtomField {
-                    id: AtomHandle::Id(AtomId(0)),
-                    change: AtomFieldChange::ImplicitHydrogens {
-                        old: NumForm::Undetermined,
-                        new: NumForm::Lit(4),
-                    },
-                }]),
-                AtomCompletions::new()
-            ))
-        );
+        let mut expected = AtomCompletions::new();
+        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4#D1")]);
+        assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
     }
 
     #[rstest]
-    fn test_atom_typing_valence_plan_plural(plural_registry: AtomTypeRegistry) {
+    fn test_atom_typing_valence_admit_plural(plural_registry: AtomTypeRegistry) {
         let resolver = AtomTypingValence::new(&plural_registry);
-        let molecule = mol_dsl!(r#"{:atoms ["N#c0"]}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["C#c0" "N#c0"]}"#);
         let mut expected = AtomCompletions::new();
+        expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4")]);
         expected.insert(
-            AtomId(0),
+            AtomId(1),
             smallvec![atom_dsl!("N#c0#h0#a1"), atom_dsl!("N#c0#h1#a2")],
         );
-        assert_eq!(
-            resolver.plan(&molecule),
-            Solution::Underdetermined((Edits::new(), expected))
-        );
+        assert_eq!(resolver.admit(&molecule), Solution::Determined(expected));
     }
 
     #[rstest]
     #[case::topology_key_admits(
         AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h3#D1")]),
-        Solution::Determined((
-            Edits::from_iter([Edit::ModifyAtomField {
-                id: AtomHandle::Id(AtomId(0)),
-                change: AtomFieldChange::ImplicitHydrogens {
-                    old: NumForm::Undetermined,
-                    new: NumForm::Lit(3),
-                },
-            }]),
-            AtomCompletions::new()
-        ))
+        Solution::Determined({
+            let mut expected = AtomCompletions::new();
+            expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h3#D1")]);
+            expected
+        })
     )]
     #[case::topology_key_rejects(
         AtomTypeRegistry::from_atoms([atom_dsl!("C#c0#h2#D2")]),
@@ -281,34 +218,34 @@ mod tests {
             charge: Some(0),
         })
     )]
-    fn test_atom_typing_valence_plan_admission(
+    fn test_atom_typing_valence_admit_admission(
         #[case] registry: AtomTypeRegistry,
-        #[case] expected: Solution<(Edits, AtomCompletions), AtomTypingError>,
+        #[case] expected: Solution<AtomCompletions, AtomTypingError>,
     ) {
         let molecule = mol_dsl!(r#"{:atoms ["C#c0" "C#i=#c0#h3#n0#u0#s"] :bonds [[0 1 "1"]]}"#);
-        assert_eq!(AtomTypingValence::new(&registry).plan(&molecule), expected);
+        assert_eq!(AtomTypingValence::new(&registry).admit(&molecule), expected);
     }
 
     #[rstest]
     #[case::default_registry(Cow::Borrowed(AtomTypeRegistry::default_registry()))]
     #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
-    fn test_atom_typing_valence_plan_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
+    fn test_atom_typing_valence_admit_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
         let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         assert_eq!(
-            AtomTypingValence::new(registry.as_ref()).plan(&molecule),
-            Solution::Determined((Edits::new(), AtomCompletions::new()))
+            AtomTypingValence::new(registry.as_ref()).admit(&molecule),
+            Solution::Determined(AtomCompletions::new())
         );
     }
 
     #[rstest]
     #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_atom_typing_valence_plan_partial(
+    fn test_atom_typing_valence_admit_partial(
         atom_type_registry: AtomTypeRegistry,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).plan(&molecule),
-            Solution::Underdetermined((Edits::new(), AtomCompletions::new()))
+            AtomTypingValence::new(&atom_type_registry).admit(&molecule),
+            Solution::Underdetermined(AtomCompletions::new())
         );
     }
 
@@ -321,59 +258,6 @@ mod tests {
             charge: Some(0),
         }
     )]
-    fn test_atom_typing_valence_plan_error(
-        atom_type_registry: AtomTypeRegistry,
-        #[case] molecule: Molecule,
-        #[case] expected: AtomTypingError,
-    ) {
-        assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).plan(&molecule),
-            Solution::Contradictory(expected)
-        );
-    }
-
-    #[rstest]
-    fn test_atom_typing_valence_resolve(atom_type_registry: AtomTypeRegistry) {
-        let resolver = AtomTypingValence::new(&atom_type_registry);
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0#D1"]}"#);
-        assert_eq!(
-            resolver.resolve(&mut molecule),
-            Ok(Solution::Determined(AtomCompletions::new()))
-        );
-        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c0#h4#D1"]}"#));
-    }
-
-    #[rstest]
-    fn test_atom_typing_valence_resolve_plural(plural_registry: AtomTypeRegistry) {
-        let resolver = AtomTypingValence::new(&plural_registry);
-        let mut molecule = mol_dsl!(r#"{:atoms ["C#c0" "N#c0"]}"#);
-        let mut expected = AtomCompletions::new();
-        expected.insert(
-            AtomId(1),
-            smallvec![atom_dsl!("N#c0#h0#a1"), atom_dsl!("N#c0#h1#a2")],
-        );
-        assert_eq!(
-            resolver.resolve(&mut molecule),
-            Ok(Solution::Underdetermined(expected))
-        );
-        assert_eq!(molecule, mol_dsl!(r#"{:atoms ["C#c0#h4" "N#c0"]}"#));
-    }
-
-    #[rstest]
-    #[case::later_undetermined_element(mol_dsl!(r#"{:atoms ["C#c0" "{C,N}#c0"]}"#))]
-    fn test_atom_typing_valence_resolve_partial(
-        atom_type_registry: AtomTypeRegistry,
-        #[case] mut molecule: Molecule,
-    ) {
-        let original = molecule.clone();
-        assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).resolve(&mut molecule),
-            Ok(Solution::Underdetermined(AtomCompletions::new()))
-        );
-        assert_eq!(molecule, original);
-    }
-
-    #[rstest]
     #[case::later_atom_contradiction(
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0#h3"]}"#),
         AtomTypingError::NoMatch {
@@ -382,17 +266,15 @@ mod tests {
             charge: Some(0),
         }
     )]
-    fn test_atom_typing_valence_resolve_error(
+    fn test_atom_typing_valence_admit_error(
         atom_type_registry: AtomTypeRegistry,
-        #[case] mut molecule: Molecule,
+        #[case] molecule: Molecule,
         #[case] expected: AtomTypingError,
     ) {
-        let original = molecule.clone();
         assert_eq!(
-            AtomTypingValence::new(&atom_type_registry).resolve(&mut molecule),
-            Ok(Solution::Contradictory(expected))
+            AtomTypingValence::new(&atom_type_registry).admit(&molecule),
+            Solution::Contradictory(expected)
         );
-        assert_eq!(molecule, original);
     }
 
     #[rstest]

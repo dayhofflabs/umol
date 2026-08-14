@@ -2,12 +2,14 @@
 //! materialized valence stage; planning emits complete aromatic systems and
 //! localized bond aromatic constraints without mutating the source molecule.
 
-use std::collections::BTreeSet;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet};
 
+use smallvec::smallvec;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm,
-    AtomConstraintForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle, BondUpdate,
-    BooleanForm, Edits, Molecule,
+    AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
+    AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
+    BondUpdate, BooleanForm, Edits, Molecule, NumForm,
 };
 use umol_utils::solution::Solution;
 
@@ -15,7 +17,13 @@ use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     AromaticityPerception,
 };
-use crate::ops::model::AromaticityModel;
+use crate::ops::model::{AromaticityModel, ValenceTieBreak};
+use crate::ops::resolve::ResolveState;
+use crate::ops::valence::compare::compare_by_key;
+
+/// Enumeration bound for joint assignments over aromatic-flexible atoms; an
+/// exceeding molecule stays underdetermined rather than being sampled.
+const MAX_JOINT_ASSIGNMENTS: usize = 4096;
 
 /// How aromaticity resolution handles an independently invalid constraint or entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -262,7 +270,244 @@ impl AromaticityResolver {
         Ok(Solution::Determined(()))
     }
 
-    fn plan_system(
+    /// Joint selection per candidate aromatic system over the carrier,
+    /// mutating nothing: enumerates assignments over the product of the
+    /// members' candidate sets, keeps those the model accepts, and narrows
+    /// the carrier to the chosen completions. Contribution sourcing is
+    /// uniform — an atom's carrier entry if present, else its stored input
+    /// assertion (with the overlay-derived fallback). Assignment ties fall to
+    /// `tie_break`; under `Strict`, or when the key leaves a tie, the members
+    /// stay plural and the system is not accepted. Overlapping systems narrow
+    /// sequentially in ascending member order; a later system's assignments
+    /// incompatible with an earlier choice are dropped. Returns the narrowed
+    /// carrier, the accepted systems, and the atoms selected by the key.
+    ///
+    /// More than [`MAX_JOINT_ASSIGNMENTS`] joint assignments, a non-literal
+    /// stored `#a` outside the carrier, or an undetermined perception yields
+    /// `Underdetermined` with the carrier unchanged. A carrier atom whose
+    /// every disjunct requires aromaticity but which no accepted or tied
+    /// system claims is `Contradictory`.
+    pub fn select(
+        &self,
+        molecule: &Molecule,
+        state: ResolveState,
+        tie_break: ValenceTieBreak,
+    ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
+        let ResolveState {
+            mut completions,
+            mut systems,
+            mut tie_breaks,
+        } = state;
+        let carrier_atoms: BTreeSet<AtomId> = completions.iter().map(|(atom, _)| atom).collect();
+        let stored_gate = molecule.atoms().iter().any(|atom| {
+            !carrier_atoms.contains(&atom.id)
+                && matches!(
+                    atom.attributes.constraints.aromatic_valence(),
+                    Some(AromaticValenceForm::Aromatic(valence)) if valence.as_lit().is_none()
+                )
+        });
+        if stored_gate {
+            return Ok(Solution::Underdetermined(ResolveState {
+                completions,
+                systems,
+                tie_breaks,
+            }));
+        }
+
+        let contribution = |form: &AtomForm| -> Option<u8> {
+            match form.constraints.aromatic_valence() {
+                Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
+                    u8::try_from(*valence).ok()
+                }
+                _ => None,
+            }
+        };
+
+        // Flexible: carrier atoms whose disjuncts differ in contribution.
+        let flexible: Vec<(AtomId, Vec<Option<u8>>)> = completions
+            .iter()
+            .filter_map(|(atom, disjuncts)| {
+                let contributions: Vec<Option<u8>> = disjuncts.iter().map(contribution).collect();
+                (contributions.iter().collect::<BTreeSet<_>>().len() > 1)
+                    .then_some((atom, contributions))
+            })
+            .collect();
+        let assignment_count: usize = flexible
+            .iter()
+            .map(|(_, contributions)| contributions.len())
+            .product();
+        if assignment_count > MAX_JOINT_ASSIGNMENTS {
+            return Ok(Solution::Underdetermined(ResolveState {
+                completions,
+                systems,
+                tie_breaks,
+            }));
+        }
+
+        // Every accepted (system, assignment-restriction) pair across the
+        // joint assignments, keyed by the system's sorted member set.
+        type SystemOption = (Vec<(AtomId, AtomForm)>, Vec<AtomId>, AromaticSystemForm);
+        let mut per_system: BTreeMap<Vec<AtomId>, Vec<SystemOption>> = BTreeMap::new();
+        let mut odometer = vec![0usize; flexible.len()];
+        loop {
+            let choice: BTreeMap<AtomId, usize> = flexible
+                .iter()
+                .zip(&odometer)
+                .map(|(&(atom, _), &index)| (atom, index))
+                .collect();
+            let outcome = self.perception.find_systems(
+                molecule,
+                self.config.perception,
+                |atom| match choice.get(&atom.id) {
+                    Some(&index) => {
+                        contribution(&completions.get(atom.id).expect("flexible atom")[index])
+                    }
+                    None => match completions.get(atom.id) {
+                        Some(disjuncts) => contribution(&disjuncts[0]),
+                        None => match atom.attributes.constraints.aromatic_valence() {
+                            Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
+                                u8::try_from(*valence).ok()
+                            }
+                            Some(AromaticValenceForm::Aromatic(_))
+                            | Some(AromaticValenceForm::NotAromatic) => None,
+                            Some(AromaticValenceForm::Undetermined) | None => {
+                                match atom.aromatic_valence() {
+                                    NumForm::Lit(valence) => u8::try_from(valence).ok(),
+                                    _ => None,
+                                }
+                            }
+                        },
+                    },
+                },
+            )?;
+            let found = match outcome {
+                Solution::Determined(found) => found,
+                Solution::Underdetermined(_) => {
+                    return Ok(Solution::Underdetermined(ResolveState {
+                        completions,
+                        systems,
+                        tie_breaks,
+                    }));
+                }
+                Solution::Contradictory(contradiction) => {
+                    return Ok(Solution::Contradictory(contradiction));
+                }
+            };
+            for (atoms, form) in found {
+                let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
+                let restriction: Vec<(AtomId, AtomForm)> = choice
+                    .iter()
+                    .filter(|(atom, _)| members.contains(atom))
+                    .map(|(&atom, &index)| {
+                        (
+                            atom,
+                            completions.get(atom).expect("flexible atom")[index].clone(),
+                        )
+                    })
+                    .collect();
+                let mut key: Vec<AtomId> = atoms.clone();
+                key.sort_unstable();
+                let options = per_system.entry(key).or_default();
+                if !options.iter().any(|(existing, _, existing_form)| {
+                    *existing == restriction && *existing_form == form
+                }) {
+                    options.push((restriction, atoms, form));
+                }
+            }
+
+            let mut position = flexible.len();
+            loop {
+                if position == 0 {
+                    break;
+                }
+                position -= 1;
+                odometer[position] += 1;
+                if odometer[position] < flexible[position].1.len() {
+                    break;
+                }
+                odometer[position] = 0;
+            }
+            if flexible.is_empty() || odometer.iter().all(|&index| index == 0) {
+                break;
+            }
+        }
+
+        let mut accepted: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
+        let mut tie_break_uses: BTreeSet<AtomId> = BTreeSet::new();
+        let mut claimed: BTreeSet<AtomId> = BTreeSet::new();
+        for (key, mut options) in per_system {
+            // Sequential consistency: drop assignments incompatible with
+            // earlier choices (a narrowed entry no longer offers the
+            // restricted form).
+            options.retain(|(restriction, _, _)| {
+                restriction.iter().all(|(atom, form)| {
+                    completions
+                        .get(*atom)
+                        .is_some_and(|entry| entry.contains(form))
+                })
+            });
+            if options.is_empty() {
+                continue;
+            }
+            claimed.extend(key.iter().copied());
+            let chosen = if options.len() == 1 {
+                Some((&options[0], false))
+            } else if tie_break.key().is_empty() {
+                None
+            } else {
+                let best = options
+                    .iter()
+                    .max_by(|a, b| compare_restrictions(&a.0, &b.0, tie_break))
+                    .expect("non-empty options");
+                let unique = options
+                    .iter()
+                    .filter(|other| compare_restrictions(&other.0, &best.0, tie_break).is_eq())
+                    .count()
+                    == 1;
+                unique.then_some((best, true))
+            };
+            let Some(((restriction, atoms, form), by_key)) = chosen else {
+                continue;
+            };
+            accepted.push((atoms.clone(), form.clone()));
+            for (atom, chosen_form) in restriction {
+                if by_key && completions.get(*atom).is_some_and(|entry| entry.len() > 1) {
+                    tie_break_uses.insert(*atom);
+                }
+                completions.insert(*atom, smallvec![chosen_form.clone()]);
+            }
+        }
+
+        // A carrier atom whose every disjunct requires aromaticity but which
+        // no accepted or tied system claims cannot be completed.
+        for (atom, disjuncts) in completions.iter() {
+            if claimed.contains(&atom) {
+                continue;
+            }
+            if disjuncts.iter().all(|form| {
+                matches!(
+                    form.constraints.aromatic_valence(),
+                    Some(AromaticValenceForm::Aromatic(_))
+                )
+            }) {
+                return Ok(Solution::Contradictory(
+                    AromaticityInconsistency::AromaticValenceFailure { atom }.into(),
+                ));
+            }
+        }
+
+        systems.extend(accepted);
+        tie_breaks.extend(tie_break_uses);
+        tie_breaks.sort_unstable();
+        tie_breaks.dedup();
+        Ok(Solution::Determined(ResolveState {
+            completions,
+            systems,
+            tie_breaks,
+        }))
+    }
+
+    pub(crate) fn plan_system(
         &self,
         molecule: &Molecule,
         atoms: Vec<AtomId>,
@@ -319,6 +564,30 @@ impl AromaticityResolver {
     }
 }
 
+/// Member-wise lexicographic comparison of two assignment restrictions for
+/// the same system, in ascending member order, each member compared by the
+/// tie-break key over its candidate forms.
+fn compare_restrictions(
+    a: &[(AtomId, AtomForm)],
+    b: &[(AtomId, AtomForm)],
+    tie_break: ValenceTieBreak,
+) -> Ordering {
+    let key = tie_break.key();
+    let b_forms: BTreeMap<AtomId, &AtomForm> = b.iter().map(|(atom, form)| (*atom, form)).collect();
+    let mut a_sorted: Vec<&(AtomId, AtomForm)> = a.iter().collect();
+    a_sorted.sort_unstable_by_key(|(atom, _)| *atom);
+    for (atom, a_form) in a_sorted {
+        let Some(b_form) = b_forms.get(atom) else {
+            continue;
+        };
+        let ordering = compare_by_key(key, a_form, b_form);
+        if ordering != Ordering::Equal {
+            return ordering;
+        }
+    }
+    Ordering::Equal
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
@@ -334,6 +603,7 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
+    use crate::ops::valence::AtomCompletions;
 
     #[fixture]
     fn aromaticity_model() -> AromaticityModel {
@@ -758,6 +1028,192 @@ mod tests {
             bond.attributes.constraints.get(BondConstraintKey::Aromatic),
             Some(BondConstraintForm::Aromatic(BooleanForm::Lit(true)))
         )));
+    }
+
+    type SelectOutcome = Solution<ResolveState, AromaticityContradiction>;
+
+    #[rstest]
+    #[case::unique_survivor(
+        mol_dsl!(r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
+                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
+        {
+            let mut completions = AtomCompletions::new();
+            completions.insert(
+                AtomId(0),
+                smallvec![
+                    umol_graph_ir::atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                    umol_graph_ir::atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                ],
+            );
+            for atom in 1..5 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                );
+            }
+            completions
+        },
+        ValenceTieBreak::Strict,
+        Solution::Determined(ResolveState { completions: {
+                let mut narrowed = AtomCompletions::new();
+                narrowed.insert(
+                    AtomId(0),
+                    smallvec![umol_graph_ir::atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2")],
+                );
+                for atom in 1..5 {
+                    narrowed.insert(
+                        AtomId(atom),
+                        smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                    );
+                }
+                narrowed
+            }, systems: vec![(
+                (0..5).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )], tie_breaks: Vec::new() })
+    )]
+    #[case::tie_strict(
+        mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
+                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        {
+            let mut completions = AtomCompletions::new();
+            for atom in 0..2 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![
+                        umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                        umol_graph_ir::atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+                    ],
+                );
+            }
+            for atom in 2..6 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                );
+            }
+            completions
+        },
+        ValenceTieBreak::Strict,
+        Solution::Determined(ResolveState { completions: {
+                let mut narrowed = AtomCompletions::new();
+                for atom in 0..2 {
+                    narrowed.insert(
+                        AtomId(atom),
+                        smallvec![
+                            umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                            umol_graph_ir::atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+                        ],
+                    );
+                }
+                for atom in 2..6 {
+                    narrowed.insert(
+                        AtomId(atom),
+                        smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                    );
+                }
+                narrowed
+            }, systems: Vec::new(), tie_breaks: Vec::new() })
+    )]
+    #[case::tie_most_saturated(
+        mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
+                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        {
+            let mut completions = AtomCompletions::new();
+            for atom in 0..2 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![
+                        umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                        umol_graph_ir::atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+                    ],
+                );
+            }
+            for atom in 2..6 {
+                completions.insert(
+                    AtomId(atom),
+                    smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                );
+            }
+            completions
+        },
+        ValenceTieBreak::MostSaturated,
+        Solution::Determined(ResolveState { completions: {
+                let mut narrowed = AtomCompletions::new();
+                narrowed.insert(
+                    AtomId(0),
+                    smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0")],
+                );
+                narrowed.insert(
+                    AtomId(1),
+                    smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")],
+                );
+                for atom in 2..6 {
+                    narrowed.insert(
+                        AtomId(atom),
+                        smallvec![umol_graph_ir::atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")],
+                    );
+                }
+                narrowed
+            }, systems: vec![(
+                (0..6).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![0, 2, 1, 1, 1, 1])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )], tie_breaks: vec![AtomId(0), AtomId(1)] })
+    )]
+    #[case::stored_assertions_empty_carrier(
+        benzene(),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Determined(ResolveState { completions: AtomCompletions::new(), systems: vec![(
+                (0..6).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![1; 6])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )], tie_breaks: Vec::new() })
+    )]
+    #[case::unclaimed_aromatic_contradiction(
+        mol_dsl!(r#"{:atoms ["N#c0"] :bonds []}"#),
+        {
+            let mut completions = AtomCompletions::new();
+            completions.insert(
+                AtomId(0),
+                smallvec![umol_graph_ir::atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")],
+            );
+            completions
+        },
+        ValenceTieBreak::Strict,
+        Solution::Contradictory(AromaticityContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
+        ))
+    )]
+    #[case::stored_undetermined_gate(
+        mol_dsl!(r#"{:atoms ["C#a+" "C#a"] :bonds [[0 1 "1"]]}"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Underdetermined(ResolveState::default())
+    )]
+    fn test_aromaticity_resolver_select(
+        aromaticity_model: AromaticityModel,
+        #[case] molecule: Molecule,
+        #[case] completions: AtomCompletions,
+        #[case] tie_break: ValenceTieBreak,
+        #[case] expected: SelectOutcome,
+    ) {
+        assert_eq!(
+            AromaticityResolver::new(&aromaticity_model).select(
+                &molecule,
+                ResolveState {
+                    completions,
+                    ..ResolveState::default()
+                },
+                tie_break,
+            ),
+            Ok(expected)
+        );
     }
 
     #[rstest]

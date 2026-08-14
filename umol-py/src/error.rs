@@ -172,8 +172,8 @@ mod tests {
         AromaticityError as GraphAromaticityError,
     };
     use umol_graph::ops::resolve::{
+        ResolveContradiction as GraphResolveContradiction, ResolveError as GraphResolveError,
         ResolveUnderdetermined as GraphResolveUnderdetermined,
-        ResolverContradiction as GraphResolverContradiction, ResolverError as GraphResolverError,
     };
     use umol_graph_ir::dsl::MetadataError as GraphIrMetadataError;
     use umol_graph_ir::ir::{AtomId, BondId, Entity, EntityKind};
@@ -308,7 +308,7 @@ mod tests {
         "tetrahedral stereo at atom 1 with 2 ligands, expected 3 or 4 ligands"
     )]
     #[case::contradiction(
-        GraphSmilesInputError::Contradiction(GraphResolverContradiction::Aromaticity(
+        GraphSmilesInputError::Contradiction(GraphResolveContradiction::Aromaticity(
             GraphAromaticityContradiction::HmoInvalidInput(String::from("invalid input")),
         )),
         "ContradictionError",
@@ -320,7 +320,7 @@ mod tests {
         "resolution underdetermined"
     )]
     #[case::execution(
-        GraphSmilesInputError::Execution(GraphResolverError::Aromaticity(
+        GraphSmilesInputError::Execution(GraphResolveError::Aromaticity(
             GraphAromaticityError::HmoMissingParameters(String::from("carbon")),
         )),
         "RuntimeError",
@@ -373,7 +373,7 @@ mod tests {
         GraphReactionSmilesInputError::Interpretation(
             GraphReactionInterpretationError::Reactants(
                 GraphMoleculeInterpretationError::Contradiction(
-                    GraphResolverContradiction::Aromaticity(
+                    GraphResolveContradiction::Aromaticity(
                         GraphAromaticityContradiction::HmoInvalidInput(String::from(
                             "invalid reactant",
                         )),
@@ -387,7 +387,7 @@ mod tests {
     #[case::product_contradiction(
         GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
             GraphMoleculeInterpretationError::Contradiction(
-                GraphResolverContradiction::Aromaticity(
+                GraphResolveContradiction::Aromaticity(
                     GraphAromaticityContradiction::HmoInvalidInput(String::from(
                         "invalid product",
                     )),
@@ -416,7 +416,7 @@ mod tests {
     #[case::reactant_execution(
         GraphReactionSmilesInputError::Interpretation(
             GraphReactionInterpretationError::Reactants(
-                GraphMoleculeInterpretationError::Execution(GraphResolverError::Aromaticity(
+                GraphMoleculeInterpretationError::Execution(GraphResolveError::Aromaticity(
                     GraphAromaticityError::HmoMissingParameters(String::from("reactant atom",)),
                 ),),
             ),
@@ -426,7 +426,7 @@ mod tests {
     )]
     #[case::product_execution(
         GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
-            GraphMoleculeInterpretationError::Execution(GraphResolverError::Aromaticity(
+            GraphMoleculeInterpretationError::Execution(GraphResolveError::Aromaticity(
                 GraphAromaticityError::HmoMissingParameters(String::from("product atom",)),
             ),),
         ),),

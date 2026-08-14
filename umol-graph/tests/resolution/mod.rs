@@ -54,12 +54,12 @@ fn resolve_test(
 ) -> ResolveResult {
     let mut molecule = raise(input, defaults);
     match Resolver::new(chemistry).resolve(&mut molecule) {
-        Ok(Solution::Determined(())) => ResolveResult {
+        Ok(Solution::Determined(_)) => ResolveResult {
             success: true,
             output: Some(lower(&molecule)),
             error: None,
         },
-        Ok(Solution::Underdetermined(())) => ResolveResult {
+        Ok(Solution::Underdetermined(_)) => ResolveResult {
             success: false,
             output: None,
             error: Some("resolution underdetermined".to_string()),

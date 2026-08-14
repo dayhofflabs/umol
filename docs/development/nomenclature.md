@@ -198,7 +198,9 @@ The house pattern for a thing that performs an operation is the agent noun — `
 their own error and config types, while `DelocalizeCharge` and the hydrogen transforms are
 parameterless operations, which may justify two conventions rather than one.
 
-This needs a decision before the planned transformers land, not after.
+The engine-adjacent side is settled by the *Operation names* entry: the agent noun names engines
+only, and every run artifact (`*Error`, `*Config`, state) takes the verb stem. Open here remains
+only the choice between agent-noun engines and verb-phrase parameterless transforms.
 
 ## Retired and discouraged
 
@@ -228,6 +230,8 @@ spelling.
 | `Ctx` in a public identifier | `Context` | public identifiers use complete words |
 | `apply_remapping`, `try_apply_remapping` | `remap`, `try_remap` | the receiver is transported through the supplied remapping |
 | `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
+| agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
+| operation-noun composites for run artifacts (`KekulizationConfig`, `CanonicalizationLevel`) | verb stem (`KekulizeConfig`, `CanonicalizeLevel`) | the operation noun names a completed act, not a run's parameters |
 
 ## Open issues
 
@@ -1122,6 +1126,30 @@ semantic deduplication.
 **Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
 explicit context. Not chemical standardization, resolution, validation, or repair.
 **In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`, `Equiv::equiv`.
+
+### Operation names
+
+An operation family has up to three stems — the verb (*resolve*), the agent noun (*resolver*),
+and the operation noun (*resolution*) — and composites choose by referent:
+
+- The **agent noun** names the engine, its qualified engines, and agent classifications, and
+  nothing else: `Resolver`, `ValenceResolver`, `ConstraintValidator`, `ParserType`.
+- The **verb stem** names everything a run consumes, threads, or emits — configs, state,
+  reports, errors, contradictions: `ResolveConfig`, `ResolveState`, `ResolveReport`,
+  `ResolveError`, `ParseError`, `ValidateConfig`, `KekulizeConfig`, `CanonicalizeLevel`. This is
+  the default for operation-adjacent types.
+- The **operation noun** is reserved for prose and for result objects that name a completed act
+  as data (`AromaticityDerivation`); when the result object has a more specific name
+  (`ResolveReport`, a coloring, a matching), prefer it.
+
+Errors, configs, and state belong to the run, not to the engine that performs it — engines are
+built *from* configs and *produce* reports, so `ResolverError` misattributes.
+
+**Not:** agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`,
+`KekulizerError`); operation-noun composites for run artifacts (`KekulizationConfig`,
+`CanonicalizationLevel`).
+**In code:** `Resolver`/`ResolveConfig`/`ResolveState`/`ResolveReport`; the remaining families
+migrate per the staged renames.
 
 ### Overlay
 
