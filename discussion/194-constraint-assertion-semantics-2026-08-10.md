@@ -1087,7 +1087,17 @@ pub struct ResolveReport {
   underdetermined: ties surviving the key, wildcard elements); `error` is reserved for
   contradiction and execution failures, so an underdetermined cell is documented by its
   candidates, not a string. Harness-only change; the snapshots regenerate once at S5d.
-  [dep: S4h]
+  [dep: S4h] **Done 2026-08-13:** the harness runs the four cells per input through
+  tie-break-parameterized model constructors and captures the report: determined cells
+  carry `:tie-breaks`, underdetermined cells carry `:unresolved` (atom id → candidate atom
+  strings) and no error string. The per-cell success asserts are deleted — with `Strict`
+  cells underdetermination is a documented outcome, and the snapshot is the record.
+  Benzene's cells show the design working: both atom-typing cells resolve without
+  discretion (`:tie-breaks []`), `counts-most-saturated` resolves recording
+  `:tie-breaks [0 1 2 3 4 5]`, and `counts-strict` is underdetermined with each carbon's
+  two candidates in full (`"C#i=#c0#h#n0#u0#s#v2#a"` versus the radical doublet
+  `"C#i=#c0#h0#n0#u#s2#v2#a"`). Clippy zero; the suite stays red until the S5d
+  regeneration.
 
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
   [dep: S5b, S5c, S5c1, S5c2, doc 196 A4]
