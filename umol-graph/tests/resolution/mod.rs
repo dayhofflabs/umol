@@ -45,7 +45,7 @@ fn raise(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> Molecule {
 }
 
 fn lower(molecule: &Molecule) -> MoleculeDsl {
-    let cfg = MoleculeDefaults::zeroed();
+    let cfg = MoleculeDefaults::ground();
     MoleculeDsl::from_ir(molecule, &cfg)
 }
 

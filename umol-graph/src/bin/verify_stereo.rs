@@ -160,7 +160,7 @@ fn read_input(arg: &str) -> Vec<u8> {
 /// Lower an IR to DSL with **zeroed** defaults — fully explicit (nothing elided),
 /// matching how the resolution harness lowers its output.
 fn lower(molecule: &Molecule) -> String {
-    MoleculeDsl::from_ir(molecule, &MoleculeDefaults::zeroed()).to_string()
+    MoleculeDsl::from_ir(molecule, &MoleculeDefaults::ground()).to_string()
 }
 
 /// Parse the SMILES to an IR, then lower the IR to DSL.

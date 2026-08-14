@@ -462,10 +462,7 @@ fn lower_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondD
         constraints: _,
     } = bond;
 
-    if matches!(
-        (&cfg.charge, &*charge),
-        (NumDefault::Zero, NumForm::Lit(0))
-    ) {
+    if matches!((&cfg.charge, &*charge), (NumDefault::Zero, NumForm::Lit(0))) {
         *charge = NumForm::Undetermined;
     }
     lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);

@@ -507,10 +507,7 @@ pub(crate) fn lower_bond(bond: &mut BondForm, cfg: &BondDefaults) {
         constraints,
     } = bond;
 
-    if matches!(
-        (&cfg.charge, &*charge),
-        (NumDefault::Zero, NumForm::Lit(0))
-    ) {
+    if matches!((&cfg.charge, &*charge), (NumDefault::Zero, NumForm::Lit(0))) {
         *charge = NumForm::Undetermined;
     }
     lower_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);

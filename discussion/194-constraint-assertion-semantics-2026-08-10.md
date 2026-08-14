@@ -1010,6 +1010,14 @@ pub struct ResolveReport {
   1306 + the two doc-195 skips, clippy zero; conformance stays red for S5d as planned.
 - S5c: lowering: retire the `zeroed()` elision-only paths; raise-side dialect filling stays.
   S6e5 then deletes the `zeroed()` constructors themselves. Breaking. [dep: S5b]
+  **Done 2026-08-13:** three lowering sites passed `zeroed()` and now pass `ground()` —
+  the conformance suite's `lower`, the `verify_stereo` binary, and the `from_ir` conversion
+  bench (its `into_ir` twin and the `ground.rs`/registry raises keep `zeroed()`: raise-side
+  dialect filling, localized at S6e5). Field elision is unchanged; the constraint-elision
+  role had no work left after discharge, and kept assertions (Keep-mode, patterns) now
+  always render. Spot check: benzene's conformance cell lowers to `"C#h"` atoms, `:single`
+  bonds, the system carrying the electrons — primary data only. Snapshots regenerate at
+  S5d; clippy zero across `--tests --benches`.
 - S5c1: SMILES umbrella table curation — verify the superset claim row by
   row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
   Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording

@@ -13,8 +13,8 @@ use winnow::token::{one_of, take};
 use winnow::Parser;
 
 use super::config::{
-    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault,
-    NumDefault, StereoDefault,
+    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault, NumDefault,
+    StereoDefault,
 };
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
@@ -939,10 +939,7 @@ pub(crate) fn lower_atom(atom: &mut AtomForm, cfg: &AtomDefaults) {
     ) {
         *isotope_mass = IsotopeMassForm::Undetermined;
     }
-    if matches!(
-        (&cfg.charge, &*charge),
-        (NumDefault::Zero, NumForm::Lit(0))
-    ) {
+    if matches!((&cfg.charge, &*charge), (NumDefault::Zero, NumForm::Lit(0))) {
         *charge = NumForm::Undetermined;
     }
     match (&cfg.implicit_hydrogens, &*implicit_hydrogens) {
