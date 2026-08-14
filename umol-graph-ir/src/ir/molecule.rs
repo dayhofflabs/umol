@@ -35,7 +35,7 @@ use super::noncovalent::NoncovalentBondForm;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoBondForm};
-use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
+use super::traits::{BiRelationEquiv, Equiv, RelationEquiv};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -44,71 +44,6 @@ use super::view::{
     StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
     StereoBondViews,
 };
-
-fn transform_constraint_stereo_frame(
-    constraint: Constraint,
-    entity: Entity,
-    permutation: Permutation,
-) -> Option<Constraint> {
-    Some(match constraint {
-        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
-            let form = StereoAtomForm {
-                configuration: Default::default(),
-                constraints: constraint.into(),
-            }
-            .transform_frame_by(permutation)?;
-            Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
-        }
-        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
-            let form = StereoBondForm {
-                configuration: Default::default(),
-                constraints: constraint.into(),
-            }
-            .transform_frame_by(permutation)?;
-            Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
-        }
-        Constraint::And(constraints) => Constraint::And(
-            constraints
-                .into_iter()
-                .map(|constraint| {
-                    transform_constraint_stereo_frame(constraint, entity, permutation)
-                })
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Or(constraints) => Constraint::Or(
-            constraints
-                .into_iter()
-                .map(|constraint| {
-                    transform_constraint_stereo_frame(constraint, entity, permutation)
-                })
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Not(constraint) => Constraint::Not(Box::new(
-            transform_constraint_stereo_frame(*constraint, entity, permutation)?,
-        )),
-        constraint => constraint,
-    })
-}
-
-fn constraints_equiv_under_stereo_frames(
-    constraints: Constraints,
-    other: &Constraints,
-    frames: &[(Entity, Vec<Permutation>)],
-) -> bool {
-    let Some(((entity, permutations), remaining)) = frames.split_first() else {
-        return constraints.equiv(other);
-    };
-    permutations.iter().copied().any(|permutation| {
-        let transformed = constraints
-            .clone()
-            .into_iter()
-            .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, permutation))
-            .collect::<Option<Constraints>>();
-        transformed.is_some_and(|constraints| {
-            constraints_equiv_under_stereo_frames(constraints, other, remaining)
-        })
-    })
-}
 
 mod build;
 mod editor;
@@ -1292,33 +1227,34 @@ impl Molecule {
         edits
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.atoms.iter().all(|a| a.is_ground())
-            && self.bonds.iter().all(|b| b.is_ground())
+    /// Concreteness: all entities have ground inherent fields.
+    pub fn is_concrete(&self) -> bool {
+        self.atoms.iter().all(|atom| atom.is_concrete())
+            && self.bonds.iter().all(|bond| bond.is_concrete())
             && self
                 .dative_bonds
                 .relation_ids()
-                .all(|id| self.dative_bonds.data(id).is_ground())
+                .all(|id| self.dative_bonds.data(id).is_concrete())
             && self
                 .aromatic_systems
                 .relation_ids()
-                .all(|id| self.aromatic_systems.data(id).is_ground())
+                .all(|id| self.aromatic_systems.data(id).is_concrete())
             && self
                 .multicenter_bonds
                 .relation_ids()
-                .all(|id| self.multicenter_bonds.data(id).is_ground())
+                .all(|id| self.multicenter_bonds.data(id).is_concrete())
             && self
                 .noncovalent_bonds
                 .relation_ids()
-                .all(|id| self.noncovalent_bonds.data(id).is_ground())
+                .all(|id| self.noncovalent_bonds.data(id).is_concrete())
             && self
                 .stereo_atoms
                 .relation_ids()
-                .all(|id| self.stereo_atoms.data(id).is_ground())
+                .all(|id| self.stereo_atoms.data(id).is_concrete())
             && self
                 .stereo_bonds
                 .relation_ids()
-                .all(|id| self.stereo_bonds.data(id).is_ground())
+                .all(|id| self.stereo_bonds.data(id).is_concrete())
     }
 
     /// Rings selected by `model` and computed using `config`.
@@ -2557,6 +2493,71 @@ fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> I
             .map(|&(compact, original)| (original, compact))
             .collect(),
     )
+}
+
+fn transform_constraint_stereo_frame(
+    constraint: Constraint,
+    entity: Entity,
+    permutation: Permutation,
+) -> Option<Constraint> {
+    Some(match constraint {
+        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
+            let form = StereoAtomForm {
+                configuration: Default::default(),
+                constraints: constraint.into(),
+            }
+            .transform_frame_by(permutation)?;
+            Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
+        }
+        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
+            let form = StereoBondForm {
+                configuration: Default::default(),
+                constraints: constraint.into(),
+            }
+            .transform_frame_by(permutation)?;
+            Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
+        }
+        Constraint::And(constraints) => Constraint::And(
+            constraints
+                .into_iter()
+                .map(|constraint| {
+                    transform_constraint_stereo_frame(constraint, entity, permutation)
+                })
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Constraint::Or(constraints) => Constraint::Or(
+            constraints
+                .into_iter()
+                .map(|constraint| {
+                    transform_constraint_stereo_frame(constraint, entity, permutation)
+                })
+                .collect::<Option<Vec<_>>>()?,
+        ),
+        Constraint::Not(constraint) => Constraint::Not(Box::new(
+            transform_constraint_stereo_frame(*constraint, entity, permutation)?,
+        )),
+        constraint => constraint,
+    })
+}
+
+fn constraints_equiv_under_stereo_frames(
+    constraints: Constraints,
+    other: &Constraints,
+    frames: &[(Entity, Vec<Permutation>)],
+) -> bool {
+    let Some(((entity, permutations), remaining)) = frames.split_first() else {
+        return constraints.equiv(other);
+    };
+    permutations.iter().copied().any(|permutation| {
+        let transformed = constraints
+            .clone()
+            .into_iter()
+            .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, permutation))
+            .collect::<Option<Constraints>>();
+        transformed.is_some_and(|constraints| {
+            constraints_equiv_under_stereo_frames(constraints, other, remaining)
+        })
+    })
 }
 
 #[cfg(test)]

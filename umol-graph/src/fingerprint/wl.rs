@@ -25,8 +25,8 @@ impl WlFeaturizer {
 
     /// Returns the deduplicated set of feature identifiers.
     pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         Ok(FeatureSet::from_sorted_unique(
             self.refinement(mol).features(),
@@ -38,8 +38,8 @@ impl WlFeaturizer {
         &self,
         mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         Ok(CountedFeatureSet::from_counts(
             self.refinement(mol).counts(),

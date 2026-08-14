@@ -210,7 +210,7 @@ fn test_kekulization_fixture(#[case] source: &str, #[case] expected: Kekulizatio
     let dsl: MoleculeDsl = source.parse().unwrap();
     let molecule = dsl.into_ir(&MoleculeDefaults::ground());
 
-    assert!(molecule.is_ground());
+    assert!(molecule.is_concrete());
     assert_eq!(molecule.aromatic_systems().count(), 1);
 
     let system = molecule.aromatic_systems().iter().next().unwrap();

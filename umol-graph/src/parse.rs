@@ -8,7 +8,7 @@ use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 
-use crate::ops::model::ChemistryModel;
+use crate::ops::model::{ChemistryModel, ValenceModel};
 use crate::ops::resolve::{ResolveConfig, ResolveUnderdetermined, Resolver};
 
 /// Parse MOL to a resolved [`Molecule`] using default IO config and model.
@@ -21,7 +21,10 @@ pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, Box<dyn UmolError>> {
     parse_mol_bytes_with(
         input,
         &CtfileIoConfig::basic(),
-        &ChemistryModel::default(),
+        &ChemistryModel {
+            valence: ValenceModel::mdl(),
+            ..ChemistryModel::default()
+        },
         &ResolveConfig::default(),
     )
 }
@@ -47,7 +50,7 @@ pub fn parse_mol_bytes_with(
     let mut molecule: Molecule = (&table_mol).try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
         Solution::Determined(_) => Ok(molecule),
-        Solution::Underdetermined(_) => Err(Box::new(ResolveUnderdetermined)),
+        Solution::Underdetermined(report) => Err(Box::new(ResolveUnderdetermined { report })),
         Solution::Contradictory(c) => Err(Box::new(c)),
     }
 }

@@ -24,9 +24,11 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityFailurePolicy
     AromaticityMismatchPolicy
     AromaticityModel
+    AromaticityRule
     AromaticityResolveConfig
     AtomForm
     AtomUpdate
+    AtomCompletions
     AtomConstraintForm
     AtomConstraintKey
     AtomConstraintsForm
@@ -153,6 +155,7 @@ PUBLIC_EXPORTS = frozenset(
     RelationalConstraint
     RelevantCycleEnumerationAlgorithm
     ResolveConfig
+    ResolveReport
     RingConfig
     RingLimits
     RingMembershipForm
@@ -216,9 +219,11 @@ PUBLIC_EXPORTS = frozenset(
     UnpairedElectronsForm
     UnpairedElectronsUpdate
     UnderdeterminedError
+    ValenceCandidateSource
     ValenceEntry
     ValenceModel
     ValenceTable
+    ValenceTieBreak
     NumForm
     PredExpr
     ArithExpr

@@ -138,11 +138,14 @@ impl UmolError for ResolveContradiction {
     }
 }
 
-/// Resolution left the molecule underdetermined (no contradiction, but not ground).
-/// Surfaced as an error only at boundaries that require a determined result.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+/// Resolution left the molecule underdetermined (no contradiction, but not
+/// concrete). Surfaced as an error only at boundaries that require a
+/// determined result; carries the report for inspection.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Error)]
 #[error("resolution underdetermined")]
-pub struct ResolveUnderdetermined;
+pub struct ResolveUnderdetermined {
+    pub report: ResolveReport,
+}
 
 impl UmolError for ResolveUnderdetermined {
     fn as_any(&self) -> &dyn Any {
@@ -394,7 +397,7 @@ impl<'a> Resolver<'a> {
         }
 
         let resolved = editor.build();
-        if resolved.is_ground() {
+        if resolved.is_concrete() {
             *molecule = resolved;
             Ok(Solution::Determined(ResolveReport {
                 unresolved: AtomCompletions::new(),

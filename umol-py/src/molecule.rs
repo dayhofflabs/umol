@@ -7,7 +7,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
-use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
+use umol_graph::ops::model::{
+    ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
+};
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
@@ -244,8 +246,13 @@ impl Molecule {
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let chemistry_model = chemistry_model.map_or_else(
+            || GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            },
+            |model| model.to_rust(),
+        );
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
 
@@ -886,7 +893,10 @@ mod tests {
     #[case::defaults(None, None, None)]
     #[case::explicit(
         Some(SmilesIoConfig::from_rust(&IoSmilesIoConfig::opensmiles())),
-        Some(ChemistryModel::from_rust(&GraphChemistryModel::default())),
+        Some(ChemistryModel::from_rust(&GraphChemistryModel {
+            valence: GraphValenceModel::smiles(),
+            ..GraphChemistryModel::default()
+        })),
         Some(ResolveConfig::from_rust(GraphResolveConfig::default())),
     )]
     fn test_molecule_from_smiles(
@@ -896,9 +906,7 @@ mod tests {
     ) {
         assert_eq!(
             Molecule::from_smiles("C", io_config, chemistry_model, resolve_config).unwrap(),
-            Molecule::from_rust(mol_dsl!(
-                r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#
-            ))
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}"#))
         );
     }
 

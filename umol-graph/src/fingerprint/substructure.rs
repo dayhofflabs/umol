@@ -39,8 +39,8 @@ impl SubstructureFeaturizer {
     /// `mol` must be ground. Returns the set of canonical structural keys for
     /// every atom and every connected subgraph up to `max_bonds` bonds.
     pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<Vec<u8>>, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         let graph = mol.raw_graph();
         let mut keys: Vec<Vec<u8>> = Vec::new();

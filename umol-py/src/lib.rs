@@ -106,8 +106,8 @@ use crate::{
     reaction_span::ReactionSpan,
     resolve::{
         AromaticBondConstraintMismatchPolicy, AromaticityFailurePolicy, AromaticityMismatchPolicy,
-        AromaticityResolveConfig, ResolveConfig, StereoFailurePolicy, StereoMismatchPolicy,
-        StereoResolveConfig,
+        AromaticityResolveConfig, AtomCompletions, ResolveConfig, ResolveReport,
+        StereoFailurePolicy, StereoMismatchPolicy, StereoResolveConfig,
     },
     ring::RingConfig,
     smiles::{SmilesIoConfig, SmilesSyntaxFlags},
@@ -262,6 +262,8 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add_class::<AromaticityResolveConfig>()?;
         module.add_class::<StereoResolveConfig>()?;
         module.add_class::<ResolveConfig>()?;
+        module.add_class::<ResolveReport>()?;
+        module.add_class::<AtomCompletions>()?;
         module.add_class::<AromaticSystemDelta>()?;
         module.add_class::<AtomDelta>()?;
         module.add_class::<AtomFieldChange>()?;

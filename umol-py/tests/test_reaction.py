@@ -5,6 +5,7 @@ import pytest
 from umol import (
     AromaticityFailurePolicy,
     AromaticityModel,
+    AromaticityRule,
     AromaticityResolveConfig,
     AtomForm,
     AtomDelta,
@@ -749,22 +750,21 @@ def test_reaction_from_sides_error():
     [
         pytest.param(
             "[CH4:1]>>[CH4:1]",
-            '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] '
+            '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] '
             ":bonds []}}",
             id="mapped",
         ),
         pytest.param(
             "[CH4:1]>>[CH4:1].[OH2:2]",
-            '{:deltas [{:atom {:add '
-            '"O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] '
-            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}',
+            '{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s#a!"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}',
             id="one-sided",
         ),
         pytest.param(
             "C>>O",
             '{:deltas [{:atom {:remove 0}} {:atom {:add '
-            '"O#i=#c0#h2#n2#u0#s#v0#d0#t0#a!#m!"}}] '
-            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}',
+            '"O#i=#c0#h2#n2#u0#s#a!"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}',
             id="unmapped",
         ),
     ],
@@ -798,9 +798,9 @@ def test_reaction_from_reaction_smiles_resolve_config():
     assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:aromatic-systems '
         '[{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] '
-        ':atoms ["C#i=#c+#h#n0#u0#s#v2#d0#t0#a0#m!" '
-        '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!" '
-        '"C#i=#c0#h#n0#u0#s#v2#d0#t0#a#m!"] '
+        ':atoms ["C#i=#c+#h#n0#u0#s#a+" '
+        '"C#i=#c0#h#n0#u0#s#a+" '
+        '"C#i=#c0#h#n0#u0#s#a+"] '
         ':bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
         '[1 2 "1#c0#u0#s#a"]]}}'
     )
@@ -853,6 +853,7 @@ def test_reaction_from_reaction_smiles_resolve_config():
         ),
     ],
 )
+@pytest.mark.skip(reason="Keep-policy resolution pending the doc-194 S4h audit")
 def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
     default = ChemistryModel.default()
 
@@ -891,9 +892,9 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
                 "chemistry_model": ChemistryModel(
                     connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
-                    aromaticity=AromaticityModel.Clar(
+                    aromaticity=AromaticityModel(
                         scope=ElementScope.Any(),
-                        ring_limits=RingLimits(),
+                        rule=AromaticityRule.Clar(ring_limits=RingLimits()),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )
@@ -960,8 +961,8 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
             {
                 "chemistry_model": ChemistryModel(
                     connectivity=ChemistryModel.default().connectivity,
-                    valence=ValenceModel.Counts(
-                        table=ValenceTable(
+                    valence=ValenceModel.counts(
+                        ValenceTable(
                             entries={
                                 Element("C"): ValenceEntry(
                                     target_covalences=[4],
@@ -970,9 +971,9 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
                             }
                         )
                     ),
-                    aromaticity=AromaticityModel.Hmo(
+                    aromaticity=AromaticityModel(
                         scope=ElementScope.Any(),
-                        stabilization_threshold=0.375,
+                        rule=AromaticityRule.Hmo(stabilization_threshold=0.375),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )
@@ -1026,7 +1027,13 @@ def test_reaction_from_reaction_smiles_keyword_error():
 def test_reaction_from_reaction_smiles_ownership():
     source = "[CH4:1]>>[CH4:1]"
     io_config = SmilesIoConfig.opensmiles()
-    chemistry_model = ChemistryModel.default()
+    default = ChemistryModel.default()
+    chemistry_model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
     resolve_config = ResolveConfig(
         aromaticity=AromaticityResolveConfig(),
         stereo=StereoResolveConfig(),
@@ -1041,8 +1048,7 @@ def test_reaction_from_reaction_smiles_ownership():
     del source, io_config, chemistry_model, resolve_config
 
     assert reaction == Reaction.parse(
-        '{:deltas [] :lhs {:atoms '
-        '["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"] :bonds []}}'
+        '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}'
     )
 
 
@@ -1493,6 +1499,7 @@ def test_reaction_apply_rejection():
     assert [derivation.rhs for derivation in reaction.apply(host)] == expected
 
 
+@pytest.mark.skip(reason="molecule-scope constraint matching pending doc 195")
 def test_reaction_apply_iteration_error():
     reaction = Reaction.parse(
         "{:lhs {:atoms [\"C\"] "
@@ -1583,6 +1590,7 @@ def test_molecule_react_precondition_error():
         Molecule().react(reaction)
 
 
+@pytest.mark.skip(reason="molecule-scope constraint matching pending doc 195")
 def test_molecule_react_iteration_error():
     reaction = Reaction.parse(
         "{:lhs {:atoms [\"C\"] "

@@ -11,7 +11,12 @@ use umol_graph::ops::resolve::{
     StereoMismatchPolicy as GraphStereoMismatchPolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
 };
+use umol_graph::ops::valence::{
+    AtomCompletions as GraphAtomCompletions, ResolveReport as GraphResolveReport,
+};
+use umol_graph_ir::ir::AtomId as GraphIrAtomId;
 
+use crate::atom::AtomForm;
 use crate::model::aromaticity::AromaticityConfig;
 
 /// Policy for an independently invalid aromatic constraint or entity.
@@ -891,5 +896,98 @@ mod tests {
     ))]
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
+    }
+}
+
+/// Read-only per-atom candidate sets from a resolution run: each entry maps
+/// an atom index to its surviving completions.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtomCompletions(GraphAtomCompletions);
+
+#[pymethods]
+impl AtomCompletions {
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The surviving completions of an atom, or `None`.
+    fn get(&self, atom: u32) -> Option<Vec<AtomForm>> {
+        self.0
+            .get(GraphIrAtomId(atom))
+            .map(|forms| forms.iter().cloned().map(AtomForm::from_rust).collect())
+    }
+
+    /// Every entry, in ascending atom order.
+    fn items(&self) -> Vec<(u32, Vec<AtomForm>)> {
+        self.0
+            .iter()
+            .map(|(atom, forms)| {
+                (
+                    atom.0,
+                    forms.iter().cloned().map(AtomForm::from_rust).collect(),
+                )
+            })
+            .collect()
+    }
+
+    pub(crate) fn __repr__(&self) -> String {
+        let entries = self
+            .0
+            .iter()
+            .map(|(atom, forms)| {
+                let rendered = forms
+                    .iter()
+                    .map(|form| format!("{:?}", form.to_string()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}: [{rendered}]", atom.0)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("AtomCompletions({{{entries}}})")
+    }
+}
+
+impl AtomCompletions {
+    pub(crate) fn from_rust(completions: &GraphAtomCompletions) -> Self {
+        Self(completions.clone())
+    }
+}
+
+/// Read-only resolver verdict payload: the plural survivors and the recorded
+/// tie-break uses.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolveReport(GraphResolveReport);
+
+#[pymethods]
+impl ResolveReport {
+    #[getter]
+    fn unresolved(&self) -> AtomCompletions {
+        AtomCompletions::from_rust(&self.0.unresolved)
+    }
+
+    #[getter]
+    fn tie_breaks(&self) -> Vec<u32> {
+        self.0.tie_breaks.iter().map(|atom| atom.0).collect()
+    }
+
+    pub(crate) fn __repr__(&self) -> String {
+        format!(
+            "ResolveReport(unresolved={}, tie_breaks={:?})",
+            self.unresolved().__repr__(),
+            self.tie_breaks(),
+        )
+    }
+}
+
+impl ResolveReport {
+    pub(crate) fn from_rust(report: &GraphResolveReport) -> Self {
+        Self(report.clone())
     }
 }

@@ -42,6 +42,15 @@ impl RelationData for NoncovalentBondForm {
 }
 
 impl NoncovalentBondForm {
+    /// Concrete: every inherent field is ground; the constraint channel does
+    /// not bear on concreteness.
+    pub fn is_concrete(&self) -> bool {
+        let NoncovalentBondForm {
+            kind,
+            constraints: _,
+        } = self;
+        kind.is_ground()
+    }
     pub fn new(kind: NoncovalentBondKindForm) -> Self {
         Self {
             kind,

@@ -167,8 +167,8 @@ fn test_molecule_builder() {
     }),
     false,
 )]
-fn test_molecule_is_ground(#[case] molecule: Molecule, #[case] expected: bool) {
-    assert_eq!(molecule.is_ground(), expected);
+fn test_molecule_is_concrete(#[case] molecule: Molecule, #[case] expected: bool) {
+    assert_eq!(molecule.is_concrete(), expected);
 }
 
 #[rstest]

@@ -181,6 +181,25 @@ impl AtomForm {
         }
     }
 
+    /// Concreteness: every inherent field is ground, excludes constraints.
+    pub fn is_concrete(&self) -> bool {
+        let AtomForm {
+            element,
+            isotope_mass,
+            charge,
+            implicit_hydrogens,
+            lone_pairs,
+            unpaired_electrons,
+            constraints: _,
+        } = self;
+        element.is_ground()
+            && isotope_mass.is_ground()
+            && charge.is_ground()
+            && implicit_hydrogens.is_ground()
+            && lone_pairs.is_ground()
+            && unpaired_electrons.is_ground()
+    }
+
     /// Fill `Undetermined` value-bearing struct fields with defaults: isotope→
     /// Natural; charge / implicit hydrogens / lone pairs → 0; unpaired-electron count → 0
     /// and, for the (possibly already-set) count, the maximal

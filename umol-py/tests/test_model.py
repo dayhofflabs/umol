@@ -5,6 +5,7 @@ import pytest
 from umol import (
     AromaticityConfig,
     AromaticityModel,
+    AromaticityRule,
     AtomForm,
     AtomTypeRegistry,
     ChemistryModel,
@@ -18,9 +19,11 @@ from umol import (
     StereoKind,
     StereoKindModel,
     StereoModel,
+    ValenceCandidateSource,
     ValenceEntry,
     ValenceModel,
     ValenceTable,
+    ValenceTieBreak,
 )
 
 
@@ -281,30 +284,30 @@ def test_valence_table_mutation():
     assert not hasattr(table, "insert")
 
 
-def test_valence_model_atom_typing():
+def test_valence_candidate_source_atom_typing():
     registry = AtomTypeRegistry.from_atoms(
         [AtomForm.parse("C#c0#v4"), AtomForm.parse("O#c0#v2")]
     )
-    model = ValenceModel.AtomTyping(registry=registry)
+    source = ValenceCandidateSource.AtomTyping(registry=registry)
 
-    assert isinstance(model, ValenceModel)
-    assert isinstance(model, ValenceModel.AtomTyping)
-    assert model.registry == registry
-    assert model == ValenceModel.AtomTyping(registry=registry)
-    assert model != ValenceModel.Counts(table=ValenceTable(entries={}))
+    assert isinstance(source, ValenceCandidateSource)
+    assert isinstance(source, ValenceCandidateSource.AtomTyping)
+    assert source.registry == registry
+    assert source == ValenceCandidateSource.AtomTyping(registry=registry)
+    assert source != ValenceCandidateSource.Counts(table=ValenceTable(entries={}))
 
 
-def test_valence_model_counts():
+def test_valence_candidate_source_counts():
     table = ValenceTable(
         entries={Element("C"): ValenceEntry(target_covalences=[4, 2])}
     )
-    model = ValenceModel.Counts(table=table)
+    source = ValenceCandidateSource.Counts(table=table)
 
-    assert isinstance(model, ValenceModel)
-    assert isinstance(model, ValenceModel.Counts)
-    assert model.table == table
-    assert model == ValenceModel.Counts(table=table)
-    assert model != ValenceModel.AtomTyping(
+    assert isinstance(source, ValenceCandidateSource)
+    assert isinstance(source, ValenceCandidateSource.Counts)
+    assert source.table == table
+    assert source == ValenceCandidateSource.Counts(table=table)
+    assert source != ValenceCandidateSource.AtomTyping(
         registry=AtomTypeRegistry.from_atoms([])
     )
 
@@ -312,58 +315,183 @@ def test_valence_model_counts():
 @pytest.mark.parametrize(
     ("variant", "payload"),
     [
-        (ValenceModel.AtomTyping, AtomTypeRegistry.from_atoms([])),
-        (ValenceModel.Counts, ValenceTable(entries={})),
+        (ValenceCandidateSource.AtomTyping, AtomTypeRegistry.from_atoms([])),
+        (ValenceCandidateSource.Counts, ValenceTable(entries={})),
     ],
 )
-def test_valence_model_new_error(variant, payload):
+def test_valence_candidate_source_new_error(variant, payload):
     with pytest.raises(TypeError):
         variant(payload)
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    ("source", "expected"),
     [
         (
-            ValenceModel.AtomTyping(
+            ValenceCandidateSource.AtomTyping(
                 registry=AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
             ),
-            'ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms(['
+            "ValenceCandidateSource.AtomTyping("
+            "registry=AtomTypeRegistry.from_atoms(["
             'AtomForm.parse("C#c0#v4")]))',
         ),
         (
-            ValenceModel.Counts(
+            ValenceCandidateSource.Counts(
                 table=ValenceTable(
                     entries={
                         Element("C"): ValenceEntry(target_covalences=[4, 2])
                     }
                 )
             ),
-            "ValenceModel.Counts(table=ValenceTable(entries={Element('C'): "
+            "ValenceCandidateSource.Counts(table=ValenceTable(entries="
+            "{Element('C'): "
             "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])}))",
         ),
     ],
 )
-def test_valence_model_repr(model, expected):
-    assert repr(model) == expected
+def test_valence_candidate_source_repr(source, expected):
+    assert repr(source) == expected
 
 
 @pytest.mark.parametrize(
-    ("model", "field", "value"),
+    ("source", "field", "value"),
     [
         (
-            ValenceModel.AtomTyping(registry=AtomTypeRegistry.from_atoms([])),
+            ValenceCandidateSource.AtomTyping(
+                registry=AtomTypeRegistry.from_atoms([])
+            ),
             "registry",
             AtomTypeRegistry.default(),
         ),
         (
-            ValenceModel.Counts(table=ValenceTable(entries={})),
+            ValenceCandidateSource.Counts(table=ValenceTable(entries={})),
             "table",
             ValenceTable.default(),
         ),
     ],
 )
-def test_valence_model_mutation(model, field, value):
+def test_valence_candidate_source_mutation(source, field, value):
+    with pytest.raises(AttributeError):
+        setattr(source, field, value)
+
+
+def test_valence_tie_break_equality():
+    assert ValenceTieBreak.Strict == ValenceTieBreak.Strict
+    assert ValenceTieBreak.Strict != ValenceTieBreak.MostSaturated
+
+
+@pytest.mark.parametrize(
+    ("tie_break", "expected"),
+    [
+        (ValenceTieBreak.Strict, "ValenceTieBreak.Strict"),
+        (ValenceTieBreak.MostSaturated, "ValenceTieBreak.MostSaturated"),
+    ],
+)
+def test_valence_tie_break_repr(tie_break, expected):
+    assert repr(tie_break) == expected
+
+
+def test_valence_model_new():
+    registry = AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
+    model = ValenceModel(
+        candidates=ValenceCandidateSource.AtomTyping(registry=registry),
+        tie_break=ValenceTieBreak.MostSaturated,
+    )
+
+    assert model.candidates == ValenceCandidateSource.AtomTyping(
+        registry=registry
+    )
+    assert model.tie_break == ValenceTieBreak.MostSaturated
+    assert model == ValenceModel(
+        candidates=ValenceCandidateSource.AtomTyping(registry=registry),
+        tie_break=ValenceTieBreak.MostSaturated,
+    )
+    assert model != ValenceModel(
+        candidates=ValenceCandidateSource.AtomTyping(registry=registry)
+    )
+
+
+def test_valence_model_new_default_tie_break():
+    model = ValenceModel(
+        candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={}))
+    )
+
+    assert model.tie_break == ValenceTieBreak.Strict
+
+
+def test_valence_model_new_error():
+    with pytest.raises(TypeError):
+        ValenceModel(ValenceCandidateSource.Counts(table=ValenceTable(entries={})))
+
+
+def test_valence_model_atom_typing():
+    registry = AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
+
+    assert ValenceModel.atom_typing(registry) == ValenceModel(
+        candidates=ValenceCandidateSource.AtomTyping(registry=registry),
+        tie_break=ValenceTieBreak.Strict,
+    )
+
+
+def test_valence_model_counts():
+    table = ValenceTable(
+        entries={Element("C"): ValenceEntry(target_covalences=[4, 2])}
+    )
+
+    assert ValenceModel.counts(table) == ValenceModel(
+        candidates=ValenceCandidateSource.Counts(table=table),
+        tie_break=ValenceTieBreak.Strict,
+    )
+
+
+def test_valence_model_smiles():
+    model = ValenceModel.smiles()
+
+    assert model.candidates == ValenceCandidateSource.Counts(
+        table=ValenceTable.default()
+    )
+    assert model.tie_break == ValenceTieBreak.MostSaturated
+
+
+def test_valence_model_mdl():
+    model = ValenceModel.mdl()
+    table = model.candidates.table
+
+    assert isinstance(model.candidates, ValenceCandidateSource.Counts)
+    assert model.tie_break == ValenceTieBreak.MostSaturated
+    assert table != ValenceTable.default()
+    assert table.entry(Element("N")) == ValenceEntry(
+        target_covalences=[3], aromatic_valences=[1, 2]
+    )
+    assert table.entry(Element("Cl")) == ValenceEntry(
+        target_covalences=[1, 3, 5, 7], aromatic_valences=[]
+    )
+
+
+def test_valence_model_repr():
+    model = ValenceModel(
+        candidates=ValenceCandidateSource.AtomTyping(
+            registry=AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])
+        ),
+    )
+
+    assert repr(model) == (
+        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping("
+        'registry=AtomTypeRegistry.from_atoms([AtomForm.parse("C#c0#v4")])), '
+        "tie_break=ValenceTieBreak.Strict)"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("candidates", ValenceCandidateSource.Counts(table=ValenceTable.default())),
+        ("tie_break", ValenceTieBreak.MostSaturated),
+    ],
+)
+def test_valence_model_mutation(field, value):
+    model = ValenceModel.smiles()
+
     with pytest.raises(AttributeError):
         setattr(model, field, value)
 
@@ -615,11 +743,10 @@ def test_aromaticity_config_mutation(field, value):
 
 
 @pytest.mark.parametrize(
-    ("variant", "scope", "ring_limits"),
+    ("variant", "ring_limits"),
     [
         (
-            AromaticityModel.HueckelRule,
-            ElementScope.Any(),
+            AromaticityRule.Hueckel,
             RingLimits(
                 min_ring_size=4,
                 max_ring_size=18,
@@ -629,8 +756,7 @@ def test_aromaticity_config_mutation(field, value):
             ),
         ),
         (
-            AromaticityModel.Clar,
-            ElementScope.AllowList([Element("C")]),
+            AromaticityRule.Clar,
             RingLimits(
                 min_ring_size=6,
                 max_ring_size=14,
@@ -641,47 +767,129 @@ def test_aromaticity_config_mutation(field, value):
         ),
     ],
 )
-def test_aromaticity_model_ring_variant(variant, scope, ring_limits):
-    model = variant(scope=scope, ring_limits=ring_limits)
+def test_aromaticity_rule_ring_variant(variant, ring_limits):
+    rule = variant(ring_limits=ring_limits)
 
-    assert isinstance(model, AromaticityModel)
-    assert isinstance(model, variant)
-    assert model.scope == scope
-    assert model.scope is not scope
-    assert model.ring_limits == ring_limits
-    assert model.ring_limits is not ring_limits
-    assert model == variant(scope=scope, ring_limits=ring_limits)
+    assert isinstance(rule, AromaticityRule)
+    assert isinstance(rule, variant)
+    assert rule.ring_limits == ring_limits
+    assert rule.ring_limits is not ring_limits
+    assert rule == variant(ring_limits=ring_limits)
+    assert rule != variant(ring_limits=RingLimits())
 
 
-def test_aromaticity_model_hmo():
-    scope = ElementScope.AllowList([Element("C"), Element("N")])
-    model = AromaticityModel.Hmo(
-        scope=scope,
-        stabilization_threshold=0.375,
-    )
+def test_aromaticity_rule_hmo():
+    rule = AromaticityRule.Hmo(stabilization_threshold=0.375)
 
-    assert isinstance(model, AromaticityModel)
-    assert isinstance(model, AromaticityModel.Hmo)
-    assert model.scope == scope
-    assert model.scope is not scope
-    assert model.stabilization_threshold == 0.375
-    assert model == AromaticityModel.Hmo(
-        scope=scope,
-        stabilization_threshold=0.375,
-    )
+    assert isinstance(rule, AromaticityRule)
+    assert isinstance(rule, AromaticityRule.Hmo)
+    assert rule.stabilization_threshold == 0.375
+    assert rule == AromaticityRule.Hmo(stabilization_threshold=0.375)
+    assert rule != AromaticityRule.Hmo(stabilization_threshold=0.5)
 
 
 @pytest.mark.parametrize(
     ("variant", "args"),
     [
-        (AromaticityModel.HueckelRule, (ElementScope.Any(), RingLimits())),
-        (AromaticityModel.Hmo, (ElementScope.Any(), 0.375)),
-        (AromaticityModel.Clar, (ElementScope.Any(), RingLimits())),
+        (AromaticityRule.Hueckel, (RingLimits(),)),
+        (AromaticityRule.Hmo, (0.375,)),
+        (AromaticityRule.Clar, (RingLimits(),)),
     ],
 )
-def test_aromaticity_model_new_error(variant, args):
+def test_aromaticity_rule_new_error(variant, args):
     with pytest.raises(TypeError):
         variant(*args)
+
+
+@pytest.mark.parametrize(
+    ("rule", "expected"),
+    [
+        (
+            AromaticityRule.Hueckel(
+                ring_limits=RingLimits(
+                    min_ring_size=4,
+                    max_ring_size=18,
+                    include_fused=False,
+                    max_fused_combination=3,
+                    max_fused_search=2_000,
+                )
+            ),
+            "AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, "
+            "max_ring_size=18, include_fused=False, max_fused_combination=3, "
+            "max_fused_search=2000))",
+        ),
+        (
+            AromaticityRule.Hmo(stabilization_threshold=0.375),
+            "AromaticityRule.Hmo(stabilization_threshold=0.375)",
+        ),
+        (
+            AromaticityRule.Clar(
+                ring_limits=RingLimits(
+                    min_ring_size=6,
+                    max_ring_size=14,
+                    max_fused_combination=4,
+                    max_fused_search=1_500,
+                )
+            ),
+            "AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, "
+            "max_ring_size=14, include_fused=True, max_fused_combination=4, "
+            "max_fused_search=1500))",
+        ),
+    ],
+)
+def test_aromaticity_rule_repr(rule, expected):
+    assert repr(rule) == expected
+
+
+@pytest.mark.parametrize(
+    ("rule", "field", "value"),
+    [
+        (
+            AromaticityRule.Hueckel(ring_limits=RingLimits()),
+            "ring_limits",
+            RingLimits(min_ring_size=4),
+        ),
+        (
+            AromaticityRule.Hmo(stabilization_threshold=0.375),
+            "stabilization_threshold",
+            0.5,
+        ),
+        (
+            AromaticityRule.Clar(ring_limits=RingLimits()),
+            "ring_limits",
+            RingLimits(min_ring_size=6),
+        ),
+    ],
+)
+def test_aromaticity_rule_mutation(rule, field, value):
+    with pytest.raises(AttributeError):
+        setattr(rule, field, value)
+
+
+def test_aromaticity_model_new():
+    scope = ElementScope.AllowList([Element("C"), Element("N")])
+    rule = AromaticityRule.Hmo(stabilization_threshold=0.375)
+    model = AromaticityModel(scope=scope, rule=rule)
+
+    assert model.scope == scope
+    assert model.scope is not scope
+    assert model.rule == rule
+    assert model.rule is not rule
+    assert model == AromaticityModel(scope=scope, rule=rule)
+    assert model != AromaticityModel(scope=ElementScope.Any(), rule=rule)
+    assert model != AromaticityModel(
+        scope=scope, rule=AromaticityRule.Hmo(stabilization_threshold=0.5)
+    )
+    assert model != AromaticityModel(
+        scope=scope, rule=AromaticityRule.Hueckel(ring_limits=RingLimits())
+    )
+
+
+def test_aromaticity_model_new_error():
+    with pytest.raises(TypeError):
+        AromaticityModel(
+            ElementScope.Any(), AromaticityRule.Hueckel(ring_limits=RingLimits())
+        )
 
 
 @pytest.mark.parametrize(
@@ -689,7 +897,7 @@ def test_aromaticity_model_new_error(variant, args):
     [
         (
             AromaticityModel.daylight,
-            AromaticityModel.HueckelRule(
+            AromaticityModel(
                 scope=ElementScope.AllowList(
                     [
                         Element("C"),
@@ -700,21 +908,23 @@ def test_aromaticity_model_new_error(variant, args):
                         Element("As"),
                     ]
                 ),
-                ring_limits=RingLimits(),
+                rule=AromaticityRule.Hueckel(ring_limits=RingLimits()),
             ),
         ),
         (
             AromaticityModel.mdl,
-            AromaticityModel.HueckelRule(
+            AromaticityModel(
                 scope=ElementScope.AllowList([Element("C"), Element("N")]),
-                ring_limits=RingLimits(min_ring_size=6),
+                rule=AromaticityRule.Hueckel(
+                    ring_limits=RingLimits(min_ring_size=6)
+                ),
             ),
         ),
         (
             AromaticityModel.permissive,
-            AromaticityModel.HueckelRule(
+            AromaticityModel(
                 scope=ElementScope.Any(),
-                ring_limits=RingLimits(),
+                rule=AromaticityRule.Hueckel(ring_limits=RingLimits()),
             ),
         ),
     ],
@@ -723,158 +933,28 @@ def test_aromaticity_model_preset(preset, expected):
     assert preset() == expected
 
 
-@pytest.mark.parametrize(
-    ("left", "right"),
-    [
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            AromaticityModel.Clar(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-        ),
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.AllowList([Element("C")]),
-                ring_limits=RingLimits(),
-            ),
-        ),
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(),
-                ring_limits=RingLimits(min_ring_size=4),
-            ),
-        ),
-        (
-            AromaticityModel.Hmo(
-                scope=ElementScope.Any(), stabilization_threshold=0.375
-            ),
-            AromaticityModel.Hmo(
-                scope=ElementScope.AllowList([Element("C")]),
-                stabilization_threshold=0.375,
-            ),
-        ),
-        (
-            AromaticityModel.Hmo(
-                scope=ElementScope.Any(), stabilization_threshold=0.375
-            ),
-            AromaticityModel.Hmo(
-                scope=ElementScope.Any(), stabilization_threshold=0.5
-            ),
-        ),
-        (
-            AromaticityModel.Clar(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            AromaticityModel.Clar(
-                scope=ElementScope.AllowList([Element("C")]),
-                ring_limits=RingLimits(),
-            ),
-        ),
-        (
-            AromaticityModel.Clar(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            AromaticityModel.Clar(
-                scope=ElementScope.Any(),
-                ring_limits=RingLimits(min_ring_size=6),
-            ),
-        ),
-    ],
-)
-def test_aromaticity_model_equality(left, right):
-    assert left != right
+def test_aromaticity_model_repr():
+    model = AromaticityModel(
+        scope=ElementScope.AllowList([Element("C")]),
+        rule=AromaticityRule.Hmo(stabilization_threshold=0.375),
+    )
+
+    assert repr(model) == (
+        "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), "
+        "rule=AromaticityRule.Hmo(stabilization_threshold=0.375))"
+    )
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    ("field", "value"),
     [
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(),
-                ring_limits=RingLimits(
-                    min_ring_size=4,
-                    max_ring_size=18,
-                    include_fused=False,
-                    max_fused_combination=3,
-                    max_fused_search=2_000,
-                ),
-            ),
-            "AromaticityModel.HueckelRule(scope=ElementScope.Any(), "
-            "ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, "
-            "include_fused=False, max_fused_combination=3, "
-            "max_fused_search=2000))",
-        ),
-        (
-            AromaticityModel.Hmo(
-                scope=ElementScope.AllowList([Element("C"), Element("N")]),
-                stabilization_threshold=0.375,
-            ),
-            "AromaticityModel.Hmo(scope=ElementScope.AllowList([Element('C'), "
-            "Element('N')]), stabilization_threshold=0.375)",
-        ),
-        (
-            AromaticityModel.Clar(
-                scope=ElementScope.AllowList([Element("C")]),
-                ring_limits=RingLimits(
-                    min_ring_size=6,
-                    max_ring_size=14,
-                    max_fused_combination=4,
-                    max_fused_search=1_500,
-                ),
-            ),
-            "AromaticityModel.Clar(scope=ElementScope.AllowList([Element('C')]), "
-            "ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, "
-            "include_fused=True, max_fused_combination=4, "
-            "max_fused_search=1500))",
-        ),
+        ("scope", ElementScope.AllowList([Element("C")])),
+        ("rule", AromaticityRule.Hmo(stabilization_threshold=0.5)),
     ],
 )
-def test_aromaticity_model_repr(model, expected):
-    assert repr(model) == expected
+def test_aromaticity_model_mutation(field, value):
+    model = AromaticityModel.permissive()
 
-
-@pytest.mark.parametrize(
-    ("model", "field", "value"),
-    [
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            "scope",
-            ElementScope.AllowList([Element("C")]),
-        ),
-        (
-            AromaticityModel.HueckelRule(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            "ring_limits",
-            RingLimits(min_ring_size=4),
-        ),
-        (
-            AromaticityModel.Hmo(
-                scope=ElementScope.Any(), stabilization_threshold=0.375
-            ),
-            "stabilization_threshold",
-            0.5,
-        ),
-        (
-            AromaticityModel.Clar(
-                scope=ElementScope.Any(), ring_limits=RingLimits()
-            ),
-            "ring_limits",
-            RingLimits(min_ring_size=6),
-        ),
-    ],
-)
-def test_aromaticity_model_mutation(model, field, value):
     with pytest.raises(AttributeError):
         setattr(model, field, value)
 
@@ -1114,26 +1194,24 @@ def test_chemistry_model_default():
     model = ChemistryModel.default()
 
     assert model.connectivity == ConnectivityModel.default()
-    assert model.valence == ValenceModel.AtomTyping(
-        registry=AtomTypeRegistry.default()
-    )
+    assert model.valence == ValenceModel.atom_typing(AtomTypeRegistry.default())
     assert model.aromaticity == AromaticityModel.daylight()
     assert model.stereo == StereoModel.default()
     assert model == ChemistryModel.default()
 
 
 def test_chemistry_model_new():
-    valence = ValenceModel.Counts(
-        table=ValenceTable(
+    valence = ValenceModel.counts(
+        ValenceTable(
             entries={
                 Element("C"): ValenceEntry(target_covalences=[4]),
                 Element("O"): ValenceEntry(target_covalences=[2]),
             }
         )
     )
-    aromaticity = AromaticityModel.Clar(
+    aromaticity = AromaticityModel(
         scope=ElementScope.AllowList([Element("C")]),
-        ring_limits=RingLimits(min_ring_size=6),
+        rule=AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6)),
     )
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,
@@ -1160,7 +1238,7 @@ def test_chemistry_model_new():
 def test_chemistry_model_new_error():
     with pytest.raises(TypeError):
         ChemistryModel(
-            ValenceModel.AtomTyping(registry=AtomTypeRegistry.default()),
+            ValenceModel.atom_typing(AtomTypeRegistry.default()),
             AromaticityModel.daylight(),
             StereoModel.default(),
         )
@@ -1186,23 +1264,19 @@ def test_chemistry_model_new_error():
         ),
         ChemistryModel(
             connectivity=ChemistryModel.default().connectivity,
-            valence=ValenceModel.Counts(table=ValenceTable(entries={})),
+            valence=ValenceModel.counts(ValenceTable(entries={})),
             aromaticity=AromaticityModel.daylight(),
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
             connectivity=ChemistryModel.default().connectivity,
-            valence=ValenceModel.AtomTyping(
-                registry=AtomTypeRegistry.default()
-            ),
+            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.permissive(),
             stereo=StereoModel.default(),
         ),
         ChemistryModel(
             connectivity=ChemistryModel.default().connectivity,
-            valence=ValenceModel.AtomTyping(
-                registry=AtomTypeRegistry.default()
-            ),
+            valence=ValenceModel.atom_typing(AtomTypeRegistry.default()),
             aromaticity=AromaticityModel.daylight(),
             stereo=StereoModel(
                 kind_models={},
@@ -1222,16 +1296,16 @@ def test_chemistry_model_equality(other):
         (
             ChemistryModel(
                 connectivity=ChemistryModel.default().connectivity,
-                valence=ValenceModel.Counts(
-                    table=ValenceTable(
+                valence=ValenceModel.counts(
+                    ValenceTable(
                         entries={
                             Element("C"): ValenceEntry(target_covalences=[4])
                         }
                     )
                 ),
-                aromaticity=AromaticityModel.Hmo(
+                aromaticity=AromaticityModel(
                     scope=ElementScope.Any(),
-                    stabilization_threshold=0.375,
+                    rule=AromaticityRule.Hmo(stabilization_threshold=0.375),
                 ),
                 stereo=StereoModel(
                     kind_models=StereoModel.default().kind_models,
@@ -1239,11 +1313,13 @@ def test_chemistry_model_equality(other):
                 ),
             ),
             "ChemistryModel(connectivity=ConnectivityModel.default(), "
-            "valence=ValenceModel.Counts(table="
-            "ValenceTable(entries={Element('C'): ValenceEntry("
-            "target_covalences=[4], aromatic_valences=[])})), aromaticity="
-            "AromaticityModel.Hmo(scope=ElementScope.Any(), "
-            "stabilization_threshold=0.375), stereo=StereoModel(kind_models={"
+            "valence=ValenceModel(candidates=ValenceCandidateSource.Counts("
+            "table=ValenceTable(entries={Element('C'): ValenceEntry("
+            "target_covalences=[4], aromatic_valences=[])})), "
+            "tie_break=ValenceTieBreak.Strict), aromaticity="
+            "AromaticityModel(scope=ElementScope.Any(), "
+            "rule=AromaticityRule.Hmo(stabilization_threshold=0.375)), "
+            "stereo=StereoModel(kind_models={"
             "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
             "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="
             "ElementScope.Any(), fluxionality=False)}, para_stereo=True))",
@@ -1272,7 +1348,7 @@ def test_chemistry_model_repr(model, expected):
         ),
         (
             "valence",
-            ValenceModel.Counts(table=ValenceTable(entries={})),
+            ValenceModel.counts(ValenceTable(entries={})),
         ),
         ("aromaticity", AromaticityModel.permissive()),
         (

@@ -6,10 +6,18 @@ from umol import (
     AromaticityFailurePolicy,
     AromaticityMismatchPolicy,
     AromaticityResolveConfig,
+    AtomCompletions,
+    AtomForm,
+    ChemistryModel,
+    Molecule,
     ResolveConfig,
+    ResolveReport,
     StereoFailurePolicy,
     StereoMismatchPolicy,
     StereoResolveConfig,
+    UnderdeterminedError,
+    ValenceModel,
+    ValenceTable,
 )
 
 
@@ -535,3 +543,58 @@ def test_resolve_config_mutation(field, value):
 
     with pytest.raises(AttributeError):
         setattr(config, field, value)
+
+
+def test_underdetermined_error_report():
+    with pytest.raises(UnderdeterminedError) as excinfo:
+        Molecule.from_smiles(
+            "C",
+            chemistry_model=ChemistryModel(
+                connectivity=ChemistryModel.default().connectivity,
+                valence=ValenceModel.counts(ValenceTable.default()),
+                aromaticity=ChemistryModel.default().aromaticity,
+                stereo=ChemistryModel.default().stereo,
+            ),
+        )
+
+    assert str(excinfo.value) == "resolution underdetermined"
+    report = excinfo.value.report
+    assert isinstance(report, ResolveReport)
+    assert report.tie_breaks == []
+    completions = report.unresolved
+    assert isinstance(completions, AtomCompletions)
+    assert not completions.is_empty()
+    assert len(completions) == 1
+    assert completions.get(0) == [
+        AtomForm.parse("C#i=#c0#h0#n2#u0#s#v0#a!"),
+        AtomForm.parse("C#i=#c0#h2#n#u0#s#v0#a!"),
+        AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#a!"),
+    ]
+    assert completions.get(1) is None
+    assert completions.items() == [
+        (
+            0,
+            [
+                AtomForm.parse("C#i=#c0#h0#n2#u0#s#v0#a!"),
+                AtomForm.parse("C#i=#c0#h2#n#u0#s#v0#a!"),
+                AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#a!"),
+            ],
+        )
+    ]
+    assert repr(report) == (
+        "ResolveReport(unresolved=AtomCompletions({0: "
+        '["C#i=#c0#h0#n2#u0#s#v0#a!", "C#i=#c0#h2#n#u0#s#v0#a!", '
+        '"C#i=#c0#h4#n0#u0#s#v0#a!"]}), tie_breaks=[])'
+    )
+
+
+def test_underdetermined_error_report_empty():
+    with pytest.raises(UnderdeterminedError) as excinfo:
+        Molecule.from_smiles("*")
+
+    report = excinfo.value.report
+    assert report.unresolved.is_empty()
+    assert len(report.unresolved) == 0
+    assert report.unresolved.items() == []
+    assert report.tie_breaks == []
+    assert repr(report) == "ResolveReport(unresolved=AtomCompletions({}), tie_breaks=[])"

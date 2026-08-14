@@ -7,7 +7,9 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph::ingest::ingest_reaction_smiles_with;
-use umol_graph::ops::model::ChemistryModel as GraphChemistryModel;
+use umol_graph::ops::model::{
+    ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
+};
 use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
 use umol_graph_core::CommonSubgraphEnumerationAlgorithm as GraphCoreCommonSubgraphEnumerationAlgorithm;
 #[cfg(test)]
@@ -332,8 +334,13 @@ impl Reaction {
     ) -> PyResult<Self> {
         let io_config =
             io_config.map_or_else(IoSmilesIoConfig::opensmiles, SmilesIoConfig::to_rust);
-        let chemistry_model =
-            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let chemistry_model = chemistry_model.map_or_else(
+            || GraphChemistryModel {
+                valence: GraphValenceModel::smiles(),
+                ..GraphChemistryModel::default()
+            },
+            |model| model.to_rust(),
+        );
         let resolve_config =
             resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
         let reaction =

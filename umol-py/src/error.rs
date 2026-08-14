@@ -1,7 +1,8 @@
 //! Binding exceptions.
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
-use pyo3::{create_exception, PyErr};
+use pyo3::types::PyAnyMethods;
+use pyo3::{create_exception, PyErr, Python};
 use umol_graph::fingerprint::FingerprintError as GraphFingerprintError;
 use umol_graph::ingest::{
     MoleculeInterpretationError as GraphMoleculeInterpretationError,
@@ -14,6 +15,8 @@ use umol_graph_ir::ir::{
     Contradiction as GraphIrContradiction, MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
     TransactionError as GraphIrTransactionError,
 };
+
+use crate::resolve::ResolveReport;
 
 create_exception!(
     umol,
@@ -99,9 +102,13 @@ pub(crate) fn smiles_input_error(error: GraphSmilesInputError) -> PyErr {
         GraphSmilesInputError::Contradiction(error) => {
             ContradictionError::new_err(error.to_string())
         }
-        GraphSmilesInputError::Underdetermined(error) => {
-            UnderdeterminedError::new_err(error.to_string())
-        }
+        GraphSmilesInputError::Underdetermined(error) => Python::attach(|py| {
+            let underdetermined = UnderdeterminedError::new_err(error.to_string());
+            let _ = underdetermined
+                .value(py)
+                .setattr("report", ResolveReport::from_rust(&error.report));
+            underdetermined
+        }),
         GraphSmilesInputError::Execution(error) => PyRuntimeError::new_err(error.to_string()),
     }
 }
@@ -149,7 +156,7 @@ pub(crate) fn reaction_smiles_input_error(error: GraphReactionSmilesInputError) 
 /// Map a fingerprint operation error onto the public Python taxonomy.
 pub(crate) fn fingerprint_error(error: GraphFingerprintError) -> PyErr {
     match error {
-        GraphFingerprintError::NotGround => {
+        GraphFingerprintError::NotConcrete => {
             UnderdeterminedError::new_err("fingerprint requires a determined molecule")
         }
         GraphFingerprintError::Inconsistent => {
@@ -400,7 +407,9 @@ mod tests {
     #[case::reactant_underdetermined(
         GraphReactionSmilesInputError::Interpretation(
             GraphReactionInterpretationError::Reactants(
-                GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined,),
+                GraphMoleculeInterpretationError::Underdetermined(
+                    GraphResolveUnderdetermined::default()
+                ),
             ),
         ),
         "UnderdeterminedError",
@@ -408,7 +417,9 @@ mod tests {
     )]
     #[case::product_underdetermined(
         GraphReactionSmilesInputError::Interpretation(GraphReactionInterpretationError::Products(
-            GraphMoleculeInterpretationError::Underdetermined(GraphResolveUnderdetermined,),
+            GraphMoleculeInterpretationError::Underdetermined(
+                GraphResolveUnderdetermined::default()
+            ),
         ),),
         "UnderdeterminedError",
         "products: resolution underdetermined"
@@ -468,7 +479,7 @@ mod tests {
 
     #[rstest]
     #[case::not_ground(
-        GraphFingerprintError::NotGround,
+        GraphFingerprintError::NotConcrete,
         "UnderdeterminedError",
         "fingerprint requires a determined molecule"
     )]

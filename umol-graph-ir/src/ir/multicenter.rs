@@ -46,6 +46,17 @@ impl RelationData for MulticenterBondForm {
 }
 
 impl MulticenterBondForm {
+    /// Concrete: every inherent field is ground; the constraint channel does
+    /// not bear on concreteness.
+    pub fn is_concrete(&self) -> bool {
+        let MulticenterBondForm {
+            electrons,
+            charge,
+            unpaired_electrons,
+            constraints: _,
+        } = self;
+        electrons.is_ground() && charge.is_ground() && unpaired_electrons.is_ground()
+    }
     pub fn new(electrons: ElectronCountsForm) -> Self {
         Self {
             electrons,

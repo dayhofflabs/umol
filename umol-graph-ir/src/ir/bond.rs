@@ -28,6 +28,17 @@ pub struct BondUpdate {
 }
 
 impl BondForm {
+    /// Concrete: every inherent field is ground; the constraint channel does
+    /// not bear on concreteness.
+    pub fn is_concrete(&self) -> bool {
+        let BondForm {
+            order,
+            charge,
+            unpaired_electrons,
+            constraints: _,
+        } = self;
+        order.is_ground() && charge.is_ground() && unpaired_electrons.is_ground()
+    }
     pub fn new(order: NumForm) -> Self {
         Self {
             order,

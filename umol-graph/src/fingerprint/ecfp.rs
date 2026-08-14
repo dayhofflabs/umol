@@ -33,8 +33,8 @@ impl EcfpFeaturizer {
 
     /// Returns the deduplicated set of feature identifiers.
     pub fn featurize(&self, mol: &Molecule) -> Result<FeatureSet<u64>, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         Ok(FeatureSet::from_features(self.identifiers(mol)))
     }
@@ -44,8 +44,8 @@ impl EcfpFeaturizer {
         &self,
         mol: &Molecule,
     ) -> Result<CountedFeatureSet<u64>, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         Ok(CountedFeatureSet::from_features(self.identifiers(mol)))
     }

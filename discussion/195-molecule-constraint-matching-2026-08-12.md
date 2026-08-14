@@ -32,7 +32,9 @@ its LHS); `apply_at` with a supplied correspondence is ungated. Six tests exerci
   `test_reaction_products_iter_error`, `test_reaction_apply_error` (`case_1_transaction`);
 - `umol-graph-ir/tests/property/reaction/malformed.rs`: `test_reaction_apply_error`;
 - `umol-py/src/reaction.rs`: `test_reaction_application_iter_error`,
-  `test_reaction_products_iter_error`.
+  `test_reaction_products_iter_error`;
+- `umol-py/tests/test_reaction.py` (pytest, `@pytest.mark.skip`):
+  `test_reaction_apply_iteration_error`, `test_molecule_react_iteration_error`.
 
 ## Scope
 

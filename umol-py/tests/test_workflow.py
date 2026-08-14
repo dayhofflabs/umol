@@ -93,10 +93,8 @@ def test_resolved_smiles_workflow():
         NumForm.Lit(0),
     ]
     assert [atom.constraints.aromatic_valence for atom in molecule.atoms] == [
-        AromaticValenceForm.Aromatic(NumForm.Lit(0)),
-        AromaticValenceForm.Aromatic(NumForm.Lit(1)),
-        AromaticValenceForm.Aromatic(NumForm.Lit(1)),
-    ]
+        AromaticValenceForm.Aromatic(NumForm.Undetermined())
+    ] * 3
     assert [
         (system.atom_ids, system.charge) for system in molecule.aromatic_systems
     ] == [((0, 1, 2), NumForm.Lit(0))]
@@ -316,7 +314,7 @@ def test_substructure_workflow():
 def test_reaction_application_workflow():
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]} '
-        ':deltas [{:atom {:modify [0 "#h3#v1"]}} '
+        ':deltas [{:atom {:modify [0 "#h3"]}} '
         "{:atom {:remove 1}} {:bond {:remove 0}}]}"
     )
     host = Molecule.from_smiles("CCO")

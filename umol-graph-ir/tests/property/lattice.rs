@@ -398,6 +398,48 @@ proptest! {
         assert_normalized_lattice_laws(&a, &b, &c)?;
     }
 
+    // Concreteness decomposes lattice groundness: ground iff concrete with a
+    // ground constraint channel.
+    #[test]
+    fn test_atom_form_is_concrete(form in atom_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_bond_form_is_concrete(form in bond_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_dative_bond_form_is_concrete(form in dative_bond_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_aromatic_system_form_is_concrete(form in aromatic_system_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_multicenter_bond_form_is_concrete(form in multicenter_bond_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_noncovalent_bond_form_is_concrete(form in noncovalent_bond_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_stereo_atom_form_is_concrete(form in stereo_atom_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
+    #[test]
+    fn test_stereo_bond_form_is_concrete(form in stereo_bond_form_strategy()) {
+        prop_assert_eq!(form.is_ground(), form.is_concrete() && form.constraints.is_ground());
+    }
+
     #[test]
     fn test_atom_constraints_lattice_laws(
         a in atom_constraints_strategy(),

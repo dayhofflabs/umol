@@ -320,33 +320,6 @@ impl<'a> AtomView<'a> {
         self.molecule.stereo_atoms().at(self.id)
     }
 
-    /// Derive topological constraints from atom properties.
-    /// Derives topology constraints for an atom. With `include_missing`, an absent
-    /// overlay yields its definite negative (`NotAromatic` / `NotMulticenter` /
-    /// `NotStereo`, zero dative pairs) — the fully-perceived reading used by
-    /// substructure matching and conformance. Without it, the overlay-based fields
-    /// (aromatic / multicenter / stereo, and the dative pair counts) are emitted
-    /// only when the overlay is present — the pre-resolution reading, where an
-    /// absent overlay is not yet perceived rather than known-absent. `valence`
-    /// comes from localized bonds and is always emitted.
-    pub fn derive_constraints(&self, include_missing: bool) -> AtomConstraintsForm {
-        let mut constraints = AtomConstraintsForm::new();
-        for key in [
-            AtomConstraintKey::Valence,
-            AtomConstraintKey::DonatedPairs,
-            AtomConstraintKey::AcceptedPairs,
-            AtomConstraintKey::AromaticValence,
-            AtomConstraintKey::MulticenterValence,
-            AtomConstraintKey::TetrahedralStereo,
-        ] {
-            if let Some(c) = derived_constraint(self.molecule, self.id, None, key, include_missing)
-            {
-                constraints.set(c);
-            }
-        }
-        constraints
-    }
-
     /// Is atom ground
     pub fn is_ground(&self) -> bool {
         self.attributes.is_ground()
@@ -613,9 +586,7 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::constraint::{
-        AromaticValenceForm, AtomConstraintForm, AtomConstraintsForm, MulticenterValenceForm,
-    };
+    use crate::ir::constraint::{AromaticValenceForm, AtomConstraintForm, MulticenterValenceForm};
     use crate::ir::dative::DativeBondForm;
     use crate::ir::electrons::ElectronCountsForm;
     use crate::ir::id::{
@@ -627,7 +598,7 @@ mod tests {
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use crate::ir::num::NumForm;
-    use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind, TetrahedralStereoForm};
+    use crate::ir::stereo::{StereoAtomForm, StereoCoset, StereoKind};
     use crate::mol_dsl;
 
     #[fixture]
@@ -1080,81 +1051,6 @@ mod tests {
         assert_eq!(square_planar.id, StereoAtomId(1));
         assert_eq!(square_planar.kind(), StereoKind::SquarePlanar);
         assert!(stereo_molecule.atom(AtomId(1)).stereo_atom().is_none());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::tetrahedral_site(AtomId(0), AtomConstraintsForm::from_iter([
-        AtomConstraintForm::valence(NumForm::Lit(4)),
-        AtomConstraintForm::donated_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::accepted_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
-        AtomConstraintForm::multicenter_valence(MulticenterValenceForm::NotMulticenter),
-        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::stereo(StereoCoset::Lit(1))),
-    ]))]
-    #[case::non_stereo_ligand(AtomId(1), AtomConstraintsForm::from_iter([
-        AtomConstraintForm::valence(NumForm::Lit(1)),
-        AtomConstraintForm::donated_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::accepted_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
-        AtomConstraintForm::multicenter_valence(MulticenterValenceForm::NotMulticenter),
-        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
-    ]))]
-    #[case::square_planar_site(AtomId(5), AtomConstraintsForm::from_iter([
-        AtomConstraintForm::valence(NumForm::Lit(4)),
-        AtomConstraintForm::donated_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::accepted_pairs(NumForm::Lit(0)),
-        AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic),
-        AtomConstraintForm::multicenter_valence(MulticenterValenceForm::NotMulticenter),
-        AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo),
-    ]))]
-    fn test_atom_view_derive_constraints(
-        stereo_molecule: Molecule,
-        #[case] atom: AtomId,
-        #[case] expected: AtomConstraintsForm,
-    ) {
-        assert_eq!(stereo_molecule.atom(atom).derive_constraints(true), expected);
-    }
-
-    #[rstest]
-    #[case::aromatic(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
-            ..Default::default()
-        }),
-        AtomConstraintsForm::from_iter([
-            AtomConstraintForm::valence(0),
-            AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(
-                NumForm::Undetermined,
-            )),
-        ]),
-    )]
-    #[case::multicenter(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::C),
-            ],
-            multicenter: vec![(
-                vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondForm::default(),
-            )],
-            ..Default::default()
-        }),
-        AtomConstraintsForm::from_iter([
-            AtomConstraintForm::valence(0),
-            AtomConstraintForm::multicenter_valence(MulticenterValenceForm::multicenter(
-                NumForm::Undetermined,
-            )),
-        ]),
-    )]
-    fn test_atom_view_derive_constraints_partial(
-        #[case] molecule: Molecule,
-        #[case] expected: AtomConstraintsForm,
-    ) {
-        assert_eq!(molecule.atom(AtomId(0)).derive_constraints(false), expected);
     }
 
     #[rstest]

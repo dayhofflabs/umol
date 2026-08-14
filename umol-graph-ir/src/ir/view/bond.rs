@@ -183,20 +183,6 @@ impl<'a> BondView<'a> {
         self.molecule.stereo_bonds().at(self.id)
     }
 
-    /// Derive topological constraints from bond properties.
-    /// See [`AtomView::derive_constraints`] for `include_missing`: with it, an
-    /// absent overlay yields `NotStereo`; without it, the cis/trans stereo
-    /// constraint is emitted only when the overlay is present.
-    pub fn derive_constraints(&self, include_missing: bool) -> BondConstraintsForm {
-        BondConstraintsForm::from_iter(derived_constraint(
-            self.molecule,
-            self.id,
-            None,
-            BondConstraintKey::CisTransStereo,
-            include_missing,
-        ))
-    }
-
     /// Is bond ground
     pub fn is_ground(&self) -> bool {
         self.attributes.is_ground()
@@ -300,14 +286,13 @@ mod tests {
     use crate::ir::aromatic::AromaticSystemForm;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
-    use crate::ir::constraint::{BondConstraintForm, BondConstraintsForm};
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ir::ligand::{StereoLigand, StereoLigandKind};
     use crate::ir::molecule::{Molecule, MoleculeEntries};
     use crate::ir::multicenter::MulticenterBondForm;
     use crate::ir::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
-    use crate::ir::stereo::{CisTransStereoForm, StereoBondForm, StereoCoset, StereoKind};
+    use crate::ir::stereo::{StereoBondForm, StereoCoset, StereoKind};
 
     #[fixture]
     fn molecule() -> Molecule {
@@ -485,21 +470,5 @@ mod tests {
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).stereo_bond().is_none());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::cis_trans_site(BondId(1), BondConstraintsForm::from_iter([
-        BondConstraintForm::cis_trans_stereo(CisTransStereoForm::stereo(StereoCoset::Lit(1))),
-    ]))]
-    #[case::non_stereo(BondId(0), BondConstraintsForm::from_iter([
-        BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo),
-    ]))]
-    fn test_bond_view_derive_constraints(
-        stereo_molecule: Molecule,
-        #[case] bond: BondId,
-        #[case] expected: BondConstraintsForm,
-    ) {
-        assert_eq!(stereo_molecule.bond(bond).derive_constraints(true), expected);
     }
 }

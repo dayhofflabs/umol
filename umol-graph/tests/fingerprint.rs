@@ -74,7 +74,7 @@ fn test_wl_featurizer_featurize_error() {
         WlFeaturizer::new(RefinementRounds::Fixed(3))
             .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -84,7 +84,7 @@ fn test_wl_featurizer_featurize_counted_error() {
         WlFeaturizer::new(RefinementRounds::Fixed(3))
             .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -116,7 +116,7 @@ fn test_ecfp_featurizer_featurize_error() {
         EcfpFeaturizer::new(2)
             .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -126,7 +126,7 @@ fn test_ecfp_featurizer_featurize_counted_error() {
         EcfpFeaturizer::new(2)
             .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -153,7 +153,7 @@ fn test_morgan_featurizer_featurize_error() {
         MorganFeaturizer::new(2)
             .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -163,7 +163,7 @@ fn test_morgan_featurizer_featurize_counted_error() {
         MorganFeaturizer::new(2)
             .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -176,7 +176,7 @@ fn test_featurizer_featurize_error(#[case] featurizer: Featurizer) {
         featurizer
             .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -206,7 +206,7 @@ fn test_featurizer_featurize_counted_error(#[case] featurizer: Featurizer) {
         featurizer
             .featurize_counted(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -227,7 +227,7 @@ fn test_pattern_fingerprinter_fingerprint_error() {
         PatternFingerprinter::new()
             .fingerprint(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -264,7 +264,7 @@ fn test_substructure_featurizer_featurize_error() {
         SubstructureFeaturizer::new(2)
             .featurize(&mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))
             .unwrap_err(),
-        FingerprintError::NotGround
+        FingerprintError::NotConcrete
     );
 }
 
@@ -302,7 +302,7 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: Reaction) {
 #[rstest]
 #[case::non_ground(
     Reaction::new(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Deltas::new()),
-    FingerprintError::NotGround
+    FingerprintError::NotConcrete
 )]
 #[case::inconsistent(
     Reaction::new(

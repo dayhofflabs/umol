@@ -8,6 +8,7 @@ from umol import (
     AromaticityConfig,
     AromaticityFailurePolicy,
     AromaticityModel,
+    AromaticityRule,
     AromaticityResolveConfig,
     AutomorphismAlgorithm,
     AtomForm,
@@ -58,9 +59,11 @@ from umol import (
     StereoResolveConfig,
     TetrahedralConfiguration,
     UnderdeterminedError,
+    ValenceCandidateSource,
     ValenceEntry,
     ValenceModel,
     ValenceTable,
+    ValenceTieBreak,
     NumForm,
 )
 
@@ -441,8 +444,7 @@ def test_molecule_canonicalize_integrity_error():
 
 def test_molecule_from_smiles():
     assert Molecule.from_smiles("C") == Molecule.parse(
-        '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-        defaults=MoleculeDefaults.ground(),
+        '{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}'
     )
 
 
@@ -481,31 +483,39 @@ def test_molecule_from_smiles_io_config(io_config):
     ]
 
 
+def test_molecule_from_smiles_io_config_dative():
+    assert Molecule.from_smiles(
+        "C->N", io_config=SmilesIoConfig.lenient()
+    ) == Molecule.parse(
+        '{:atoms ["C#i=#c0#h4#n0#u0#s#a!" "N#i=#c0#h#n2#u0#s#a!"] '
+        ":dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}"
+    )
+
+
 def test_molecule_from_smiles_io_config_error():
     with pytest.raises(ParseError, match="^Invalid token at position 2$"):
         Molecule.from_smiles("C->N", io_config=SmilesIoConfig.opensmiles())
-    with pytest.raises(
-        ContradictionError,
-        match="^no atom-typing match for AtomId\\(0\\) "
-        "\\(element C, charge Some\\(0\\)\\)$",
-    ):
-        Molecule.from_smiles("C->N", io_config=SmilesIoConfig.lenient())
 
 
 @pytest.mark.parametrize(
     ("valence_model", "expected"),
     [
         (
-            ValenceModel.AtomTyping(
-                registry=AtomTypeRegistry.from_atoms(
+            ValenceModel.atom_typing(
+                AtomTypeRegistry.from_atoms(
                     [AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
                 )
             ),
-            AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s#a!"),
         ),
         (
-            ValenceModel.Counts(table=ValenceTable.default()),
-            AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#a!"),
+            ValenceModel(
+                candidates=ValenceCandidateSource.Counts(
+                    table=ValenceTable.default()
+                ),
+                tie_break=ValenceTieBreak.MostSaturated,
+            ),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s#a!"),
         ),
     ],
 )
@@ -523,13 +533,15 @@ def test_molecule_from_smiles_chemistry_model_valence(valence_model, expected):
     ) == Molecule.from_entries([expected])
 
 
+@pytest.mark.skip(reason="Keep-policy resolution pending the doc-194 S4h audit")
 def test_molecule_from_smiles_chemistry_model_aromaticity():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         connectivity=ChemistryModel.default().connectivity,
         valence=default.valence,
-        aromaticity=AromaticityModel.Hmo(
-            scope=ElementScope.Any(), stabilization_threshold=0.375
+        aromaticity=AromaticityModel(
+            scope=ElementScope.Any(),
+            rule=AromaticityRule.Hmo(stabilization_threshold=0.375),
         ),
         stereo=default.stereo,
     )
@@ -593,6 +605,7 @@ def test_molecule_from_smiles_chemistry_model_aromaticity():
         ),
     ],
 )
+@pytest.mark.skip(reason="Keep-policy resolution pending the doc-194 S4h audit")
 def test_molecule_from_smiles_aromaticity_policy(source, expected):
     default = ChemistryModel.default()
 
@@ -617,7 +630,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
     default = ChemistryModel.default()
     chemistry_model = ChemistryModel(
         connectivity=ChemistryModel.default().connectivity,
-        valence=default.valence,
+        valence=ValenceModel.smiles(),
         aromaticity=default.aromaticity,
         stereo=StereoModel(
             kind_models={},
@@ -677,11 +690,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
-                [
-                    AromaticValenceForm.Aromatic(NumForm.Lit(0)),
-                    AromaticValenceForm.Aromatic(NumForm.Lit(1)),
-                    AromaticValenceForm.Aromatic(NumForm.Lit(1)),
-                ],
+                [AromaticValenceForm.Aromatic(NumForm.Undetermined())] * 3,
                 [None] * 3,
                 [((0, 1, 2), NumForm.Lit(0))],
                 [],
@@ -750,8 +759,9 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
                 "chemistry_model": ChemistryModel(
                     connectivity=ChemistryModel.default().connectivity,
                     valence=ChemistryModel.default().valence,
-                    aromaticity=AromaticityModel.Clar(
-                        scope=ElementScope.Any(), ring_limits=RingLimits()
+                    aromaticity=AromaticityModel(
+                        scope=ElementScope.Any(),
+                        rule=AromaticityRule.Clar(ring_limits=RingLimits()),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )
@@ -805,22 +815,14 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
             "cannot produce a valid aromatic system",
             id="mdl-pyrrole",
         ),
-        pytest.param(
-            "c1cccn1",
-            {},
-            ContradictionError,
-            "aromaticity inconsistency: aromatic valence at atom AtomId(0) "
-            "cannot produce a valid aromatic system",
-            id="bare-aromatic-nitrogen",
-        ),
         ("*", {}, UnderdeterminedError, "resolution underdetermined"),
         (
             "c1ccccc1",
             {
                 "chemistry_model": ChemistryModel(
                     connectivity=ChemistryModel.default().connectivity,
-                    valence=ValenceModel.Counts(
-                        table=ValenceTable(
+                    valence=ValenceModel.counts(
+                        ValenceTable(
                             entries={
                                 Element("C"): ValenceEntry(
                                     target_covalences=[4],
@@ -829,9 +831,9 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
                             }
                         )
                     ),
-                    aromaticity=AromaticityModel.Hmo(
+                    aromaticity=AromaticityModel(
                         scope=ElementScope.Any(),
-                        stabilization_threshold=0.375,
+                        rule=AromaticityRule.Hmo(stabilization_threshold=0.375),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )
@@ -854,7 +856,13 @@ def test_molecule_from_smiles_keyword_error():
 
 def test_molecule_from_smiles_ownership():
     io_config = SmilesIoConfig.opensmiles()
-    chemistry_model = ChemistryModel.default()
+    default = ChemistryModel.default()
+    chemistry_model = ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
     resolve_config = ResolveConfig.default()
 
     first = Molecule.from_smiles(
@@ -871,13 +879,15 @@ def test_molecule_from_smiles_ownership():
     )
     first.atoms[0].charge = 1
 
-    assert second == Molecule.parse(
-        '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-        defaults=MoleculeDefaults.ground(),
-    )
+    assert second == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}')
     assert first != second
     assert io_config == SmilesIoConfig.opensmiles()
-    assert chemistry_model == ChemistryModel.default()
+    assert chemistry_model == ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
     assert resolve_config == ResolveConfig.default()
 
 

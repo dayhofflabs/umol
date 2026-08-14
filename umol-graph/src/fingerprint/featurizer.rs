@@ -18,8 +18,8 @@ pub enum Featurizer {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FingerprintError {
-    /// The molecule contains values that are not ground terms.
-    NotGround,
+    /// The molecule is not concrete: an inherent field is undetermined.
+    NotConcrete,
     /// The reaction deltas cannot be applied consistently.
     Inconsistent,
     /// A fixed-width fingerprint cannot have zero width.

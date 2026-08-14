@@ -61,8 +61,8 @@ impl PatternFingerprinter {
 
     /// `mol` must be ground. Returns the folded pattern fingerprint.
     pub fn fingerprint(&self, mol: &Molecule) -> Result<BitFp, FingerprintError> {
-        if !mol.is_ground() {
-            return Err(FingerprintError::NotGround);
+        if !mol.is_concrete() {
+            return Err(FingerprintError::NotConcrete);
         }
         let mut ids: Vec<u64> = Vec::new();
         for template in TEMPLATES.iter() {

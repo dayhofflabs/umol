@@ -232,6 +232,7 @@ spelling.
 | `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`, `CanonicalizationLevel`) | verb stem (`KekulizeConfig`, `CanonicalizeLevel`) | the operation noun names a completed act, not a run's parameters |
+| `ground` for a molecule's or entity's chemistry-level determinedness | `concrete` | ground is the lattice term (constraint coordinates included) and risks the ground-state reading |
 
 ## Open issues
 
@@ -356,6 +357,22 @@ selects among them, and an underdetermined verdict reports the survivors.
 constraint channel; not the resolution result, which is the committed outcome; not a struct of
 primitive fields.
 **In code:** ground `AtomForm` members of `AtomCompletions`, the keyed carrier.
+
+### Concrete
+
+An entity is **concrete** when its chemical attributes — the inherent fields — are determined;
+a molecule is concrete when every entity form is. The constraint channel does not bear on
+concreteness: assertions are not attributes, so a concrete molecule may carry non-ground
+assertions until discharge removes the determined-redundant ones. Concreteness is the
+chemistry-level determinedness of a structure; lattice groundness is the algebraic notion over
+the full product including the constraint coordinates, and the two decompose per form as
+`is_ground() == is_concrete() && constraints.is_ground()`. The pattern/concrete asymmetry names
+this axis: patterns are permanently non-concrete descriptions.
+
+**Not:** *ground* — the lattice term, which includes the constraint coordinates and stays on
+`Lattice::is_ground`; *complete* — the closure/completion family; the electronic *ground state*.
+**In code:** `Molecule::is_concrete`, `is_concrete` on each entity form (exhaustive destructure
+with `constraints: _`); `FingerprintError::NotConcrete`.
 
 ### Config
 
@@ -756,7 +773,7 @@ chemistry invariants or that its entities are mutually consistent.
 `value.is_ground() == value.as_lit().is_some()`. It does not normalize, apply defaults, validate,
 or merge ground states that happen to have the same downstream numerical effect.
 
-**Not:** valid, or chemically admissible. Structural groundness is separate from both.
+**Not:** valid, or chemically admissible. Structural groundness is separate from both. Not the chemistry-level determinedness of a molecule or entity, which is *concrete*.
 **In code:** `Lattice::is_ground`, `AsLit::as_lit`, `Ground<T>` (planned).
 
 ### Graph IR
@@ -1047,7 +1064,7 @@ are new names; the living defaults promise only candidate-set monotonicity under
 A **molecular structure** is a molecular topology together with its overlay entities.
 
 **Not:** molecular topology, which excludes them.
-**In code:** —
+**In code:** `Molecule::is_concrete` reads the structure's determinedness.
 
 ### Molecular topology
 

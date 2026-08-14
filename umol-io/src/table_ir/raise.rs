@@ -8,7 +8,6 @@ use std::any::Any;
 use std::collections::HashSet;
 
 use thiserror::Error;
-use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondConstraintForm, BondForm,
     BooleanForm, CisTransStereoForm, Constraints, DativeBondForm, ElementForm, IsotopeMassForm,
@@ -175,13 +174,6 @@ impl TryIntoIr<AtomForm> for &TableAtom {
                 atom.constraints.set(AtomConstraintForm::AromaticValence(
                     AromaticValenceForm::Aromatic(NumForm::Undetermined),
                 ));
-                // A bare aromatic heteroatom specifies zero H; any H must be bracketed
-                // ([nH]), which arrives above as an explicit count.
-                if matches!(self.element, Some(element) if element != Element::C)
-                    && matches!(atom.implicit_hydrogens, NumForm::Undetermined)
-                {
-                    atom.implicit_hydrogens = NumForm::Lit(0);
-                }
             }
             Some(false) => {
                 atom.constraints.set(AtomConstraintForm::AromaticValence(
@@ -624,11 +616,11 @@ mod tests {
         );
     }
 
-    // A bare aromatic heteroatom resolves to zero H; aromatic carbon and explicit
-    // bracket H are left to the valence model / preserved.
+    // A bare aromatic atom stays H-open — the hydrogen count is the valence
+    // model's decision; explicit bracket H is preserved.
     #[rstest]
-    #[case::aromatic_nitrogen_bare(Element::N, Some(true), None, NumForm::Lit(0))]
-    #[case::aromatic_oxygen_bare(Element::O, Some(true), None, NumForm::Lit(0))]
+    #[case::aromatic_nitrogen_bare(Element::N, Some(true), None, NumForm::Undetermined)]
+    #[case::aromatic_oxygen_bare(Element::O, Some(true), None, NumForm::Undetermined)]
     #[case::aromatic_nitrogen_bracket_h(Element::N, Some(true), Some(1), NumForm::Lit(1))]
     #[case::aromatic_carbon_bare(Element::C, Some(true), None, NumForm::Undetermined)]
     #[case::aliphatic_nitrogen_bare(Element::N, Some(false), None, NumForm::Undetermined)]

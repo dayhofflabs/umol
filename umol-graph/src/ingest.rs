@@ -11,7 +11,7 @@ use umol_io::table_ir::Molecule as TableMolecule;
 use umol_utils::error::UmolError;
 use umol_utils::solution::Solution;
 
-use crate::ops::model::ChemistryModel;
+use crate::ops::model::{ChemistryModel, ValenceModel};
 use crate::ops::resolve::{
     ResolveConfig, ResolveContradiction, ResolveError, ResolveUnderdetermined, Resolver,
 };
@@ -129,7 +129,7 @@ fn interpret_molecule(
     let mut molecule: Molecule = molecule.try_into_ir(&())?;
     match Resolver::with_config(model, *resolve_config).resolve(&mut molecule)? {
         Solution::Determined(_) => Ok(molecule),
-        Solution::Underdetermined(_) => Err(ResolveUnderdetermined.into()),
+        Solution::Underdetermined(report) => Err(ResolveUnderdetermined { report }.into()),
         Solution::Contradictory(error) => Err(error.into()),
     }
 }
@@ -188,17 +188,22 @@ impl Interpret for ReactionSmiles {
     }
 }
 
-/// Ingest SMILES text with the OpenSMILES configuration and default model.
+/// Ingest SMILES text with the OpenSMILES configuration and the SMILES
+/// valence preset — the reader carries its format's convention.
 pub fn ingest_smiles(input: &str) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes(input.as_bytes())
 }
 
-/// Ingest SMILES bytes with the OpenSMILES configuration and default model.
+/// Ingest SMILES bytes with the OpenSMILES configuration and the SMILES
+/// valence preset — the reader carries its format's convention.
 pub fn ingest_smiles_bytes(input: &[u8]) -> Result<Molecule, SmilesInputError> {
     ingest_smiles_bytes_with(
         input,
         &SmilesIoConfig::opensmiles(),
-        &ChemistryModel::default(),
+        &ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        },
         &ResolveConfig::default(),
     )
 }
@@ -226,17 +231,22 @@ pub fn ingest_smiles_bytes_with(
         .map_err(SmilesInputError::from)
 }
 
-/// Ingest reaction SMILES text with the OpenSMILES configuration and default model.
+/// Ingest reaction SMILES text with the OpenSMILES configuration and the
+/// SMILES valence preset — the reader carries its format's convention.
 pub fn ingest_reaction_smiles(input: &str) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes(input.as_bytes())
 }
 
-/// Ingest reaction SMILES bytes with the OpenSMILES configuration and default model.
+/// Ingest reaction SMILES bytes with the OpenSMILES configuration and the
+/// SMILES valence preset — the reader carries its format's convention.
 pub fn ingest_reaction_smiles_bytes(input: &[u8]) -> Result<Reaction, ReactionSmilesInputError> {
     ingest_reaction_smiles_bytes_with(
         input,
         &SmilesIoConfig::opensmiles(),
-        &ChemistryModel::default(),
+        &ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        },
         &ResolveConfig::default(),
     )
 }
@@ -300,7 +310,7 @@ mod tests {
         "hmo: invalid input: invalid input"
     )]
     #[case::underdetermined(
-        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
         "resolution underdetermined"
     )]
     #[case::execution(
@@ -332,7 +342,7 @@ mod tests {
     )]
     #[case::products(
         ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined
+            ResolveUnderdetermined::default()
         ),),
         "products: resolution underdetermined",
         Some("resolution underdetermined")
@@ -380,7 +390,7 @@ mod tests {
         "hmo: invalid input: invalid input"
     )]
     #[case::underdetermined(
-        SmilesInputError::Underdetermined(ResolveUnderdetermined),
+        SmilesInputError::Underdetermined(ResolveUnderdetermined::default()),
         "resolution underdetermined"
     )]
     #[case::execution(
@@ -411,8 +421,8 @@ mod tests {
         ))
     )]
     #[case::underdetermined(
-        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
-        SmilesInputError::Underdetermined(ResolveUnderdetermined)
+        MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
+        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
     )]
     #[case::execution(
         MoleculeInterpretationError::Execution(ResolveError::Aromaticity(
@@ -450,7 +460,7 @@ mod tests {
     )]
     #[case::products(
         ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Products(
-            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
         )),
         "products: resolution underdetermined",
         vec![
@@ -532,7 +542,7 @@ mod tests {
         assert_eq!(
             parsed.interpret(&model, &resolve_config),
             Err(MoleculeInterpretationError::Underdetermined(
-                ResolveUnderdetermined
+                ResolveUnderdetermined::default()
             ))
         );
     }
@@ -630,14 +640,14 @@ mod tests {
         "*>>",
         ChemistryModel::default(),
         ReactionInterpretationError::Reactants(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined
+            ResolveUnderdetermined::default()
         ),)
     )]
     #[case::products_underdetermined(
         ">>*",
         ChemistryModel::default(),
         ReactionInterpretationError::Products(MoleculeInterpretationError::Underdetermined(
-            ResolveUnderdetermined
+            ResolveUnderdetermined::default()
         ),)
     )]
     #[case::reactants_contradiction(
@@ -728,7 +738,10 @@ mod tests {
             ingest_smiles_with(
                 input,
                 &SmilesIoConfig::opensmiles(),
-                &ChemistryModel::default(),
+                &ChemistryModel {
+                    valence: ValenceModel::smiles(),
+                    ..ChemistryModel::default()
+                },
                 &ResolveConfig::default(),
             )
         );
@@ -743,14 +756,9 @@ mod tests {
             count: 2,
         })
     )]
-    #[case::underdetermined("*", SmilesInputError::Underdetermined(ResolveUnderdetermined))]
-    #[case::bare_aromatic_nitrogen(
-        "c1cccn1",
-        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
-            AromaticityContradiction::Inconsistency(
-                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
-            ),
-        )),
+    #[case::underdetermined(
+        "*",
+        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
     )]
     fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
         assert_eq!(ingest_smiles(input), Err(expected));
@@ -765,7 +773,10 @@ mod tests {
             ingest_smiles_bytes_with(
                 input,
                 &SmilesIoConfig::opensmiles(),
-                &ChemistryModel::default(),
+                &ChemistryModel {
+                    valence: ValenceModel::smiles(),
+                    ..ChemistryModel::default()
+                },
                 &ResolveConfig::default(),
             )
         );
@@ -1017,7 +1028,7 @@ mod tests {
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
-        SmilesInputError::Underdetermined(ResolveUnderdetermined)
+        SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
     )]
     #[case::mdl_furan(
         "o1cccc1",
@@ -1083,7 +1094,10 @@ mod tests {
             ingest_reaction_smiles_with(
                 input,
                 &SmilesIoConfig::opensmiles(),
-                &ChemistryModel::default(),
+                &ChemistryModel {
+                    valence: ValenceModel::smiles(),
+                    ..ChemistryModel::default()
+                },
                 &ResolveConfig::default(),
             )
         );
@@ -1115,7 +1129,7 @@ mod tests {
     #[case::underdetermined(
         "*>>C",
         ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
-            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
+            MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined::default()),
         ),)
     )]
     fn test_ingest_reaction_smiles_error(
@@ -1134,7 +1148,10 @@ mod tests {
             ingest_reaction_smiles_bytes_with(
                 input,
                 &SmilesIoConfig::opensmiles(),
-                &ChemistryModel::default(),
+                &ChemistryModel {
+                    valence: ValenceModel::smiles(),
+                    ..ChemistryModel::default()
+                },
                 &ResolveConfig::default(),
             )
         );
@@ -1157,17 +1174,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::io(
-        "C~C>>C.C",
-        SmilesIoConfig::lenient(),
-        ChemistryModel::default(),
-        ResolveConfig::default(),
-        Err(
-            ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
-                MoleculeInterpretationError::Underdetermined(ResolveUnderdetermined),
-            ),)
-        )
-    )]
+    #[case::io("C~C>>C.C")]
+    fn test_ingest_reaction_smiles_with_underdetermined_report(#[case] input: &str) {
+        let result = ingest_reaction_smiles_with(
+            input,
+            &SmilesIoConfig::lenient(),
+            &ChemistryModel::default(),
+            &ResolveConfig::default(),
+        );
+        let Err(ReactionSmilesInputError::Interpretation(ReactionInterpretationError::Reactants(
+            MoleculeInterpretationError::Underdetermined(underdetermined),
+        ))) = result
+        else {
+            panic!("expected an underdetermined reactants interpretation: {result:?}");
+        };
+        assert!(!underdetermined.report.unresolved.is_empty());
+    }
+
+    #[rstest]
     #[case::chemistry(
         "[nH]1cccc1>>",
         SmilesIoConfig::opensmiles(),

@@ -5,7 +5,7 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::num::NumForm;
-use super::traits::Equiv;
+use super::traits::{Equiv, Lattice};
 
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
@@ -26,6 +26,15 @@ pub struct DativeBondUpdate {
 }
 
 impl DativeBondForm {
+    /// Concrete: every inherent field is ground; the constraint channel does
+    /// not bear on concreteness.
+    pub fn is_concrete(&self) -> bool {
+        let DativeBondForm {
+            order,
+            constraints: _,
+        } = self;
+        order.is_ground()
+    }
     pub fn new(order: NumForm) -> Self {
         Self {
             order,

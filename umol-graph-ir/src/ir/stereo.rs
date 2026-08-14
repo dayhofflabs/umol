@@ -36,6 +36,18 @@ macro_rules! stereo_element {
             pub constraints: $constraints,
         }
 
+        impl $name {
+            /// Concrete: every inherent field is ground; the constraint
+            /// channel does not bear on concreteness.
+            pub fn is_concrete(&self) -> bool {
+                let $name {
+                    configuration,
+                    constraints: _,
+                } = self;
+                configuration.is_ground()
+            }
+        }
+
         impl BiRelationData for $name {
             /// The ligands are an `Ordered` factor, so `order_2` from `canonicalize_positions` is
             /// always the identity — the frame-relative configuration needs no reindex here.

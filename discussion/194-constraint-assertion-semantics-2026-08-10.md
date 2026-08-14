@@ -753,7 +753,7 @@ pub struct ResolveReport {
   failures: aromatic SMILES ingest paths (furan/thiophene/pyrrole MDL cases, reaction-SMILES
   contradiction cases) now resolve end-to-end through admission → joint selection → single
   commit. The remaining resolver-stage reds are the recorded write-back expectation deltas.
-  Conformance stays at 402 pending S4e's preset wiring and the S6f-gated S5d regeneration.
+  Conformance stays at 402 pending S4e's preset wiring and the S5c1-gated S5d regeneration.
   Simple-case overhead audit (2026-08-13): the unambiguous path pays no asymptotic cost for
   the general scheme — one `find_systems` run (`derive` ran one plus one per stored system),
   four transactions where the old pipeline ran five, singleton carrier entries inline in the
@@ -765,11 +765,68 @@ pub struct ResolveReport {
   convenience entry points select their format's preset (`ingest_smiles`,
   `ingest_smiles_bytes` → `ValenceModel::smiles()`; `parse_mol_bytes` → `ValenceModel::mdl()`)
   — a reader carries its own convention, the `_with` forms stay explicit. Breaking.
-  [dep: S4b1, S4d]
+  [dep: S4b1, S4d] **Done 2026-08-13:** the pin removed in `table_ir/raise.rs` (shared by the
+  SMILES and CTfile raises — MDL aromatic nitrogen was wrongly pinned too); its two raise
+  tests now expect H-open; the convenience wiring as specced, with the ingest equivalence
+  tests naming the preset they compare against. Two consequences surfaced and resolved:
+  the pipeline's `Determined` verdict now uses **structural groundness**
+  (`structure_is_ground` — fields and relations only, the constraint channel excluded),
+  because stored input assertions like `#a+` legitimately remain non-ground until discharge;
+  the old whole-form `is_ground` check was the write-back model's conflation. And the
+  `bare_aromatic_nitrogen` ingest error case is retired: `c1cccn1` now **resolves** through
+  joint selection instead of contradicting — doc 174's headline behavior; the positive pin is
+  S4h's triple. Net −59 red versus S4d with zero new failures (umol-py 24 → 2, fingerprint
+  featurizers 10 → 2, umol-graph lib 87 → 43 from the stage peak); the remaining red is
+  dominated by the 402 conformance snapshots awaiting S5c1 + S5d.
+- S4e1: concreteness vocabulary (settled 2026-08-13): the chemistry-level determinedness of a
+  molecule is **concreteness**, separated from lattice groundness — the fields/constraints
+  split is chemical, not algebraic, and the rename retires the ground-state ambiguity.
+  `is_concrete()` on each of the eight entity forms (exhaustive destructure with
+  `constraints: _`, beside the struct — a new field is a local compile error);
+  `Molecule::is_concrete()` as their field-blind composition; `Molecule::is_ground` **deleted**
+  (its projection body was the accident — consumers migrate; `Lattice::is_ground` on forms is
+  untouched, as the laws and the completion emit contract require). Decomposition law in the
+  property suites per entity: `is_ground() == is_concrete() && constraints.is_ground()`.
+  Nomenclature: new *Concrete* entry (Not: ground — the lattice term; complete — the
+  closure/completion family), the Not-line on *Ground term*, a retired-table row. The
+  whitepaper's molecule-groundness wording moves to concreteness (recorded follow-up).
+  Breaking. [dep: S4e] **Done 2026-08-13:** as specced — the eight destructure-based
+  `is_concrete` methods (the stereo pair via the `stereo_element!` generator, so both forms
+  stay uniform), `Molecule::is_concrete`, `Molecule::is_ground` deleted with its one IR test
+  retargeted, the fingerprint gates migrated and `FingerprintError::NotGround` renamed
+  `NotConcrete` (the gate error states the vocabulary), and the eight decomposition laws
+  green in the lattice property suite. Net −19 red with zero new: the fingerprint featurizer
+  target is fully green — concreteness gates admit resolved molecules that still carry
+  assertions, which the old whole-form gate wrongly rejected. Remaining red: umol-graph lib
+  26, conformance 402, umol-py 2.
 - S4f: `umol-py`: bind the report for inspection; update the resolution verdict mapping.
-  Breaking. [dep: S4d]
+  Breaking. [dep: S4d] **Done 2026-08-13:** `AtomCompletions` and `ResolveReport` bound
+  read-only (`get`/`items`/`len`, `unresolved`/`tie_breaks` getters; reprs render candidate
+  sets as atom strings, per the carrier section). The report reaches Python by riding the
+  boundary marker — `ResolveUnderdetermined` gains `pub report: ResolveReport` — and the
+  verdict mapping attaches it as a `report` **attribute** on `UnderdeterminedError` (tuple
+  args were tried and rejected: they pollute `str(e)`). Two S4e follow-through discoveries:
+  the *python* SMILES conveniences (`Molecule.from_smiles`, the reaction reader) and the
+  *rust reaction* conveniences (`ingest_reaction_smiles`/`_bytes`) had not received the
+  preset — all now default to `ValenceModel::smiles()`, with the equivalence tests naming
+  the preset they compare against. The reaction-io underdetermined case became a dedicated
+  test pinning the S4f point itself: the report arrives at the boundary error non-empty.
+  umol-py fully green (1620 passed, the two S1a ignores remain); umol-graph lib red at the
+  S4e1 baseline exactly; clippy zero. The pytest suite followed on 2026-08-13: the five S4b
+  types (`ValenceCandidateSource`, `ValenceTieBreak`, `AromaticityRule`) and S4f types
+  (`AtomCompletions`, `ResolveReport`) added to the package re-exports and the export
+  inventory; `test_model.py` rewritten to the envelope surface; explicit-default-model tests
+  name `ValenceModel.smiles()` (the atom-typing default under `Strict` is honestly
+  underdetermined); retired `#v/#d/#t/#m` writes dropped from expectations; the
+  bare-aromatic-nitrogen error case removed (resolves per doc 174); `e.report` gains pytest
+  coverage on both the plural-completions and empty-report paths. 1299 passed; 9 skips: seven
+  Keep-policy (S4h) and two matcher-gate (doc 195), registered at their items.
 - S4g: retire `derive_constraints` and `include_missing` (last callers died in S1a/S4a).
-  Breaking. [dep: S4a]
+  Breaking. [dep: S4a] **Done 2026-08-14:** `AtomView::derive_constraints` and
+  `BondView::derive_constraints` deleted with their tests — the only remaining
+  `include_missing` surface; the keyed `derived_constraint` layer already speaks `complete`
+  and stays as the substrate of the constraints views. Workspace grep clean, umol-graph-ir
+  fully green (6023 lib + 321 property), clippy zero.
 - S4h: acceptance: the doc 174 regression triple and the pyrrolyl DSL case; the conformance
   suite's model constructors opt into the `MostSaturated` tie-break explicitly (the default is
   `Strict`); full suite green
@@ -778,7 +835,11 @@ pub struct ResolveReport {
   snapshots recording constraints that are no longer written back (atom-typing `#v` since S4a,
   counts since S4b, `#h0` pinning since S4e). There is nothing to fix in that class; the
   expectations changed as planned, and the one regeneration stays at S5d, after discharge
-  (S5b) and elision retirement (S5c) change the outputs once more. [dep: S4a–S4g]
+  (S5b) and elision retirement (S5c) change the outputs once more. The audit also covers the
+  Keep-policy family (`aromatic_valence_failure: Keep` now contradicts where it previously
+  downgraded — rust twins red in the baseline, and seven pytest twins in
+  `umol-py/tests/{test_molecule,test_reaction}.py` carry `@pytest.mark.skip` markers naming
+  this item; unskip them here). [dep: S4a–S4g]
 - S4i: audit the stereo phase for the same premature collapse (doc 174's remaining open item) —
   whether a local preference selects before a later criterion can vote. Read-and-report while the
   pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d]
@@ -798,11 +859,16 @@ pub struct ResolveReport {
   `Contradictory`; undecided ⇒ kept (patterns are never resolved, so pattern constraints
   persist). Breaking — resolved outputs lose stored assertions. [dep: S4d, S5a]
 - S5c: lowering: retire the `zeroed()` elision-only paths; raise-side dialect filling stays.
-  Breaking. [dep: S5b]
-- S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
-  [dep: S5b, S5c]
+  S6e5 then deletes the `zeroed()` constructors themselves. Breaking. [dep: S5b]
+- S5c1: SMILES umbrella table curation — verify the superset claim row by
+  row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
+  Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording
+  per-row provenance in the table header. [dep: S4b1]
 
-### S6 — deferrable, except S6f
+- S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
+  [dep: S5b, S5c, S5c1]
+
+### S6 — cleanup; all planned work, sequenced last
 
 - S6a: `ConstraintValidator` internals on the entity views. After S5 the constraint pass is
   vacuous on resolved molecules, so the validator becomes a staging/pattern tool; the per-kind
@@ -842,18 +908,34 @@ pub struct ResolveReport {
 - S6e4: io and perception naming audit: `ParserError` versus `ParseError` (merge or rename;
   `ParserType` stays — an agent classification); decide the agent name for
   `AromaticityPerception`, which is an engine wearing the operation noun. [dep: none]
-- S6f: SMILES umbrella table curation — **not deferrable**: verify the superset claim row by
-  row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
-  Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording
-  per-row provenance in the table header. Ordered before S5d: the conformance regeneration
-  bakes table content into snapshots, and regenerating over an uncurated table forces a second
-  regeneration. [dep: S4b1]
-
-Critical path: S0 → S1 → S3 → S4 (S6f before S5d) → S5. S1 must precede S5 because discharge
+- S6e5: the concreteness rename, exhaustive, and the `zeroed()` retirement (settled
+  2026-08-13). The transform family `into_ground` → `into_concrete` on all seven form files
+  with corrected rustdoc (the honest contract under any name: fills undetermined fields; the
+  result is concrete iff every field was undetermined or ground); the defaults family
+  `*Defaults::ground()` → `concrete()`; the macros (`mol_dsl_ground!`, `mol_ground!`) renamed
+  to match — macros are the user-facing surface where the wrong word teaches the wrong model;
+  the `into_ground`/`is_ground` test families follow. `zeroed()` is **deleted**, not renamed:
+  unlike concreteness, which the enumerated inherent fields make ensurable, zeroing the
+  constraint channel is unsound — the key family is open (parameterized ring keys, relational
+  constraints), so `zeroed()` only ever grounded an arbitrary subset while claiming totality.
+  Its two roles dissolve separately: compact output (eliding the `#a0#m0#d0#t0` tail) is
+  solved by discharge — resolved molecules no longer carry those assertions (S5b/S5c); the
+  atom-typing registry's valence-relevant constraint defaults are localized to the registry
+  raise, which already builds its own explicit `AtomDefaults`, and get no generic variant.
+  Rename part [dep: S4e1]; `zeroed()` deletion [dep: S5b, S5c].
+- S6e6: whitepaper revision for the concreteness vocabulary across the board: the
+  molecule/entity groundness wording moves to *concrete* (lattice groundness stays "ground"
+  where the paper speaks algebraically); the documented defaults and macro surfaces follow
+  their S6e5 spellings; and every rendered output listing in the paper is re-checked against
+  the post-rename renderer — the elided constraint tails change with the `zeroed()`
+  retirement and discharge, so listings must be regenerated, not hand-edited.
+  [dep: S6e5; rendered listings also dep: S5]
+Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge
 strips assertions from resolved hosts, after which matching must project every pattern key. S2
 is dissolved; S3 is parallel to S1. The core deliverable — staleness-free semantics and the
-whitepaper Mutation story — completes at S5; S6 is not required for it, except S6f, which
-gates the S5d snapshot regeneration.
+whitepaper Mutation story — completes at S5. S6 is the cleanup stage: all of it is planned
+work, none of it deferred — it is sequenced last because nothing else depends on it. The
+former S6f (table curation) moved to S5c1 so the staged plan is executable in order.
 
 ## Open items
 
