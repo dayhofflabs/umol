@@ -446,11 +446,17 @@ def test_valence_model_counts():
 
 def test_valence_model_smiles():
     model = ValenceModel.smiles()
+    table = model.candidates.table
 
-    assert model.candidates == ValenceCandidateSource.Counts(
-        table=ValenceTable.default()
-    )
+    assert isinstance(model.candidates, ValenceCandidateSource.Counts)
     assert model.tie_break == ValenceTieBreak.MostSaturated
+    assert table != ValenceTable.default()
+    assert table.entry(Element("Cl")) == ValenceEntry(
+        target_covalences=[1], aromatic_valences=[]
+    )
+    assert table.entry(Element("N")) == ValenceEntry(
+        target_covalences=[3, 5], aromatic_valences=[1, 2]
+    )
 
 
 def test_valence_model_mdl():

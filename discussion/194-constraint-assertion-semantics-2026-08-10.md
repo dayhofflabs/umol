@@ -1021,7 +1021,33 @@ pub struct ResolveReport {
 - S5c1: SMILES umbrella table curation — verify the superset claim row by
   row against the RDKit, CDK, and OpenBabel implicit-valence readings and the
   Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording
-  per-row provenance in the table header. [dep: S4b1]
+  per-row provenance in the table header. [dep: S4b1] **Done 2026-08-13:** superset claim
+  verified; no row extends. References read from source: the OpenSMILES "normal valence"
+  table (opensmiles.org, vendored PDF backstop in `materials/formats/opensmiles`), RDKit
+  `atomic_data.cpp` valence lists, CDK via Beam (`Element.java` valence arrays), OpenBabel
+  `smilesvalence.h`. Organic subset: B 3, C 4, O 2, P 3/5, S 2/4/6, F 1, Br 1 unanimous;
+  N 3/5 with RDKit reading 3 only (subset); I 1/3/5 equals the widest reference (RDKit);
+  Cl's hypervalent entries exceed every reference and stay — the umbrella may exceed, never
+  trail. Non-organic rows are the general counts model outside SMILES's rule (Si/As/Se/Sn/
+  Sb/Te/Pb match RDKit's periodic-table lists); `aromatic_valences` are umol's
+  π-contribution reading with no toolkit counterpart (Beam counts from the lowest valence
+  level, OpenBabel subtracts one H). Provenance recorded in the table header; the content
+  hash covers parsed entries only, so the freeze is intact — hash-pinned tests unchanged.
+  **Follow-up, settled 2026-08-13:** the SMILES table drops the hypervalent chlorine
+  entries (Cl `[1]`; the general table keeps its row), and the counts admission adopts the
+  OpenSMILES over-valence reading as its one semantics: past the largest saturation target
+  the atom is saturated and no hydrogens are added — `NoMatch`-on-exceed was incongruous
+  for a model whose entries are saturation targets, not an enumeration of allowed states
+  (rejection stays right for atom typing), and it applied only to the free-`#h` spelling
+  while pinned-`#h` inputs already passed. The electron bookkeeping still rejects
+  unrealizable states (carbon at valence 5 stays `NoMatch` through the empty-candidate
+  path), so the arm admits only states the element can hold: ClF₃ now resolves h0·n2 under
+  the smiles preset, dialkylchloronium (`C1C[Cl+]1`) resolves h0·n2 through the
+  isoelectronic shift with no acquired hydrogen — both pinned at the counts admission
+  (`test_counts_valence_candidate_states_saturated`, with the divalent-fluorine doublet)
+  and at ingest (`test_ingest_smiles_chlorine`). The smiles and default tables now differ;
+  the table-identity assertions name the rows instead. Workspace 15059 green, pytest 1306,
+  clippy zero.
 
 - S5c2: resolution conformance matrix — the suite's two columns predate the tie-break axis;
   each input now runs source × tie-break, four cells of independent records (no cross-model

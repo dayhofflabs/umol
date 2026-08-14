@@ -1,15 +1,53 @@
 # umol SMILES valence table for the counts valence model: the frozen release
 # behind `ValenceModel::smiles()`. SMILES itself is not rigorously specified,
-# so umol owns this reading the way it owns its OpenSMILES parsing spec: the
-# organic-subset rows are the Daylight/OpenSMILES normal valences (B 3, C 4,
-# N 3,5, O 2, P 3,5, S 2,4,6, halogens 1), taken as an honest superset of the
-# RDKit/CDK/OpenBabel readings — permissive reading matching permissive
-# parsing; the remaining rows are inherited from the general table. Frozen:
-# revisions are new named files, never edits.
+# so umol owns this reading the way it owns its OpenSMILES parsing spec:
+# the organic-subset rows are the Daylight/OpenSMILES normal valences, taken
+# as an honest superset of the RDKit/CDK/OpenBabel readings — permissive
+# reading matching permissive parsing; the remaining rows are inherited from
+# the general table. Frozen: revisions are new named files, never edits (the
+# content hash covers parsed entries only, so this header is documentation).
+#
+# Superset claim verified row by row, 2026-08-13, against:
+#   [SPEC] OpenSMILES specification, "normal valence" table (the Daylight
+#          normal valences), opensmiles.org — vendored as PDF at
+#          materials/formats/opensmiles against the site's certificate rot —
+#          and umol's parsing spec (umol-io/spec/opensmiles-spec.md).
+#   [RDKIT] rdkit Code/GraphMol/atomic_data.cpp valence lists (master).
+#   [CDK] CDK parses SMILES via Beam: johnmay/beam
+#          core/.../uk/ac/ebi/beam/Element.java valence arrays (master).
+#   [OB]  openbabel src/formats/smilesvalence.h (master).
+#
+# Organic subset (the only rows SMILES implicit-hydrogen counting governs;
+# bracket atoms carry explicit H):
+#   B  3        unanimous [SPEC][RDKIT][CDK][OB]
+#   C  4        unanimous
+#   N  3,5      [SPEC][CDK][OB]; RDKit reads 3 only — subset of this row
+#   O  2        unanimous
+#   P  3,5      unanimous
+#   S  2,4,6    unanimous
+#   F  1        unanimous
+#   Cl 1        unanimous; the general table keeps its hypervalent chlorine
+#               row — over-valence input saturates at h0 here (below)
+#   Br 1        unanimous
+#   I  1,3,5    [RDKIT] reads 1,3,5; [SPEC][CDK][OB] read 1 — this row
+#               equals the widest reference
+# No reference reads more than any row above: nothing to extend.
+#
+# Remaining rows are the umol general counts model, outside SMILES's
+# implicit-hydrogen rule; Si, As, Se, Sn, Sb, Te, Pb match the RDKit
+# periodic-table valence lists, the noble-gas and s-block rows are umol's.
+#
+# aromatic_valences are umol's per-atom pi-contribution reading and have no
+# toolkit counterpart (Beam counts aromatic hydrogens from the lowest
+# valence level; OpenBabel subtracts one hydrogen on aromatic atoms). The
+# aromatic subset is b c n o p s se as [SPEC]; the Si entry serves umol's
+# extended aromatics (Beam's permissive tier also admits Si).
 #
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
-#   largest; Counts uses the first entry >= v + inc when #h is free. Literal
-#   #h overrides. Ions read the isoelectronic entry via an element shift.
+#   largest; Counts uses the first entry >= v + inc when #h is free, and past
+#   the largest target the atom is saturated: no hydrogens are added (the
+#   OpenSMILES over-valence reading). Literal #h overrides. Ions read the
+#   isoelectronic entry via an element shift.
 [H]
 target_covalences = [1]
 
@@ -66,7 +104,7 @@ target_covalences = [2, 4, 6]
 aromatic_valences = [2]
 
 [Cl]
-target_covalences = [1, 3, 5, 7]
+target_covalences = [1]
 
 [Ar]
 target_covalences = [0]

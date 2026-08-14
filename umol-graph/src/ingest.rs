@@ -953,6 +953,19 @@ mod tests {
     }
 
     #[rstest]
+    #[case::chloronium(
+        "C1C[Cl+]1",
+        mol_dsl!(r##"{:atoms ["C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "Cl#i=#c+#h0#n2#u0#s"] :bonds [[0 2 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::chlorine_trifluoride(
+        "FCl(F)F",
+        mol_dsl!(r##"{:atoms ["F#i=#c0#h0#n3#u0#s" "Cl#i=#c0#h0#n2#u0#s" "F#i=#c0#h0#n3#u0#s" "F#i=#c0#h0#n3#u0#s"] :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}"##)
+    )]
+    fn test_ingest_smiles_chlorine(#[case] input: &str, #[case] expected: Molecule) {
+        assert_eq!(ingest_smiles(input).unwrap(), expected);
+    }
+
+    #[rstest]
     #[case::mdl_furan("o1cccc1")]
     #[case::mdl_thiophene("s1cccc1")]
     #[case::mdl_pyrrole("[nH]1cccc1")]

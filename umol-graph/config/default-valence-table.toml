@@ -5,8 +5,10 @@
 # frozen preset tables never change in place.
 #
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
-#   largest; Counts uses the first entry >= v + inc when #h is free. Literal
-#   #h overrides. Ions read the isoelectronic entry via an element shift.
+#   largest; Counts uses the first entry >= v + inc when #h is free, and past
+#   the largest target the atom is saturated: no hydrogens are added (the
+#   OpenSMILES over-valence reading). Literal #h overrides. Ions read the
+#   isoelectronic entry via an element shift.
 [H]
 target_covalences = [1]
 

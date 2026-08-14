@@ -87,7 +87,7 @@ impl<'a> CountsValence<'a> {
 
         let mut completions = AtomCompletions::new();
         for id in molecule.atoms().ids() {
-            match self.resolve_molecule_atom(molecule, id) {
+            match self.admitted_completions(molecule, id) {
                 Ok(Some(candidates)) => completions.insert(id, candidates),
                 Ok(None) => {}
                 Err(contradiction) => return Solution::Contradictory(contradiction),
@@ -96,7 +96,7 @@ impl<'a> CountsValence<'a> {
         Solution::Determined(completions)
     }
 
-    fn resolve_molecule_atom(
+    fn admitted_completions(
         &self,
         molecule: &Molecule,
         atom_id: AtomId,
@@ -116,7 +116,7 @@ impl<'a> CountsValence<'a> {
             return Ok(None);
         }
         let input = CountsInput::for_molecule_atom(atom);
-        let mut candidates = self.select_candidates(atom.attributes, input)?;
+        let mut candidates = self.candidate_states(atom.attributes, input)?;
         for candidate in &mut candidates {
             if candidate.isotope_mass.is_undetermined() {
                 candidate.isotope_mass = IsotopeMassForm::Natural;
@@ -143,7 +143,7 @@ impl<'a> CountsValence<'a> {
         };
         let charge = atom.charge().as_lit().unwrap_or(0);
         let input = CountsInput::for_molecule_atom(atom);
-        match self.select_candidates(atom.attributes, input) {
+        match self.candidate_states(atom.attributes, input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {
                 element,
@@ -156,7 +156,7 @@ impl<'a> CountsValence<'a> {
     /// Every candidate state admitted by the table and the atom's literals,
     /// in enumeration order (implicit hydrogens ascending, then the table's
     /// aromatic valences).
-    fn select_candidates(
+    fn candidate_states(
         &self,
         atom: &AtomForm,
         input: CountsInput,
@@ -186,15 +186,18 @@ impl<'a> CountsValence<'a> {
             return Err(CountsError::UndeterminedAromaticValence);
         }
 
+        // Bonding budget is next-largest saturation target - valence.
+        // Above largest saturation target, bonding budget is zero.
         let bonding_budget = match entry {
             Some(entry) if atom.implicit_hydrogens.as_lit().is_none() => Some(
                 entry
                     .target_covalences
                     .iter()
-                    .map(|&c| i64::from(c))
-                    .find(|&c| c >= valence)
-                    .map(|c| c - valence)
-                    .ok_or(CountsError::NoMatch)?,
+                    .find_map(|&c| {
+                        let c = i64::from(c);
+                        (c >= valence).then(|| c - valence)
+                    })
+                    .unwrap_or(0),
             ),
             _ => None,
         };
@@ -610,14 +613,37 @@ mod tests {
     ])]
     #[case::tropylium_carbocation("C#c1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c+#h#n0#u0#s#v2#a0"])]
     #[case::iron_out_of_table("Fe#c0#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["Fe#c0#h0#n4#u0#s#v0#a!"])]
-    fn test_counts_valence_select_candidates(
+    fn test_counts_valence_candidate_states(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
         #[case] expected: Vec<&str>,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         let candidates = resolver
-            .select_candidates(&atom_dsl!(input), counts_input)
+            .candidate_states(&atom_dsl!(input), counts_input)
+            .unwrap();
+        assert_eq!(
+            candidates
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::chloronium("Cl#c1", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c+#h0#n2#u0#s#v2#a!"])]
+    #[case::chlorine_trifluoride("Cl#c0", CountsInput { valence: 3, accepted_pairs: 0, is_aromatic: false }, vec!["Cl#c0#h0#n2#u0#s#v3#a!"])]
+    #[case::divalent_fluorine("F#c0", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: false }, vec!["F#c0#h0#n2#u#s2#v2#a!"])]
+    fn test_counts_valence_candidate_states_saturated(
+        #[case] input: &str,
+        #[case] counts_input: CountsInput,
+        #[case] expected: Vec<&str>,
+    ) {
+        let resolver = CountsValence::new(ValenceTable::smiles_table());
+        let candidates = resolver
+            .candidate_states(&atom_dsl!(input), counts_input)
             .unwrap();
         assert_eq!(
             candidates
@@ -632,14 +658,14 @@ mod tests {
     #[rstest]
     #[case::undetermined_aromatic_out_of_table("Fe#c0#h0#a+", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: true }, CountsError::UndeterminedAromaticValence)]
     #[case::over_valence("C#c0", CountsInput { valence: 5, accepted_pairs: 0, is_aromatic: false }, CountsError::NoMatch)]
-    fn test_counts_valence_select_candidates_error(
+    fn test_counts_valence_candidate_states_error(
         #[case] input: &str,
         #[case] counts_input: CountsInput,
         #[case] expected: CountsError,
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(
-            resolver.select_candidates(&atom_dsl!(input), counts_input),
+            resolver.candidate_states(&atom_dsl!(input), counts_input),
             Err(expected)
         );
     }
