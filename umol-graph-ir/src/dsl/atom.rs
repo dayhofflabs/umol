@@ -14,7 +14,7 @@ use winnow::Parser;
 
 use super::config::{
     AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault,
-    NumericDefault, StereoDefault,
+    NumDefault, StereoDefault,
 };
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
@@ -850,20 +850,20 @@ pub(crate) fn raise_atom(atom: &mut AtomForm, cfg: &AtomDefaults) {
     }
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     if matches!(*implicit_hydrogens, NumForm::Undetermined) {
         *implicit_hydrogens = match cfg.implicit_hydrogens {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     if matches!(*lone_pairs, NumForm::Undetermined) {
         *lone_pairs = match cfg.lone_pairs {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
@@ -880,7 +880,7 @@ fn raise_atom_constraints(constraints: &mut AtomConstraintsForm, cfg: &AtomDefau
     // One explicit clause per defaulted kind, in ascending key-sort order. No global vacuous
     // strip: a defaulted kind fills its own absent/vacuous entry; vacuous entries of other kinds
     // are left for lazy canonicalization.
-    if matches!(cfg.valence, NumericDefault::Zero)
+    if matches!(cfg.valence, NumDefault::Zero)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::Valence)
     {
         constraints.set(AtomConstraintForm::Valence(NumForm::Lit(0)));
@@ -901,12 +901,12 @@ fn raise_atom_constraints(constraints: &mut AtomConstraintsForm, cfg: &AtomDefau
             MulticenterValenceForm::NotMulticenter,
         ));
     }
-    if matches!(cfg.donated_pairs, NumericDefault::Zero)
+    if matches!(cfg.donated_pairs, NumDefault::Zero)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::DonatedPairs)
     {
         constraints.set(AtomConstraintForm::DonatedPairs(NumForm::Lit(0)));
     }
-    if matches!(cfg.accepted_pairs, NumericDefault::Zero)
+    if matches!(cfg.accepted_pairs, NumDefault::Zero)
         && is_unset_or_vacuous(constraints, AtomConstraintKey::AcceptedPairs)
     {
         constraints.set(AtomConstraintForm::AcceptedPairs(NumForm::Lit(0)));
@@ -941,22 +941,22 @@ pub(crate) fn lower_atom(atom: &mut AtomForm, cfg: &AtomDefaults) {
     }
     if matches!(
         (&cfg.charge, &*charge),
-        (NumericDefault::Zero, NumForm::Lit(0))
+        (NumDefault::Zero, NumForm::Lit(0))
     ) {
         *charge = NumForm::Undetermined;
     }
     match (&cfg.implicit_hydrogens, &*implicit_hydrogens) {
-        (NumericDefault::Required, NumForm::Undetermined) => {
+        (NumDefault::Required, NumForm::Undetermined) => {
             *implicit_hydrogens = NumForm::Undetermined;
         }
-        (NumericDefault::Zero, NumForm::Lit(0)) => {
+        (NumDefault::Zero, NumForm::Lit(0)) => {
             *implicit_hydrogens = NumForm::Undetermined;
         }
         _ => {}
     }
     if matches!(
         (&cfg.lone_pairs, &*lone_pairs),
-        (NumericDefault::Zero, NumForm::Lit(0))
+        (NumDefault::Zero, NumForm::Lit(0))
     ) {
         *lone_pairs = NumForm::Undetermined;
     }
@@ -981,13 +981,13 @@ fn lower_atom_constraints(constraints: &mut AtomConstraintsForm, cfg: &AtomDefau
             AtomConstraintForm::TetrahedralStereo(TetrahedralStereoForm::NotStereo),
         );
     }
-    if matches!(cfg.accepted_pairs, NumericDefault::Zero) {
+    if matches!(cfg.accepted_pairs, NumDefault::Zero) {
         remove_if_default(
             constraints,
             AtomConstraintForm::AcceptedPairs(NumForm::Lit(0)),
         );
     }
-    if matches!(cfg.donated_pairs, NumericDefault::Zero) {
+    if matches!(cfg.donated_pairs, NumDefault::Zero) {
         remove_if_default(
             constraints,
             AtomConstraintForm::DonatedPairs(NumForm::Lit(0)),
@@ -1008,7 +1008,7 @@ fn lower_atom_constraints(constraints: &mut AtomConstraintsForm, cfg: &AtomDefau
             AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic),
         );
     }
-    if matches!(cfg.valence, NumericDefault::Zero) {
+    if matches!(cfg.valence, NumDefault::Zero) {
         remove_if_default(constraints, AtomConstraintForm::Valence(NumForm::Lit(0)));
     }
 }

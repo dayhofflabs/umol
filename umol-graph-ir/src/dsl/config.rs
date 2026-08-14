@@ -236,14 +236,14 @@ pub struct DeltaDefaults {
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AtomDefaults {
     pub isotope: IsotopeDefault,
-    pub charge: NumericDefault,
-    pub implicit_hydrogens: NumericDefault,
-    pub lone_pairs: NumericDefault,
+    pub charge: NumDefault,
+    pub implicit_hydrogens: NumDefault,
+    pub lone_pairs: NumDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
-    pub valence: NumericDefault,
-    pub donated_pairs: NumericDefault,
-    pub accepted_pairs: NumericDefault,
+    pub valence: NumDefault,
+    pub donated_pairs: NumDefault,
+    pub accepted_pairs: NumDefault,
     pub multicenter_valence: MulticenterValenceDefault,
     pub aromatic_valence: AromaticValenceDefault,
     pub tetrahedral_stereo: StereoDefault,
@@ -254,14 +254,14 @@ impl AtomDefaults {
     pub fn new() -> Self {
         Self {
             isotope: IsotopeDefault::Required,
-            charge: NumericDefault::Required,
-            implicit_hydrogens: NumericDefault::Required,
-            lone_pairs: NumericDefault::Required,
+            charge: NumDefault::Required,
+            implicit_hydrogens: NumDefault::Required,
+            lone_pairs: NumDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Required,
             multiplicity: MultiplicityDefault::Required,
-            valence: NumericDefault::Required,
-            donated_pairs: NumericDefault::Required,
-            accepted_pairs: NumericDefault::Required,
+            valence: NumDefault::Required,
+            donated_pairs: NumDefault::Required,
+            accepted_pairs: NumDefault::Required,
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
             tetrahedral_stereo: StereoDefault::Required,
@@ -272,14 +272,14 @@ impl AtomDefaults {
     pub fn ground() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
-            charge: NumericDefault::Zero,
-            implicit_hydrogens: NumericDefault::Zero,
-            lone_pairs: NumericDefault::Zero,
+            charge: NumDefault::Zero,
+            implicit_hydrogens: NumDefault::Zero,
+            lone_pairs: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
-            valence: NumericDefault::Required,
-            donated_pairs: NumericDefault::Required,
-            accepted_pairs: NumericDefault::Required,
+            valence: NumDefault::Required,
+            donated_pairs: NumDefault::Required,
+            accepted_pairs: NumDefault::Required,
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
             tetrahedral_stereo: StereoDefault::Required,
@@ -293,14 +293,14 @@ impl AtomDefaults {
     pub fn zeroed() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
-            charge: NumericDefault::Zero,
-            implicit_hydrogens: NumericDefault::Zero,
-            lone_pairs: NumericDefault::Zero,
+            charge: NumDefault::Zero,
+            implicit_hydrogens: NumDefault::Zero,
+            lone_pairs: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
-            valence: NumericDefault::Zero,
-            donated_pairs: NumericDefault::Zero,
-            accepted_pairs: NumericDefault::Zero,
+            valence: NumDefault::Zero,
+            donated_pairs: NumDefault::Zero,
+            accepted_pairs: NumDefault::Zero,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
             tetrahedral_stereo: StereoDefault::NotStereo,
@@ -360,14 +360,14 @@ impl Default for AtomDefaults {
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct AtomOverrides {
     pub isotope: Option<IsotopeDefault>,
-    pub charge: Option<NumericDefault>,
-    pub implicit_hydrogens: Option<NumericDefault>,
-    pub lone_pairs: Option<NumericDefault>,
+    pub charge: Option<NumDefault>,
+    pub implicit_hydrogens: Option<NumDefault>,
+    pub lone_pairs: Option<NumDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
-    pub valence: Option<NumericDefault>,
-    pub donated_pairs: Option<NumericDefault>,
-    pub accepted_pairs: Option<NumericDefault>,
+    pub valence: Option<NumDefault>,
+    pub donated_pairs: Option<NumDefault>,
+    pub accepted_pairs: Option<NumDefault>,
     pub multicenter_valence: Option<MulticenterValenceDefault>,
     pub aromatic_valence: Option<AromaticValenceDefault>,
     pub tetrahedral_stereo: Option<StereoDefault>,
@@ -377,7 +377,7 @@ pub struct AtomOverrides {
 /// See `AtomDefaults` for semantics.
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct BondDefaults {
-    pub charge: NumericDefault,
+    pub charge: NumDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
     pub cis_trans_stereo: StereoDefault,
@@ -387,7 +387,7 @@ impl BondDefaults {
     /// Requires every bond field and constraint to be explicit.
     pub fn new() -> Self {
         Self {
-            charge: NumericDefault::Required,
+            charge: NumDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Required,
             multiplicity: MultiplicityDefault::Required,
             cis_trans_stereo: StereoDefault::Required,
@@ -397,7 +397,7 @@ impl BondDefaults {
     /// Grounds all struct fields
     pub fn ground() -> Self {
         Self {
-            charge: NumericDefault::Zero,
+            charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
             cis_trans_stereo: StereoDefault::Required,
@@ -408,7 +408,7 @@ impl BondDefaults {
     /// The omission threshold for *lowering* a bond to DSL (compact output).
     pub fn zeroed() -> Self {
         Self {
-            charge: NumericDefault::Zero,
+            charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
             cis_trans_stereo: StereoDefault::NotStereo,
@@ -439,7 +439,7 @@ impl Default for BondDefaults {
 /// Sparse overrides on `BondDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct BondOverrides {
-    pub charge: Option<NumericDefault>,
+    pub charge: Option<NumDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
 }
@@ -473,7 +473,7 @@ pub struct DativeBondOverrides {}
 /// Lowering/raising defaults for aromatic systems.
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AromaticSystemDefaults {
-    pub charge: NumericDefault,
+    pub charge: NumDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
 }
@@ -482,7 +482,7 @@ impl AromaticSystemDefaults {
     /// Requires every aromatic-system field to be explicit.
     pub fn new() -> Self {
         Self {
-            charge: NumericDefault::Required,
+            charge: NumDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Required,
             multiplicity: MultiplicityDefault::Required,
         }
@@ -491,7 +491,7 @@ impl AromaticSystemDefaults {
     /// Grounds all struct fields
     pub fn ground() -> Self {
         Self {
-            charge: NumericDefault::Zero,
+            charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
         }
@@ -526,7 +526,7 @@ impl Default for AromaticSystemDefaults {
 /// Sparse overrides on `AromaticSystemDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct AromaticSystemOverrides {
-    pub charge: Option<NumericDefault>,
+    pub charge: Option<NumDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
 }
@@ -534,7 +534,7 @@ pub struct AromaticSystemOverrides {
 /// Lowering/raising defaults for multicenter bonds.
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MulticenterBondDefaults {
-    pub charge: NumericDefault,
+    pub charge: NumDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
 }
@@ -543,7 +543,7 @@ impl MulticenterBondDefaults {
     /// Requires every multicenter-bond field to be explicit.
     pub fn new() -> Self {
         Self {
-            charge: NumericDefault::Required,
+            charge: NumDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Required,
             multiplicity: MultiplicityDefault::Required,
         }
@@ -552,7 +552,7 @@ impl MulticenterBondDefaults {
     /// Grounds all struct fields.
     pub fn ground() -> Self {
         Self {
-            charge: NumericDefault::Zero,
+            charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
         }
@@ -587,7 +587,7 @@ impl Default for MulticenterBondDefaults {
 /// Sparse overrides on `MulticenterBondDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct MulticenterBondOverrides {
-    pub charge: Option<NumericDefault>,
+    pub charge: Option<NumDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
 }
@@ -680,7 +680,7 @@ pub enum IsotopeDefault {
 
 /// Numeric field default
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub enum NumericDefault {
+pub enum NumDefault {
     Zero,
     Required,
 }
@@ -767,7 +767,7 @@ mod tests {
     fn test_molecule_defaults_with_overrides_routes_to_per_entity() {
         let cfg = MoleculeDefaults::ground().with_overrides(MoleculeOverrides {
             atom: AtomOverrides {
-                charge: Some(NumericDefault::Required),
+                charge: Some(NumDefault::Required),
                 ..AtomOverrides::default()
             },
             bond: BondOverrides {
@@ -776,11 +776,11 @@ mod tests {
             },
             dative_bond: DativeBondOverrides::default(),
             aromatic_system: AromaticSystemOverrides {
-                charge: Some(NumericDefault::Required),
+                charge: Some(NumDefault::Required),
                 ..AromaticSystemOverrides::default()
             },
             multicenter_bond: MulticenterBondOverrides {
-                charge: Some(NumericDefault::Required),
+                charge: Some(NumDefault::Required),
                 ..MulticenterBondOverrides::default()
             },
             noncovalent_bond: NoncovalentBondOverrides::default(),
@@ -788,11 +788,11 @@ mod tests {
             stereo_bond: StereoBondOverrides::default(),
         });
         assert_eq!(cfg.atom.isotope, IsotopeDefault::Natural);
-        assert_eq!(cfg.atom.charge, NumericDefault::Required);
-        assert_eq!(cfg.bond.charge, NumericDefault::Zero);
+        assert_eq!(cfg.atom.charge, NumDefault::Required);
+        assert_eq!(cfg.bond.charge, NumDefault::Zero);
         assert_eq!(cfg.bond.multiplicity, MultiplicityDefault::Required);
-        assert_eq!(cfg.aromatic_system.charge, NumericDefault::Required);
-        assert_eq!(cfg.multicenter_bond.charge, NumericDefault::Required);
+        assert_eq!(cfg.aromatic_system.charge, NumDefault::Required);
+        assert_eq!(cfg.multicenter_bond.charge, NumDefault::Required);
     }
 
     #[rstest]
@@ -856,8 +856,8 @@ mod tests {
          :valence :required :donated-pairs :required :accepted-pairs :required \
          :multicenter-valence :required :aromatic-valence :required \
          :tetrahedral-stereo :required}",
-        NumericDefault::Required,
-        NumericDefault::Required,
+        NumDefault::Required,
+        NumDefault::Required,
         MulticenterValenceDefault::Required,
         AromaticValenceDefault::Required
     )]
@@ -867,15 +867,15 @@ mod tests {
          :valence :zero :donated-pairs :zero :accepted-pairs :zero \
          :multicenter-valence :not-multicenter :aromatic-valence :not-aromatic \
          :tetrahedral-stereo :not-stereo}",
-        NumericDefault::Zero,
-        NumericDefault::Zero,
+        NumDefault::Zero,
+        NumDefault::Zero,
         MulticenterValenceDefault::NotMulticenter,
         AromaticValenceDefault::NotAromatic
     )]
     fn test_atom_form_config_from_edn(
         #[case] edn: &str,
-        #[case] expected_charge: NumericDefault,
-        #[case] expected_h: NumericDefault,
+        #[case] expected_charge: NumDefault,
+        #[case] expected_h: NumDefault,
         #[case] expected_multicenter: MulticenterValenceDefault,
         #[case] expected_aromatic: AromaticValenceDefault,
     ) {
@@ -890,9 +890,9 @@ mod tests {
     #[rstest]
     fn test_atom_defaults_ground_constraints_required() {
         let g = AtomDefaults::ground();
-        assert_eq!(g.valence, NumericDefault::Required);
-        assert_eq!(g.donated_pairs, NumericDefault::Required);
-        assert_eq!(g.accepted_pairs, NumericDefault::Required);
+        assert_eq!(g.valence, NumDefault::Required);
+        assert_eq!(g.donated_pairs, NumDefault::Required);
+        assert_eq!(g.accepted_pairs, NumDefault::Required);
         assert_eq!(g.multicenter_valence, MulticenterValenceDefault::Required);
         assert_eq!(g.aromatic_valence, AromaticValenceDefault::Required);
     }
@@ -913,27 +913,27 @@ mod tests {
     fn test_atom_defaults_with_overrides() {
         let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
             isotope: Some(IsotopeDefault::Required),
-            charge: Some(NumericDefault::Required),
-            implicit_hydrogens: Some(NumericDefault::Required),
-            lone_pairs: Some(NumericDefault::Required),
+            charge: Some(NumDefault::Required),
+            implicit_hydrogens: Some(NumDefault::Required),
+            lone_pairs: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
-            valence: Some(NumericDefault::Required),
-            donated_pairs: Some(NumericDefault::Required),
-            accepted_pairs: Some(NumericDefault::Required),
+            valence: Some(NumDefault::Required),
+            donated_pairs: Some(NumDefault::Required),
+            accepted_pairs: Some(NumDefault::Required),
             multicenter_valence: Some(MulticenterValenceDefault::Required),
             aromatic_valence: Some(AromaticValenceDefault::Required),
             tetrahedral_stereo: Some(StereoDefault::Required),
         });
         assert_eq!(cfg.isotope, IsotopeDefault::Required);
-        assert_eq!(cfg.charge, NumericDefault::Required);
-        assert_eq!(cfg.implicit_hydrogens, NumericDefault::Required);
-        assert_eq!(cfg.lone_pairs, NumericDefault::Required);
+        assert_eq!(cfg.charge, NumDefault::Required);
+        assert_eq!(cfg.implicit_hydrogens, NumDefault::Required);
+        assert_eq!(cfg.lone_pairs, NumDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
-        assert_eq!(cfg.valence, NumericDefault::Required);
-        assert_eq!(cfg.donated_pairs, NumericDefault::Required);
-        assert_eq!(cfg.accepted_pairs, NumericDefault::Required);
+        assert_eq!(cfg.valence, NumDefault::Required);
+        assert_eq!(cfg.donated_pairs, NumDefault::Required);
+        assert_eq!(cfg.accepted_pairs, NumDefault::Required);
         assert_eq!(cfg.multicenter_valence, MulticenterValenceDefault::Required);
         assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::Required);
         assert_eq!(cfg.tetrahedral_stereo, StereoDefault::Required);
@@ -942,25 +942,25 @@ mod tests {
     #[rstest]
     fn test_atom_defaults_with_overrides_partial() {
         let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
-            charge: Some(NumericDefault::Required),
+            charge: Some(NumDefault::Required),
             ..AtomOverrides::default()
         });
-        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.charge, NumDefault::Required);
         // Untouched fields retain the zeroed() defaults.
         assert_eq!(cfg.isotope, IsotopeDefault::Natural);
-        assert_eq!(cfg.implicit_hydrogens, NumericDefault::Zero);
-        assert_eq!(cfg.valence, NumericDefault::Zero);
+        assert_eq!(cfg.implicit_hydrogens, NumDefault::Zero);
+        assert_eq!(cfg.valence, NumDefault::Zero);
         assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic);
     }
 
     #[rstest]
     fn test_bond_defaults_with_overrides() {
         let cfg = BondDefaults::zeroed().with_overrides(BondOverrides {
-            charge: Some(NumericDefault::Required),
+            charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
         });
-        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.charge, NumDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
     }
@@ -968,11 +968,11 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_defaults_with_overrides() {
         let cfg = AromaticSystemDefaults::zeroed().with_overrides(AromaticSystemOverrides {
-            charge: Some(NumericDefault::Required),
+            charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
         });
-        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.charge, NumDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
     }
@@ -980,11 +980,11 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_defaults_with_overrides() {
         let cfg = MulticenterBondDefaults::zeroed().with_overrides(MulticenterBondOverrides {
-            charge: Some(NumericDefault::Required),
+            charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
         });
-        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.charge, NumDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
     }

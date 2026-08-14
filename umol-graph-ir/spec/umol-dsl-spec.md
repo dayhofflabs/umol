@@ -1124,7 +1124,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 - **`lift_constraints`** (entity → molecule): drains every inline store into the molecule list as `{:<entity> [ref form]}` peers.
 - **`inline_constraints`** (molecule → entity): drains top-level inline-capable narrow leaves from the molecule list into the targeted entity's inline store.
 
-Combinator subtrees, relational leaves, and molecule-scope leaves are never moved by either operation. With multiple top-level entries targeting the same (entity, kind), `inline_constraints` resolves the collision via the entity store's per-kind insert policy (last-wins for unique-kind variants).
+Combinator subtrees, relational leaves, and molecule-scope leaves are never moved by either operation. With multiple top-level entries targeting the same (entity, kind), or an entry colliding with a stored inline constraint of that kind, `inline_constraints` combines the assertions by meet; a meet to bottom is a contradiction, the operation fails, and the molecule is unchanged.
 
 **Multiple constraints per entity.** Each per-entity constraint serializes as its **own** entity-constraint entry; implementations **MUST NOT** bundle multiple constraints on the same entity into a single map.
 

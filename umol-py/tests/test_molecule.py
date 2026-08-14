@@ -443,9 +443,7 @@ def test_molecule_canonicalize_integrity_error():
 
 
 def test_molecule_from_smiles():
-    assert Molecule.from_smiles("C") == Molecule.parse(
-        '{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}'
-    )
+    assert Molecule.from_smiles("C") == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
 
 
 @pytest.mark.parametrize(
@@ -487,7 +485,7 @@ def test_molecule_from_smiles_io_config_dative():
     assert Molecule.from_smiles(
         "C->N", io_config=SmilesIoConfig.lenient()
     ) == Molecule.parse(
-        '{:atoms ["C#i=#c0#h4#n0#u0#s#a!" "N#i=#c0#h#n2#u0#s#a!"] '
+        '{:atoms ["C#i=#c0#h4#n0#u0#s" "N#i=#c0#h#n2#u0#s"] '
         ":dative-bonds [{:acceptor 1 :attrs :single :donors [0]}]}"
     )
 
@@ -506,7 +504,7 @@ def test_molecule_from_smiles_io_config_error():
                     [AtomForm.parse("C#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
                 )
             ),
-            AtomForm.parse("C#i=#c0#h4#n0#u0#s#a!"),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s"),
         ),
         (
             ValenceModel(
@@ -515,7 +513,7 @@ def test_molecule_from_smiles_io_config_error():
                 ),
                 tie_break=ValenceTieBreak.MostSaturated,
             ),
-            AtomForm.parse("C#i=#c0#h4#n0#u0#s#a!"),
+            AtomForm.parse("C#i=#c0#h4#n0#u0#s"),
         ),
     ],
 )
@@ -688,7 +686,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(1), NumForm.Lit(0), NumForm.Lit(0)],
-                [AromaticValenceForm.Aromatic(NumForm.Undetermined())] * 3,
+                [None] * 3,
                 [None] * 3,
                 [((0, 1, 2), NumForm.Lit(0))],
                 [],
@@ -718,7 +716,7 @@ def test_molecule_from_smiles_chemistry_model_stereo():
             ),
             (
                 [NumForm.Lit(0)] * 4,
-                [AromaticValenceForm.NotAromatic()] * 4,
+                [None] * 4,
                 [None] * 4,
                 [],
                 [(1, StereoKind.Tetrahedral, StereoCoset.Lit(0))],
@@ -877,7 +875,7 @@ def test_molecule_from_smiles_ownership():
     )
     first.atoms[0].charge = 1
 
-    assert second == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}')
+    assert second == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
     assert first != second
     assert io_config == SmilesIoConfig.opensmiles()
     assert chemistry_model == ChemistryModel(

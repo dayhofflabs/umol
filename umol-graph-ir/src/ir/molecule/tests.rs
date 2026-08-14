@@ -3317,7 +3317,7 @@ fn test_molecule_inline_constraints_drains_top_level_leaves(
         DativeBondConstraintForm::ring_membership(RingScope::Size(5), 1),
     ));
 
-    molecule.inline_constraints();
+    molecule.inline_constraints().unwrap();
 
     assert!(molecule.constraints().is_empty());
     assert_eq!(
@@ -3350,7 +3350,7 @@ fn test_molecule_inline_constraints_last_wins_on_collision(
         AtomConstraintForm::Valence(NumForm::Lit(4)),
     ));
 
-    molecule.inline_constraints();
+    molecule.inline_constraints().unwrap();
 
     // Only one Valence survives; with two competing inserts of the same kind,
     // exactly one wins (which one is unspecified). Verify count and kind.
@@ -3380,7 +3380,7 @@ fn test_molecule_inline_constraints_skips_combinator_nested(
     ]);
     molecule.constraints_mut().push(nested.clone());
 
-    molecule.inline_constraints();
+    molecule.inline_constraints().unwrap();
 
     let mut expected = Constraints::new();
     expected.push(nested);
@@ -3407,7 +3407,7 @@ fn test_molecule_inline_constraints_skips_relational_and_molecule(
         AtomConstraintForm::Valence(NumForm::Lit(4)),
     ));
 
-    molecule.inline_constraints();
+    molecule.inline_constraints().unwrap();
 
     let mut expected = Constraints::new();
     expected.push(rel);
@@ -3451,7 +3451,7 @@ fn test_molecule_lift_then_inline_roundtrips_inline_state(
 
     molecule.lift_constraints();
     assert!(molecule.atom(AtomId(0)).attributes.constraints.is_empty());
-    molecule.inline_constraints();
+    molecule.inline_constraints().unwrap();
 
     assert_eq!(molecule, original);
 }

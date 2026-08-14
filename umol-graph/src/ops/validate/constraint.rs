@@ -91,6 +91,17 @@ impl ConstraintInvariantsValidator {
         Self { config }
     }
 
+    /// Evaluate one molecule-scope constraint: [`Solution::Determined`] is
+    /// decided-true, [`Solution::Underdetermined`] undecided, and
+    /// [`Solution::Contradictory`] decided-false.
+    pub fn evaluate(
+        &self,
+        molecule: &Molecule,
+        constraint: &Constraint,
+    ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
+        ConstraintEvaluation::new(molecule, self.config).evaluate(constraint)
+    }
+
     /// Validate all inline, relational, and molecule constraints.
     ///
     /// A non-ground predicate produces [`Solution::Underdetermined`], a false predicate produces

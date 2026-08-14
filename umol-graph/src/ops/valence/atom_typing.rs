@@ -38,10 +38,8 @@ impl<'a> AtomTypingValence<'a> {
         Self { registry }
     }
 
-    /// Admission: every atom under resolution gets its candidate set —
-    /// one disjunct per admitted registry row — and no edits are produced.
-    /// A non-literal element makes the whole admission underdetermined and
-    /// empty; plurality is state, not a verdict.
+    /// Admission: determine candidate sets for each atom under resolution,
+    /// Underdetermined if any atom is non-literal, empty if no atoms are admitted.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, AtomTypingError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {
@@ -60,9 +58,7 @@ impl<'a> AtomTypingValence<'a> {
         Solution::Determined(completions)
     }
 
-    /// The admitted completions of an atom: one disjunct per registry row
-    /// surviving admission — field compatibility plus the constraints view's
-    /// `is_compatible` — each the meet of the atom's form with the row.
+    /// Determine admitted completions, compatible with the atom's form and constraints.
     /// `None` when the atom is ground or its element is not literal.
     fn admitted_completions(
         &self,

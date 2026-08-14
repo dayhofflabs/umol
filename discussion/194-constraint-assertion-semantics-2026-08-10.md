@@ -916,6 +916,98 @@ pub struct ResolveReport {
   machinery: decided true with ground inputs ⇒ implied ⇒ removed; decided false ⇒
   `Contradictory`; undecided ⇒ kept (patterns are never resolved, so pattern constraints
   persist). Breaking — resolved outputs lose stored assertions. [dep: S4d, S5a]
+
+  Contract (drafted at execution, 2026-08-15). Both stages are private planners inside
+  `ops/resolve.rs` — bookends of `resolve`, not engines; they carry no model or config of
+  their own. New public types:
+
+  ```rust
+  // umol-graph::ops::resolve
+  pub enum ResolveContradiction {
+      Placement(#[from] PlacementContradiction),   // new, first
+      Valence(..), Aromaticity(..), Stereo(..), Bonds(..), MulticenterBonds(..),
+      Discharge(#[from] DischargeContradiction),   // new, last
+  }
+
+  #[derive(Debug, Error, Clone, PartialEq, Eq)]
+  pub enum PlacementContradiction {
+      #[error("placement: molecule constraint is unsatisfiable: {constraint:?}")]
+      Normalize { constraint: Constraint },
+      #[error("placement: colliding assertions meet to bottom: {constraint:?}")]
+      Collision { constraint: Constraint },
+  }
+
+  #[derive(Debug, Error, Clone, PartialEq, Eq)]
+  pub enum DischargeContradiction {
+      #[error("discharge: assertion contradicts the derived value: {constraint:?}")]
+      Assertion { constraint: Constraint },
+      #[error("discharge: {0}")]
+      Molecule(#[from] ConstraintInvariantsContradiction),
+  }
+
+  pub enum ResolveError {
+      ..existing..,
+      #[error("placement commit failed: {0}")]
+      Placement(TransactionError),
+      #[error("discharge evaluation failed: {0}")]
+      DischargeEvaluation(#[from] ConstraintInvariantsError),
+      #[error("discharge commit failed: {0}")]
+      Discharge(TransactionError),
+  }
+  ```
+
+  A per-entity discharge target is named by the same `Constraint` leaf vocabulary the
+  molecule list uses (`Constraint::Atom(id, form)`, …) — no new entity-reference type.
+  The molecule-scope evaluation reuses the validator machinery through a new public
+  single-constraint entry `ConstraintInvariantsValidator::evaluate(molecule, constraint,
+  config)`; discharge's ring gating mirrors the matcher's `host_ring_context` (scan for
+  ring keys; `RingModel { kind: Relevant, max_ring_size: 22 }` with the validator config's
+  cycle algorithm). `Molecule::inline_constraints` becomes fallible
+  (`Result<(), Contradiction>`) with the collision policy corrected from last-wins to
+  meet; the placement planner is its transactional twin producing `Edits` (the in-place
+  method stays the staging/DSL tool — an in-place mutation cannot be journaled).
+
+  **Discharge honors the resolve failure policies (settled at execution, flagged for
+  review):** the drafted `⊥ ⇒ Contradictory` under `derived_complete` collides with the
+  S4h Keep semantics — every Keep-tolerated assertion (an `#a` with no realized system, a
+  kept stereo assertion without its overlay) meets its closure reading to `⊥`, so discharge
+  as drafted would flip Keep-tolerated resolutions into contradictions and defeat the
+  policy. The alternatives fail: evaluating `⊥` on the vacuous `derived` reading instead
+  would leave `NotAromatic`-class assertions (`#a!`) undischargeable, breaking the
+  no-determined-redundant-assertion guarantee. So the `⊥` arm is policy-gated per key
+  family: aromatic atom/bond keys tolerate `⊥` (keep the assertion) unless the
+  corresponding aromaticity policy is `Error`; stereo keys likewise under the stereo
+  policies; constitution and topology keys (`#v`, `#D`, totals, dative pairs, multicenter,
+  ring keys) have no tolerance policy and contradict unconditionally. Under a non-`Error`
+  policy the unrealized assertion stays stored — the input claim remains documented, as in
+  the S4h outputs.
+
+  **Done 2026-08-15:** both bookends land in `resolve`'s journal. The placement planner
+  normalizes the molecule-scope list (S0h wrapper reduction included) and inlines bare
+  leaves with cumulative per-`(entity, key)` meets — `Molecule::inline_constraints` is
+  fallible with the same meet policy (validate-then-apply, unchanged on `⊥`) and the DSL
+  spec's collision note is rewritten from last-wins to meet. The discharge planner removes
+  every assertion whose ground `derived_complete` refines it, with the `⊥` arm dispatched
+  on the **derived form** — a closure negative (`NotAromatic`, `Aromatic(false)` reading,
+  `NotStereo`) marks the *failure* family and is gated by the failure policies, a positive
+  derived value marks the *mismatch* family and is gated by the mismatch policies; the
+  refinement was forced by the Keep tests, whose kept bond `#a` marks meet the closure
+  `Lit(false)` while only `aromatic_valence_failure` is `Keep`. The molecule-scope list is
+  evaluated per entry through the new `ConstraintInvariantsValidator::evaluate` (algorithm
+  choices from the resolve perception config); decided-true entries are removed. The
+  undecided-kept arm is currently unreachable through `resolve`'s `Determined` verdict
+  (concreteness makes molecule-scope field predicates decide) — it exists for the contract,
+  untested. Every early return now rolls back the journal (placement commits before
+  admission, so `Underdetermined` and every contradiction restore the input exactly);
+  ⊥-path tests pin molecule-unchanged. Resolved outputs lose their realized assertions
+  throughout the workspace expectations (lib, umol-py, pytest — the ingest triple,
+  interpret family, stages, identity fixed point now all end with empty constraint stores);
+  the Keep-policy family keeps its marks, distinguishing tolerated-unrealized from
+  discharged-realized output states. Six stage tests (placement leaf + wrapper, collision,
+  `#D5` discharge contradiction, molecule-scope decided-true and decided-false, all with
+  rollback pins); inline properties migrated to the fallible contract with the stronger
+  unchanged-on-`⊥` clause. umol-graph lib 899 green, graph-ir property suite green, pytest
+  1306 + the two doc-195 skips, clippy zero; conformance stays red for S5d as planned.
 - S5c: lowering: retire the `zeroed()` elision-only paths; raise-side dialect filling stays.
   S6e5 then deletes the `zeroed()` constructors themselves. Breaking. [dep: S5b]
 - S5c1: SMILES umbrella table curation — verify the superset claim row by
@@ -964,7 +1056,7 @@ pub struct ResolveReport {
   [dep: S4h]
 
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
-  [dep: S5b, S5c, S5c1, S5c2]
+  [dep: S5b, S5c, S5c1, S5c2, doc 196 A4]
 
 ### S6 — cleanup; all planned work, sequenced last
 

@@ -11,7 +11,7 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::config::{AromaticSystemDefaults, NumericDefault};
+use super::config::{AromaticSystemDefaults, NumDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
 use super::num::{fmt_num, NumDsl};
@@ -443,8 +443,8 @@ fn raise_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDe
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
@@ -460,7 +460,7 @@ fn lower_aromatic_system(system: &mut AromaticSystemForm, cfg: &AromaticSystemDe
 
     if matches!(
         (&cfg.charge, &*charge),
-        (NumericDefault::Zero, NumForm::Lit(0))
+        (NumDefault::Zero, NumForm::Lit(0))
     ) {
         *charge = NumForm::Undetermined;
     }

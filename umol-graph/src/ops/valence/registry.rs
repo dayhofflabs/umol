@@ -15,7 +15,7 @@ use std::sync::LazyLock;
 
 use umol_chem::element::Element;
 use umol_graph_ir::dsl::{
-    AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumericDefault,
+    AromaticValenceDefault, AtomDefaults, AtomDsl, MulticenterValenceDefault, NumDefault,
 };
 use umol_graph_ir::ir::{AtomForm, ElementForm, IntoIr, NumForm};
 use xxhash_rust::const_xxh3::xxh3_64;
@@ -91,15 +91,11 @@ impl AtomTypeRegistry {
     pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
-        // Registry entries describe valence types: zero exactly the valence-relevant
-        // constraints. Every other constraint (stereo, …) stays `Required` (emit
-        // nothing) via `ground()`, so an entry never asserts something a valence
-        // type does not own — e.g. `NotStereo`, which would conflict with a
-        // stereocenter atom's own `#T`.
+        // Zero the valance constraints.
         let defaults = AtomDefaults {
-            valence: NumericDefault::Zero,
-            donated_pairs: NumericDefault::Zero,
-            accepted_pairs: NumericDefault::Zero,
+            valence: NumDefault::Zero,
+            donated_pairs: NumDefault::Zero,
+            accepted_pairs: NumDefault::Zero,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
             ..AtomDefaults::ground()
@@ -299,9 +295,9 @@ mod tests {
 -1 = ["O#c-#n3#v#a0"]
 "#;
         let defaults = AtomDefaults {
-            valence: NumericDefault::Zero,
-            donated_pairs: NumericDefault::Zero,
-            accepted_pairs: NumericDefault::Zero,
+            valence: NumDefault::Zero,
+            donated_pairs: NumDefault::Zero,
+            accepted_pairs: NumDefault::Zero,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
             ..AtomDefaults::ground()

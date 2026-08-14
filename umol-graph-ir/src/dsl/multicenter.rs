@@ -11,7 +11,7 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::config::{MulticenterBondDefaults, NumericDefault};
+use super::config::{MulticenterBondDefaults, NumDefault};
 use super::electrons::{electron_counts, fmt_electron_counts};
 use super::error::{PResult, ParseError};
 use super::num::{fmt_num, NumDsl};
@@ -447,8 +447,8 @@ fn raise_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondD
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);
@@ -464,7 +464,7 @@ fn lower_multicenter_bond(bond: &mut MulticenterBondForm, cfg: &MulticenterBondD
 
     if matches!(
         (&cfg.charge, &*charge),
-        (NumericDefault::Zero, NumForm::Lit(0))
+        (NumDefault::Zero, NumForm::Lit(0))
     ) {
         *charge = NumForm::Undetermined;
     }

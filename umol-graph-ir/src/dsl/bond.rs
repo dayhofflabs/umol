@@ -12,7 +12,7 @@ use winnow::token::take;
 use winnow::Parser;
 
 use super::boolean::{boolean, BooleanDsl};
-use super::config::{BondDefaults, NumericDefault, StereoDefault};
+use super::config::{BondDefaults, NumDefault, StereoDefault};
 use super::constraint::RingMembershipDsl;
 use super::edn_utils::single_key_map;
 use super::error::{PResult, ParseError};
@@ -509,7 +509,7 @@ pub(crate) fn lower_bond(bond: &mut BondForm, cfg: &BondDefaults) {
 
     if matches!(
         (&cfg.charge, &*charge),
-        (NumericDefault::Zero, NumForm::Lit(0))
+        (NumDefault::Zero, NumForm::Lit(0))
     ) {
         *charge = NumForm::Undetermined;
     }
@@ -529,8 +529,8 @@ pub(crate) fn raise_bond(bond: &mut BondForm, cfg: &BondDefaults) {
 
     if matches!(*charge, NumForm::Undetermined) {
         *charge = match cfg.charge {
-            NumericDefault::Zero => NumForm::Lit(0),
-            NumericDefault::Required => NumForm::Undetermined,
+            NumDefault::Zero => NumForm::Lit(0),
+            NumDefault::Required => NumForm::Undetermined,
         };
     }
     raise_unpaired_electrons(unpaired_electrons, cfg.unpaired_electrons, cfg.multiplicity);

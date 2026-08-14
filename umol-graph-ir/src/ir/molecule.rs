@@ -25,6 +25,7 @@ use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondForm;
 use super::edit::{AtomHandle, BondHandle, Edits};
 use super::entity::Entity;
+use super::error::Contradiction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -35,7 +36,7 @@ use super::noncovalent::NoncovalentBondForm;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoBondForm};
-use super::traits::{BiRelationEquiv, Equiv, RelationEquiv};
+use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -1558,14 +1559,113 @@ impl Molecule {
     }
 
     /// Push every entity inline constraints from `self.constraints`
-    /// into the targeted entity's inline `constraints` store via `add`
-    /// (last-wins per kind), removing it from the molecule list.
-    /// Combinator subtrees, `Relational`, and `Molecule` entries are left
-    /// in place.
-    pub fn inline_constraints(&mut self) {
-        let entries = self.constraints.take();
-        let mut leftover: Vec<Constraint> = Vec::new();
-        for c in entries {
+    /// into the targeted entity's inline `constraints` store, removing it
+    /// from the molecule list. A leaf colliding with a stored entry of the
+    /// same key combines by meet; a meet to `⊥` is a contradiction and the
+    /// molecule is left unchanged. Combinator subtrees, `Relational`, and
+    /// `Molecule` entries are left in place.
+    pub fn inline_constraints(&mut self) -> Result<(), Contradiction> {
+        // Validate every collision before mutating anything.
+        let mut planned: Vec<Constraint> = Vec::with_capacity(self.constraints.iter().count());
+        for c in self.constraints.iter() {
+            let met = match c {
+                Constraint::Atom(id, inner) => {
+                    let met = match self.atom(*id).attributes.constraints.get(inner.key()) {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::Atom(*id, met)
+                }
+                Constraint::Bond(id, inner) => {
+                    let met = match self.bond(*id).attributes.constraints.get(inner.key()) {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::Bond(*id, met)
+                }
+                Constraint::DativeBond(id, inner) => {
+                    let met = match self
+                        .dative_bond(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::DativeBond(*id, met)
+                }
+                Constraint::AromaticSystem(id, inner) => {
+                    let met = match self
+                        .aromatic_system(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::AromaticSystem(*id, met)
+                }
+                Constraint::MulticenterBond(id, inner) => {
+                    let met = match self
+                        .multicenter_bond(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::MulticenterBond(*id, met)
+                }
+                Constraint::NoncovalentBond(id, inner) => {
+                    let met = match self
+                        .noncovalent_bond(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::NoncovalentBond(*id, met)
+                }
+                Constraint::StereoAtom(id, kind, inner) => {
+                    let met = match self
+                        .stereo_atom(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::StereoAtom(*id, *kind, met)
+                }
+                Constraint::StereoBond(id, kind, inner) => {
+                    let met = match self
+                        .stereo_bond(*id)
+                        .attributes
+                        .constraints
+                        .get(inner.key())
+                    {
+                        Some(existing) => existing.meet(inner).ok_or(Contradiction)?,
+                        None => inner.clone(),
+                    };
+                    Constraint::StereoBond(*id, *kind, met)
+                }
+                c @ (Constraint::Relational(_)
+                | Constraint::Molecule(_)
+                | Constraint::And(_)
+                | Constraint::Or(_)
+                | Constraint::Not(_)) => c.clone(),
+            };
+            planned.push(met);
+        }
+
+        self.constraints.take();
+        for c in planned {
             match c {
                 Constraint::Atom(id, inner) => {
                     self.atom_mut(id).attributes.constraints.set(inner);
@@ -1606,12 +1706,10 @@ impl Molecule {
                 | Constraint::Molecule(_)
                 | Constraint::And(_)
                 | Constraint::Or(_)
-                | Constraint::Not(_)) => leftover.push(c),
+                | Constraint::Not(_)) => self.constraints.push(c),
             }
         }
-        for c in leftover {
-            self.constraints.push(c);
-        }
+        Ok(())
     }
 
     pub fn edit(&self) -> MoleculeEditor {

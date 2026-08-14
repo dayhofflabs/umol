@@ -491,19 +491,20 @@ proptest! {
 
     /// `lift_constraints` followed by `inline_constraints` is idempotent:
     /// running the pair twice yields the same `Molecule` as running it
-    /// once. This holds even if the original molecule has duplicate (entity, kind)
-    /// entries across the inline + molecule scopes — the first pass collapses
-    /// them via the entity store's last-wins policy and the second pass is
-    /// a fixpoint.
+    /// once. Duplicate (entity, kind) entries across the inline + molecule
+    /// scopes combine by meet on the first pass, so the second pass is a
+    /// fixpoint; a meet to `⊥` fails the first pass and never the second.
     #[test]
     fn test_lift_inline_idempotent(molecule in molecule_with_constraints_strategy()) {
         let mut once = molecule.clone();
         once.lift_constraints();
-        once.inline_constraints();
+        if once.inline_constraints().is_err() {
+            return Ok(());
+        }
 
         let mut twice = once.clone();
         twice.lift_constraints();
-        twice.inline_constraints();
+        twice.inline_constraints().unwrap();
 
         prop_assert_eq!(once, twice);
     }
@@ -747,12 +748,17 @@ proptest! {
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
-    /// leaf from the molecule list. Combinator-nested entries, relational
-    /// leaves, molecule-scope leaves are preserved.
+    /// leaf from the molecule list; a meet to `⊥` fails and leaves the
+    /// molecule unchanged. Combinator-nested entries, relational leaves,
+    /// molecule-scope leaves are preserved.
     #[test]
     fn test_inline_removes_top_level_leaves(molecule in molecule_with_constraints_strategy()) {
         let mut a = molecule;
-        a.inline_constraints();
+        let before = a.clone();
+        if a.inline_constraints().is_err() {
+            prop_assert_eq!(a, before);
+            return Ok(());
+        }
         for c in a.constraints().iter() {
             prop_assert!(
                 !matches!(
@@ -771,9 +777,9 @@ proptest! {
 
     /// `inline_constraints` deposits each top-level narrow leaf into the
     /// targeted entity's inline `constraints` store, indexed by the leaf's
-    /// `kind()`. Last-wins per kind: if the same `(id, kind)` appeared
-    /// multiple times, or if the entity already had an inline same-kind
-    /// entry, the kind is still present after the call.
+    /// `kind()`. Colliding same-`(id, kind)` entries combine by meet, so on
+    /// success the kind is still present after the call; a meet to `⊥`
+    /// fails and leaves the molecule unchanged.
     #[test]
     fn test_inline_deposits_leaves_into_entities(
         molecule in molecule_with_constraints_strategy(),
@@ -807,7 +813,11 @@ proptest! {
         }
 
         let mut a = molecule;
-        a.inline_constraints();
+        let before = a.clone();
+        if a.inline_constraints().is_err() {
+            prop_assert_eq!(a, before);
+            return Ok(());
+        }
 
         for (id, key) in atom_keys {
             prop_assert!(

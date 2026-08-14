@@ -750,21 +750,21 @@ def test_reaction_from_sides_error():
     [
         pytest.param(
             "[CH4:1]>>[CH4:1]",
-            '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] '
+            '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s"] '
             ":bonds []}}",
             id="mapped",
         ),
         pytest.param(
             "[CH4:1]>>[CH4:1].[OH2:2]",
-            '{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s#a!"}}] '
-            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}',
+            '{:deltas [{:atom {:add "O#i=#c0#h2#n2#u0#s"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s"] :bonds []}}',
             id="one-sided",
         ),
         pytest.param(
             "C>>O",
             '{:deltas [{:atom {:remove 0}} {:atom {:add '
-            '"O#i=#c0#h2#n2#u0#s#a!"}}] '
-            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}',
+            '"O#i=#c0#h2#n2#u0#s"}}] '
+            ':lhs {:atoms ["C#i=#c0#h4#n0#u0#s"] :bonds []}}',
             id="unmapped",
         ),
     ],
@@ -798,11 +798,11 @@ def test_reaction_from_reaction_smiles_resolve_config():
     assert reaction == Reaction.parse(
         '{:deltas [] :lhs {:aromatic-systems '
         '[{:atoms [0 1 2] :attrs "[0,1,1]#c0#u0#s"}] '
-        ':atoms ["C#i=#c+#h#n0#u0#s#a+" '
-        '"C#i=#c0#h#n0#u0#s#a+" '
-        '"C#i=#c0#h#n0#u0#s#a+"] '
-        ':bonds [[0 2 "1#c0#u0#s#a"] [0 1 "1#c0#u0#s#a"] '
-        '[1 2 "1#c0#u0#s#a"]]}}'
+        ':atoms ["C#i=#c+#h#n0#u0#s" '
+        '"C#i=#c0#h#n0#u0#s" '
+        '"C#i=#c0#h#n0#u0#s"] '
+        ':bonds [[0 2 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] '
+        '[1 2 "1#c0#u0#s"]]}}'
     )
 
 
@@ -1047,7 +1047,7 @@ def test_reaction_from_reaction_smiles_ownership():
     del source, io_config, chemistry_model, resolve_config
 
     assert reaction == Reaction.parse(
-        '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s#a!"] :bonds []}}'
+        '{:deltas [] :lhs {:atoms ["C#i=#c0#h4#n0#u0#s"] :bonds []}}'
     )
 
 

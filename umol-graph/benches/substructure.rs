@@ -184,15 +184,18 @@ fn substructure_benchmark(c: &mut Criterion) {
                 group.bench_function(id, |b| {
                     b.iter(|| {
                         for target in &corpus {
-                            black_box(pat.substructure_matches(
-                                target,
-                                SubstructureMatchConfig {
-                                    match_algorithm: strategy,
-                                    subgraph_isomorphism_algorithm: algorithm,
-                                    relevant_cycle_algorithm:
-                                        RelevantCycleEnumerationAlgorithm::Vismara,
-                                },
-                            ));
+                            black_box(
+                                pat.substructure_matches(
+                                    target,
+                                    SubstructureMatchConfig {
+                                        match_algorithm: strategy,
+                                        subgraph_isomorphism_algorithm: algorithm,
+                                        relevant_cycle_algorithm:
+                                            RelevantCycleEnumerationAlgorithm::Vismara,
+                                    },
+                                )
+                                .unwrap(),
+                            );
                         }
                     });
                 });

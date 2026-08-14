@@ -906,7 +906,7 @@ mod tests {
     ) {
         assert_eq!(
             Molecule::from_smiles("C", io_config, chemistry_model, resolve_config).unwrap(),
-            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#a!"]}"#))
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))
         );
     }
 
