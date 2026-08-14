@@ -653,6 +653,45 @@ mod tests {
     use crate::mol_dsl;
 
     #[rstest]
+    #[case::cis_trans_coset_plural(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([0, 1])),
+            )],
+            ..Default::default()
+        }),
+        BondId(1),
+        BondConstraintKey::CisTransStereo,
+        Some(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::stereo(StereoCoset::lit_set([0, 1])),
+        )),
+    )]
+    fn test_bond_constraints_view_derived_complete_determination(
+        #[case] molecule: Molecule,
+        #[case] bond: BondId,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        assert_eq!(
+            molecule.bond(bond).constraints().derived_complete(key),
+            expected
+        );
+    }
+
+    #[rstest]
     #[case::present(
         Some(AtomConstraintForm::valence(4)),
         AtomConstraintKey::Valence,
@@ -819,6 +858,131 @@ mod tests {
         #[case] expected: Option<AtomConstraintForm>,
     ) {
         let molecule = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().derived_complete(key),
+            expected
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence_bond_order_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        AtomConstraintKey::Valence,
+        Some(AtomConstraintForm::valence(NumForm::Undetermined)),
+    )]
+    #[case::degree_bond_order_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        AtomConstraintKey::Degree,
+        Some(AtomConstraintForm::degree(1)),
+    )]
+    #[case::total_degree_hydrogens_open(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::TotalDegree,
+        Some(AtomConstraintForm::total_degree(NumForm::Undetermined)),
+    )]
+    #[case::total_hydrogens_explicit_neighbor(
+        mol_dsl!(r#"{:atoms ["C#h3" "H#h0"] :bonds [[0 1 "1"]]}"#),
+        AtomConstraintKey::TotalHydrogens,
+        Some(AtomConstraintForm::total_hydrogens(4)),
+    )]
+    #[case::total_hydrogens_neighbor_element_open(
+        mol_dsl!(r#"{:atoms ["C#h0" "*#h0"] :bonds [[0 1 "1"]]}"#),
+        AtomConstraintKey::TotalHydrogens,
+        Some(AtomConstraintForm::total_hydrogens(NumForm::Undetermined)),
+    )]
+    #[case::total_valence_bond_order_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                {
+                    let mut atom = AtomForm::from_element(Element::C);
+                    atom.implicit_hydrogens = NumForm::Lit(3);
+                    atom
+                },
+                AtomForm::from_element(Element::C),
+            ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::default())],
+            ..Default::default()
+        }),
+        AtomConstraintKey::TotalValence,
+        Some(AtomConstraintForm::total_valence(NumForm::Undetermined)),
+    )]
+    #[case::donated_pairs_order_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+            ],
+            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
+            ..Default::default()
+        }),
+        AtomConstraintKey::DonatedPairs,
+        Some(AtomConstraintForm::donated_pairs(NumForm::Undetermined)),
+    )]
+    #[case::aromatic_electrons_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::default())],
+            ..Default::default()
+        }),
+        AtomConstraintKey::AromaticValence,
+        Some(AtomConstraintForm::aromatic_valence(
+            AromaticValenceForm::aromatic(NumForm::Undetermined),
+        )),
+    )]
+    #[case::multicenter_electrons_open(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            )],
+            ..Default::default()
+        }),
+        AtomConstraintKey::MulticenterValence,
+        Some(AtomConstraintForm::multicenter_valence(
+            MulticenterValenceForm::multicenter(NumForm::Undetermined),
+        )),
+    )]
+    #[case::tetrahedral_coset_plural(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([0, 1])),
+            )],
+            ..Default::default()
+        }),
+        AtomConstraintKey::TetrahedralStereo,
+        Some(AtomConstraintForm::tetrahedral_stereo(
+            TetrahedralStereoForm::stereo(StereoCoset::lit_set([0, 1])),
+        )),
+    )]
+    fn test_atom_constraints_view_derived_complete_determination(
+        #[case] molecule: Molecule,
+        #[case] key: AtomConstraintKey,
+        #[case] expected: Option<AtomConstraintForm>,
+    ) {
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().derived_complete(key),
             expected
@@ -1482,6 +1646,27 @@ mod tests {
     }
 
     #[rstest]
+    fn test_aromatic_system_constraints_view_derived_complete_determination() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemForm::default(),
+            )],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .constraints()
+                .derived_complete(AromaticSystemConstraintKey::ElectronCount),
+            Some(AromaticSystemConstraintForm::electron_count(
+                NumForm::Undetermined,
+            ))
+        );
+    }
+
+    #[rstest]
     fn test_multicenter_bond_constraints_view_derived() {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::B); 3],
@@ -1497,6 +1682,27 @@ mod tests {
                 .constraints()
                 .derived(MulticenterBondConstraintKey::ElectronCount),
             Some(MulticenterBondConstraintForm::electron_count(2))
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_view_derived_complete_determination() {
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::B); 3],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondForm::default(),
+            )],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .multicenter_bond(MulticenterBondId(0))
+                .constraints()
+                .derived_complete(MulticenterBondConstraintKey::ElectronCount),
+            Some(MulticenterBondConstraintForm::electron_count(
+                NumForm::Undetermined,
+            ))
         );
     }
 

@@ -171,20 +171,21 @@ The kekulizer and aromatizer removals are a different contract: a transform that
 relation must delete the assertions its output no longer satisfies, which is the existing
 emit-compliance policy and stays per-operation.
 
-When `derived_complete` is ground, per key (to be confirmed row by row during implementation
-planning):
+When `derived_complete` is ground, per key (confirmed row by row at S5a, 2026-08-15):
 
 | key                          | determined when                                                    |
 | ---------------------------- | ------------------------------------------------------------------ |
 | `#v` valence                 | all incident bond orders literal                                   |
 | `#D` degree                  | always (topology)                                                  |
-| `#X`, `#H`, `#V` totals      | implicit hydrogens literal (+ explicit H neighbors' elements literal) |
-| `#d`, `#t` dative pairs      | dative overlay incidence under the closure                         |
-| `#a` aromatic valence        | when the aromatic system is created (removable early)              |
-| `#m` multicenter valence     | when the multicenter bond is created (removable early)             |
-| `#T`, `#C` stereo            | when the stereo overlay is created (design 103 flow)               |
+| `#X` total degree            | implicit hydrogens literal (degree and multicenter degree are counts) |
+| `#H` total hydrogens         | implicit hydrogens literal and explicit neighbors' elements literal |
+| `#V` total valence           | all incident bond orders, implicit hydrogens, and both overlay contributions literal |
+| `#d`, `#t` dative pairs      | dative overlay incidence under the closure, orders literal         |
+| `#a` aromatic valence        | when the aromatic system is created with literal electron counts (removable early); a Kekulé flag alone reads `Aromatic(Undetermined)` |
+| `#m` multicenter valence     | when the multicenter bond is created with literal electron counts (removable early) |
+| `#T`, `#C` stereo            | when the stereo overlay is created with a literal coset (design 103 flow) |
 | `#R`, `#x`, `#y` ring keys   | always (pure function of topology); checked by discharge, gated on presence |
-| overlay-entity constraints   | at the resolution stage of the owning overlay                      |
+| overlay-entity constraints   | at the resolution stage of the owning overlay: electron counts literal (aromatic, multicenter); always for noncovalent intramolecularity (topology); dative aromaticity only for binary entries (doc 117 stub); stereo entity keys derive vacuous — their determination is validation-side symmetry, not view projection |
 
 ## Resolution carrier
 
@@ -867,12 +868,44 @@ pub struct ResolveReport {
   to `is_concrete` with matching names.
 - S4i: audit the stereo phase for the same premature collapse (doc 174's remaining open item) —
   whether a local preference selects before a later criterion can vote. Read-and-report while the
-  pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d]
+  pipeline is open; any fix is its own proposal, not S4 scope. [dep: S4d] **Done 2026-08-14:**
+  no premature collapse. The phase has no counterpart of the constitution defect for three
+  structural reasons. (i) No enumeration, no preference: `StereoPerception::derive`
+  materializes asserted `#T`/`#C` cosets verbatim (`coset.clone()`) and only *reframes*
+  existing entity cosets to the canonical ligand frame (`coset_for`, a bijection) — there is
+  no candidate list anywhere for a preference to pick from. (ii) Partial values are gated,
+  not collapsed: `StereoResolver::plan` returns `Underdetermined` whenever any stereo
+  constraint is neither undetermined nor ground (`LitSet`/`Term` — the coset domain's native
+  candidate sets), refusing exactly where the old valence path chose. (iii) The later
+  criteria that could veto — stereogenicity/topicity via graph symmetry, with the
+  para-stereo fixpoint (`iterate_to_fixpoint: model.para_stereo`) — run in
+  `validate/stereo.rs` and canonicalization on the committed state, and lose nothing by
+  running later: the commit stores the full coset, so a veto needs no discarded
+  alternative. The aromatic-H defect destroyed information; the stereo phase destroys none.
+  The para-stereo correlation specifically cannot collapse in resolve because resolve never
+  evaluates stereogenicity at all — the fixpoint sees every site's stored value. One local
+  priority recorded, not a collapse: the virtual-ligand choice
+  (`ops/stereo.rs::derive_stereo_atom`) fills a 3-neighbor site's fourth vertex with the
+  implicit hydrogen when `h ≥ 1`, else the lone pair when `n ≥ 1` — when both hold (a
+  5-domain site asserted tetrahedral) it silently prefers the hydrogen instead of refusing;
+  it reads the already-materialized constitution, so no downstream criterion is preempted,
+  but the priority is hard-coded and configuration-invisible. Any change is its own
+  proposal.
 
 ### S5 — discharge and output cleanup; one conformance regeneration
 
 - S5a: per-key determination checks on the view layer; the determination table is confirmed row
-  by row here. Additive. [dep: S0b]
+  by row here. Additive. [dep: S0b] **Done 2026-08-15:** the table above is updated to its
+  confirmed form and pinned by `derived_complete` determination table tests on the views
+  (`test_atom_constraints_view_derived_complete_determination`, ten rows; bond, aromatic
+  system, and multicenter twins; the stereo-vacuous, dative multi-donor, and noncovalent
+  rows were already pinned). One row failed confirmation and the derivation is corrected:
+  `total_hydrogens` counted only `Lit(H)` neighbors, so a neighbor with a non-literal
+  element contributed zero and `#H` claimed ground where the table requires those elements
+  literal — a neighbor that may be a hydrogen now contributes `Undetermined`. Three rows
+  were confirmed with sharper conditions than the draft phrasing (`#V` needs all four
+  terms literal, not only hydrogens; `#a`/`#m` need literal electron counts, not only the
+  entity). Suites green (graph-ir 6036, umol-graph 893), clippy zero.
 - S5b: the placement and discharge stages bookending `Resolver::resolve`, in the same journal.
   Opening placement stage: apply the context-free constraint normalization (including the S0h
   trivial-wrapper reduction) and move bare top-level entity leaves inline, colliding assertions
@@ -890,8 +923,48 @@ pub struct ResolveReport {
   Daylight/OpenSMILES normal valences, extending rows where a toolkit reads more and recording
   per-row provenance in the table header. [dep: S4b1]
 
+- S5c2: resolution conformance matrix — the suite's two columns predate the tie-break axis;
+  each input now runs source × tie-break, four cells of independent records (no cross-model
+  assertion exists or can: cells disagreeing is the content; the one cross-cell theorem —
+  a Strict-unique input resolves identically under `MostSaturated` — is resolver
+  property-test material, not conformance). Settled 2026-08-15: flat snapshot fields, the
+  existing keys renamed; underdetermined cells document all candidates — that is the
+  resolution result in full; determined cells record the report's `tie_breaks`, the same
+  in-full principle applied to the determined side. Harness contract:
+
+  ```rust
+  #[derive(ToEdn)]
+  struct TestResults {
+      atom_typing_strict: ResolveResult,
+      atom_typing_most_saturated: ResolveResult,
+      counts_strict: ResolveResult,
+      counts_most_saturated: ResolveResult,
+  }
+
+  #[derive(ToEdn)]
+  struct ResolveResult {
+      success: bool,
+      output: Option<MoleculeDsl>,
+      tie_breaks: Vec<u32>,
+      unresolved: Option<BTreeMap<u32, Vec<String>>>,
+      error: Option<String>,
+  }
+  ```
+
+  Cell fields are the source constructors × `ValenceTieBreak` variant names; the EDN keys
+  are kebab-case via the `ToEdn` default (`:atom-typing-strict`,
+  `:atom-typing-most-saturated`, `:counts-strict`, `:counts-most-saturated`, `:tie-breaks`,
+  `:unresolved`). `tie_breaks` is the report's ids — where the policy acted; always empty
+  under `Strict`. `unresolved`
+  is the report's candidate sets keyed by atom id, each candidate rendered as its atom
+  string — present exactly on underdetermined outcomes (a `MostSaturated` cell can be
+  underdetermined: ties surviving the key, wildcard elements); `error` is reserved for
+  contradiction and execution failures, so an underdetermined cell is documented by its
+  candidates, not a string. Harness-only change; the snapshots regenerate once at S5d.
+  [dep: S4h]
+
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
-  [dep: S5b, S5c, S5c1]
+  [dep: S5b, S5c, S5c1, S5c2]
 
 ### S6 — cleanup; all planned work, sequenced last
 

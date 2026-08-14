@@ -434,13 +434,20 @@ pub(crate) fn total_degree(molecule: &Molecule, atom: AtomId) -> NumForm {
         + multicenter_degree(molecule, atom)
 }
 
-/// Explicit hydrogen neighbors plus implicit hydrogens of `atom`.
+/// Explicit hydrogen neighbors plus implicit hydrogens of `atom`. A neighbor
+/// with a non-literal element may be a hydrogen, so it contributes
+/// `Undetermined`.
 pub(crate) fn total_hydrogens(molecule: &Molecule, atom: AtomId) -> NumForm {
-    let explicit = molecule
-        .neighbors(atom)
-        .filter(|n| matches!(n.atom().element(), ElementForm::Lit(Element::H)))
-        .count() as i64;
-    NumForm::Lit(explicit) + molecule.atom(atom).implicit_hydrogens()
+    let mut sum = molecule.atom(atom).implicit_hydrogens().clone();
+    for neighbor in molecule.neighbors(atom) {
+        sum = sum
+            + match neighbor.atom().element() {
+                ElementForm::Lit(Element::H) => NumForm::Lit(1),
+                ElementForm::Lit(_) => NumForm::Lit(0),
+                _ => NumForm::Undetermined,
+            };
+    }
+    sum
 }
 
 /// `valence` + implicit hydrogens + `aromatic_valence` + `multicenter_valence`
