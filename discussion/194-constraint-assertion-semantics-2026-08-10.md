@@ -1385,6 +1385,23 @@ pub struct ResolveReport {
   atom-typing registry's valence-relevant constraint defaults are localized to the registry
   raise, which already builds its own explicit `AtomDefaults`, and get no generic variant.
   Rename part [dep: S4e1]; `zeroed()` deletion [dep: S5b, S5c].
+  **Done 2026-08-15:** `into_concrete` on all seven forms with the honest rustdoc ("the
+  result is concrete iff …"); the macro family is the nine `*_dsl_concrete!` macros
+  (`mol_ground!` never existed); `*Defaults::concrete()` across the family including
+  `ReactionDefaults` and the Python wrappers (staticmethods, reprs, pytest sites); the
+  construction API joined the exhaustive sweep — spec term `concrete()` /
+  `MoleculeSpecTerm::Concrete`, `MoleculeBuilder::concrete()`; bench `ground.rs` →
+  `concrete.rs`; type-named tests follow throughout, `Lattice::is_ground` and
+  lattice-state prose untouched. `zeroed()` deleted from all nine defaults types. The
+  registry localization surfaced one real unification: the `registry!` macro raised with
+  `zeroed()` while the TOML loader used explicit five-constraint defaults, so macro-built
+  rows carried a `#T!` the production registry never had — both paths now share the new
+  `AtomTypeRegistry::raise_defaults()`, and the divergent `#T!` is gone from macro rows.
+  Remaining `zeroed` callers were tests/benches of the concept itself: deleted where the
+  subject died, migrated to `ground()`-equivalents or an explicit constraint-defaults
+  fixture (the registry-raise shape) where they exercised the still-production elision
+  mechanism. Zero conformance churn; workspace green (conformance 675, graph-ir 6063 +
+  321, io 3294 + 10032, umol-py 1622 + pytest 1311, clippy 0).
 - S6e6: whitepaper revision for the concreteness vocabulary across the board: the
   molecule/entity groundness wording moves to *concrete* (lattice groundness stays "ground"
   where the paper speaks algebraically); the documented defaults and macro surfaces follow

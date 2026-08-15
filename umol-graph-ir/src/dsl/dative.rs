@@ -604,7 +604,7 @@ mod tests {
         #[case] input: DativeBondDsl,
         #[case] expected: DativeBondForm,
     ) {
-        assert_eq!(input.into_ir(&DativeBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&DativeBondDefaults::concrete()), expected);
     }
 
     #[rustfmt::skip]

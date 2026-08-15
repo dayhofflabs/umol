@@ -362,8 +362,9 @@ fn test_molecule_dsl_from_str_error() {
 
 // Round-trip direction: DSL → IR (raise) → DSL (lower) is the
 // identity. IR → DSL → IR isn't, since raising `Undetermined`
-// fields to `Lit(0)` is one-way under `zeroed()`. One case per overlay
-// kind so the `into_ir` / `from_ir` per-relation loops are exercised.
+// fields to `Lit(0)` is one-way under grounding defaults. One case per
+// overlay kind so the `into_ir` / `from_ir` per-relation loops are
+// exercised.
 #[rustfmt::skip]
 #[rstest]
 #[case::atoms_bonds(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##)]
@@ -373,10 +374,10 @@ fn test_molecule_dsl_from_str_error() {
 #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:atoms [0 1] :attrs "Hbd"}]}"##)]
 #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"##)]
 #[case::stereo_bond(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"##)]
-fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip_zeroed(#[case] source: &str) {
+fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip(#[case] source: &str) {
     let molecule = mol_dsl!(source);
     let dsl = MoleculeDsl::new(molecule, MoleculeMetadata::default()).unwrap();
-    let cfg = MoleculeDefaults::zeroed();
+    let cfg = MoleculeDefaults::concrete();
     let raised = dsl.clone().into_ir(&cfg);
     let lowered = MoleculeDsl::from_ir(&raised, &cfg);
     assert_eq!(lowered.molecule(), dsl.molecule());
@@ -385,7 +386,7 @@ fn test_molecule_dsl_dsl_to_ir_to_dsl_roundtrip_zeroed(#[case] source: &str) {
 #[rstest]
 fn test_molecule_dsl_from_ir_has_empty_metadata() {
     let molecule = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
-    let cfg = MoleculeDefaults::zeroed();
+    let cfg = MoleculeDefaults::concrete();
     let dsl = MoleculeDsl::from_ir(&molecule, &cfg);
     assert_eq!(dsl.metadata(), &MoleculeMetadata::default());
 }

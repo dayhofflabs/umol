@@ -568,7 +568,7 @@ mod tests {
         #[case] expected: NoncovalentBondDsl,
     ) {
         assert_eq!(
-            NoncovalentBondDsl::from_ir(&input, &NoncovalentBondDefaults::zeroed()),
+            NoncovalentBondDsl::from_ir(&input, &NoncovalentBondDefaults::concrete()),
             expected,
         );
     }
@@ -583,7 +583,7 @@ mod tests {
         #[case] input: NoncovalentBondDsl,
         #[case] expected: NoncovalentBondForm,
     ) {
-        assert_eq!(input.into_ir(&NoncovalentBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&NoncovalentBondDefaults::concrete()), expected);
     }
 
     #[rustfmt::skip]

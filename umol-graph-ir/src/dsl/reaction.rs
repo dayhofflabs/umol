@@ -2636,7 +2636,7 @@ mod tests {
     #[case::stereo_atom(r##"{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]} :deltas [{:stereo-atom {:add {:site 0 :ligands [1 2 3 4] :attrs "Th1"}}}]}"##.parse().unwrap())]
     #[case::stereo_bond(r##"{:lhs {:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]} :deltas [{:stereo-bond {:add {:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}}}]}"##.parse().unwrap())]
     fn test_reaction_dsl_from_ir_roundtrip(#[case] reaction: Reaction) {
-        let cfg = ReactionDefaults::ground();
+        let cfg = ReactionDefaults::concrete();
         let dsl = ReactionDsl::new(reaction, ReactionMetadata::default()).unwrap();
         let lowered = ReactionDsl::from_ir(&dsl.clone().into_ir(&cfg), &cfg);
         assert_eq!(lowered.reaction(), dsl.reaction());

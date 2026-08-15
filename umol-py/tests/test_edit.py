@@ -689,7 +689,7 @@ def test_edits_parse_render():
 
 def test_edits_parse_render_defaults():
     source = '[{:atom {:add "O"}}]'
-    defaults = MoleculeDefaults.ground()
+    defaults = MoleculeDefaults.concrete()
     expected = Edits(
         [
             Edit.AddAtoms(

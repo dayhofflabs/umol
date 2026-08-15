@@ -419,7 +419,7 @@ impl ValenceInvariants {
                         let Some(candidate) = atom.attributes.meet(&assignment) else {
                             continue;
                         };
-                        candidates.push(candidate.into_ground());
+                        candidates.push(candidate.into_concrete());
                     }
                 }
             }
@@ -779,7 +779,7 @@ mod tests {
         vec![],
     )]
     // Both components open: unpaired-electron count fixed by conservation to 2, multiplicity
-    // defaulted by `into_ground` to the maximum (triplet carbene).
+    // defaulted by `into_concrete` to the maximum (triplet carbene).
     #[case::open_unpaired_electrons(
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),
@@ -820,7 +820,7 @@ mod tests {
         }],
     )]
     // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
-    // preserved through `into_ground`.
+    // preserved through `into_concrete`.
     #[case::specified_isotope(
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm {
             element: ElementForm::Lit(Element::C),

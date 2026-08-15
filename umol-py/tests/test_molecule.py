@@ -102,9 +102,9 @@ def test_molecule_new():
     [
         (MoleculeDefaults(), MoleculeDefaults(), "MoleculeDefaults()"),
         (
-            MoleculeDefaults.ground(),
-            MoleculeDefaults.ground(),
-            "MoleculeDefaults.ground()",
+            MoleculeDefaults.concrete(),
+            MoleculeDefaults.concrete(),
+            "MoleculeDefaults.concrete()",
         ),
     ],
 )
@@ -123,7 +123,7 @@ def test_molecule_defaults(value, expected, expected_repr):
         ),
         (
             '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-            MoleculeDefaults.ground(),
+            MoleculeDefaults.concrete(),
             Molecule.from_entries(
                 [AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")]
             ),
@@ -149,7 +149,7 @@ def test_molecule_parse_keyword_error():
             "^Molecule.parse\\(\\) takes 1 positional arguments but 2 were given$"
         ),
     ):
-        Molecule.parse('{:atoms ["C"]}', MoleculeDefaults.ground())
+        Molecule.parse('{:atoms ["C"]}', MoleculeDefaults.concrete())
 
 
 def test_molecule_parse_with_metadata():
@@ -172,7 +172,7 @@ def test_molecule_parse_with_metadata():
 def test_molecule_parse_with_metadata_defaults():
     molecule, metadata = Molecule.parse_with_metadata(
         '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-        defaults=MoleculeDefaults.ground(),
+        defaults=MoleculeDefaults.concrete(),
     )
 
     assert molecule == Molecule.from_entries(
@@ -195,7 +195,7 @@ def test_molecule_parse_with_metadata_keyword_error():
     ):
         Molecule.parse_with_metadata(
             '{:atoms ["C"]}',
-            MoleculeDefaults.ground(),
+            MoleculeDefaults.concrete(),
         )
 
 
@@ -210,9 +210,9 @@ def test_molecule_parse_with_metadata_keyword_error():
         (
             Molecule.parse(
                 '{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-                defaults=MoleculeDefaults.ground(),
+                defaults=MoleculeDefaults.concrete(),
             ),
-            MoleculeDefaults.ground(),
+            MoleculeDefaults.concrete(),
             '{:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}',
         ),
     ],

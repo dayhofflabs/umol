@@ -204,7 +204,7 @@ mod tests {
     use rstest::{fixture, rstest};
     use smallvec::smallvec;
     use umol_graph_ir::ir::MoleculeEntries;
-    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::valence::AtomTypeRegistry;
@@ -251,7 +251,7 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_admit_ground_evidenced(plural_registry: AtomTypeRegistry) {
         let resolver = AtomTypingValence::new(&plural_registry);
-        let molecule = mol_dsl_ground!(r#"{:atoms ["N#h1" "N#h1"] :bonds [[0 1 "1#a"]]}"#);
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["N#h1" "N#h1"] :bonds [[0 1 "1#a"]]}"#);
         let Solution::Determined(completions) = resolver.admit(&molecule) else {
             panic!("ground-evidenced admission did not determine");
         };
@@ -307,7 +307,7 @@ mod tests {
     #[case::default_registry(Cow::Borrowed(AtomTypeRegistry::default_registry()))]
     #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
     fn test_atom_typing_valence_admit_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#);
         assert_eq!(
             AtomTypingValence::new(registry.as_ref()).admit(&molecule),
             Solution::Determined(AtomCompletions::new())

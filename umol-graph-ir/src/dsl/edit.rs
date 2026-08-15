@@ -4210,7 +4210,7 @@ mod tests {
     )]
     #[case::ground_default(
         r#"[{:atom {:add "O"}}]"#,
-        MoleculeDefaults::ground(),
+        MoleculeDefaults::concrete(),
         Edits::from_iter([Edit::AddAtoms {
             atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::O),
@@ -4457,7 +4457,7 @@ mod tests {
     #[rstest]
     #[case::atom_add(
         r#"{:atom {:add "C"}}"#,
-        MoleculeDefaults::ground(),
+        MoleculeDefaults::concrete(),
         Edits::from_iter([Edit::AddAtoms {
             atoms: vec![AtomForm {
                 element: ElementForm::Lit(Element::C),
@@ -4509,7 +4509,7 @@ mod tests {
     )]
     #[case::bond_add(
         "{:bond {:add [0 {:new 0} :single]}}",
-        MoleculeDefaults::ground(),
+        MoleculeDefaults::concrete(),
         Edits::from_iter([Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
@@ -4598,19 +4598,19 @@ mod tests {
     #[rstest]
     #[case::atom_add(
         Edit::AddAtoms {
-            atoms: vec![AtomForm::from_element(Element::C).into_ground()],
+            atoms: vec![AtomForm::from_element(Element::C).into_concrete()],
         },
-        MoleculeDefaults::ground(),
+        MoleculeDefaults::concrete(),
         r#"{:atom {:add "C"}}"#,
     )]
     #[case::bond_add(
         Edit::AddBonds {
             bonds: vec![AddBond {
                 endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::New(0)],
-                attributes: BondForm::from_order(1).into_ground(),
+                attributes: BondForm::from_order(1).into_concrete(),
             }],
         },
-        MoleculeDefaults::ground(),
+        MoleculeDefaults::concrete(),
         "{:bond {:add [0 {:new 0} :single]}}",
     )]
     #[case::atom_remove(
@@ -5030,7 +5030,7 @@ mod tests {
         r#"{:aromatic-system {:add {:atoms [0 1] :attrs "[1,1]"}}}"#,
         Edit::AddAromaticSystem {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            attributes: AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
+            attributes: AromaticSystemForm::from_electrons(vec![1, 1]).into_concrete(),
         },
     )]
     #[case::aromatic_remove(
@@ -5039,7 +5039,7 @@ mod tests {
             removes: vec![(
                 AromaticSystemHandle::Id(AromaticSystemId(0)),
                 vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                AromaticSystemForm::from_electrons(vec![1, 1]).into_ground(),
+                AromaticSystemForm::from_electrons(vec![1, 1]).into_concrete(),
             )],
         },
     )]
@@ -5047,7 +5047,7 @@ mod tests {
         r#"{:multicenter-bond {:add {:atoms [0 1] :attrs "[1,1]"}}}"#,
         Edit::AddMulticenterBond {
             atoms: vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-            attributes: MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
+            attributes: MulticenterBondForm::from_electrons(vec![1, 1]).into_concrete(),
         },
     )]
     #[case::multicenter_remove(
@@ -5056,7 +5056,7 @@ mod tests {
             removes: vec![(
                 MulticenterBondHandle::Id(MulticenterBondId(0)),
                 vec![AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
-                MulticenterBondForm::from_electrons(vec![1, 1]).into_ground(),
+                MulticenterBondForm::from_electrons(vec![1, 1]).into_concrete(),
             )],
         },
     )]
@@ -5065,9 +5065,9 @@ mod tests {
 
         EditInput::from_edn_str(input)
             .unwrap()
-            .append_to(&mut edits, &MoleculeDefaults::ground())
+            .append_to(&mut edits, &MoleculeDefaults::concrete())
             .unwrap();
-        let rendered = EditInput::from_edit(&expected, &MoleculeDefaults::ground())
+        let rendered = EditInput::from_edit(&expected, &MoleculeDefaults::concrete())
             .unwrap()
             .into_iter()
             .map(|input| input.to_edn())

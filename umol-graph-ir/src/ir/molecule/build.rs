@@ -24,8 +24,8 @@ use super::{Molecule, MoleculeEditor};
 pub struct MoleculeBuilder {
     editor: MoleculeEditor,
     /// Whether each added atom is grounded — its unspecified fields filled with their
-    /// ground defaults (neutral, singlet, …). Applied per atom via `AtomForm::into_ground`.
-    ground: bool,
+    /// ground defaults (neutral, singlet, …). Applied per atom via `AtomForm::into_concrete`.
+    concrete: bool,
 }
 
 impl MoleculeBuilder {
@@ -33,18 +33,18 @@ impl MoleculeBuilder {
     pub fn new() -> Self {
         Self {
             editor: Molecule::new().edit(),
-            ground: false,
+            concrete: false,
         }
     }
 
-    /// A fresh builder that **grounds** each atom — unspecified fields take their ground
-    /// defaults (neutral, singlet, …), reusing `AtomForm::into_ground`. The in-code
-    /// analogue of the `mol_dsl_ground!` path. (Partial defaults — e.g. neutral but spin
+    /// A fresh builder that completes each atom — unspecified fields take their ground
+    /// defaults (neutral, singlet, …), reusing `AtomForm::into_concrete`. The in-code
+    /// analogue of the `mol_dsl_concrete!` path. (Partial defaults — e.g. neutral but spin
     /// open — will be the L2 `+`-spec's `charge(0)`/`spin(…)` terms.)
-    pub fn ground() -> Self {
+    pub fn concrete() -> Self {
         Self {
             editor: Molecule::new().edit(),
-            ground: true,
+            concrete: true,
         }
     }
 
@@ -52,8 +52,8 @@ impl MoleculeBuilder {
     /// compact atom-string (`"C#h3"`) via `Into<AtomForm>`.
     pub fn atom(&mut self, spec: impl Into<AtomForm>) -> AtomId {
         let atom = spec.into();
-        let atom = if self.ground {
-            atom.into_ground()
+        let atom = if self.concrete {
+            atom.into_concrete()
         } else {
             atom
         };
@@ -229,7 +229,7 @@ mod tests {
         NumForm::Lit(2)
     )]
     fn test_molecule_builder_ground(#[case] spec: AtomForm, #[case] expected_charge: NumForm) {
-        let mut builder = MoleculeBuilder::ground();
+        let mut builder = MoleculeBuilder::concrete();
         let atom = builder.atom(spec);
         let mol = builder.build();
 

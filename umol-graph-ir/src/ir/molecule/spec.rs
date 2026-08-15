@@ -165,7 +165,7 @@ pub enum MoleculeSpecTerm {
         ligands: Vec<StereoLigandArg>,
         attributes: StereoBondForm,
     },
-    Ground,
+    Concrete,
 }
 
 /// Introduce one atom.
@@ -338,8 +338,8 @@ pub fn stereo_bond(
 }
 
 /// Fill every unspecified atom field with its ground default at `build`.
-pub fn ground() -> MoleculeSpecTerm {
-    MoleculeSpecTerm::Ground
+pub fn concrete() -> MoleculeSpecTerm {
+    MoleculeSpecTerm::Concrete
 }
 
 /// A declarative molecule specification — a sum of [`MoleculeSpecTerm`]s composed with
@@ -355,18 +355,18 @@ impl MoleculeSpec {
     }
 
     /// Materialize the spec. Atoms are created in `+`-order (fixing their positions),
-    /// relations are wired against the created atoms, and — if any `ground` term is
+    /// relations are wired against the created atoms, and — if any `concrete` term is
     /// present — every unspecified atom field is filled with its ground default.
     pub fn build(self) -> Molecule {
         let grounded = self
             .terms
             .iter()
-            .any(|term| matches!(term, MoleculeSpecTerm::Ground));
+            .any(|term| matches!(term, MoleculeSpecTerm::Concrete));
         let mut cx = BuildContext::new(grounded);
 
         for term in self.terms {
             match term {
-                MoleculeSpecTerm::Ground => {}
+                MoleculeSpecTerm::Concrete => {}
                 MoleculeSpecTerm::Atoms(specs) => {
                     for spec in specs {
                         cx.resolve(spec);
@@ -473,7 +473,7 @@ impl BuildContext {
     fn new(grounded: bool) -> Self {
         Self {
             builder: if grounded {
-                MoleculeBuilder::ground()
+                MoleculeBuilder::concrete()
             } else {
                 MoleculeBuilder::new()
             },
@@ -808,9 +808,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::grounded(atom(Element::C) + ground(), NumForm::Lit(0))]
-    #[case::ungrounded(MoleculeSpec::new() + atom(Element::C), NumForm::Undetermined)]
-    fn test_molecule_spec_ground(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
+    #[case::concrete(atom(Element::C) + concrete(), NumForm::Lit(0))]
+    #[case::not_concrete(MoleculeSpec::new() + atom(Element::C), NumForm::Undetermined)]
+    fn test_molecule_spec_concrete(#[case] spec: MoleculeSpec, #[case] expected_charge: NumForm) {
         let mol = spec.build();
 
         assert_eq!(mol.atom(AtomId(0)).attributes.charge, expected_charge);

@@ -105,9 +105,9 @@ impl AromaticSystemForm {
 
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. `electrons`
-    /// and `constraints` are preserved. The result is ground iff `electrons`
+    /// and `constraints` are preserved. The result is concrete iff `electrons`
     /// is already `Lit`.
-    pub fn into_ground(mut self) -> Self {
+    pub fn into_concrete(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = NumForm::Lit(0);
         }
@@ -232,16 +232,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_ground_electrons(AromaticSystemForm::from_electrons(vec![1; 6]).into_ground(),
+    #[case::from_ground_electrons(AromaticSystemForm::from_electrons(vec![1; 6]).into_concrete(),
         AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsForm::new() })]
-    #[case::preserves_set_charge(AromaticSystemForm::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
+    #[case::preserves_set_charge(AromaticSystemForm::from_electrons(vec![1; 6]).with_charge(1_i64).into_concrete(),
         AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(1), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsForm::new() })]
-    #[case::preserves_constraints(AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintForm::electron_count(6)).into_ground(),
+    #[case::preserves_constraints(AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintForm::electron_count(6)).into_concrete(),
         AromaticSystemForm { electrons: ElectronCountsForm::Lit(vec![1; 6]), charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)),
         constraints: AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6)) })]
-    fn test_aromatic_system_form_into_ground(
+    fn test_aromatic_system_form_into_concrete(
         #[case] actual: AromaticSystemForm,
         #[case] expected: AromaticSystemForm,
     ) {

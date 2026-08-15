@@ -332,7 +332,7 @@ mod tests {
     )]
     #[case::ground(
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
-        Some(MoleculeDefaults::ground()),
+        Some(MoleculeDefaults::concrete()),
         GraphIrReactionSpan::from_entries(GraphIrReactionSpanEntries {
             atoms: vec![GraphIrEntitySpan::Unchanged(
                 "C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!".parse().unwrap()
@@ -413,7 +413,7 @@ mod tests {
             )],
             ..Default::default()
         }),
-        Some(MoleculeDefaults::ground()),
+        Some(MoleculeDefaults::concrete()),
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#
     )]
     fn test_reaction_span_render(

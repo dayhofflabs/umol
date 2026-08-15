@@ -111,7 +111,7 @@ fn canonical_key(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
 
@@ -139,7 +139,7 @@ mod tests {
     #[case::bonds_2(2, 5)]
     fn test_substructure_featurizer_featurize(#[case] max_bonds: u32, #[case] expected: usize) {
         let fingerprint = SubstructureFeaturizer::new(max_bonds)
-            .featurize(&mol_dsl_ground!(ETHANOL))
+            .featurize(&mol_dsl_concrete!(ETHANOL))
             .unwrap();
         assert_eq!(fingerprint.len(), expected);
     }
@@ -149,8 +149,8 @@ mod tests {
     #[rstest]
     fn test_substructure_featurizer_featurize_subset() {
         let featurizer = SubstructureFeaturizer::new(2);
-        let ethane = featurizer.featurize(&mol_dsl_ground!(ETHANE)).unwrap();
-        let propane = featurizer.featurize(&mol_dsl_ground!(PROPANE)).unwrap();
+        let ethane = featurizer.featurize(&mol_dsl_concrete!(ETHANE)).unwrap();
+        let propane = featurizer.featurize(&mol_dsl_concrete!(PROPANE)).unwrap();
         assert!(ethane.is_subset(&propane));
         assert!(!propane.is_subset(&ethane));
     }
@@ -160,9 +160,9 @@ mod tests {
     #[rstest]
     fn test_substructure_featurizer_featurize_order_independent() {
         let featurizer = SubstructureFeaturizer::new(2);
-        let forward = featurizer.featurize(&mol_dsl_ground!(ETHANOL)).unwrap();
+        let forward = featurizer.featurize(&mol_dsl_concrete!(ETHANOL)).unwrap();
         let relabeled = featurizer
-            .featurize(&mol_dsl_ground!(
+            .featurize(&mol_dsl_concrete!(
                 r#"{:atoms ["O #h1" "C #h2" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
             ))
             .unwrap();
@@ -174,9 +174,9 @@ mod tests {
     #[rstest]
     fn test_substructure_featurizer_featurize_bond_order() {
         let featurizer = SubstructureFeaturizer::new(1);
-        let ethane = featurizer.featurize(&mol_dsl_ground!(ETHANE)).unwrap();
+        let ethane = featurizer.featurize(&mol_dsl_concrete!(ETHANE)).unwrap();
         let ethene = featurizer
-            .featurize(&mol_dsl_ground!(
+            .featurize(&mol_dsl_concrete!(
                 r#"{:atoms ["C #h2" "C #h2"] :bonds [[0 1 "2"]]}"#
             ))
             .unwrap();

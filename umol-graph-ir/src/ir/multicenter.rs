@@ -105,9 +105,9 @@ impl MulticenterBondForm {
 
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. `electrons`
-    /// and `constraints` are preserved. The result is ground iff `electrons`
+    /// and `constraints` are preserved. The result is concrete iff `electrons`
     /// is already `Lit`.
-    pub fn into_ground(mut self) -> Self {
+    pub fn into_concrete(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = NumForm::Lit(0);
         }
@@ -239,7 +239,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_electrons(
-        MulticenterBondForm::from_electrons(vec![1; 3]).into_ground(),
+        MulticenterBondForm::from_electrons(vec![1; 3]).into_concrete(),
         MulticenterBondForm {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(0),
@@ -248,7 +248,7 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        MulticenterBondForm::from_electrons(vec![1; 3]).with_charge(1_i64).into_ground(),
+        MulticenterBondForm::from_electrons(vec![1; 3]).with_charge(1_i64).into_concrete(),
         MulticenterBondForm {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(1),
@@ -259,7 +259,7 @@ mod tests {
     #[case::preserves_constraints(
         MulticenterBondForm::from_electrons(vec![1; 3])
             .with_constraint(MulticenterBondConstraintForm::electron_count(3))
-            .into_ground(),
+            .into_concrete(),
         MulticenterBondForm {
             electrons: ElectronCountsForm::Lit(vec![1; 3]),
             charge: NumForm::Lit(0),
@@ -269,7 +269,7 @@ mod tests {
             ),
         },
     )]
-    fn test_multicenter_bond_form_into_ground(
+    fn test_multicenter_bond_form_into_concrete(
         #[case] actual: MulticenterBondForm,
         #[case] expected: MulticenterBondForm,
     ) {

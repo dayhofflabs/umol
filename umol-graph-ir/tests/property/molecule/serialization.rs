@@ -96,7 +96,7 @@ proptest! {
         molecule in molecule_with_constraints_strategy(),
     ) {
         let required = MoleculeDefaults::new();
-        let ground = MoleculeDefaults::ground();
+        let ground = MoleculeDefaults::concrete();
         let grounded = MoleculeDsl::from_ir(&molecule, &required).into_ir(&ground);
         let rebuilt = MoleculeDsl::from_ir(&grounded, &ground).into_ir(&ground);
         prop_assert_eq!(rebuilt, grounded);

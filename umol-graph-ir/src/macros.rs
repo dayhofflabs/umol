@@ -13,10 +13,10 @@ macro_rules! mol_dsl {
     }};
 }
 
-/// Parse molecule-EDN string into a `Molecule` with `MoleculeDefaults::ground()` applied.
-/// Mirrors `AtomForm::into_ground()` at the molecule scope.
+/// Parse molecule-EDN string into a `Molecule` with `MoleculeDefaults::concrete()` applied.
+/// Mirrors `AtomForm::into_concrete()` at the molecule scope.
 #[macro_export]
-macro_rules! mol_dsl_ground {
+macro_rules! mol_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MoleculeDsl =
             <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
@@ -24,7 +24,7 @@ macro_rules! mol_dsl_ground {
         <$crate::dsl::MoleculeDsl as $crate::ir::IntoIr<$crate::ir::Molecule>>::into_ir(
             $crate::dsl::MoleculeDsl::new(molecule, $crate::dsl::MoleculeMetadata::default())
                 .expect("empty metadata is coherent"),
-            &$crate::dsl::MoleculeDefaults::ground(),
+            &$crate::dsl::MoleculeDefaults::concrete(),
         )
     }};
 }
@@ -41,15 +41,15 @@ macro_rules! atom_dsl {
     }};
 }
 
-/// Parse atom DSL into an `AtomForm` with `AtomDefaults::ground()` applied.
+/// Parse atom DSL into an `AtomForm` with `AtomDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! atom_dsl_ground {
+macro_rules! atom_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AtomDsl =
             <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::AtomDsl as $crate::ir::IntoIr<$crate::ir::AtomForm>>::into_ir(
             dsl,
-            &$crate::dsl::AtomDefaults::ground(),
+            &$crate::dsl::AtomDefaults::concrete(),
         )
     }};
 }
@@ -74,15 +74,15 @@ macro_rules! bond_dsl {
     }};
 }
 
-/// Parse a bond DSL into a `BondForm` with `BondDefaults::ground()` applied.
+/// Parse a bond DSL into a `BondForm` with `BondDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! bond_dsl_ground {
+macro_rules! bond_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::BondDsl =
             <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::BondDsl as $crate::ir::IntoIr<$crate::ir::BondForm>>::into_ir(
             dsl,
-            &$crate::dsl::BondDefaults::ground(),
+            &$crate::dsl::BondDefaults::concrete(),
         )
     }};
 }
@@ -103,15 +103,15 @@ macro_rules! dative_dsl {
     }};
 }
 
-/// Parse a dative-bond DSL string into a `DativeBondForm` with `DativeBondDefaults::ground()` applied.
+/// Parse a dative-bond DSL string into a `DativeBondForm` with `DativeBondDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! dative_dsl_ground {
+macro_rules! dative_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::DativeBondDsl =
             <$crate::dsl::DativeBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::DativeBondDsl as $crate::ir::IntoIr<$crate::ir::DativeBondForm>>::into_ir(
             dsl,
-            &$crate::dsl::DativeBondDefaults::ground(),
+            &$crate::dsl::DativeBondDefaults::concrete(),
         )
     }};
 }
@@ -125,15 +125,15 @@ macro_rules! aromatic_dsl {
 }
 
 /// Parse an aromatic-system DSL string into an `AromaticSystemForm` with
-/// `AromaticSystemDefaults::ground()` applied.
+/// `AromaticSystemDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! aromatic_dsl_ground {
+macro_rules! aromatic_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::AromaticSystemDsl =
             <$crate::dsl::AromaticSystemDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::AromaticSystemDsl as $crate::ir::IntoIr<$crate::ir::AromaticSystemForm>>::into_ir(
             dsl,
-            &$crate::dsl::AromaticSystemDefaults::ground(),
+            &$crate::dsl::AromaticSystemDefaults::concrete(),
         )
     }};
 }
@@ -147,15 +147,15 @@ macro_rules! multicenter_dsl {
 }
 
 /// Parse a multicenter-bond DSL string into a `MulticenterBondForm` with
-/// `MulticenterBondDefaults::ground()` applied.
+/// `MulticenterBondDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! multicenter_dsl_ground {
+macro_rules! multicenter_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::MulticenterBondDsl =
             <$crate::dsl::MulticenterBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::MulticenterBondDsl as $crate::ir::IntoIr<$crate::ir::MulticenterBondForm>>::into_ir(
             dsl,
-            &$crate::dsl::MulticenterBondDefaults::ground(),
+            &$crate::dsl::MulticenterBondDefaults::concrete(),
         )
     }};
 }
@@ -169,15 +169,15 @@ macro_rules! noncovalent_dsl {
 }
 
 /// Parse a noncovalent-bond DSL string into a `NoncovalentBondForm` with
-/// `NoncovalentBondDefaults::ground()` applied.
+/// `NoncovalentBondDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! noncovalent_dsl_ground {
+macro_rules! noncovalent_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::NoncovalentBondDsl =
             <$crate::dsl::NoncovalentBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::NoncovalentBondDsl as $crate::ir::IntoIr<$crate::ir::NoncovalentBondForm>>::into_ir(
             dsl,
-            &$crate::dsl::NoncovalentBondDefaults::ground(),
+            &$crate::dsl::NoncovalentBondDefaults::concrete(),
         )
     }};
 }
@@ -190,15 +190,15 @@ macro_rules! stereo_atom_dsl {
     }};
 }
 
-/// Parse a stereo-atom DSL string into a `StereoAtomForm` with `StereoAtomDefaults::ground()` applied.
+/// Parse a stereo-atom DSL string into a `StereoAtomForm` with `StereoAtomDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! stereo_atom_dsl_ground {
+macro_rules! stereo_atom_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoAtomDsl =
             <$crate::dsl::StereoAtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::StereoAtomDsl as $crate::ir::IntoIr<$crate::ir::StereoAtomForm>>::into_ir(
             dsl,
-            &$crate::dsl::StereoAtomDefaults::ground(),
+            &$crate::dsl::StereoAtomDefaults::concrete(),
         )
     }};
 }
@@ -211,15 +211,15 @@ macro_rules! stereo_bond_dsl {
     }};
 }
 
-/// Parse a stereo-bond DSL string into a `StereoBondForm` with `StereoBondDefaults::ground()` applied.
+/// Parse a stereo-bond DSL string into a `StereoBondForm` with `StereoBondDefaults::concrete()` applied.
 #[macro_export]
-macro_rules! stereo_bond_dsl_ground {
+macro_rules! stereo_bond_dsl_concrete {
     ($s:expr $(,)?) => {{
         let dsl: $crate::dsl::StereoBondDsl =
             <$crate::dsl::StereoBondDsl as ::core::str::FromStr>::from_str($s).unwrap();
         <$crate::dsl::StereoBondDsl as $crate::ir::IntoIr<$crate::ir::StereoBondForm>>::into_ir(
             dsl,
-            &$crate::dsl::StereoBondDefaults::ground(),
+            &$crate::dsl::StereoBondDefaults::concrete(),
         )
     }};
 }
@@ -313,11 +313,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_concrete()], bonds: vec![], ..Default::default() }))]
     #[case::carbon_charged(r#"{:atoms ["C #c+"] :bonds []}"#,
-        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64).into_ground()], bonds: vec![], ..Default::default() }))]
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C).with_charge(1_i64).into_concrete()], bonds: vec![], ..Default::default() }))]
     fn test_mol_ground_macro(#[case] input: &str, #[case] expected: Molecule) {
-        assert_eq!(mol_dsl_ground!(input), expected);
+        assert_eq!(mol_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -335,11 +335,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon_h4("C #h4", AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_ground())]
-    #[case::carbon("C", AtomForm::from_element(Element::C).into_ground())]
-    #[case::carbon_v4("C #v4", AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_ground())]
+    #[case::carbon_h4("C #h4", AtomForm::from_element(Element::C).with_implicit_hydrogens(4_i64).into_concrete())]
+    #[case::carbon("C", AtomForm::from_element(Element::C).into_concrete())]
+    #[case::carbon_v4("C #v4", AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_concrete())]
     fn test_atom_ground_macro(#[case] input: &str, #[case] expected: AtomForm) {
-        assert_eq!(atom_dsl_ground!(input), expected);
+        assert_eq!(atom_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -368,9 +368,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::double("2", BondForm::from_order(2).into_ground())]
+    #[case::double("2", BondForm::from_order(2).into_concrete())]
     fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondForm) {
-        assert_eq!(bond_dsl_ground!(input), expected);
+        assert_eq!(bond_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -399,9 +399,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::double("2", DativeBondForm::from_order(2).into_ground())]
+    #[case::double("2", DativeBondForm::from_order(2).into_concrete())]
     fn test_dative_ground_macro(#[case] input: &str, #[case] expected: DativeBondForm) {
-        assert_eq!(dative_dsl_ground!(input), expected);
+        assert_eq!(dative_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -420,9 +420,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintForm::electron_count(6)).into_ground())]
+    #[case::electron_count("[1,1,1,1,1,1]#e6", AromaticSystemForm::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraintForm::electron_count(6)).into_concrete())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemForm) {
-        assert_eq!(aromatic_dsl_ground!(input), expected);
+        assert_eq!(aromatic_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -440,9 +440,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charged("[1,1,1,1,1]#c-", MulticenterBondForm::from_electrons(vec![1; 5]).with_charge(-1_i64).into_ground())]
+    #[case::charged("[1,1,1,1,1]#c-", MulticenterBondForm::from_electrons(vec![1; 5]).with_charge(-1_i64).into_concrete())]
     fn test_multicenter_ground_macro(#[case] input: &str, #[case] expected: MulticenterBondForm) {
-        assert_eq!(multicenter_dsl_ground!(input), expected);
+        assert_eq!(multicenter_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -461,9 +461,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::hbond("Hbd", NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).into_ground())]
+    #[case::hbond("Hbd", NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).into_concrete())]
     fn test_noncovalent_ground_macro(#[case] input: &str, #[case] expected: NoncovalentBondForm) {
-        assert_eq!(noncovalent_dsl_ground!(input), expected);
+        assert_eq!(noncovalent_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -485,7 +485,7 @@ mod tests {
     #[rstest]
     #[case::ccw("Th0", StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)))]
     fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomForm) {
-        assert_eq!(stereo_atom_dsl_ground!(input), expected);
+        assert_eq!(stereo_atom_dsl_concrete!(input), expected);
     }
 
     #[rustfmt::skip]
@@ -506,6 +506,6 @@ mod tests {
     #[rstest]
     #[case::z("Ct1", StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)))]
     fn test_stereo_bond_ground_macro(#[case] input: &str, #[case] expected: StereoBondForm) {
-        assert_eq!(stereo_bond_dsl_ground!(input), expected);
+        assert_eq!(stereo_bond_dsl_concrete!(input), expected);
     }
 }

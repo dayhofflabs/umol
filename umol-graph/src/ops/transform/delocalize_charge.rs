@@ -124,19 +124,19 @@ impl Transformer for DelocalizeCharge {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
-    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
     use super::*;
 
     #[rstest]
     #[case::cyclopentadienyl(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#c-#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                     [3 4 :aromatic] [4 0 :aromatic]]
@@ -144,7 +144,7 @@ mod tests {
         }"#)
     )]
     #[case::tropylium(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#c+#h#a0" "C#h#a" "C#h#a" "C#h#a"
                     "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
@@ -153,7 +153,7 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4 5 6]
                                 :attrs "[0,1,1,1,1,1,1]"}]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a"
                     "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
@@ -164,7 +164,7 @@ mod tests {
         }"#)
     )]
     #[case::multiple_systems(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#c+#h#a0" "C#h#a" "C#h#a"
                     "C#c+#h#a0" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]
@@ -173,7 +173,7 @@ mod tests {
                 {:atoms [0 1 2] :attrs "[0,1,1]"}
                 {:atoms [3 4 5] :attrs "[0,1,1]"}]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a"
                     "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]
@@ -188,13 +188,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::already_delocalized(mol_dsl_ground!(r#"{
+    #[case::already_delocalized(mol_dsl_concrete!(r#"{
         :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                 [3 4 :aromatic] [4 0 :aromatic]]
         :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]
     }"#))]
-    #[case::heterogeneous(mol_dsl_ground!(r#"{
+    #[case::heterogeneous(mol_dsl_concrete!(r#"{
         :atoms ["B#c-#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
         :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic]
                 [3 4 :aromatic] [4 5 :aromatic] [5 0 :aromatic]]
@@ -211,12 +211,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#c+#h#a0" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,1]"}]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 0 :aromatic]]
             :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#c+"}]

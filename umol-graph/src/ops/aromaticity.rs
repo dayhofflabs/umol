@@ -470,7 +470,7 @@ mod tests {
         AtomId, BondConstraintKey, BondForm, ElectronCountsForm, Molecule, MoleculeEntries,
         NumForm, UnpairedElectronsForm,
     };
-    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
@@ -953,12 +953,12 @@ mod tests {
 
     #[rstest]
     #[case::cyclopropenium_cation(
-        mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         0, vec![1, 1, 0], vec![0, 0, 1], vec![1, 1, 0],
     )]
     #[case::cot_dianion(
-        mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
+        mol_dsl_concrete!(r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
                                 "C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
                                [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 0 "1"]]}"#),
@@ -966,42 +966,42 @@ mod tests {
         vec![0, -1, 0, 0, 0, -1, 0, 0], vec![1, 2, 1, 1, 1, 2, 1, 1],
     )]
     #[case::s4_dication(
-        mol_dsl_ground!(r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
+        mol_dsl_concrete!(r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]}"#),
         0, vec![1, 2, 1, 2], vec![1, 0, 1, 0], vec![1, 2, 1, 2],
     )]
     #[case::boratabenzene_anion(
-        mol_dsl_ground!(r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![-1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::borepin(
-        mol_dsl_ground!(r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 0 "1"]]}"#),
         0, vec![0, 1, 1, 1, 1, 1, 1], vec![0; 7], vec![0, 1, 1, 1, 1, 1, 1],
     )]
     #[case::pyridinium(
-        mol_dsl_ground!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrylium(
-        mol_dsl_ground!(r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrrole(
-        mol_dsl_ground!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::furan(
-        mol_dsl_ground!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::thiophene(
-        mol_dsl_ground!(r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]

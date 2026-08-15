@@ -674,7 +674,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::zeroed(
+    #[case::ground(
         AromaticSystemForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AromaticSystemConstraintsForm::new() },
         AromaticSystemDsl(AromaticSystemForm::default()),
     )]
@@ -683,14 +683,14 @@ mod tests {
         #[case] expected: AromaticSystemDsl,
     ) {
         assert_eq!(
-            AromaticSystemDsl::from_ir(&input, &AromaticSystemDefaults::zeroed()),
+            AromaticSystemDsl::from_ir(&input, &AromaticSystemDefaults::concrete()),
             expected,
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::zeroed(
+    #[case::ground(
         AromaticSystemDsl(AromaticSystemForm::default()),
         AromaticSystemForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AromaticSystemConstraintsForm::new() },
     )]
@@ -698,7 +698,7 @@ mod tests {
         #[case] input: AromaticSystemDsl,
         #[case] expected: AromaticSystemForm,
     ) {
-        assert_eq!(input.into_ir(&AromaticSystemDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&AromaticSystemDefaults::concrete()), expected);
     }
 
     #[rustfmt::skip]

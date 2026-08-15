@@ -636,7 +636,7 @@ mod tests {
     )]
     #[case::ground(
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
-        Some(MoleculeDefaults::ground()),
+        Some(MoleculeDefaults::concrete()),
         mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#)
     )]
     fn test_molecule_parse(
@@ -689,7 +689,7 @@ mod tests {
     fn test_molecule_parse_with_metadata_defaults() {
         let (molecule, metadata) = Molecule::parse_with_metadata(
             r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"]}"#,
-            Some(MoleculeDefaults::ground()),
+            Some(MoleculeDefaults::concrete()),
         )
         .unwrap();
 
@@ -711,7 +711,7 @@ mod tests {
     )]
     #[case::ground(
         mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]}"#),
-        Some(MoleculeDefaults::ground()),
+        Some(MoleculeDefaults::concrete()),
         r#"{:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}"#
     )]
     fn test_molecule_render(

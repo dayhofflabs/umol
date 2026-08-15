@@ -1,11 +1,11 @@
 //! Atom-type registry: a lookup of canonical atom patterns keyed by element
 //! and (optionally) charge. Consumed by the AtomTyping valence resolver.
 //!
-//! TOML-loaded entries are parsed via `AtomDsl` and raised to ground `AtomForm`
-//! values with `ground()` defaults plus the valence-relevant constraints zeroed
-//! (valence, donated/accepted pairs, aromatic valence, multicenter valence); all
-//! other constraints stay unconstrained. Stored under both `(element, Some(charge))`
-//! and `(element, None)` for the two lookup modes.
+//! TOML-loaded entries are parsed via `AtomDsl` and raised with the registry
+//! raise defaults: concrete struct fields plus the valence-relevant constraints
+//! at their zero values (valence, donated/accepted pairs, aromatic valence,
+//! multicenter valence); all other constraints stay unconstrained. Stored under
+//! both `(element, Some(charge))` and `(element, None)` for the two lookup modes.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -88,18 +88,24 @@ impl AtomTypeRegistry {
         self.content_hash = xxh3_64(buf.as_bytes());
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
-        let parsed: AtomTypeRegistryToml = toml::from_str(input)
-            .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
-        // Zero the valance constraints.
-        let defaults = AtomDefaults {
+    /// The raise defaults for registry entries: concrete struct fields plus
+    /// the valence-relevant constraints at their zero values; all other
+    /// constraints stay unconstrained.
+    pub fn raise_defaults() -> AtomDefaults {
+        AtomDefaults {
             valence: NumDefault::Zero,
             donated_pairs: NumDefault::Zero,
             accepted_pairs: NumDefault::Zero,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
-            ..AtomDefaults::ground()
-        };
+            ..AtomDefaults::concrete()
+        }
+    }
+
+    pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
+        let parsed: AtomTypeRegistryToml = toml::from_str(input)
+            .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
+        let defaults = Self::raise_defaults();
         let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomForm>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
@@ -230,7 +236,7 @@ macro_rules! registry {
                 .expect("invalid atom DSL");
             let atom: ::umol_graph_ir::ir::AtomForm = <_ as ::umol_graph_ir::ir::IntoIr<
                 ::umol_graph_ir::ir::AtomForm,
-            >>::into_ir(dsl, &::umol_graph_ir::dsl::AtomDefaults::zeroed());
+            >>::into_ir(dsl, &$crate::ops::valence::AtomTypeRegistry::raise_defaults());
             registry.add(atom);
         )*
         registry
@@ -300,7 +306,7 @@ mod tests {
             accepted_pairs: NumDefault::Zero,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
-            ..AtomDefaults::ground()
+            ..AtomDefaults::concrete()
         };
         let expected = AtomTypeRegistry::from_atoms(
             ["C#c0#v4#a0", "O#c-#n3#v#a0"]
@@ -329,7 +335,7 @@ mod tests {
 
     #[rstest]
     fn test_registry_macro() {
-        let defaults = AtomDefaults::zeroed();
+        let defaults = AtomTypeRegistry::raise_defaults();
         let expected = AtomTypeRegistry::from_atoms(
             ["C#c0#v4", "C#c+#h3"]
                 .map(|source| source.parse::<AtomDsl>().unwrap().into_ir(&defaults)),

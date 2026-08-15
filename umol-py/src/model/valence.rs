@@ -593,7 +593,7 @@ mod tests {
     )]
     #[case::custom(
         AtomTypeRegistry(registry!["C#c0#v4", "O#c0#v2"]),
-        "AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\"), AtomForm.parse(\"O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!#T!\")])"
+        "AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\"), AtomForm.parse(\"O#i=#c0#h0#n0#u0#s#v2#d0#t0#a!#m!\")])"
     )]
     fn test_atom_type_registry_repr(#[case] registry: AtomTypeRegistry, #[case] expected: &str) {
         assert_eq!(registry.__repr__(), expected);
@@ -911,7 +911,7 @@ mod tests {
     #[rstest]
     #[case::atom_typing(
         ValenceModel::atom_typing(AtomTypeRegistry(registry!["C#c0#v4"])),
-        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!#T!\")])), tie_break=ValenceTieBreak.Strict)"
+        "ValenceModel(candidates=ValenceCandidateSource.AtomTyping(registry=AtomTypeRegistry.from_atoms([AtomForm.parse(\"C#i=#c0#h0#n0#u0#s#v4#d0#t0#a!#m!\")])), tie_break=ValenceTieBreak.Strict)"
     )]
     #[case::counts(
         ValenceModel::counts(ValenceTable(valence_table![C => [4, 2]])),

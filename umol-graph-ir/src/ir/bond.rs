@@ -132,9 +132,9 @@ impl BondForm {
 
     /// Fill `Undetermined` value-bearing struct fields with zero defaults:
     /// charge → `Lit(0)`, unpaired electrons → closed-shell singlet `(0, 1)`. Existing
-    /// values and `constraints` are preserved. The result is ground iff
+    /// values and `constraints` are preserved. The result is concrete iff
     /// `order` is already ground.
-    pub fn into_ground(mut self) -> Self {
+    pub fn into_concrete(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = NumForm::Lit(0);
         }
@@ -280,7 +280,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_order(
-        BondForm::from_order(1).into_ground(),
+        BondForm::from_order(1).into_concrete(),
         BondForm {
             order: NumForm::Lit(1),
             charge: NumForm::Lit(0),
@@ -289,7 +289,7 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        BondForm::from_order(2).with_charge(1_i64).into_ground(),
+        BondForm::from_order(2).with_charge(1_i64).into_concrete(),
         BondForm {
             order: NumForm::Lit(2),
             charge: NumForm::Lit(1),
@@ -298,7 +298,7 @@ mod tests {
         },
     )]
     #[case::preserves_constraints(
-        BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))).into_ground(),
+        BondForm::from_order(1).with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))).into_concrete(),
         BondForm {
             order: NumForm::Lit(1),
             charge: NumForm::Lit(0),
@@ -306,7 +306,7 @@ mod tests {
             constraints: BondConstraintsForm::from(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
         },
     )]
-    fn test_bond_form_into_ground(#[case] actual: BondForm, #[case] expected: BondForm) {
+    fn test_bond_form_into_concrete(#[case] actual: BondForm, #[case] expected: BondForm) {
         assert_eq!(actual, expected);
     }
 

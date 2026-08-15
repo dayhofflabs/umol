@@ -115,7 +115,7 @@ mod tests {
         AromaticSystemId, AtomForm, AtomId, BondConstraintKey, BondForm, Molecule, MoleculeEntries,
         RingConfig, UnpairedElectronsForm,
     };
-    use umol_graph_ir::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
 
@@ -143,7 +143,7 @@ mod tests {
 
     #[rstest]
     fn test_aromatizer_with_config() {
-        let molecule = mol_dsl_ground!(
+        let molecule = mol_dsl_concrete!(
             r#"{
                 :atoms ["C" "C" "C" "C" "C" "C"]
                 :bonds [[0 1 "2"] [1 2 "1"] [2 3 "2"]

@@ -325,9 +325,9 @@ def test_reaction_value():
     [
         (ReactionDefaults(), ReactionDefaults(), "ReactionDefaults()"),
         (
-            ReactionDefaults.ground(),
-            ReactionDefaults.ground(),
-            "ReactionDefaults.ground()",
+            ReactionDefaults.concrete(),
+            ReactionDefaults.concrete(),
+            "ReactionDefaults.concrete()",
         ),
     ],
 )
@@ -377,7 +377,7 @@ def test_reaction_parse_defaults():
     reaction = Reaction.parse(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
-        defaults=ReactionDefaults.ground(),
+        defaults=ReactionDefaults.concrete(),
     )
 
     assert reaction == Reaction.parse(
@@ -404,7 +404,7 @@ def test_reaction_parse_keyword_error():
     ):
         Reaction.parse(
             '{:lhs {:atoms ["C"]} :deltas []}',
-            ReactionDefaults.ground(),
+            ReactionDefaults.concrete(),
         )
 
 
@@ -533,7 +533,7 @@ def test_reaction_parse_with_metadata_defaults():
     reaction, metadata = Reaction.parse_with_metadata(
         '{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} '
         ':deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}',
-        defaults=ReactionDefaults.ground(),
+        defaults=ReactionDefaults.concrete(),
     )
 
     assert reaction == Reaction(
@@ -570,7 +570,7 @@ def test_reaction_parse_with_metadata_keyword_error():
     ):
         Reaction.parse_with_metadata(
             '{:lhs {:atoms ["C"]} :deltas []}',
-            ReactionDefaults.ground(),
+            ReactionDefaults.concrete(),
         )
 
 
@@ -618,7 +618,7 @@ def test_reaction_parse_with_metadata_keyword_error():
                     ]
                 ),
             ),
-            ReactionDefaults.ground(),
+            ReactionDefaults.concrete(),
             '{:deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}] '
             ':lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}}',
             id="ground",

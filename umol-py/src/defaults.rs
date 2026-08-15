@@ -18,15 +18,15 @@ impl MoleculeDefaults {
         Self(GraphIrMoleculeDefaults::new())
     }
 
-    /// Ground ordinary entity fields while leaving constraints required.
+    /// Concrete ordinary entity fields; constraints stay required.
     #[staticmethod]
-    pub(crate) fn ground() -> Self {
-        Self(GraphIrMoleculeDefaults::ground())
+    pub(crate) fn concrete() -> Self {
+        Self(GraphIrMoleculeDefaults::concrete())
     }
 
     fn __repr__(&self) -> &'static str {
-        if self.0 == GraphIrMoleculeDefaults::ground() {
-            "MoleculeDefaults.ground()"
+        if self.0 == GraphIrMoleculeDefaults::concrete() {
+            "MoleculeDefaults.concrete()"
         } else {
             "MoleculeDefaults()"
         }
@@ -52,15 +52,15 @@ impl ReactionDefaults {
         Self(GraphIrReactionDefaults::new())
     }
 
-    /// Ground ordinary fields in the LHS and delta entity snapshots.
+    /// Concrete ordinary fields in the LHS and delta entity snapshots.
     #[staticmethod]
-    pub(crate) fn ground() -> Self {
-        Self(GraphIrReactionDefaults::ground())
+    pub(crate) fn concrete() -> Self {
+        Self(GraphIrReactionDefaults::concrete())
     }
 
     fn __repr__(&self) -> &'static str {
-        if self.0 == GraphIrReactionDefaults::ground() {
-            "ReactionDefaults.ground()"
+        if self.0 == GraphIrReactionDefaults::concrete() {
+            "ReactionDefaults.concrete()"
         } else {
             "ReactionDefaults()"
         }
@@ -88,11 +88,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_defaults_ground() {
-        let defaults = MoleculeDefaults::ground();
+    fn test_molecule_defaults_concrete() {
+        let defaults = MoleculeDefaults::concrete();
 
-        assert_eq!(defaults.to_rust(), &GraphIrMoleculeDefaults::ground());
-        assert_eq!(defaults.__repr__(), "MoleculeDefaults.ground()");
+        assert_eq!(defaults.to_rust(), &GraphIrMoleculeDefaults::concrete());
+        assert_eq!(defaults.__repr__(), "MoleculeDefaults.concrete()");
     }
 
     #[rstest]
@@ -104,10 +104,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_defaults_ground() {
-        let defaults = ReactionDefaults::ground();
+    fn test_reaction_defaults_concrete() {
+        let defaults = ReactionDefaults::concrete();
 
-        assert_eq!(defaults.to_rust(), &GraphIrReactionDefaults::ground());
-        assert_eq!(defaults.__repr__(), "ReactionDefaults.ground()");
+        assert_eq!(defaults.to_rust(), &GraphIrReactionDefaults::concrete());
+        assert_eq!(defaults.__repr__(), "ReactionDefaults.concrete()");
     }
 }

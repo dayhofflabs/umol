@@ -31,34 +31,17 @@ impl MoleculeDefaults {
         }
     }
 
-    /// Composes `*Defaults::ground()` for each entity.
-    pub fn ground() -> Self {
+    /// Composes `*Defaults::concrete()` for each entity.
+    pub fn concrete() -> Self {
         Self {
-            atom: AtomDefaults::ground(),
-            bond: BondDefaults::ground(),
-            dative_bond: DativeBondDefaults::ground(),
-            aromatic_system: AromaticSystemDefaults::ground(),
-            multicenter_bond: MulticenterBondDefaults::ground(),
-            noncovalent_bond: NoncovalentBondDefaults::ground(),
-            stereo_atom: StereoAtomDefaults::ground(),
-            stereo_bond: StereoBondDefaults::ground(),
-        }
-    }
-
-    /// Composes `*Defaults::zeroed()` for each entity. Atom topology-derived
-    /// fields (`valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`,
-    /// `multicenter_valence`) are skipped during `into_ir` when the molecule
-    /// has incident topology — see `MoleculeDsl::into_ir`.
-    pub fn zeroed() -> Self {
-        Self {
-            atom: AtomDefaults::zeroed(),
-            bond: BondDefaults::zeroed(),
-            dative_bond: DativeBondDefaults::zeroed(),
-            aromatic_system: AromaticSystemDefaults::zeroed(),
-            multicenter_bond: MulticenterBondDefaults::zeroed(),
-            noncovalent_bond: NoncovalentBondDefaults::zeroed(),
-            stereo_atom: StereoAtomDefaults::zeroed(),
-            stereo_bond: StereoBondDefaults::zeroed(),
+            atom: AtomDefaults::concrete(),
+            bond: BondDefaults::concrete(),
+            dative_bond: DativeBondDefaults::concrete(),
+            aromatic_system: AromaticSystemDefaults::concrete(),
+            multicenter_bond: MulticenterBondDefaults::concrete(),
+            noncovalent_bond: NoncovalentBondDefaults::concrete(),
+            stereo_atom: StereoAtomDefaults::concrete(),
+            stereo_bond: StereoBondDefaults::concrete(),
         }
     }
 
@@ -133,17 +116,17 @@ impl ReactionDefaults {
         }
     }
 
-    /// Composes `*Defaults::ground()` for each entity.
-    pub fn ground() -> Self {
+    /// Composes `*Defaults::concrete()` for each entity.
+    pub fn concrete() -> Self {
         Self {
-            atom: AtomDefaults::ground(),
-            bond: BondDefaults::ground(),
-            dative_bond: DativeBondDefaults::ground(),
-            aromatic_system: AromaticSystemDefaults::ground(),
-            multicenter_bond: MulticenterBondDefaults::ground(),
-            noncovalent_bond: NoncovalentBondDefaults::ground(),
-            stereo_atom: StereoAtomDefaults::ground(),
-            stereo_bond: StereoBondDefaults::ground(),
+            atom: AtomDefaults::concrete(),
+            bond: BondDefaults::concrete(),
+            dative_bond: DativeBondDefaults::concrete(),
+            aromatic_system: AromaticSystemDefaults::concrete(),
+            multicenter_bond: MulticenterBondDefaults::concrete(),
+            noncovalent_bond: NoncovalentBondDefaults::concrete(),
+            stereo_atom: StereoAtomDefaults::concrete(),
+            stereo_bond: StereoBondDefaults::concrete(),
         }
     }
 
@@ -268,8 +251,8 @@ impl AtomDefaults {
         }
     }
 
-    /// Grounds struct fields, no constraints
-    pub fn ground() -> Self {
+    /// Concrete struct-field defaults; constraints stay required.
+    pub fn concrete() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
             charge: NumDefault::Zero,
@@ -283,27 +266,6 @@ impl AtomDefaults {
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
             tetrahedral_stereo: StereoDefault::Required,
-        }
-    }
-
-    /// Grounds struct fields and sets the constraint defaults to their zero values.
-    /// Used as the omission threshold when *lowering* an IR value to DSL (a constraint
-    /// equal to its zeroed value is omitted, keeping output compact). Raising
-    /// (DSL → IR) uses `ground()` plus an explicit per-constraint selection.
-    pub fn zeroed() -> Self {
-        Self {
-            isotope: IsotopeDefault::Natural,
-            charge: NumDefault::Zero,
-            implicit_hydrogens: NumDefault::Zero,
-            lone_pairs: NumDefault::Zero,
-            unpaired_electrons: UnpairedElectronsDefault::Zero,
-            multiplicity: MultiplicityDefault::Derived,
-            valence: NumDefault::Zero,
-            donated_pairs: NumDefault::Zero,
-            accepted_pairs: NumDefault::Zero,
-            multicenter_valence: MulticenterValenceDefault::NotMulticenter,
-            aromatic_valence: AromaticValenceDefault::NotAromatic,
-            tetrahedral_stereo: StereoDefault::NotStereo,
         }
     }
 
@@ -394,24 +356,13 @@ impl BondDefaults {
         }
     }
 
-    /// Grounds all struct fields
-    pub fn ground() -> Self {
+    /// Concrete struct-field defaults.
+    pub fn concrete() -> Self {
         Self {
             charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
             cis_trans_stereo: StereoDefault::Required,
-        }
-    }
-
-    /// Like `ground()` but additionally sets `cis_trans_stereo` to `NotStereo`.
-    /// The omission threshold for *lowering* a bond to DSL (compact output).
-    pub fn zeroed() -> Self {
-        Self {
-            charge: NumDefault::Zero,
-            unpaired_electrons: UnpairedElectronsDefault::Zero,
-            multiplicity: MultiplicityDefault::Derived,
-            cis_trans_stereo: StereoDefault::NotStereo,
         }
     }
 
@@ -453,11 +404,7 @@ impl DativeBondDefaults {
         Self {}
     }
 
-    pub fn ground() -> Self {
-        Self {}
-    }
-
-    pub fn zeroed() -> Self {
+    pub fn concrete() -> Self {
         Self {}
     }
 
@@ -488,18 +435,13 @@ impl AromaticSystemDefaults {
         }
     }
 
-    /// Grounds all struct fields
-    pub fn ground() -> Self {
+    /// Concrete struct-field defaults.
+    pub fn concrete() -> Self {
         Self {
             charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
         }
-    }
-
-    /// Equivalent to ground()
-    pub fn zeroed() -> Self {
-        Self::ground()
     }
 
     /// Add overrides
@@ -549,18 +491,13 @@ impl MulticenterBondDefaults {
         }
     }
 
-    /// Grounds all struct fields.
-    pub fn ground() -> Self {
+    /// Concrete struct-field defaults.
+    pub fn concrete() -> Self {
         Self {
             charge: NumDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
         }
-    }
-
-    /// Equivalent to ground()
-    pub fn zeroed() -> Self {
-        Self::ground()
     }
 
     /// Add overrides
@@ -598,11 +535,7 @@ pub struct MulticenterBondOverrides {
 pub struct NoncovalentBondDefaults {}
 
 impl NoncovalentBondDefaults {
-    pub fn zeroed() -> Self {
-        Self {}
-    }
-
-    pub fn ground() -> Self {
+    pub fn concrete() -> Self {
         Self {}
     }
 
@@ -628,11 +561,7 @@ impl StereoAtomDefaults {
         Self {}
     }
 
-    pub fn ground() -> Self {
-        Self {}
-    }
-
-    pub fn zeroed() -> Self {
+    pub fn concrete() -> Self {
         Self {}
     }
 
@@ -654,11 +583,7 @@ impl StereoBondDefaults {
         Self {}
     }
 
-    pub fn ground() -> Self {
-        Self {}
-    }
-
-    pub fn zeroed() -> Self {
+    pub fn concrete() -> Self {
         Self {}
     }
 
@@ -730,8 +655,7 @@ mod tests {
 
     #[rstest]
     #[case::verbatim(MoleculeDefaults::new())]
-    #[case::ground(MoleculeDefaults::ground())]
-    #[case::zeroed(MoleculeDefaults::zeroed())]
+    #[case::concrete(MoleculeDefaults::concrete())]
     fn test_molecule_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();
@@ -765,7 +689,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_defaults_with_overrides_routes_to_per_entity() {
-        let cfg = MoleculeDefaults::ground().with_overrides(MoleculeOverrides {
+        let cfg = MoleculeDefaults::concrete().with_overrides(MoleculeOverrides {
             atom: AtomOverrides {
                 charge: Some(NumDefault::Required),
                 ..AtomOverrides::default()
@@ -797,7 +721,7 @@ mod tests {
 
     #[rstest]
     #[case::required(ReactionDefaults::new())]
-    #[case::ground(ReactionDefaults::ground())]
+    #[case::concrete(ReactionDefaults::concrete())]
     fn test_reaction_defaults_roundtrip(#[case] defaults: ReactionDefaults) {
         assert_eq!(
             ReactionDefaults::from_edn(&defaults.to_edn()).unwrap(),
@@ -807,7 +731,7 @@ mod tests {
 
     #[rstest]
     #[case::required(ReactionDefaults::new(), MoleculeDefaults::new())]
-    #[case::ground(ReactionDefaults::ground(), MoleculeDefaults::ground())]
+    #[case::concrete(ReactionDefaults::concrete(), MoleculeDefaults::concrete())]
     fn test_reaction_defaults_molecule_defaults(
         #[case] defaults: ReactionDefaults,
         #[case] expected: MoleculeDefaults,
@@ -829,17 +753,17 @@ mod tests {
             stereo_bond: StereoBondDefaults::new(),
         }
     )]
-    #[case::ground(
-        ReactionDefaults::ground(),
+    #[case::concrete(
+        ReactionDefaults::concrete(),
         DeltaDefaults {
-            atom: AtomDefaults::ground(),
-            bond: BondDefaults::ground(),
-            dative_bond: DativeBondDefaults::ground(),
-            aromatic_system: AromaticSystemDefaults::ground(),
-            multicenter_bond: MulticenterBondDefaults::ground(),
-            noncovalent_bond: NoncovalentBondDefaults::ground(),
-            stereo_atom: StereoAtomDefaults::ground(),
-            stereo_bond: StereoBondDefaults::ground(),
+            atom: AtomDefaults::concrete(),
+            bond: BondDefaults::concrete(),
+            dative_bond: DativeBondDefaults::concrete(),
+            aromatic_system: AromaticSystemDefaults::concrete(),
+            multicenter_bond: MulticenterBondDefaults::concrete(),
+            noncovalent_bond: NoncovalentBondDefaults::concrete(),
+            stereo_atom: StereoAtomDefaults::concrete(),
+            stereo_bond: StereoBondDefaults::concrete(),
         }
     )]
     fn test_reaction_defaults_delta_defaults(
@@ -861,7 +785,7 @@ mod tests {
         MulticenterValenceDefault::Required,
         AromaticValenceDefault::Required
     )]
-    #[case::zeroed_atom(
+    #[case::constraint_defaulted_atom(
         "{:isotope :natural :charge :zero :implicit-hydrogens :zero \
          :lone-pairs :zero :unpaired-electrons :zero :multiplicity :derived \
          :valence :zero :donated-pairs :zero :accepted-pairs :zero \
@@ -888,8 +812,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_defaults_ground_constraints_required() {
-        let g = AtomDefaults::ground();
+    fn test_atom_defaults_concrete_constraints_required() {
+        let g = AtomDefaults::concrete();
         assert_eq!(g.valence, NumDefault::Required);
         assert_eq!(g.donated_pairs, NumDefault::Required);
         assert_eq!(g.accepted_pairs, NumDefault::Required);
@@ -898,20 +822,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_defaults_ground_struct_fields_match_zeroed() {
-        let g = AtomDefaults::ground();
-        let z = AtomDefaults::zeroed();
-        assert_eq!(g.isotope, z.isotope);
-        assert_eq!(g.charge, z.charge);
-        assert_eq!(g.implicit_hydrogens, z.implicit_hydrogens);
-        assert_eq!(g.lone_pairs, z.lone_pairs);
-        assert_eq!(g.unpaired_electrons, z.unpaired_electrons);
-        assert_eq!(g.multiplicity, z.multiplicity);
-    }
-
-    #[rstest]
     fn test_atom_defaults_with_overrides() {
-        let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
+        let cfg = AtomDefaults::concrete().with_overrides(AtomOverrides {
             isotope: Some(IsotopeDefault::Required),
             charge: Some(NumDefault::Required),
             implicit_hydrogens: Some(NumDefault::Required),
@@ -941,21 +853,21 @@ mod tests {
 
     #[rstest]
     fn test_atom_defaults_with_overrides_partial() {
-        let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
+        let cfg = AtomDefaults::concrete().with_overrides(AtomOverrides {
             charge: Some(NumDefault::Required),
             ..AtomOverrides::default()
         });
         assert_eq!(cfg.charge, NumDefault::Required);
-        // Untouched fields retain the zeroed() defaults.
+        // Untouched fields retain the concrete() defaults.
         assert_eq!(cfg.isotope, IsotopeDefault::Natural);
         assert_eq!(cfg.implicit_hydrogens, NumDefault::Zero);
-        assert_eq!(cfg.valence, NumDefault::Zero);
-        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic);
+        assert_eq!(cfg.valence, NumDefault::Required);
+        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::Required);
     }
 
     #[rstest]
     fn test_bond_defaults_with_overrides() {
-        let cfg = BondDefaults::zeroed().with_overrides(BondOverrides {
+        let cfg = BondDefaults::concrete().with_overrides(BondOverrides {
             charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
@@ -967,7 +879,7 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_defaults_with_overrides() {
-        let cfg = AromaticSystemDefaults::zeroed().with_overrides(AromaticSystemOverrides {
+        let cfg = AromaticSystemDefaults::concrete().with_overrides(AromaticSystemOverrides {
             charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
@@ -979,7 +891,7 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_defaults_with_overrides() {
-        let cfg = MulticenterBondDefaults::zeroed().with_overrides(MulticenterBondOverrides {
+        let cfg = MulticenterBondDefaults::concrete().with_overrides(MulticenterBondOverrides {
             charge: Some(NumDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),

@@ -335,14 +335,14 @@ mod tests {
     use rstest::rstest;
     use umol_chem::element::Element;
     use umol_graph_ir::ir::{StereoAtomId, StereoBondId};
-    use umol_graph_ir::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
     use crate::ops::model::{ElementScope, StereoKindModel};
 
     #[rstest]
     #[case::materializations(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
@@ -373,7 +373,7 @@ mod tests {
         },
     )]
     #[case::existing_elements(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
@@ -414,7 +414,7 @@ mod tests {
         },
     )]
     #[case::unrealizable_sites(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "S#h0#T1" "C#h3"
                     "C#h3" "C#h2" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [3 4 "1"] [4 5 "2#C1"]]
@@ -429,7 +429,7 @@ mod tests {
         },
     )]
     #[case::relation_mismatches(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
@@ -479,7 +479,7 @@ mod tests {
         },
     )]
     #[case::entity_failures(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"
                     "C#h3" "C#h0" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
@@ -501,7 +501,7 @@ mod tests {
         },
     )]
     #[case::not_stereo_mismatches(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T!" "N#h2" "O#h"
                     "C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]
@@ -537,7 +537,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(
         StereoModel::default(),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         }"#),
@@ -557,7 +557,7 @@ mod tests {
             model.kind_models[StereoKind::Tetrahedral as usize] = None;
             model
         },
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         }"#),
@@ -572,7 +572,7 @@ mod tests {
             });
             model
         },
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "S#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         }"#),
@@ -580,7 +580,7 @@ mod tests {
     )]
     #[case::ligand_arity(
         StereoModel::default(),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h0#T1" "N#h2"]
             :bonds [[0 1 "1"] [1 2 "1"]]
         }"#),
@@ -588,7 +588,7 @@ mod tests {
     )]
     #[case::aromatic_exclusion(
         StereoModel::default(),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C" "C#T1" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"] [1 4 "1"]]
             :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]
@@ -613,7 +613,7 @@ mod tests {
     #[rstest]
     #[case::cis_trans(
         StereoModel::default(),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
         }"#),
@@ -633,7 +633,7 @@ mod tests {
             model.kind_models[StereoKind::CisTrans as usize] = None;
             model
         },
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
         }"#),
@@ -648,7 +648,7 @@ mod tests {
             });
             model
         },
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "N#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
         }"#),
@@ -656,7 +656,7 @@ mod tests {
     )]
     #[case::ligand_arity(
         StereoModel::default(),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h0#n0" "C#h" "C#h3"]
             :bonds [[0 1 "2#C1"] [1 2 "1"]]
         }"#),

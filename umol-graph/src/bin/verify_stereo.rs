@@ -157,10 +157,10 @@ fn read_input(arg: &str) -> Vec<u8> {
     }
 }
 
-/// Lower an IR to DSL with **zeroed** defaults — fully explicit (nothing elided),
-/// matching how the resolution harness lowers its output.
+/// Lower an IR to DSL with ground defaults, matching how the resolution
+/// harness lowers its output.
 fn lower(molecule: &Molecule) -> String {
-    MoleculeDsl::from_ir(molecule, &MoleculeDefaults::ground()).to_string()
+    MoleculeDsl::from_ir(molecule, &MoleculeDefaults::concrete()).to_string()
 }
 
 /// Parse the SMILES to an IR, then lower the IR to DSL.
@@ -185,11 +185,11 @@ fn print_table() {
     }
 }
 
-/// Config-overrides paired with every zeroed-lowered input: pin charge and aromatic
+/// Config-overrides paired with every lowered input: pin charge and aromatic
 /// valence (left undetermined by `MoleculeDefaults::default()`, which the harness
 /// raises input with) so resolution is well-posed. Implicit hydrogens are left
 /// undetermined on purpose — the resolver fills them. Atoms with a non-zero charge
-/// or aromatic flag carry those inline (≠ zeroed → rendered) and override-unaffected.
+/// or aromatic flag carry those inline (non-default → rendered) and override-unaffected.
 const CONFIG_OVERRIDES: &str = "{:atom {:aromatic-valence :not-aromatic :charge :zero}}";
 
 /// Write `<base>/<category>/<name>.edn` = `{:config-overrides … :input <DSL>}` for every entry.

@@ -32,7 +32,7 @@ use fixtures::MOL_INDOLE;
 
 fn indole_concrete() -> Molecule {
     let dsl = MoleculeDsl::from_edn_str(MOL_INDOLE).unwrap();
-    let cfg = MoleculeDefaults::zeroed();
+    let cfg = MoleculeDefaults::concrete();
     dsl.into_ir(&cfg)
 }
 

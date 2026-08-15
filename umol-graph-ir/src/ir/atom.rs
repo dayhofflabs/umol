@@ -205,9 +205,9 @@ impl AtomForm {
     /// and, for the (possibly already-set) count, the maximal
     /// multiplicity `count + 1` (so a fully unset pair becomes the
     /// closed-shell singlet). Existing literal or expression values and all
-    /// constraints are preserved. The result is ground iff `element` is
+    /// constraints are preserved. The result is concrete iff `element` is
     /// already ground.
-    pub fn into_ground(mut self) -> Self {
+    pub fn into_concrete(mut self) -> Self {
         if self.isotope_mass.is_undetermined() {
             self.isotope_mass = IsotopeMassForm::Natural;
         }
@@ -877,16 +877,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_element(AtomForm::from_element(Element::C).into_ground(),
+    #[case::from_element(AtomForm::from_element(Element::C).into_concrete(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::new() })]
-    #[case::with_charge(AtomForm::from_element(Element::C).with_charge(1_i64).into_ground(),
+    #[case::with_charge(AtomForm::from_element(Element::C).with_charge(1_i64).into_concrete(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(1), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::new() })]
-    #[case::constraint(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_ground(),
+    #[case::constraint(AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4_i64)).into_concrete(),
         AtomForm { element: ElementForm::Lit(Element::C), isotope_mass: IsotopeMassForm::Natural, charge: NumForm::Lit(0), implicit_hydrogens: NumForm::Lit(0),
         lone_pairs: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: AtomConstraintsForm::from(AtomConstraintForm::valence(4)) })]
-    fn test_atom_form_into_ground(#[case] actual: AtomForm, #[case] expected: AtomForm) {
+    fn test_atom_form_into_concrete(#[case] actual: AtomForm, #[case] expected: AtomForm) {
         assert_eq!(actual, expected);
     }
 

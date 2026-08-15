@@ -931,7 +931,7 @@ mod tests {
         AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig, RingModel,
         RingSetKind, UnpairedElectronsForm,
     };
-    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
@@ -1334,7 +1334,7 @@ mod tests {
     #[rstest]
     #[case::homogeneous_localized(
         AromaticityResolveConfig::default(),
-        mol_dsl_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         NumForm::Lit(0),
         vec![NumForm::Lit(0), NumForm::Lit(0), NumForm::Lit(1)],
@@ -1346,7 +1346,7 @@ mod tests {
     )]
     #[case::heterogeneous_localized(
         AromaticityResolveConfig::default(),
-        mol_dsl_ground!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a"
+        mol_dsl_concrete!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a"
                                       "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                                       [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
@@ -1362,7 +1362,7 @@ mod tests {
             aromatic_valence_failure: AromaticityFailurePolicy::Keep,
             ..AromaticityResolveConfig::default()
         },
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"
                     "C#h3#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
@@ -1881,7 +1881,7 @@ mod tests {
     #[rstest]
     #[case::clar_heterocycle(
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
-        mol_dsl_ground!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AromaticityContradiction::ClarNonBenzenoid(
             "Clar model requires benzenoid input but non-carbon aromatic atoms are present".to_string()
@@ -1889,7 +1889,7 @@ mod tests {
     )]
     #[case::aromatic_valence_failure(
         AromaticityModel::mdl(),
-        mol_dsl_ground!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_dsl_concrete!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AromaticityContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }

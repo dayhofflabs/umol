@@ -95,7 +95,7 @@ macro_rules! stereo_element {
 
             /// No-op. A stereo element is always stereogenic, so its coset has no
             /// zero default; it is ground iff its coset is ground.
-            pub fn into_ground(self) -> Self {
+            pub fn into_concrete(self) -> Self {
                 self
             }
 
@@ -1582,8 +1582,8 @@ mod tests {
     #[rstest]
     #[case::open_coset(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined))]
     #[case::ground(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_form_into_ground(#[case] atom: StereoAtomForm) {
-        assert_eq!(atom.clone().into_ground(), atom);
+    fn test_stereo_atom_form_into_concrete(#[case] atom: StereoAtomForm) {
+        assert_eq!(atom.clone().into_concrete(), atom);
     }
 
     #[rustfmt::skip]

@@ -246,7 +246,7 @@ mod tests {
         RingScope, StereoAtomConstraintForm, StereoAtomId, StereoBondConstraintForm, StereoBondId,
         StereoKind, StereogenicityForm, UnpairedElectronsForm,
     };
-    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::aromaticity::AromaticityInconsistency;
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#))]
+    #[case::ground(mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#))]
     fn test_validator_new(#[case] molecule: Molecule) {
         let model = ChemistryModel::default();
@@ -289,7 +289,7 @@ mod tests {
 
     #[rstest]
     fn test_validator_with_config() {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let model = ChemistryModel::default();
         let config = ValidateConfig {
             constraint: ConstraintValidateConfig {
@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ground(mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
+    #[case::ground(mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#), Solution::Determined(()))]
     #[case::non_ground(mol_dsl!(r#"{:atoms ["C"] :bonds []}"#), Solution::Underdetermined(()))]
     #[case::invalid_spin(
         Molecule::from_entries(MoleculeEntries {
@@ -471,7 +471,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ground(
-        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
         Solution::Determined(()),
     )]
     #[case::partial_spin(
@@ -556,7 +556,7 @@ mod tests {
 
     #[rstest]
     #[case::ground(
-        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
         Solution::Determined(()),
     )]
     #[case::aromaticity(
@@ -568,7 +568,7 @@ mod tests {
         )),
     )]
     #[case::stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h0#T1" "C#h3" "C#h3" "C#h3" "C#h3"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
         }"#),

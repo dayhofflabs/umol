@@ -47,7 +47,7 @@ use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
 };
 use super::{Molecule, MoleculeEntries, MoleculeIntegrityError, TransactionError};
-use crate::{mol_dsl, mol_dsl_ground};
+use crate::{mol_dsl, mol_dsl_concrete};
 
 fn ground_atom() -> AtomForm {
     let mut a = AtomForm::from_element(Element::C);
@@ -119,7 +119,7 @@ fn test_molecule_builder() {
 #[rstest]
 #[case::empty(Molecule::default(), true)]
 #[case::ground_atom(
-    mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+    mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
     true,
 )]
 #[case::wildcard_element(

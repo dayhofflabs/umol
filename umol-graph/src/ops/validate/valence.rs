@@ -77,7 +77,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
-    use umol_graph_ir::{atom_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
@@ -106,7 +106,7 @@ mod tests {
         AtomTypeRegistry::default_registry()
     )))]
     fn test_valence_conformance_validator_validate(#[case] model: ValenceModel) {
-        let molecule = mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let molecule = mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let result = ValenceConformanceValidator::new(&model)
             .validate(&molecule)
             .unwrap();

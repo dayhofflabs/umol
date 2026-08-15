@@ -1180,7 +1180,7 @@ mod tests {
     use umol_graph_ir::ir::{
         AtomConstraintForm, AtomId, EntityKind, MoleculeConstraint, MulticenterValenceForm, NumForm,
     };
-    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::ops::aromaticity::{AromaticityError, AromaticityInconsistency};
@@ -1210,7 +1210,7 @@ mod tests {
 
     #[fixture]
     fn aromatic_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                 :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#
         )
@@ -1218,7 +1218,7 @@ mod tests {
 
     #[fixture]
     fn stereo_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                 :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
         )
@@ -1379,7 +1379,7 @@ mod tests {
                     [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]
                     [4 5 "1#c0#u0#s"] [5 0 "1#c0#u0#s"]]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                     [3 4 "1"] [4 5 "1"] [5 0 "1"]]
@@ -1395,7 +1395,7 @@ mod tests {
                     [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]
                     [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                     [3 4 "1"] [4 5 "1"] [5 0 "1"]]
@@ -1411,7 +1411,7 @@ mod tests {
                     [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]
                     [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
                     [3 4 "1"] [4 5 "1"] [5 0 "1"]]
@@ -1424,7 +1424,7 @@ mod tests {
                     "Cl#i=#c0#h0#n0#u0#s" "Br#i=#c0#h0#n0#u0#s"]
             :bonds [[0 1 "1#c0#u0#s"] [0 2 "1#c0#u0#s"] [0 3 "1#c0#u0#s"]]
         }"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h" "F" "Cl" "Br"]
             :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
             :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]
@@ -1779,7 +1779,7 @@ mod tests {
 
     #[rstest]
     fn test_resolver_resolve_identity(chemistry_model: ChemistryModel) {
-        let mut molecule = mol_dsl_ground!(
+        let mut molecule = mol_dsl_concrete!(
             r#"{
             :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]

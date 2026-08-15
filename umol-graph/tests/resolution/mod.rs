@@ -58,7 +58,7 @@ fn raise(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> Molecule {
 }
 
 fn lower(molecule: &Molecule) -> MoleculeDsl {
-    let cfg = MoleculeDefaults::ground();
+    let cfg = MoleculeDefaults::concrete();
     MoleculeDsl::from_ir(molecule, &cfg)
 }
 
@@ -90,7 +90,7 @@ fn resolve_test(
                             forms
                                 .iter()
                                 .map(|form| {
-                                    AtomDsl::from_ir(form, &AtomDefaults::ground()).to_string()
+                                    AtomDsl::from_ir(form, &AtomDefaults::concrete()).to_string()
                                 })
                                 .collect(),
                         )

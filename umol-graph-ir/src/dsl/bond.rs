@@ -833,7 +833,7 @@ mod tests {
         let mut form = BondForm::new(NumForm::Lit(1));
         form.charge = NumForm::Lit(0);
         form.unpaired_electrons = UnpairedElectronsForm::from((0_u8, 1_u8));
-        let cfg = BondDefaults::zeroed();
+        let cfg = BondDefaults::concrete();
         let dsl = BondDsl::from_ir(&form, &cfg);
         assert_eq!(dsl.0.charge, NumForm::Undetermined);
         assert_eq!(dsl.0.unpaired_electrons, UnpairedElectronsForm::default());
@@ -842,7 +842,7 @@ mod tests {
     #[rstest]
     fn test_bond_dsl_into_ir() {
         let dsl = BondDsl(BondForm::new(NumForm::Lit(1)));
-        let cfg = BondDefaults::zeroed();
+        let cfg = BondDefaults::concrete();
         let form = dsl.into_ir(&cfg);
         assert_eq!(form.charge, NumForm::Lit(0));
         assert_eq!(
@@ -852,9 +852,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_dsl_roundtrip_zeroed() {
+    fn test_bond_dsl_roundtrip() {
         let input = BondDsl(BondForm::new(NumForm::Lit(2)));
-        let cfg = BondDefaults::zeroed();
+        let cfg = BondDefaults::concrete();
         let raised = input.clone().into_ir(&cfg);
         let lowered = BondDsl::from_ir(&raised, &cfg);
         assert_eq!(input, lowered);

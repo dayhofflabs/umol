@@ -376,7 +376,7 @@ mod tests {
         AtomId, BondId, Edit, Edits, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
         StereoCoset, StereoKind, StereoLigandKind,
     };
-    use umol_graph_ir::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_concrete;
 
     use super::*;
 
@@ -387,7 +387,7 @@ mod tests {
 
     #[fixture]
     fn tetrahedral_entity_failure_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{
             :atoms ["C#h3" "C#h" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
@@ -398,7 +398,7 @@ mod tests {
 
     #[fixture]
     fn cis_trans_entity_failure_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{
             :atoms ["C#h3" "C#h0" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]]
@@ -409,7 +409,7 @@ mod tests {
 
     #[fixture]
     fn tetrahedral_mismatch_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
@@ -420,7 +420,7 @@ mod tests {
 
     #[fixture]
     fn cis_trans_mismatch_molecule() -> Molecule {
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
@@ -447,7 +447,7 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                              :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
         Edits::from_iter([Edit::AddStereoAtom {
             site: AtomHandle::Id(AtomId(1)),
@@ -461,7 +461,7 @@ mod tests {
         }])
     )]
     #[case::cis_trans(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
         Edits::from_iter([Edit::AddStereoBond {
             site: BondHandle::Id(BondId(1)),
@@ -486,11 +486,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::tetrahedral(mol_dsl_ground!(r#"{
+    #[case::tetrahedral(mol_dsl_concrete!(r#"{
         :atoms ["C #h3" "C #h1 #T+" "N #h2" "O #h1"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
     }"#))]
-    #[case::cis_trans(mol_dsl_ground!(r#"{
+    #[case::cis_trans(mol_dsl_concrete!(r#"{
         :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
         :bonds [[0 1 "1"] [1 2 "2#C+"] [2 3 "1"]]
     }"#))]
@@ -502,9 +502,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_assertion(mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#))]
-    #[case::vacuous(mol_dsl_ground!(r#"{:atoms ["C #h4 #T*"]}"#))]
-    #[case::existing_atom(mol_dsl_ground!(r#"{
+    #[case::no_assertion(mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#))]
+    #[case::vacuous(mol_dsl_concrete!(r#"{:atoms ["C #h4 #T*"]}"#))]
+    #[case::existing_atom(mol_dsl_concrete!(r#"{
         :atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
         :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
@@ -519,14 +519,14 @@ mod tests {
     #[rstest]
     #[case::tetrahedral_keep(
         StereoFailurePolicy::Keep,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
     #[case::tetrahedral_remove(
         StereoFailurePolicy::Remove,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Determined(Edits::from_iter([Edit::ModifyAtomConstraint {
@@ -539,7 +539,7 @@ mod tests {
     )]
     #[case::tetrahedral_error(
         StereoFailurePolicy::Error,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#
         ),
         Solution::Contradictory(StereoContradiction::Inconsistency(
@@ -548,14 +548,14 @@ mod tests {
     )]
     #[case::cis_trans_keep(
         StereoFailurePolicy::Keep,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
         Solution::Determined(Edits::new())
     )]
     #[case::cis_trans_remove(
         StereoFailurePolicy::Remove,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
         Solution::Determined(Edits::from_iter([Edit::ModifyBondConstraint {
@@ -568,7 +568,7 @@ mod tests {
     )]
     #[case::cis_trans_error(
         StereoFailurePolicy::Error,
-        mol_dsl_ground!(
+        mol_dsl_concrete!(
             r#"{:atoms ["C #h3" "C #h2" "C #h1"] :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#
         ),
         Solution::Contradictory(StereoContradiction::Inconsistency(
@@ -909,7 +909,7 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral_not_stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T!" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
             :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
@@ -932,7 +932,7 @@ mod tests {
         }])
     )]
     #[case::cis_trans_not_stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C!"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
@@ -978,18 +978,18 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"]
                              :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C #h3" "C #h1" "N #h2" "O #h1"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
             :stereo-atoms [{:site 1 :ligands [0 2 3 [:h 1]] :attrs "Th1"}]
         }"#)
     )]
     #[case::cis_trans(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#),
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C #h3" "C #h1" "C #h1" "C #h3"]
             :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
             :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]
@@ -1016,14 +1016,14 @@ mod tests {
 
     #[rstest]
     #[case::atom(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"]
                              :bonds [[0 1 "1"] [1 2 "1"]]}"#),
         StereoContradiction::Inconsistency(
             StereoInconsistency::TetrahedralStereoFailure { atom: AtomId(1) }
         )
     )]
     #[case::bond(
-        mol_dsl_ground!(r#"{:atoms ["C #h3" "C #h2" "C #h1"]
+        mol_dsl_concrete!(r#"{:atoms ["C #h3" "C #h2" "C #h1"]
                              :bonds [[0 1 "1"] [1 2 "2#C1"]]}"#),
         StereoContradiction::Inconsistency(
             StereoInconsistency::CisTransStereoFailure { bond: BondId(1) }

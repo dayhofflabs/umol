@@ -92,7 +92,7 @@ impl NoncovalentBondForm {
     /// No-op on value fields: `NoncovalentBondForm` has no value-bearing field
     /// besides `kind`, which is essential and never filled. Constraints are
     /// preserved. Provided for API symmetry.
-    pub fn into_ground(self) -> Self {
+    pub fn into_concrete(self) -> Self {
         self
     }
 
@@ -273,8 +273,8 @@ mod tests {
     #[rstest]
     #[case::default_(NoncovalentBondForm::default())]
     #[case::ground(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_bond_form_into_ground(#[case] bond: NoncovalentBondForm) {
-        assert_eq!(bond.clone().into_ground(), bond);
+    fn test_noncovalent_bond_form_into_concrete(#[case] bond: NoncovalentBondForm) {
+        assert_eq!(bond.clone().into_concrete(), bond);
     }
 
     #[rustfmt::skip]

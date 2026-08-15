@@ -43,7 +43,7 @@ def test_reaction_span_parse_error():
 def test_reaction_span_parse_defaults():
     span = ReactionSpan.parse(
         r'{:atoms ["C#h4#v0#d0#t0#a!#m!"]}',
-        defaults=MoleculeDefaults.ground(),
+        defaults=MoleculeDefaults.concrete(),
     )
 
     atom = AtomForm.parse("C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!")

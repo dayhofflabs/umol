@@ -74,7 +74,7 @@ impl DativeBondForm {
 
     /// No-op: `DativeBondForm` has no value-bearing fields besides `order`,
     /// which is essential and never filled. Provided for API symmetry.
-    pub fn into_ground(self) -> Self {
+    pub fn into_concrete(self) -> Self {
         self
     }
 
@@ -186,8 +186,8 @@ mod tests {
     #[rstest]
     #[case::from_order(DativeBondForm::from_order(1))]
     #[case::with_constraint(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
-    fn test_dative_bond_form_into_ground(#[case] bond: DativeBondForm) {
-        assert_eq!(bond.clone().into_ground(), bond);
+    fn test_dative_bond_form_into_concrete(#[case] bond: DativeBondForm) {
+        assert_eq!(bond.clone().into_concrete(), bond);
     }
 
     #[rustfmt::skip]

@@ -271,7 +271,7 @@ mod tests {
         AtomId, BondId, LigandPermutation, OrientedLigandPermutation, StereoAtomConstraintForm,
         StereoBondConstraintForm, StereoLigandPosition, StereogenicityForm,
     };
-    use umol_graph_ir::mol_dsl_ground;
+    use umol_graph_ir::mol_dsl_concrete;
     use umol_perm::{Orientation, Permutation};
 
     use super::*;
@@ -322,7 +322,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_conformance_validator_new() {
-        let molecule = mol_dsl_ground!(CFCLBRI);
+        let molecule = mol_dsl_concrete!(CFCLBRI);
         assert_eq!(
             StereoConformanceValidator::new(&StereoModel::default()).validate(&molecule),
             StereoConformanceValidator::with_config(
@@ -347,7 +347,7 @@ mod tests {
         #[case] dsl: &str,
         #[case] mutate: fn(&mut Molecule),
     ) {
-        let mut molecule = mol_dsl_ground!(dsl);
+        let mut molecule = mol_dsl_concrete!(dsl);
         mutate(&mut molecule);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&molecule)
@@ -357,21 +357,21 @@ mod tests {
 
     #[rstest]
     #[case::missing_stereo_atom(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
         }"#),
         Solution::Determined(()),
     )]
     #[case::missing_stereo_bond(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
         }"#),
         Solution::Determined(()),
     )]
     #[case::unrealizable_tetrahedral_stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "S#h0#T1" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "1"]]
         }"#),
@@ -380,7 +380,7 @@ mod tests {
         )),
     )]
     #[case::unrealizable_cis_trans_stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h2" "C#h"]
             :bonds [[0 1 "1"] [1 2 "2#C1"]]
         }"#),
@@ -389,7 +389,7 @@ mod tests {
         )),
     )]
     #[case::tetrahedral_stereo_mismatch(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
             :stereo-atoms [{
@@ -406,7 +406,7 @@ mod tests {
         )),
     )]
     #[case::cis_trans_stereo_mismatch(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
             :stereo-bonds [{
@@ -423,7 +423,7 @@ mod tests {
         )),
     )]
     #[case::conformant_stereo_atom(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h#T1" "N#h2" "O#h"]
             :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]
             :stereo-atoms [{
@@ -435,7 +435,7 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::conformant_stereo_bond(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h3" "C#h" "C#h" "C#h3"]
             :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]
             :stereo-bonds [{
@@ -447,11 +447,11 @@ mod tests {
         Solution::Determined(()),
     )]
     #[case::undetermined_tetrahedral_stereo(
-        mol_dsl_ground!(r#"{:atoms ["C#T*"]}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C#T*"]}"#),
         Solution::Determined(()),
     )]
     #[case::undetermined_cis_trans_stereo(
-        mol_dsl_ground!(r#"{
+        mol_dsl_concrete!(r#"{
             :atoms ["C#h2" "C#h2"]
             :bonds [[0 1 "2#C*"]]
         }"#),
@@ -538,7 +538,7 @@ mod tests {
         #[case] mutate: fn(&mut Molecule),
         #[case] expected: StereoConformanceContradiction,
     ) {
-        let mut molecule = mol_dsl_ground!(dsl);
+        let mut molecule = mol_dsl_concrete!(dsl);
         mutate(&mut molecule);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&molecule)

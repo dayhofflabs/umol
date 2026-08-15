@@ -32,7 +32,7 @@ fn cases() -> [(&'static str, &'static str); 8] {
 }
 
 fn bench_molecule_from_ir(c: &mut Criterion) {
-    let cfg = MoleculeDefaults::ground();
+    let cfg = MoleculeDefaults::concrete();
     let mut g = c.benchmark_group("molecule_from_ir");
     for (label, source) in cases() {
         let molecule = MoleculeDsl::from_edn_str(source).unwrap().into_parts().0;
@@ -45,7 +45,7 @@ fn bench_molecule_from_ir(c: &mut Criterion) {
 }
 
 fn bench_molecule_into_ir(c: &mut Criterion) {
-    let cfg = MoleculeDefaults::zeroed();
+    let cfg = MoleculeDefaults::concrete();
     let mut g = c.benchmark_group("molecule_into_ir");
     for (label, source) in cases() {
         let dsl = MoleculeDsl::from_edn_str(source).unwrap();

@@ -1171,11 +1171,18 @@ and the operation noun (*resolution*) — and composites choose by referent:
 Errors, configs, and state belong to the run, not to the engine that performs it — engines are
 built *from* configs and *produce* reports, so `ResolverError` misattributes.
 
+One level below the engine facade, method-qualified domain engines are named
+`<Method><Domain>` with no agent suffix: `CountsValence`, `AtomTypingValence`,
+`HueckelAromaticity`, `HmoAromaticity`, `ClarAromaticity`. The method qualifier does the
+naming work; appending the agent noun to a dispatch variant's payload adds length and
+stutters against the facade that selects it.
+
 **Not:** agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`,
 `KekulizerError`); operation-noun composites for run artifacts (`KekulizationConfig`,
-`CanonicalizationLevel`).
-**In code:** `Resolver`/`ResolveConfig`/`ResolveState`/`ResolveReport`; the remaining families
-migrate per the staged renames.
+`CanonicalizationLevel`); agent suffixes on method-qualified engines
+(`HueckelAromaticityPerceiver`).
+**In code:** `Resolver`/`ResolveConfig`/`ResolveState`/`ResolveReport`, `ValidateError`,
+`KekulizeConfig`, `CanonicalizeLevel`, `AromaticityPerceiver`, `CountsValence`.
 
 ### Overlay
 

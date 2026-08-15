@@ -48,7 +48,7 @@ def ethanol_deoxygenation():
         ':lhs {:atoms ["C#h3#v#d0#t0#a!#m!" '
         '"C#h2#v2#d0#t0#a!#m!" "O#h#n2#v#d0#t0#a!#m!"] '
         ':bonds [[0 1 "1"] [1 2 "1"]]}}',
-        defaults=ReactionDefaults.ground(),
+        defaults=ReactionDefaults.concrete(),
     )
 
 

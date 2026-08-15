@@ -662,7 +662,7 @@ mod tests {
         StereoCoset as GraphIrStereoCoset, StereoKind as GraphIrStereoKind,
         StereoLigand as GraphIrStereoLigand, StereoLigandKind as GraphIrStereoLigandKind,
     };
-    use umol_graph_ir::{mol_dsl, mol_dsl_ground};
+    use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
     use super::*;
     use crate::convert::into_py_variant;
@@ -1051,7 +1051,7 @@ mod tests {
     )]
     #[case::ground(
         r##"{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} :deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}"##,
-        Some(ReactionDefaults::ground()),
+        Some(ReactionDefaults::concrete()),
         r##"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} :deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"##
     )]
     fn test_reaction_parse_defaults(
@@ -1122,7 +1122,7 @@ mod tests {
                     r#"{:lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"]} "#,
                     r#":deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}]}"#,
                 ),
-                Some(ReactionDefaults::ground()),
+                Some(ReactionDefaults::concrete()),
             )
             .unwrap();
 
@@ -1153,7 +1153,7 @@ mod tests {
             r#"{:lhs {:atoms ["C#i=#c0#h4#n0#u0#s#v0#d0#t0#a!#m!"]} "#,
             r#":deltas [{:atom {:add "O#i=#c0#h0#n2#u0#s#v0#d0#t0#a!#m!"}}]}"#,
         ).parse().unwrap(),
-        Some(ReactionDefaults::ground()),
+        Some(ReactionDefaults::concrete()),
         concat!(
             r#"{:deltas [{:atom {:add "O#n2#v0#d0#t0#a!#m!"}}] "#,
             r#":lhs {:atoms ["C#h4#v0#d0#t0#a!#m!"] :bonds []}}"#,
@@ -2587,7 +2587,7 @@ mod tests {
     )]
     #[case::product_not_ground(
         GraphIrReaction::new(
-            mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {
@@ -2607,7 +2607,7 @@ mod tests {
     )]
     #[case::inconsistent(
         GraphIrReaction::new(
-            mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+            mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
             GraphIrDeltas::from_iter([GraphIrDelta::Atom(GraphIrAtomDelta::ModifyField {
                 id: GraphIrAtomId(0),
                 change: GraphIrAtomFieldChange::Charge {

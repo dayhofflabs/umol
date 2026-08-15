@@ -12,7 +12,7 @@ use umol_graph_ir::ir::{
     AtomDelta, AtomFieldChange, AtomId, BondDelta, BondId, Delta, Deltas, Molecule, NumForm,
     Reaction, RingConfig,
 };
-use umol_graph_ir::{mol_dsl, mol_dsl_ground};
+use umol_graph_ir::{mol_dsl, mol_dsl_concrete};
 
 #[fixture]
 fn ethanol() -> Molecule {
@@ -306,7 +306,7 @@ fn test_featurize_reaction_difference(ethanol_deoxygenation: Reaction) {
 )]
 #[case::inconsistent(
     Reaction::new(
-        mol_dsl_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
+        mol_dsl_concrete!(r#"{:atoms ["C #h4"] :bonds []}"#),
         Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
             id: AtomId(0),
             change: AtomFieldChange::Charge {

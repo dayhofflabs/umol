@@ -1691,8 +1691,19 @@ mod tests {
         assert_eq!(err, expected);
     }
 
+    /// Ground field defaults plus the two constraint defaults the elision
+    /// tests exercise (the registry-raise shape).
+    #[fixture]
+    fn constraint_defaults() -> AtomDefaults {
+        AtomDefaults {
+            valence: NumDefault::Zero,
+            aromatic_valence: AromaticValenceDefault::NotAromatic,
+            ..AtomDefaults::concrete()
+        }
+    }
+
     #[rstest]
-    fn test_atom_dsl_from_ir() {
+    fn test_atom_dsl_from_ir(constraint_defaults: AtomDefaults) {
         let mut form = AtomForm::new(ElementForm::Lit(Element::C));
         form.charge = NumForm::Lit(0);
         form.lone_pairs = NumForm::Lit(0);
@@ -1704,7 +1715,7 @@ mod tests {
         form.constraints.set(AtomConstraintForm::AromaticValence(
             AromaticValenceForm::NotAromatic,
         ));
-        let cfg = AtomDefaults::zeroed();
+        let cfg = constraint_defaults;
         let dsl = AtomDsl::from_ir(&form, &cfg);
         assert_eq!(dsl.0.charge, NumForm::Undetermined);
         assert_eq!(dsl.0.lone_pairs, NumForm::Undetermined);
@@ -1715,9 +1726,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_dsl_into_ir() {
+    fn test_atom_dsl_into_ir(constraint_defaults: AtomDefaults) {
         let dsl = AtomDsl(AtomForm::new(ElementForm::Lit(Element::C)));
-        let cfg = AtomDefaults::zeroed();
+        let cfg = constraint_defaults;
         let form = dsl.into_ir(&cfg);
         assert_eq!(form.charge, NumForm::Lit(0));
         assert_eq!(form.lone_pairs, NumForm::Lit(0));
@@ -1740,7 +1751,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_raise_atom_constraints() {
+    fn test_raise_atom_constraints(constraint_defaults: AtomDefaults) {
         // A vacuous defaulted kind is overwritten with its default; a vacuous NON-defaulted kind
         // survives (no global vacuous strip); a concrete value is left alone.
         let mut constraints = AtomConstraintsForm::from_iter([
@@ -1748,7 +1759,7 @@ mod tests {
             AtomConstraintForm::TotalValence(NumForm::Undetermined),
             AtomConstraintForm::degree(3),
         ]);
-        raise_atom_constraints(&mut constraints, &AtomDefaults::zeroed());
+        raise_atom_constraints(&mut constraints, &constraint_defaults);
         assert_eq!(
             constraints.get(AtomConstraintKey::Valence),
             Some(&AtomConstraintForm::Valence(NumForm::Lit(0)))
@@ -1764,14 +1775,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_lower_atom_constraints() {
+    fn test_lower_atom_constraints(constraint_defaults: AtomDefaults) {
         // A defaulted entry equal to its default is elided; a non-default value is kept.
         let mut constraints = AtomConstraintsForm::from_iter([
             AtomConstraintForm::Valence(NumForm::Lit(0)),
             AtomConstraintForm::AromaticValence(AromaticValenceForm::NotAromatic),
             AtomConstraintForm::degree(3),
         ]);
-        lower_atom_constraints(&mut constraints, &AtomDefaults::zeroed());
+        lower_atom_constraints(&mut constraints, &constraint_defaults);
         assert_eq!(
             constraints.iter().cloned().collect::<Vec<_>>(),
             vec![AtomConstraintForm::degree(3)]
@@ -1779,9 +1790,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_dsl_roundtrip_zeroed() {
+    fn test_atom_dsl_roundtrip_constraint_defaults(constraint_defaults: AtomDefaults) {
         let input = AtomDsl(AtomForm::new(ElementForm::Lit(Element::C)));
-        let cfg = AtomDefaults::zeroed();
+        let cfg = constraint_defaults;
         let raised = input.clone().into_ir(&cfg);
         let lowered = AtomDsl::from_ir(&raised, &cfg);
         assert_eq!(input, lowered);

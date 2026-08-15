@@ -208,7 +208,7 @@ struct KekulizationFixture {
 )]
 fn test_kekulization_fixture(#[case] source: &str, #[case] expected: KekulizationFixture) {
     let dsl: MoleculeDsl = source.parse().unwrap();
-    let molecule = dsl.into_ir(&MoleculeDefaults::ground());
+    let molecule = dsl.into_ir(&MoleculeDefaults::concrete());
 
     assert!(molecule.is_concrete());
     assert_eq!(molecule.aromatic_systems().count(), 1);
@@ -326,9 +326,9 @@ fn test_kekulization_fixture_output(
     #[case] expected_exposed_atom: Option<AtomId>,
 ) {
     let input_dsl: MoleculeDsl = source.parse().unwrap();
-    let input = input_dsl.into_ir(&MoleculeDefaults::ground());
+    let input = input_dsl.into_ir(&MoleculeDefaults::concrete());
     let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
-    let expected = expected_dsl.into_ir(&MoleculeDefaults::ground());
+    let expected = expected_dsl.into_ir(&MoleculeDefaults::concrete());
     let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
     let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
@@ -464,7 +464,7 @@ fn test_kekulization_fixture_output_error(
     let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
         .parse()
         .unwrap();
-    let mut input = dsl.into_ir(&MoleculeDefaults::ground());
+    let mut input = dsl.into_ir(&MoleculeDefaults::concrete());
     input.atom_mut(AtomId(4)).attributes.charge = exposed_charge;
     input.atom_mut(AtomId(4)).attributes.lone_pairs = exposed_lone_pairs;
     let original = input.clone();

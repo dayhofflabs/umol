@@ -670,7 +670,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::zeroed(
+    #[case::ground(
         MulticenterBondForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsForm::new() },
         MulticenterBondDsl(MulticenterBondForm::default()),
     )]
@@ -679,14 +679,14 @@ mod tests {
         #[case] expected: MulticenterBondDsl,
     ) {
         assert_eq!(
-            MulticenterBondDsl::from_ir(&input, &MulticenterBondDefaults::zeroed()),
+            MulticenterBondDsl::from_ir(&input, &MulticenterBondDefaults::concrete()),
             expected,
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::zeroed(
+    #[case::ground(
         MulticenterBondDsl(MulticenterBondForm::default()),
         MulticenterBondForm { electrons: ElectronCountsForm::Undetermined, charge: NumForm::Lit(0), unpaired_electrons: UnpairedElectronsForm::from((0_u8, 1_u8)), constraints: MulticenterBondConstraintsForm::new() },
     )]
@@ -694,7 +694,7 @@ mod tests {
         #[case] input: MulticenterBondDsl,
         #[case] expected: MulticenterBondForm,
     ) {
-        assert_eq!(input.into_ir(&MulticenterBondDefaults::zeroed()), expected);
+        assert_eq!(input.into_ir(&MulticenterBondDefaults::concrete()), expected);
     }
 
     #[rustfmt::skip]
