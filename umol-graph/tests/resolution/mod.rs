@@ -199,18 +199,3 @@ fn run_conformance_test(file_path: &Path) {
 fn test_conformance(#[files("tests/resolution/data/**/*.edn")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }
-
-#[rstest]
-#[ignore]
-fn generate_f420_input() {
-    let smiles = "C[C@H](OP(=O)(O)OC[C@@H](O)[C@@H](O)[C@@H](O)Cn1c2nc(=O)nc(=O)c-2cc2ccc(O)cc21)C(=O)N[C@@H](CCC(=O)N[C@@H](CCC(=O)O)C(=O)O)C(=O)O";
-    let table = umol_io::smiles::Smiles::parse(smiles)
-        .unwrap()
-        .into_table_ir();
-    let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
-    let dsl = MoleculeDsl::from_ir(&molecule, &MoleculeDefaults::default());
-    println!(
-        "{{:input {}}}",
-        dsl.to_edn().to_string_with(&FormatConfig::default())
-    );
-}

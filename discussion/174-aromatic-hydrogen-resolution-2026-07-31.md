@@ -171,6 +171,12 @@ preference order:
 Add the corrected F420 structure as a fourth case once completion is implemented: unique solution,
 C29H36N5O18P.
 
+> **Correction 2026-08-15** (landed as doc 194 S6d, conformance case `aromatic/f420.edn`): the
+> completion is not unique. Under assignment-level selection the fused 14-atom deazaflavin system
+> passes 4n+2 with the NH on either bare-written uracil nitrogen (equal 14-π totals), so `Strict`
+> is honestly plural and `MostSaturated` resolves the C29H36N5O18P formula while recording the
+> tautomer pick. The uniqueness claim above predates the fused-system reading.
+
 ## The same failure at boron, and a second defect behind it
 
 Verified 2026-08-01 against a release rebuild of `umol-py`.

@@ -1,0 +1,111 @@
+{:input {
+  :atoms [
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T0"
+    "O#i=#c0#u0#a!"
+    "P#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T1"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T1"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T1"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "N#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "N#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "O#i=#c0#u0#a!"
+    "N#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a+"
+    "C#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "N#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T1"
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "N#i=#c0#u0#a!"
+    "C#i=#c0#h#a!#T1"
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "C#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"
+    "O#i=#c0#u0#a!"]
+  :bonds [
+    [0 1 :single]
+    [1 2 :single]
+    [2 3 :single]
+    [3 4 :double]
+    [3 5 :single]
+    [3 6 :single]
+    [6 7 :single]
+    [7 8 :single]
+    [8 9 :single]
+    [8 10 :single]
+    [10 11 :single]
+    [10 12 :single]
+    [12 13 :single]
+    [12 14 :single]
+    [14 15 :single]
+    [15 31 :aromatic]
+    [15 16 :aromatic]
+    [16 23 :single]
+    [16 17 :aromatic]
+    [17 18 :aromatic]
+    [18 19 :double]
+    [18 20 :aromatic]
+    [20 21 :aromatic]
+    [21 22 :double]
+    [21 23 :aromatic]
+    [23 24 :aromatic]
+    [24 25 :aromatic]
+    [25 31 :aromatic]
+    [25 26 :aromatic]
+    [26 27 :aromatic]
+    [27 28 :aromatic]
+    [28 29 :single]
+    [28 30 :aromatic]
+    [30 31 :aromatic]
+    [1 32 :single]
+    [32 33 :double]
+    [32 34 :single]
+    [34 35 :single]
+    [35 36 :single]
+    [36 37 :single]
+    [37 38 :single]
+    [38 39 :double]
+    [38 40 :single]
+    [40 41 :single]
+    [41 42 :single]
+    [42 43 :single]
+    [43 44 :single]
+    [44 45 :double]
+    [44 46 :single]
+    [41 47 :single]
+    [47 48 :double]
+    [47 49 :single]
+    [35 50 :single]
+    [50 51 :double]
+    [50 52 :single]]}}

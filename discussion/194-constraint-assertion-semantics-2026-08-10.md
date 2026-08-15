@@ -1310,6 +1310,17 @@ pub struct ResolveReport {
   the refusal is scope, exactly as diagnosed.
 - S6d: the F420 acceptance case (unique completion, C29H36N5O18P); its C/N ring is within the
   Daylight scope, so S6c is not a dependency. [dep: S4, S6b]
+  **Done 2026-08-15:** conformance case `aromatic/f420.edn` — the ChEBI:16848 SMILES raised
+  verbatim (53 heavy atoms, six `#T` markers, the explicit `c-2` single bond, both
+  exocyclic carbonyls). Both `MostSaturated` cells resolve determined with the full
+  14-atom deazaflavin system (14 π = 4·3+2, carbonyl carbons at zero) and hydrogen total
+  36 — the C29H36N5O18P formula confirmed; RDKit refuses this input outright. Correction
+  to doc 174's expectation, noted there: the completion is **not** unique — the input
+  writes both uracil-ring nitrogens bare, and the fused system passes 4n+2 with the NH on
+  either one (equal 14-π totals the electron key cannot split), so the `Strict` cells are
+  honestly plural (tautomer pair plus h-open sp³ splits) and `MostSaturated` records
+  tie-break picks; the first-differing-atom rule places the H on N1, not the canonical
+  N3 — a documented policy pick on notation that does not say.
 - S6e: MDL valence table audit: row-by-row against the CTfile specification's default-valence
   appendix. The frozen content was inherited from the historical default and is
   ad-hoc-permissive, not a transcription (`Cl [1, 3, 5, 7]` beside `Br [1]`); deviations are
