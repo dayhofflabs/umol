@@ -966,6 +966,22 @@ mod tests {
     }
 
     #[rstest]
+    fn test_ingest_smiles_components() {
+        // Five bridged triazine rings: fifteen flexible nitrogens whose
+        // assignment product exceeds the per-component bound as a whole
+        // molecule but not per candidate-ring component.
+        let molecule =
+            ingest_smiles("C(c1ncncn1)(c1ncncn1)(c1ncncn1)CC(c1ncncn1)c1ncncn1").unwrap();
+        let systems: Vec<Vec<AtomId>> = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|system| system.atom_ids().collect())
+            .collect();
+        assert_eq!(systems.len(), 5);
+        assert!(molecule.is_concrete());
+    }
+
+    #[rstest]
     #[case::mdl_furan("o1cccc1")]
     #[case::mdl_thiophene("s1cccc1")]
     #[case::mdl_pyrrole("[nH]1cccc1")]

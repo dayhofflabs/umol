@@ -360,7 +360,21 @@ selection, then the model envelope and bindings, then the suites.
   `MAX_JOINT_ASSIGNMENTS` → `MAX_ASSIGNMENTS`, now per component. Behavior-preserving for
   single-component inputs — the existing suite is the preservation test; new test: two
   independent flexible rings whose assignment product exceeds the bound while each
-  component is under it. Additive. [dep: A1a]
+  component is under it. Additive. [dep: A1a] **Done 2026-08-13:** the perception exposes
+  `candidate_rings` (the exact `find_systems` construction, now shared); `select` derives
+  the components with capability = any carrier disjunct contributing, else the stored
+  contribution — the fallback chain extracted as `stored_contribution`, shared by the
+  enumeration closure. The bound checks per component before any enumeration; each
+  component enumerates its own flexible atoms with other components held at their first
+  disjunct, and accumulation keeps only systems inside the component, so cross-component
+  duplicates never enter `per_system`. Flexible atoms outside every component are not
+  enumerated — no candidate ring can claim them, and they fall to the finalization
+  tie-break. Preservation: the full suite unchanged. Acceptance: five bridged triazines —
+  fifteen flexible nitrogens, assignment product 2¹⁵ over the whole molecule, 2³ per
+  component — flip from bound-underdetermined to `Determined` with five systems
+  (`test_ingest_smiles_components`), confirmed end-to-end from python. Lib 917 green,
+  pytest 1306, clippy zero (one displaced `#[allow(clippy::complexity)]` restored to
+  `find_systems`).
 
 ### A2 — assignment-level selection (breaking; fixes the panic)
 

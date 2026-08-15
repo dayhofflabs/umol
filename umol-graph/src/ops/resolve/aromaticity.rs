@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use smallvec::smallvec;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
-    AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, Edits, Molecule, NumForm, RingSet,
+    AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, AtomView, BondConstraintForm,
+    BondHandle, BondUpdate, BooleanForm, Edits, Molecule, NumForm, RingSet,
 };
 use umol_utils::solution::Solution;
 
@@ -21,9 +21,10 @@ use crate::ops::model::{AromaticityModel, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
 use crate::ops::valence::compare::compare_by_key;
 
-/// Enumeration bound for joint assignments over aromatic-flexible atoms; an
-/// exceeding molecule stays underdetermined rather than being sampled.
-const MAX_JOINT_ASSIGNMENTS: usize = 4096;
+/// Per-component enumeration bound for assignments over aromatic-flexible
+/// atoms; an exceeding component leaves the molecule underdetermined rather
+/// than being sampled.
+const MAX_ASSIGNMENTS: usize = 4096;
 
 /// How aromaticity resolution handles an independently invalid constraint or entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -282,7 +283,8 @@ impl AromaticityResolver {
     /// incompatible with an earlier choice are dropped. Returns the narrowed
     /// carrier, the accepted systems, and the atoms selected by the key.
     ///
-    /// More than [`MAX_JOINT_ASSIGNMENTS`] joint assignments, a non-literal
+    /// More than [`MAX_ASSIGNMENTS`] assignments in one candidate-ring
+    /// component, a non-literal
     /// stored `#a` outside the carrier, or an undetermined perception yields
     /// `Underdetermined` with the carrier unchanged. A carrier atom whose
     /// every disjunct requires aromaticity but which no accepted or tied
@@ -332,103 +334,125 @@ impl AromaticityResolver {
                     .then_some((atom, contributions))
             })
             .collect();
-        let assignment_count: usize = flexible
-            .iter()
-            .map(|(_, contributions)| contributions.len())
-            .product();
-        if assignment_count > MAX_JOINT_ASSIGNMENTS {
-            return Ok(Solution::Underdetermined(ResolveState {
-                completions,
-                systems,
-                tie_breaks,
-            }));
+
+        // The rule's acceptance couples atoms only within a candidate-ring
+        // component: enumeration and the assignment bound are per component.
+        // A flexible atom outside every component has no candidate ring and
+        // falls through to the finalization tie-break.
+        let rings = self
+            .perception
+            .candidate_rings(molecule, self.config.perception);
+        let components = candidate_components(&rings, |atom_id| match completions.get(atom_id) {
+            Some(disjuncts) => disjuncts.iter().any(|form| contribution(form).is_some()),
+            None => stored_contribution(&molecule.atom(atom_id)).is_some(),
+        });
+        for component in &components {
+            let component_flexible: Vec<&(AtomId, Vec<Option<u8>>)> = flexible
+                .iter()
+                .filter(|(atom, _)| component.contains(atom))
+                .collect();
+            let assignment_count: usize = component_flexible
+                .iter()
+                .map(|(_, contributions)| contributions.len())
+                .product();
+            if assignment_count > MAX_ASSIGNMENTS {
+                return Ok(Solution::Underdetermined(ResolveState {
+                    completions,
+                    systems,
+                    tie_breaks,
+                }));
+            }
         }
 
-        // Every accepted (system, assignment-restriction) pair across the
-        // joint assignments, keyed by the system's sorted member set.
+        // Every accepted (system, assignment-restriction) pair across each
+        // component's assignments, keyed by the system's sorted member set.
+        // Member sets are component-local, so accumulation across components
+        // never collides.
         type SystemOption = (Vec<(AtomId, AtomForm)>, Vec<AtomId>, AromaticSystemForm);
         let mut per_system: BTreeMap<Vec<AtomId>, Vec<SystemOption>> = BTreeMap::new();
-        let mut assignment_indices = vec![0usize; flexible.len()];
-        loop {
-            let choice: BTreeMap<AtomId, usize> = flexible
+        for component in &components {
+            let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = flexible
                 .iter()
-                .zip(&assignment_indices)
-                .map(|(&(atom, _), &index)| (atom, index))
+                .filter(|(atom, _)| component.contains(atom))
+                .cloned()
                 .collect();
-            let outcome = self.perception.find_systems(
-                molecule,
-                self.config.perception,
-                |atom| match choice.get(&atom.id) {
-                    Some(&index) => {
-                        contribution(&completions.get(atom.id).expect("flexible atom")[index])
-                    }
-                    None => match completions.get(atom.id) {
-                        Some(disjuncts) => contribution(&disjuncts[0]),
-                        None => match atom.attributes.constraints.aromatic_valence() {
-                            Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
-                                u8::try_from(*valence).ok()
-                            }
-                            Some(AromaticValenceForm::Aromatic(_))
-                            | Some(AromaticValenceForm::NotAromatic) => None,
-                            Some(AromaticValenceForm::Undetermined) | None => {
-                                match atom.aromatic_valence() {
-                                    NumForm::Lit(valence) => u8::try_from(valence).ok(),
-                                    _ => None,
-                                }
-                            }
-                        },
-                    },
-                },
-            )?;
-            let found = match outcome {
-                Solution::Determined(found) => found,
-                Solution::Underdetermined(_) => {
-                    return Ok(Solution::Underdetermined(ResolveState {
-                        completions,
-                        systems,
-                        tie_breaks,
-                    }));
-                }
-                Solution::Contradictory(contradiction) => {
-                    return Ok(Solution::Contradictory(contradiction));
-                }
-            };
-            for (atoms, form) in found {
-                let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
-                let restriction: Vec<(AtomId, AtomForm)> = choice
-                    .iter()
-                    .filter(|(atom, _)| members.contains(atom))
-                    .map(|(&atom, &index)| {
-                        (
-                            atom,
-                            completions.get(atom).expect("flexible atom")[index].clone(),
-                        )
-                    })
-                    .collect();
-                let mut key: Vec<AtomId> = atoms.clone();
-                key.sort_unstable();
-                let options = per_system.entry(key).or_default();
-                if !options.iter().any(|(existing, _, existing_form)| {
-                    *existing == restriction && *existing_form == form
-                }) {
-                    options.push((restriction, atoms, form));
-                }
-            }
-
-            let mut position = flexible.len();
+            let mut assignment_indices = vec![0usize; component_flexible.len()];
             loop {
-                if position == 0 {
+                let choice: BTreeMap<AtomId, usize> = component_flexible
+                    .iter()
+                    .zip(&assignment_indices)
+                    .map(|(&(atom, _), &index)| (atom, index))
+                    .collect();
+                let outcome =
+                    self.perception
+                        .find_systems(molecule, self.config.perception, |atom| {
+                            match choice.get(&atom.id) {
+                                Some(&index) => contribution(
+                                    &completions.get(atom.id).expect("flexible atom")[index],
+                                ),
+                                None => match completions.get(atom.id) {
+                                    Some(disjuncts) => contribution(&disjuncts[0]),
+                                    None => stored_contribution(atom),
+                                },
+                            }
+                        })?;
+                let found = match outcome {
+                    Solution::Determined(found) => found,
+                    Solution::Underdetermined(_) => {
+                        return Ok(Solution::Underdetermined(ResolveState {
+                            completions,
+                            systems,
+                            tie_breaks,
+                        }));
+                    }
+                    Solution::Contradictory(contradiction) => {
+                        return Ok(Solution::Contradictory(contradiction));
+                    }
+                };
+                for (atoms, form) in found {
+                    let members: BTreeSet<AtomId> = atoms.iter().copied().collect();
+                    if !members.iter().all(|atom| component.contains(atom)) {
+                        // Another component's system under this component's
+                        // default indices; its own enumeration accumulates it.
+                        continue;
+                    }
+                    let restriction: Vec<(AtomId, AtomForm)> = choice
+                        .iter()
+                        .filter(|(atom, _)| members.contains(atom))
+                        .map(|(&atom, &index)| {
+                            (
+                                atom,
+                                completions.get(atom).expect("flexible atom")[index].clone(),
+                            )
+                        })
+                        .collect();
+                    let mut key: Vec<AtomId> = atoms.clone();
+                    key.sort_unstable();
+                    let options = per_system.entry(key).or_default();
+                    if !options.iter().any(|(existing, _, existing_form)| {
+                        *existing == restriction && *existing_form == form
+                    }) {
+                        options.push((restriction, atoms, form));
+                    }
+                }
+
+                let mut position = component_flexible.len();
+                loop {
+                    if position == 0 {
+                        break;
+                    }
+                    position -= 1;
+                    assignment_indices[position] += 1;
+                    if assignment_indices[position] < component_flexible[position].1.len() {
+                        break;
+                    }
+                    assignment_indices[position] = 0;
+                }
+                if component_flexible.is_empty()
+                    || assignment_indices.iter().all(|&index| index == 0)
+                {
                     break;
                 }
-                position -= 1;
-                assignment_indices[position] += 1;
-                if assignment_indices[position] < flexible[position].1.len() {
-                    break;
-                }
-                assignment_indices[position] = 0;
-            }
-            if flexible.is_empty() || assignment_indices.iter().all(|&index| index == 0) {
-                break;
             }
         }
 
@@ -570,12 +594,25 @@ impl AromaticityResolver {
 /// Member-wise lexicographic comparison of two assignment restrictions for
 /// the same system, in ascending member order, each member compared by the
 /// tie-break key over its candidate forms.
+/// The contribution of an atom outside the carrier: a literal stored
+/// assertion, else — with no assertion opinion — the stored aromatic
+/// system's literal electron count.
+fn stored_contribution(atom: &AtomView<'_>) -> Option<u8> {
+    match atom.attributes.constraints.aromatic_valence() {
+        Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => u8::try_from(*valence).ok(),
+        Some(AromaticValenceForm::Aromatic(_) | AromaticValenceForm::NotAromatic) => None,
+        Some(AromaticValenceForm::Undetermined) | None => match atom.aromatic_valence() {
+            NumForm::Lit(valence) => u8::try_from(valence).ok(),
+            _ => None,
+        },
+    }
+}
+
 /// Connected components of the aromatic-candidate graph: the perception's
 /// rings whose members are all aromatic-capable, connected over shared
 /// atoms. The aromaticity rule's acceptance couples atoms only within a
 /// component, so enumeration, validity, selection, and the assignment bound
 /// are all per component.
-#[allow(dead_code, reason = "wired by the per-component enumeration at A1b")]
 fn candidate_components<F>(rings: &RingSet, capable: F) -> Vec<BTreeSet<AtomId>>
 where
     F: Fn(AtomId) -> bool,

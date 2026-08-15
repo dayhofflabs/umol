@@ -27,7 +27,7 @@ use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorit
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, AtomView,
     BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig,
-    RingModel, RingSetKind, TransactionError,
+    RingModel, RingSet, RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -127,6 +127,18 @@ impl AromaticityPerception {
         }
     }
 
+    /// The ring set `find_systems` perceives over — the rule's ring request
+    /// under the configured algorithms.
+    pub(crate) fn candidate_rings(
+        &self,
+        molecule: &Molecule,
+        config: AromaticityConfig,
+    ) -> RingSet {
+        molecule
+            .rings(self.ring_request(), config.ring_config)
+            .into_ring_set()
+    }
+
     /// Find candidate aromatic systems via the configured algorithm.
     /// The closure `electrons_at` returns each atom's π contribution if the
     /// atom is aromatic-eligible, else `None`.
@@ -143,8 +155,7 @@ impl AromaticityPerception {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let model = self.ring_request();
-        let rings = molecule.rings(model, config.ring_config).into_ring_set();
+        let rings = self.candidate_rings(molecule, config);
 
         let systems = match self {
             Self::HueckelRule(m) => m.find_from_rings(molecule, &rings, &electrons_at),
