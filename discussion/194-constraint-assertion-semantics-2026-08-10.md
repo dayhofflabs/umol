@@ -1326,6 +1326,22 @@ pub struct ResolveReport {
   ad-hoc-permissive, not a transcription (`Cl [1, 3, 5, 7]` beside `Br [1]`); deviations are
   corrected in place — the freeze discipline applies from the audited release onward — or
   documented as deliberate departures in the table header. [dep: S4b1]
+  **Done 2026-08-15:** the premise needed one correction — the CTfile specification (2003
+  MDL edition, vendored) defines only the `vvv` atom-block field; the per-element defaults
+  live in the MDL valence model, audited here against its transcription by NextMove
+  Software (OpenBabel `mdlvalence.h`, fetched to `materials/formats/mol/`). Six
+  deviations, all corrected in place: `N [3]` → `[3, 5]`, `Br [1]` → `[1, 3, 5, 7]`,
+  `I`/`At` gain `7`, `Xe [0, 2, 4, 6]` → `[0]` (the model has no xenon row — hydrogens
+  never added), and `Tl [1, 3]` added (the one missing element). `Cl [1, 3, 5, 7]` —
+  flagged above as ad-hoc — turns out to be the correct MDL row. Structural finding,
+  recorded in the header: the model's charge tables are exactly isoelectronic shifts of
+  the neutral column (including its gap rows), so the counts resolver's shift mechanism
+  reproduces the whole charge-parameterized model from the q = 0 table — and the halogen
+  corrections are what make the shift consistent across families (Se⁻ → Br, Te⁻ → I).
+  The living default table absorbed the union (Br/I/At/Tl; header claim updated from
+  "coincides with the SMILES superset" to "union of the frozen releases"); the smiles
+  release is untouched (`Br 1` is the verified SMILES reading). Zero test flips
+  workspace-wide.
 - S6e1: validation-family renames per the *Operation names* rule: `ValidatorError` →
   `ValidateError`, `ValidatorContradiction` → `ValidateContradiction` (`ValidateConfig`
   already conforms). [dep: none]

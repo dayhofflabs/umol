@@ -1,7 +1,16 @@
 # MDL/CTfile valence table for the counts valence model: the frozen release
-# behind `ValenceModel::mdl()`. Content inherited from the historical default
-# table; a row-by-row audit against the CTfile specification's default-valence
-# appendix is pending. Frozen: revisions are new named files, never edits.
+# behind `ValenceModel::mdl()`: the neutral (q = 0) column of the MDL valence
+# model, verified row by row against the model's transcription by NextMove
+# Software (OpenBabel src/formats/mdlvalence.h, vendored at
+# materials/formats/mol/openbabel-mdlvalence) — the CTfile specification
+# itself defines only the vvv atom-block field, not the per-element defaults
+# (MDL CTFile Formats; vendored at materials/formats/mol). The model's charge
+# tables are isoelectronic shifts of the neutral column, so the counts
+# resolver's element shift reproduces them exactly, including the gap rows
+# (charges the model omits shift onto elements without entries). Noble-gas
+# rows transcribe the model's absent rows behaviorally: target zero, past
+# which saturation adds no hydrogens. Frozen: revisions are new named files,
+# never edits.
 #
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
 #   largest; Counts uses the first entry >= v + inc when #h is free, and past
@@ -35,7 +44,7 @@ aromatic_valences = [1]
 fallback_aromatic_valences = [0]
 
 [N]
-target_covalences = [3]
+target_covalences = [3, 5]
 aromatic_valences = [1, 2]
 
 [O]
@@ -96,7 +105,7 @@ target_covalences = [2, 4, 6]
 aromatic_valences = [2]
 
 [Br]
-target_covalences = [1]
+target_covalences = [1, 3, 5, 7]
 
 [Kr]
 target_covalences = [0]
@@ -120,16 +129,19 @@ target_covalences = [3, 5]
 target_covalences = [2, 4, 6]
 
 [I]
-target_covalences = [1, 3, 5]
+target_covalences = [1, 3, 5, 7]
 
 [Xe]
-target_covalences = [0, 2, 4, 6]
+target_covalences = [0]
 
 [Cs]
 target_covalences = [1]
 
 [Ba]
 target_covalences = [2]
+
+[Tl]
+target_covalences = [1, 3]
 
 [Pb]
 target_covalences = [2, 4]
@@ -141,7 +153,7 @@ target_covalences = [3, 5]
 target_covalences = [2, 4, 6]
 
 [At]
-target_covalences = [1, 3, 5]
+target_covalences = [1, 3, 5, 7]
 
 [Rn]
 target_covalences = [0]
