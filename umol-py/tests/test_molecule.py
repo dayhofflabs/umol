@@ -757,7 +757,7 @@ def test_molecule_from_smiles_resolve_config(source, resolve_config, expected):
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel(
                         scope=ElementScope.Any(),
-                        rule=AromaticityRule.Clar(ring_limits=RingLimits()),
+                        rule=AromaticityRule.Clar(),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )

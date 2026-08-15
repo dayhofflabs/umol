@@ -773,16 +773,6 @@ def test_aromaticity_config_mutation(field, value):
                 max_unions=2_000,
             ),
         ),
-        (
-            AromaticityRule.Clar,
-            RingLimits(
-                min_ring_size=6,
-                max_ring_size=14,
-                include_unions=True,
-                max_ring_count=4,
-                max_unions=1_500,
-            ),
-        ),
     ],
 )
 def test_aromaticity_rule_ring_variant(variant, ring_limits):
@@ -811,7 +801,7 @@ def test_aromaticity_rule_hmo():
     [
         (AromaticityRule.Hueckel, (RingLimits(),)),
         (AromaticityRule.Hmo, (0.375,)),
-        (AromaticityRule.Clar, (RingLimits(),)),
+        (AromaticityRule.Clar, (RingLimits(),)),  # Clar takes no arguments
     ],
 )
 def test_aromaticity_rule_new_error(variant, args):
@@ -841,17 +831,8 @@ def test_aromaticity_rule_new_error(variant, args):
             "AromaticityRule.Hmo(stabilization_threshold=0.375)",
         ),
         (
-            AromaticityRule.Clar(
-                ring_limits=RingLimits(
-                    min_ring_size=6,
-                    max_ring_size=14,
-                    max_ring_count=4,
-                    max_unions=1_500,
-                )
-            ),
-            "AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, "
-            "max_ring_size=14, include_unions=True, max_ring_count=4, "
-            "max_unions=1500))",
+            AromaticityRule.Clar(),
+            "AromaticityRule.Clar()",
         ),
     ],
 )
@@ -872,11 +853,7 @@ def test_aromaticity_rule_repr(rule, expected):
             "stabilization_threshold",
             0.5,
         ),
-        (
-            AromaticityRule.Clar(ring_limits=RingLimits()),
-            "ring_limits",
-            RingLimits(min_ring_size=6),
-        ),
+
     ],
 )
 def test_aromaticity_rule_mutation(rule, field, value):
@@ -1273,7 +1250,7 @@ def test_chemistry_model_new():
     )
     aromaticity = AromaticityModel(
         scope=ElementScope.AllowList([Element("C")]),
-        rule=AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6)),
+        rule=AromaticityRule.Clar(),
     )
     stereo = StereoModel(
         kind_models=StereoModel.default().kind_models,

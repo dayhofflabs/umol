@@ -124,7 +124,7 @@ impl AromaticityPerceiver {
                 model.scope.clone(),
                 *stabilization_threshold,
             )),
-            AromaticityRule::Clar { .. } => Self::Clar(ClarAromaticity),
+            AromaticityRule::Clar => Self::Clar(ClarAromaticity),
         }
     }
 
@@ -508,7 +508,7 @@ mod tests {
         ]
     )]
     #[case::clar_rings_only(
-        AromaticityRule::Clar { ring_limits: RingLimits::default() },
+        AromaticityRule::Clar,
         vec![
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
             vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
@@ -561,7 +561,7 @@ mod tests {
         vec![(0..6).map(AtomId).collect::<Vec<_>>()]
     )]
     #[case::clar_sextet(
-        AromaticityRule::Clar { ring_limits: RingLimits::default() },
+        AromaticityRule::Clar,
         mol_dsl!(r#"{
             :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
@@ -938,9 +938,7 @@ mod tests {
     fn test_aromaticity_perceiver_clar_heterocycle() {
         let perception = AromaticityPerceiver::new(&AromaticityModel {
             scope: ElementScope::Any,
-            rule: AromaticityRule::Clar {
-                ring_limits: RingLimits::default(),
-            },
+            rule: AromaticityRule::Clar,
             tie_break: AromaticityTieBreak::Strict,
         });
         let mut molecule = pyrrole();

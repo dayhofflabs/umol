@@ -3,7 +3,7 @@ requires = ["maturin>=1.14,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "umol"
+name = "umol-py"
 description = "Python bindings for umol molecular representation."
 requires-python = ">=3.9"
 license = { text = "MIT OR Apache-2.0" }

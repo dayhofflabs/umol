@@ -669,6 +669,10 @@ audit: zero success flips across the 653 historical cases. Recorded, separate it
 `AromaticityRule::Clar { ring_limits }` payload is discarded by the implementation
 (`ClarAromaticity` takes no limits and the ring request hardcodes size six) — the model
 surface advertises configuration Clar never reads.
+**Resolved 2026-08-15** (release prep, doc 163): the payload is removed — `Clar` is a
+unit variant. No `RingLimits` field applies to the model: the sextet size is inherent,
+and the union walk the other limits govern is the Hückel mechanism; Clar selects
+disjoint sextets by maximum independent set.
 
 The critical path is A0 → A1 → A2; A2c is the defect fix's acceptance. A3 (Keep-mode
 policy) and A4 (scale) are independent of each other and deferrable behind the critical

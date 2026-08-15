@@ -1,15 +1,17 @@
 # Praparations for Rust and Python package release
 
-Status: **Proposed**
+Status: **In Progress** — guiding document for the 0.6.0 release
 Date: 2026-07-26
 Relates: [151](151-python-molecule-workflows-2026-07-13.md),
 
 ## Scope
 
-This document covers verification and release steps for the following Rust crates:
+This document covers verification and release steps for the workspace crates
+(names as of the current tree; the former `umol-ast`/`umol-ast-macros` are
+`umol-graph-ir`/`umol-graph-ir-macros`):
 
-- `umol-ast`
-- `umol-ast-macros`
+- `umol-graph-ir`
+- `umol-graph-ir-macros`
 - `umol-chem`
 - `umol-edn`
 - `umol-edn-macros`
@@ -28,6 +30,115 @@ This document covers verification and release steps for the following Rust crate
 - `umol-utils`
 
 The crates should be tagged as revision 0.6.0, this version reflects prior internal iteration. The CI/CD pipeline should be set up. The python package should be prepared and published to the pypi server.
+
+## Semantic versioning policy (0.6 line)
+
+Cargo's compatibility convention for pre-1.0 versions applies: the leftmost
+nonzero component is the breaking boundary, so `0.6.x` releases must be
+compatible with `0.6.0`, and any breaking change ships as `0.7.0`. Consequences:
+
+- Conformance-suite growth, atom-typing registry rows, and living
+  default-valence-table additions are compatible (`0.6.x`); resolution outcomes
+  may change through added candidate rows — that is the documented update
+  policy (candidate sets are the monotone observable), state it in the release
+  notes. Frozen preset tables never change in place; a preset revision is a new
+  named file and at least a minor bump.
+- Internal cleanup that does not move public paths is `0.6.x`. Module
+  restructuring that changes public paths — including the docs 164–168 API
+  worklists — is `0.7.0` material, not a patch.
+- `umol-py` follows the same version as the workspace; the wheel and the crates
+  are tagged together.
+
+## Functional-gap assessment for 0.6 (2026-08-15)
+
+The whitepaper is the functionality specification; every concrete claim in its
+listings has been verified against the live code (doc 194 S6e6). Two code-level
+items must land before the tag:
+
+1. `AromaticityRule::Clar { ring_limits }` advertises a payload that
+   `ClarAromaticity` never reads (the ring request is hardcoded at six).
+   Advertised-but-ignored configuration is exactly the "behaves unexpectedly"
+   class; either the payload is read or it is removed — removal is a type
+   change, so it must precede the tag.
+   **Done 2026-08-15:** removed — no `RingLimits` field applies to Clar (the
+   sextet size is inherent; the union limits govern the Hückel mechanism);
+   `Clar` is a unit variant in Rust and a no-argument constructor in Python.
+2. `umol-py/pyproject.toml` still declares `name = "umol"`; the 2026-08-02
+   decision below publishes as `umol-py` (import name stays `umol`).
+   **Done 2026-08-15:** renamed to `umol-py`; the wheel installs as
+   `umol-py`, the module imports as `umol`. The dormant PyPI `umol` takeover
+   stays unpursued per the PEP 541 analysis below; revisit in a year if it
+   ever becomes a source of confusion.
+
+Assessed and **not** blocking, with the reason recorded:
+
+- **Doc 195 (molecule-scope constraint matching)**: a pattern carrying a
+  molecule-scope constraint is refused loudly with an error naming the
+  construct (the doc 194 S1a gate) instead of matching as if unconstrained.
+  The whitepaper neither documents molecule-scope constraints in patterns nor
+  promises their evaluation, so this is a documented limitation for the
+  release notes, not a gap against the specification. Same for the gated
+  constraint-remove reaction path (six `#[ignore]`d tests).
+- **Doc 193 (recursive subpattern constraints)**: unimplemented proposal; not
+  in the whitepaper.
+- **Doc 149 Part B (hashing tiers)**: the whitepaper presents hashability as a
+  consequence of canonical labeling and demonstrates `canonical_eq` only;
+  `canonical_hash` stays deferred until a consumer (network dedup) exists.
+- **Docs 164–168 (cleanup worklists)**: no blockers. The two once-functional
+  items in doc 166 are resolved or out of scope — the validator completion
+  landed with the doc 194 S6a family (spin invariants included), and the
+  implicit/explicit hydrogen transformer pair is unimplemented but not
+  whitepaper-promised (a good `0.6.x` addition). The API reshapes in these
+  docs are `0.7.0` material under the versioning policy.
+- **Doc 56 (registry rows)** and conformance growth: additive data, `0.6.x`.
+- **Doc 175 (`Ground<T>` API)**: unimplemented; likely superseded by the
+  concreteness API (`is_concrete`/`into_concrete`, doc 194 S6e5) — review and
+  close, no release impact.
+- **Doc 180 (facade crate)**: the whitepaper's Rust primer instructs depending
+  on `umol-graph`/`umol-graph-ir`/`umol-graph-core` directly, so 0.6 ships
+  without a facade; the crates.io `umol` placeholder stays as the name
+  reservation. A later facade that only re-exports is additive (`0.6.x` or
+  `0.7`); closing off the individual crates behind it would be breaking and
+  runs against the multi-model composition philosophy — the individual crates
+  stay public regardless.
+- **Doc 182 (Python resolution exposure)**: reviewed 2026-08-15 — the gap is
+  real and current. Python has no `resolve` method anywhere: a molecule built
+  by editing or `parse` cannot be resolved except by round-tripping through
+  ingest, so the refine loop (assert, re-resolve) is not executable from
+  Python. Not a tag blocker — the whitepaper shows no `resolve()` listing,
+  and adding a method is additive (`0.6.x`) — but it is the most user-visible
+  API hole in this assessment, and it carries doc 182's open design question
+  (verdict value versus exception) to settle before implementing. The doc's
+  Rust reference section predates the S4 rework (`Resolver::with_config`,
+  `ResolverError` spellings) and needs refreshing against `ResolveConfig`
+  stored on `Resolver` and the `Resolve*` names.
+- Behaviors to state in the release notes rather than change: higher stereo
+  kinds (allene, square-planar, octahedral) are staged off by the default
+  `StereoModel`; the whitepaper demonstrates tetrahedral and cis/trans only.
+
+## Release collateral (missing items)
+
+1. **README.md** at the repository root — Getting Started from the whitepaper
+   primer (step already listed below); include the `pip install umol-py` /
+   `import umol` distinction.
+2. **Release notes for 0.6.0** — the whitepaper feature set, the known
+   limitations above, and the data-update policy statement.
+3. **License files** — `pyproject.toml` declares `MIT OR Apache-2.0`, but the
+   repository has no `LICENSE-MIT`/`LICENSE-APACHE` files and the crate
+   manifests carry no `license` field; both are required for crates.io.
+4. **CI** — no `.github/` exists. Needed: a test workflow (workspace build,
+   `--all-features --tests` so the conformance and proptest suites run,
+   clippy, fmt) and a release workflow (crates.io publish in dependency
+   order; maturin wheel builds for linux x86_64 and macos-arm — the binding
+   uses abi3, so one wheel per platform — plus sdist, publish to PyPI).
+5. **Workspace version** — `[workspace.package] version = "0.6.0"` plus
+   `version.workspace = true` in member crates (step 3 below), and the
+   remaining Cargo metadata fields (description, license, repository,
+   keywords, readme) per crate.
+6. **Name availability re-check** — the 2026-08-02 check covered the old
+   `umol-ast`/`umol-ast-macros` names; `umol-graph-ir` and
+   `umol-graph-ir-macros` have not been checked. Re-check all names
+   immediately before publishing.
 
 ## Registry name availability (checked 2026-08-02)
 
@@ -105,7 +216,20 @@ diagnose.
 ## Rust Additional Steps
 
 1. The repo needs a README.md document with the Getting Started section (corresponds to the Primer section of the whitepaper).
-2. Need to carefully consider if umol-ast and umol-io dependencies should be re-exported from umol-graph.
+2. Need to carefully consider if umol-graph-ir and umol-io dependencies should be re-exported from umol-graph.
+   Standing state (2026-08-15): `umol-graph`'s root is pub modules only with zero
+   re-exports, and the whitepaper's listings use module paths (`ops::resolve::Resolver`,
+   `ingest::ingest_smiles`) consistently with it — that is the de-facto export policy
+   and single types get no one-off root exceptions.
+   **Decided (author, 2026-08-15): no cross-crate re-exports**, proc macros excepted.
+   Consumers depend on the defining crates directly; the whitepaper's three-crate
+   dependency block is the documented experience.
+   **Still open: the per-crate root-export policy** — what each crate's `lib.rs`
+   re-exports of its own modules. Today `umol-graph` and `umol-graph-ir` are
+   pub-modules-only (paths like `ops::resolve::Resolver`, `ir::Molecule`;
+   `#[macro_export]` macros land at the root by the mechanism). Whether that stays the
+   uniform rule or roots curate a selection is a doc 168 api-hygiene decision; settle
+   it before the README teaches the import style.
 3. The workspace needs to set version.workspace = true in individual crates and [workspace.package] version = "0.6.0" in the top-level Cargo.toml.
 4. Need to check which other fields should be set in the Cargo.toml files.
 5. Check if all crates need to be published now, umol-geometric*, umol-msym* are not required by the graph infrastructure.

@@ -10,19 +10,22 @@ A molecule built by editing cannot be resolved from Python. `MoleculeAst.from_sm
 only `defaults` and does not resolve; there is no `resolve` method. The three `*ResolveConfig` classes
 are exported and nothing outside reaction application consumes them.
 
-## The Rust side, for reference
+## The Rust side, for reference (refreshed 2026-08-15 after the doc 194 S4 rework)
 
 Fully worked out; the binding has a settled shape to mirror.
 
 ```rust
 Resolver::new(&chemistry_model)                          // ResolveConfig::default()
-Resolver::with_config(&chemistry_model, resolve_config)  // explicit
-    .resolve(&mut ast)   // -> Result<Solution<(), ResolverContradiction>, ResolverError>
+Resolver::with_config(&chemistry_model, resolve_config)  // explicit; the resolver stores it
+    .resolve(&mut molecule)
+    // -> Result<Solution<ResolveReport, ResolveContradiction>, ResolveError>
 ```
 
-Both internal callers use exactly this — `umol-graph/src/ingest.rs:130` and
-`umol-graph/src/parse.rs:48` are `Resolver::with_config(model, *resolve_config).resolve(&mut ast)?`.
-Ingest constructs the same resolver any caller would; nothing about it is privileged.
+The verdict carries the report in both non-error arms: `Determined(report)` (its
+`tie_breaks` name the atoms where a configured policy decided), `Underdetermined(report)`
+(its `unresolved` carries the per-atom candidate lists; nothing is committed — the
+journal rolls back every failure path). Ingest constructs the same resolver any caller
+would; nothing about it is privileged.
 
 `Resolver` is not re-exported from `umol-graph/src/lib.rs`, so the path today is
 `umol_graph::ops::resolve::Resolver`. Worth raising when the facade of doc
@@ -62,26 +65,54 @@ listing today.
 - `ResolverError` as a value. Rollback failure indicates a defect, not an outcome a caller plans for;
   an exception is right.
 
-## Open question: verdict or exception
+## Decided: verdict value (author, 2026-08-15)
 
-The Rust signature returns `Solution<(), ResolverContradiction>` — `Determined`, `Underdetermined`,
-`Contradictory` — and Python currently has `ContradictionError` and `UnderdeterminedError` but no
-`Solution`.
+The Rust verdict returns `Solution<ResolveReport, ResolveContradiction>`, and Python had
+`ContradictionError`/`UnderdeterminedError` but no `Solution`. Decision: the solution and
+the contradiction are integral to the model — the three-valued outcome is the
+whitepaper's validity vocabulary — and are exposed faithfully as Python values. Ingest
+keeps raising (a structure that will not resolve is a failure of that call); the
+explicit operation returns the verdict; only `ResolveError` — the rollback-defect
+class — remains an exception. This is the difference in kind the earlier analysis
+anticipated, and it follows 178's rule that ordinary outcomes are values.
 
-Two precedents point opposite ways.
+## Specified surface
 
-- **178 argued for values.** `meet` and `join` return `None` when no bound exists, because "failure to
-  relate two otherwise valid values is an ordinary result, not a Python exception." By that reasoning
-  `Underdetermined` is an ordinary outcome of resolution and belongs in a returned verdict.
-- **`from_smiles` raises today**, and consistency with it argues for raising.
+Two new types plus one method; nothing else. (`MoleculeAst` is `Molecule` since doc
+176; the older mentions above read accordingly.)
 
-The distinction that may resolve it: for ingest, a structure that will not resolve is a failure of the
-call, so raising fits. For a molecule under construction, `Underdetermined` is frequently the expected
-state and the caller wants to inspect it. If so, the answer is that ingest keeps raising and the
-explicit operation returns a verdict, which is a difference in kind rather than an inconsistency.
+```python
+class Solution:                      # pyo3 complex enum
+    Determined(molecule: Molecule, report: ResolveReport)
+    Underdetermined(report: ResolveReport)
+    Contradictory(contradiction: ResolveContradiction)
 
-Recommend deciding this before implementing; it determines the shape of every listing in
-\Cref{sec:validity}.
+class ResolveContradiction:          # value wrapper over the Rust enum
+    __str__   # the Rust Display message
+    __repr__  # ResolveContradiction("<message>")
+    __eq__    # structural, via the Rust PartialEq
+
+Molecule.resolve(
+    self, *, chemistry_model=None, resolve_config=None
+) -> Solution
+```
+
+- **Non-mutating**: the receiver is never touched; `Determined` carries the resolved
+  molecule (the Rust in-place mutation runs on a clone). `Underdetermined` and
+  `Contradictory` carry no molecule — nothing was committed, and the receiver already
+  is the unchanged input.
+- **Defaults**: `chemistry_model=None` means `ChemistryModel.default()` — presets are
+  reader conventions applied at format boundaries, and a constructed molecule has no
+  format; `resolve_config=None` means `ResolveConfig.default()`. The different ways of
+  resolving are reached through these two arguments (preset models, tie-breaks,
+  failure policies).
+- `Determined.report` makes tie-break uses visible on success — the exception path
+  never delivered that. `Underdetermined.report` is the same `ResolveReport` already
+  bound for `e.report`.
+- `ResolveContradiction` starts opaque-but-printable (message, equality); per-variant
+  destructuring is additive if a consumer needs it.
+- Reaction resolution stays out of the minimal set; reaction application already
+  resolves internally, and an explicit reaction-side operation is additive later.
 
 ## Settled semantics
 

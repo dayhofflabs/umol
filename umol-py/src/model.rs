@@ -163,8 +163,8 @@ mod tests {
     use rstest::rstest;
     use umol_graph::ops::model::{
         AromaticityModel as GraphAromaticityModel, AromaticityRule as GraphAromaticityRule,
-        AromaticityTieBreak as GraphAromaticityTieBreak, RingLimits as GraphRingLimits,
-        StereoModel as GraphStereoModel, ValenceModel as GraphValenceModel,
+        AromaticityTieBreak as GraphAromaticityTieBreak, StereoModel as GraphStereoModel,
+        ValenceModel as GraphValenceModel,
     };
     use umol_graph::ops::validate::ConnectivityModel as GraphConnectivityModel;
     use umol_graph::valence_table;
@@ -214,12 +214,7 @@ mod tests {
             valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4], O => [2]])),
             aromaticity: GraphAromaticityModel {
                 scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                rule: GraphAromaticityRule::Clar {
-                    ring_limits: GraphRingLimits {
-                        min_ring_size: 6,
-                        ..GraphRingLimits::default()
-                    },
-                },
+                rule: GraphAromaticityRule::Clar,
                 tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {
@@ -249,12 +244,7 @@ mod tests {
             valence: GraphValenceModel::counts(Cow::Owned(valence_table![C => [4], O => [2]])),
             aromaticity: GraphAromaticityModel {
                 scope: GraphElementScope::AllowList(vec![ChemElement::C]),
-                rule: GraphAromaticityRule::Clar {
-                    ring_limits: GraphRingLimits {
-                        min_ring_size: 6,
-                        ..GraphRingLimits::default()
-                    },
-                },
+                rule: GraphAromaticityRule::Clar,
                 tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {

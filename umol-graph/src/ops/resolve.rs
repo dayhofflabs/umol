@@ -1723,7 +1723,7 @@ mod tests {
 
     #[rstest]
     #[case::aromaticity(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
         mol_dsl!(r#"{
             :atoms ["N#i*#c0#h#n0#u0#s#a2" "C#i=#c0#h#n0#u0#s#a"
                     "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
