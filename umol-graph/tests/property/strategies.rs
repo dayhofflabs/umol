@@ -7,8 +7,8 @@
 //! atom-level assertions. Policies vary over both failure policies, both
 //! aromaticity tie-breaks, and both valence tie-breaks.
 
-use proptest::prelude::*;
 use proptest::collection::vec;
+use proptest::prelude::*;
 use proptest::sample::subsequence;
 use smallvec::{smallvec, SmallVec};
 use umol_graph::ops::model::{
@@ -106,7 +106,7 @@ pub(crate) fn select_scenario() -> impl Strategy<Value = SelectScenario> {
             ],
             prop_oneof![
                 Just(AromaticityTieBreak::Strict),
-                Just(AromaticityTieBreak::MaxAtomCount),
+                Just(AromaticityTieBreak::MinElectronCount),
             ],
             prop_oneof![
                 Just(ValenceTieBreak::Strict),

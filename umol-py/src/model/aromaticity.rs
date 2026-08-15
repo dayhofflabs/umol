@@ -217,9 +217,11 @@ impl AromaticityRule {
 pub enum AromaticityTieBreak {
     /// No structural preference: structurally distinct survivors stay plural.
     Strict,
-    /// Maximal claimed-atom count; the perception decides what a system is,
-    /// the policy only orders how much of the evidence is realized.
-    MaxAtomCount,
+    /// Claimed-atom count descending, then electron total ascending, then
+    /// member sets lexicographic: realize as much of the evidence as the
+    /// rule allows while synthesizing as little as possible beyond the
+    /// written structure.
+    MinElectronCount,
 }
 
 #[pymethods]
@@ -227,7 +229,7 @@ impl AromaticityTieBreak {
     pub(crate) fn __repr__(&self) -> String {
         match self {
             Self::Strict => "AromaticityTieBreak.Strict".to_owned(),
-            Self::MaxAtomCount => "AromaticityTieBreak.MaxAtomCount".to_owned(),
+            Self::MinElectronCount => "AromaticityTieBreak.MinElectronCount".to_owned(),
         }
     }
 }
@@ -236,14 +238,14 @@ impl AromaticityTieBreak {
     pub(crate) fn from_rust(tie_break: GraphAromaticityTieBreak) -> Self {
         match tie_break {
             GraphAromaticityTieBreak::Strict => Self::Strict,
-            GraphAromaticityTieBreak::MaxAtomCount => Self::MaxAtomCount,
+            GraphAromaticityTieBreak::MinElectronCount => Self::MinElectronCount,
         }
     }
 
     pub(crate) fn to_rust(self) -> GraphAromaticityTieBreak {
         match self {
             Self::Strict => GraphAromaticityTieBreak::Strict,
-            Self::MaxAtomCount => GraphAromaticityTieBreak::MaxAtomCount,
+            Self::MinElectronCount => GraphAromaticityTieBreak::MinElectronCount,
         }
     }
 }
@@ -458,7 +460,7 @@ mod tests {
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::new(3, 22, true, 6, 10_000)
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             }
         );
     }
@@ -474,7 +476,7 @@ mod tests {
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::new(6, 22, true, 6, 10_000)
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             }
         );
     }
@@ -488,7 +490,7 @@ mod tests {
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::new(3, 22, true, 6, 10_000)
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             }
         );
     }
@@ -501,8 +503,8 @@ mod tests {
     #[case::hmo(
         AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MaxAtomCount },
-        "AromaticityModel(scope=ElementScope.AllowList([Element('C'), Element('N')]), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.MaxAtomCount)"
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount },
+        "AromaticityModel(scope=ElementScope.AllowList([Element('C'), Element('N')]), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.MinElectronCount)"
     )]
     #[case::clar(
         AromaticityModel { scope: ElementScope::AllowList {
@@ -526,10 +528,10 @@ mod tests {
         AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) }, tie_break: AromaticityTieBreak::Strict }
     )]
     #[case::hmo(
-        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MaxAtomCount },
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MinElectronCount },
         AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MaxAtomCount }
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount }
     )]
     #[case::clar(
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar { ring_limits: GraphRingLimits {
@@ -564,8 +566,8 @@ mod tests {
     #[case::hmo(
         AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into(), ChemElement::N.into()],
-            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MaxAtomCount },
-        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MaxAtomCount }
+            }, rule: AromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: AromaticityTieBreak::MinElectronCount },
+        GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C, ChemElement::N]), rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::MinElectronCount }
     )]
     #[case::clar(
         AromaticityModel { scope: ElementScope::AllowList {

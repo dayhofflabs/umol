@@ -27,8 +27,8 @@ use umol_graph::ops::model::{AromaticityTieBreak, ValenceTieBreak};
 use umol_graph::ops::resolve::{AromaticityFailurePolicy, AromaticityResolver, ResolveState};
 use umol_graph::ops::valence::compare::compare_by_key;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticValenceForm, AtomForm, AtomId, NumForm, RingConfig, RingModel,
-    RingSetKind,
+    AromaticSystemForm, AromaticValenceForm, AtomForm, AtomId, ElectronCountsForm, NumForm,
+    RingConfig, RingModel, RingSetKind,
 };
 use umol_utils::solution::Solution;
 
@@ -237,7 +237,7 @@ fn exhaustive_select(
         }
 
         let mut structural_decided = false;
-        if model.tie_break == AromaticityTieBreak::MaxAtomCount {
+        if model.tie_break == AromaticityTieBreak::MinElectronCount {
             let structure = |partition: &Vec<(Vec<AtomId>, AromaticSystemForm)>| {
                 (
                     Reverse(
@@ -246,6 +246,13 @@ fn exhaustive_select(
                             .map(|(atoms, _)| atoms.len())
                             .sum::<usize>(),
                     ),
+                    partition
+                        .iter()
+                        .map(|(_, form)| match &form.electrons {
+                            ElectronCountsForm::Lit(electrons) => electrons.iter().sum(),
+                            _ => i64::MAX,
+                        })
+                        .sum::<i64>(),
                     partition
                         .iter()
                         .map(|(atoms, _)| atoms.clone())

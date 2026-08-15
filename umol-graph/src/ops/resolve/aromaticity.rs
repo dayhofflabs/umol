@@ -9,7 +9,7 @@ use smallvec::smallvec;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, Edits, Molecule, NumForm, RingSet,
+    BondUpdate, BooleanForm, Edits, ElectronCountsForm, Molecule, NumForm, RingSet,
 };
 use umol_utils::solution::Solution;
 
@@ -282,11 +282,12 @@ impl AromaticityResolver {
     /// assignment is valid iff every stored aromatic system touching the
     /// component reappears with the same member set, and — under the `Error`
     /// failure policy — no component atom whose every disjunct requires
-    /// aromaticity is left unclaimed. Under the model's `MaxAtomCount`
+    /// aromaticity is left unclaimed. Under the model's `MinElectronCount`
     /// tie-break, the structural order runs on the valid assignments first —
-    /// claimed-atom count descending, then member-set lists lexicographic —
-    /// and the chosen systems' members are recorded as tie-break uses when
-    /// this order decided; under the model's `Strict` it never runs. A unique
+    /// claimed-atom count descending, then electron total ascending, then
+    /// member-set lists lexicographic — and the chosen systems' members are
+    /// recorded as tie-break uses when this order decided; under the model's
+    /// `Strict` it never runs. A unique
     /// surviving restriction is accepted; several fall to `tie_break`
     /// member-wise. When the key leaves a tie, or when survivors restrict
     /// different atoms, the members stay plural and nothing is accepted.
@@ -654,12 +655,14 @@ impl AromaticityResolver {
                 }
             }
 
-            // Structural order under `MaxAtomCount`: most claimed atoms first,
-            // member-set lists breaking ties lexicographically. Inert under
-            // the `Error` failure policy, where valid assignments cannot
-            // differ structurally.
+            // Structural order under `MinElectronCount`: most claimed atoms
+            // first, then the smallest electron total, member-set lists
+            // breaking ties lexicographically. The electron component acts
+            // whenever the rule admits more than one total for the same
+            // members; the coverage component only under a non-`Error`
+            // failure policy.
             let mut structural_decided = false;
-            if self.tie_break == AromaticityTieBreak::MaxAtomCount {
+            if self.tie_break == AromaticityTieBreak::MinElectronCount {
                 let structure = |partition: &Vec<(Vec<AtomId>, AromaticSystemForm)>| {
                     (
                         Reverse(
@@ -668,6 +671,13 @@ impl AromaticityResolver {
                                 .map(|(atoms, _)| atoms.len())
                                 .sum::<usize>(),
                         ),
+                        partition
+                            .iter()
+                            .map(|(_, form)| match &form.electrons {
+                                ElectronCountsForm::Lit(electrons) => electrons.iter().sum(),
+                                _ => i64::MAX,
+                            })
+                            .sum::<i64>(),
                         partition
                             .iter()
                             .map(|(atoms, _)| atoms.clone())
@@ -1607,15 +1617,91 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromaticity_resolver_select_tolerated_carrier() {
-        // Keep policy admits the no-system assignment alongside the full
-        // ring; `MaxAtomCount` realizes the full ring and records its members.
+    fn test_aromaticity_resolver_select_min_electron_count() {
+        // Two totals pass the rule on the same members (all-pyridinic 6,
+        // all-pyrrolic 10); the electron component picks the smaller and
+        // records the members, with no value key consulted.
         let model = AromaticityModel {
             scope: ElementScope::Any,
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
-            tie_break: AromaticityTieBreak::MaxAtomCount,
+            tie_break: AromaticityTieBreak::MinElectronCount,
+        };
+        let molecule = mol_dsl!(
+            r#"{:atoms ["N#c0" "N#c0" "C#c0" "N#c0" "N#c0" "C#c0"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
+        );
+        assert_eq!(
+            AromaticityResolver::new(&model).select(
+                &molecule,
+                ResolveState {
+                    completions: AtomCompletions::from_iter([
+                        (
+                            AtomId(0),
+                            smallvec![
+                                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                            ]
+                        ),
+                        (
+                            AtomId(1),
+                            smallvec![
+                                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                            ]
+                        ),
+                        (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                        (
+                            AtomId(3),
+                            smallvec![
+                                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                            ]
+                        ),
+                        (
+                            AtomId(4),
+                            smallvec![
+                                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                            ]
+                        ),
+                        (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                    ]),
+                    ..ResolveState::default()
+                },
+                ValenceTieBreak::Strict,
+            ),
+            Ok(Solution::Determined(ResolveState {
+                completions: AtomCompletions::from_iter([
+                    (AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]),
+                    (AtomId(1), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]),
+                    (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                    (AtomId(3), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]),
+                    (AtomId(4), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]),
+                    (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                ]),
+                systems: vec![(
+                    (0..6).map(AtomId).collect(),
+                    AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 1, 1])
+                        .with_charge(0)
+                        .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+                )],
+                tie_breaks: (0..6).map(AtomId).collect(),
+            }))
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_resolver_select_tolerated_carrier() {
+        // Keep policy admits the no-system assignment alongside the full
+        // ring; `MinElectronCount` realizes the full ring and records its members.
+        let model = AromaticityModel {
+            scope: ElementScope::Any,
+            rule: AromaticityRule::Hueckel {
+                ring_limits: RingLimits::default(),
+            },
+            tie_break: AromaticityTieBreak::MinElectronCount,
         };
         let molecule = mol_dsl!(
             r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]

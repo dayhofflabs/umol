@@ -78,13 +78,18 @@ assignment is the unique survivor — no tie-break consulted.
 
 **Selection among valid assignments.**
 
-1. **Structural order (`AromaticityTieBreak`, new policy).** Reachable only under a
-   non-`Error` failure policy, where partial-fit assignments survive validity. One
+1. **Structural order (`AromaticityTieBreak`, new policy).** One
    criterion (corrected 2026-08-13: under closed-world admission, claimed atoms and
    unrealized carriers partition the evidenced set, so "full fit first" and "coverage" are
-   complements — the earlier two-component phrasing was redundant): claimed-atom count
-   descending, then the member sets themselves (lexicographic) — so the value order below
-   never compares assignments restricting different atoms. Ring size and system
+   complements — the earlier two-component phrasing was redundant; extended 2026-08-15
+   with the electron component on the pteridine evidence): claimed-atom count
+   descending, then the systems' electron total ascending, then the member sets
+   themselves (lexicographic) — so the value order below
+   never compares assignments restricting different atoms. The electron component acts
+   whenever the rule admits more than one total for the same members (bare-`n` pteridine:
+   all-pyridinic 10 and all-pyrrolic 14 both satisfy 4n+2, the mixed sums fail; minimal
+   synthesis picks 10); the coverage component is reachable only under a non-`Error`
+   failure policy, where partial-fit assignments survive validity. Ring size and system
    granularity carry no preference here: what counts as a system is the perception's
    decision under `AromaticityRule` and `RingLimits`, one decomposition per assignment;
    selection never re-partitions. Under `Error` the order is fully inert: validity forces
@@ -162,9 +167,12 @@ pub enum AromaticityTieBreak {
     /// scheme.
     #[default]
     Strict,
-    /// Maximal claimed-atom count; the perception decides what a system
-    /// is, the policy only orders how much of the evidence is realized.
-    MaxAtomCount,
+    /// Claimed-atom count descending, then electron total ascending, then
+    /// member sets lexicographic: realize as much of the evidence as the
+    /// rule allows while synthesizing as little as possible beyond the
+    /// written structure. The perception decides what a system is; the
+    /// policy only orders the valid assignments.
+    MinElectronCount,
 }
 
 pub struct AromaticityModel {
@@ -178,26 +186,37 @@ The policy is a modeling choice and sits in the model envelope beside the valenc
 per the doc 194 envelope design. Breaking for `AromaticityModel` constructors, presets, and
 the umol-py bindings.
 
-Naming and defaults, settled 2026-08-13:
+Naming and defaults, settled 2026-08-13; revised 2026-08-15 on the pteridine evidence
+(see the A6a open item and its resolution below):
 
-- the variant name is `MaxAtomCount` (renamed from `MaxAtomCount` 2026-08-14: "coverage"
-  duplicated the claimed-atom count under a second word, and `atom_count` is the established
-  count vocabulary; `MostAromatic` was rejected earlier — "aromatic atom" reads as aromaticity
-  being the atom's property);
+- the variant is `MinElectronCount` (2026-08-15, replacing `MaxAtomCount`, itself renamed
+  from `MaxCoverage` 2026-08-14 — "coverage" duplicated the claimed-atom count under a
+  second word, and `atom_count` is the established count vocabulary; `MostAromatic` was
+  rejected earlier — "aromatic atom" reads as aromaticity being the atom's property).
+  Coverage-only carried no meaning where the two orderings differ, so the axis keeps ONE
+  non-`Strict` variant with the full ordering — claimed-atom count descending, electron
+  total ascending, member sets lexicographic — named for its semantically active
+  component, as `MostSaturated` names its leading key. The electron component is the
+  active one under `Error` policies; coverage discriminates only in Keep-mode;
 - the default is `Strict`, as for the valence tie-break: any other default would bias the
-  scheme;
-- the `daylight`/`mdl`/`permissive` presets do **not** opt into `MaxAtomCount`; they inherit
-  the default. The presets reproduce a format convention's reading, and on this axis there
-  is no reference behaviour to reproduce: every reference toolkit pins implicit hydrogens at
-  parse time from its fixed valence table, so perception runs over one already-fixed valence
-  state and no set of assignments arises. Where a fixed reading is impossible — bare `n` in
-  a pyrrole position — RDKit refuses the input rather than guessing (doc 174). The
-  valence-level half of that convention is already carried by `ValenceModel::smiles()` with
-  `MostSaturated`. Under `Error` failure policies the structural order is inert regardless,
-  so opting in would change nothing except in Keep-mode, where it would bias exactly the
-  case the caller is inspecting;
-- the conformance matrix (194 S5c2) does not gain this axis: under `Error` policies the
-  cells would be identical.
+  scheme. The neutrality doctrine holds at the type level; conventions live in presets;
+- the `daylight`/`mdl`/`permissive` presets **adopt `MinElectronCount`** (2026-08-15,
+  reversing the 2026-08-13 decision). The earlier rationale — "no reference behaviour to
+  reproduce, since reference toolkits pin hydrogens at parse time" — is contradicted by
+  the data: ChEBI and ChemSpider store pteridine as bare-`n` `c1cnc2ncncc2n1` (PubChem
+  holds the Kekulé form), and the reference reading of such input is minimal-H — RDKit
+  gives bare `n` zero implicit hydrogens and either kekulizes on that basis or refuses
+  (H0 or bust, never H1; bare purine cannot kekulize — nine π atoms admit no perfect
+  matching — and is refused; ChemSpider accordingly writes purine with explicit `[nH]`).
+  `MinElectronCount` reproduces that convention as the usable superset: add exactly the
+  hydrogens the rule forces, never more — pteridine resolves all-pyridinic like every
+  reference, bare purine (which references refuse) resolves to the unique one-`[nH]`
+  assignment, the original doc 174 goal. SMILES and MOL inputs read alike (no
+  interpretation difference when hydrogens are missing), and `permissive` adopts it too —
+  its purpose is processing arbitrary real-world input;
+- the conformance matrix (194 S5c2) still does not gain this axis as a cell dimension;
+  the cells inherit the presets, so `MinElectronCount` lands in every cell at the S5d
+  regeneration.
 
 Contingent, not open: whether A5's class distribution argues for a shipped bulk suite after
 all, and if so the category names for it.
@@ -534,11 +553,36 @@ selection, then the model envelope and bindings, then the suites.
 
 - A5a: fetch script for the VEHICLe CSV into a gitignored working directory, with the
   provenance note; the `.gitignore` entry lands with it. Additive. [dep: none]
+  **Done 2026-08-15:** `scripts/fetch-vehicle.sh` stages `VEHICLe.csv` and the FTP README
+  into `materials/aromaticity/vehicle/` (staging directory settled in session; the whole
+  `materials/` tree is already covered by the repository `.gitignore`, so no new entry was
+  needed). The script header carries the provenance (Pitt et al., doi:10.1021/jm801513z;
+  ChEMBL FTP source of record) and the never-commit/never-redistribute note. The live CSV
+  has 24 867 rows and one column beyond the README's list (`Pgood`).
 - A5b: the instrument run: an `#[ignore]`d test that skips when the local CSV is absent,
   classifies every row by the outcome pair under both valence tie-breaks, asserts
   rule-acceptance and no-overlap on every emitted system, checks tautomer-cluster consistency, and writes the
   class distribution and failure manifest for review. The distribution is the A5
   deliverable, recorded in this document. Additive. [dep: A2c, A5a]
+  **Done 2026-08-15:** `umol-graph/tests/vehicle.rs` (`--release --test vehicle --
+  --ignored`, ~3.6 s; skips with a fetch hint when the CSV is absent). Each row ingests
+  under `ValenceModel { tie_break, ..smiles() }` for both tie-breaks; rule-acceptance is
+  re-validated by running perception `derive` on every resolved molecule (each stored
+  system reassessed from its electron contributions under the daylight model) and overlap
+  checked directly; outputs land beside the corpus as `distribution.txt`/`manifest.txt`.
+  **The distribution (24 867 rows):** determined 24 521 (98.61 %), tie-break picks 346
+  (1.39 %); zero tie-survives, zero contradictory, zero parse failures, zero hierarchy
+  violations, zero invariant violations. The 294-row panic family resolves inside those
+  classes. Only 346 of the 4 221 bare-`n` rows need the value key at all — the ring sums
+  force a unique valid assignment for the rest. Tautomer oracle over the 1 544 clusters:
+  five class splits, all the same benign shape — an aromatic-written member (flexible,
+  tie-break picks) clustered with a Kekulé-written member (no aromatic marks, determined),
+  i.e. different input evidence, not an inconsistency; canonical-form counts over resolved
+  `MostSaturated` members: 1 370 two-member clusters keep two distinct forms (distinct
+  pinned tautomers), 11 converge to one form, larger clusters analogous
+  ((3,3)=124, (4,4)=24, (5,5)=3, (6,6)=2, (3,1)=8, (3,2)=1, (4,1)=1). The health
+  criterion is met: no contradictions anywhere in the corpus and both defect-class
+  invariants hold on every emitted system. A5 complete.
 
 ### A6 — promotions (additive; gates 194 S5d)
 
@@ -547,6 +591,41 @@ selection, then the model envelope and bindings, then the suites.
   cases VEHICLe cannot supply (acenes, phenanthrene, coronene, azulene; porphine,
   phthalocyanine; biphenyl, carbazole, dibenzofuran, acridine). Additive; snapshots
   regenerate at S5d. [dep: A5b]
+  **Done 2026-08-15:** fifteen data files. Thirteen under `data/aromatic/`: quinoline,
+  isoquinoline, benzimidazole (bare), purine, pteridine, anthracene, azulene, coronene,
+  carbazole, dibenzofuran, acridine, porphine, phthalocyanine (biphenyl and phenanthrene
+  already present); the full tautomer cluster 1390 under `data/vehicle/` as
+  `s16534.edn`/`s19784.edn` (the aromatic-written/Kekulé-written pair, category named for
+  provenance). Inputs are the verbatim SMILES raise (generated via
+  `Smiles::parse → try_into_ir`, self-contained, no config overrides); the porphine,
+  phthalocyanine, and pteridine aromatic transliterations were cross-checked against the
+  PubChem kekulized references on atoms, bonds, element multisets, and degree sequences.
+  All fifteen execute panic-free; snapshots regenerate at S5d as planned. Cell outcomes at
+  promotion time: quinoline, isoquinoline, coronene, azulene, and the Kekulé cluster
+  member fully determined; purine, benzimidazole, and the aromatic cluster member
+  `Strict`-plural with `MostSaturated` picking; porphine contradictory (aromaticity
+  inconsistency) and phthalocyanine contradictory (discharge) in all four cells —
+  recorded as-is, the macrocycle families are new behavior to assess.
+  **Surfaced by the pteridine promotion, settled 2026-08-15:** on fused polyaza systems
+  where more than one total passes the Hückel rule, the `MostSaturated` value key
+  preferred the maximally-hydrogenated assignment — bare pteridine resolved to all four
+  nitrogens pyrrolic (electrons sum 14 = 4·3+2), where every reference toolkit reads
+  bare `n` pyridinic (sum 10); ChEBI and ChemSpider store exactly this bare-`n` form.
+  Resolution: the structural order gained the electron-total-ascending component and the
+  axis's non-`Strict` variant became `MinElectronCount`, adopted by the presets — see the
+  revised "Naming and defaults". `Strict` continues to report the plurality honestly.
+  Implemented 2026-08-15: variant, ordering, and presets landed with the equivalence
+  property's definition-level reference updated in step (2000 cases green); pinned by the
+  six-atom tetrazine select case (totals 6 and 10 both pass, the electron component picks
+  6 and records the members with no value key consulted) and the end-to-end pteridine
+  ingest expectation (all-pyridinic, electrons `[1;10]`, every nitrogen `#h0`). The
+  VEHICLe instrument re-run under the new presets: **determined 24 867 (100.00 %)** —
+  every former picks-class row was total-count ambiguity, now settled structurally, so
+  both tie-breaks agree on the entire corpus; zero cluster class splits remain, and the
+  formerly converging clusters (11+8+1) now hold pairwise-distinct canonical forms — bare
+  members resolve minimal instead of collapsing onto their `[nH]` siblings. Invariants
+  zero throughout. Lib 949, umol-py 1620, pytest 1311, property 2000 cases, workspace
+  clippy zero.
 - A6b: the corpus loaders as acceptance: the substructure and fingerprint bench fixtures
   ingest the OpenSMILES corpus panic-free (bench `--test` mode); the instrument is deleted
   unless A5's distribution argued for a shipped bulk suite, and that decision is recorded

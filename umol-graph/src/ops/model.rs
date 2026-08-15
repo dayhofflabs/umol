@@ -153,9 +153,12 @@ pub enum AromaticityTieBreak {
     /// No structural preference: structurally distinct survivors stay plural.
     #[default]
     Strict,
-    /// Maximal claimed-atom count; the perception decides what a system
-    /// is, the policy only orders how much of the evidence is realized.
-    MaxAtomCount,
+    /// Claimed-atom count descending, then electron total ascending, then
+    /// member sets lexicographic: realize as much of the evidence as the
+    /// rule allows while synthesizing as little as possible beyond the
+    /// written structure. The perception decides what a system is; the
+    /// policy only orders the valid assignments.
+    MinElectronCount,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -180,7 +183,7 @@ impl AromaticityModel {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
-            tie_break: AromaticityTieBreak::Strict,
+            tie_break: AromaticityTieBreak::MinElectronCount,
         }
     }
 
@@ -194,7 +197,7 @@ impl AromaticityModel {
                     ..RingLimits::default()
                 },
             },
-            tie_break: AromaticityTieBreak::Strict,
+            tie_break: AromaticityTieBreak::MinElectronCount,
         }
     }
 
@@ -205,7 +208,7 @@ impl AromaticityModel {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
-            tie_break: AromaticityTieBreak::Strict,
+            tie_break: AromaticityTieBreak::MinElectronCount,
         }
     }
 }
@@ -511,7 +514,7 @@ mod tests {
     )]
     #[case::tie_break(
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::MaxAtomCount },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::MinElectronCount },
     )]
     fn test_aromaticity_model_eq_difference(
         #[case] left: AromaticityModel,
@@ -536,7 +539,7 @@ mod tests {
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::default()
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             },
         );
     }
@@ -553,7 +556,7 @@ mod tests {
                         ..RingLimits::default()
                     }
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             },
         );
     }
@@ -567,7 +570,7 @@ mod tests {
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::default()
                 },
-                tie_break: AromaticityTieBreak::Strict,
+                tie_break: AromaticityTieBreak::MinElectronCount,
             },
         );
     }
