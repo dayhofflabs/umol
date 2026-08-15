@@ -1,6 +1,6 @@
 # 182 — Expose resolution on the Python surface
 
-Status: Proposed
+Status: Completed
 Date: 2026-08-03
 Relates: [178](178-python-lattice-ops-2026-08-01.md),
 [179](179-python-editing-and-transactions-2026-08-02.md)
@@ -113,6 +113,58 @@ Molecule.resolve(
   destructuring is additive if a consumer needs it.
 - Reaction resolution stays out of the minimal set; reaction application already
   resolves internally, and an explicit reaction-side operation is additive later.
+- **`Determined` owns its molecule** (settled 2026-08-15): the `Molecule` wrapper gains
+  `Clone` (its inner is already `Clone`), so `Solution` derives structural equality like
+  every binding type — no `Py<Molecule>` handle, no hand-rolled `__eq__`. Attribute
+  access clones, as it already does for `ValenceCandidateSource`'s owned fields: value
+  semantics on a frozen verdict value.
+- **Resolve is not validate** (confirmed 2026-08-15): admission skips ground atoms, so a
+  committed model-violating structure returns `Determined` unchecked. Resolution fills
+  what is open; validating committed structure under a chemistry model is a separate
+  operation outside this set (its Python surface is doc 166 territory). Stated in the
+  method's docstring.
+
+## Implementation plan
+
+One stage, additive throughout; green after every subitem.
+
+- S0a — `umol-py::molecule`: `Clone` derive on `Molecule`. Additive. [dep: none]
+  **Done 2026-08-15:** `Clone` plus the explicit `from_py_object` opt-in pyo3 now
+  requires on `Clone` pyclasses. Adjacent fact, recorded for doc 181: `ReactionSpan` is
+  already `Clone`; `Reaction` is deliberately not — it holds live `Py<Molecule>`/
+  `Py<Deltas>` handles and has no equality, the opposite ownership design from the
+  owned-value wrappers.
+- S0b — `umol-py::resolve`: `ResolveContradiction` pyclass (eq, frozen; `__str__` =
+  Display message, `__repr__`, `from_rust`) plus repr/str/eq test rows. Additive.
+  [dep: none]
+- S0c — `umol-py::resolve`: `Solution` complex enum (frozen, derived `PartialEq`;
+  keyword-only variant constructors per the spec block) plus `__repr__` and tests.
+  Additive. [dep: S0a, S0b]
+- S0d — `umol-py::molecule`: `Molecule.resolve` per the spec (clone inner, run
+  `Resolver::with_config`, map the verdict; `ResolveError` → `RuntimeError`; docstring
+  states non-mutation, the default model, and the resolve-is-not-validate boundary);
+  `umol-py` gains the `umol-utils` dependency to name the Rust `Solution`. Rust-side
+  tests: the three verdicts from constructed molecules, non-mutation of the receiver in
+  all three arms, the default-model case. [dep: S0c]
+- S0e — registration and Python tests: `lib.rs` exports and `add_class` for the two
+  types, `__init__.py`, the import inventory; pytest rows for the three verdicts and
+  non-mutation, including the `match`/`case` idiom — this is where pyo3's
+  structural-pattern support is verified, and the documented idiom falls back to class
+  patterns with attribute access if keyword patterns are unsupported. [dep: S0c, S0d]
+
+Critical path S0a → S0c → S0d → S0e; S0b is parallel to S0a.
+
+**S0b–S0e done 2026-08-15.** `ResolveContradiction` and `Solution` landed as specced
+(frozen, derived equality; keyword-only constructors); `Molecule.resolve` maps the Rust
+outcome with `ResolveError` → `RuntimeError`; `umol-py` depends on `umol-utils` directly
+per the no-re-export policy. Rust-side tests pin the three arms, non-mutation of the
+receiver in every arm, and the default-model case (a charge-open atom takes the
+registry's charge-less lookup: nine carbon candidates); the pytest rows exercise the
+same through `match`/`case` — pyo3 complex-enum keyword patterns verified working, so
+the documented idiom stands without fallback. Vocabulary ruling applied while landing:
+"verdict" does not appear in `umol-py` or `umol-graph` — the word is *solution*
+(rustdoc, locals, and the `validate` helper renamed). Suites: pytest 1313, umol-py
+1631, workspace clippy clean.
 
 ## Settled semantics
 

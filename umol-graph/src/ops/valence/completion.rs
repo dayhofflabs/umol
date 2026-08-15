@@ -74,10 +74,10 @@ impl FromIterator<(AtomId, SmallVec<[AtomForm; 1]>)> for AtomCompletions {
     }
 }
 
-/// Resolver verdict payload: a descriptive record with no invariant.
+/// Resolution report: a descriptive record with no invariant.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolveReport {
-    /// Per-atom plural survivors; empty under a `Determined` verdict.
+    /// Per-atom plural survivors; empty under a `Determined` solution.
     pub unresolved: AtomCompletions,
     /// Atoms whose completion was selected by the valence-preference
     /// tie-break; sorted and deduplicated.

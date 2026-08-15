@@ -7,6 +7,7 @@ use umol_graph::ops::resolve::{
     AromaticityFailurePolicy as GraphAromaticityFailurePolicy,
     AromaticityMismatchPolicy as GraphAromaticityMismatchPolicy,
     AromaticityResolveConfig as GraphAromaticityResolveConfig, ResolveConfig as GraphResolveConfig,
+    ResolveContradiction as GraphResolveContradiction,
     StereoFailurePolicy as GraphStereoFailurePolicy,
     StereoMismatchPolicy as GraphStereoMismatchPolicy,
     StereoResolveConfig as GraphStereoResolveConfig,
@@ -18,6 +19,7 @@ use umol_graph_ir::ir::AtomId as GraphIrAtomId;
 
 use crate::atom::AtomForm;
 use crate::model::aromaticity::AromaticityConfig;
+use crate::molecule::Molecule;
 
 /// Policy for an independently invalid aromatic constraint or entity.
 #[pyclass(eq, hash, frozen, from_py_object)]
@@ -412,6 +414,7 @@ impl ResolveConfig {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_graph::ops::aromaticity::AromaticityContradiction as GraphAromaticityContradiction;
 
     use super::*;
 
@@ -897,6 +900,118 @@ mod tests {
     fn test_resolve_config_to_rust(#[case] config: ResolveConfig) {
         assert_eq!(config.to_rust(), config.0);
     }
+
+    #[rstest]
+    #[case::hmo(
+        GraphResolveContradiction::Aromaticity(GraphAromaticityContradiction::HmoInvalidInput(
+            String::from("odd component"),
+        )),
+        "hmo: invalid input: odd component"
+    )]
+    fn test_resolve_contradiction_str(
+        #[case] contradiction: GraphResolveContradiction,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            ResolveContradiction::from_rust(contradiction).__str__(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::hmo(
+        GraphResolveContradiction::Aromaticity(GraphAromaticityContradiction::HmoInvalidInput(
+            String::from("odd component"),
+        )),
+        "ResolveContradiction(\"hmo: invalid input: odd component\")"
+    )]
+    fn test_resolve_contradiction_repr(
+        #[case] contradiction: GraphResolveContradiction,
+        #[case] expected: &str,
+    ) {
+        assert_eq!(
+            ResolveContradiction::from_rust(contradiction).__repr__(),
+            expected
+        );
+    }
+
+    #[rstest]
+    fn test_resolve_contradiction_eq() {
+        let contradiction = || {
+            ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+                GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
+            ))
+        };
+        let different = ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+            GraphAromaticityContradiction::HmoInvalidInput(String::from("other")),
+        ));
+
+        assert_eq!(contradiction(), contradiction());
+        assert_ne!(contradiction(), different);
+    }
+
+    #[rstest]
+    fn test_solution_repr() {
+        let molecule = Molecule::from_rust(r#"{:atoms ["C#h4"]}"#.parse().unwrap());
+        let report = ResolveReport::from_rust(&GraphResolveReport {
+            unresolved: GraphAtomCompletions::new(),
+            tie_breaks: Vec::new(),
+        });
+        let contradiction =
+            ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+                GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
+            ));
+
+        assert_eq!(
+            Solution::Determined {
+                molecule: molecule.clone(),
+                report: report.clone(),
+            }
+            .__repr__(),
+            format!(
+                "Solution.Determined(molecule={}, report={})",
+                molecule.__repr__(),
+                report.__repr__(),
+            ),
+        );
+        assert_eq!(
+            Solution::Underdetermined {
+                report: report.clone(),
+            }
+            .__repr__(),
+            format!("Solution.Underdetermined(report={})", report.__repr__()),
+        );
+        assert_eq!(
+            Solution::Contradictory {
+                contradiction: contradiction.clone(),
+            }
+            .__repr__(),
+            format!(
+                "Solution.Contradictory(contradiction={})",
+                contradiction.__repr__(),
+            ),
+        );
+    }
+
+    #[rstest]
+    fn test_solution_eq() {
+        let report = || {
+            ResolveReport::from_rust(&GraphResolveReport {
+                unresolved: GraphAtomCompletions::new(),
+                tie_breaks: Vec::new(),
+            })
+        };
+        let underdetermined = || Solution::Underdetermined { report: report() };
+        let contradictory = || Solution::Contradictory {
+            contradiction: ResolveContradiction::from_rust(GraphResolveContradiction::Aromaticity(
+                GraphAromaticityContradiction::HmoInvalidInput(String::from("odd component")),
+            )),
+        };
+
+        assert_eq!(underdetermined(), underdetermined());
+        assert_eq!(contradictory(), contradictory());
+        assert_ne!(underdetermined(), contradictory());
+    }
 }
 
 /// Read-only per-atom candidate sets from a resolution run: each entry maps
@@ -911,12 +1026,12 @@ impl AtomCompletions {
         self.0.len()
     }
 
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// The surviving completions of an atom, or `None`.
-    fn get(&self, atom: u32) -> Option<Vec<AtomForm>> {
+    pub(crate) fn get(&self, atom: u32) -> Option<Vec<AtomForm>> {
         self.0
             .get(GraphIrAtomId(atom))
             .map(|forms| forms.iter().cloned().map(AtomForm::from_rust).collect())
@@ -959,7 +1074,7 @@ impl AtomCompletions {
     }
 }
 
-/// Read-only resolver verdict payload: the plural survivors and the recorded
+/// Read-only resolution report: the plural survivors and the recorded
 /// tie-break uses.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -968,12 +1083,12 @@ pub struct ResolveReport(GraphResolveReport);
 #[pymethods]
 impl ResolveReport {
     #[getter]
-    fn unresolved(&self) -> AtomCompletions {
+    pub(crate) fn unresolved(&self) -> AtomCompletions {
         AtomCompletions::from_rust(&self.0.unresolved)
     }
 
     #[getter]
-    fn tie_breaks(&self) -> Vec<u32> {
+    pub(crate) fn tie_breaks(&self) -> Vec<u32> {
         self.0.tie_breaks.iter().map(|atom| atom.0).collect()
     }
 
@@ -989,5 +1104,66 @@ impl ResolveReport {
 impl ResolveReport {
     pub(crate) fn from_rust(report: &GraphResolveReport) -> Self {
         Self(report.clone())
+    }
+}
+
+/// Resolution contradiction: the chemistry model rejected the input.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolveContradiction(GraphResolveContradiction);
+
+#[pymethods]
+impl ResolveContradiction {
+    pub(crate) fn __str__(&self) -> String {
+        self.0.to_string()
+    }
+
+    pub(crate) fn __repr__(&self) -> String {
+        format!("ResolveContradiction({:?})", self.0.to_string())
+    }
+}
+
+impl ResolveContradiction {
+    pub(crate) fn from_rust(contradiction: GraphResolveContradiction) -> Self {
+        Self(contradiction)
+    }
+}
+
+/// The resolution solution: determined, underdetermined, or
+/// contradictory, with the payload each arm carries.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum Solution {
+    /// Resolution committed: the resolved molecule and the tie-break record.
+    #[pyo3(constructor = (*, molecule, report))]
+    Determined {
+        molecule: Molecule,
+        report: ResolveReport,
+    },
+    /// Nothing committed: the survivors' per-atom candidate lists.
+    #[pyo3(constructor = (*, report))]
+    Underdetermined { report: ResolveReport },
+    /// The chemistry model rejected the input; nothing committed.
+    #[pyo3(constructor = (*, contradiction))]
+    Contradictory { contradiction: ResolveContradiction },
+}
+
+#[pymethods]
+impl Solution {
+    pub(crate) fn __repr__(&self) -> String {
+        match self {
+            Self::Determined { molecule, report } => format!(
+                "Solution.Determined(molecule={}, report={})",
+                molecule.__repr__(),
+                report.__repr__(),
+            ),
+            Self::Underdetermined { report } => {
+                format!("Solution.Underdetermined(report={})", report.__repr__())
+            }
+            Self::Contradictory { contradiction } => format!(
+                "Solution.Contradictory(contradiction={})",
+                contradiction.__repr__(),
+            ),
+        }
     }
 }

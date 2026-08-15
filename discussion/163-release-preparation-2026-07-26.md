@@ -238,3 +238,9 @@ diagnose.
 
 1. Check which additional fields need to be added to the pyproject.toml file.
 2. CI/CD pipeline setup for building Python wheels (linux, macos-arm).
+3. Import-time note (measured 2026-08-15): `import umol` runs ~31 ms steady-state, of
+   which ~21 ms is `importlib.metadata` resolving the dynamic `__version__` in
+   `__init__.py` — the native extension itself is a minor share. If import time ever
+   needs cutting, defer that lookup (lazy `__getattr__`) or bake the version into the
+   native module at build time; either drops the import to roughly a third. Not a 0.6
+   item.

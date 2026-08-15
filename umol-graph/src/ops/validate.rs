@@ -169,7 +169,7 @@ impl<'a> Validator<'a> {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        Ok(verdict(any_undetermined))
+        Ok(solution(any_undetermined))
     }
 
     /// Conformance: chemistry-model conformance — valence table / atom-typing,
@@ -199,7 +199,7 @@ impl<'a> Validator<'a> {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        Ok(verdict(any_undetermined))
+        Ok(solution(any_undetermined))
     }
 
     /// All semantic validators in order: invariants, then model conformance.
@@ -218,11 +218,11 @@ impl<'a> Validator<'a> {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c)),
         }
-        Ok(verdict(any_undetermined))
+        Ok(solution(any_undetermined))
     }
 }
 
-fn verdict(any_undetermined: bool) -> Solution<(), ValidateContradiction> {
+fn solution(any_undetermined: bool) -> Solution<(), ValidateContradiction> {
     if any_undetermined {
         Solution::Underdetermined(())
     } else {

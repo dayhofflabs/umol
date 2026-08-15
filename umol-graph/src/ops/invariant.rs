@@ -1,5 +1,5 @@
 //! Per-atom electron-conservation equation. `check` reports the molecule-wide
-//! verdict; `check_atom` evaluates a bare `AtomForm` (topology-derived
+//! solution; `check_atom` evaluates a bare `AtomForm` (topology-derived
 //! valences default to zero); `enumerate_atom` returns the ground `AtomForm`
 //! candidates satisfying the equation when fields are `Undetermined`. Shared
 //! physics, not tied to a specific valence model.
@@ -20,7 +20,7 @@ use umol_utils::solution::Solution;
 ///
 /// Validation callers should normally use [`ValenceInvariantsValidator`]. Candidate enumeration
 /// is exposed separately because it returns possible ground atom forms rather than a validation
-/// verdict.
+/// solution.
 pub struct ValenceInvariants;
 
 /// Validates the model-independent electron-conservation invariant.
@@ -46,7 +46,7 @@ pub enum ValenceMismatch {
 }
 
 impl ValenceInvariants {
-    /// Molecule-wide verdict: `Underdetermined` if any atom has a non-`Lit`
+    /// Molecule-wide solution: `Underdetermined` if any atom has a non-`Lit`
     /// field the check can't fire on, `Contradictory` on the first orbital !=
     /// electron mismatch, else `Determined`.
     fn check(molecule: &Molecule) -> Solution<(), ValenceMismatch> {
@@ -60,7 +60,7 @@ impl ValenceInvariants {
         Solution::Determined(())
     }
 
-    /// Verdict for a bare `AtomForm`. Topology-derived valences default to zero;
+    /// Solution for a bare `AtomForm`. Topology-derived valences default to zero;
     /// only a non-negative literal constraint raises them. `Underdetermined`
     /// when element / charge / implicit-H / lone-pairs / unpaired electrons are not all
     /// `Lit`.
@@ -157,7 +157,7 @@ impl ValenceInvariants {
         }
     }
 
-    /// Per-atom verdict reading the atom in its molecule context: each valence
+    /// Per-atom solution reading the atom in its molecule context: each valence
     /// is taken from a literal constraint, else the topology-derived value.
     /// `Underdetermined` when any required field is non-`Lit`.
     fn check_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Solution<(), ValenceMismatch> {

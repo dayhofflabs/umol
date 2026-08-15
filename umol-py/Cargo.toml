@@ -22,6 +22,7 @@ graph = [
     "dep:umol-graph-core",
     "dep:umol-io",
     "dep:umol-perm",
+    "dep:umol-utils",
 ]
 
 [dependencies]
@@ -32,6 +33,7 @@ umol-graph = { path = "../umol-graph", version = "0.1.0", optional = true }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0", optional = true }
 umol-io = { path = "../umol-io", version = "0.1.0", optional = true }
 umol-perm = { path = "../umol-perm", version = "0.1.0", optional = true }
+umol-utils = { path = "../umol-utils", version = "0.1.0", optional = true }
 
 [dev-dependencies]
 rstest = "0.26.1"

@@ -46,6 +46,7 @@ from umol import (
     RingLimits,
     SimpleCycleEnumerationAlgorithm,
     SmilesIoConfig,
+    Solution,
     SmilesSyntaxFlags,
     StereoAtomForm,
     StereoBondForm,
@@ -559,6 +560,75 @@ def test_molecule_from_smiles_chemistry_model_aromaticity():
         AromaticValenceForm.Aromatic(NumForm.Undetermined())
     ] * 6
     assert list(molecule.aromatic_systems) == []
+
+
+def _smiles_valence_model():
+    default = ChemistryModel.default()
+    return ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.smiles(),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+
+
+def _counts_strict_model():
+    default = ChemistryModel.default()
+    return ChemistryModel(
+        connectivity=default.connectivity,
+        valence=ValenceModel.counts(ValenceTable.default()),
+        aromaticity=default.aromaticity,
+        stereo=default.stereo,
+    )
+
+
+def test_molecule_resolve():
+    molecule = Molecule.parse('{:atoms ["C#c0"]}')
+
+    solution = molecule.resolve(chemistry_model=_smiles_valence_model())
+
+    match solution:
+        case Solution.Determined(molecule=resolved, report=report):
+            assert resolved == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
+            assert report.tie_breaks == [0]
+        case _:
+            pytest.fail("expected Determined")
+    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
+
+
+def test_molecule_resolve_underdetermined():
+    molecule = Molecule.parse('{:atoms ["C#c0"]}')
+
+    solution = molecule.resolve(chemistry_model=_counts_strict_model())
+
+    match solution:
+        case Solution.Underdetermined(report=report):
+            assert len(report.unresolved.get(0)) == 5
+        case _:
+            pytest.fail("expected Underdetermined")
+    assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
+
+
+def test_molecule_resolve_contradiction():
+    molecule = Molecule.parse('{:atoms ["C#c0#h5"]}')
+
+    solution = molecule.resolve(chemistry_model=_smiles_valence_model())
+
+    match solution:
+        case Solution.Contradictory(contradiction=contradiction):
+            assert str(contradiction) == "no matching valence state"
+        case _:
+            pytest.fail("expected Contradictory")
+    assert molecule == Molecule.parse('{:atoms ["C#c0#h5"]}')
+
+
+def test_molecule_resolve_default_model():
+    solution = Molecule.parse('{:atoms ["C"]}').resolve()
+
+    assert isinstance(solution, Solution.Underdetermined)
+    assert len(solution.report.unresolved.get(0)) == 9
+
+
 
 
 @pytest.mark.parametrize(

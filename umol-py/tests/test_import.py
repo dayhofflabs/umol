@@ -156,6 +156,7 @@ PUBLIC_EXPORTS = frozenset(
     RelationalConstraint
     RelevantCycleEnumerationAlgorithm
     ResolveConfig
+    ResolveContradiction
     ResolveReport
     RingConfig
     RingLimits
@@ -166,6 +167,7 @@ PUBLIC_EXPORTS = frozenset(
     SimpleCycleEnumerationAlgorithm
     SmilesIoConfig
     SmilesSyntaxFlags
+    Solution
     SpinState
     StereoAtomForm
     StereoAtomUpdate
