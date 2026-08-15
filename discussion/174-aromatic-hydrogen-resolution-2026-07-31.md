@@ -1,6 +1,9 @@
 # 174 — Implicit hydrogen on bare aromatic heteroatoms
 
-Status: Proposed
+Status: Completed — resolution fills bare aromatic heteroatoms via candidate sets and joint
+selection ([194](194-constraint-assertion-semantics-2026-08-10.md),
+[196](196-aromatic-assignment-selection-2026-08-13.md)); the boron-scope and F420
+corrections are recorded in place.
 Date: 2026-07-31
 Relates: [053](053-molecule-validation-scheme-2026-02-17.md),
 [054](054-molecule-validation-phases-2026-02-17.md),

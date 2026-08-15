@@ -1,6 +1,8 @@
 # 128 — Substructure matching of derived topological predicates
 
-Status: Active
+Status: Superseded — the matcher on the views' keyed readings
+([194](194-constraint-assertion-semantics-2026-08-10.md) S1) evaluates derived predicates
+during matching; ring-scope queries (`#R(6)`) verified end to end.
 Date: 2026-06-23
 
 ## Problem

@@ -1,6 +1,8 @@
 # 125 — What constraints represent: the projection / view model
 
-Status: Active
+Status: Superseded — [194](194-constraint-assertion-semantics-2026-08-10.md) settles the
+remedy: the constraint channel holds assertions only, and projections are read on demand
+through the constraints views.
 Date: 2026-06-22
 
 ## Draft API

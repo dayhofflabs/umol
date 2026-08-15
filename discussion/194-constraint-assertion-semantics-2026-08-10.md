@@ -1,6 +1,6 @@
 # 194 — Constraint channel: assertions only, projections read on demand
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-10
 Relates: [053](053-molecule-validation-scheme-2026-02-17.md),
 [125](125-constraints-as-projections-2026-06-22.md),
@@ -1272,6 +1272,16 @@ pub struct ResolveReport {
   dash-less biaryl rows (zolpidem, atorvastatin, sildenafil — sildenafil's carbonyl
   no longer blocks it; its biaryl linker still does). The biaryl raise-semantics
   question is the only open item in this corpus.
+  **Done 2026-08-15 (corpus digested, instrument deleted):** the biaryl question is
+  settled — dash-less biaryls error out, in line with the OpenSMILES requirement that a
+  single (nonaromatic) bond between two aromatic atoms be explicitly represented; the
+  existing refusal at discharge is the spec-correct behavior, no raise change. Promotions:
+  `ingest_smiles` rows pin the pair — explicit-single biphenyl resolves to two six-atom
+  systems, the unwritten-single form dies at discharge on the unclaimable bond assertion —
+  plus the manual's antiaromatic cyclobutadiene refusal; the carbonyl and open-shell
+  classes were already pinned at S6b1/S6b3. Instrument deleted (`tests/daylight.rs`, its
+  target registration, the fetch script); the staged corpus remains a consumer-less local
+  artifact under `materials/formats/daylight/`.
 - S6b3: the bracket-atom open-shell rule — the raise pins `unpaired_electrons = 0`
   only where the notation itself implies the closed shell: bare organic-subset atoms
   (the implicit-valence model) keep the pin; bracket atoms — whose hydrogen count is
@@ -1409,6 +1419,22 @@ pub struct ResolveReport {
   the post-rename renderer — the elided constraint tails change with the `zeroed()`
   retirement and discharge, so listings must be regenerated, not hand-edited.
   [dep: S6e5; rendered listings also dep: S5]
+  **Done 2026-08-15:** the concreteness wording was already in place — the paper speaks
+  *concrete* for structures and reserves *ground term/value* for the algebra, and no
+  `zeroed`/`into_ground`/old-macro spelling appears; the one defaults mention became
+  `MoleculeDefaults::concrete()`. Every concrete claim in the Python listings re-ran green
+  against the live binding (match counts, Tanimoto, derivation counts, lattice ops, edits,
+  canonical equality, metadata roundtrip), and the rendered delta listing verified
+  byte-exact. Three stale-API listings corrected: `ValenceModel.Counts` (pre-S4b1) → the
+  explicit `ValenceCandidateSource.Counts` + `ValenceTieBreak` form; the Rust selector
+  listing → `SubstructureMatchConfig` with its three named fields and the
+  no-default-at-this-layer design point (the paper's "ordinary arguments, not a
+  configuration object" claim had inverted); and the chemistry-model example — its
+  `FP(F)(F)(F)F → ContradictionError` claim dissolved with the S5c1 over-valence reading
+  (counts saturates at h0 under any table), so the example now uses the atom-typing
+  candidate source (user-chosen): a two-row registry accepts PF₃ and rejects PF₅ as
+  `no atom-typing match`, with prose contrasting enumerated-states rejection against
+  counts-source saturation. All claims re-verified end to end after the rewrite.
 Critical path: S0 → S1 → S3 → S4 → S5. S1 must precede S5 because discharge
 strips assertions from resolved hosts, after which matching must project every pattern key. S2
 is dissolved; S3 is parallel to S1. The core deliverable — staleness-free semantics and the
@@ -1418,5 +1444,5 @@ former S6f (table curation) moved to S5c1 so the staged plan is executable in or
 
 ## Open items
 
-- F420 enablement via the doc 174 zero-contributor and registry-coverage items (S6b).
-- Matching of molecule-level pattern constraints: doc 195 (out of this document's critical path).
+None. Successor work outside this document's scope: matching of molecule-level pattern
+constraints (doc 195, including the six gated test unskips).
