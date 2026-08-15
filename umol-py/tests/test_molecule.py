@@ -14,8 +14,8 @@ from umol import (
     AtomForm,
     AtomTypeRegistry,
     BondForm,
-    CanonicalizationConfig,
-    CanonicalizationLevel,
+    CanonicalizeConfig,
+    CanonicalizeLevel,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     Constraint,
@@ -69,11 +69,11 @@ from umol import (
 
 
 def test_canonicalization_config():
-    config = CanonicalizationConfig()
+    config = CanonicalizeConfig()
 
-    assert config == CanonicalizationConfig.default()
+    assert config == CanonicalizeConfig.default()
     assert config.automorphism_algorithm == AutomorphismAlgorithm.Nauty()
-    assert repr(config) == "CanonicalizationConfig.default()"
+    assert repr(config) == "CanonicalizeConfig.default()"
     with pytest.raises(AttributeError):
         config.automorphism_algorithm = AutomorphismAlgorithm.Nauty()
 
@@ -81,10 +81,10 @@ def test_canonicalization_config():
 @pytest.mark.parametrize(
     ("level", "expected_repr"),
     [
-        (CanonicalizationLevel.Topology, "CanonicalizationLevel.Topology"),
-        (CanonicalizationLevel.Constitution, "CanonicalizationLevel.Constitution"),
-        (CanonicalizationLevel.Structure, "CanonicalizationLevel.Structure"),
-        (CanonicalizationLevel.Full, "CanonicalizationLevel.Full"),
+        (CanonicalizeLevel.Topology, "CanonicalizeLevel.Topology"),
+        (CanonicalizeLevel.Constitution, "CanonicalizeLevel.Constitution"),
+        (CanonicalizeLevel.Structure, "CanonicalizeLevel.Structure"),
+        (CanonicalizeLevel.Full, "CanonicalizeLevel.Full"),
     ],
 )
 def test_canonicalization_level(level, expected_repr):
@@ -398,8 +398,8 @@ def test_molecule_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(CanonicalizationLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, CanonicalizationLevel.Full)
+    assert source.canonicalize_by(CanonicalizeLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
 def test_molecule_canonicalize_by():
@@ -410,9 +410,9 @@ def test_molecule_canonicalize_by():
 
     assert plain.canonical_eq_by(
         constrained,
-        CanonicalizationLevel.Structure,
+        CanonicalizeLevel.Structure,
         stereo_model=StereoModel.default(),
-        config=CanonicalizationConfig.default(),
+        config=CanonicalizeConfig.default(),
     )
     assert not plain.canonical_eq(constrained)
 

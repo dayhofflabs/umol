@@ -1,4 +1,4 @@
-//! HueckelRule (4n+2 electron counting) aromaticity perception.
+//! Hückel-rule (4n+2 electron counting) aromaticity perception.
 //!
 //! Filters candidate atoms by element scope and the per-atom aromatic-valence
 //! constraint, enumerates rings within configured bounds, checks the Hueckel
@@ -15,12 +15,12 @@ use umol_graph_ir::ir::{
 use crate::ops::model::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
-pub struct HueckelRuleAromaticity {
+pub struct HueckelAromaticity {
     pub element_scope: ElementScope,
     pub ring_limits: RingLimits,
 }
 
-impl HueckelRuleAromaticity {
+impl HueckelAromaticity {
     pub fn new(element_scope: ElementScope, ring_limits: RingLimits) -> Self {
         Self {
             element_scope,
@@ -346,8 +346,8 @@ mod tests {
         })
     }
 
-    fn daylight_model() -> HueckelRuleAromaticity {
-        HueckelRuleAromaticity::new(
+    fn daylight_model() -> HueckelAromaticity {
+        HueckelAromaticity::new(
             ElementScope::AllowList(vec![
                 Element::C,
                 Element::N,
@@ -360,8 +360,8 @@ mod tests {
         )
     }
 
-    fn mdl_model() -> HueckelRuleAromaticity {
-        HueckelRuleAromaticity::new(
+    fn mdl_model() -> HueckelAromaticity {
+        HueckelAromaticity::new(
             ElementScope::AllowList(vec![Element::C, Element::N]),
             RingLimits {
                 min_ring_size: 6,
@@ -370,8 +370,8 @@ mod tests {
         )
     }
 
-    fn permissive_model() -> HueckelRuleAromaticity {
-        HueckelRuleAromaticity::new(ElementScope::Any, RingLimits::default())
+    fn permissive_model() -> HueckelAromaticity {
+        HueckelAromaticity::new(ElementScope::Any, RingLimits::default())
     }
 
     #[fixture]
@@ -543,7 +543,7 @@ mod tests {
     #[case::two_electrons(&[(2, 2)], true)]
     #[case::below_two(&[(0, 1)], false)]
     #[case::empty(&[], false)]
-    fn test_hueckel_rule_aromaticity_accepts_range(
+    fn test_hueckel_aromaticity_aromaticity_accepts_range(
         #[case] members: &[(u32, u32)],
         #[case] expected: bool,
     ) {
@@ -562,7 +562,7 @@ mod tests {
     #[case::phenanthrene(phenanthrene(), 14, 14)]
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 6)]
-    fn test_hueckel_rule_find_from_rings_aromatic(
+    fn test_hueckel_aromaticity_find_from_rings_aromatic(
         #[case] molecule: Molecule,
         #[case] expected_atoms: usize,
         #[case] expected_electrons: i64,
@@ -598,9 +598,9 @@ mod tests {
     #[case::cubane(cubane(), daylight_model())]
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
-    fn test_hueckel_rule_find_from_rings_non_aromatic(
+    fn test_hueckel_aromaticity_find_from_rings_non_aromatic(
         #[case] molecule: Molecule,
-        #[case] model: HueckelRuleAromaticity,
+        #[case] model: HueckelAromaticity,
     ) {
         let rings = molecule
             .rings(
@@ -625,7 +625,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hueckel_rule_find_from_rings_bridged() {
+    fn test_hueckel_aromaticity_find_from_rings_bridged() {
         // Two five-rings sharing the two-bond run 3-4-0: the `Bridged`
         // relation, not `Fused`. Neither ring passes alone (sum 4); their
         // union does (sum 6), so the combination walk must cross bridged
@@ -667,7 +667,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: Molecule) {
+    fn test_hueckel_aromaticity_find_from_rings_borazine_permissive(borazine: Molecule) {
         let rings = borazine
             .rings(
                 RingModel {

@@ -2567,9 +2567,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::AutomorphismAlgorithm;
 
-    use super::super::canonicalize::{
-        CanonicalizationContext, CanonicalizationLevel, Canonicalize,
-    };
+    use super::super::canonicalize::{Canonicalize, CanonicalizeContext, CanonicalizeLevel};
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
@@ -2585,8 +2583,8 @@ mod tests {
     use super::*;
 
     #[fixture]
-    fn canonicalization_context() -> CanonicalizationContext {
-        CanonicalizationContext {
+    fn canonicalize_context() -> CanonicalizeContext {
+        CanonicalizeContext {
             para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
@@ -3001,7 +2999,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_canonicalize(canonicalization_context: CanonicalizationContext) {
+    fn test_reaction_span_canonicalize(canonicalize_context: CanonicalizeContext) {
         let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Added(AtomForm::from_element(Element::O)),
@@ -3016,10 +3014,7 @@ mod tests {
             ..Default::default()
         });
 
-        let canonical = span
-            .clone()
-            .canonicalize(&canonicalization_context)
-            .unwrap();
+        let canonical = span.clone().canonicalize(&canonicalize_context).unwrap();
 
         assert_eq!(
             canonical
@@ -3035,20 +3030,20 @@ mod tests {
             .skip(2)
             .all(|span| span.lhs().is_none()));
         assert_eq!(
-            canonical.clone().canonicalize(&canonicalization_context),
+            canonical.clone().canonicalize(&canonicalize_context),
             Ok(canonical.clone())
         );
-        assert!(span.canonical_eq(&canonical, &canonicalization_context));
+        assert!(span.canonical_eq(&canonical, &canonicalize_context));
     }
 
     #[rstest]
-    #[case::topology(CanonicalizationLevel::Topology)]
-    #[case::constitution(CanonicalizationLevel::Constitution)]
-    #[case::structure(CanonicalizationLevel::Structure)]
-    #[case::full(CanonicalizationLevel::Full)]
+    #[case::topology(CanonicalizeLevel::Topology)]
+    #[case::constitution(CanonicalizeLevel::Constitution)]
+    #[case::structure(CanonicalizeLevel::Structure)]
+    #[case::full(CanonicalizeLevel::Full)]
     fn test_reaction_span_canonicalize_by(
-        canonicalization_context: CanonicalizationContext,
-        #[case] level: CanonicalizationLevel,
+        canonicalize_context: CanonicalizeContext,
+        #[case] level: CanonicalizeLevel,
     ) {
         let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
@@ -3066,22 +3061,20 @@ mod tests {
 
         let canonical = span
             .clone()
-            .canonicalize_by(level, &canonicalization_context)
+            .canonicalize_by(level, &canonicalize_context)
             .unwrap();
 
         assert_eq!(
             canonical
                 .clone()
-                .canonicalize_by(level, &canonicalization_context),
+                .canonicalize_by(level, &canonicalize_context),
             Ok(canonical.clone()),
         );
-        assert!(span.canonical_eq_by(&canonical, level, &canonicalization_context));
+        assert!(span.canonical_eq_by(&canonical, level, &canonicalize_context));
     }
 
     #[rstest]
-    fn test_reaction_span_canonical_eq_by_contradiction(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_reaction_span_canonical_eq_by_contradiction(canonicalize_context: CanonicalizeContext) {
         let mut constrained_atom = AtomForm::from_element(Element::C);
         constrained_atom.constraints =
             AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
@@ -3096,10 +3089,10 @@ mod tests {
 
         assert!(constrained.canonical_eq_by(
             &plain,
-            CanonicalizationLevel::Structure,
-            &canonicalization_context,
+            CanonicalizeLevel::Structure,
+            &canonicalize_context,
         ));
-        assert!(!constrained.canonical_eq(&plain, &canonicalization_context));
+        assert!(!constrained.canonical_eq(&plain, &canonicalize_context));
     }
 
     #[rstest]

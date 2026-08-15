@@ -12,13 +12,13 @@ use umol_chem::element::Element;
 use umol_graph_ir::ir::{AtomId, ElementForm, Molecule, NumForm};
 
 use crate::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
+    AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerceiver,
 };
 use crate::ops::model::AromaticityModel;
 use crate::ops::transform::Transformer;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum AromatizerError {
+pub enum AromatizeError {
     #[error("aromaticity setup: {0}")]
     Setup(#[from] AromaticityError),
     #[error("aromaticity contradiction: {0}")]
@@ -29,7 +29,7 @@ pub enum AromatizerError {
 
 #[derive(Clone, Debug)]
 pub struct Aromatizer {
-    perception: AromaticityPerception,
+    perception: AromaticityPerceiver,
     config: AromaticityConfig,
 }
 
@@ -40,16 +40,16 @@ impl Aromatizer {
 
     pub fn with_config(model: &AromaticityModel, config: AromaticityConfig) -> Self {
         Self {
-            perception: AromaticityPerception::new(model),
+            perception: AromaticityPerceiver::new(model),
             config,
         }
     }
 }
 
 impl Transformer for Aromatizer {
-    type Error = AromatizerError;
+    type Error = AromatizeError;
 
-    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizerError> {
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), AromatizeError> {
         if molecule.aromatic_systems().count() > 0 {
             return Ok(());
         }
@@ -58,7 +58,7 @@ impl Transformer for Aromatizer {
             .find_systems(molecule, self.config, |atom| {
                 electrons_from_kekule(molecule, atom)
             })?
-            .into_decisive(AromatizerError::Underdetermined)?;
+            .into_decisive(AromatizeError::Underdetermined)?;
         self.perception.add_systems(molecule, systems);
         Ok(())
     }

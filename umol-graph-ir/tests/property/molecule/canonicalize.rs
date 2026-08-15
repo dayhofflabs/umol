@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::{
-    CanonicalizationContext, CanonicalizationLevel, Canonicalize, MoleculeCorrespondence,
+    Canonicalize, CanonicalizeContext, CanonicalizeLevel, MoleculeCorrespondence,
 };
 
 use crate::strategies::*;
@@ -34,8 +34,8 @@ fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
     )
 }
 
-fn context() -> CanonicalizationContext {
-    CanonicalizationContext {
+fn context() -> CanonicalizeContext {
+    CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
@@ -86,10 +86,10 @@ proptest! {
         let renumbered = molecule.remap(&reverse_correspondence(&molecule));
 
         for level in [
-            CanonicalizationLevel::Topology,
-            CanonicalizationLevel::Constitution,
-            CanonicalizationLevel::Structure,
-            CanonicalizationLevel::Full,
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
         ] {
             let canonical = molecule.clone().canonicalize_by(level, &context);
 
@@ -105,7 +105,7 @@ proptest! {
             }
         }
         prop_assert_eq!(
-            molecule.canonical_eq_by(&renumbered, CanonicalizationLevel::Full, &context),
+            molecule.canonical_eq_by(&renumbered, CanonicalizeLevel::Full, &context),
             molecule.canonical_eq(&renumbered, &context),
         );
     }

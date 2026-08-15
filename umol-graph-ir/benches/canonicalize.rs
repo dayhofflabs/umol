@@ -14,11 +14,11 @@ use umol_graph_ir::ir::canonicalize::{
 };
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    CanonicalizationContext, CanonicalizationLevel, Canonicalize, Constraint, DativeBondForm,
-    DativeBondId, IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence,
-    MoleculeEntries, MulticenterBondForm, MulticenterBondId, NoncovalentBondForm,
-    NoncovalentBondId, NoncovalentBondKind, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm,
-    StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    Canonicalize, CanonicalizeContext, CanonicalizeLevel, Constraint, DativeBondForm, DativeBondId,
+    IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
+    NoncovalentBondKind, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -373,16 +373,12 @@ const LEVELS: [IncidenceLevel; 3] = [
     IncidenceLevel::Full,
 ];
 
-const OPERATIONS: [(&str, CanonicalizationLevel, bool); 5] = [
-    ("topology", CanonicalizationLevel::Topology, false),
-    ("constitution", CanonicalizationLevel::Constitution, false),
-    ("structure", CanonicalizationLevel::Structure, false),
-    (
-        "para_stereo_structure",
-        CanonicalizationLevel::Structure,
-        true,
-    ),
-    ("full", CanonicalizationLevel::Full, true),
+const OPERATIONS: [(&str, CanonicalizeLevel, bool); 5] = [
+    ("topology", CanonicalizeLevel::Topology, false),
+    ("constitution", CanonicalizeLevel::Constitution, false),
+    ("structure", CanonicalizeLevel::Structure, false),
+    ("para_stereo_structure", CanonicalizeLevel::Structure, true),
+    ("full", CanonicalizeLevel::Full, true),
 ];
 
 fn level_name(level: IncidenceLevel) -> &'static str {
@@ -397,11 +393,11 @@ fn graph_size(nodes: usize, edges: usize) -> String {
     format!("n{nodes}_e{edges}")
 }
 
-fn incidence_level(level: CanonicalizationLevel) -> IncidenceLevel {
+fn incidence_level(level: CanonicalizeLevel) -> IncidenceLevel {
     match level {
-        CanonicalizationLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full => IncidenceLevel::Full,
+        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
+        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
     }
 }
 
@@ -534,7 +530,7 @@ fn bench_refinement(c: &mut Criterion) {
             let adapter = AutomorphismAdapter::new(&incidence, &classes);
             let size = graph_size(adapter.graph().node_count(), adapter.graph().edge_count());
             group.bench_function(BenchmarkId::new(case.name, size), |b| match level {
-                CanonicalizationLevel::Topology => {
+                CanonicalizeLevel::Topology => {
                     let descriptors =
                         partition_descriptors(&adapter, &entity_keys, &incidence_keys);
                     b.iter(|| {
@@ -542,7 +538,7 @@ fn bench_refinement(c: &mut Criterion) {
                             .refine(black_box(adapter.graph()))
                     })
                 }
-                CanonicalizationLevel::Constitution => {
+                CanonicalizeLevel::Constitution => {
                     let descriptors =
                         constitution_partition_descriptors(&adapter, &entity_keys, &incidence);
                     b.iter(|| {
@@ -550,7 +546,7 @@ fn bench_refinement(c: &mut Criterion) {
                             .refine(black_box(adapter.graph()))
                     })
                 }
-                CanonicalizationLevel::Structure | CanonicalizationLevel::Full => b.iter(|| {
+                CanonicalizeLevel::Structure | CanonicalizeLevel::Full => b.iter(|| {
                     structure_partition(
                         black_box(&case.molecule),
                         black_box(&incidence),
@@ -607,7 +603,7 @@ fn bench_canonicalize(c: &mut Criterion) {
     let corpus = corpus();
 
     for (operation, level, para_stereo) in OPERATIONS {
-        let context = CanonicalizationContext {
+        let context = CanonicalizeContext {
             para_stereo,
             automorphism_algorithm: ALGORITHM,
         };

@@ -1,4 +1,4 @@
-//! Aromaticity validator. Wraps [`AromaticityPerception`] and verifies that
+//! Aromaticity validator. Wraps [`AromaticityPerceiver`] and verifies that
 //! aromatic constraints and systems agree with the selected model.
 
 use thiserror::Error;
@@ -7,14 +7,14 @@ use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityInconsistency,
-    AromaticityPerception,
+    AromaticityPerceiver,
 };
 use crate::ops::model::AromaticityModel;
 
 /// Validates aromatic systems and aromatic constraints against an aromaticity model.
 #[derive(Clone, Debug)]
 pub struct AromaticityConformanceValidator {
-    perception: AromaticityPerception,
+    perception: AromaticityPerceiver,
     config: AromaticityConfig,
 }
 
@@ -35,7 +35,7 @@ impl AromaticityConformanceValidator {
     /// Construct a validator with explicit aromaticity operation configuration.
     pub fn with_config(model: &AromaticityModel, config: AromaticityConfig) -> Self {
         Self {
-            perception: AromaticityPerception::new(model),
+            perception: AromaticityPerceiver::new(model),
             config,
         }
     }

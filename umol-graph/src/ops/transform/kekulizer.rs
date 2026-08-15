@@ -6,7 +6,7 @@
 //! removed from the system's bonds and from the system's atoms; the system
 //! entry itself is removed at the end.
 //!
-//! The matching algorithm is configurable via [`KekulizationConfig`]; the
+//! The matching algorithm is configurable via [`KekulizeConfig`]; the
 //! atom processing order — which controls determinism — is fixed at
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
@@ -33,7 +33,7 @@ use crate::ops::validate::{
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum KekulizerError {
+pub enum KekulizeError {
     #[error("electron contributions are undetermined for aromatic system {0:?}")]
     UndeterminedElectrons(AromaticSystemId),
     #[error("charge is undetermined for aromatic system {0:?}")]
@@ -131,14 +131,14 @@ struct MatchingInput {
 }
 
 impl MatchingInput {
-    fn from_system(molecule: &Molecule, system: AromaticSystemId) -> Result<Self, KekulizerError> {
+    fn from_system(molecule: &Molecule, system: AromaticSystemId) -> Result<Self, KekulizeError> {
         let view = molecule.aromatic_system(system);
         let atoms: Vec<AtomId> = view.atom_ids().collect();
         let ElectronCountsForm::Lit(electrons) = view.electrons() else {
-            return Err(KekulizerError::UndeterminedElectrons(system));
+            return Err(KekulizeError::UndeterminedElectrons(system));
         };
         if electrons.len() != atoms.len() {
-            return Err(KekulizerError::ElectronCountMismatch {
+            return Err(KekulizeError::ElectronCountMismatch {
                 system,
                 member_count: atoms.len(),
                 electron_count: electrons.len(),
@@ -146,19 +146,19 @@ impl MatchingInput {
         }
 
         let NumForm::Lit(charge) = view.charge() else {
-            return Err(KekulizerError::UndeterminedCharge(system));
+            return Err(KekulizeError::UndeterminedCharge(system));
         };
         let (NumForm::Lit(unpaired_electrons), NumForm::Lit(multiplicity)) = (
             &view.unpaired_electrons().count,
             &view.unpaired_electrons().multiplicity,
         ) else {
-            return Err(KekulizerError::UndeterminedUnpairedElectrons(system));
+            return Err(KekulizeError::UndeterminedUnpairedElectrons(system));
         };
         if (*unpaired_electrons, *multiplicity) != (0, 1) {
-            return Err(KekulizerError::OpenShell(system));
+            return Err(KekulizeError::OpenShell(system));
         }
         if charge.abs() > 1 {
-            return Err(KekulizerError::UnsupportedCharge {
+            return Err(KekulizeError::UnsupportedCharge {
                 system,
                 charge: *charge,
             });
@@ -171,7 +171,7 @@ impl MatchingInput {
                 1 => required_covered.push(atom),
                 0 | 2 => required_exposed.push(PrescribedExposure { atom, electrons }),
                 contribution => {
-                    return Err(KekulizerError::UnsupportedElectronContribution {
+                    return Err(KekulizeError::UnsupportedElectronContribution {
                         system,
                         atom,
                         contribution,
@@ -181,13 +181,13 @@ impl MatchingInput {
         }
 
         if required_exposed.len() > 1 {
-            return Err(KekulizerError::MultiplePrescribedExposures {
+            return Err(KekulizeError::MultiplePrescribedExposures {
                 system,
                 count: required_exposed.len(),
             });
         }
         if !required_exposed.is_empty() && *charge != 0 {
-            return Err(KekulizerError::MixedExposureDemand(system));
+            return Err(KekulizeError::MixedExposureDemand(system));
         }
 
         if required_exposed.is_empty() && *charge != 0 {
@@ -215,17 +215,17 @@ pub enum MaximumMatchingAlgorithm {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct KekulizationConfig {
+pub struct KekulizeConfig {
     pub algorithm: MaximumMatchingAlgorithm,
 }
 
-impl KekulizationConfig {
+impl KekulizeConfig {
     pub fn new(algorithm: MaximumMatchingAlgorithm) -> Self {
         Self { algorithm }
     }
 }
 
-impl Default for KekulizationConfig {
+impl Default for KekulizeConfig {
     fn default() -> Self {
         Self::new(MaximumMatchingAlgorithm::Edmonds)
     }
@@ -233,20 +233,20 @@ impl Default for KekulizationConfig {
 
 #[derive(Clone, Debug)]
 pub struct Kekulizer {
-    config: KekulizationConfig,
+    config: KekulizeConfig,
     node_order: Vec<AtomId>,
 }
 
 impl Kekulizer {
-    pub fn new(config: KekulizationConfig, node_order: Vec<AtomId>) -> Self {
+    pub fn new(config: KekulizeConfig, node_order: Vec<AtomId>) -> Self {
         Self { config, node_order }
     }
 }
 
 impl Transformer for Kekulizer {
-    type Error = KekulizerError;
+    type Error = KekulizeError;
 
-    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), KekulizerError> {
+    fn transform_into(&self, molecule: &mut Molecule) -> Result<(), KekulizeError> {
         if molecule.aromatic_systems().count() == 0 {
             return Ok(());
         }
@@ -284,7 +284,7 @@ impl Transformer for Kekulizer {
                 let exposed = plan.exposed_atoms[0];
                 let atom = candidate.atom_mut(exposed).attributes;
                 let NumForm::Lit(local_charge) = atom.charge else {
-                    return Err(KekulizerError::UndeterminedExposedAtomCharge {
+                    return Err(KekulizeError::UndeterminedExposedAtomCharge {
                         system: plan.system_idx,
                         atom: exposed,
                     });
@@ -292,7 +292,7 @@ impl Transformer for Kekulizer {
                 atom.charge = NumForm::Lit(local_charge + system_charge);
                 if system_charge == -1 {
                     let NumForm::Lit(lone_pairs) = atom.lone_pairs else {
-                        return Err(KekulizerError::UndeterminedExposedAtomLonePairs {
+                        return Err(KekulizeError::UndeterminedExposedAtomLonePairs {
                             system: plan.system_idx,
                             atom: exposed,
                         });
@@ -322,25 +322,25 @@ impl Transformer for Kekulizer {
     }
 }
 
-fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizerError> {
+fn validate_localized_candidate(candidate: &Molecule) -> Result<(), KekulizeError> {
     match ValenceInvariantsValidator
         .validate(candidate)
-        .map_err(KekulizerError::PostLocalizationValenceInvariantError)?
+        .map_err(KekulizeError::PostLocalizationValenceInvariantError)?
     {
         Solution::Determined(()) | Solution::Underdetermined(()) => {}
         Solution::Contradictory(contradiction) => {
-            return Err(KekulizerError::PostLocalizationValenceInvariant(
+            return Err(KekulizeError::PostLocalizationValenceInvariant(
                 contradiction,
             ));
         }
     }
     match SpinInvariantsValidator
         .validate(candidate)
-        .map_err(KekulizerError::PostLocalizationSpinInvariantError)?
+        .map_err(KekulizeError::PostLocalizationSpinInvariantError)?
     {
         Solution::Determined(()) | Solution::Underdetermined(()) => {}
         Solution::Contradictory(contradiction) => {
-            return Err(KekulizerError::PostLocalizationSpinInvariant(contradiction));
+            return Err(KekulizeError::PostLocalizationSpinInvariant(contradiction));
         }
     }
     Ok(())
@@ -358,7 +358,7 @@ struct SystemPlan {
 
 impl Kekulizer {
     /// Build the per-system matching plan against an immutable molecule.
-    fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizerError> {
+    fn plan_systems(&self, molecule: &Molecule) -> Result<Vec<SystemPlan>, KekulizeError> {
         let mut plans = Vec::with_capacity(molecule.aromatic_systems().count());
         for view in molecule.aromatic_systems().iter() {
             let system_idx = view.id;
@@ -386,7 +386,7 @@ impl Kekulizer {
                 .filter(|atom| !seen.contains(atom))
                 .collect();
             if !missing.is_empty() || !duplicates.is_empty() {
-                return Err(KekulizerError::InvalidNodeOrder {
+                return Err(KekulizeError::InvalidNodeOrder {
                     system: system_idx,
                     missing,
                     duplicates,
@@ -444,18 +444,18 @@ impl Kekulizer {
                         BipartiteMaximumMatchingAlgorithm::HopcroftKarp,
                     )
                     .map_err(|NonBipartiteGraphError| {
-                        KekulizerError::NonBipartiteMatching(system_idx)
+                        KekulizeError::NonBipartiteMatching(system_idx)
                     })?,
             };
             let deficiency = extracted.atoms().count() - 2 * matching.size();
             match matching_input.mode {
                 MatchingInputMode::Prescribed if deficiency != 0 => {
-                    return Err(KekulizerError::NoMatching(system_idx));
+                    return Err(KekulizeError::NoMatching(system_idx));
                 }
                 MatchingInputMode::OneMobileExposure
                     if deficiency != matching_input.exposed_count =>
                 {
-                    return Err(KekulizerError::MatchingDeficiency {
+                    return Err(KekulizeError::MatchingDeficiency {
                         system: system_idx,
                         expected: matching_input.exposed_count,
                         actual: deficiency,
@@ -510,7 +510,7 @@ impl Kekulizer {
                 || matched_atoms != required_covered
                 || actual_exposed != exposed_set
             {
-                return Err(KekulizerError::NoMatching(system_idx));
+                return Err(KekulizeError::NoMatching(system_idx));
             }
             let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) =
                 bonds.iter().copied().partition(|b| matched.contains(b));
@@ -592,19 +592,19 @@ mod tests {
     #[rstest]
     #[case::undetermined_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "*#c0#u0#s1"}]}"#),
-        KekulizerError::UndeterminedElectrons(AromaticSystemId(0))
+        KekulizeError::UndeterminedElectrons(AromaticSystemId(0))
     )]
     #[case::undetermined_charge(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#u0#s1"}]}"#),
-        KekulizerError::UndeterminedCharge(AromaticSystemId(0))
+        KekulizeError::UndeterminedCharge(AromaticSystemId(0))
     )]
     #[case::undetermined_unpaired_electrons(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u0"}]}"#),
-        KekulizerError::UndeterminedUnpairedElectrons(AromaticSystemId(0))
+        KekulizeError::UndeterminedUnpairedElectrons(AromaticSystemId(0))
     )]
     #[case::unsupported_contribution_at_positional_atom(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,3]#c0#u0#s1"}]}"#),
-        KekulizerError::UnsupportedElectronContribution {
+        KekulizeError::UnsupportedElectronContribution {
             system: AromaticSystemId(0),
             atom: AtomId(1),
             contribution: 3,
@@ -612,29 +612,29 @@ mod tests {
     )]
     #[case::open_shell(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c0#u1#s2"}]}"#),
-        KekulizerError::OpenShell(AromaticSystemId(0))
+        KekulizeError::OpenShell(AromaticSystemId(0))
     )]
     #[case::multiple_prescribed_exposures(
         mol_dsl!(r#"{:atoms ["B" "C" "N"] :bonds [] :aromatic-systems [{:atoms [0 1 2] :attrs "[0,1,2]#c0#u0#s1"}]}"#),
-        KekulizerError::MultiplePrescribedExposures {
+        KekulizeError::MultiplePrescribedExposures {
             system: AromaticSystemId(0),
             count: 2,
         }
     )]
     #[case::unsupported_charge(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[1,1]#c+2#u0#s1"}]}"#),
-        KekulizerError::UnsupportedCharge {
+        KekulizeError::UnsupportedCharge {
             system: AromaticSystemId(0),
             charge: 2,
         }
     )]
     #[case::mixed_prescribed_and_mobile_demand(
         mol_dsl!(r#"{:atoms ["B" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :attrs "[0,1]#c+#u0#s1"}]}"#),
-        KekulizerError::MixedExposureDemand(AromaticSystemId(0))
+        KekulizeError::MixedExposureDemand(AromaticSystemId(0))
     )]
     fn test_matching_input_from_system_error(
         #[case] input: Molecule,
-        #[case] expected: KekulizerError,
+        #[case] expected: KekulizeError,
     ) {
         let system = input.aromatic_systems().ids().next().unwrap();
         assert_eq!(MatchingInput::from_system(&input, system), Err(expected));
@@ -643,28 +643,28 @@ mod tests {
     #[rstest]
     #[case::edmonds(
         MaximumMatchingAlgorithm::Edmonds,
-        KekulizationConfig {
+        KekulizeConfig {
             algorithm: MaximumMatchingAlgorithm::Edmonds,
         }
     )]
     #[case::hopcroft_karp(
         MaximumMatchingAlgorithm::HopcroftKarp,
-        KekulizationConfig {
+        KekulizeConfig {
             algorithm: MaximumMatchingAlgorithm::HopcroftKarp,
         }
     )]
-    fn test_kekulization_config_new(
+    fn test_kekulize_config_new(
         #[case] algorithm: MaximumMatchingAlgorithm,
-        #[case] expected: KekulizationConfig,
+        #[case] expected: KekulizeConfig,
     ) {
-        assert_eq!(KekulizationConfig::new(algorithm), expected);
+        assert_eq!(KekulizeConfig::new(algorithm), expected);
     }
 
     #[rstest]
-    fn test_kekulization_config_default() {
+    fn test_kekulize_config_default() {
         assert_eq!(
-            KekulizationConfig::default(),
-            KekulizationConfig {
+            KekulizeConfig::default(),
+            KekulizeConfig {
                 algorithm: MaximumMatchingAlgorithm::Edmonds,
             }
         );
@@ -692,7 +692,7 @@ mod tests {
         #[case] expected: Molecule,
     ) {
         let mut molecule = input;
-        Kekulizer::new(KekulizationConfig::default(), node_order)
+        Kekulizer::new(KekulizeConfig::default(), node_order)
             .transform_into(&mut molecule)
             .unwrap();
         assert_eq!(molecule, expected);
@@ -702,7 +702,7 @@ mod tests {
     #[case::kekule_benzene( mol_dsl_ground!(r#"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [[0 1 :double] [1 2 :single] [2 3 :double] [3 4 :single] [4 5 :double] [0 5 :single]]}"#))]
     fn test_kekulizer_transform_into_identity(#[case] input: Molecule) {
         let mut molecule = input.clone();
-        Kekulizer::new(KekulizationConfig::default(), (0..6).map(AtomId).collect())
+        Kekulizer::new(KekulizeConfig::default(), (0..6).map(AtomId).collect())
             .transform_into(&mut molecule)
             .unwrap();
         assert_eq!(molecule, input);
@@ -712,12 +712,12 @@ mod tests {
     #[case::no_matching(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
-        KekulizerError::NoMatching(AromaticSystemId(0))
+        KekulizeError::NoMatching(AromaticSystemId(0))
     )]
     #[case::missing_system_atom(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(2)],
-        KekulizerError::InvalidNodeOrder {
+        KekulizeError::InvalidNodeOrder {
             system: AromaticSystemId(0),
             missing: vec![AtomId(3)],
             duplicates: vec![],
@@ -726,7 +726,7 @@ mod tests {
     #[case::duplicate_system_atom(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3] :attrs "[1,1,1,1]"}]}"#),
         vec![AtomId(0), AtomId(1), AtomId(1), AtomId(2), AtomId(3)],
-        KekulizerError::InvalidNodeOrder {
+        KekulizeError::InvalidNodeOrder {
             system: AromaticSystemId(0),
             missing: vec![],
             duplicates: vec![AtomId(1)],
@@ -735,7 +735,7 @@ mod tests {
     #[case::spin_invariant(
         mol_dsl_ground!(r#"{:atoms ["N#h0#n0#a#u2#s2" "C#h#a" "C#h#a" "C#h#a" "C#h#a" "C#h#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 5 :aromatic] [0 5 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]}"#),
         (0..6).map(AtomId).collect(),
-        KekulizerError::PostLocalizationSpinInvariant(
+        KekulizeError::PostLocalizationSpinInvariant(
             SpinInvariantsContradiction::MoleculeAtom {
                 atom: AtomId(0),
                 error: SpinStateError::Incompatible {
@@ -748,11 +748,11 @@ mod tests {
     fn test_kekulizer_transform_into_error(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] expected: KekulizerError,
+        #[case] expected: KekulizeError,
     ) {
         let mut molecule = input.clone();
         let result =
-            Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut molecule);
+            Kekulizer::new(KekulizeConfig::default(), node_order).transform_into(&mut molecule);
         assert_eq!(result, Err(expected));
         assert_eq!(molecule, input);
     }
@@ -761,21 +761,21 @@ mod tests {
     #[case::non_bipartite(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [0 2 :aromatic]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]}"#),
         (0..3).map(AtomId).collect(),
-        KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
+        KekulizeError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
     #[case::mobile_exposure(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 4 :aromatic] [4 0 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
-        KekulizerError::NonBipartiteMatching(AromaticSystemId(0)),
+        KekulizeError::NonBipartiteMatching(AromaticSystemId(0)),
     )]
     fn test_kekulizer_transform_into_matching_error(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] expected: KekulizerError,
+        #[case] expected: KekulizeError,
     ) {
         let mut actual = input.clone();
         let result = Kekulizer::new(
-            KekulizationConfig::new(MaximumMatchingAlgorithm::HopcroftKarp),
+            KekulizeConfig::new(MaximumMatchingAlgorithm::HopcroftKarp),
             node_order,
         )
         .transform_into(&mut actual);
@@ -886,7 +886,7 @@ mod tests {
         #[case] node_order: Vec<AtomId>,
         #[case] expected: Vec<SystemPlan>,
     ) {
-        let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
+        let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
         assert_eq!(kekulizer.plan_systems(&input), Ok(expected.clone()));
         assert_eq!(kekulizer.plan_systems(&input), Ok(expected));
     }
@@ -895,12 +895,12 @@ mod tests {
     #[case::impossible_prescribed_hole(
         mol_dsl_ground!(r#"{:atoms ["N#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic] [1 2 :aromatic] [2 3 :aromatic] [3 0 :aromatic] [0 4 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[2,1,1,1,1]"}]}"#),
         (0..5).map(AtomId).collect(),
-        KekulizerError::NoMatching(AromaticSystemId(0))
+        KekulizeError::NoMatching(AromaticSystemId(0))
     )]
     #[case::mobile_matching_deficiency(
         mol_dsl_ground!(r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a"] :bonds [[0 1 :aromatic]] :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,1]#c-"}]}"#),
         (0..5).map(AtomId).collect(),
-        KekulizerError::MatchingDeficiency {
+        KekulizeError::MatchingDeficiency {
             system: AromaticSystemId(0),
             expected: 1,
             actual: 3,
@@ -909,9 +909,9 @@ mod tests {
     fn test_kekulizer_plan_systems_error(
         #[case] input: Molecule,
         #[case] node_order: Vec<AtomId>,
-        #[case] expected: KekulizerError,
+        #[case] expected: KekulizeError,
     ) {
-        let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
+        let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
         assert_eq!(kekulizer.plan_systems(&input), Err(expected));
     }
 }

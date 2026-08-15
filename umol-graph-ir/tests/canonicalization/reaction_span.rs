@@ -6,7 +6,7 @@
 
 use rstest::rstest;
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{CanonicalizationContext, Canonicalize, ReactionSpan};
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, ReactionSpan};
 
 const LIFECYCLE: &str = r#"{
     :atoms [{:add "O"} {:modify ["C" "N"]} {:remove "F"} "Cl"]
@@ -32,8 +32,8 @@ const STEREO: &str = r#"{
 
 const CONSTRAINT: &str = r#"{:atoms ["C"] :constraints [{:add {:connected {}}}]}"#;
 
-fn context() -> CanonicalizationContext {
-    CanonicalizationContext {
+fn context() -> CanonicalizeContext {
+    CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }

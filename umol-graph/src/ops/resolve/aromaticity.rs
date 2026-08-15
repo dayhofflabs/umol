@@ -15,7 +15,7 @@ use umol_utils::solution::Solution;
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityInconsistency,
-    AromaticityPerception,
+    AromaticityPerceiver,
 };
 use crate::ops::model::{AromaticityModel, AromaticityTieBreak, ValenceTieBreak};
 use crate::ops::resolve::ResolveState;
@@ -77,7 +77,7 @@ impl Default for AromaticityResolveConfig {
 
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {
-    perception: AromaticityPerception,
+    perception: AromaticityPerceiver,
     tie_break: AromaticityTieBreak,
     config: AromaticityResolveConfig,
 }
@@ -89,7 +89,7 @@ impl AromaticityResolver {
 
     pub fn with_config(model: &AromaticityModel, config: AromaticityResolveConfig) -> Self {
         Self {
-            perception: AromaticityPerception::new(model),
+            perception: AromaticityPerceiver::new(model),
             tie_break: model.tie_break,
             config,
         }

@@ -41,8 +41,8 @@ pub use atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMass, Is
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use canonicalize::{
-    CanonicalizationContext, CanonicalizationLevel, Canonicalize, MoleculeCanonicalizationError,
-    ReactionCanonicalizationError, ReactionSpanCanonicalizationError,
+    Canonicalize, CanonicalizeContext, CanonicalizeLevel, MoleculeCanonicalizeError,
+    ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
 };
 pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
 pub use constraint::{

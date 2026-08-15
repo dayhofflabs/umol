@@ -496,7 +496,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::hueckel_rule(
+    #[case::hueckel(
         AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) }, tie_break: AromaticityTieBreak::Strict },
         "AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, include_unions=False, max_ring_count=3, max_unions=2000)), tie_break=AromaticityTieBreak.Strict)"
     )]
@@ -517,7 +517,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::hueckel_rule(
+    #[case::hueckel(
         GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,
                 max_ring_size: 18,
@@ -553,7 +553,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::hueckel_rule(
+    #[case::hueckel(
         AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) }, tie_break: AromaticityTieBreak::Strict },
         GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,

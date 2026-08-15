@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use proptest::prelude::*;
 use umol_graph::ops::aromaticity::{
-    AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerception,
+    AromaticityConfig, AromaticityContradiction, AromaticityInconsistency, AromaticityPerceiver,
 };
 use umol_graph::ops::model::{AromaticityTieBreak, ValenceTieBreak};
 use umol_graph::ops::resolve::{AromaticityFailurePolicy, AromaticityResolver, ResolveState};
@@ -74,7 +74,7 @@ fn exhaustive_select(
         config,
         tie_break,
     } = scenario;
-    let perception = AromaticityPerception::new(model);
+    let perception = AromaticityPerceiver::new(model);
     let mut completions = completions.clone();
     let mut systems: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
     let mut tie_breaks: Vec<AtomId> = Vec::new();

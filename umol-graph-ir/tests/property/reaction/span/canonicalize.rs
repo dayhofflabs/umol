@@ -8,14 +8,12 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{
-    CanonicalizationContext, CanonicalizationLevel, Canonicalize, ReactionSpan,
-};
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, CanonicalizeLevel, ReactionSpan};
 
 use super::reaction_span_scenario_strategy;
 
-fn context() -> CanonicalizationContext {
-    CanonicalizationContext {
+fn context() -> CanonicalizeContext {
+    CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
@@ -90,10 +88,10 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first);
 
         for level in [
-            CanonicalizationLevel::Topology,
-            CanonicalizationLevel::Constitution,
-            CanonicalizationLevel::Structure,
-            CanonicalizationLevel::Full,
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
         ] {
             let canonical = scenario.span.clone().canonicalize_by(level, &context);
 
@@ -111,7 +109,7 @@ proptest! {
         prop_assert_eq!(
             scenario.span.canonical_eq_by(
                 &renumbered,
-                CanonicalizationLevel::Full,
+                CanonicalizeLevel::Full,
                 &context,
             ),
             scenario.span.canonical_eq(&renumbered, &context),

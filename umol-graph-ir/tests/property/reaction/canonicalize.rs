@@ -11,10 +11,9 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::canonicalize::canonicalize_reaction_with_correspondence;
 use umol_graph_ir::ir::{
-    AtomDelta, CanonicalizationContext, CanonicalizationLevel, Canonicalize, Contradiction, Delta,
-    Deltas, Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm,
-    Reaction, ReactionCanonicalizationError, ReactionDerivation, ReactionIntegrityError,
-    ReactionSpan,
+    AtomDelta, Canonicalize, CanonicalizeContext, CanonicalizeLevel, Contradiction, Delta, Deltas,
+    Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
+    ReactionCanonicalizeError, ReactionDerivation, ReactionIntegrityError, ReactionSpan,
 };
 
 use super::span::reaction_span_scenario_strategy;
@@ -26,8 +25,8 @@ enum Side {
     Right,
 }
 
-fn context() -> CanonicalizationContext {
-    CanonicalizationContext {
+fn context() -> CanonicalizeContext {
+    CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
@@ -163,8 +162,8 @@ fn product_correspondence(
         .expect("product atom transport induces all entity families")
 }
 
-fn canonicalization_error_strategy(
-) -> impl Strategy<Value = (Reaction, ReactionCanonicalizationError)> {
+fn canonicalization_error_strategy() -> impl Strategy<Value = (Reaction, ReactionCanonicalizeError)>
+{
     prop_oneof![
         (0u32..64).prop_map(|id| {
             (
@@ -177,17 +176,15 @@ fn canonicalization_error_strategy(
                     .into_iter()
                     .collect(),
                 ),
-                ReactionCanonicalizationError::Integrity(
-                    ReactionIntegrityError::InvalidReference {
-                        entity: Entity::Atom(AtomId(id)),
-                    },
-                ),
+                ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
+                    entity: Entity::Atom(AtomId(id)),
+                }),
             )
         }),
         discontinuous_atom_update_reaction_strategy().prop_map(|reaction| {
             (
                 reaction,
-                ReactionCanonicalizationError::Contradiction(Contradiction),
+                ReactionCanonicalizeError::Contradiction(Contradiction),
             )
         }),
         any::<i64>().prop_map(|charge| {
@@ -202,7 +199,7 @@ fn canonicalization_error_strategy(
                     }),
                     Deltas::new(),
                 ),
-                ReactionCanonicalizationError::Contradiction(Contradiction),
+                ReactionCanonicalizeError::Contradiction(Contradiction),
             )
         }),
     ]
@@ -234,17 +231,17 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first).to_reaction();
 
         for level in [
-            CanonicalizationLevel::Topology,
-            CanonicalizationLevel::Constitution,
-            CanonicalizationLevel::Structure,
-            CanonicalizationLevel::Full,
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
         ] {
             let left = source.clone().canonicalize_by(level, &context);
             let right = renumbered.clone().canonicalize_by(level, &context);
             match (left, right) {
                 (Ok(left), Ok(right)) => {
                     prop_assert!(left.canonical_eq_by(&right, level, &context));
-                    if level == CanonicalizationLevel::Full {
+                    if level == CanonicalizeLevel::Full {
                         prop_assert_eq!(left, right);
                     }
                 }
@@ -255,7 +252,7 @@ proptest! {
             }
         }
         prop_assert_eq!(
-            source.clone().canonicalize_by(CanonicalizationLevel::Full, &context),
+            source.clone().canonicalize_by(CanonicalizeLevel::Full, &context),
             source.canonicalize(&context),
         );
     }
@@ -267,10 +264,10 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first).to_reaction();
 
         for level in [
-            CanonicalizationLevel::Topology,
-            CanonicalizationLevel::Constitution,
-            CanonicalizationLevel::Structure,
-            CanonicalizationLevel::Full,
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
         ] {
             prop_assert!(source.canonical_eq_by(&source, level, &context));
             prop_assert!(source.canonical_eq_by(&renumbered, level, &context));
@@ -280,7 +277,7 @@ proptest! {
             );
         }
         prop_assert_eq!(
-            source.canonical_eq_by(&renumbered, CanonicalizationLevel::Full, &context),
+            source.canonical_eq_by(&renumbered, CanonicalizeLevel::Full, &context),
             source.canonical_eq(&renumbered, &context),
         );
     }

@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::hueckel_rule(
+    #[case::hueckel(
         AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]

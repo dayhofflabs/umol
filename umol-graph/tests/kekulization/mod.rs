@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use rstest::rstest;
 use umol_chem::element::Element;
 use umol_graph::ops::invariant::ValenceMismatch;
-use umol_graph::ops::transform::{KekulizationConfig, Kekulizer, KekulizerError, Transformer};
+use umol_graph::ops::transform::{KekulizeConfig, KekulizeError, Kekulizer, Transformer};
 use umol_graph::ops::validate::ValenceInvariantsValidator;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
@@ -330,7 +330,7 @@ fn test_kekulization_fixture_output(
     let expected_dsl: MoleculeDsl = expected_source.parse().unwrap();
     let expected = expected_dsl.into_ir(&MoleculeDefaults::ground());
     let node_order: Vec<AtomId> = input.atoms().iter().map(|atom| atom.id).collect();
-    let kekulizer = Kekulizer::new(KekulizationConfig::default(), node_order);
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
 
     let first = kekulizer.transform(&input).unwrap();
     let second = kekulizer.transform(&input).unwrap();
@@ -434,7 +434,7 @@ fn test_kekulization_fixture_output(
 #[case::localization(
     NumForm::Undetermined,
     NumForm::Lit(0),
-    KekulizerError::UndeterminedExposedAtomCharge {
+    KekulizeError::UndeterminedExposedAtomCharge {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
@@ -442,7 +442,7 @@ fn test_kekulization_fixture_output(
 #[case::lone_pair_localization(
     NumForm::Lit(0),
     NumForm::Undetermined,
-    KekulizerError::UndeterminedExposedAtomLonePairs {
+    KekulizeError::UndeterminedExposedAtomLonePairs {
         system: AromaticSystemId(0),
         atom: AtomId(4),
     }
@@ -450,7 +450,7 @@ fn test_kekulization_fixture_output(
 #[case::valence_invariant(
     NumForm::Lit(0),
     NumForm::Lit(1),
-    KekulizerError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
+    KekulizeError::PostLocalizationValenceInvariant(ValenceMismatch::OrbitalCount {
         atom_id: AtomId(4),
         orbital_count: 10,
         electron_count: 8,
@@ -459,7 +459,7 @@ fn test_kekulization_fixture_output(
 fn test_kekulization_fixture_output_error(
     #[case] exposed_charge: NumForm,
     #[case] exposed_lone_pairs: NumForm,
-    #[case] expected: KekulizerError,
+    #[case] expected: KekulizeError,
 ) {
     let dsl: MoleculeDsl = include_str!("data/cyclopentadienyl_anion_aromatic_input.edn")
         .parse()
@@ -470,8 +470,7 @@ fn test_kekulization_fixture_output_error(
     let original = input.clone();
     let node_order: Vec<AtomId> = input.atoms().ids().collect();
 
-    let result =
-        Kekulizer::new(KekulizationConfig::default(), node_order).transform_into(&mut input);
+    let result = Kekulizer::new(KekulizeConfig::default(), node_order).transform_into(&mut input);
 
     assert_eq!(result, Err(expected));
     assert_eq!(input, original);

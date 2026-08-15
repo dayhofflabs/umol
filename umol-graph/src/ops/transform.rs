@@ -8,9 +8,9 @@ pub mod aromatizer;
 pub mod delocalize_charge;
 pub mod kekulizer;
 
-pub use aromatizer::{Aromatizer, AromatizerError};
+pub use aromatizer::{AromatizeError, Aromatizer};
 pub use delocalize_charge::DelocalizeCharge;
-pub use kekulizer::{KekulizationConfig, Kekulizer, KekulizerError, MaximumMatchingAlgorithm};
+pub use kekulizer::{KekulizeConfig, KekulizeError, Kekulizer, MaximumMatchingAlgorithm};
 use umol_graph_ir::ir::Molecule;
 
 pub trait Transformer {

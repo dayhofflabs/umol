@@ -51,7 +51,7 @@ use super::traits::Normalize;
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CanonicalizationContext {
+pub struct CanonicalizeContext {
     /// Whether stereo-sensitive refinement is iterated to a para-stereo fixpoint.
     pub para_stereo: bool,
     /// Graph automorphism algorithm used during canonical-frame search.
@@ -68,7 +68,7 @@ pub struct CanonicalizationContext {
 /// AB, non-stereo is DAMN, stereo is SS, constitution is topology plus non-stereo, and overlays are
 /// non-stereo plus stereo.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CanonicalizationLevel {
+pub enum CanonicalizeLevel {
     Topology,
     Constitution,
     Structure,
@@ -91,7 +91,7 @@ pub enum CanonicalizationLevel {
 ///   entity remapping;
 /// - `canonical_eq` and each `canonical_eq_by` relation are reflexive, symmetric, and transitive
 ///   under their documented failure totalization;
-/// - [`CanonicalizationLevel::Full`] is identical to the corresponding unqualified operation;
+/// - [`CanonicalizeLevel::Full`] is identical to the corresponding unqualified operation;
 /// - `canonical_eq_by` is invariant under valid dense entity remapping at every level.
 ///
 /// A level-specific transformation returns a complete aggregate, but features excluded from frame
@@ -106,12 +106,12 @@ pub trait Canonicalize: Sized {
     ///
     /// Returns the aggregate-specific integrity error for malformed representation state and
     /// [`Contradiction`] when intrinsic normalization is unsatisfiable.
-    fn canonicalize(self, context: &CanonicalizationContext) -> Result<Self, Self::Error>;
+    fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error>;
 
     /// Construct a complete normalized aggregate whose selected structural layer is canonical.
     ///
     /// Features excluded by `level` are preserved but do not break ties in the selected frame.
-    /// [`CanonicalizationLevel::Full`] is identical to [`Self::canonicalize`].
+    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonicalize`].
     ///
     /// # Errors
     ///
@@ -120,25 +120,25 @@ pub trait Canonicalize: Sized {
     /// value excluded from frame selection.
     fn canonicalize_by(
         self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
     /// Compare complete canonical forms.
     ///
     /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
     /// compare equal, while an integrity failure never makes distinct inputs equal.
-    fn canonical_eq(&self, other: &Self, context: &CanonicalizationContext) -> bool;
+    fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
 
     /// Compare canonical forms at the selected structural layer.
     ///
     /// Contradictions in features excluded by `level` do not affect this relation.
-    /// [`CanonicalizationLevel::Full`] is identical to [`Self::canonical_eq`].
+    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_eq`].
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> bool;
 }
 
@@ -4301,8 +4301,8 @@ fn normalize_reaction_span(span: ReactionSpan) -> Result<ReactionSpan, Contradic
 
 fn canonicalize_topology(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
-) -> Result<Molecule, MoleculeCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
     canonicalize_topology_with_options(
         molecule,
         context,
@@ -4317,9 +4317,9 @@ fn canonicalize_topology(
 
 fn canonicalize_topology_with_options(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
+    context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizationError> {
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
@@ -4348,8 +4348,8 @@ fn canonicalize_topology_with_options(
 
 fn canonicalize_constitution(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
-) -> Result<Molecule, MoleculeCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
     canonicalize_constitution_with_options(
         molecule,
         context,
@@ -4364,9 +4364,9 @@ fn canonicalize_constitution(
 
 fn canonicalize_constitution_with_options(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
+    context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizationError> {
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
@@ -4395,8 +4395,8 @@ fn canonicalize_constitution_with_options(
 
 fn canonicalize_structure(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
-) -> Result<Molecule, MoleculeCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
     canonicalize_structure_with_options(
         molecule,
         context,
@@ -4411,9 +4411,9 @@ fn canonicalize_structure(
 
 fn canonicalize_structure_with_options(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
+    context: &CanonicalizeContext,
     mut options: CanonicalSearchOptions,
-) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizationError> {
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
     // A structure-frame automorphism acts on both entity ids and stereo configurations. The graph
     // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
@@ -4455,8 +4455,8 @@ fn canonicalize_structure_with_options(
 
 fn canonicalize_full(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
-) -> Result<Molecule, MoleculeCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
     canonicalize_full_with_options(
         molecule,
         context,
@@ -4470,9 +4470,9 @@ fn canonicalize_full(
 
 fn canonicalize_full_with_options(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
+    context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
-) -> Result<Molecule, MoleculeCanonicalizationError> {
+) -> Result<Molecule, MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
     let normalized = normalize_molecule(molecule.clone())?;
     let molecule = &normalized;
@@ -4512,19 +4512,19 @@ fn canonicalize_full_with_options(
 
 fn canonical_key_by(
     molecule: &Molecule,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
-) -> Result<CanonicalComparisonKey, MoleculeCanonicalizationError> {
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
-    if level == CanonicalizationLevel::Full {
+    if level == CanonicalizeLevel::Full {
         let normalized = normalize_molecule(molecule.clone())?;
         return canonical_key_by_full(&normalized, context);
     }
     let incidence_level = match level {
-        CanonicalizationLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizationLevel::Structure => IncidenceLevel::Full,
-        CanonicalizationLevel::Full => unreachable!("handled before incidence construction"),
+        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
+        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
+        CanonicalizeLevel::Structure => IncidenceLevel::Full,
+        CanonicalizeLevel::Full => unreachable!("handled before incidence construction"),
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
@@ -4532,13 +4532,13 @@ fn canonical_key_by(
     let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let options = CanonicalSearchOptions {
-        automorphism_pruning: level != CanonicalizationLevel::Structure,
+        automorphism_pruning: level != CanonicalizeLevel::Structure,
         prefix_pruning: false,
         branch_order: BranchOrder::BackendCanonical,
     };
 
     let key = match level {
-        CanonicalizationLevel::Topology => {
+        CanonicalizeLevel::Topology => {
             let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
@@ -4555,7 +4555,7 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizationLevel::Constitution => {
+        CanonicalizeLevel::Constitution => {
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             let leaf_candidate = |order: &[NodeId]| {
@@ -4573,7 +4573,7 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizationLevel::Structure => {
+        CanonicalizeLevel::Structure => {
             let (partition, _) = structure_partition(
                 molecule,
                 &incidence_graph,
@@ -4597,15 +4597,15 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizationLevel::Full => unreachable!("handled before selected-layer search"),
+        CanonicalizeLevel::Full => unreachable!("handled before selected-layer search"),
     };
     Ok(key)
 }
 
 fn canonical_key_by_full(
     molecule: &Molecule,
-    context: &CanonicalizationContext,
-) -> Result<CanonicalComparisonKey, MoleculeCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
@@ -4658,7 +4658,7 @@ fn reaction_span_entity_keys(
 
 fn reaction_span_comparison_key(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
+    level: CanonicalizeLevel,
 ) -> Result<CanonicalComparisonKey, Contradiction> {
     let entries = span.entries();
     let atoms = entries
@@ -4694,9 +4694,7 @@ fn reaction_span_comparison_key(
 
     if matches!(
         level,
-        CanonicalizationLevel::Constitution
-            | CanonicalizationLevel::Structure
-            | CanonicalizationLevel::Full
+        CanonicalizeLevel::Constitution | CanonicalizeLevel::Structure | CanonicalizeLevel::Full
     ) {
         let dative = entries
             .dative
@@ -4778,7 +4776,7 @@ fn reaction_span_comparison_key(
 
     if matches!(
         level,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
     ) {
         let stereo_atoms = entries
             .stereo_atoms
@@ -4830,7 +4828,7 @@ fn reaction_span_comparison_key(
         );
     }
 
-    let constraints = if level == CanonicalizationLevel::Full {
+    let constraints = if level == CanonicalizeLevel::Full {
         let mut blocks = Vec::new();
         macro_rules! inline_span_block {
             ($position:expr, $entries:expr, $constraints:expr, $key:expr) => {{
@@ -5035,37 +5033,37 @@ fn constraint_span_key(span: &ConstraintSpan) -> CanonicalKeyValue {
 }
 
 impl Canonicalize for Molecule {
-    type Error = MoleculeCanonicalizationError;
+    type Error = MoleculeCanonicalizeError;
 
-    fn canonicalize(self, context: &CanonicalizationContext) -> Result<Self, Self::Error> {
+    fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
         canonicalize_full(&self, context)
     }
 
     fn canonicalize_by(
         self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         match level {
-            CanonicalizationLevel::Topology => canonicalize_topology(&self, context),
-            CanonicalizationLevel::Constitution => canonicalize_constitution(&self, context),
-            CanonicalizationLevel::Structure => canonicalize_structure(&self, context),
-            CanonicalizationLevel::Full => canonicalize_full(&self, context),
+            CanonicalizeLevel::Topology => canonicalize_topology(&self, context),
+            CanonicalizeLevel::Constitution => canonicalize_constitution(&self, context),
+            CanonicalizeLevel::Structure => canonicalize_structure(&self, context),
+            CanonicalizeLevel::Full => canonicalize_full(&self, context),
         }
     }
 
-    fn canonical_eq(&self, other: &Self, context: &CanonicalizationContext) -> bool {
+    fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
         match (
-            canonical_key_by(self, CanonicalizationLevel::Full, context),
-            canonical_key_by(other, CanonicalizationLevel::Full, context),
+            canonical_key_by(self, CanonicalizeLevel::Full, context),
+            canonical_key_by(other, CanonicalizeLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
-                Err(MoleculeCanonicalizationError::Contradiction(_)),
-                Err(MoleculeCanonicalizationError::Contradiction(_)),
+                Err(MoleculeCanonicalizeError::Contradiction(_)),
+                Err(MoleculeCanonicalizeError::Contradiction(_)),
             ) => true,
             _ => false,
         }
@@ -5074,13 +5072,13 @@ impl Canonicalize for Molecule {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizationLevel::Full {
+        if level == CanonicalizeLevel::Full {
             return self.canonical_eq(other, context);
         }
         match (
@@ -5089,8 +5087,8 @@ impl Canonicalize for Molecule {
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
-                Err(MoleculeCanonicalizationError::Contradiction(_)),
-                Err(MoleculeCanonicalizationError::Contradiction(_)),
+                Err(MoleculeCanonicalizeError::Contradiction(_)),
+                Err(MoleculeCanonicalizeError::Contradiction(_)),
             ) => true,
             _ => false,
         }
@@ -5099,7 +5097,7 @@ impl Canonicalize for Molecule {
 
 /// Failure to construct a canonical [`Molecule`](super::Molecule).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum MoleculeCanonicalizationError {
+pub enum MoleculeCanonicalizeError {
     /// The molecule does not satisfy its representation-integrity contract.
     #[error(transparent)]
     Integrity(#[from] MoleculeIntegrityError),
@@ -5110,7 +5108,7 @@ pub enum MoleculeCanonicalizationError {
 
 /// Failure to construct a canonical [`ReactionSpan`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ReactionSpanCanonicalizationError {
+pub enum ReactionSpanCanonicalizeError {
     /// The span does not satisfy its representation-integrity contract.
     #[error(transparent)]
     Integrity(#[from] ReactionSpanIntegrityError),
@@ -5121,25 +5119,25 @@ pub enum ReactionSpanCanonicalizationError {
 
 fn reaction_span_canonical_candidate(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
-        CanonicalizationLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full => IncidenceLevel::Full,
+        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
+        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
     let descriptors = match level {
-        CanonicalizationLevel::Topology => {
+        CanonicalizeLevel::Topology => {
             partition_descriptors(&adapter, &entity_keys, &incidence_keys)
         }
-        CanonicalizationLevel::Constitution
-        | CanonicalizationLevel::Structure
-        | CanonicalizationLevel::Full => {
+        CanonicalizeLevel::Constitution
+        | CanonicalizeLevel::Structure
+        | CanonicalizeLevel::Full => {
             constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph)
         }
     };
@@ -5148,7 +5146,7 @@ fn reaction_span_canonical_candidate(
         let remapped = span.remap(&correspondence);
         let remapped = if matches!(
             level,
-            CanonicalizationLevel::Structure | CanonicalizationLevel::Full
+            CanonicalizeLevel::Structure | CanonicalizeLevel::Full
         ) {
             canonicalize_reaction_span_stereo_frames(remapped)
                 .expect("initial classes established stereo normalization")
@@ -5179,13 +5177,13 @@ fn reaction_span_canonical_candidate(
 
 fn reaction_span_from_candidate(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
+    level: CanonicalizeLevel,
     candidate: &CanonicalCandidate<CanonicalComparisonKey>,
 ) -> Result<ReactionSpan, Contradiction> {
     let incidence_level = match level {
-        CanonicalizationLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full => IncidenceLevel::Full,
+        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
+        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let correspondence =
@@ -5193,7 +5191,7 @@ fn reaction_span_from_candidate(
     let remapped = span.remap(&correspondence);
     if matches!(
         level,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
     ) {
         Ok(canonicalize_reaction_span_stereo_frames(remapped)?)
     } else {
@@ -5203,9 +5201,9 @@ fn reaction_span_from_candidate(
 
 fn canonicalize_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
-) -> Result<ReactionSpan, ReactionSpanCanonicalizationError> {
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
     span.check_integrity()?;
     Ok(canonicalize_integrity_valid_reaction_span_by(
         span, level, context,
@@ -5214,23 +5212,23 @@ fn canonicalize_reaction_span_by(
 
 fn canonicalize_integrity_valid_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, Contradiction> {
     Ok(canonicalize_integrity_valid_reaction_span_with_correspondence_by(span, level, context)?.0)
 }
 
 fn canonicalize_integrity_valid_reaction_span_with_correspondence_by(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
 ) -> Result<(ReactionSpan, MoleculeCorrespondence), Contradiction> {
     let normalized = normalize_reaction_span(span.clone())?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
     let incidence_level = match level {
-        CanonicalizationLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizationLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full => IncidenceLevel::Full,
+        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
+        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = normalized.incidence_graph(incidence_level);
     let correspondence = lhs_anchored_correspondence_from_order(
@@ -5246,11 +5244,11 @@ fn canonicalize_integrity_valid_reaction_span_with_correspondence_by(
 
 fn canonical_reaction_span_key(
     span: &ReactionSpan,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
-) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizationError> {
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
     span.check_integrity()?;
-    if level == CanonicalizationLevel::Full {
+    if level == CanonicalizeLevel::Full {
         let normalized = normalize_reaction_span(span.clone())?;
         return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
     }
@@ -5258,32 +5256,32 @@ fn canonical_reaction_span_key(
 }
 
 impl Canonicalize for ReactionSpan {
-    type Error = ReactionSpanCanonicalizationError;
+    type Error = ReactionSpanCanonicalizeError;
 
-    fn canonicalize(self, context: &CanonicalizationContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_span_by(&self, CanonicalizationLevel::Full, context)
+    fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
+        canonicalize_reaction_span_by(&self, CanonicalizeLevel::Full, context)
     }
 
     fn canonicalize_by(
         self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         canonicalize_reaction_span_by(&self, level, context)
     }
 
-    fn canonical_eq(&self, other: &Self, context: &CanonicalizationContext) -> bool {
+    fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
         match (
-            canonical_reaction_span_key(self, CanonicalizationLevel::Full, context),
-            canonical_reaction_span_key(other, CanonicalizationLevel::Full, context),
+            canonical_reaction_span_key(self, CanonicalizeLevel::Full, context),
+            canonical_reaction_span_key(other, CanonicalizeLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
-                Err(ReactionSpanCanonicalizationError::Contradiction(_)),
-                Err(ReactionSpanCanonicalizationError::Contradiction(_)),
+                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
+                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
             ) => true,
             _ => false,
         }
@@ -5292,13 +5290,13 @@ impl Canonicalize for ReactionSpan {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizationLevel::Full {
+        if level == CanonicalizeLevel::Full {
             return self.canonical_eq(other, context);
         }
         match (
@@ -5307,8 +5305,8 @@ impl Canonicalize for ReactionSpan {
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
-                Err(ReactionSpanCanonicalizationError::Contradiction(_)),
-                Err(ReactionSpanCanonicalizationError::Contradiction(_)),
+                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
+                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
             ) => true,
             _ => false,
         }
@@ -5317,7 +5315,7 @@ impl Canonicalize for ReactionSpan {
 
 /// Failure to construct a canonical [`Reaction`](super::Reaction).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum ReactionCanonicalizationError {
+pub enum ReactionCanonicalizeError {
     /// The reaction does not satisfy its representation-integrity contract.
     #[error(transparent)]
     Integrity(#[from] ReactionIntegrityError),
@@ -5326,13 +5324,13 @@ pub enum ReactionCanonicalizationError {
     Contradiction(#[from] Contradiction),
 }
 
-fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizationLevel) -> bool {
-    let includes_non_stereo = level != CanonicalizationLevel::Topology;
+fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizeLevel) -> bool {
+    let includes_non_stereo = level != CanonicalizeLevel::Topology;
     let includes_stereo = matches!(
         level,
-        CanonicalizationLevel::Structure | CanonicalizationLevel::Full
+        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
     );
-    let includes_constraints = level == CanonicalizationLevel::Full;
+    let includes_constraints = level == CanonicalizeLevel::Full;
     match delta {
         Delta::Atom(AtomDelta::ModifyConstraint { .. })
         | Delta::Bond(BondDelta::ModifyConstraint { .. })
@@ -5356,7 +5354,7 @@ fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizationLevel) -> bo
     }
 }
 
-fn project_reaction(reaction: &Reaction, level: CanonicalizationLevel) -> Reaction {
+fn project_reaction(reaction: &Reaction, level: CanonicalizeLevel) -> Reaction {
     let deltas = reaction
         .deltas
         .iter()
@@ -5368,9 +5366,9 @@ fn project_reaction(reaction: &Reaction, level: CanonicalizationLevel) -> Reacti
 
 fn canonicalize_reaction_by(
     reaction: &Reaction,
-    level: CanonicalizationLevel,
-    context: &CanonicalizationContext,
-) -> Result<Reaction, ReactionCanonicalizationError> {
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<Reaction, ReactionCanonicalizeError> {
     reaction.check_integrity()?;
     let span = reaction.to_reaction_span()?;
     Ok(canonicalize_integrity_valid_reaction_span_by(&span, level, context)?.to_reaction())
@@ -5382,46 +5380,46 @@ fn canonicalize_reaction_by(
 #[doc(hidden)]
 pub fn canonicalize_reaction_with_correspondence(
     reaction: &Reaction,
-    context: &CanonicalizationContext,
-) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizationError> {
+    context: &CanonicalizeContext,
+) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizeError> {
     reaction.check_integrity()?;
     let span = reaction.to_reaction_span()?;
     let (canonical, correspondence) =
         canonicalize_integrity_valid_reaction_span_with_correspondence_by(
             &span,
-            CanonicalizationLevel::Full,
+            CanonicalizeLevel::Full,
             context,
         )?;
     Ok((canonical.to_reaction(), correspondence))
 }
 
 impl Canonicalize for Reaction {
-    type Error = ReactionCanonicalizationError;
+    type Error = ReactionCanonicalizeError;
 
-    fn canonicalize(self, context: &CanonicalizationContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_by(&self, CanonicalizationLevel::Full, context)
+    fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
+        canonicalize_reaction_by(&self, CanonicalizeLevel::Full, context)
     }
 
     fn canonicalize_by(
         self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         canonicalize_reaction_by(&self, level, context)
     }
 
-    fn canonical_eq(&self, other: &Self, context: &CanonicalizationContext) -> bool {
+    fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
         match (
-            canonicalize_reaction_by(self, CanonicalizationLevel::Full, context),
-            canonicalize_reaction_by(other, CanonicalizationLevel::Full, context),
+            canonicalize_reaction_by(self, CanonicalizeLevel::Full, context),
+            canonicalize_reaction_by(other, CanonicalizeLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
-                Err(ReactionCanonicalizationError::Contradiction(_)),
-                Err(ReactionCanonicalizationError::Contradiction(_)),
+                Err(ReactionCanonicalizeError::Contradiction(_)),
+                Err(ReactionCanonicalizeError::Contradiction(_)),
             ) => true,
             _ => false,
         }
@@ -5430,13 +5428,13 @@ impl Canonicalize for Reaction {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizationLevel::Full {
+        if level == CanonicalizeLevel::Full {
             return self.canonical_eq(other, context);
         }
         if self.check_integrity().is_err() || other.check_integrity().is_err() {
@@ -5607,8 +5605,8 @@ mod tests {
     }
 
     #[fixture]
-    fn canonicalization_context() -> CanonicalizationContext {
-        CanonicalizationContext {
+    fn canonicalize_context() -> CanonicalizeContext {
+        CanonicalizeContext {
             para_stereo: false,
             automorphism_algorithm: AutomorphismAlgorithm::Nauty,
         }
@@ -6332,7 +6330,7 @@ mod tests {
     #[rstest]
     fn test_canonicalize_structure_para_stereo(
         para_stereo_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let correspondence = molecule_correspondence(&[
             vec![1, 0, 6, 8, 7, 9, 2, 4, 3, 5, 13, 11, 10, 12],
@@ -6345,9 +6343,9 @@ mod tests {
             Vec::new(),
         ]);
         let renumbered = para_stereo_canonicalization_molecule.remap(&correspondence);
-        let context = CanonicalizationContext {
+        let context = CanonicalizeContext {
             para_stereo: true,
-            ..canonicalization_context
+            ..canonicalize_context
         };
         let canonical = canonicalize_structure(&para_stereo_canonicalization_molecule, &context)
             .expect("fixed molecule canonicalizes");
@@ -6385,7 +6383,7 @@ mod tests {
 
     #[rstest]
     fn test_canonicalize_structure_stereo_atom(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         stereo_atom_canonicalization_molecule: Molecule,
     ) {
         let renumbering = molecule_correspondence(&[
@@ -6401,16 +6399,16 @@ mod tests {
         let renumbered = stereo_atom_canonicalization_molecule.remap(&renumbering);
         let canonical = canonicalize_structure(
             &stereo_atom_canonicalization_molecule,
-            &canonicalization_context,
+            &canonicalize_context,
         )
         .expect("fixed molecule canonicalizes");
 
         assert_eq!(
-            canonicalize_structure(&renumbered, &canonicalization_context),
+            canonicalize_structure(&renumbered, &canonicalize_context),
             Ok(canonical.clone()),
         );
         assert_eq!(
-            canonicalize_structure(&canonical, &canonicalization_context),
+            canonicalize_structure(&canonical, &canonicalize_context),
             Ok(canonical.clone()),
         );
         assert_eq!(canonical.check_integrity(), Ok(()));
@@ -6419,7 +6417,7 @@ mod tests {
 
     #[rstest]
     fn test_canonicalize_structure_configuration(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         stereo_atom_canonicalization_molecule: Molecule,
     ) {
         let mut opposite_entries = molecule_entries(&stereo_atom_canonicalization_molecule);
@@ -6430,15 +6428,15 @@ mod tests {
         assert_ne!(
             canonicalize_structure(
                 &stereo_atom_canonicalization_molecule,
-                &canonicalization_context,
+                &canonicalize_context,
             ),
-            canonicalize_structure(&opposite, &canonicalization_context),
+            canonicalize_structure(&opposite, &canonicalize_context),
         );
     }
 
     #[rstest]
     fn test_canonicalize_structure_stereo_bond(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         stereo_bond_canonicalization_molecule: Molecule,
     ) {
         let renumbering = molecule_correspondence(&[
@@ -6454,16 +6452,16 @@ mod tests {
         let renumbered = stereo_bond_canonicalization_molecule.remap(&renumbering);
         let canonical = canonicalize_structure(
             &stereo_bond_canonicalization_molecule,
-            &canonicalization_context,
+            &canonicalize_context,
         )
         .expect("fixed molecule canonicalizes");
 
         assert_eq!(
-            canonicalize_structure(&renumbered, &canonicalization_context),
+            canonicalize_structure(&renumbered, &canonicalize_context),
             Ok(canonical.clone()),
         );
         assert_eq!(
-            canonicalize_structure(&canonical, &canonicalization_context),
+            canonicalize_structure(&canonical, &canonicalize_context),
             Ok(canonical.clone()),
         );
         assert_eq!(canonical.check_integrity(), Ok(()));
@@ -6472,7 +6470,7 @@ mod tests {
 
     #[rstest]
     fn test_canonicalize_structure_stereo_atom_constraints(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         stereo_atom_canonicalization_molecule: Molecule,
     ) {
         let constraint = StereoAtomConstraintForm::Topicity(TopicityForm {
@@ -6491,14 +6489,14 @@ mod tests {
         );
 
         assert_eq!(
-            canonicalize_structure(&reframed, &canonicalization_context),
-            canonicalize_structure(&source, &canonicalization_context),
+            canonicalize_structure(&reframed, &canonicalize_context),
+            canonicalize_structure(&source, &canonicalize_context),
         );
     }
 
     #[rstest]
     fn test_canonicalize_structure_stereo_bond_constraints(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         stereo_bond_canonicalization_molecule: Molecule,
     ) {
         let constraint = StereoBondConstraintForm::Topicity(TopicityForm {
@@ -6515,9 +6513,9 @@ mod tests {
             StereoBondId(0),
             Permutation::from_image(&[2, 3, 0, 1]),
         );
-        let left = canonicalize_structure(&source, &canonicalization_context)
+        let left = canonicalize_structure(&source, &canonicalize_context)
             .expect("fixed molecule canonicalizes");
-        let right = canonicalize_structure(&reframed, &canonicalization_context)
+        let right = canonicalize_structure(&reframed, &canonicalize_context)
             .expect("reframed molecule canonicalizes");
 
         assert_eq!(
@@ -6527,7 +6525,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_canonicalize(canonicalization_context: CanonicalizationContext) {
+    fn test_molecule_canonicalize(canonicalize_context: CanonicalizeContext) {
         let plain = AtomForm::from_element(Element::C);
         let mut constrained = plain.clone();
         constrained.constraints = AtomConstraintForm::valence(4).into();
@@ -6561,15 +6559,15 @@ mod tests {
         });
 
         assert_eq!(
-            source.clone().canonicalize(&canonicalization_context),
+            source.clone().canonicalize(&canonicalize_context),
             Ok(expected.clone()),
         );
         assert_eq!(
-            renumbered.canonicalize(&canonicalization_context),
+            renumbered.canonicalize(&canonicalize_context),
             Ok(expected.clone()),
         );
         assert_eq!(
-            expected.clone().canonicalize(&canonicalization_context),
+            expected.clone().canonicalize(&canonicalize_context),
             Ok(expected.clone()),
         );
     }
@@ -6577,7 +6575,7 @@ mod tests {
     #[rstest]
     fn test_molecule_canonicalize_stereo_frame(
         repeated_ligand_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let constraint = StereoAtomConstraintForm::Topicity(TopicityForm {
             pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
@@ -6595,21 +6593,21 @@ mod tests {
         );
         let canonical = source
             .clone()
-            .canonicalize(&canonicalization_context)
+            .canonicalize(&canonicalize_context)
             .expect("fixed molecule canonicalizes");
 
         assert_eq!(
-            reframed.canonicalize(&canonicalization_context),
+            reframed.canonicalize(&canonicalize_context),
             Ok(canonical.clone()),
         );
         assert_eq!(
-            canonical.clone().canonicalize(&canonicalization_context),
+            canonical.clone().canonicalize(&canonicalize_context),
             Ok(canonical),
         );
     }
 
     #[rstest]
-    fn test_molecule_canonicalize_contradiction(canonicalization_context: CanonicalizationContext) {
+    fn test_molecule_canonicalize_contradiction(canonicalize_context: CanonicalizeContext) {
         let mut atom = AtomForm::from_element(Element::C);
         atom.constraints = AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
         let molecule = Molecule::from_entries(MoleculeEntries {
@@ -6618,15 +6616,15 @@ mod tests {
         });
 
         assert_eq!(
-            molecule.canonicalize(&canonicalization_context),
-            Err(MoleculeCanonicalizationError::Contradiction(Contradiction)),
+            molecule.canonicalize(&canonicalize_context),
+            Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
         );
     }
 
     #[rstest]
     fn test_molecule_canonicalize_integrity_error(
         stereo_atom_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let mut malformed = stereo_atom_canonicalization_molecule;
         malformed
@@ -6635,8 +6633,8 @@ mod tests {
             .configuration = StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
 
         assert_eq!(
-            malformed.canonicalize(&canonicalization_context),
-            Err(MoleculeCanonicalizationError::Integrity(
+            malformed.canonicalize(&canonicalize_context),
+            Err(MoleculeCanonicalizeError::Integrity(
                 MoleculeIntegrityError::StereoLigandArity {
                     entity: Entity::StereoAtom(StereoAtomId(0)),
                     kind: StereoKind::Octahedral,
@@ -6648,32 +6646,32 @@ mod tests {
     }
 
     #[rstest]
-    #[case::topology(CanonicalizationLevel::Topology)]
-    #[case::constitution(CanonicalizationLevel::Constitution)]
-    #[case::structure(CanonicalizationLevel::Structure)]
-    #[case::full(CanonicalizationLevel::Full)]
+    #[case::topology(CanonicalizeLevel::Topology)]
+    #[case::constitution(CanonicalizeLevel::Constitution)]
+    #[case::structure(CanonicalizeLevel::Structure)]
+    #[case::full(CanonicalizeLevel::Full)]
     fn test_molecule_canonicalize_by(
         initial_class_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
-        #[case] level: CanonicalizationLevel,
+        canonicalize_context: CanonicalizeContext,
+        #[case] level: CanonicalizeLevel,
     ) {
         let canonical = initial_class_molecule
             .clone()
-            .canonicalize_by(level, &canonicalization_context)
+            .canonicalize_by(level, &canonicalize_context)
             .expect("fixed molecule canonicalizes at every level");
 
         assert_eq!(
             canonical
                 .clone()
-                .canonicalize_by(level, &canonicalization_context),
+                .canonicalize_by(level, &canonicalize_context),
             Ok(canonical),
         );
-        if level == CanonicalizationLevel::Full {
+        if level == CanonicalizeLevel::Full {
             assert_eq!(
                 initial_class_molecule
                     .clone()
-                    .canonicalize_by(level, &canonicalization_context),
-                initial_class_molecule.canonicalize(&canonicalization_context),
+                    .canonicalize_by(level, &canonicalize_context),
+                initial_class_molecule.canonicalize(&canonicalize_context),
             );
         }
     }
@@ -6681,16 +6679,16 @@ mod tests {
     #[rstest]
     fn test_molecule_canonical_eq(
         initial_class_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let renumbered =
             initial_class_molecule.remap(&reverse_correspondence(&initial_class_molecule));
 
-        assert!(initial_class_molecule.canonical_eq(&renumbered, &canonicalization_context));
+        assert!(initial_class_molecule.canonical_eq(&renumbered, &canonicalize_context));
     }
 
     #[rstest]
-    fn test_molecule_canonical_eq_contradiction(canonicalization_context: CanonicalizationContext) {
+    fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeContext) {
         let mut left_contradiction = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -6708,14 +6706,14 @@ mod tests {
             ..Default::default()
         });
 
-        assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalization_context));
-        assert!(!left_contradiction.canonical_eq(&valid, &canonicalization_context));
+        assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
+        assert!(!left_contradiction.canonical_eq(&valid, &canonicalize_context));
     }
 
     #[rstest]
     fn test_molecule_canonical_eq_integrity_error(
         stereo_atom_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let mut malformed_left = stereo_atom_canonicalization_molecule.clone();
         malformed_left
@@ -6728,12 +6726,12 @@ mod tests {
             .attributes
             .configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0u32);
 
-        assert!(malformed_left.canonical_eq(&malformed_left, &canonicalization_context));
-        assert!(!malformed_left.canonical_eq(&malformed_right, &canonicalization_context));
+        assert!(malformed_left.canonical_eq(&malformed_left, &canonicalize_context));
+        assert!(!malformed_left.canonical_eq(&malformed_right, &canonicalize_context));
     }
 
     #[rstest]
-    fn test_molecule_canonical_eq_by_topology(canonicalization_context: CanonicalizationContext) {
+    fn test_molecule_canonical_eq_by_topology(canonicalize_context: CanonicalizeContext) {
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             ..Default::default()
@@ -6744,22 +6742,18 @@ mod tests {
             ..Default::default()
         });
 
-        assert!(left.canonical_eq_by(
-            &right,
-            CanonicalizationLevel::Topology,
-            &canonicalization_context,
-        ));
+        assert!(left.canonical_eq_by(&right, CanonicalizeLevel::Topology, &canonicalize_context,));
         assert!(!left.canonical_eq_by(
             &right,
-            CanonicalizationLevel::Constitution,
-            &canonicalization_context,
+            CanonicalizeLevel::Constitution,
+            &canonicalize_context,
         ));
     }
 
     #[rstest]
     fn test_molecule_canonical_eq_by_constitution(
         stereo_atom_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
         entries.stereo_atoms.clear();
@@ -6767,18 +6761,18 @@ mod tests {
 
         assert!(constitution.canonical_eq_by(
             &stereo_atom_canonicalization_molecule,
-            CanonicalizationLevel::Constitution,
-            &canonicalization_context,
+            CanonicalizeLevel::Constitution,
+            &canonicalize_context,
         ));
         assert!(!constitution.canonical_eq_by(
             &stereo_atom_canonicalization_molecule,
-            CanonicalizationLevel::Structure,
-            &canonicalization_context,
+            CanonicalizeLevel::Structure,
+            &canonicalize_context,
         ));
     }
 
     #[rstest]
-    fn test_molecule_canonical_eq_by_structure(canonicalization_context: CanonicalizationContext) {
+    fn test_molecule_canonical_eq_by_structure(canonicalize_context: CanonicalizeContext) {
         let plain = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -6792,21 +6786,17 @@ mod tests {
 
         assert!(plain.canonical_eq_by(
             &constrained,
-            CanonicalizationLevel::Structure,
-            &canonicalization_context,
+            CanonicalizeLevel::Structure,
+            &canonicalize_context,
         ));
         assert!(!plain.canonical_eq_by(
             &constrained,
-            CanonicalizationLevel::Full,
-            &canonicalization_context,
+            CanonicalizeLevel::Full,
+            &canonicalize_context,
         ));
         assert_eq!(
-            plain.canonical_eq_by(
-                &constrained,
-                CanonicalizationLevel::Full,
-                &canonicalization_context,
-            ),
-            plain.canonical_eq(&constrained, &canonicalization_context),
+            plain.canonical_eq_by(&constrained, CanonicalizeLevel::Full, &canonicalize_context,),
+            plain.canonical_eq(&constrained, &canonicalize_context),
         );
     }
 
@@ -6830,30 +6820,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case::topology(CanonicalizationLevel::Topology)]
-    #[case::constitution(CanonicalizationLevel::Constitution)]
-    #[case::structure(CanonicalizationLevel::Structure)]
-    #[case::full(CanonicalizationLevel::Full)]
+    #[case::topology(CanonicalizeLevel::Topology)]
+    #[case::constitution(CanonicalizeLevel::Constitution)]
+    #[case::structure(CanonicalizeLevel::Structure)]
+    #[case::full(CanonicalizeLevel::Full)]
     fn test_reaction_canonicalize_by(
-        canonicalization_context: CanonicalizationContext,
-        #[case] level: CanonicalizationLevel,
+        canonicalize_context: CanonicalizeContext,
+        #[case] level: CanonicalizeLevel,
     ) {
         let source = reaction_canonicalization_fixture();
         let expected = source
             .to_reaction_span()
             .expect("fixed reaction materializes")
-            .canonicalize_by(level, &canonicalization_context)
+            .canonicalize_by(level, &canonicalize_context)
             .expect("fixed span canonicalizes")
             .to_reaction();
 
         assert_eq!(
-            source
-                .clone()
-                .canonicalize_by(level, &canonicalization_context),
+            source.clone().canonicalize_by(level, &canonicalize_context),
             Ok(expected.clone()),
         );
-        if level == CanonicalizationLevel::Full {
-            assert_eq!(source.canonicalize(&canonicalization_context), Ok(expected),);
+        if level == CanonicalizeLevel::Full {
+            assert_eq!(source.canonicalize(&canonicalize_context), Ok(expected),);
         }
     }
 
@@ -6872,7 +6860,7 @@ mod tests {
                 },
             })].into_iter().collect(),
         ),
-        ReactionCanonicalizationError::Integrity(ReactionIntegrityError::InvalidReference {
+        ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
     )]
@@ -6890,45 +6878,38 @@ mod tests {
                 },
             })].into_iter().collect(),
         ),
-        ReactionCanonicalizationError::Contradiction(Contradiction),
+        ReactionCanonicalizeError::Contradiction(Contradiction),
     )]
     fn test_reaction_canonicalize_error(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] reaction: Reaction,
-        #[case] expected: ReactionCanonicalizationError,
+        #[case] expected: ReactionCanonicalizeError,
     ) {
-        assert_eq!(
-            reaction.canonicalize(&canonicalization_context),
-            Err(expected)
-        );
+        assert_eq!(reaction.canonicalize(&canonicalize_context), Err(expected));
     }
 
     #[rstest]
-    fn test_reaction_canonical_eq(canonicalization_context: CanonicalizationContext) {
+    fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
         let source = reaction_canonicalization_fixture();
         let canonical = source
             .clone()
-            .canonicalize(&canonicalization_context)
+            .canonicalize(&canonicalize_context)
             .expect("fixed reaction canonicalizes");
 
-        assert!(source.canonical_eq(&canonical, &canonicalization_context));
+        assert!(source.canonical_eq(&canonical, &canonicalize_context));
         assert_eq!(
-            source.canonical_eq_by(
-                &canonical,
-                CanonicalizationLevel::Full,
-                &canonicalization_context,
-            ),
-            source.canonical_eq(&canonical, &canonicalization_context),
+            source.canonical_eq_by(&canonical, CanonicalizeLevel::Full, &canonicalize_context,),
+            source.canonical_eq(&canonical, &canonicalize_context),
         );
     }
 
     #[rstest]
-    #[case::topology(CanonicalizationLevel::Topology)]
-    #[case::constitution(CanonicalizationLevel::Constitution)]
-    #[case::structure(CanonicalizationLevel::Structure)]
+    #[case::topology(CanonicalizeLevel::Topology)]
+    #[case::constitution(CanonicalizeLevel::Constitution)]
+    #[case::structure(CanonicalizeLevel::Structure)]
     fn test_reaction_canonical_eq_by(
-        canonicalization_context: CanonicalizationContext,
-        #[case] level: CanonicalizationLevel,
+        canonicalize_context: CanonicalizeContext,
+        #[case] level: CanonicalizeLevel,
     ) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
@@ -6944,16 +6925,12 @@ mod tests {
             .collect(),
         );
 
-        assert!(excluded_contradiction.canonical_eq_by(
-            &identity,
-            level,
-            &canonicalization_context,
-        ));
-        assert!(!excluded_contradiction.canonical_eq(&identity, &canonicalization_context));
+        assert!(excluded_contradiction.canonical_eq_by(&identity, level, &canonicalize_context,));
+        assert!(!excluded_contradiction.canonical_eq(&identity, &canonicalize_context));
     }
 
     #[rstest]
-    fn test_reaction_canonical_eq_error(canonicalization_context: CanonicalizationContext) {
+    fn test_reaction_canonical_eq_error(canonicalize_context: CanonicalizeContext) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
             ..Default::default()
@@ -6987,19 +6964,17 @@ mod tests {
             .collect(),
         );
 
-        assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalization_context));
-        assert!(malformed.canonical_eq(&malformed, &canonicalization_context));
+        assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
+        assert!(malformed.canonical_eq(&malformed, &canonicalize_context));
         assert!(!malformed.canonical_eq_by(
             &left_contradiction,
-            CanonicalizationLevel::Topology,
-            &canonicalization_context,
+            CanonicalizeLevel::Topology,
+            &canonicalize_context,
         ));
     }
 
     #[rstest]
-    fn test_molecule_canonical_eq_by_contradiction(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_molecule_canonical_eq_by_contradiction(canonicalize_context: CanonicalizeContext) {
         let mut left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
@@ -7011,12 +6986,8 @@ mod tests {
             ..Default::default()
         });
 
-        assert!(left.canonical_eq_by(
-            &right,
-            CanonicalizationLevel::Structure,
-            &canonicalization_context,
-        ));
-        assert!(!left.canonical_eq(&right, &canonicalization_context));
+        assert!(left.canonical_eq_by(&right, CanonicalizeLevel::Structure, &canonicalize_context,));
+        assert!(!left.canonical_eq(&right, &canonicalize_context));
     }
 
     #[rstest]
@@ -7035,11 +7006,11 @@ mod tests {
     #[rstest]
     fn test_canonicalize_structure_selected_layer(
         initial_class_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
-        let canonical = canonicalize_structure(&initial_class_molecule, &canonicalization_context)
+        let canonical = canonicalize_structure(&initial_class_molecule, &canonicalize_context)
             .expect("fixed molecule canonicalizes");
-        let canonical_again = canonicalize_structure(&canonical, &canonicalization_context)
+        let canonical_again = canonicalize_structure(&canonical, &canonicalize_context)
             .expect("canonical molecule canonicalizes");
 
         assert_eq!(
@@ -7052,11 +7023,11 @@ mod tests {
     #[rstest]
     fn test_canonicalize_structure_renumbering(
         symmetric_stereo_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let canonical = canonicalize_structure(
             &symmetric_stereo_canonicalization_molecule,
-            &canonicalization_context,
+            &canonicalize_context,
         )
         .expect("fixed molecule canonicalizes");
         let expected = selected_structure_key(&canonical);
@@ -7074,7 +7045,7 @@ mod tests {
                 Vec::new(),
             ]);
             let renumbered = symmetric_stereo_canonicalization_molecule.remap(&correspondence);
-            let actual = canonicalize_structure(&renumbered, &canonicalization_context)
+            let actual = canonicalize_structure(&renumbered, &canonicalize_context)
                 .expect("renumbered molecule canonicalizes");
 
             assert_eq!(selected_structure_key(&actual), expected, "rank {rank}");
@@ -7085,7 +7056,7 @@ mod tests {
     #[case::nauty(AutomorphismAlgorithm::Nauty)]
     fn test_canonicalize_structure_minimum(
         symmetric_stereo_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] algorithm: AutomorphismAlgorithm,
     ) {
         let incidence_graph =
@@ -7156,9 +7127,9 @@ mod tests {
         ] {
             let (canonical, _) = canonicalize_structure_with_options(
                 &symmetric_stereo_canonicalization_molecule,
-                &CanonicalizationContext {
+                &CanonicalizeContext {
                     automorphism_algorithm: algorithm,
-                    ..canonicalization_context
+                    ..canonicalize_context
                 },
                 options,
             )
@@ -7174,7 +7145,7 @@ mod tests {
     #[rstest]
     fn test_canonicalize_structure_meso(
         meso_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let correspondence = molecule_correspondence(&[
             vec![1, 0, 3, 2, 5, 4],
@@ -7189,8 +7160,8 @@ mod tests {
         let renumbered = meso_canonicalization_molecule.remap(&correspondence);
 
         assert_eq!(
-            canonicalize_structure(&renumbered, &canonicalization_context),
-            canonicalize_structure(&meso_canonicalization_molecule, &canonicalization_context,),
+            canonicalize_structure(&renumbered, &canonicalize_context),
+            canonicalize_structure(&meso_canonicalization_molecule, &canonicalize_context,),
         );
     }
 
@@ -7199,7 +7170,7 @@ mod tests {
     #[case::undetermined(StereoConfigurationForm::Undetermined)]
     fn test_canonicalize_structure_repeated_ligands(
         repeated_ligand_canonicalization_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] configuration: StereoConfigurationForm,
     ) {
         let mut entries = molecule_entries(&repeated_ligand_canonicalization_molecule);
@@ -7212,8 +7183,8 @@ mod tests {
         );
 
         assert_eq!(
-            canonicalize_structure(&reframed, &canonicalization_context),
-            canonicalize_structure(&source, &canonicalization_context),
+            canonicalize_structure(&reframed, &canonicalize_context),
+            canonicalize_structure(&source, &canonicalize_context),
         );
     }
 
@@ -8321,7 +8292,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_topology(canonicalization_context: CanonicalizationContext) {
+    fn test_canonicalize_topology(canonicalize_context: CanonicalizeContext) {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::O),
@@ -8366,7 +8337,7 @@ mod tests {
         });
 
         assert_eq!(
-            canonicalize_topology(&molecule, &canonicalization_context),
+            canonicalize_topology(&molecule, &canonicalize_context),
             Ok(expected),
         );
     }
@@ -8401,12 +8372,12 @@ mod tests {
         }),
     )]
     fn test_canonicalize_topology_components(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] molecule: Molecule,
         #[case] expected: Molecule,
     ) {
         assert_eq!(
-            canonicalize_topology(&molecule, &canonicalization_context),
+            canonicalize_topology(&molecule, &canonicalize_context),
             Ok(expected),
         );
     }
@@ -8434,17 +8405,17 @@ mod tests {
         }),
     )]
     fn test_canonicalize_topology_error(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] molecule: Molecule,
     ) {
         assert_eq!(
-            canonicalize_topology(&molecule, &canonicalization_context),
-            Err(MoleculeCanonicalizationError::Contradiction(Contradiction,)),
+            canonicalize_topology(&molecule, &canonicalize_context),
+            Err(MoleculeCanonicalizeError::Contradiction(Contradiction,)),
         );
     }
 
     #[rstest]
-    fn test_canonicalize_topology_excluded_data(canonicalization_context: CanonicalizationContext) {
+    fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeContext) {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
@@ -8464,7 +8435,7 @@ mod tests {
 
         let (canonical, correspondence) = canonicalize_topology_with_options(
             &molecule,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8474,7 +8445,7 @@ mod tests {
         .unwrap();
         let (canonical_remapped, remapped_correspondence) = canonicalize_topology_with_options(
             &remapped,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8485,7 +8456,7 @@ mod tests {
         let canonical_incidence = canonical.incidence_graph(IncidenceLevel::Topology);
         let canonical_remapped_incidence =
             canonical_remapped.incidence_graph(IncidenceLevel::Topology);
-        let canonical_again = canonicalize_topology(&canonical, &canonicalization_context).unwrap();
+        let canonical_again = canonicalize_topology(&canonical, &canonicalize_context).unwrap();
         let canonical_again_incidence = canonical_again.incidence_graph(IncidenceLevel::Topology);
 
         assert!(molecule.equiv_under(&canonical, &correspondence));
@@ -8527,7 +8498,7 @@ mod tests {
     #[rstest]
     #[case::order_four(4)]
     fn test_canonicalize_topology_exhaustive_domain(
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
         #[case] atom_count: usize,
     ) {
         let endpoint_pairs = (0..atom_count as u32)
@@ -8562,7 +8533,7 @@ mod tests {
 
             let (canonical, correspondence) = canonicalize_topology_with_options(
                 &molecule,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
                     prefix_pruning: false,
@@ -8572,7 +8543,7 @@ mod tests {
             .unwrap();
             let (unpruned, _) = canonicalize_topology_with_options(
                 &molecule,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: false,
                     prefix_pruning: false,
@@ -8595,7 +8566,7 @@ mod tests {
             );
             assert_eq!(canonical.check_integrity(), Ok(()));
             assert_eq!(
-                canonicalize_topology(&canonical, &canonicalization_context),
+                canonicalize_topology(&canonical, &canonicalize_context),
                 Ok(canonical.clone()),
                 "edge mask {edge_mask:#08b}",
             );
@@ -8620,7 +8591,7 @@ mod tests {
                 let renumbered = molecule.remap(&renumbering);
 
                 assert_eq!(
-                    canonicalize_topology(&renumbered, &canonicalization_context),
+                    canonicalize_topology(&renumbered, &canonicalize_context),
                     Ok(canonical.clone()),
                     "edge mask {edge_mask:#08b}, renumbering {index}",
                 );
@@ -8629,7 +8600,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_constitution(canonicalization_context: CanonicalizationContext) {
+    fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::O).with_constraint(AtomConstraintForm::Valence(
@@ -8752,7 +8723,7 @@ mod tests {
         assert_eq!(
             canonicalize_constitution_with_options(
                 &molecule,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
                     prefix_pruning: false,
@@ -8764,9 +8735,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_constitution_excluded_data(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_canonicalize_constitution_excluded_data(canonicalize_context: CanonicalizeContext) {
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C)
@@ -8808,7 +8777,7 @@ mod tests {
 
         let (_, left_correspondence) = canonicalize_constitution_with_options(
             &left,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8818,7 +8787,7 @@ mod tests {
         .unwrap();
         let (_, right_correspondence) = canonicalize_constitution_with_options(
             &right,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8833,12 +8802,12 @@ mod tests {
     #[rstest]
     fn test_canonicalize_constitution_properties(
         initial_class_molecule: Molecule,
-        canonicalization_context: CanonicalizationContext,
+        canonicalize_context: CanonicalizeContext,
     ) {
         let normalized_source = normalize_molecule(initial_class_molecule.clone()).unwrap();
         let (canonical, correspondence) = canonicalize_constitution_with_options(
             &initial_class_molecule,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8856,7 +8825,7 @@ mod tests {
 
         let (canonical_again, _) = canonicalize_constitution_with_options(
             &canonical,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
                 prefix_pruning: false,
@@ -8888,7 +8857,7 @@ mod tests {
         let (canonical_renumbered, renumbered_correspondence) =
             canonicalize_constitution_with_options(
                 &renumbered,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
                     prefix_pruning: false,
@@ -8921,7 +8890,7 @@ mod tests {
 
         let (unpruned, _) = canonicalize_constitution_with_options(
             &initial_class_molecule,
-            &canonicalization_context,
+            &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
                 prefix_pruning: false,
@@ -8945,9 +8914,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_constitution_family_minimum(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_canonicalize_constitution_family_minimum(canonicalize_context: CanonicalizeContext) {
         let atoms = vec![AtomForm::from_element(Element::C); 4];
         let cases = [
             (
@@ -9038,7 +9005,7 @@ mod tests {
             let expected = exhaustive_minimum(&adapter, &leaf_candidate);
             let (canonical, correspondence) = canonicalize_constitution_with_options(
                 &molecule,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
                     prefix_pruning: false,
@@ -9048,7 +9015,7 @@ mod tests {
             .unwrap();
             let (unpruned, _) = canonicalize_constitution_with_options(
                 &molecule,
-                &canonicalization_context,
+                &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: false,
                     prefix_pruning: false,
@@ -9093,7 +9060,7 @@ mod tests {
                 let renumbered = molecule.remap(&molecule_correspondence(&images));
 
                 assert_eq!(
-                    canonicalize_constitution(&renumbered, &canonicalization_context),
+                    canonicalize_constitution(&renumbered, &canonicalize_context),
                     Ok(canonical.clone()),
                     "{family}, renumbering {index}",
                 );
@@ -9102,9 +9069,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_canonicalize_constitution_participant_order(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_canonicalize_constitution_participant_order(canonicalize_context: CanonicalizeContext) {
         let left = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
             aromatic: vec![
@@ -9155,15 +9120,13 @@ mod tests {
         });
 
         assert_eq!(
-            canonicalize_constitution(&right, &canonicalization_context),
-            canonicalize_constitution(&left, &canonicalization_context),
+            canonicalize_constitution(&right, &canonicalize_context),
+            canonicalize_constitution(&left, &canonicalize_context),
         );
     }
 
     #[rstest]
-    fn test_canonicalize_constitution_contradiction(
-        canonicalization_context: CanonicalizationContext,
-    ) {
+    fn test_canonicalize_constitution_contradiction(canonicalize_context: CanonicalizeContext) {
         let selected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             dative: vec![(
@@ -9199,8 +9162,8 @@ mod tests {
             ("excluded stereo", excluded_stereo),
         ] {
             assert_eq!(
-                canonicalize_constitution(&molecule, &canonicalization_context),
-                Err(MoleculeCanonicalizationError::Contradiction(Contradiction)),
+                canonicalize_constitution(&molecule, &canonicalize_context),
+                Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
                 "{location}",
             );
         }
@@ -9387,32 +9350,32 @@ mod tests {
 
     #[rstest]
     #[case::integrity(
-        MoleculeCanonicalizationError::from(MoleculeIntegrityError::InvalidReference {
+        MoleculeCanonicalizeError::from(MoleculeIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
-        MoleculeCanonicalizationError::Integrity(MoleculeIntegrityError::InvalidReference {
+        MoleculeCanonicalizeError::Integrity(MoleculeIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
     )]
     #[case::contradiction(
-        MoleculeCanonicalizationError::from(Contradiction),
-        MoleculeCanonicalizationError::Contradiction(Contradiction)
+        MoleculeCanonicalizeError::from(Contradiction),
+        MoleculeCanonicalizeError::Contradiction(Contradiction)
     )]
-    fn test_molecule_canonicalization_error_from(
-        #[case] actual: MoleculeCanonicalizationError,
-        #[case] expected: MoleculeCanonicalizationError,
+    fn test_molecule_canonicalize_error_from(
+        #[case] actual: MoleculeCanonicalizeError,
+        #[case] expected: MoleculeCanonicalizeError,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case::topology(CanonicalizationLevel::Topology)]
-    #[case::constitution(CanonicalizationLevel::Constitution)]
-    #[case::structure(CanonicalizationLevel::Structure)]
-    #[case::full(CanonicalizationLevel::Full)]
+    #[case::topology(CanonicalizeLevel::Topology)]
+    #[case::constitution(CanonicalizeLevel::Constitution)]
+    #[case::structure(CanonicalizeLevel::Structure)]
+    #[case::full(CanonicalizeLevel::Full)]
     fn test_canonicalize_integrity_valid_reaction_span_by(
-        canonicalization_context: CanonicalizationContext,
-        #[case] level: CanonicalizationLevel,
+        canonicalize_context: CanonicalizeContext,
+        #[case] level: CanonicalizeLevel,
     ) {
         let source = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
@@ -9442,57 +9405,53 @@ mod tests {
         });
 
         assert_eq!(
-            canonicalize_integrity_valid_reaction_span_by(
-                &source,
-                level,
-                &canonicalization_context,
-            ),
+            canonicalize_integrity_valid_reaction_span_by(&source, level, &canonicalize_context,),
             Ok(expected.clone()),
         );
         assert_eq!(
-            canonicalize_reaction_span_by(&source, level, &canonicalization_context),
+            canonicalize_reaction_span_by(&source, level, &canonicalize_context),
             Ok(expected),
         );
     }
 
     #[rstest]
     #[case::integrity(
-        ReactionSpanCanonicalizationError::from(ReactionSpanIntegrityError::InvalidReference {
+        ReactionSpanCanonicalizeError::from(ReactionSpanIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
-        ReactionSpanCanonicalizationError::Integrity(
+        ReactionSpanCanonicalizeError::Integrity(
             ReactionSpanIntegrityError::InvalidReference {
                 entity: Entity::Atom(AtomId(1)),
             },
         ),
     )]
     #[case::contradiction(
-        ReactionSpanCanonicalizationError::from(Contradiction),
-        ReactionSpanCanonicalizationError::Contradiction(Contradiction)
+        ReactionSpanCanonicalizeError::from(Contradiction),
+        ReactionSpanCanonicalizeError::Contradiction(Contradiction)
     )]
-    fn test_reaction_span_canonicalization_error_from(
-        #[case] actual: ReactionSpanCanonicalizationError,
-        #[case] expected: ReactionSpanCanonicalizationError,
+    fn test_reaction_span_canonicalize_error_from(
+        #[case] actual: ReactionSpanCanonicalizeError,
+        #[case] expected: ReactionSpanCanonicalizeError,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
     #[case::integrity(
-        ReactionCanonicalizationError::from(ReactionIntegrityError::InvalidReference {
+        ReactionCanonicalizeError::from(ReactionIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
-        ReactionCanonicalizationError::Integrity(ReactionIntegrityError::InvalidReference {
+        ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
         }),
     )]
     #[case::contradiction(
-        ReactionCanonicalizationError::from(Contradiction),
-        ReactionCanonicalizationError::Contradiction(Contradiction)
+        ReactionCanonicalizeError::from(Contradiction),
+        ReactionCanonicalizeError::Contradiction(Contradiction)
     )]
-    fn test_reaction_canonicalization_error_from(
-        #[case] actual: ReactionCanonicalizationError,
-        #[case] expected: ReactionCanonicalizationError,
+    fn test_reaction_canonicalize_error_from(
+        #[case] actual: ReactionCanonicalizeError,
+        #[case] expected: ReactionCanonicalizeError,
     ) {
         assert_eq!(actual, expected);
     }

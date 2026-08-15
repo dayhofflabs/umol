@@ -10,7 +10,7 @@ from umol import (
     AtomForm,
     AtomDelta,
     AtomFieldChange,
-    CanonicalizationLevel,
+    CanonicalizeLevel,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
@@ -1090,8 +1090,8 @@ def test_reaction_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(CanonicalizationLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, CanonicalizationLevel.Full)
+    assert source.canonicalize_by(CanonicalizeLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
 def test_reaction_canonicalize_by():
@@ -1100,7 +1100,7 @@ def test_reaction_canonicalize_by():
 
     assert plain.canonical_eq_by(
         constrained,
-        CanonicalizationLevel.Structure,
+        CanonicalizeLevel.Structure,
     )
     assert not plain.canonical_eq(constrained)
 

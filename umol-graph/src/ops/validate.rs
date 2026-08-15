@@ -90,7 +90,7 @@ pub struct Validator<'a> {
 
 /// Semantic contradiction returned by one component of [`Validator`].
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ValidatorContradiction {
+pub enum ValidateContradiction {
     #[error(transparent)]
     ValenceInvariant(#[from] ValenceMismatch),
     #[error(transparent)]
@@ -109,7 +109,7 @@ pub enum ValidatorContradiction {
 
 /// Setup, reference, or unsupported-operation failure returned by one validator component.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ValidatorError {
+pub enum ValidateError {
     #[error(transparent)]
     ValenceInvariant(#[from] ValenceInvariantsError),
     #[error(transparent)]
@@ -152,7 +152,7 @@ impl<'a> Validator<'a> {
     pub fn validate_invariants(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
+    ) -> Result<Solution<(), ValidateContradiction>, ValidateError> {
         let mut any_undetermined = false;
         match self.constraint.validate(molecule)? {
             Solution::Determined(()) => {}
@@ -177,7 +177,7 @@ impl<'a> Validator<'a> {
     pub fn validate_conformance(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
+    ) -> Result<Solution<(), ValidateContradiction>, ValidateError> {
         let mut any_undetermined = false;
         match self.connectivity.validate(molecule)? {
             Solution::Determined(()) => {}
@@ -206,7 +206,7 @@ impl<'a> Validator<'a> {
     pub fn validate(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
+    ) -> Result<Solution<(), ValidateContradiction>, ValidateError> {
         let mut any_undetermined = false;
         match self.validate_invariants(molecule)? {
             Solution::Determined(()) => {}
@@ -222,7 +222,7 @@ impl<'a> Validator<'a> {
     }
 }
 
-fn verdict(any_undetermined: bool) -> Solution<(), ValidatorContradiction> {
+fn verdict(any_undetermined: bool) -> Solution<(), ValidateContradiction> {
     if any_undetermined {
         Solution::Underdetermined(())
     } else {
@@ -364,8 +364,8 @@ mod tests {
     })]
     fn test_validator_contradiction_from(#[case] input: ConstraintInvariantsContradiction) {
         assert_eq!(
-            ValidatorContradiction::from(input.clone()),
-            ValidatorContradiction::Constraint(input)
+            ValidateContradiction::from(input.clone()),
+            ValidateContradiction::Constraint(input)
         );
     }
 
@@ -378,8 +378,8 @@ mod tests {
     })]
     fn test_validator_error_from(#[case] input: ConstraintInvariantsError) {
         assert_eq!(
-            ValidatorError::from(input.clone()),
-            ValidatorError::Constraint(input)
+            ValidateError::from(input.clone()),
+            ValidateError::Constraint(input)
         );
     }
 
@@ -398,7 +398,7 @@ mod tests {
             }],
             ..Default::default()
         }),
-        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+        Solution::Contradictory(ValidateContradiction::SpinInvariants(
             SpinInvariantsContradiction::MoleculeAtom {
                 atom: AtomId(0),
                 error: SpinStateError::Incompatible {
@@ -426,7 +426,7 @@ mod tests {
             }).into(),
             ..Default::default()
         }),
-        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+        Solution::Contradictory(ValidateContradiction::SpinInvariants(
             SpinInvariantsContradiction::UnpairedElectronCoupling {
                 constraint_index: 0,
                 error: SpinStateError::Incompatible {
@@ -438,7 +438,7 @@ mod tests {
     )]
     fn test_validator_validate(
         #[case] molecule: Molecule,
-        #[case] expected: Solution<(), ValidatorContradiction>,
+        #[case] expected: Solution<(), ValidateContradiction>,
     ) {
         let model = ChemistryModel::default();
         assert_eq!(
@@ -460,7 +460,7 @@ mod tests {
 
         assert_eq!(
             Validator::new(&model).validate_invariants(&molecule),
-            Err(ValidatorError::Constraint(
+            Err(ValidateError::Constraint(
                 ConstraintInvariantsError::InvalidReference {
                     entity: Entity::Atom(AtomId(1)),
                 }
@@ -503,7 +503,7 @@ mod tests {
             }],
             ..Default::default()
         }),
-        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+        Solution::Contradictory(ValidateContradiction::SpinInvariants(
             SpinInvariantsContradiction::MoleculeAtom {
                 atom: AtomId(0),
                 error: SpinStateError::Incompatible {
@@ -531,7 +531,7 @@ mod tests {
             }).into(),
             ..Default::default()
         }),
-        Solution::Contradictory(ValidatorContradiction::SpinInvariants(
+        Solution::Contradictory(ValidateContradiction::SpinInvariants(
             SpinInvariantsContradiction::UnpairedElectronCoupling {
                 constraint_index: 0,
                 error: SpinStateError::Incompatible {
@@ -543,7 +543,7 @@ mod tests {
     )]
     fn test_validator_validate_invariants(
         #[case] molecule: Molecule,
-        #[case] expected: Solution<(), ValidatorContradiction>,
+        #[case] expected: Solution<(), ValidateContradiction>,
     ) {
         let model = ChemistryModel::default();
         assert_eq!(
@@ -561,7 +561,7 @@ mod tests {
     )]
     #[case::aromaticity(
         mol_dsl!(r#"{:atoms ["C#a"]}"#),
-        Solution::Contradictory(ValidatorContradiction::Aromaticity(
+        Solution::Contradictory(ValidateContradiction::Aromaticity(
             AromaticityConformanceContradiction::Inconsistency(
                 AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
             ),
@@ -583,7 +583,7 @@ mod tests {
     )]
     fn test_validator_validate_conformance(
         #[case] molecule: Molecule,
-        #[case] expected: Solution<(), ValidatorContradiction>,
+        #[case] expected: Solution<(), ValidateContradiction>,
     ) {
         let original = molecule.clone();
         let model = ChemistryModel::default();
@@ -617,7 +617,7 @@ mod tests {
             let expected = SpinInvariantsValidator
                 .validate(&molecule)
                 .unwrap()
-                .map_contradiction(ValidatorContradiction::SpinInvariants);
+                .map_contradiction(ValidateContradiction::SpinInvariants);
             let model = ChemistryModel::default();
 
             prop_assert_eq!(

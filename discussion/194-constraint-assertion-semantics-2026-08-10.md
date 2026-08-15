@@ -1345,14 +1345,31 @@ pub struct ResolveReport {
 - S6e1: validation-family renames per the *Operation names* rule: `ValidatorError` →
   `ValidateError`, `ValidatorContradiction` → `ValidateContradiction` (`ValidateConfig`
   already conforms). [dep: none]
+  **Done 2026-08-15:** both renamed; all twenty sites lived in `ops/validate.rs`, no
+  re-exports elsewhere; the per-domain `*Validator` engines keep the agent noun.
 - S6e2: kekulization/aromatization renames: `KekulizationConfig` → `KekulizeConfig`,
   `KekulizerError` → `KekulizeError`; audit the aromatizer family alongside. [dep: none]
+  **Done 2026-08-15:** all three run artifacts renamed (`KekulizeConfig`, `KekulizeError`,
+  and the aromatizer audit's one find, `AromatizerError` → `AromatizeError`); `Kekulizer`
+  and `Aromatizer` keep the agent noun; config test names follow.
 - S6e3: canonicalization renames: `CanonicalizationConfig`/`Context`/`Level` →
   `Canonicalize*`; `MoleculeCanonicalizationError` and peers → `*CanonicalizeError`.
   [dep: none]
+  **Done 2026-08-15:** all six types renamed across graph-ir, graph, and the Python
+  surface (pyclass names, `__init__.py` inventory, pytest reprs); type-named test
+  functions and the `canonicalize_context` fixture identifiers follow; prose
+  "canonicalization" stays — the operation noun is legitimate outside type names.
 - S6e4: io and perception naming audit: `ParserError` versus `ParseError` (merge or rename;
   `ParserType` stays — an agent classification); decide the agent name for
   `AromaticityPerception`, which is an engine wearing the operation noun. [dep: none]
+  **Done 2026-08-15:** the io half dissolved on audit — `ParserError` no longer exists,
+  both formats carry module-scoped `ParseError`, and `ParserType` is a private clap enum
+  in the `test_smiles` binary. The perception engine is `AromaticityPerceiver`
+  (user-approved), with the consistency sweep the user requested: `HueckelRuleAromaticity`
+  → `HueckelAromaticity`, the `HueckelRule` perceiver variant → `Hueckel` (matching
+  `AromaticityRule::Hueckel`), module `hueckel_rule.rs` → `hueckel.rs`; the
+  `test_aromaticity_perception_*` family follows the type, and the three behavior-named
+  functions in it conform to scenario names in the same pass.
 - S6e5: the concreteness rename, exhaustive, and the `zeroed()` retirement (settled
   2026-08-13). The transform family `into_ground` → `into_concrete` on all seven form files
   with corrected rustdoc (the honest contract under any name: fills undetermined fields; the

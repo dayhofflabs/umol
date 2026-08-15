@@ -54,8 +54,8 @@ PUBLIC_EXPORTS = frozenset(
     BondView
     BondViews
     BooleanForm
-    CanonicalizationConfig
-    CanonicalizationLevel
+    CanonicalizeConfig
+    CanonicalizeLevel
     ChemistryModel
     CisTransConfiguration
     CisTransStereo
@@ -505,7 +505,7 @@ def test_public_operation_signature(operation, expected):
             "(*, common_subgraph_enumeration_algorithm=Ellipsis)",
         ),
         (
-            umol.CanonicalizationConfig,
+            umol.CanonicalizeConfig,
             "(*, automorphism_algorithm=Ellipsis)",
         ),
         (
