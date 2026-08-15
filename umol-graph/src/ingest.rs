@@ -282,8 +282,8 @@ mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
     use umol_graph_ir::ir::{
-        AromaticSystemId, AromaticValenceForm, AtomId, BooleanForm, Deltas, ElectronCountsForm,
-        NumForm, TetrahedralStereoForm,
+        AromaticSystemId, AromaticValenceForm, AtomId, BondConstraintForm, BondId, BooleanForm,
+        Constraint, Deltas, ElectronCountsForm, NumForm, TetrahedralStereoForm,
     };
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
@@ -296,7 +296,8 @@ mod tests {
         ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
-        AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
+        AromaticityFailurePolicy, AromaticityResolveConfig, DischargeContradiction,
+        StereoResolveConfig,
     };
     use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ResolveReport};
 
@@ -783,6 +784,28 @@ mod tests {
         "*",
         SmilesInputError::Underdetermined(ResolveUnderdetermined::default())
     )]
+    #[case::biphenyl_unwritten_single(
+        // OpenSMILES: a single (nonaromatic) bond between two aromatic atoms
+        // must be explicitly represented; the unwritten bond raises as an
+        // aromatic assertion no system can claim.
+        "c1ccc(cc1)c1ccccc1",
+        SmilesInputError::Contradiction(ResolveContradiction::Discharge(
+            DischargeContradiction::Assertion {
+                constraint: Constraint::Bond(
+                    BondId(6),
+                    BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
+                ),
+            },
+        ))
+    )]
+    #[case::cyclobutadiene(
+        "c1ccc1",
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        ))
+    )]
     fn test_ingest_smiles_error(#[case] input: &str, #[case] expected: SmilesInputError) {
         assert_eq!(ingest_smiles(input), Err(expected));
     }
@@ -1022,6 +1045,10 @@ mod tests {
     #[case::isoquinoline(
         "c1ccc2cnccc2c1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h0#n#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 9 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 8 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"] [6 7 "1#c0#u0#s"] [7 8 "1#c0#u0#s"] [8 9 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::biphenyl_explicit_single(
+        "c1ccc(cc1)-c1ccccc1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]#c0#u0#s"} {:atoms [6 7 8 9 10 11] :attrs "[1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 5 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [3 6 "1#c0#u0#s"] [6 11 "1#c0#u0#s"] [6 7 "1#c0#u0#s"] [7 8 "1#c0#u0#s"] [8 9 "1#c0#u0#s"] [9 10 "1#c0#u0#s"] [10 11 "1#c0#u0#s"]]}"##)
     )]
     #[case::pyridone_exocyclic(
         "O=c1cccc[nH]1",
