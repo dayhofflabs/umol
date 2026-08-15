@@ -41,6 +41,19 @@ use umol_graph_ir::ir::{
 pub struct ConstraintValidateConfig {
     pub relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm,
     pub connected_components_algorithm: ConnectedComponentsAlgorithm,
+    pub derived_kind: DerivedKind,
+}
+
+/// Which derived reading incidence validation compares assertions against:
+/// the views' `derived` (present relations only — an absent overlay leaves
+/// the assertion undecided) or `derived_complete` (the closure — absence
+/// reads as the definite negative). The default is the closure, preserving
+/// the historical per-kind absence semantics.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DerivedKind {
+    Derived,
+    #[default]
+    DerivedComplete,
 }
 
 /// Cross-check between inline and molecule-scope constraints and their
@@ -324,8 +337,10 @@ impl<'a> ConstraintEvaluation<'a> {
                 .into()
             }))
         } else {
-            Ok(validate_atom_constraint(self.molecule, id, constraint)
-                .map_contradiction(ConstraintInvariantsContradiction::from))
+            Ok(
+                validate_atom_constraint(self.molecule, id, constraint, self.config.derived_kind)
+                    .map_contradiction(ConstraintInvariantsContradiction::from),
+            )
         }
     }
 
@@ -348,9 +363,11 @@ impl<'a> ConstraintEvaluation<'a> {
                 .into()
             }))
         } else {
-            Ok(validate_bond_constraint(self.molecule, id, constraint)
-                .expect("non-ring bond constraint")
-                .map_contradiction(ConstraintInvariantsContradiction::from))
+            Ok(
+                validate_bond_constraint(self.molecule, id, constraint, self.config.derived_kind)
+                    .expect("non-ring bond constraint")
+                    .map_contradiction(ConstraintInvariantsContradiction::from),
+            )
         }
     }
 
@@ -367,11 +384,14 @@ impl<'a> ConstraintEvaluation<'a> {
                 Err(ConstraintInvariantsError::DativeBondRingMembershipUnsupported { bond: id })
             }
         } else {
-            Ok(
-                validate_dative_bond_constraint(self.molecule, id, constraint)
-                    .expect("non-ring dative-bond constraint")
-                    .map_contradiction(ConstraintInvariantsContradiction::from),
+            Ok(validate_dative_bond_constraint(
+                self.molecule,
+                id,
+                constraint,
+                self.config.derived_kind,
             )
+            .expect("non-ring dative-bond constraint")
+            .map_contradiction(ConstraintInvariantsContradiction::from))
         }
     }
 
@@ -381,10 +401,13 @@ impl<'a> ConstraintEvaluation<'a> {
         constraint: &AromaticSystemConstraintForm,
     ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
         self.require(Entity::AromaticSystem(id))?;
-        Ok(
-            validate_aromatic_system_constraint(self.molecule, id, constraint)
-                .map_contradiction(ConstraintInvariantsContradiction::from),
+        Ok(validate_aromatic_system_constraint(
+            self.molecule,
+            id,
+            constraint,
+            self.config.derived_kind,
         )
+        .map_contradiction(ConstraintInvariantsContradiction::from))
     }
 
     fn evaluate_multicenter_bond(
@@ -393,10 +416,13 @@ impl<'a> ConstraintEvaluation<'a> {
         constraint: &MulticenterBondConstraintForm,
     ) -> Result<Solution<(), ConstraintInvariantsContradiction>, ConstraintInvariantsError> {
         self.require(Entity::MulticenterBond(id))?;
-        Ok(
-            validate_multicenter_bond_constraint(self.molecule, id, constraint)
-                .map_contradiction(ConstraintInvariantsContradiction::from),
+        Ok(validate_multicenter_bond_constraint(
+            self.molecule,
+            id,
+            constraint,
+            self.config.derived_kind,
         )
+        .map_contradiction(ConstraintInvariantsContradiction::from))
     }
 
     fn evaluate_noncovalent_bond(
@@ -619,6 +645,7 @@ mod tests {
     const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+        derived_kind: DerivedKind::DerivedComplete,
     };
 
     #[fixture]

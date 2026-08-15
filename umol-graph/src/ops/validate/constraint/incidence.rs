@@ -3,15 +3,14 @@
 use thiserror::Error;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemConstraintForm, AromaticSystemId, AromaticValenceForm, AtomConstraintForm,
-    AtomConstraintKey, AtomId, BondConstraintForm, BondConstraintKey, BondId, CisTransStereoForm,
-    DativeBondConstraintForm, DativeBondId, Entity, Lattice, Molecule,
-    MulticenterBondConstraintForm, MulticenterBondId, MulticenterValenceForm,
-    NoncovalentBondConstraintForm, NoncovalentBondId, StereoKind, TetrahedralStereoForm,
+    AromaticSystemConstraintForm, AromaticSystemId, AtomConstraintForm, AtomConstraintKey, AtomId,
+    BondConstraintForm, BondConstraintKey, BondId, DativeBondConstraintForm, DativeBondId, Entity,
+    Lattice, Molecule, MulticenterBondConstraintForm, MulticenterBondId,
+    NoncovalentBondConstraintForm, NoncovalentBondId,
 };
 use umol_utils::solution::Solution;
 
-use super::ConstraintInvariantsError;
+use super::{ConstraintInvariantsError, DerivedKind};
 
 /// Evaluates model-independent incidence constraints; only noncovalent `#I` requires a graph
 /// algorithm selector.
@@ -24,6 +23,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         connected_components_algorithm: ConnectedComponentsAlgorithm,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let mut bond_components = None;
@@ -31,7 +31,7 @@ impl IncidenceConstraintInvariantsValidator {
 
         for id in molecule.atoms().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_atom(molecule, id)?,
+                self.validate_molecule_atom(molecule, id, reading)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -39,7 +39,7 @@ impl IncidenceConstraintInvariantsValidator {
         }
         for id in molecule.bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_bond(molecule, id)?,
+                self.validate_molecule_bond(molecule, id, reading)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -47,7 +47,7 @@ impl IncidenceConstraintInvariantsValidator {
         }
         for id in molecule.dative_bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_dative_bond(molecule, id)?,
+                self.validate_molecule_dative_bond(molecule, id, reading)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -55,7 +55,7 @@ impl IncidenceConstraintInvariantsValidator {
         }
         for id in molecule.aromatic_systems().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_aromatic_system(molecule, id)?,
+                self.validate_molecule_aromatic_system(molecule, id, reading)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -63,7 +63,7 @@ impl IncidenceConstraintInvariantsValidator {
         }
         for id in molecule.multicenter_bonds().ids() {
             if let Some(contradiction) = observe(
-                self.validate_molecule_multicenter_bond(molecule, id)?,
+                self.validate_molecule_multicenter_bond(molecule, id, reading)?,
                 &mut any_underdetermined,
             ) {
                 return Ok(Solution::Contradictory(contradiction));
@@ -104,6 +104,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         atom_id: AtomId,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let atom =
@@ -114,7 +115,7 @@ impl IncidenceConstraintInvariantsValidator {
                     entity: Entity::Atom(atom_id),
                 })?;
         Ok(conjunction(atom.constraints().iter().map(|constraint| {
-            validate_atom_constraint(molecule, atom_id, constraint)
+            validate_atom_constraint(molecule, atom_id, constraint, reading)
         })))
     }
 
@@ -124,6 +125,7 @@ impl IncidenceConstraintInvariantsValidator {
         molecule: &Molecule,
         atom_id: AtomId,
         key: AtomConstraintKey,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let atom =
@@ -137,7 +139,7 @@ impl IncidenceConstraintInvariantsValidator {
             .constraints()
             .asserted(key)
             .map_or(Solution::Determined(()), |constraint| {
-                validate_atom_constraint(molecule, atom_id, constraint)
+                validate_atom_constraint(molecule, atom_id, constraint, reading)
             }))
     }
 
@@ -146,6 +148,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         bond_id: BondId,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let bond =
@@ -156,7 +159,7 @@ impl IncidenceConstraintInvariantsValidator {
                     entity: Entity::Bond(bond_id),
                 })?;
         Ok(conjunction(bond.constraints().iter().filter_map(
-            |constraint| validate_bond_constraint(molecule, bond_id, constraint),
+            |constraint| validate_bond_constraint(molecule, bond_id, constraint, reading),
         )))
     }
 
@@ -166,6 +169,7 @@ impl IncidenceConstraintInvariantsValidator {
         molecule: &Molecule,
         bond_id: BondId,
         key: BondConstraintKey,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let bond =
@@ -178,7 +182,7 @@ impl IncidenceConstraintInvariantsValidator {
         Ok(bond
             .constraints()
             .asserted(key)
-            .and_then(|constraint| validate_bond_constraint(molecule, bond_id, constraint))
+            .and_then(|constraint| validate_bond_constraint(molecule, bond_id, constraint, reading))
             .unwrap_or(Solution::Determined(())))
     }
 
@@ -187,6 +191,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         bond_id: DativeBondId,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let bond = molecule.dative_bonds().get(bond_id).ok_or(
@@ -195,7 +200,7 @@ impl IncidenceConstraintInvariantsValidator {
             },
         )?;
         Ok(conjunction(bond.constraints().iter().filter_map(
-            |constraint| validate_dative_bond_constraint(molecule, bond_id, constraint),
+            |constraint| validate_dative_bond_constraint(molecule, bond_id, constraint, reading),
         )))
     }
 
@@ -204,6 +209,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         system_id: AromaticSystemId,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let system = molecule.aromatic_systems().get(system_id).ok_or(
@@ -212,7 +218,7 @@ impl IncidenceConstraintInvariantsValidator {
             },
         )?;
         Ok(conjunction(system.constraints().iter().map(|constraint| {
-            validate_aromatic_system_constraint(molecule, system_id, constraint)
+            validate_aromatic_system_constraint(molecule, system_id, constraint, reading)
         })))
     }
 
@@ -221,6 +227,7 @@ impl IncidenceConstraintInvariantsValidator {
         &self,
         molecule: &Molecule,
         bond_id: MulticenterBondId,
+        reading: DerivedKind,
     ) -> Result<Solution<(), IncidenceConstraintInvariantsContradiction>, ConstraintInvariantsError>
     {
         let bond = molecule.multicenter_bonds().get(bond_id).ok_or(
@@ -229,7 +236,7 @@ impl IncidenceConstraintInvariantsValidator {
             },
         )?;
         Ok(conjunction(bond.constraints().iter().map(|constraint| {
-            validate_multicenter_bond_constraint(molecule, bond_id, constraint)
+            validate_multicenter_bond_constraint(molecule, bond_id, constraint, reading)
         })))
     }
 
@@ -261,119 +268,61 @@ impl IncidenceConstraintInvariantsValidator {
     }
 }
 
-/// Validate one non-ring atom constraint against its incidence-derived value.
-/// Ring constraints are determined identities here.
+/// Validate one non-ring atom constraint against the selected derived
+/// reading: violation ⇔ the assertion and the reading fail to meet. Ring
+/// constraints are determined identities here — the ring validator owns them.
 pub fn validate_atom_constraint(
     molecule: &Molecule,
     atom_id: AtomId,
     constraint: &AtomConstraintForm,
+    reading: DerivedKind,
 ) -> Solution<(), IncidenceConstraintInvariantsContradiction> {
-    let atom = molecule.atom(atom_id);
-    match constraint {
-        AtomConstraintForm::Valence(_) => evaluate(
-            constraint,
-            &AtomConstraintForm::valence(atom.valence()),
-            atom_contradiction(atom_id, constraint),
-        ),
-        AtomConstraintForm::DonatedPairs(_) => {
-            // Multi-donor dative incidence has no defined per-atom projection pending the
-            // coordination/haptic entity split in discussion doc 117.
-            let unsupported = atom.dative_bonds().any(|bond| {
-                bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)
-            });
-            if !constraint.is_undetermined() && unsupported {
-                Solution::Underdetermined(())
-            } else {
-                evaluate(
-                    constraint,
-                    &AtomConstraintForm::donated_pairs(atom.donated_pairs()),
-                    atom_contradiction(atom_id, constraint),
-                )
-            }
-        }
-        AtomConstraintForm::AcceptedPairs(_) => {
-            // Multi-donor dative incidence has no defined per-atom projection pending the
-            // coordination/haptic entity split in discussion doc 117.
-            let unsupported = atom
-                .dative_bonds()
-                .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id);
-            if !constraint.is_undetermined() && unsupported {
-                Solution::Underdetermined(())
-            } else {
-                evaluate(
-                    constraint,
-                    &AtomConstraintForm::accepted_pairs(atom.accepted_pairs()),
-                    atom_contradiction(atom_id, constraint),
-                )
-            }
-        }
-        AtomConstraintForm::AromaticValence(_) => {
-            let derived = if atom.is_in_aromatic_system() {
-                AromaticValenceForm::aromatic(atom.aromatic_valence())
-            } else {
-                AromaticValenceForm::NotAromatic
-            };
-            evaluate(
-                constraint,
-                &AtomConstraintForm::aromatic_valence(derived),
-                atom_contradiction(atom_id, constraint),
-            )
-        }
-        AtomConstraintForm::MulticenterValence(_) => {
-            let derived = if atom.is_in_multicenter_bond() {
-                MulticenterValenceForm::multicenter(atom.multicenter_valence())
-            } else {
-                MulticenterValenceForm::NotMulticenter
-            };
-            evaluate(
-                constraint,
-                &AtomConstraintForm::multicenter_valence(derived),
-                atom_contradiction(atom_id, constraint),
-            )
-        }
-        AtomConstraintForm::TetrahedralStereo(_) => {
-            let derived = match atom.stereo_atom() {
-                Some(stereo) => match (
-                    stereo.attributes.configuration.kind(),
-                    stereo.attributes.configuration.coset(),
-                ) {
-                    (Some(StereoKind::Tetrahedral), Some(coset)) => {
-                        TetrahedralStereoForm::stereo(coset.clone())
-                    }
-                    (Some(_), _) => TetrahedralStereoForm::NotStereo,
-                    (None, _) => TetrahedralStereoForm::Undetermined,
-                },
-                None => TetrahedralStereoForm::NotStereo,
-            };
-            evaluate(
-                constraint,
-                &AtomConstraintForm::tetrahedral_stereo(derived),
-                atom_contradiction(atom_id, constraint),
-            )
-        }
-        AtomConstraintForm::Degree(_) => evaluate(
-            constraint,
-            &AtomConstraintForm::degree(atom.degree()),
-            atom_contradiction(atom_id, constraint),
-        ),
-        AtomConstraintForm::TotalDegree(_) => evaluate(
-            constraint,
-            &AtomConstraintForm::total_degree(atom.total_degree()),
-            atom_contradiction(atom_id, constraint),
-        ),
-        AtomConstraintForm::TotalValence(_) => evaluate(
-            constraint,
-            &AtomConstraintForm::total_valence(atom.total_valence()),
-            atom_contradiction(atom_id, constraint),
-        ),
-        AtomConstraintForm::TotalHydrogens(_) => evaluate(
-            constraint,
-            &AtomConstraintForm::total_hydrogens(atom.total_hydrogens()),
-            atom_contradiction(atom_id, constraint),
-        ),
+    if matches!(
+        constraint,
         AtomConstraintForm::RingDegree(_)
-        | AtomConstraintForm::RingValence(_)
-        | AtomConstraintForm::RingMembership(_) => Solution::Determined(()),
+            | AtomConstraintForm::RingValence(_)
+            | AtomConstraintForm::RingMembership(_)
+    ) {
+        return Solution::Determined(());
+    }
+    if constraint.is_undetermined() {
+        return Solution::Determined(());
+    }
+    let atom = molecule.atom(atom_id);
+    // Multi-donor dative incidence has no defined per-atom projection pending
+    // the coordination/haptic entity split in discussion doc 117.
+    let unsupported = match constraint {
+        AtomConstraintForm::DonatedPairs(_) => atom
+            .dative_bonds()
+            .any(|bond| bond.donor_count() != 1 && bond.donor_ids().any(|donor| donor == atom.id)),
+        AtomConstraintForm::AcceptedPairs(_) => atom
+            .dative_bonds()
+            .any(|bond| bond.donor_count() != 1 && bond.acceptor_id() == atom.id),
+        _ => false,
+    };
+    if unsupported {
+        return Solution::Underdetermined(());
+    }
+    match derived_atom(molecule, atom_id, constraint, reading) {
+        Some(derived) => evaluate(
+            constraint,
+            &derived,
+            atom_contradiction(atom_id, constraint),
+        ),
+        None => Solution::Underdetermined(()),
+    }
+}
+
+fn derived_atom(
+    molecule: &Molecule,
+    atom_id: AtomId,
+    constraint: &AtomConstraintForm,
+    reading: DerivedKind,
+) -> Option<AtomConstraintForm> {
+    let constraints = molecule.atom(atom_id).constraints();
+    match reading {
+        DerivedKind::Derived => constraints.derived(constraint.key()),
+        DerivedKind::DerivedComplete => constraints.derived_complete(constraint.key()),
     }
 }
 
@@ -415,35 +364,26 @@ pub fn validate_bond_constraint(
     molecule: &Molecule,
     bond_id: BondId,
     constraint: &BondConstraintForm,
+    reading: DerivedKind,
 ) -> Option<Solution<(), IncidenceConstraintInvariantsContradiction>> {
-    let bond = molecule.bond(bond_id);
-    Some(match constraint {
-        BondConstraintForm::Aromatic(_) => evaluate(
+    if matches!(constraint, BondConstraintForm::RingMembership(_)) {
+        return None;
+    }
+    if constraint.is_undetermined() {
+        return Some(Solution::Determined(()));
+    }
+    let constraints = molecule.bond(bond_id).constraints();
+    let derived = match reading {
+        DerivedKind::Derived => constraints.derived(constraint.key()),
+        DerivedKind::DerivedComplete => constraints.derived_complete(constraint.key()),
+    };
+    Some(match derived {
+        Some(derived) => evaluate(
             constraint,
-            &BondConstraintForm::aromatic(bond.is_in_aromatic_system()),
+            &derived,
             bond_contradiction(bond_id, constraint),
         ),
-        BondConstraintForm::CisTransStereo(_) => {
-            let derived = match bond.stereo_bond() {
-                Some(stereo) => match (
-                    stereo.attributes.configuration.kind(),
-                    stereo.attributes.configuration.coset(),
-                ) {
-                    (Some(StereoKind::CisTrans), Some(coset)) => {
-                        CisTransStereoForm::stereo(coset.clone())
-                    }
-                    (Some(_), _) => CisTransStereoForm::NotStereo,
-                    (None, _) => CisTransStereoForm::Undetermined,
-                },
-                None => CisTransStereoForm::NotStereo,
-            };
-            evaluate(
-                constraint,
-                &BondConstraintForm::cis_trans_stereo(derived),
-                bond_contradiction(bond_id, constraint),
-            )
-        }
-        BondConstraintForm::RingMembership(_) => return None,
+        None => Solution::Underdetermined(()),
     })
 }
 
@@ -451,35 +391,32 @@ pub fn validate_dative_bond_constraint(
     molecule: &Molecule,
     bond_id: DativeBondId,
     constraint: &DativeBondConstraintForm,
+    reading: DerivedKind,
 ) -> Option<Solution<(), IncidenceConstraintInvariantsContradiction>> {
-    let bond = molecule.dative_bond(bond_id);
-    Some(match constraint {
-        DativeBondConstraintForm::Aromatic(_) if bond.donor_count() != 1 => {
-            // Aromatic incidence is defined only for a binary dative bond pending the
-            // coordination/haptic entity split in discussion doc 117.
-            if constraint.is_undetermined() {
-                Solution::Determined(())
-            } else {
-                Solution::Underdetermined(())
-            }
-        }
-        DativeBondConstraintForm::Aromatic(_) => {
-            let donor_system = bond
-                .donors()
-                .next()
-                .and_then(|donor| donor.aromatic_system_id());
-            let derived =
-                donor_system.is_some() && donor_system == bond.acceptor().aromatic_system_id();
-            evaluate(
-                constraint,
-                &DativeBondConstraintForm::aromatic(derived),
-                IncidenceConstraintInvariantsContradiction::DativeBond {
-                    bond: bond.id,
-                    constraint: constraint.clone(),
-                },
-            )
-        }
-        DativeBondConstraintForm::RingMembership(_) => return None,
+    if matches!(constraint, DativeBondConstraintForm::RingMembership(_)) {
+        return None;
+    }
+    if constraint.is_undetermined() {
+        return Some(Solution::Determined(()));
+    }
+    // The views' derivation yields no value for multi-donor incidence,
+    // pending the coordination/haptic entity split in discussion doc 117;
+    // the `None` fallthrough reads it as undecided.
+    let constraints = molecule.dative_bond(bond_id).constraints();
+    let derived = match reading {
+        DerivedKind::Derived => constraints.derived(constraint.key()),
+        DerivedKind::DerivedComplete => constraints.derived_complete(constraint.key()),
+    };
+    Some(match derived {
+        Some(derived) => evaluate(
+            constraint,
+            &derived,
+            IncidenceConstraintInvariantsContradiction::DativeBond {
+                bond: bond_id,
+                constraint: constraint.clone(),
+            },
+        ),
+        None => Solution::Underdetermined(()),
     })
 }
 
@@ -487,36 +424,54 @@ pub fn validate_aromatic_system_constraint(
     molecule: &Molecule,
     system_id: AromaticSystemId,
     constraint: &AromaticSystemConstraintForm,
+    reading: DerivedKind,
 ) -> Solution<(), IncidenceConstraintInvariantsContradiction> {
-    let derived = AromaticSystemConstraintForm::electron_count(
-        molecule.aromatic_system(system_id).electron_count(),
-    );
-    evaluate(
-        constraint,
-        &derived,
-        IncidenceConstraintInvariantsContradiction::AromaticSystem {
-            system: system_id,
-            constraint: constraint.clone(),
-        },
-    )
+    if constraint.is_undetermined() {
+        return Solution::Determined(());
+    }
+    let constraints = molecule.aromatic_system(system_id).constraints();
+    let derived = match reading {
+        DerivedKind::Derived => constraints.derived(constraint.key()),
+        DerivedKind::DerivedComplete => constraints.derived_complete(constraint.key()),
+    };
+    match derived {
+        Some(derived) => evaluate(
+            constraint,
+            &derived,
+            IncidenceConstraintInvariantsContradiction::AromaticSystem {
+                system: system_id,
+                constraint: constraint.clone(),
+            },
+        ),
+        None => Solution::Underdetermined(()),
+    }
 }
 
 pub fn validate_multicenter_bond_constraint(
     molecule: &Molecule,
     bond_id: MulticenterBondId,
     constraint: &MulticenterBondConstraintForm,
+    reading: DerivedKind,
 ) -> Solution<(), IncidenceConstraintInvariantsContradiction> {
-    let derived = MulticenterBondConstraintForm::electron_count(
-        molecule.multicenter_bond(bond_id).electron_count(),
-    );
-    evaluate(
-        constraint,
-        &derived,
-        IncidenceConstraintInvariantsContradiction::MulticenterBond {
-            bond: bond_id,
-            constraint: constraint.clone(),
-        },
-    )
+    if constraint.is_undetermined() {
+        return Solution::Determined(());
+    }
+    let constraints = molecule.multicenter_bond(bond_id).constraints();
+    let derived = match reading {
+        DerivedKind::Derived => constraints.derived(constraint.key()),
+        DerivedKind::DerivedComplete => constraints.derived_complete(constraint.key()),
+    };
+    match derived {
+        Some(derived) => evaluate(
+            constraint,
+            &derived,
+            IncidenceConstraintInvariantsContradiction::MulticenterBond {
+                bond: bond_id,
+                constraint: constraint.clone(),
+            },
+        ),
+        None => Solution::Underdetermined(()),
+    }
 }
 
 pub fn validate_noncovalent_bond_constraint(
@@ -643,9 +598,42 @@ pub fn bond_components_by_atom(
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_graph_ir::ir::{AromaticValenceForm, NumForm};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
+
+    #[rstest]
+    #[case::complete_contradicts(
+        DerivedKind::DerivedComplete,
+        Solution::Contradictory(IncidenceConstraintInvariantsContradiction::Atom {
+            atom: AtomId(0),
+            constraint: AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(
+                NumForm::Undetermined,
+            )),
+        })
+    )]
+    #[case::derived_undecided(DerivedKind::Derived, Solution::Underdetermined(()))]
+    fn test_validate_atom_constraint_reading(
+        #[case] reading: DerivedKind,
+        #[case] expected: Solution<(), IncidenceConstraintInvariantsContradiction>,
+    ) {
+        // An aromatic assertion on an atom in no stored system: the closure
+        // reads the absence as `NotAromatic` and contradicts; the open
+        // reading leaves the assertion undecided.
+        let molecule = mol_dsl!(r#"{:atoms ["C#a+"] :bonds []}"#);
+        assert_eq!(
+            validate_atom_constraint(
+                &molecule,
+                AtomId(0),
+                &AtomConstraintForm::aromatic_valence(AromaticValenceForm::aromatic(
+                    NumForm::Undetermined,
+                )),
+                reading,
+            ),
+            expected
+        );
+    }
 
     #[rstest]
     #[case::determined(
@@ -691,8 +679,12 @@ mod tests {
         >,
     ) {
         assert_eq!(
-            IncidenceConstraintInvariantsValidator
-                .validate_molecule_atom_constraint(&molecule, atom, key),
+            IncidenceConstraintInvariantsValidator.validate_molecule_atom_constraint(
+                &molecule,
+                atom,
+                key,
+                DerivedKind::DerivedComplete
+            ),
             expected
         );
     }
@@ -735,8 +727,12 @@ mod tests {
         >,
     ) {
         assert_eq!(
-            IncidenceConstraintInvariantsValidator
-                .validate_molecule_bond_constraint(&molecule, bond, key),
+            IncidenceConstraintInvariantsValidator.validate_molecule_bond_constraint(
+                &molecule,
+                bond,
+                key,
+                DerivedKind::DerivedComplete
+            ),
             expected
         );
     }
@@ -776,8 +772,11 @@ mod tests {
         let molecule = mol_dsl!(input);
 
         assert_eq!(
-            IncidenceConstraintInvariantsValidator
-                .validate(&molecule, ConnectedComponentsAlgorithm::Bfs,),
+            IncidenceConstraintInvariantsValidator.validate(
+                &molecule,
+                ConnectedComponentsAlgorithm::Bfs,
+                DerivedKind::DerivedComplete,
+            ),
             Ok(Solution::Determined(()))
         );
     }
@@ -832,8 +831,11 @@ mod tests {
         let molecule = mol_dsl!(input);
 
         assert_eq!(
-            IncidenceConstraintInvariantsValidator
-                .validate(&molecule, ConnectedComponentsAlgorithm::Bfs,),
+            IncidenceConstraintInvariantsValidator.validate(
+                &molecule,
+                ConnectedComponentsAlgorithm::Bfs,
+                DerivedKind::DerivedComplete,
+            ),
             Ok(Solution::Contradictory(expected))
         );
     }
@@ -861,8 +863,11 @@ mod tests {
         let molecule = mol_dsl!(input);
 
         assert_eq!(
-            IncidenceConstraintInvariantsValidator
-                .validate(&molecule, ConnectedComponentsAlgorithm::Bfs,),
+            IncidenceConstraintInvariantsValidator.validate(
+                &molecule,
+                ConnectedComponentsAlgorithm::Bfs,
+                DerivedKind::DerivedComplete,
+            ),
             Ok(Solution::Underdetermined(()))
         );
     }

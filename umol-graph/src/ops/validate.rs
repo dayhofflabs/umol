@@ -22,7 +22,7 @@ pub use connectivity::{
 };
 pub use constraint::{
     ConstraintInvariantsContradiction, ConstraintInvariantsError, ConstraintInvariantsValidator,
-    ConstraintValidateConfig, IncidenceConstraintInvariantsContradiction,
+    ConstraintValidateConfig, DerivedKind, IncidenceConstraintInvariantsContradiction,
     IncidenceConstraintInvariantsValidator, MoleculeConstraintInvariantsContradiction,
     MoleculeConstraintInvariantsValidator, RelationalConstraintInvariantsContradiction,
     RelationalConstraintInvariantsValidator, RingConstraintInvariantsContradiction,
@@ -66,6 +66,7 @@ impl Default for ValidateConfig {
             constraint: ConstraintValidateConfig {
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                derived_kind: DerivedKind::DerivedComplete,
             },
             aromaticity: AromaticityConfig::default(),
             stereo: StereoValidateConfig::default(),
@@ -259,6 +260,7 @@ mod tests {
                 constraint: ConstraintValidateConfig {
                     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                     connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                    derived_kind: DerivedKind::DerivedComplete,
                 },
                 aromaticity: AromaticityConfig {
                     ring_config: RingConfig::default(),
@@ -293,6 +295,7 @@ mod tests {
             constraint: ConstraintValidateConfig {
                 relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
                 connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+                derived_kind: DerivedKind::DerivedComplete,
             },
             aromaticity: AromaticityConfig {
                 ring_config: RingConfig::default(),

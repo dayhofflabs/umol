@@ -1123,6 +1123,29 @@ pub struct ResolveReport {
   derived reading is `⊥`". `ConstraintValidateConfig` selects the reading (`derived` versus
   `derived_complete`; selector representation decided here) with current per-kind absence
   semantics read off `incidence.rs` and preserved as the default. [dep: S0e]
+  **Done 2026-08-15:** the selector is `DerivedKind { Derived, DerivedComplete }`
+  (variants verbatim from the accessor names; `Default = DerivedComplete`; type renamed
+  from `DerivedReading` same day — kind-and-key naming), the `derived_kind` field on
+  `ConstraintValidateConfig`. The incidence dispatch collapsed onto the views' keyed readings — assertion
+  undetermined ⇒ satisfied; reading absent (`None`) ⇒ undecided; else the meet decides —
+  with two retained locals: the doc-117 multi-donor guard on atom `DonatedPairs`/
+  `AcceptedPairs` (the views' pair projections are explicitly provisional there; the dative
+  `Aromatic` guard collapsed for free — the view derivation yields `None` on multi-donor
+  incidence), and the noncovalent `Intramolecular` component computation (the views hardcode
+  reachability; the config's explicit-algorithm doctrine keeps the selector meaningful).
+  Ring keys keep routing to the ring validator. Two settled prerequisites landed in
+  graph-ir first: the bond-carried aromatic-mark arm was **dropped from the derived
+  reading** — `derived` reads relations only; the placement merge lives on
+  `asserted_complete`, so a bond-marked unresolved host no longer satisfies atom-aromatic
+  pattern constraints (four pins repinned; the "kekulé-flag" case labels retired) — and
+  the stereo derivations were **totalized** over staging entities (undetermined kind or
+  coset reads `Undetermined` rather than panicking through the compliance-assuming view
+  accessors; a tetrahedral entity with an open coset now honestly reads `Undetermined`
+  where incidence had mapped it `NotStereo`). The relational predicate path pins
+  `DerivedComplete` locally — threading its own selector is outside this subitem.
+  Discriminating pin: an unsystemed `#a+` atom contradicts under `DerivedComplete` and
+  stays undecided under `Derived`. graph-ir 6065, lib 952, conformance 669, property,
+  umol-py 1620, pytest 1311, clippy zero.
 - S6b: registry row `"C #v4 #a0"` (grounds as `#h0 #n0 #v4 #a0`; the exocyclic-carbonyl aromatic
   carbon of 2-pyridone, uracil, 4-pyranone, tropone, and tropolone) plus their snapshots. Pure
   data; independent — may land as early as S4h.

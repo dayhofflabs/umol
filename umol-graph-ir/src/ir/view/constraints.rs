@@ -729,8 +729,8 @@ mod tests {
     use crate::ir::num::NumForm;
     use crate::ir::ring::{RingConfig, RingModel};
     use crate::ir::stereo::{
-        CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoCoset, StereoKind,
-        Stereogenicity, TetrahedralStereoForm,
+        CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
+        StereoKind, Stereogenicity, TetrahedralStereoForm,
     };
     use crate::mol_dsl;
 
@@ -969,12 +969,10 @@ mod tests {
             AromaticValenceForm::aromatic(NumForm::Lit(1)),
         )),
     )]
-    #[case::aromatic_bond_flag(
+    #[case::aromatic_bond_marked(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         AtomConstraintKey::AromaticValence,
-        Some(AtomConstraintForm::aromatic_valence(
-            AromaticValenceForm::aromatic(NumForm::Undetermined),
-        )),
+        None,
     )]
     #[case::multicenter_absent(
         mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
@@ -1010,6 +1008,35 @@ mod tests {
         AtomConstraintKey::TetrahedralStereo,
         Some(AtomConstraintForm::tetrahedral_stereo(
             TetrahedralStereoForm::stereo(StereoCoset::Lit(1)),
+        )),
+    )]
+    #[case::tetrahedral_undetermined_configuration(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm {
+                    configuration: StereoConfigurationForm::Undetermined,
+                    ..StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                },
+            )],
+            ..Default::default()
+        }),
+        AtomConstraintKey::TetrahedralStereo,
+        Some(AtomConstraintForm::tetrahedral_stereo(
+            TetrahedralStereoForm::Undetermined,
         )),
     )]
     fn test_atom_constraints_view_derived(
@@ -1182,8 +1209,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_view_derived_complete_bond_flag() {
-        // The closure does not override positive Kekulé-bond evidence.
+    fn test_atom_constraints_view_derived_complete_bond_marked() {
+        // Derived reads relations only: a bond-carried aromatic mark is an
+        // assertion, merged on the `asserted_complete` side; the closure
+        // reads the absent relation as its definite negative.
         let molecule = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#);
         assert_eq!(
             molecule
@@ -1191,7 +1220,7 @@ mod tests {
                 .constraints()
                 .derived_complete(AtomConstraintKey::AromaticValence),
             Some(AtomConstraintForm::aromatic_valence(
-                AromaticValenceForm::aromatic(NumForm::Undetermined),
+                AromaticValenceForm::NotAromatic,
             )),
         );
     }
@@ -1505,6 +1534,37 @@ mod tests {
         BondConstraintKey::CisTransStereo,
         Some(BondConstraintForm::cis_trans_stereo(
             CisTransStereoForm::stereo(StereoCoset::Lit(1)),
+        )),
+    )]
+    #[case::cis_trans_undetermined_configuration(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: vec![
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(2), AtomId(3), BondForm::from_order(2)),
+                (AtomId(3), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                ],
+                StereoBondForm {
+                    configuration: StereoConfigurationForm::Undetermined,
+                    ..StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0))
+                },
+            )],
+            ..Default::default()
+        }),
+        BondId(1),
+        BondConstraintKey::CisTransStereo,
+        Some(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::Undetermined,
         )),
     )]
     #[case::cis_trans_absent(

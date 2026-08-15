@@ -51,7 +51,7 @@ use crate::ops::valence::compare::compare_by_key;
 use crate::ops::valence::{AtomCompletions, ResolveReport};
 use crate::ops::validate::{
     ConstraintInvariantsContradiction, ConstraintInvariantsError, ConstraintInvariantsValidator,
-    ConstraintValidateConfig,
+    ConstraintValidateConfig, DerivedKind,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -892,6 +892,7 @@ impl<'a> Resolver<'a> {
                 .aromaticity
                 .perception
                 .connected_components_algorithm,
+            derived_kind: DerivedKind::DerivedComplete,
         });
         for constraint in molecule.constraints().iter() {
             match validator.evaluate(molecule, constraint)? {

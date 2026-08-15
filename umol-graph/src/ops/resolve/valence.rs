@@ -8,7 +8,7 @@ use umol_utils::solution::Solution;
 use crate::ops::model::{ValenceCandidateSource, ValenceModel};
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 use crate::ops::validate::{
-    IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
+    DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
 };
 
 #[derive(Clone, Debug)]
@@ -59,7 +59,12 @@ impl<'a> ValenceResolver<'a> {
                 AtomConstraintKey::AcceptedPairs,
             ] {
                 match IncidenceConstraintInvariantsValidator
-                    .validate_molecule_atom_constraint(molecule, atom, key)
+                    .validate_molecule_atom_constraint(
+                        molecule,
+                        atom,
+                        key,
+                        DerivedKind::DerivedComplete,
+                    )
                     .expect("atom id came from the molecule atom store")
                 {
                     Solution::Determined(()) => {}

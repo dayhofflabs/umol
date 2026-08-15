@@ -11,7 +11,7 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 use super::incidence::validate_atom_constraint;
-use super::ConstraintInvariantsError;
+use super::{ConstraintInvariantsError, DerivedKind};
 
 /// Evaluates one molecule-scope relational constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -371,7 +371,12 @@ fn evaluate_atom(
             Truth::False
         }
     } else {
-        truth_from_solution(validate_atom_constraint(molecule, atom_id, predicate))
+        truth_from_solution(validate_atom_constraint(
+            molecule,
+            atom_id,
+            predicate,
+            DerivedKind::DerivedComplete,
+        ))
     }
 }
 

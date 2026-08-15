@@ -525,16 +525,11 @@ pub(crate) fn atom_derived_constraint(
             || complete)
             .then(|| AtomConstraintForm::accepted_pairs(accepted_pairs(molecule, atom))),
         AtomConstraintKey::AromaticValence => {
+            // Derived reads relations only: bond-carried aromatic marks are
+            // assertions and merge on the `asserted_complete` side.
             if molecule.aromatic_systems().has_incident(atom) {
                 Some(AtomConstraintForm::aromatic_valence(
                     AromaticValenceForm::aromatic(aromatic_valence(molecule, atom)),
-                ))
-            } else if molecule
-                .neighbors(atom)
-                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanForm::Lit(true)))
-            {
-                Some(AtomConstraintForm::aromatic_valence(
-                    AromaticValenceForm::aromatic(NumForm::Undetermined),
                 ))
             } else if complete {
                 Some(AtomConstraintForm::aromatic_valence(
@@ -558,14 +553,22 @@ pub(crate) fn atom_derived_constraint(
             }
         }
         AtomConstraintKey::TetrahedralStereo => {
-            if let Some(stereo) = molecule
-                .stereo_atoms()
-                .at(atom)
-                .filter(|s| s.kind() == StereoKind::Tetrahedral)
-            {
-                Some(AtomConstraintForm::tetrahedral_stereo(
-                    TetrahedralStereoForm::stereo(stereo.coset().clone()),
-                ))
+            // Total over staging entities: an undetermined kind or coset is
+            // an open claim, not the absence of one.
+            if let Some(stereo) = molecule.stereo_atoms().at(atom) {
+                let form = match (
+                    stereo.attributes.configuration.kind(),
+                    stereo.attributes.configuration.coset(),
+                ) {
+                    (Some(StereoKind::Tetrahedral), Some(coset)) => {
+                        TetrahedralStereoForm::stereo(coset.clone())
+                    }
+                    (Some(StereoKind::Tetrahedral), None) | (None, _) => {
+                        TetrahedralStereoForm::Undetermined
+                    }
+                    (Some(_), _) => TetrahedralStereoForm::NotStereo,
+                };
+                Some(AtomConstraintForm::tetrahedral_stereo(form))
             } else if complete {
                 Some(AtomConstraintForm::tetrahedral_stereo(
                     TetrahedralStereoForm::NotStereo,

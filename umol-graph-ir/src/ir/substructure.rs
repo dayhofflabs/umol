@@ -823,15 +823,15 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
         vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
-    #[case::atom_aromatic_kekule_flag(
+    #[case::atom_aromatic_bond_marked_unresolved(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a+"] :bonds []}"#),
-        vec![vec![AtomId(0)], vec![AtomId(1)]]
+        vec![]
     )]
-    #[case::atom_not_aromatic_kekule_flag(
+    #[case::atom_not_aromatic_bond_marked_unresolved(
         mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
         mol_dsl!(r#"{:atoms ["C#a!"] :bonds []}"#),
-        vec![]
+        vec![vec![AtomId(0)], vec![AtomId(1)]]
     )]
     #[case::atom_multicenter_valence(
         mol_dsl!(r#"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :attrs "[2,0,0]"}]}"#),

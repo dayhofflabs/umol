@@ -9,7 +9,7 @@ use umol_graph_ir::ir::{
 use umol_utils::solution::Solution;
 
 use crate::ops::validate::{
-    IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
+    DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -40,6 +40,7 @@ impl MulticenterBondsResolver {
                     molecule,
                     atom,
                     AtomConstraintKey::MulticenterValence,
+                    DerivedKind::DerivedComplete,
                 )
                 .expect("atom id came from the molecule atom store")
             {

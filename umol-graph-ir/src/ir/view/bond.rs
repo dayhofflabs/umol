@@ -249,14 +249,22 @@ pub(crate) fn bond_derived_constraint(
             }
         }
         BondConstraintKey::CisTransStereo => {
-            if let Some(stereo) = molecule
-                .stereo_bonds()
-                .at(bond)
-                .filter(|s| s.kind() == StereoKind::CisTrans)
-            {
-                Some(BondConstraintForm::cis_trans_stereo(
-                    CisTransStereoForm::stereo(stereo.coset().clone()),
-                ))
+            // Total over staging entities: an undetermined kind or coset is
+            // an open claim, not the absence of one.
+            if let Some(stereo) = molecule.stereo_bonds().at(bond) {
+                let form = match (
+                    stereo.attributes.configuration.kind(),
+                    stereo.attributes.configuration.coset(),
+                ) {
+                    (Some(StereoKind::CisTrans), Some(coset)) => {
+                        CisTransStereoForm::stereo(coset.clone())
+                    }
+                    (Some(StereoKind::CisTrans), None) | (None, _) => {
+                        CisTransStereoForm::Undetermined
+                    }
+                    (Some(_), _) => CisTransStereoForm::NotStereo,
+                };
+                Some(BondConstraintForm::cis_trans_stereo(form))
             } else if complete {
                 Some(BondConstraintForm::cis_trans_stereo(
                     CisTransStereoForm::NotStereo,

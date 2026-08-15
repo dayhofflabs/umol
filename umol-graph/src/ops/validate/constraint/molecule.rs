@@ -163,11 +163,13 @@ mod tests {
     use umol_graph_ir::ir::UnpairedElectronsForm;
     use umol_graph_ir::mol_dsl;
 
+    use super::super::DerivedKind;
     use super::*;
 
     const CONFIG: ConstraintValidateConfig = ConstraintValidateConfig {
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
         connected_components_algorithm: ConnectedComponentsAlgorithm::Bfs,
+        derived_kind: DerivedKind::DerivedComplete,
     };
 
     #[fixture]
