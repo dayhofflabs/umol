@@ -426,6 +426,16 @@ selection, then the model envelope and bindings, then the suites.
   `Underdetermined` with both nitrogen splits in the report, and the existing
   `MostSaturated` imidazole case stays green; expectation deltas swept. Stage green: full
   lib suite, pytest. [dep: A2b]
+  **Done 2026-08-14:** quinoline and isoquinoline pinned in
+  `test_ingest_smiles_aromatic_nitrogen` with full-molecule expectations — one ten-atom
+  system, electrons `[1;10]`, fusion carbons `#h0`, nitrogen `#h0#n`. New
+  `test_ingest_smiles_with_tie_break`: bare-`n` imidazole under `Strict` (via
+  `ValenceModel { tie_break: Strict, ..smiles() }`) errors `Underdetermined` with the
+  report carrying exactly the two nitrogen entries (`#h0#n#v2#a` / `#h#n0#v2#a2` each) and
+  no tie-break records; the `MostSaturated` imidazole case stays green beside it. The
+  expectation sweep was empty — no other lib or pytest expectation moved (A2b left both
+  suites green). Stage closed green: lib 927, pytest 1306, clippy zero. A2 complete; the
+  panic family's acceptance is pinned end-to-end.
 
 ### A3 — the aromaticity tie-break envelope (breaking)
 
@@ -433,6 +443,15 @@ selection, then the model envelope and bindings, then the suites.
   `AromaticityModel.tie_break` field (`umol-graph/src/ops/model.rs`), constructors and
   presets inheriting `Strict`; every `AromaticityModel` struct-literal site across the
   workspace migrates. Model table tests. Breaking. [dep: A2c]
+  **Done 2026-08-14:** the enum and field landed per the model-surface spec; the three
+  presets set `Strict` explicitly, matching the `ValenceModel` constructor style. Forty-five
+  struct-literal sites migrated across umol-graph (ingest, parse, aromaticity, resolve,
+  validate, model tests) and umol-py's rust side, `tie_break` last in declaration order.
+  umol-py interim until A3c: the pyclass `AromaticityModel` does not carry the field yet;
+  `to_rust` fills `Strict`. Model tests: presets pin `Strict` in their full-literal
+  expectations, `test_aromaticity_model_eq_difference` gains the `tie_break` case,
+  `test_aromaticity_tie_break_default` pins the default variant. Lib 929, umol-py 1620,
+  pytest 1306, workspace clippy zero.
 - A3b: the structural order in selection under non-`Error` policies: claimed-atom count
   descending, then member sets lexicographic; `tie_breaks` gains the chosen systems'
   members when the structural order decided. Keep-mode tests: the tolerated-carrier family

@@ -163,8 +163,8 @@ mod tests {
     use rstest::rstest;
     use umol_graph::ops::model::{
         AromaticityModel as GraphAromaticityModel, AromaticityRule as GraphAromaticityRule,
-        RingLimits as GraphRingLimits, StereoModel as GraphStereoModel,
-        ValenceModel as GraphValenceModel,
+        AromaticityTieBreak as GraphAromaticityTieBreak, RingLimits as GraphRingLimits,
+        StereoModel as GraphStereoModel, ValenceModel as GraphValenceModel,
     };
     use umol_graph::ops::validate::ConnectivityModel as GraphConnectivityModel;
     use umol_graph::valence_table;
@@ -192,7 +192,7 @@ mod tests {
         ChemistryModel::new(
             ConnectivityModel::from_rust(&GraphConnectivityModel::default()),
             ValenceModel::from_rust(&GraphValenceModel::counts(Cow::Owned(valence_table![C => [4]]))),
-            AromaticityModel::from_rust(&GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 } }),
+            AromaticityModel::from_rust(&GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hmo { stabilization_threshold: 0.375 }, tie_break: GraphAromaticityTieBreak::Strict }),
             StereoModel::from_rust(&GraphStereoModel {
                 para_stereo: true,
                 ..GraphStereoModel::default()
@@ -220,6 +220,7 @@ mod tests {
                         ..GraphRingLimits::default()
                     },
                 },
+                tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {
                 para_stereo: true,
@@ -254,6 +255,7 @@ mod tests {
                         ..GraphRingLimits::default()
                     },
                 },
+                tie_break: GraphAromaticityTieBreak::Strict,
             },
             stereo: GraphStereoModel {
                 para_stereo: true,

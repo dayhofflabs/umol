@@ -760,7 +760,7 @@ mod tests {
     use umol_graph_ir::{atom_dsl, mol_dsl, mol_dsl_ground};
 
     use super::*;
-    use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
+    use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
     use crate::ops::valence::AtomCompletions;
 
     #[rustfmt::skip]
@@ -838,6 +838,7 @@ mod tests {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         }
     }
 
@@ -875,93 +876,6 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#
         )
-    }
-
-    #[fixture]
-    fn quinoline() -> Molecule {
-        mol_dsl!(
-            r#"{
-            :atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "N#c0" "C#c0"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
-                    [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]
-        }"#
-        )
-    }
-
-    /// No completion of the flexible atom reproduces the stored system:
-    /// `#a2` breaks the count, `#a!` removes the candidate ring.
-    #[fixture]
-    fn stored_system_conflict() -> Molecule {
-        mol_dsl!(
-            r#"{
-            :atoms ["C#c0" "C#a" "C#a" "C#a" "C#a" "C#a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
-        }"#
-        )
-    }
-
-    #[fixture]
-    fn flexible_nitrogen_completions() -> AtomCompletions {
-        let mut completions = AtomCompletions::new();
-        completions.insert(
-            AtomId(0),
-            smallvec![
-                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
-                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
-            ],
-        );
-        for atom in 1..5 {
-            completions.insert(AtomId(atom), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]);
-        }
-        completions
-    }
-
-    #[fixture]
-    fn symmetric_pair_completions() -> AtomCompletions {
-        let mut completions = AtomCompletions::new();
-        for atom in 0..2 {
-            completions.insert(
-                AtomId(atom),
-                smallvec![
-                    atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
-                    atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-                ],
-            );
-        }
-        for atom in 2..6 {
-            completions.insert(AtomId(atom), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]);
-        }
-        completions
-    }
-
-    #[fixture]
-    fn quinoline_completions() -> AtomCompletions {
-        let mut completions = AtomCompletions::new();
-        for atom in [0, 1, 2, 3, 4, 5, 6, 7, 9] {
-            completions.insert(AtomId(atom), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]);
-        }
-        completions.insert(
-            AtomId(8),
-            smallvec![
-                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
-                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
-            ],
-        );
-        completions
-    }
-
-    #[fixture]
-    fn stored_conflict_completions() -> AtomCompletions {
-        let mut completions = AtomCompletions::new();
-        completions.insert(
-            AtomId(0),
-            smallvec![
-                atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
-                atom_dsl!("C#i=#c0#h2#n0#u0#s#v2#a!"),
-            ],
-        );
-        completions
     }
 
     #[rstest]
@@ -1349,13 +1263,24 @@ mod tests {
     #[case::unique_survivor(
         mol_dsl!(r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
                      :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
-        flexible_nitrogen_completions(),
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![
+                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+        ]),
         ValenceTieBreak::Strict,
-        Solution::Determined(ResolveState { completions: {
-                let mut narrowed = flexible_nitrogen_completions();
-                narrowed.insert(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2")]);
-                narrowed
-            }, systems: vec![(
+        Solution::Determined(ResolveState { completions: AtomCompletions::from_iter([
+                (AtomId(0), smallvec![atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2")]),
+                (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            ]), systems: vec![(
                 (0..5).map(AtomId).collect(),
                 AromaticSystemForm::from_electrons(vec![2, 1, 1, 1, 1])
                     .with_charge(0)
@@ -1363,42 +1288,69 @@ mod tests {
             )], tie_breaks: Vec::new() })
     )]
     #[case::quinoline(
-        quinoline(),
-        quinoline_completions(),
+        mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "N#c0" "C#c0"]
+                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                             [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]}"#),
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(6), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(7), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(8), smallvec![
+                atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(9), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+        ]),
         ValenceTieBreak::Strict,
-        Solution::Determined(ResolveState { completions: {
-                let mut narrowed = quinoline_completions();
-                narrowed.insert(AtomId(8), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]);
-                narrowed
-            }, systems: vec![(
+        Solution::Determined(ResolveState { completions: AtomCompletions::from_iter([
+                (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(6), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(7), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(8), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]),
+                (AtomId(9), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            ]), systems: vec![(
                 (0..10).map(AtomId).collect(),
                 AromaticSystemForm::from_electrons(vec![1; 10])
                     .with_charge(0)
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )], tie_breaks: Vec::new() })
     )]
-    #[case::tie_strict(
-        mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
-        symmetric_pair_completions(),
-        ValenceTieBreak::Strict,
-        Solution::Determined(ResolveState {
-            completions: symmetric_pair_completions(),
-            systems: Vec::new(),
-            tie_breaks: Vec::new(),
-        })
-    )]
     #[case::tie_most_saturated(
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
                      :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
-        symmetric_pair_completions(),
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![
+                atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(1), smallvec![
+                atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+        ]),
         ValenceTieBreak::MostSaturated,
-        Solution::Determined(ResolveState { completions: {
-                let mut narrowed = symmetric_pair_completions();
-                narrowed.insert(AtomId(0), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0")]);
-                narrowed.insert(AtomId(1), smallvec![atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")]);
-                narrowed
-            }, systems: vec![(
+        Solution::Determined(ResolveState { completions: AtomCompletions::from_iter([
+                (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0")]),
+                (AtomId(1), smallvec![atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2")]),
+                (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+                (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            ]), systems: vec![(
                 (0..6).map(AtomId).collect(),
                 AromaticSystemForm::from_electrons(vec![0, 2, 1, 1, 1, 1])
                     .with_charge(0)
@@ -1418,11 +1370,7 @@ mod tests {
     )]
     #[case::unclaimed_aromatic_contradiction(
         mol_dsl!(r#"{:atoms ["N#c0"] :bonds []}"#),
-        {
-            let mut completions = AtomCompletions::new();
-            completions.insert(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")]);
-            completions
-        },
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
         ValenceTieBreak::Strict,
         Solution::Contradictory(AromaticityContradiction::Inconsistency(
             AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
@@ -1455,46 +1403,114 @@ mod tests {
     }
 
     #[rstest]
-    #[case::error(
-        AromaticityFailurePolicy::Error,
-        Solution::Contradictory(AromaticityContradiction::Inconsistency(
-            AromaticityInconsistency::AromaticSystemFailure {
-                system: AromaticSystemId(0)
-            }
-        ))
+    #[case::tie_strict(
+        mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
+                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        AtomCompletions::from_iter([
+            (AtomId(0), smallvec![
+                atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(1), smallvec![
+                atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
+                atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+            ]),
+            (AtomId(2), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(3), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(4), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+            (AtomId(5), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
+        ]),
+        ValenceTieBreak::Strict
     )]
-    #[case::keep(
-        AromaticityFailurePolicy::Keep,
-        Solution::Determined(ResolveState {
-            completions: stored_conflict_completions.clone(),
-            systems: Vec::new(),
-            tie_breaks: Vec::new(),
-        })
-    )]
-    fn test_aromaticity_resolver_select_stored_conflict(
+    fn test_aromaticity_resolver_select_identity(
         aromaticity_model: AromaticityModel,
-        stored_system_conflict: Molecule,
-        stored_conflict_completions: AtomCompletions,
-        #[case] policy: AromaticityFailurePolicy,
-        #[case] expected: SelectOutcome,
+        #[case] molecule: Molecule,
+        #[case] completions: AtomCompletions,
+        #[case] tie_break: ValenceTieBreak,
     ) {
+        let state = ResolveState {
+            completions,
+            ..ResolveState::default()
+        };
         assert_eq!(
-            AromaticityResolver::with_config(
-                &aromaticity_model,
-                AromaticityResolveConfig {
-                    aromatic_system_failure: policy,
-                    ..AromaticityResolveConfig::default()
-                },
-            )
-            .select(
-                &stored_system_conflict,
+            AromaticityResolver::new(&aromaticity_model).select(
+                &molecule,
+                state.clone(),
+                tie_break
+            ),
+            Ok(Solution::Determined(state))
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_resolver_select_stored_conflict(aromaticity_model: AromaticityModel) {
+        // No completion of the flexible atom reproduces the stored system:
+        // `#a2` breaks the count, `#a!` removes the candidate ring.
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#c0" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#
+        );
+        assert_eq!(
+            AromaticityResolver::new(&aromaticity_model).select(
+                &molecule,
                 ResolveState {
-                    completions: stored_conflict_completions.clone(),
+                    completions: AtomCompletions::from_iter([(
+                        AtomId(0),
+                        smallvec![
+                            atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+                            atom_dsl!("C#i=#c0#h2#n0#u0#s#v2#a!"),
+                        ]
+                    )]),
                     ..ResolveState::default()
                 },
                 ValenceTieBreak::Strict,
             ),
-            Ok(expected)
+            Ok(Solution::Contradictory(
+                AromaticityContradiction::Inconsistency(
+                    AromaticityInconsistency::AromaticSystemFailure {
+                        system: AromaticSystemId(0)
+                    }
+                )
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_resolver_select_stored_conflict_identity(
+        aromaticity_model: AromaticityModel,
+    ) {
+        // Same conflict under `Keep`: the component is inert and the state
+        // passes through unchanged.
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C#c0" "C#a" "C#a" "C#a" "C#a" "C#a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#
+        );
+        let state = ResolveState {
+            completions: AtomCompletions::from_iter([(
+                AtomId(0),
+                smallvec![
+                    atom_dsl!("C#i=#c0#h0#n0#u0#s#v2#a2"),
+                    atom_dsl!("C#i=#c0#h2#n0#u0#s#v2#a!"),
+                ],
+            )]),
+            ..ResolveState::default()
+        };
+        assert_eq!(
+            AromaticityResolver::with_config(
+                &aromaticity_model,
+                AromaticityResolveConfig {
+                    aromatic_system_failure: AromaticityFailurePolicy::Keep,
+                    ..AromaticityResolveConfig::default()
+                },
+            )
+            .select(&molecule, state.clone(), ValenceTieBreak::Strict),
+            Ok(Solution::Determined(state))
         );
     }
 
@@ -1513,7 +1529,7 @@ mod tests {
 
     #[rstest]
     #[case::clar_heterocycle(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         mol_dsl_ground!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AromaticityContradiction::ClarNonBenzenoid(

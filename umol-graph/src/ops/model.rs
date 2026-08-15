@@ -138,11 +138,24 @@ impl ValenceTieBreak {
     }
 }
 
-/// Aromaticity model: the participating elements and the perception rule.
+/// Aromaticity model: the participating elements, the perception rule, and
+/// how structurally distinct valid assignments are disposed of.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AromaticityModel {
     pub scope: ElementScope,
     pub rule: AromaticityRule,
+    pub tie_break: AromaticityTieBreak,
+}
+
+/// Disposal policy for structurally distinct valid aromatic assignments.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AromaticityTieBreak {
+    /// No structural preference: structurally distinct survivors stay plural.
+    #[default]
+    Strict,
+    /// Maximal claimed-atom coverage; the perception decides what a system
+    /// is, the policy only orders how much of the evidence is realized.
+    MaxCoverage,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -167,6 +180,7 @@ impl AromaticityModel {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         }
     }
 
@@ -180,6 +194,7 @@ impl AromaticityModel {
                     ..RingLimits::default()
                 },
             },
+            tie_break: AromaticityTieBreak::Strict,
         }
     }
 
@@ -190,6 +205,7 @@ impl AromaticityModel {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         }
     }
 }
@@ -390,7 +406,7 @@ mod tests {
         ..ChemistryModel::default()
     })]
     #[case::aromaticity(ChemistryModel {
-        aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
         ..ChemistryModel::default()
     })]
     #[case::stereo(ChemistryModel {
@@ -443,16 +459,16 @@ mod tests {
 
     #[rstest]
     #[case::hueckel_rule(
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C, Element::N]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::hmo(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::clar(
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]
     fn test_aromaticity_model_eq(#[case] left: AromaticityModel, #[case] right: AromaticityModel) {
         assert_eq!(left, right);
@@ -460,38 +476,42 @@ mod tests {
 
     #[rstest]
     #[case::variant(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::hueckel_scope(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::hueckel_ring_limits(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits {
                 min_ring_size: 4,
                 ..RingLimits::default()
-            } } },
+            } }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::hmo_scope(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::hmo_threshold(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.6 } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.6 }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::clar_scope(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
-        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
     )]
     #[case::clar_ring_limits(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits {
                 include_fused: false,
                 ..RingLimits::default()
-            } } },
+            } }, tie_break: AromaticityTieBreak::Strict },
+    )]
+    #[case::tie_break(
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::MaxCoverage },
     )]
     fn test_aromaticity_model_eq_difference(
         #[case] left: AromaticityModel,
@@ -515,7 +535,8 @@ mod tests {
                 ]),
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::default()
-                }
+                },
+                tie_break: AromaticityTieBreak::Strict,
             },
         );
     }
@@ -531,7 +552,8 @@ mod tests {
                         min_ring_size: 6,
                         ..RingLimits::default()
                     }
-                }
+                },
+                tie_break: AromaticityTieBreak::Strict,
             },
         );
     }
@@ -544,9 +566,15 @@ mod tests {
                 scope: ElementScope::Any,
                 rule: AromaticityRule::Hueckel {
                     ring_limits: RingLimits::default()
-                }
+                },
+                tie_break: AromaticityTieBreak::Strict,
             },
         );
+    }
+
+    #[rstest]
+    fn test_aromaticity_tie_break_default() {
+        assert_eq!(AromaticityTieBreak::default(), AromaticityTieBreak::Strict);
     }
 
     #[rstest]

@@ -67,8 +67,8 @@ mod tests {
 
     use super::{parse_mol_bytes, parse_mol_bytes_with};
     use crate::ops::model::{
-        AromaticityModel, AromaticityRule, ChemistryModel, ElementScope, RingLimits, StereoModel,
-        ValenceModel, ValenceTieBreak,
+        AromaticityModel, AromaticityRule, AromaticityTieBreak, ChemistryModel, ElementScope,
+        RingLimits, StereoModel, ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
         AromaticityResolveConfig, ResolveConfig, Resolver, StereoResolveConfig,
@@ -139,7 +139,7 @@ mod tests {
                 tie_break: ValenceTieBreak::MostSaturated,
                 ..ValenceModel::counts(Cow::Borrowed(ValenceTable::default_table()))
             },
-            aromaticity: AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() } },
+            aromaticity: AromaticityModel { scope: ElementScope::AllowList(vec![Element::C]), rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
             stereo: StereoModel::default(),
         },
         ResolveConfig::default(),

@@ -438,7 +438,7 @@ mod tests {
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
-    use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
+    use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
 
     #[rstest]
     fn test_aromaticity_config_default() {
@@ -503,6 +503,7 @@ mod tests {
         let perception = AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::Any,
             rule,
+            tie_break: AromaticityTieBreak::Strict,
         });
         let electrons = |_: AtomId| Some(1);
         let Solution::Determined(first) = perception
@@ -536,6 +537,7 @@ mod tests {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         })
     }
 
@@ -835,6 +837,7 @@ mod tests {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         });
         let mut molecule = benzene();
         let solution = run_full(&perception, &mut molecule);
@@ -862,6 +865,7 @@ mod tests {
             rule: AromaticityRule::Clar {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         });
         let mut molecule = pyrrole();
         let solution = run_full(&perception, &mut molecule);
@@ -973,6 +977,7 @@ mod tests {
             rule: AromaticityRule::Hueckel {
                 ring_limits: RingLimits::default(),
             },
+            tie_break: AromaticityTieBreak::Strict,
         });
         let atoms: Vec<AtomForm> = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
         let bonds: Vec<_> = (0..6)

@@ -58,6 +58,22 @@ impl AtomCompletions {
     }
 }
 
+impl FromIterator<(AtomId, SmallVec<[AtomForm; 1]>)> for AtomCompletions {
+    /// Collects entries through `insert`: later duplicates replace earlier
+    /// ones.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any entry is empty.
+    fn from_iter<I: IntoIterator<Item = (AtomId, SmallVec<[AtomForm; 1]>)>>(iter: I) -> Self {
+        let mut completions = Self::new();
+        for (atom, entry) in iter {
+            completions.insert(atom, entry);
+        }
+        completions
+    }
+}
+
 /// Resolver verdict payload: a descriptive record with no invariant.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ResolveReport {
@@ -149,6 +165,60 @@ mod tests {
     #[should_panic(expected = "an empty candidate set is a contradiction, not an entry")]
     fn test_atom_completions_insert_error() {
         AtomCompletions::new().insert(AtomId(0), SmallVec::new());
+    }
+
+    #[rstest]
+    #[case::empty(vec![], AtomCompletions::new())]
+    #[case::entries(
+        vec![
+            (AtomId(4), smallvec![AtomForm::from_element(Element::N)]),
+            (
+                AtomId(0),
+                smallvec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::O),
+                ],
+            ),
+        ],
+        AtomCompletions {
+            entries: BTreeMap::from([
+                (
+                    AtomId(0),
+                    SmallVec::from_vec(vec![
+                        AtomForm::from_element(Element::C),
+                        AtomForm::from_element(Element::O),
+                    ]),
+                ),
+                (
+                    AtomId(4),
+                    SmallVec::from_vec(vec![AtomForm::from_element(Element::N)]),
+                ),
+            ]),
+        }
+    )]
+    #[case::duplicate_replaces(
+        vec![
+            (AtomId(0), smallvec![AtomForm::from_element(Element::C)]),
+            (AtomId(0), smallvec![AtomForm::from_element(Element::O)]),
+        ],
+        AtomCompletions {
+            entries: BTreeMap::from([(
+                AtomId(0),
+                SmallVec::from_vec(vec![AtomForm::from_element(Element::O)]),
+            )]),
+        }
+    )]
+    fn test_atom_completions_from_iter(
+        #[case] entries: Vec<(AtomId, SmallVec<[AtomForm; 1]>)>,
+        #[case] expected: AtomCompletions,
+    ) {
+        assert_eq!(AtomCompletions::from_iter(entries), expected);
+    }
+
+    #[rstest]
+    #[should_panic(expected = "an empty candidate set is a contradiction, not an entry")]
+    fn test_atom_completions_from_iter_error() {
+        AtomCompletions::from_iter([(AtomId(0), SmallVec::new())]);
     }
 
     #[rstest]

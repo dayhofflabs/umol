@@ -280,6 +280,7 @@ mod tests {
     use std::error::Error as _;
 
     use rstest::rstest;
+    use smallvec::smallvec;
     use umol_graph_ir::ir::{
         AromaticSystemId, AromaticValenceForm, AtomId, BooleanForm, Deltas, ElectronCountsForm,
         NumForm, TetrahedralStereoForm,
@@ -291,12 +292,13 @@ mod tests {
         AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     };
     use crate::ops::model::{
-        AromaticityModel, AromaticityRule, ElementScope, RingLimits, ValenceModel, ValenceTieBreak,
+        AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits,
+        ValenceModel, ValenceTieBreak,
     };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, StereoResolveConfig,
     };
-    use crate::ops::valence::AtomTypeRegistry;
+    use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ResolveReport};
 
     #[rstest]
     #[case::model_conversion(
@@ -674,7 +676,7 @@ mod tests {
     #[case::reactants_contradiction(
         "[nH]1cccc1>>",
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Reactants(
@@ -690,7 +692,7 @@ mod tests {
     #[case::products_contradiction(
         ">>[nH]1cccc1",
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Products(
@@ -709,7 +711,7 @@ mod tests {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
                     "C#i=#c0#h0#n0#u0#s#v2#a2"
                 )]))),
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Reactants(
@@ -726,7 +728,7 @@ mod tests {
             valence: ValenceModel::atom_typing(Cow::Owned(AtomTypeRegistry::from_atoms([atom_dsl!(
                     "C#i=#c0#h0#n0#u0#s#v2#a2"
                 )]))),
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hmo { stabilization_threshold: 0.5 }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Products(
@@ -948,11 +950,14 @@ mod tests {
         "c1cncn1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,2,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h0#n#u0#s"] :bonds [[0 4 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]}"##)
     )]
-    fn test_ingest_smiles_aromatic_nitrogen(#[case] input: &str, #[case] expected: Molecule) {
-        assert_eq!(ingest_smiles(input).unwrap(), expected);
-    }
-
-    #[rstest]
+    #[case::quinoline(
+        "c1ccc2ccccc2n1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "N#i=#c0#h0#n#u0#s"] :bonds [[0 9 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 8 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"] [6 7 "1#c0#u0#s"] [7 8 "1#c0#u0#s"] [8 9 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::isoquinoline(
+        "c1ccc2cnccc2c1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h0#n#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 9 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 8 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"] [6 7 "1#c0#u0#s"] [7 8 "1#c0#u0#s"] [8 9 "1#c0#u0#s"]]}"##)
+    )]
     #[case::chloronium(
         "C1C[Cl+]1",
         mol_dsl!(r##"{:atoms ["C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "Cl#i=#c+#h0#n2#u0#s"] :bonds [[0 2 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]]}"##)
@@ -961,8 +966,45 @@ mod tests {
         "FCl(F)F",
         mol_dsl!(r##"{:atoms ["F#i=#c0#h0#n3#u0#s" "Cl#i=#c0#h0#n2#u0#s" "F#i=#c0#h0#n3#u0#s" "F#i=#c0#h0#n3#u0#s"] :bonds [[0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [1 3 "1#c0#u0#s"]]}"##)
     )]
-    fn test_ingest_smiles_chlorine(#[case] input: &str, #[case] expected: Molecule) {
+    fn test_ingest_smiles_resolution(#[case] input: &str, #[case] expected: Molecule) {
         assert_eq!(ingest_smiles(input).unwrap(), expected);
+    }
+
+    #[rstest]
+    #[case::imidazole(
+        "c1cncn1",
+        SmilesInputError::Underdetermined(ResolveUnderdetermined {
+            report: ResolveReport {
+                unresolved: AtomCompletions::from_iter([2, 4].map(|atom| (
+                    AtomId(atom),
+                    smallvec![
+                        atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
+                        atom_dsl!("N#i=#c0#h#n0#u0#s#v2#a2"),
+                    ],
+                ))),
+                tie_breaks: Vec::new(),
+            },
+        })
+    )]
+    fn test_ingest_smiles_with_tie_break(#[case] input: &str, #[case] expected: SmilesInputError) {
+        // Both tautomeric assignments survive `Strict`: the report carries the
+        // two nitrogen splits.
+        let model = ChemistryModel {
+            valence: ValenceModel {
+                tie_break: ValenceTieBreak::Strict,
+                ..ValenceModel::smiles()
+            },
+            ..ChemistryModel::default()
+        };
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &ResolveConfig::default(),
+            ),
+            Err(expected)
+        );
     }
 
     #[rstest]
@@ -1083,7 +1125,7 @@ mod tests {
         "[nH]1cccc1",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
@@ -1269,7 +1311,7 @@ mod tests {
         "[nH]1cccc1>>",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() } },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
