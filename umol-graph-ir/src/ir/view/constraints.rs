@@ -35,9 +35,16 @@ use super::super::ring::RingSet;
 use super::super::stereo::{CisTransStereoForm, TetrahedralStereoForm};
 use super::super::traits::Lattice;
 use super::aromatic::{aromatic_system_asserted_constraints, aromatic_system_derived_constraint};
-use super::atom::{atom_asserted_constraints, atom_derived_constraint};
-use super::bond::{bond_asserted_constraints, bond_derived_constraint};
-use super::dative::{dative_bond_asserted_constraints, dative_bond_derived_constraint};
+use super::atom::{
+    atom_asserted_complete_constraint, atom_asserted_constraints, atom_derived_constraint,
+};
+use super::bond::{
+    bond_asserted_complete_constraint, bond_asserted_constraints, bond_derived_constraint,
+};
+use super::dative::{
+    dative_bond_asserted_complete_constraint, dative_bond_asserted_constraints,
+    dative_bond_derived_constraint,
+};
 use super::multicenter::{
     multicenter_bond_asserted_constraints, multicenter_bond_derived_constraint,
 };
@@ -76,6 +83,17 @@ impl<'a> AtomConstraintsView<'a> {
     /// The stored side of `key`; absence is the vacuous constraint.
     pub fn asserted(&self, key: AtomConstraintKey) -> Option<&'a AtomConstraintForm> {
         atom_asserted_constraints(self.molecule, self.atom).get(key)
+    }
+
+    /// The asserted side of `key` under resolution's closed-world claim:
+    /// absence of a constraint is actual absence, so the absence cell of an
+    /// entity-creating overlay key closes to its definite negative. Aromatic
+    /// evidence merges both dialect placements: the atom's own assertion,
+    /// else an incident bond asserting `#a`, else `NotAromatic`. Topology
+    /// keys return the assertion or `None` — they have no absence cell.
+    /// Never reads relations; matching keeps the open-world [`Self::asserted`].
+    pub fn asserted_complete(&self, key: AtomConstraintKey) -> Option<AtomConstraintForm> {
+        atom_asserted_complete_constraint(self.molecule, self.atom, key)
     }
 
     /// The derived side of `key`, obtained by projection from present
@@ -253,6 +271,15 @@ impl<'a> BondConstraintsView<'a> {
     /// The stored side of `key`; absence is the vacuous constraint.
     pub fn asserted(&self, key: BondConstraintKey) -> Option<&'a BondConstraintForm> {
         bond_asserted_constraints(self.molecule, self.bond).get(key)
+    }
+
+    /// The asserted side of `key` under resolution's closed-world claim:
+    /// absence of a constraint is actual absence. Never reads relations — a
+    /// bond inside a stored aromatic system without its own `#a` assertion
+    /// still reads `Lit(false)` here; matching keeps the open-world
+    /// [`Self::asserted`].
+    pub fn asserted_complete(&self, key: BondConstraintKey) -> Option<BondConstraintForm> {
+        bond_asserted_complete_constraint(self.molecule, self.bond, key)
     }
 
     /// The derived side of `key`, obtained by projection from present
@@ -533,6 +560,15 @@ constraints_view!(
 // meanings intact: every getter reads the asserted side.
 
 impl<'a> DativeBondConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim:
+    /// absence of a constraint is actual absence. Never reads relations.
+    pub fn asserted_complete(
+        &self,
+        key: DativeBondConstraintKey,
+    ) -> Option<DativeBondConstraintForm> {
+        dative_bond_asserted_complete_constraint(self.molecule, self.id, key)
+    }
+
     pub fn aromatic(&self) -> BooleanForm {
         dative_bond_asserted_constraints(self.molecule, self.id).aromatic()
     }
@@ -547,24 +583,60 @@ impl<'a> DativeBondConstraintsView<'a> {
 }
 
 impl<'a> AromaticSystemConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim; the
+    /// family has no absence cell, so the reading equals the assertion.
+    pub fn asserted_complete(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraintForm> {
+        self.asserted(key).cloned()
+    }
+
     pub fn electron_count(&self) -> NumForm {
         aromatic_system_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
 
 impl<'a> MulticenterBondConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim; the
+    /// family has no absence cell, so the reading equals the assertion.
+    pub fn asserted_complete(
+        &self,
+        key: MulticenterBondConstraintKey,
+    ) -> Option<MulticenterBondConstraintForm> {
+        self.asserted(key).cloned()
+    }
+
     pub fn electron_count(&self) -> NumForm {
         multicenter_bond_asserted_constraints(self.molecule, self.id).electron_count()
     }
 }
 
 impl<'a> NoncovalentBondConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim; the
+    /// family has no absence cell, so the reading equals the assertion.
+    pub fn asserted_complete(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraintForm> {
+        self.asserted(key).cloned()
+    }
+
     pub fn intramolecular(&self) -> BooleanForm {
         noncovalent_bond_asserted_constraints(self.molecule, self.id).intramolecular()
     }
 }
 
 impl<'a> StereoAtomConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim; the
+    /// family has no absence cell, so the reading equals the assertion.
+    pub fn asserted_complete(
+        &self,
+        key: StereoAtomConstraintKey,
+    ) -> Option<StereoAtomConstraintForm> {
+        self.asserted(key).cloned()
+    }
+
     pub fn ligand_symmetries(&self) -> impl Iterator<Item = &'a LigandSymmetryForm> {
         stereo_atom_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
@@ -591,6 +663,15 @@ impl<'a> StereoAtomConstraintsView<'a> {
 }
 
 impl<'a> StereoBondConstraintsView<'a> {
+    /// The asserted side of `key` under resolution's closed-world claim; the
+    /// family has no absence cell, so the reading equals the assertion.
+    pub fn asserted_complete(
+        &self,
+        key: StereoBondConstraintKey,
+    ) -> Option<StereoBondConstraintForm> {
+        self.asserted(key).cloned()
+    }
+
     pub fn ligand_symmetries(&self) -> impl Iterator<Item = &'a LigandSymmetryForm> {
         stereo_bond_asserted_constraints(self.molecule, self.id).ligand_symmetries()
     }
@@ -631,9 +712,10 @@ mod tests {
         AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, AtomConstraintsForm,
         BondConstraintForm, BondConstraintKey, BondConstraintsForm, DativeBondConstraintForm,
         DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
-        MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintKey,
-        NoncovalentBondConstraintsForm, RingScope, StereoAtomConstraintForm,
-        StereoAtomConstraintKey, StereoBondConstraintKey, StereogenicityForm,
+        MulticenterBondConstraintsForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
+        NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm, RingScope,
+        StereoAtomConstraintForm, StereoAtomConstraintKey, StereoBondConstraintForm,
+        StereoBondConstraintKey, StereogenicityForm,
     };
     use crate::ir::dative::DativeBondForm;
     use crate::ir::id::{
@@ -651,6 +733,52 @@ mod tests {
         Stereogenicity, TetrahedralStereoForm,
     };
     use crate::mol_dsl;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::present(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(true))),
+    )]
+    #[case::aromatic_absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(false))),
+    )]
+    #[case::aromatic_in_system_unasserted(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            )],
+            ..Default::default()
+        }),
+        BondConstraintKey::Aromatic,
+        Some(BondConstraintForm::aromatic(BooleanForm::Lit(false))),
+    )]
+    #[case::cis_trans_absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#),
+        BondConstraintKey::CisTransStereo,
+        Some(BondConstraintForm::cis_trans_stereo(CisTransStereoForm::NotStereo)),
+    )]
+    #[case::ring_absent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        BondConstraintKey::RingMembership(RingScope::All),
+        None,
+    )]
+    fn test_bond_constraints_view_asserted_complete(
+        #[case] molecule: Molecule,
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraintForm>,
+    ) {
+        assert_eq!(
+            molecule.bond(BondId(0)).constraints().asserted_complete(key),
+            expected
+        );
+    }
 
     #[rstest]
     #[case::cis_trans_coset_plural(
@@ -714,6 +842,70 @@ mod tests {
         assert_eq!(
             molecule.atom(AtomId(0)).constraints().asserted(key),
             expected.as_ref()
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::present(
+        mol_dsl!(r#"{:atoms ["C#v4"] :bonds []}"#),
+        AtomConstraintKey::Valence,
+        Some(AtomConstraintForm::valence(4)),
+    )]
+    #[case::aromatic_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::AromaticValence,
+        Some(AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic)),
+    )]
+    #[case::aromatic_bond_adjacent(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"#),
+        AtomConstraintKey::AromaticValence,
+        Some(AtomConstraintForm::aromatic_valence(
+            AromaticValenceForm::aromatic(NumForm::Undetermined),
+        )),
+    )]
+    #[case::aromatic_in_system_unasserted(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::from_electrons(vec![1]))],
+            ..Default::default()
+        }),
+        AtomConstraintKey::AromaticValence,
+        Some(AtomConstraintForm::aromatic_valence(AromaticValenceForm::NotAromatic)),
+    )]
+    #[case::stereo_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::TetrahedralStereo,
+        Some(AtomConstraintForm::tetrahedral_stereo(TetrahedralStereoForm::NotStereo)),
+    )]
+    #[case::multicenter_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::MulticenterValence,
+        Some(AtomConstraintForm::multicenter_valence(MulticenterValenceForm::NotMulticenter)),
+    )]
+    #[case::donated_pairs_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::DonatedPairs,
+        Some(AtomConstraintForm::donated_pairs(NumForm::Lit(0))),
+    )]
+    #[case::accepted_pairs_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::AcceptedPairs,
+        Some(AtomConstraintForm::accepted_pairs(NumForm::Lit(0))),
+    )]
+    #[case::topology_absent(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        AtomConstraintKey::Valence,
+        None,
+    )]
+    fn test_atom_constraints_view_asserted_complete(
+        #[case] molecule: Molecule,
+        #[case] key: AtomConstraintKey,
+        #[case] expected: Option<AtomConstraintForm>,
+    ) {
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().asserted_complete(key),
+            expected
         );
     }
 
@@ -1573,6 +1765,44 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(
+        Some(DativeBondConstraintForm::aromatic(true)),
+        DativeBondConstraintKey::Aromatic,
+        Some(DativeBondConstraintForm::aromatic(true))
+    )]
+    #[case::aromatic_absent(
+        None,
+        DativeBondConstraintKey::Aromatic,
+        Some(DativeBondConstraintForm::aromatic(false))
+    )]
+    #[case::ring_absent(None, DativeBondConstraintKey::RingMembership(RingScope::All), None)]
+    fn test_dative_bond_constraints_view_asserted_complete(
+        #[case] set: Option<DativeBondConstraintForm>,
+        #[case] key: DativeBondConstraintKey,
+        #[case] expected: Option<DativeBondConstraintForm>,
+    ) {
+        let mut form = DativeBondForm::from_order(1);
+        if let Some(constraint) = set {
+            form.constraints.set(constraint);
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::N),
+                AtomForm::from_element(Element::C),
+            ],
+            dative: vec![(vec![AtomId(0)], AtomId(1), form)],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .dative_bond(DativeBondId(0))
+                .constraints()
+                .asserted_complete(key),
+            expected
+        );
+    }
+
+    #[rstest]
     fn test_dative_bond_constraints_view_derived_ring() {
         // The ring key has no projection for dative bonds.
         let molecule = Molecule::from_entries(MoleculeEntries {
@@ -1646,6 +1876,34 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(
+        AromaticSystemConstraintsForm::from_iter([
+            AromaticSystemConstraintForm::electron_count(6),
+        ]),
+        Some(AromaticSystemConstraintForm::electron_count(6))
+    )]
+    #[case::absent(AromaticSystemConstraintsForm::default(), None)]
+    fn test_aromatic_system_constraints_view_asserted_complete(
+        #[case] constraints: AromaticSystemConstraintsForm,
+        #[case] expected: Option<AromaticSystemConstraintForm>,
+    ) {
+        let mut form = AromaticSystemForm::from_electrons(vec![2, 2, 2]);
+        form.constraints = constraints;
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], form)],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .constraints()
+                .asserted_complete(AromaticSystemConstraintKey::ElectronCount),
+            expected
+        );
+    }
+
+    #[rstest]
     fn test_aromatic_system_constraints_view_derived_complete_determination() {
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
@@ -1682,6 +1940,34 @@ mod tests {
                 .constraints()
                 .derived(MulticenterBondConstraintKey::ElectronCount),
             Some(MulticenterBondConstraintForm::electron_count(2))
+        );
+    }
+
+    #[rstest]
+    #[case::present(
+        MulticenterBondConstraintsForm::from_iter([
+            MulticenterBondConstraintForm::electron_count(2),
+        ]),
+        Some(MulticenterBondConstraintForm::electron_count(2))
+    )]
+    #[case::absent(MulticenterBondConstraintsForm::default(), None)]
+    fn test_multicenter_bond_constraints_view_asserted_complete(
+        #[case] constraints: MulticenterBondConstraintsForm,
+        #[case] expected: Option<MulticenterBondConstraintForm>,
+    ) {
+        let mut form = MulticenterBondForm::from_electrons(vec![1, 1, 0]);
+        form.constraints = constraints;
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::B); 3],
+            multicenter: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], form)],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .multicenter_bond(MulticenterBondId(0))
+                .constraints()
+                .asserted_complete(MulticenterBondConstraintKey::ElectronCount),
+            expected
         );
     }
 
@@ -1781,6 +2067,84 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(
+        NoncovalentBondConstraintsForm::from_iter([
+            NoncovalentBondConstraintForm::intramolecular(true),
+        ]),
+        Some(NoncovalentBondConstraintForm::intramolecular(true))
+    )]
+    #[case::absent(NoncovalentBondConstraintsForm::default(), None)]
+    fn test_noncovalent_bond_constraints_view_asserted_complete(
+        #[case] constraints: NoncovalentBondConstraintsForm,
+        #[case] expected: Option<NoncovalentBondConstraintForm>,
+    ) {
+        let mut form = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        form.constraints = constraints;
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::O),
+            ],
+            noncovalent: vec![(AtomId(0), AtomId(1), form)],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .noncovalent_bond(NoncovalentBondId(0))
+                .constraints()
+                .asserted_complete(NoncovalentBondConstraintKey::Intramolecular),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::present(
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ))),
+        Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        )))
+    )]
+    #[case::absent(None, None)]
+    fn test_stereo_atom_constraints_view_asserted_complete(
+        #[case] set: Option<StereoAtomConstraintForm>,
+        #[case] expected: Option<StereoAtomConstraintForm>,
+    ) {
+        let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
+        if let Some(constraint) = set {
+            form.constraints.set(constraint);
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                form,
+            )],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .stereo_atom(StereoAtomId(0))
+                .constraints()
+                .asserted_complete(StereoAtomConstraintKey::Stereogenicity),
+            expected
+        );
+    }
+
+    #[rstest]
     fn test_stereo_atom_constraints_view_asserted() {
         let mut form = StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1));
         form.constraints
@@ -1819,6 +2183,52 @@ mod tests {
         assert_eq!(
             view.derived_complete(StereoAtomConstraintKey::Stereogenicity),
             None
+        );
+    }
+
+    #[rstest]
+    #[case::present(
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ))),
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        )))
+    )]
+    #[case::absent(None, None)]
+    fn test_stereo_bond_constraints_view_asserted_complete(
+        #[case] set: Option<StereoBondConstraintForm>,
+        #[case] expected: Option<StereoBondConstraintForm>,
+    ) {
+        let mut form = StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1));
+        if let Some(constraint) = set {
+            form.constraints.set(constraint);
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(1), AtomId(2), BondForm::from_order(2)),
+                (AtomId(2), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_bonds: vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                ],
+                form,
+            )],
+            ..Default::default()
+        });
+        assert_eq!(
+            molecule
+                .stereo_bond(StereoBondId(0))
+                .constraints()
+                .asserted_complete(StereoBondConstraintKey::Stereogenicity),
+            expected
         );
     }
 

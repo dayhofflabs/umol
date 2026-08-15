@@ -459,13 +459,55 @@ pub(crate) fn total_valence(molecule: &Molecule, atom: AtomId) -> NumForm {
         + multicenter_valence(molecule, atom)
 }
 
+/// Asserted side of one atom constraint key under resolution's closed-world
+/// claim: the stored assertion, else the absence cell of an entity-creating
+/// overlay key closed to its definite negative. Aromatic evidence merges both
+/// dialect placements — the atom's own assertion, else an incident bond
+/// asserting `#a` as `Aromatic(Undetermined)`, else `NotAromatic`. Topology
+/// keys have no absence cell. Never reads relations.
+pub(crate) fn atom_asserted_complete_constraint(
+    molecule: &Molecule,
+    atom: AtomId,
+    key: AtomConstraintKey,
+) -> Option<AtomConstraintForm> {
+    if let Some(asserted) = atom_asserted_constraints(molecule, atom).get(key) {
+        return Some(asserted.clone());
+    }
+    match key {
+        AtomConstraintKey::AromaticValence => {
+            let bond_marked = molecule
+                .neighbors(atom)
+                .any(|n| matches!(n.bond().constraints().aromatic(), BooleanForm::Lit(true)));
+            Some(AtomConstraintForm::aromatic_valence(if bond_marked {
+                AromaticValenceForm::aromatic(NumForm::Undetermined)
+            } else {
+                AromaticValenceForm::NotAromatic
+            }))
+        }
+        AtomConstraintKey::TetrahedralStereo => Some(AtomConstraintForm::tetrahedral_stereo(
+            TetrahedralStereoForm::NotStereo,
+        )),
+        AtomConstraintKey::MulticenterValence => Some(AtomConstraintForm::multicenter_valence(
+            MulticenterValenceForm::NotMulticenter,
+        )),
+        AtomConstraintKey::DonatedPairs => Some(AtomConstraintForm::donated_pairs(NumForm::Lit(0))),
+        AtomConstraintKey::AcceptedPairs => {
+            Some(AtomConstraintForm::accepted_pairs(NumForm::Lit(0)))
+        }
+        _ => None,
+    }
+}
+
 /// Derived side of one atom constraint key, read from the molecule's relations.
 ///
 /// `complete` selects the closure reading: absence of a resolution-written
 /// overlay yields its definite negative (`NotAromatic` / `NotMulticenter` /
 /// `NotStereo`, zero dative pairs) instead of no value. Positive incidence and
-/// the topology keys read identically in both modes; a Kekulé-flagged atom
-/// (incident bond asserting `#a`) yields `Aromatic(Undetermined)` in both.
+/// the topology keys read identically in both modes; an atom adjacent to a
+/// bond asserting `#a` yields `Aromatic(Undetermined)` in both — a
+/// bond-carried aromatic mark (the MOL placement) is evidence equivalent to
+/// the atom's own `#a` assertion (the SMILES placement), which the asserted
+/// side carries.
 /// Ring keys require `rings` and panic without it — the caller scanning keys
 /// decides whether to build the ring set.
 pub(crate) fn atom_derived_constraint(

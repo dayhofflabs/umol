@@ -1383,6 +1383,41 @@ mod tests {
             :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
         }"#)
     )]
+    // Re-enable at doc 196 A0: admission must admit field-ground atoms whose
+    // aromatic evidence is bond-carried, with table-valued contributions.
+    #[ignore]
+    #[case::aromaticity_bond_marks(
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"
+                    "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"
+                    "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"]
+            :bonds [[0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]
+                    [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]
+                    [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]]
+        }"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
+    #[case::aromaticity_both_marks(
+        mol_dsl!(r#"{
+            :atoms ["C#i*#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"
+                    "C#i=#c0#h#n0#u0#s#a" "C#i=#c0#h#n0#u0#s#a"]
+            :bonds [[0 1 "1#c0#u0#s#a"] [1 2 "1#c0#u0#s#a"]
+                    [2 3 "1#c0#u0#s#a"] [3 4 "1#c0#u0#s#a"]
+                    [4 5 "1#c0#u0#s#a"] [5 0 "1#c0#u0#s#a"]]
+        }"#),
+        mol_dsl_ground!(r#"{
+            :atoms ["C#h" "C#h" "C#h" "C#h" "C#h" "C#h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"]
+                    [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#)
+    )]
     #[case::stereo(
         mol_dsl!(r#"{
             :atoms ["C#i*#c0#h*#n0#u0#s#T1" "F#i=#c0#h0#n0#u0#s"

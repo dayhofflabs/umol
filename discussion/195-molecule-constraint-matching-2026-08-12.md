@@ -38,6 +38,13 @@ its LHS); `apply_at` with a supplied correspondence is ungated. Six tests exerci
 
 ## Scope
 
+Note (2026-08-13): matching keeps the open-world reading of the asserted side — a pattern
+constrains only what it mentions, and the absence of a constraint on a pattern entity means
+unconstrained, never a negative claim. The closed-world `asserted_complete` reading
+introduced in [196](196-aromatic-assignment-selection-2026-08-13.md) belongs to resolution
+alone (there, absence of a mark is actual absence) and does not apply to any matcher
+evaluation specified here.
+
 Doc 194 normalizes constraint placement only through resolution, and patterns are never resolved:
 a pattern's list may carry bare entity leaves alongside `Relational` and `Molecule` leaves and
 combinators. Matching must therefore evaluate:

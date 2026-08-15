@@ -181,7 +181,7 @@ When `derived_complete` is ground, per key (confirmed row by row at S5a, 2026-08
 | `#H` total hydrogens         | implicit hydrogens literal and explicit neighbors' elements literal |
 | `#V` total valence           | all incident bond orders, implicit hydrogens, and both overlay contributions literal |
 | `#d`, `#t` dative pairs      | dative overlay incidence under the closure, orders literal         |
-| `#a` aromatic valence        | when the aromatic system is created with literal electron counts (removable early); a Kekulé flag alone reads `Aromatic(Undetermined)` |
+| `#a` aromatic valence        | when the aromatic system is created with literal electron counts (removable early); adjacency to a bond asserting `#a` alone reads `Aromatic(Undetermined)` — the bond-carried mark (MOL places aromaticity on bonds) is evidence equivalent to the atom's own assertion (SMILES places it on atoms) |
 | `#m` multicenter valence     | when the multicenter bond is created with literal electron counts (removable early) |
 | `#T`, `#C` stereo            | when the stereo overlay is created with a literal coset (design 103 flow) |
 | `#R`, `#x`, `#y` ring keys   | always (pure function of topology); checked by discharge, gated on presence |
@@ -586,7 +586,7 @@ molecule.atom(i).constraints()        // -> AtomConstraintsView<'a> (retyped acc
   propagation through reaction application adds `ApplyPreconditionError::Match(#[from] ...)`;
   `host_match_targets` replaced by `host_ring_context` + per-family satisfies tables; field
   matchers destructure exhaustively; matcher table gains rows per derived key (`#v #D #X #H #V`,
-  `#a` positive/negative/Kekulé-flag, `#m`, `#d #t`, `#T`, bond `#a` in-system and
+  `#a` positive/negative/bond-adjacent, `#m`, `#d #t`, `#T`, bond `#a` in-system and
   asserted-vs-closure `⊥`, bond `#C`). The gate surfaced six `MissingEntry`-via-matcher tests
   (constraint-remove LHS carries the removed molecule-scope constraint); they are `#[ignore]`d
   pending doc 195 evaluation, which lists them as an explicit unskip item (2026-08-13).
@@ -1100,7 +1100,7 @@ pub struct ResolveReport {
   regeneration.
 
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
-  [dep: S5b, S5c, S5c1, S5c2, doc 196 A4]
+  [dep: S5b, S5c, S5c1, S5c2, doc 196 A6]
 
 ### S6 — cleanup; all planned work, sequenced last
 

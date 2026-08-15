@@ -561,15 +561,24 @@ would be the one to rename if either were.
 A derivable constraint has an **asserted side** — the stored value, open-world by definition:
 absence is the vacuous constraint — and a **derived side**, obtained by projection from the
 relations the entity takes part in. The constraints views name the readings: `asserted(key)`
-reads storage; `derived(key)` reads present relations only and is vacuous on absence;
+reads storage; `asserted_complete(key)` reads storage under resolution's closed-world claim —
+absence of a constraint is actual absence, so the absence cell of an entity-creating overlay
+key closes to its definite negative, and aromatic evidence merges both dialect placements
+(the atom's own assertion or an incident bond's mark) without ever reading relations;
+`derived(key)` reads present relations only and is vacuous on absence;
 `derived_complete(key)` adds the closure — under the caller's claim that the relation set is
 complete, absence of a resolution-written overlay closes to its definite negative. Topology keys
-(valence, degree, the totals, the ring keys) read identically under both derived accessors; only
-the overlay-incidence keys have an absence cell for the closure to fill.
+(valence, degree, the totals, the ring keys) read identically under both derived accessors and
+have no absence cell on the asserted side; only the overlay-incidence keys have one. The two
+closures are justified by different claims, so the four readings stay four flat accessors —
+each consumer picks exactly one statically: matching reads `asserted` (open-world — a pattern
+constrains only what it mentions), resolution's admission reads `asserted_complete`.
 
 **Not:** `projected` for the reading — *projection* names the operation yielding the derived
-side; not a mode parameter or stored molecule state — the closure choice is per call.
-**In code:** `asserted`, `derived`, `derived_complete` on the constraints views.
+side; not a mode parameter or stored molecule state — the closure choice is per call; no
+parameterized accessor unifying the readings.
+**In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete` on the
+constraints views.
 
 ### Determined
 

@@ -202,6 +202,27 @@ pub(crate) fn bond_asserted_constraints(molecule: &Molecule, bond: BondId) -> &B
     &molecule.bond(bond).attributes.constraints
 }
 
+/// Asserted side of one bond constraint key under resolution's closed-world
+/// claim: the stored assertion, else the absence cell closed to its definite
+/// negative. Never reads relations — a bond inside a stored aromatic system
+/// without its own `#a` assertion reads `Lit(false)`.
+pub(crate) fn bond_asserted_complete_constraint(
+    molecule: &Molecule,
+    bond: BondId,
+    key: BondConstraintKey,
+) -> Option<BondConstraintForm> {
+    if let Some(asserted) = bond_asserted_constraints(molecule, bond).get(key) {
+        return Some(asserted.clone());
+    }
+    match key {
+        BondConstraintKey::Aromatic => Some(BondConstraintForm::aromatic(BooleanForm::Lit(false))),
+        BondConstraintKey::CisTransStereo => Some(BondConstraintForm::cis_trans_stereo(
+            CisTransStereoForm::NotStereo,
+        )),
+        BondConstraintKey::RingMembership(_) => None,
+    }
+}
+
 /// Derived side of one bond constraint key, read from the molecule's
 /// relations.
 ///
