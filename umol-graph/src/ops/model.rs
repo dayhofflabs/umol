@@ -153,9 +153,9 @@ pub enum AromaticityTieBreak {
     /// No structural preference: structurally distinct survivors stay plural.
     #[default]
     Strict,
-    /// Maximal claimed-atom coverage; the perception decides what a system
+    /// Maximal claimed-atom count; the perception decides what a system
     /// is, the policy only orders how much of the evidence is realized.
-    MaxCoverage,
+    MaxAtomCount,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -511,7 +511,7 @@ mod tests {
     )]
     #[case::tie_break(
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::MaxCoverage },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::MaxAtomCount },
     )]
     fn test_aromaticity_model_eq_difference(
         #[case] left: AromaticityModel,

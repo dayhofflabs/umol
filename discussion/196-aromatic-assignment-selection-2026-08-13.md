@@ -162,9 +162,9 @@ pub enum AromaticityTieBreak {
     /// scheme.
     #[default]
     Strict,
-    /// Maximal claimed-atom coverage; the perception decides what a system
+    /// Maximal claimed-atom count; the perception decides what a system
     /// is, the policy only orders how much of the evidence is realized.
-    MaxCoverage,
+    MaxAtomCount,
 }
 
 pub struct AromaticityModel {
@@ -180,11 +180,13 @@ the umol-py bindings.
 
 Naming and defaults, settled 2026-08-13:
 
-- the variant name is `MaxCoverage` (`MostAromatic` was rejected — "aromatic atom" reads as
-  aromaticity being the atom's property);
+- the variant name is `MaxAtomCount` (renamed from `MaxAtomCount` 2026-08-14: "coverage"
+  duplicated the claimed-atom count under a second word, and `atom_count` is the established
+  count vocabulary; `MostAromatic` was rejected earlier — "aromatic atom" reads as aromaticity
+  being the atom's property);
 - the default is `Strict`, as for the valence tie-break: any other default would bias the
   scheme;
-- the `daylight`/`mdl`/`permissive` presets do **not** opt into `MaxCoverage`; they inherit
+- the `daylight`/`mdl`/`permissive` presets do **not** opt into `MaxAtomCount`; they inherit
   the default. The presets reproduce a format convention's reading, and on this axis there
   is no reference behaviour to reproduce: every reference toolkit pins implicit hydrogens at
   parse time from its fixed valence table, so perception runs over one already-fixed valence
@@ -439,7 +441,7 @@ selection, then the model envelope and bindings, then the suites.
 
 ### A3 — the aromaticity tie-break envelope (breaking)
 
-- A3a: `AromaticityTieBreak` (`Strict` default, `MaxCoverage`) and the
+- A3a: `AromaticityTieBreak` (`Strict` default, `MaxAtomCount`) and the
   `AromaticityModel.tie_break` field (`umol-graph/src/ops/model.rs`), constructors and
   presets inheriting `Strict`; every `AromaticityModel` struct-literal site across the
   workspace migrates. Model table tests. Breaking. [dep: A2c]
@@ -455,8 +457,18 @@ selection, then the model envelope and bindings, then the suites.
 - A3b: the structural order in selection under non-`Error` policies: claimed-atom count
   descending, then member sets lexicographic; `tie_breaks` gains the chosen systems'
   members when the structural order decided. Keep-mode tests: the tolerated-carrier family
-  under `Strict` (plural) versus `MaxCoverage` (picked, recorded). Additive given A3a.
+  under `Strict` (plural) versus `MaxAtomCount` (picked, recorded). Additive given A3a.
   [dep: A3a]
+  **Done 2026-08-14:** `AromaticityResolver` carries the model's `tie_break`; under
+  `MaxAtomCount` the structural stage runs on the valid survivors between validity and the
+  value order — key `(claimed-atom count descending, member-set lists lexicographically
+  smallest)` — and the winner's member atoms enter `tie_breaks` on acceptance when the
+  stage actually decided (more than one structure present). Under the model's `Strict`
+  the stage never runs, keeping the A2b behavior; under the `Error` failure policy it is
+  inert by construction, so no gate is needed. Tests: the tolerated-carrier pair on the
+  flexible-nitrogen five-ring under `Keep` — `MaxAtomCount` accepts the full ring, narrows
+  the nitrogen, and records all five members; the model-`Strict` twin passes the state
+  through unchanged. Lib 935 green, clippy zero.
 - A3c: umol-py: `AromaticityTieBreak` class, the third `AromaticityModel` field, package
   exports and inventory, pytest coverage mirroring the rust model tests. Breaking.
   [dep: A3a]
