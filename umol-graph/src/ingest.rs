@@ -938,6 +938,67 @@ mod tests {
     }
 
     #[rstest]
+    #[case::borepin(
+        "b1cccccc1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5 6] :attrs "[0,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["B#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 6 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::borazine(
+        "b1nbnbn1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[0,2,0,2,0,2]#c0#u0#s"}] :atoms ["B#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s" "B#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s" "B#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 5 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::azaborine(
+        "b1ccccn1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[0,1,1,1,1,2]#c0#u0#s"}] :atoms ["B#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 5 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"]]}"##)
+    )]
+    fn test_ingest_smiles_with_element_scope(#[case] input: &str, #[case] expected: Molecule) {
+        // Boron rings resolve once the scope admits the element; the refusal
+        // twin below pins the same input dying on scope, not zero handling.
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            aromaticity: AromaticityModel::permissive(),
+            ..ChemistryModel::default()
+        };
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &ResolveConfig::default(),
+            )
+            .unwrap(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::borepin(
+        "b1cccccc1",
+        SmilesInputError::Contradiction(ResolveContradiction::Aromaticity(
+            AromaticityContradiction::Inconsistency(
+                AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) },
+            ),
+        ))
+    )]
+    fn test_ingest_smiles_with_element_scope_error(
+        #[case] input: &str,
+        #[case] expected: SmilesInputError,
+    ) {
+        let model = ChemistryModel {
+            valence: ValenceModel::smiles(),
+            ..ChemistryModel::default()
+        };
+        assert_eq!(
+            ingest_smiles_with(
+                input,
+                &SmilesIoConfig::opensmiles(),
+                &model,
+                &ResolveConfig::default(),
+            ),
+            Err(expected)
+        );
+    }
+
+    #[rstest]
     #[case::pyrrole(
         "c1cccn1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4] :attrs "[1,1,1,1,2]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 4 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"]]}"##)
@@ -965,6 +1026,10 @@ mod tests {
     #[case::pyridone_exocyclic(
         "O=c1cccc[nH]1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [1 2 3 4 5 6] :attrs "[0,1,1,1,1,2]#c0#u0#s"}] :atoms ["O#i=#c0#h0#n2#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 1 "2#c0#u0#s"] [1 6 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::tropone_exocyclic(
+        "O=c1cccccc1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [1 2 3 4 5 6 7] :attrs "[0,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["O#i=#c0#h0#n2#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 1 "2#c0#u0#s"] [1 7 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"] [6 7 "1#c0#u0#s"]]}"##)
     )]
     #[case::hydrogen_atom(
         "[H]",

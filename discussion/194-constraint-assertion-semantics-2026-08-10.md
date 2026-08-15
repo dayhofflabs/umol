@@ -1300,6 +1300,14 @@ pub struct ResolveReport {
   under `daylight()` (needs only S6b) and the borepin family under a boron-including scope
   (`permissive()`); a dated correction note in doc 174. No production logic change expected;
   scope membership stays a model decision that `ElementScope` already expresses.
+  **Done 2026-08-15:** correction note was already in doc 174; tests landed, no production
+  change. Tropone `O=c1cccccc1` joins `test_ingest_smiles_resolution` under the default
+  daylight scope (carbonyl zero, six π). New `test_ingest_smiles_with_element_scope`:
+  borepin `b1cccccc1` (`[0,1,1,1,1,1,1]`), borazine `b1nbnbn1` (`[0,2,0,2,0,2]` — bare-n
+  input, selection forces the pyrrolic reading as the only 4n+2 total), and 1,2-azaborine
+  `b1ccccn1` (`[0,1,1,1,1,2]`) all resolve under `permissive()`; the `_error` twin pins
+  borepin under the default scope dying as `AromaticValenceFailure` on the boron atom —
+  the refusal is scope, exactly as diagnosed.
 - S6d: the F420 acceptance case (unique completion, C29H36N5O18P); its C/N ring is within the
   Daylight scope, so S6c is not a dependency. [dep: S4, S6b]
 - S6e: MDL valence table audit: row-by-row against the CTfile specification's default-valence
