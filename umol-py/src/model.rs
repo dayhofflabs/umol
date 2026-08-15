@@ -198,7 +198,7 @@ mod tests {
                 ..GraphStereoModel::default()
             }),
         ),
-        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375)), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
+        "ChemistryModel(connectivity=ConnectivityModel.default(), valence=ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[4], aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict), aromaticity=AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hmo(stabilization_threshold=0.375), tie_break=AromaticityTieBreak.Strict), stereo=StereoModel(kind_models={StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope=ElementScope.Any(), fluxionality=False)}, para_stereo=True))"
     )]
     fn test_chemistry_model_repr(#[case] model: ChemistryModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);

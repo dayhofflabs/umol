@@ -472,6 +472,16 @@ selection, then the model envelope and bindings, then the suites.
 - A3c: umol-py: `AromaticityTieBreak` class, the third `AromaticityModel` field, package
   exports and inventory, pytest coverage mirroring the rust model tests. Breaking.
   [dep: A3a]
+  **Done 2026-08-14:** the pyclass enum mirrors `ValenceTieBreak`'s shape (repr,
+  `from_rust`/`to_rust`); the py `AromaticityModel` carries the third field with the
+  `Strict` constructor default matching `ValenceModel`'s, and `to_rust` maps the field
+  instead of filling `Strict`. Registered in the module, exported in `__init__.py` and the
+  `test_import` inventory. Rust-side py tests: the twelve model literals carry the field,
+  the hmo rows pin the `MaxAtomCount` mapping in both directions and its repr, and the
+  `ChemistryModel` repr expectations embed the new segment. pytest mirrors the valence
+  tie-break coverage: equality, reprs, constructor default, the explicit-field
+  constructor, the mutation row, and the embedded `ChemistryModel` repr. umol-py rust
+  1620, pytest 1311, clippy zero. A3 stage complete.
 
 ### A4 — pruned search (additive, deferrable)
 

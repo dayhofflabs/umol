@@ -6,6 +6,7 @@ from umol import (
     AromaticityConfig,
     AromaticityModel,
     AromaticityRule,
+    AromaticityTieBreak,
     AtomForm,
     AtomTypeRegistry,
     ChemistryModel,
@@ -872,23 +873,62 @@ def test_aromaticity_rule_mutation(rule, field, value):
         setattr(rule, field, value)
 
 
+def test_aromaticity_tie_break_equality():
+    assert AromaticityTieBreak.Strict == AromaticityTieBreak.Strict
+    assert AromaticityTieBreak.Strict != AromaticityTieBreak.MaxAtomCount
+
+
+@pytest.mark.parametrize(
+    ("tie_break", "expected"),
+    [
+        (AromaticityTieBreak.Strict, "AromaticityTieBreak.Strict"),
+        (AromaticityTieBreak.MaxAtomCount, "AromaticityTieBreak.MaxAtomCount"),
+    ],
+)
+def test_aromaticity_tie_break_repr(tie_break, expected):
+    assert repr(tie_break) == expected
+
+
 def test_aromaticity_model_new():
     scope = ElementScope.AllowList([Element("C"), Element("N")])
     rule = AromaticityRule.Hmo(stabilization_threshold=0.375)
-    model = AromaticityModel(scope=scope, rule=rule)
+    model = AromaticityModel(
+        scope=scope, rule=rule, tie_break=AromaticityTieBreak.MaxAtomCount
+    )
 
     assert model.scope == scope
     assert model.scope is not scope
     assert model.rule == rule
     assert model.rule is not rule
-    assert model == AromaticityModel(scope=scope, rule=rule)
-    assert model != AromaticityModel(scope=ElementScope.Any(), rule=rule)
+    assert model.tie_break == AromaticityTieBreak.MaxAtomCount
+    assert model == AromaticityModel(
+        scope=scope, rule=rule, tie_break=AromaticityTieBreak.MaxAtomCount
+    )
+    assert model != AromaticityModel(scope=scope, rule=rule)
     assert model != AromaticityModel(
-        scope=scope, rule=AromaticityRule.Hmo(stabilization_threshold=0.5)
+        scope=ElementScope.Any(),
+        rule=rule,
+        tie_break=AromaticityTieBreak.MaxAtomCount,
     )
     assert model != AromaticityModel(
-        scope=scope, rule=AromaticityRule.Hueckel(ring_limits=RingLimits())
+        scope=scope,
+        rule=AromaticityRule.Hmo(stabilization_threshold=0.5),
+        tie_break=AromaticityTieBreak.MaxAtomCount,
     )
+    assert model != AromaticityModel(
+        scope=scope,
+        rule=AromaticityRule.Hueckel(ring_limits=RingLimits()),
+        tie_break=AromaticityTieBreak.MaxAtomCount,
+    )
+
+
+def test_aromaticity_model_new_default_tie_break():
+    model = AromaticityModel(
+        scope=ElementScope.Any(),
+        rule=AromaticityRule.Hueckel(ring_limits=RingLimits()),
+    )
+
+    assert model.tie_break == AromaticityTieBreak.Strict
 
 
 def test_aromaticity_model_new_error():
@@ -947,7 +987,8 @@ def test_aromaticity_model_repr():
 
     assert repr(model) == (
         "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), "
-        "rule=AromaticityRule.Hmo(stabilization_threshold=0.375))"
+        "rule=AromaticityRule.Hmo(stabilization_threshold=0.375), "
+        "tie_break=AromaticityTieBreak.Strict)"
     )
 
 
@@ -956,6 +997,7 @@ def test_aromaticity_model_repr():
     [
         ("scope", ElementScope.AllowList([Element("C")])),
         ("rule", AromaticityRule.Hmo(stabilization_threshold=0.5)),
+        ("tie_break", AromaticityTieBreak.MaxAtomCount),
     ],
 )
 def test_aromaticity_model_mutation(field, value):
@@ -1324,7 +1366,8 @@ def test_chemistry_model_equality(other):
             "target_covalences=[4], aromatic_valences=[])})), "
             "tie_break=ValenceTieBreak.Strict), aromaticity="
             "AromaticityModel(scope=ElementScope.Any(), "
-            "rule=AromaticityRule.Hmo(stabilization_threshold=0.375)), "
+            "rule=AromaticityRule.Hmo(stabilization_threshold=0.375), "
+            "tie_break=AromaticityTieBreak.Strict), "
             "stereo=StereoModel(kind_models={"
             "StereoKind.Tetrahedral: StereoKindModel(scope=ElementScope.Any(), "
             "fluxionality=False), StereoKind.CisTrans: StereoKindModel(scope="

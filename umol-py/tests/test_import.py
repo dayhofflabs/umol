@@ -25,6 +25,7 @@ PUBLIC_EXPORTS = frozenset(
     AromaticityMismatchPolicy
     AromaticityModel
     AromaticityRule
+    AromaticityTieBreak
     AromaticityResolveConfig
     AtomForm
     AtomUpdate
