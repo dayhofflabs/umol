@@ -13,8 +13,8 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir::ir::MoleculeEntries;
 use umol_graph_ir::ir::{
     aromatic_covalence, AromaticValence, AromaticValenceForm, AsLit, AtomConstraintForm,
-    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, AtomView, IsotopeMassForm, Lattice,
-    Molecule, NumForm, UnpairedElectronsForm,
+    AtomConstraintKey, AtomConstraintsForm, AtomForm, AtomId, IsotopeMassForm, Lattice, Molecule,
+    NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -47,7 +47,8 @@ struct CountsInput {
 }
 
 impl CountsInput {
-    fn for_molecule_atom(atom: AtomView<'_>) -> Self {
+    fn for_molecule_atom(molecule: &Molecule, atom_id: AtomId) -> Self {
+        let atom = molecule.atom(atom_id);
         let constraints = atom.constraints();
         Self {
             valence: atom.valence().as_lit().unwrap_or(0),
@@ -158,7 +159,7 @@ impl<'a> CountsValence<'a> {
         if atom.valence().as_lit().is_none() {
             return Ok(None);
         }
-        let input = CountsInput::for_molecule_atom(atom);
+        let input = CountsInput::for_molecule_atom(molecule, atom_id);
         let mut candidates = self.candidate_states(atom.attributes, input)?;
         for candidate in &mut candidates {
             if candidate.isotope_mass.is_undetermined() {
@@ -185,7 +186,7 @@ impl<'a> CountsValence<'a> {
             return Solution::Underdetermined(());
         };
         let charge = atom.charge().as_lit().unwrap_or(0);
-        let input = CountsInput::for_molecule_atom(atom);
+        let input = CountsInput::for_molecule_atom(molecule, atom_id);
         match self.candidate_states(atom.attributes, input) {
             Ok(_) => Solution::Determined(()),
             Err(_) => Solution::Contradictory(CountsMismatch {

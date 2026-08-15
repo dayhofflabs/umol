@@ -11,8 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::{Graph, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingId, RingSet,
-    UnpairedElectronsForm,
+    AromaticSystemForm, AtomId, ElementForm, Molecule, RingId, RingSet, UnpairedElectronsForm,
 };
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -33,11 +32,11 @@ impl ClarAromaticity {
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, ClarError>
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let has_non_benzenoid = molecule.atoms().iter().any(|view| {
             !matches!(view.attributes.element, ElementForm::Lit(Element::C))
-                && electrons_at(&view).is_some()
+                && electrons_at(view.id).is_some()
         });
         if has_non_benzenoid {
             return Err(ClarError::NonBenzenoid(
@@ -56,7 +55,7 @@ impl ClarAromaticity {
                     && cycle.atoms().iter().all(|&id| {
                         let a = molecule.atom(id);
                         matches!(a.attributes.element, ElementForm::Lit(Element::C))
-                            && electrons_at(&a).is_some()
+                            && electrons_at(a.id).is_some()
                     })
             })
             .collect();
@@ -82,7 +81,7 @@ impl ClarAromaticity {
 
         let electrons: Vec<i64> = atoms
             .iter()
-            .map(|&id| electrons_at(&molecule.atom(id)).unwrap_or(0) as i64)
+            .map(|&id| electrons_at(id).unwrap_or(0) as i64)
             .collect();
 
         Ok(vec![(
@@ -289,7 +288,8 @@ mod tests {
                 &molecule,
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
-                &|v| match v
+                &|v| match molecule
+                    .atom(v)
                     .attributes
                     .constraints
                     .aromatic_valence()
@@ -357,7 +357,8 @@ mod tests {
                 &rings,
                 MaximumIndependentSetAlgorithm::BranchAndBound,
                 &|v| {
-                    match v
+                    match molecule
+                        .atom(v)
                         .attributes
                         .constraints
                         .aromatic_valence()

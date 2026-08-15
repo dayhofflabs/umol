@@ -380,7 +380,17 @@ selection, then the model envelope and bindings, then the suites.
 
 - A2a: the perception decomposition contract: pin that `find_systems` returns one
   decomposition per input molecule (deterministic, disjoint systems) with a test per rule;
-  the selection relies on it. Additive. [dep: none]
+  the selection relies on it. Additive. [dep: none] **Done 2026-08-13:** the contract
+  holds as implemented and needed no production change — Hückel merges overlapping
+  passing candidates to disjoint unions through union-find, Hmo and Clar are
+  component- and independent-set-based, every rule sorts its member lists, and the shared
+  first-atom sort in `find_systems` is therefore a total deterministic order (the
+  `HashMap` inside the Hückel merge affects only pre-sort intermediate order). Pinned by
+  a four-case table over the three rules: naphthalene's overlapping candidates merge to
+  one ten-atom system under Hückel, coupled rings come out in ascending order, Hmo at
+  threshold zero accepts the plain ring, Clar selects the first sextet; each case asserts
+  exact member sets, pairwise disjointness, sorted lists, and run-to-run equality.
+  Lib 921 green, clippy zero.
 - A2b: assignment enumeration replacing the `per_system` acceptance
   (`umol-graph/src/ops/resolve/aromaticity.rs`): per assignment, collect the member
   restriction and the partition; validity = stored-system consistency plus carrier
@@ -390,6 +400,27 @@ selection, then the model envelope and bindings, then the suites.
   policy, structurally distinct survivors stay plural. Selection can no longer emit
   overlapping systems — asserted by test on the quinoline family. Breaking (the panicking
   family changes from panic to resolution). [dep: A1b, A2a]
+  **Done 2026-08-14:** `select` collects one assignment per index choice — the partition
+  (perceived systems inside the component, sorted by member list) and the restriction
+  (chosen forms of flexible member atoms) — deduplicated, then filtered by validity:
+  every stored system touching the component must reappear with the same member set
+  (elimination to empty names the first unreproduced stored system under
+  `aromatic_system_failure: Error`; a non-`Error` policy leaves the component inert), and
+  under `aromatic_valence_failure: Error` an assignment may not leave a component atom
+  whose every disjunct requires aromaticity unclaimed. Selection: a unique surviving
+  restriction accepts directly; several compare by the value key member-wise when their
+  domains coincide, recording key-narrowed atoms in `tie_breaks`; under `Strict`, a key
+  tie, or differing domains the members stay plural and nothing is accepted;
+  restriction-identical survivors take the lexicographically smallest partition. `claimed`
+  covers every valid survivor's members, so tolerated and tied carriers pass the
+  unclaimed-carrier check unchanged. The sequential per-system narrowing and its
+  `retain` are gone. Tests: the quinoline select case pins one 10-atom system with the
+  pyridinic nitrogen narrowed and no tie-break record (the pyrrolic assignment dies on
+  the azine carriers); the stored-conflict table pins `AromaticSystemFailure` under
+  `Error` and the inert component under `Keep`. End-to-end: quinoline and isoquinoline
+  `from_smiles` yield one fused system each (previously the overlap panic). Lib 924
+  green, pytest 1306, clippy zero; the resolution conformance suite stays in its known
+  S5c2 stale-snapshot state (653 key renames, regeneration at S5d).
 - A2c: caller migration and acceptance. Quinoline and isoquinoline resolve through
   `ingest_smiles` with full-molecule expectations; bare-`n` imidazole under `Strict` is
   `Underdetermined` with both nitrogen splits in the report, and the existing

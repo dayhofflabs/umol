@@ -50,7 +50,7 @@ fn test_clar_aromaticity_find_from_rings() {
             &molecule,
             &rings,
             MaximumIndependentSetAlgorithm::BranchAndBound,
-            &|view| match &view.attributes.element {
+            &|view| match &molecule.atom(view).attributes.element {
                 ElementForm::Lit(Element::C) => Some(1),
                 _ => None,
             },

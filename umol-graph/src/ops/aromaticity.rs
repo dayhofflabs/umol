@@ -25,9 +25,9 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, AtomView,
-    BondConstraintForm, BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig,
-    RingModel, RingSet, RingSetKind, TransactionError,
+    AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, BondConstraintForm,
+    BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig, RingModel, RingSet,
+    RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -153,7 +153,7 @@ impl AromaticityPerception {
         AromaticityError,
     >
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let rings = self.candidate_rings(molecule, config);
 
@@ -221,14 +221,15 @@ impl AromaticityPerception {
         }
 
         let systems = match self.find_systems(molecule, config, |atom| {
-            match atom.attributes.constraints.aromatic_valence() {
+            let view = molecule.atom(atom);
+            match view.attributes.constraints.aromatic_valence() {
                 Some(AromaticValenceForm::Aromatic(NumForm::Lit(valence))) => {
                     u8::try_from(*valence).ok()
                 }
                 Some(AromaticValenceForm::Aromatic(_)) | Some(AromaticValenceForm::NotAromatic) => {
                     None
                 }
-                Some(AromaticValenceForm::Undetermined) | None => match atom.aromatic_valence() {
+                Some(AromaticValenceForm::Undetermined) | None => match view.aromatic_valence() {
                     NumForm::Lit(valence) => u8::try_from(valence).ok(),
                     _ => None,
                 },
@@ -284,7 +285,7 @@ impl AromaticityPerception {
                 existing_contributions
                     .iter()
                     .find_map(|&(candidate, electrons)| {
-                        (candidate == atom.id).then(|| u8::try_from(electrons).ok())
+                        (candidate == atom).then(|| u8::try_from(electrons).ok())
                     })
                     .flatten()
             })? {
@@ -454,6 +455,81 @@ mod tests {
         );
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::hueckel_fused_merged(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        vec![(0..10).map(AtomId).collect::<Vec<_>>()]
+    )]
+    #[case::hueckel_coupled_ordered(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]}"#),
+        vec![
+            (0..6).map(AtomId).collect::<Vec<_>>(),
+            (6..12).map(AtomId).collect::<Vec<_>>(),
+        ]
+    )]
+    #[case::hmo_ring(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+        vec![(0..6).map(AtomId).collect::<Vec<_>>()]
+    )]
+    #[case::clar_sextet(
+        AromaticityRule::Clar { ring_limits: RingLimits::default() },
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)]]
+    )]
+    fn test_aromaticity_perception_find_systems_decomposition(
+        #[case] rule: AromaticityRule,
+        #[case] molecule: Molecule,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        // The selection relies on the perception contract: one decomposition
+        // per input — pairwise-disjoint systems with sorted member lists, in
+        // a deterministic order.
+        let perception = AromaticityPerception::new(&AromaticityModel {
+            scope: ElementScope::Any,
+            rule,
+        });
+        let electrons = |_: AtomId| Some(1);
+        let Solution::Determined(first) = perception
+            .find_systems(&molecule, AromaticityConfig::default(), electrons)
+            .unwrap()
+        else {
+            panic!("perception did not determine");
+        };
+        let members: Vec<Vec<AtomId>> = first.iter().map(|(atoms, _)| atoms.clone()).collect();
+        assert_eq!(members, expected);
+        for (index, (atoms, _)) in first.iter().enumerate() {
+            assert!(atoms.windows(2).all(|pair| pair[0] < pair[1]));
+            for (other_index, (other, _)) in first.iter().enumerate() {
+                if index != other_index {
+                    assert!(atoms.iter().all(|atom| !other.contains(atom)));
+                }
+            }
+        }
+        let Solution::Determined(second) = perception
+            .find_systems(&molecule, AromaticityConfig::default(), electrons)
+            .unwrap()
+        else {
+            panic!("perception did not determine");
+        };
+        assert_eq!(first, second);
+    }
+
     fn any_hueckel() -> AromaticityPerception {
         AromaticityPerception::new(&AromaticityModel {
             scope: ElementScope::Any,
@@ -523,7 +599,8 @@ mod tests {
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
             .find_systems(molecule, AromaticityConfig::default(), |v| {
-                match v
+                match molecule
+                    .atom(v)
                     .attributes
                     .constraints
                     .aromatic_valence()
@@ -856,16 +933,15 @@ mod tests {
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&molecule, AromaticityConfig::default(), |v| {
-                match v
-                    .attributes
-                    .constraints
-                    .aromatic_valence()
-                    .unwrap_or(&AromaticValenceForm::Undetermined)
-                {
-                    AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
-                    _ => None,
-                }
+            .find_systems(&molecule, AromaticityConfig::default(), |v| match molecule
+                .atom(v)
+                .attributes
+                .constraints
+                .aromatic_valence()
+                .unwrap_or(&AromaticValenceForm::Undetermined)
+            {
+                AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
+                _ => None,
             })
             .unwrap();
         let Solution::Determined(systems) = outcome else {

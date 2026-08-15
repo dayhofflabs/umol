@@ -1,0 +1,67 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 189
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}]
+      :atoms ["C#h3" "C#h" "O#h#n2" "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [3 8 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]]
+      :stereo-atoms [{:attrs :cw :ligands [0 2 3 [:h 1]] :site 1}]}
+    :success true
+    :tie-breaks [0 2]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#i=#c0#h3#n0#u0#s#v#d0#t0#a!#m!"
+        "C#i=#c0#h2#n0#u#s2#v#d0#t0#a!#m!"
+        "C#i=#c0#h#n0#u2#s3#v#d0#t0#a!#m!"
+        "C#i=#c0#h#n#u0#s#v#d0#t0#a!#m!"
+        "C#i=#c0#h0#n#u#s2#v#d0#t0#a!#m!"
+        "C#i=#c0#h0#n0#u3#s4#v#d0#t0#a!#m!"]
+      2 ["O#i=#c0#h#n2#u0#s#v#d0#t0#a!#m!" "O#i=#c0#h0#n2#u#s2#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [3 4 5 6 7 8] :attrs "[1,1,1,1,1,1]"}]
+      :atoms ["C#h3" "C#h" "O#h#n2" "C" "C#h" "C#h" "C#h" "C#h" "C#h"]
+      :bonds [
+        [0 1 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [3 8 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]]
+      :stereo-atoms [{:attrs :cw :ligands [0 2 3 [:h 1]] :site 1}]}
+    :success true
+    :tie-breaks [0 2 4 5 6 7 8]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#i=#c0#h0#n#u#s2#v#a!"
+        "C#i=#c0#h#n#u0#s#v#a!"
+        "C#i=#c0#h2#n0#u#s2#v#a!"
+        "C#i=#c0#h3#n0#u0#s#v#a!"]
+      2 ["O#i=#c0#h0#n2#u#s2#v#a!" "O#i=#c0#h#n2#u0#s#v#a!"]
+      4 ["C#i=#c0#h0#n0#u#s2#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"]
+      5 ["C#i=#c0#h0#n0#u#s2#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"]
+      6 ["C#i=#c0#h0#n0#u#s2#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"]
+      7 ["C#i=#c0#h0#n0#u#s2#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"]
+      8 ["C#i=#c0#h0#n0#u#s2#v2#a" "C#i=#c0#h#n0#u0#s#v2#a"]}}}

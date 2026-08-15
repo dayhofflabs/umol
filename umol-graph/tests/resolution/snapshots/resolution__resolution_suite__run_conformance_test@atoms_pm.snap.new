@@ -1,0 +1,10 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 189
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {:output {:atoms ["Pm#n#u5"] :bonds []} :success true :tie-breaks []}
+  :atom-typing-strict {:output {:atoms ["Pm#n#u5"] :bonds []} :success true :tie-breaks []}
+  :counts-most-saturated {:output {:atoms ["Pm#n3#u"] :bonds []} :success true :tie-breaks []}
+  :counts-strict {:output {:atoms ["Pm#n3#u"] :bonds []} :success true :tie-breaks []}}

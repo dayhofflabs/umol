@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingSet, UnpairedElectronsForm,
+    AromaticSystemForm, AtomId, ElementForm, Molecule, RingSet, UnpairedElectronsForm,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
@@ -62,7 +62,7 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<Vec<(Vec<AtomId>, AromaticSystemForm)>, HmoError>
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let pi_atoms: Vec<AtomId> = molecule
             .atoms()
@@ -75,7 +75,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                electrons_at(&view).map(|_| view.id)
+                electrons_at(view.id).map(|_| view.id)
             })
             .collect();
 
@@ -122,7 +122,7 @@ impl HmoAromaticity {
 
                 let electrons: Vec<i64> = atoms
                     .iter()
-                    .map(|&id| electrons_at(&molecule.atom(id)).unwrap_or(0) as i64)
+                    .map(|&id| electrons_at(id).unwrap_or(0) as i64)
                     .collect();
 
                 candidates.push((
@@ -144,7 +144,7 @@ impl HmoAromaticity {
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let subgraph = molecule.induced_subgraph(pi_atoms);
         let n = pi_atoms.len();
@@ -161,7 +161,7 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = electrons_at(&view).ok_or_else(|| {
+            let valence = electrons_at(view.id).ok_or_else(|| {
                 HmoError::UndeterminedAtom("undetermined aromatic valence".to_string())
             })?;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
@@ -366,7 +366,8 @@ mod tests {
     fn solve_hmo(model: &HmoAromaticity, molecule: &Molecule) -> HmoOutput {
         let atoms: Vec<AtomId> = molecule.atoms().ids().collect();
         model
-            .build_calculator(molecule, &atoms, &|v| match v
+            .build_calculator(molecule, &atoms, &|v| match molecule
+                .atom(v)
                 .attributes
                 .constraints
                 .aromatic_valence()
@@ -514,7 +515,8 @@ mod tests {
                 &molecule,
                 &ring_info,
                 ConnectedComponentsAlgorithm::Bfs,
-                &|v| match v
+                &|v| match molecule
+                    .atom(v)
                     .attributes
                     .constraints
                     .aromatic_valence()
@@ -559,7 +561,8 @@ mod tests {
     fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: Molecule) {
         let atoms: Vec<AtomId> = pyridine.atoms().ids().collect();
         let calc = hmo_model
-            .build_calculator(&pyridine, &atoms, &|v| match v
+            .build_calculator(&pyridine, &atoms, &|v| match pyridine
+                .atom(v)
                 .attributes
                 .constraints
                 .aromatic_valence()

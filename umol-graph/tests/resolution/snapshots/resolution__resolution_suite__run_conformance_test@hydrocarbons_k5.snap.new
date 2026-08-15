@@ -1,0 +1,70 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 189
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["C" "C" "C" "C" "C"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [1 4 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [3 4 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["C" "C" "C" "C" "C"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [1 4 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [3 4 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["C" "C" "C" "C" "C"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [1 4 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [3 4 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["C" "C" "C" "C" "C"]
+      :bonds [
+        [0 1 :single]
+        [0 2 :single]
+        [0 3 :single]
+        [0 4 :single]
+        [1 2 :single]
+        [1 3 :single]
+        [1 4 :single]
+        [2 3 :single]
+        [2 4 :single]
+        [3 4 :single]]}
+    :success true
+    :tie-breaks []}}

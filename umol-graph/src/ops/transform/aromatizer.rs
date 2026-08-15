@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AtomView, ElementForm, Molecule, NumForm};
+use umol_graph_ir::ir::{AtomId, ElementForm, Molecule, NumForm};
 
 use crate::ops::aromaticity::{
     AromaticityConfig, AromaticityContradiction, AromaticityError, AromaticityPerception,
@@ -55,7 +55,9 @@ impl Transformer for Aromatizer {
         }
         let systems = self
             .perception
-            .find_systems(molecule, self.config, electrons_from_kekule)?
+            .find_systems(molecule, self.config, |atom| {
+                electrons_from_kekule(molecule, atom)
+            })?
             .into_decisive(AromatizerError::Underdetermined)?;
         self.perception.add_systems(molecule, systems);
         Ok(())
@@ -79,7 +81,8 @@ impl Transformer for Aromatizer {
 ///   (sp² carbocation, empty p_z, e.g. tropylium C⁺).
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →
 ///   `None`, marking the atom as not aromatic-eligible.
-pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
+pub fn electrons_from_kekule(molecule: &Molecule, atom: AtomId) -> Option<u8> {
+    let view = molecule.atom(atom);
     let ElementForm::Lit(element) = view.attributes.element else {
         return None;
     };

@@ -9,8 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
-    AromaticSystemForm, AtomId, AtomView, ElementForm, Molecule, RingId, RingSet, RingView,
-    UnpairedElectronsForm,
+    AromaticSystemForm, AtomId, ElementForm, Molecule, RingId, RingSet, UnpairedElectronsForm,
 };
 
 use crate::ops::model::{ElementScope, RingLimits};
@@ -36,15 +35,11 @@ impl HueckelRuleAromaticity {
         electrons_at: &F,
     ) -> Vec<(Vec<AtomId>, AromaticSystemForm)>
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let eligible_cycles: Vec<RingId> = rings
             .ids()
-            .filter(|&i| {
-                rings
-                    .get(i)
-                    .is_some_and(|r| self.filter_ring(molecule, r, electrons_at))
-            })
+            .filter(|&i| self.filter_ring(molecule, rings, i, electrons_at))
             .collect();
 
         let mut aromatic_atom_sets: Vec<HashSet<AtomId>> = Vec::new();
@@ -54,7 +49,7 @@ impl HueckelRuleAromaticity {
                 continue;
             };
             let ring_atoms: Vec<AtomId> = ring.atoms().to_vec();
-            if let Some(electrons) = ring_electron_count(molecule, &ring_atoms, electrons_at) {
+            if let Some(electrons) = ring_electron_count(&ring_atoms, electrons_at) {
                 if check_4n_plus_2(electrons) {
                     aromatic_atom_sets.push(ring_atoms.into_iter().collect());
                 }
@@ -65,7 +60,7 @@ impl HueckelRuleAromaticity {
             let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
             for atoms in fused_systems {
                 let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
-                if let Some(electrons) = ring_electron_count(molecule, &atom_vec, electrons_at) {
+                if let Some(electrons) = ring_electron_count(&atom_vec, electrons_at) {
                     if check_4n_plus_2(electrons) {
                         aromatic_atom_sets.push(atoms);
                     }
@@ -83,7 +78,7 @@ impl HueckelRuleAromaticity {
             let mut electrons: Vec<i64> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
-                if let Some(e) = electrons_at(&molecule.atom(atom)) {
+                if let Some(e) = electrons_at(atom) {
                     electrons.push(e as i64);
                 } else {
                     valid = false;
@@ -107,7 +102,7 @@ impl HueckelRuleAromaticity {
 
     fn is_atom_eligible<F>(&self, molecule: &Molecule, id: AtomId, electrons_at: &F) -> bool
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
         let view = molecule.atom(id);
         let element = match view.attributes.element {
@@ -117,13 +112,22 @@ impl HueckelRuleAromaticity {
         if !self.element_scope.contains(element) {
             return false;
         }
-        electrons_at(&view).is_some()
+        electrons_at(id).is_some()
     }
 
-    fn filter_ring<F>(&self, molecule: &Molecule, ring: RingView<'_>, electrons_at: &F) -> bool
+    fn filter_ring<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        ring: RingId,
+        electrons_at: &F,
+    ) -> bool
     where
-        F: Fn(&AtomView<'_>) -> Option<u8>,
+        F: Fn(AtomId) -> Option<u8>,
     {
+        let Some(ring) = rings.get(ring) else {
+            return false;
+        };
         let len = ring.len();
         if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
             return false;
@@ -201,13 +205,13 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
     (electron_count - 2).is_multiple_of(4)
 }
 
-fn ring_electron_count<F>(molecule: &Molecule, ids: &[AtomId], electrons_at: &F) -> Option<u32>
+fn ring_electron_count<F>(ids: &[AtomId], electrons_at: &F) -> Option<u32>
 where
-    F: Fn(&AtomView<'_>) -> Option<u8>,
+    F: Fn(AtomId) -> Option<u8>,
 {
     let mut total: u32 = 0;
     for &id in ids {
-        total += electrons_at(&molecule.atom(id))? as u32;
+        total += electrons_at(id)? as u32;
     }
     Some(total)
 }
@@ -538,7 +542,8 @@ mod tests {
             )
             .into_ring_set();
         let model = daylight_model();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match v
+        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+            .atom(v)
             .attributes
             .constraints
             .aromatic_valence()
@@ -571,7 +576,8 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = model.find_from_rings(&molecule, &rings, &|v| match v
+        let systems = model.find_from_rings(&molecule, &rings, &|v| match molecule
+            .atom(v)
             .attributes
             .constraints
             .aromatic_valence()
@@ -594,7 +600,8 @@ mod tests {
                 RingConfig::default(),
             )
             .into_ring_set();
-        let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match v
+        let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| match borazine
+            .atom(v)
             .attributes
             .constraints
             .aromatic_valence()

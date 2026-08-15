@@ -1,0 +1,30 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 189
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :atoms ["H" "O#n2" "S#n" "O#n2" "O#n2" "H"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single] [4 5 :single]]}
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
+    :output {
+      :atoms ["H" "O#n2" "S#n" "O#n2" "O#n2" "H"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single] [4 5 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["H" "O#n2" "S#n" "O#n2" "O#n2" "H"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single] [4 5 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["H" "O#n2" "S#n" "O#n2" "O#n2" "H"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single] [4 5 :single]]}
+    :success true
+    :tie-breaks []}}

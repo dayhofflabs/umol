@@ -20,8 +20,8 @@ use umol_graph_core::{
     BipartiteMaximumMatchingAlgorithm, GeneralMaximumMatchingAlgorithm, NonBipartiteGraphError,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemId, AromaticSystemView, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
-    ElectronCountsForm, Molecule, NumForm,
+    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
+    Molecule, NumForm,
 };
 use umol_utils::solution::Solution;
 
@@ -131,8 +131,8 @@ struct MatchingInput {
 }
 
 impl MatchingInput {
-    fn from_system(view: AromaticSystemView<'_>) -> Result<Self, KekulizerError> {
-        let system = view.id;
+    fn from_system(molecule: &Molecule, system: AromaticSystemId) -> Result<Self, KekulizerError> {
+        let view = molecule.aromatic_system(system);
         let atoms: Vec<AtomId> = view.atom_ids().collect();
         let ElectronCountsForm::Lit(electrons) = view.electrons() else {
             return Err(KekulizerError::UndeterminedElectrons(system));
@@ -393,7 +393,7 @@ impl Kekulizer {
                 });
             }
 
-            let matching_input = MatchingInput::from_system(view)?;
+            let matching_input = MatchingInput::from_system(molecule, view.id)?;
             let mobile_charge = match (matching_input.mode, view.charge()) {
                 (MatchingInputMode::OneMobileExposure, NumForm::Lit(charge)) => Some(*charge),
                 (MatchingInputMode::Prescribed, _) => None,
@@ -585,8 +585,8 @@ mod tests {
         }
     )]
     fn test_matching_input_from_system(#[case] input: Molecule, #[case] expected: MatchingInput) {
-        let system = input.aromatic_systems().iter().next().unwrap();
-        assert_eq!(MatchingInput::from_system(system), Ok(expected));
+        let system = input.aromatic_systems().ids().next().unwrap();
+        assert_eq!(MatchingInput::from_system(&input, system), Ok(expected));
     }
 
     #[rstest]
@@ -636,8 +636,8 @@ mod tests {
         #[case] input: Molecule,
         #[case] expected: KekulizerError,
     ) {
-        let system = input.aromatic_systems().iter().next().unwrap();
-        assert_eq!(MatchingInput::from_system(system), Err(expected));
+        let system = input.aromatic_systems().ids().next().unwrap();
+        assert_eq!(MatchingInput::from_system(&input, system), Err(expected));
     }
 
     #[rstest]
