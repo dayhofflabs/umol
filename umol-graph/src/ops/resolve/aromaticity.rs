@@ -9,7 +9,7 @@ use smallvec::smallvec;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, Edits, Molecule, NumForm,
+    BondUpdate, BooleanForm, Edits, Molecule, NumForm, RingSet,
 };
 use umol_utils::solution::Solution;
 
@@ -348,11 +348,11 @@ impl AromaticityResolver {
         // joint assignments, keyed by the system's sorted member set.
         type SystemOption = (Vec<(AtomId, AtomForm)>, Vec<AtomId>, AromaticSystemForm);
         let mut per_system: BTreeMap<Vec<AtomId>, Vec<SystemOption>> = BTreeMap::new();
-        let mut odometer = vec![0usize; flexible.len()];
+        let mut assignment_indices = vec![0usize; flexible.len()];
         loop {
             let choice: BTreeMap<AtomId, usize> = flexible
                 .iter()
-                .zip(&odometer)
+                .zip(&assignment_indices)
                 .map(|(&(atom, _), &index)| (atom, index))
                 .collect();
             let outcome = self.perception.find_systems(
@@ -421,13 +421,13 @@ impl AromaticityResolver {
                     break;
                 }
                 position -= 1;
-                odometer[position] += 1;
-                if odometer[position] < flexible[position].1.len() {
+                assignment_indices[position] += 1;
+                if assignment_indices[position] < flexible[position].1.len() {
                     break;
                 }
-                odometer[position] = 0;
+                assignment_indices[position] = 0;
             }
-            if flexible.is_empty() || odometer.iter().all(|&index| index == 0) {
+            if flexible.is_empty() || assignment_indices.iter().all(|&index| index == 0) {
                 break;
             }
         }
@@ -570,6 +570,36 @@ impl AromaticityResolver {
 /// Member-wise lexicographic comparison of two assignment restrictions for
 /// the same system, in ascending member order, each member compared by the
 /// tie-break key over its candidate forms.
+/// Connected components of the aromatic-candidate graph: the perception's
+/// rings whose members are all aromatic-capable, connected over shared
+/// atoms. The aromaticity rule's acceptance couples atoms only within a
+/// component, so enumeration, validity, selection, and the assignment bound
+/// are all per component.
+#[allow(dead_code, reason = "wired by the per-component enumeration at A1b")]
+fn candidate_components<F>(rings: &RingSet, capable: F) -> Vec<BTreeSet<AtomId>>
+where
+    F: Fn(AtomId) -> bool,
+{
+    let mut components: Vec<BTreeSet<AtomId>> = Vec::new();
+    for ring in rings.iter() {
+        if !ring.atoms().iter().all(|&atom| capable(atom)) {
+            continue;
+        }
+        let ring: BTreeSet<AtomId> = ring.atoms().iter().copied().collect();
+        let (connected, disjoint): (Vec<_>, Vec<_>) = components
+            .into_iter()
+            .partition(|component| !component.is_disjoint(&ring));
+        let mut merged = ring;
+        for component in connected {
+            merged.extend(component);
+        }
+        components = disjoint;
+        components.push(merged);
+    }
+    components.sort();
+    components
+}
+
 fn compare_restrictions(
     a: &[(AtomId, AtomForm)],
     b: &[(AtomId, AtomForm)],
@@ -599,14 +629,82 @@ mod tests {
         RelevantCycleEnumerationAlgorithm, SimpleCycleEnumerationAlgorithm,
     };
     use umol_graph_ir::ir::{
-        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig,
-        UnpairedElectronsForm,
+        AromaticSystemId, BondConstraintKey, BondId, Edit, Edits, NumForm, RingConfig, RingModel,
+        RingSetKind, UnpairedElectronsForm,
     };
     use umol_graph_ir::{mol_dsl, mol_dsl_ground};
 
     use super::*;
     use crate::ops::model::{AromaticityRule, ElementScope, RingLimits};
     use crate::ops::valence::AtomCompletions;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fused_pair(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#),
+        vec![(0..10).map(AtomId).collect::<BTreeSet<_>>()]
+    )]
+    #[case::coupled_rings(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [5 6 "1"]
+                    [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 10 "1"] [10 11 "1"] [11 6 "1"]]}"#),
+        vec![
+            (0..6).map(AtomId).collect::<BTreeSet<_>>(),
+            (6..12).map(AtomId).collect::<BTreeSet<_>>(),
+        ]
+    )]
+    #[case::chain(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"]]}"#),
+        vec![]
+    )]
+    fn test_candidate_components(
+        #[case] molecule: Molecule,
+        #[case] expected: Vec<BTreeSet<AtomId>>,
+    ) {
+        let rings = molecule
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 22,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
+        assert_eq!(candidate_components(&rings, |_| true), expected);
+    }
+
+    #[rstest]
+    fn test_candidate_components_capability() {
+        // One incapable atom removes its rings; the remaining candidate ring
+        // is its own component.
+        let molecule = mol_dsl!(
+            r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#
+        );
+        let rings = molecule
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: 22,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
+        assert_eq!(
+            candidate_components(&rings, |atom| atom != AtomId(0)),
+            vec![[4, 5, 6, 7, 8, 9]
+                .map(AtomId)
+                .into_iter()
+                .collect::<BTreeSet<_>>()]
+        );
+    }
 
     #[fixture]
     fn aromaticity_model() -> AromaticityModel {

@@ -111,24 +111,27 @@ here" (settled 2026-08-13): it records atoms narrowed by the value key, as today
 chosen systems' member atoms when the structural order decided between valid assignments.
 Validity elimination is a criterion, not a preference, and never records.
 
-**Component factorization.** The 4n+2 constraint couples atoms only within a connected
-component of the aromatic-candidate graph: build the perception ring set once, keep the
+**Component factorization.** The aromaticity rule's acceptance — whether a set of atoms is
+perceived as aromatic — couples atoms only within a connected component of the
+aromatic-candidate graph: build the perception ring set once, keep the
 candidate rings (every member aromatic-capable), and take connected components over shared
 atoms. Enumeration, validity, selection, and the bound are all per component; component
 results combine freely (no joint constraint spans components — biphenyl's rings, or any
 multi-fragment molecule). The assignment count drops from the product over the molecule to
 the maximum over components.
 
-**Search.** Within a component, replace the flat odometer with a depth-first search over
+**Search.** Within a component, replace the flat enumeration with a depth-first search over
 flexible atoms ordered ring-by-ring, pruning a partial assignment when the violation is
 certain:
 
-- a candidate ring with all members assigned whose π sum misses every applicable 4n+2 value,
-  when the assignment cannot become valid without it (under `Error`: some fully-assigned
-  all-aromatic atom has no other candidate ring left);
-- interval bounds: each unassigned member carries a minimum and maximum π contribution over
-  its remaining disjuncts; a ring whose reachable sum interval excludes every 4n+2 value is
-  settled early.
+- a candidate ring with all members assigned that the rule rejects, when the assignment
+  cannot become valid without it (under `Error`: some fully-assigned all-aromatic atom has
+  no other candidate ring left);
+- interval bounds where the rule admits them: each unassigned member carries a minimum and
+  maximum contribution over its remaining disjuncts, and a ring whose reachable
+  contribution range the rule can never accept is settled early (the Hückel rule prunes by
+  the 4n+2 residues; a rule without a usable bound simply prunes less — soundness, not
+  completeness, is the requirement).
 
 Pruning must be sound — it may never eliminate a valid assignment — and the executable
 specification is equivalence: on components within the bound, the pruned search returns
@@ -237,8 +240,8 @@ classifies it:
 The class distribution answers whether perception and selection work well: contradictions
 concentrated in chemically implausible rows is health, contradictions scattered through
 ordinary heteroaromatics is not. Two invariants are checked on every row regardless of
-class: every emitted system fits 4n+2, and no two systems overlap — the invariant this
-document's defect violates. Tautomer clusters are the second oracle: rows in one cluster
+class: every emitted system re-validates under the model's aromaticity rule, and no two
+systems overlap — the latter being the invariant this document's defect violates. Tautomer clusters are the second oracle: rows in one cluster
 should share a class, and under `MostSaturated` should pick consistently.
 
 **What ships.** From the instrument's output, a curated set is promoted into the doc 194
@@ -333,7 +336,12 @@ selection, then the model envelope and bindings, then the suites.
 - A0d: caller migration and the stage pin. Un-ignore
   `test_resolver_resolve_stages::case_2_aromaticity_bond_marks`; sweep lib and pytest
   expectations for inputs that previously acquired aromatic candidates without marks.
-  Stage green: full lib suite, pytest. [dep: A0b, A0c]
+  Stage green: full lib suite, pytest. [dep: A0b, A0c] **Done 2026-08-13**, absorbed by
+  the earlier subitems: the un-ignore landed with A0b (the counts fixture powers the
+  case), and the expectation sweep reduced to the one planned migration at A0c (the
+  plural-admission input gaining its `#a+` mark) — no other lib or pytest expectation
+  depended on unmarked aromatic candidates. Stage closed green: lib 916, pytest 1306,
+  clippy zero.
 
 ### A1 — component factorization (additive)
 
@@ -341,7 +349,14 @@ selection, then the model envelope and bindings, then the suites.
   perception ring set, keep rings whose members are all aromatic-capable, connect over
   shared atoms, emit disjoint atom-set components. Unit tests: fused pair = one component,
   biphenyl-coupled rings = two, no candidate rings = none. Additive. [dep: A0d]
-- A1b: per-component enumeration: the odometer runs per component;
+  **Done 2026-08-13:** `candidate_components(rings, capable)` — iterative merge over
+  shared atoms, deterministic sorted output, capability as a caller-supplied predicate so
+  the A1b wiring decides the evidence composition. Four table cases: the fused pair one
+  component, coupled rings two, a chain none, and a capability split leaving the capable
+  ring alone. Carries a targeted dead-code allow until A1b wires it. The
+  "odometer" identifiers and doc phrasing are purged (`assignment_indices`; "index-vector
+  enumeration"). Lib 916 green, clippy zero.
+- A1b: per-component enumeration: the index-vector enumeration runs per component;
   `MAX_JOINT_ASSIGNMENTS` → `MAX_ASSIGNMENTS`, now per component. Behavior-preserving for
   single-component inputs — the existing suite is the preservation test; new test: two
   independent flexible rings whose assignment product exceeds the bound while each
@@ -384,9 +399,9 @@ selection, then the model envelope and bindings, then the suites.
 
 ### A4 — pruned search (additive, deferrable)
 
-- A4a: depth-first assignment search with the two sound prunes (completed-ring 4n+2 misses
-  when no valid completion remains; interval bounds on unassigned members) replacing the
-  flat per-component enumeration. All suites green unchanged. [dep: A2c]
+- A4a: depth-first assignment search with the two sound prunes (rule-rejected completed
+  rings when no valid completion remains; rule-supplied interval bounds on unassigned
+  members) replacing the flat per-component enumeration. All suites green unchanged. [dep: A2c]
 - A4b: the enumeration-equivalence property: on components within the bound, the pruned
   search returns exactly the flat enumeration's valid-assignment set; placed per
   `docs/development/property-tests.md` (a new umol-graph property target if none exists).
@@ -397,8 +412,8 @@ selection, then the model envelope and bindings, then the suites.
 - A5a: fetch script for the VEHICLe CSV into a gitignored working directory, with the
   provenance note; the `.gitignore` entry lands with it. Additive. [dep: none]
 - A5b: the instrument run: an `#[ignore]`d test that skips when the local CSV is absent,
-  classifies every row by the outcome pair under both valence tie-breaks, asserts 4n+2 and
-  no-overlap on every emitted system, checks tautomer-cluster consistency, and writes the
+  classifies every row by the outcome pair under both valence tie-breaks, asserts
+  rule-acceptance and no-overlap on every emitted system, checks tautomer-cluster consistency, and writes the
   class distribution and failure manifest for review. The distribution is the A5
   deliverable, recorded in this document. Additive. [dep: A2c, A5a]
 
