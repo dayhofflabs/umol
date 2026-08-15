@@ -1101,6 +1101,19 @@ pub struct ResolveReport {
 
 - S5d: regenerate conformance snapshots once; final green: `--all-features --tests`, clippy.
   [dep: S5b, S5c, S5c1, S5c2, doc 196 A6]
+  **Done 2026-08-15:** the single regeneration — 668 snapshots (653 regenerated plus the
+  fifteen doc 196 A6a promotions), all cells under the `MinElectronCount` presets. Audit:
+  zero success flips between the historical cells (opted into `MostSaturated` at S4h) and
+  their most-saturated successors — the churn is the S5c2 key rename, the discharge and
+  elision output shapes, and the new strict/most-saturated cell pairs. Strict cells over
+  the suite: 381 determined with no discretion, 275 honestly plural, 12 split between the
+  sources. Final green: workspace `--all-features --tests` 28 998 passed / 0 failed over
+  55 targets, clippy zero, pytest 1311 — the S4 red period is closed. S5 complete.
+  Follow-up in the same pass: `:unresolved` candidates now lower through
+  `AtomDefaults::ground()` like the output cells (previously the one raw-`Display` spot
+  in the harness), so ground-valued fields elide and only the discriminating tokens
+  render — purine's nitrogen splits read `"N#n#v2#a"` versus `"N#h#v2#a2"`; snapshots
+  regenerated with the shape.
 
 ### S6 — cleanup; all planned work, sequenced last
 

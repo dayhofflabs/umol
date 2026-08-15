@@ -75,20 +75,20 @@ pub struct RingLimits(GraphRingLimits);
 #[pymethods]
 impl RingLimits {
     #[new]
-    #[pyo3(signature = (*, min_ring_size=3, max_ring_size=22, include_fused=true, max_fused_combination=6, max_fused_search=10_000))]
+    #[pyo3(signature = (*, min_ring_size=3, max_ring_size=22, include_unions=true, max_ring_count=6, max_unions=10_000))]
     fn new(
         min_ring_size: usize,
         max_ring_size: usize,
-        include_fused: bool,
-        max_fused_combination: usize,
-        max_fused_search: usize,
+        include_unions: bool,
+        max_ring_count: usize,
+        max_unions: usize,
     ) -> Self {
         Self(GraphRingLimits {
             min_ring_size,
             max_ring_size,
-            include_fused,
-            max_fused_combination,
-            max_fused_search,
+            include_unions,
+            max_ring_count,
+            max_unions,
         })
     }
 
@@ -103,28 +103,28 @@ impl RingLimits {
     }
 
     #[getter]
-    fn include_fused(&self) -> bool {
-        self.0.include_fused
+    fn include_unions(&self) -> bool {
+        self.0.include_unions
     }
 
     #[getter]
-    fn max_fused_combination(&self) -> usize {
-        self.0.max_fused_combination
+    fn max_ring_count(&self) -> usize {
+        self.0.max_ring_count
     }
 
     #[getter]
-    fn max_fused_search(&self) -> usize {
-        self.0.max_fused_search
+    fn max_unions(&self) -> usize {
+        self.0.max_unions
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "RingLimits(min_ring_size={}, max_ring_size={}, include_fused={}, max_fused_combination={}, max_fused_search={})",
+            "RingLimits(min_ring_size={}, max_ring_size={}, include_unions={}, max_ring_count={}, max_unions={})",
             self.0.min_ring_size,
             self.0.max_ring_size,
-            if self.0.include_fused { "True" } else { "False" },
-            self.0.max_fused_combination,
-            self.0.max_fused_search,
+            if self.0.include_unions { "True" } else { "False" },
+            self.0.max_ring_count,
+            self.0.max_unions,
         )
     }
 }
@@ -377,32 +377,32 @@ mod tests {
     #[case::zero(0, 0, false, 0, 0, GraphRingLimits {
         min_ring_size: 0,
         max_ring_size: 0,
-        include_fused: false,
-        max_fused_combination: 0,
-        max_fused_search: 0,
+        include_unions: false,
+        max_ring_count: 0,
+        max_unions: 0,
     })]
     #[case::nondefault(5, 18, false, 4, 2_500, GraphRingLimits {
         min_ring_size: 5,
         max_ring_size: 18,
-        include_fused: false,
-        max_fused_combination: 4,
-        max_fused_search: 2_500,
+        include_unions: false,
+        max_ring_count: 4,
+        max_unions: 2_500,
     })]
     fn test_ring_limits_new(
         #[case] min_ring_size: usize,
         #[case] max_ring_size: usize,
-        #[case] include_fused: bool,
-        #[case] max_fused_combination: usize,
-        #[case] max_fused_search: usize,
+        #[case] include_unions: bool,
+        #[case] max_ring_count: usize,
+        #[case] max_unions: usize,
         #[case] expected: GraphRingLimits,
     ) {
         assert_eq!(
             RingLimits::new(
                 min_ring_size,
                 max_ring_size,
-                include_fused,
-                max_fused_combination,
-                max_fused_search,
+                include_unions,
+                max_ring_count,
+                max_unions,
             )
             .0,
             expected
@@ -412,11 +412,11 @@ mod tests {
     #[rstest]
     #[case::default(
         RingLimits::new(3, 22, true, 6, 10_000),
-        "RingLimits(min_ring_size=3, max_ring_size=22, include_fused=True, max_fused_combination=6, max_fused_search=10000)"
+        "RingLimits(min_ring_size=3, max_ring_size=22, include_unions=True, max_ring_count=6, max_unions=10000)"
     )]
     #[case::nondefault(
         RingLimits::new(5, 18, false, 4, 2_500),
-        "RingLimits(min_ring_size=5, max_ring_size=18, include_fused=False, max_fused_combination=4, max_fused_search=2500)"
+        "RingLimits(min_ring_size=5, max_ring_size=18, include_unions=False, max_ring_count=4, max_unions=2500)"
     )]
     fn test_ring_limits_repr(#[case] limits: RingLimits, #[case] expected: &str) {
         assert_eq!(limits.__repr__(), expected);
@@ -427,9 +427,9 @@ mod tests {
     #[case::nondefault(GraphRingLimits {
         min_ring_size: 5,
         max_ring_size: 18,
-        include_fused: false,
-        max_fused_combination: 4,
-        max_fused_search: 2_500,
+        include_unions: false,
+        max_ring_count: 4,
+        max_unions: 2_500,
     })]
     fn test_ring_limits_from_rust(#[case] limits: GraphRingLimits) {
         assert_eq!(RingLimits::from_rust(&limits).0, limits);
@@ -498,7 +498,7 @@ mod tests {
     #[rstest]
     #[case::hueckel_rule(
         AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) }, tie_break: AromaticityTieBreak::Strict },
-        "AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, include_fused=False, max_fused_combination=3, max_fused_search=2000)), tie_break=AromaticityTieBreak.Strict)"
+        "AromaticityModel(scope=ElementScope.Any(), rule=AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, max_ring_size=18, include_unions=False, max_ring_count=3, max_unions=2000)), tie_break=AromaticityTieBreak.Strict)"
     )]
     #[case::hmo(
         AromaticityModel { scope: ElementScope::AllowList {
@@ -510,7 +510,7 @@ mod tests {
         AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into()],
             }, rule: AromaticityRule::Clar { ring_limits: RingLimits::new(6, 14, true, 4, 1_500) }, tie_break: AromaticityTieBreak::Strict },
-        "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), rule=AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, include_fused=True, max_fused_combination=4, max_fused_search=1500)), tie_break=AromaticityTieBreak.Strict)"
+        "AromaticityModel(scope=ElementScope.AllowList([Element('C')]), rule=AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, max_ring_size=14, include_unions=True, max_ring_count=4, max_unions=1500)), tie_break=AromaticityTieBreak.Strict)"
     )]
     fn test_aromaticity_model_repr(#[case] model: AromaticityModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);
@@ -521,9 +521,9 @@ mod tests {
         GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,
                 max_ring_size: 18,
-                include_fused: false,
-                max_fused_combination: 3,
-                max_fused_search: 2_000,
+                include_unions: false,
+                max_ring_count: 3,
+                max_unions: 2_000,
             } }, tie_break: GraphAromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::Any {}, rule: AromaticityRule::Hueckel { ring_limits: RingLimits::new(4, 18, false, 3, 2_000) }, tie_break: AromaticityTieBreak::Strict }
     )]
@@ -537,9 +537,9 @@ mod tests {
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar { ring_limits: GraphRingLimits {
                 min_ring_size: 6,
                 max_ring_size: 14,
-                include_fused: true,
-                max_fused_combination: 4,
-                max_fused_search: 1_500,
+                include_unions: true,
+                max_ring_count: 4,
+                max_unions: 1_500,
             } }, tie_break: GraphAromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::AllowList {
                 elements: vec![ChemElement::C.into()],
@@ -558,9 +558,9 @@ mod tests {
         GraphAromaticityModel { scope: GraphElementScope::Any, rule: GraphAromaticityRule::Hueckel { ring_limits: GraphRingLimits {
                 min_ring_size: 4,
                 max_ring_size: 18,
-                include_fused: false,
-                max_fused_combination: 3,
-                max_fused_search: 2_000,
+                include_unions: false,
+                max_ring_count: 3,
+                max_unions: 2_000,
             } }, tie_break: GraphAromaticityTieBreak::Strict }
     )]
     #[case::hmo(
@@ -576,9 +576,9 @@ mod tests {
         GraphAromaticityModel { scope: GraphElementScope::AllowList(vec![ChemElement::C]), rule: GraphAromaticityRule::Clar { ring_limits: GraphRingLimits {
                 min_ring_size: 6,
                 max_ring_size: 14,
-                include_fused: true,
-                max_fused_combination: 4,
-                max_fused_search: 1_500,
+                include_unions: true,
+                max_ring_count: 4,
+                max_unions: 1_500,
             } }, tie_break: GraphAromaticityTieBreak::Strict }
     )]
     fn test_aromaticity_model_to_rust(

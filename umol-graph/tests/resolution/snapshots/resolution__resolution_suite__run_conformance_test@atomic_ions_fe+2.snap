@@ -3,5 +3,7 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true}
-  :counts {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true}}
+  :atom-typing-most-saturated {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true :tie-breaks []}
+  :atom-typing-strict {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true :tie-breaks []}
+  :counts-most-saturated {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true :tie-breaks []}
+  :counts-strict {:output {:atoms ["Fe#c+2#n#u4"] :bonds []} :success true :tie-breaks []}}

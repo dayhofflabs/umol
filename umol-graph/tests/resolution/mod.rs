@@ -17,7 +17,7 @@ use umol_graph::ops::model::{
 use umol_graph::ops::resolve::Resolver;
 use umol_graph::ops::valence::{ResolveReport, ValenceTable};
 use umol_graph::ops::validate::ConnectivityModel;
-use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
+use umol_graph_ir::dsl::{AtomDefaults, AtomDsl, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_graph_ir::ir::{FromIr, IntoIr, Molecule};
 use umol_utils::solution::Solution;
 
@@ -87,7 +87,12 @@ fn resolve_test(
                     .map(|(atom, forms)| {
                         (
                             atom.index() as u32,
-                            forms.iter().map(ToString::to_string).collect(),
+                            forms
+                                .iter()
+                                .map(|form| {
+                                    AtomDsl::from_ir(form, &AtomDefaults::ground()).to_string()
+                                })
+                                .collect(),
                         )
                     })
                     .collect(),

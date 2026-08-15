@@ -3,18 +3,9 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {
+  :atom-typing-most-saturated {
     :output {
-      :atoms [
-        "C#v4"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"]
+      :atoms ["C" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
       :bonds [
         [0 1 :single]
         [1 2 :single]
@@ -26,19 +17,55 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [6 7 :single]
         [7 8 :single]
         [0 8 :single]]}
-    :success true}
-  :counts {
+    :success true
+    :tie-breaks [1 2 3 4 5 6 7 8]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      2 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      3 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      4 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      5 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      6 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      7 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]
+      8 [
+        "C#h2#v2#d0#t0#a!#m!"
+        "C#h#u#v2#d0#t0#a!#m!"
+        "C#u2#v2#d0#t0#a!#m!"
+        "C#n#v2#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
     :output {
-      :atoms [
-        "C#v4"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"
-        "C#h2#v2"]
+      :atoms ["C" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2" "C#h2"]
       :bonds [
         [0 1 :single]
         [1 2 :single]
@@ -50,4 +77,17 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [6 7 :single]
         [7 8 :single]
         [0 8 :single]]}
-    :success true}}
+    :success true
+    :tie-breaks [1 2 3 4 5 6 7 8]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      1 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      2 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      3 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      4 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      5 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      6 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      7 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]
+      8 ["C#n#v2#a!" "C#h#u#v2#a!" "C#h2#v2#a!"]}}}

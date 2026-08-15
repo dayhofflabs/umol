@@ -151,7 +151,7 @@ impl AromaticityPerception {
     }
 
     /// The member sets a system could claim: every candidate ring, and —
-    /// under the Hückel rule — every fused union within the ring limits.
+    /// under the Hückel rule — every ring union within the ring limits.
     /// Member lists are sorted ascending.
     pub(crate) fn claim_candidates(&self, rings: &RingSet) -> Vec<Vec<AtomId>> {
         let mut candidates: Vec<Vec<AtomId>> = rings
@@ -164,7 +164,7 @@ impl AromaticityPerception {
             .collect();
         if let Self::HueckelRule(m) = self {
             let eligible: Vec<RingId> = rings.ids().collect();
-            for union in m.enumerate_fused_combinations(rings, &eligible) {
+            for union in m.enumerate_unions(rings, &eligible) {
                 let mut atoms: Vec<AtomId> = union.into_iter().collect();
                 atoms.sort_unstable();
                 candidates.push(atoms);

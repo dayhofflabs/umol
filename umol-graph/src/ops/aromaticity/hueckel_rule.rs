@@ -67,8 +67,8 @@ impl HueckelRuleAromaticity {
             }
         }
 
-        if self.ring_limits.include_fused {
-            let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
+        if self.ring_limits.include_unions {
+            let fused_systems = self.enumerate_unions(rings, &eligible_cycles);
             for atoms in fused_systems {
                 let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
                 if let Some(electrons) = ring_electron_count(&atom_vec, electrons_at) {
@@ -148,19 +148,23 @@ impl HueckelRuleAromaticity {
             .all(|&a| self.is_atom_eligible(molecule, a, electrons_at))
     }
 
-    pub(crate) fn enumerate_fused_combinations(
+    /// Connected ring unions for acceptance, walking rings that share at
+    /// least one contiguous run of bonds — the `Fused` and `Bridged`
+    /// relations. `Spiro` sharing breaks conjugation at the shared atom and
+    /// `Noncontiguous` sharing is excluded until a need arises.
+    pub(crate) fn enumerate_unions(
         &self,
         rings: &RingSet,
         eligible: &[RingId],
     ) -> Vec<HashSet<AtomId>> {
-        let max_combo = self.ring_limits.max_fused_combination;
-        if max_combo < 2 {
+        let max_ring_count = self.ring_limits.max_ring_count;
+        if max_ring_count < 2 {
             return Vec::new();
         }
 
         let eligible_set: HashSet<RingId> = eligible.iter().copied().collect();
         let mut results: Vec<HashSet<AtomId>> = Vec::new();
-        let mut seen_combos: HashSet<Vec<RingId>> = HashSet::new();
+        let mut seen_unions: HashSet<Vec<RingId>> = HashSet::new();
 
         'outer: for &start in eligible {
             let mut stack: Vec<(Vec<RingId>, HashSet<AtomId>)> = Vec::new();
@@ -170,37 +174,41 @@ impl HueckelRuleAromaticity {
             let start_atoms: HashSet<AtomId> = start_ring.atoms().iter().copied().collect();
             stack.push((vec![start], start_atoms));
 
-            while let Some((combo, atoms)) = stack.pop() {
-                if combo.len() >= 2 {
-                    let mut key = combo.clone();
+            while let Some((union_rings, atoms)) = stack.pop() {
+                if union_rings.len() >= 2 {
+                    let mut key = union_rings.clone();
                     key.sort_unstable();
-                    if seen_combos.insert(key) {
+                    if seen_unions.insert(key) {
                         results.push(atoms.clone());
-                        if results.len() >= self.ring_limits.max_fused_search {
+                        if results.len() >= self.ring_limits.max_unions {
                             break 'outer;
                         }
                     }
                 }
 
-                if combo.len() >= max_combo {
+                if union_rings.len() >= max_ring_count {
                     continue;
                 }
 
-                let last = *combo.last().unwrap();
-                for neighbor_idx in rings.fused_neighbors(last) {
-                    if !eligible_set.contains(&neighbor_idx) || combo.contains(&neighbor_idx) {
+                let last = *union_rings.last().unwrap();
+                let mut neighbors = rings.fused_neighbors(last);
+                neighbors.extend(rings.bridged_neighbors(last));
+                neighbors.sort_unstable();
+                for neighbor_idx in neighbors {
+                    if !eligible_set.contains(&neighbor_idx) || union_rings.contains(&neighbor_idx)
+                    {
                         continue;
                     }
-                    if neighbor_idx <= combo[0] {
+                    if neighbor_idx <= union_rings[0] {
                         continue;
                     }
-                    let mut new_combo = combo.clone();
-                    new_combo.push(neighbor_idx);
+                    let mut extended_rings = union_rings.clone();
+                    extended_rings.push(neighbor_idx);
                     let mut new_atoms = atoms.clone();
                     if let Some(nr) = rings.get(neighbor_idx) {
                         new_atoms.extend(nr.atoms().iter().copied());
                     }
-                    stack.push((new_combo, new_atoms));
+                    stack.push((extended_rings, new_atoms));
                 }
             }
         }
@@ -269,6 +277,7 @@ mod tests {
         AromaticValenceForm, AtomConstraintForm, AtomForm, AtomId, BondForm, ElectronCountsForm,
         ElementForm, Molecule, MoleculeEntries, NumForm, RingConfig, RingModel, RingSetKind,
     };
+    use umol_graph_ir::mol_dsl;
 
     use super::*;
 
@@ -613,6 +622,48 @@ mod tests {
             _ => None,
         });
         assert!(systems.is_empty());
+    }
+
+    #[rstest]
+    fn test_hueckel_rule_find_from_rings_bridged() {
+        // Two five-rings sharing the two-bond run 3-4-0: the `Bridged`
+        // relation, not `Fused`. Neither ring passes alone (sum 4); their
+        // union does (sum 6), so the combination walk must cross bridged
+        // sharing.
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C#a" "C#a" "C#a" "C#a" "C#a0" "C#a" "C#a"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]
+                        [0 5 "1"] [5 6 "1"] [6 3 "1"]]}"#
+        );
+        let rings = molecule
+            .rings(
+                RingModel {
+                    kind: RingSetKind::Relevant,
+                    max_ring_size: RingLimits::default().max_ring_size,
+                },
+                RingConfig::default(),
+            )
+            .into_ring_set();
+        let systems = daylight_model().find_from_rings(&molecule, &rings, &|v| match molecule
+            .atom(v)
+            .attributes
+            .constraints
+            .aromatic_valence()
+            .unwrap_or(&AromaticValenceForm::Undetermined)
+        {
+            AromaticValenceForm::Aromatic(NumForm::Lit(n)) if *n >= 0 => Some(*n as u8),
+            _ => None,
+        });
+
+        assert_eq!(
+            systems,
+            vec![(
+                (0..7).map(AtomId).collect::<Vec<_>>(),
+                AromaticSystemForm::from_electrons(vec![1, 1, 1, 1, 0, 1, 1])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )]
+        );
     }
 
     #[rstest]

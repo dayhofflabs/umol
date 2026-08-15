@@ -1,0 +1,49 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[1,1,1,1,2,1,1,1,1]"}]
+      :atoms ["C#h" "C#h" "C#h" "C" "N#h" "C#h" "N#n" "C" "C#h"]
+      :bonds [
+        [0 8 :single]
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 7 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]]}
+    :success true
+    :tie-breaks [4 6]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      4 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!"]
+      6 ["N#n#v2#d0#t0#a#m!" "N#h#v2#d0#t0#a2#m!"]}}
+  :counts-most-saturated {
+    :output {
+      :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8] :attrs "[1,1,1,1,2,1,1,1,1]"}]
+      :atoms ["C#h" "C#h" "C#h" "C" "N#h" "C#h" "N#n" "C" "C#h"]
+      :bonds [
+        [0 8 :single]
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 7 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [5 6 :single]
+        [6 7 :single]
+        [7 8 :single]]}
+    :success true
+    :tie-breaks [4 6]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {4 ["N#n#v2#a" "N#h#v2#a2"] 6 ["N#n#v2#a" "N#h#v2#a2"]}}}

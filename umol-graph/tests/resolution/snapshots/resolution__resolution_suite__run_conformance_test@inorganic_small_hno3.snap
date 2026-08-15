@@ -3,13 +3,27 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {
+  :atom-typing-most-saturated {
     :output {
-      :atoms ["H#v" "O#n2#v2" "N#c+#v4" "O#n2#v2" "O#c-#n3#v"]
+      :atoms ["H" "O#n2" "N#c+" "O#n2" "O#c-#n3"]
       :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single]]}
-    :success true}
-  :counts {
+    :success true
+    :tie-breaks []}
+  :atom-typing-strict {
     :output {
-      :atoms ["H#v" "O#n2#v2" "N#c+#v4" "O#n2#v2" "O#c-#n3#v"]
+      :atoms ["H" "O#n2" "N#c+" "O#n2" "O#c-#n3"]
       :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single]]}
-    :success true}}
+    :success true
+    :tie-breaks []}
+  :counts-most-saturated {
+    :output {
+      :atoms ["H" "O#n2" "N#c+" "O#n2" "O#c-#n3"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single]]}
+    :success true
+    :tie-breaks []}
+  :counts-strict {
+    :output {
+      :atoms ["H" "O#n2" "N#c+" "O#n2" "O#c-#n3"]
+      :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [2 4 :single]]}
+    :success true
+    :tie-breaks []}}

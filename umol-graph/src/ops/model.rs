@@ -229,14 +229,18 @@ impl ElementScope {
     }
 }
 
-/// Ring-size and fused-ring search bounds for ring-based aromaticity perception.
+/// Ring-size and ring-union bounds for ring-based aromaticity perception.
+/// Unions extend over rings sharing at least one contiguous run of bonds
+/// (the `Fused` and `Bridged` ring relations); spiro and noncontiguous
+/// sharing are excluded. `max_ring_count` bounds the rings per union and
+/// `max_unions` the number of unions enumerated.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingLimits {
     pub min_ring_size: usize,
     pub max_ring_size: usize,
-    pub include_fused: bool,
-    pub max_fused_combination: usize,
-    pub max_fused_search: usize,
+    pub include_unions: bool,
+    pub max_ring_count: usize,
+    pub max_unions: usize,
 }
 
 impl Default for RingLimits {
@@ -244,9 +248,9 @@ impl Default for RingLimits {
         Self {
             min_ring_size: 3,
             max_ring_size: 22,
-            include_fused: true,
-            max_fused_combination: 6,
-            max_fused_search: 10_000,
+            include_unions: true,
+            max_ring_count: 6,
+            max_unions: 10_000,
         }
     }
 }
@@ -508,7 +512,7 @@ mod tests {
     #[case::clar_ring_limits(
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
         AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits {
-                include_fused: false,
+                include_unions: false,
                 ..RingLimits::default()
             } }, tie_break: AromaticityTieBreak::Strict },
     )]
@@ -599,9 +603,9 @@ mod tests {
             RingLimits {
                 min_ring_size: 3,
                 max_ring_size: 22,
-                include_fused: true,
-                max_fused_combination: 6,
-                max_fused_search: 10_000,
+                include_unions: true,
+                max_ring_count: 6,
+                max_unions: 10_000,
             },
         );
     }

@@ -3,5 +3,26 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 :single]]} :success true}
-  :counts {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 :single]]} :success true}}
+  :atom-typing-most-saturated {
+    :output {:atoms ["C#h3" "Br#n3"] :bonds [[0 1 :single]]}
+    :success true
+    :tie-breaks [0]}
+  :atom-typing-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {
+      0 [
+        "C#h3#v#d0#t0#a!#m!"
+        "C#h2#u#v#d0#t0#a!#m!"
+        "C#h#u2#v#d0#t0#a!#m!"
+        "C#h#n#v#d0#t0#a!#m!"
+        "C#n#u#v#d0#t0#a!#m!"
+        "C#u3#v#d0#t0#a!#m!"]}}
+  :counts-most-saturated {
+    :output {:atoms ["C#h3" "Br#n3"] :bonds [[0 1 :single]]}
+    :success true
+    :tie-breaks [0]}
+  :counts-strict {
+    :success false
+    :tie-breaks []
+    :unresolved {0 ["C#n#u#v#a!" "C#h#n#v#a!" "C#h2#u#v#a!" "C#h3#v#a!"]}}}

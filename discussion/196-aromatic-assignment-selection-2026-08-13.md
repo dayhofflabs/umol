@@ -642,6 +642,34 @@ selection, then the model envelope and bindings, then the suites.
   no consumer (git-ignored, never committed). Lib 949 green, clippy zero. A6 complete;
   doc 194 S5d unblocks.
 
+**Follow-up (2026-08-15): macrocycle union walk.** The porphine and phthalocyanine
+promotions were contradictory in every cell because the Hückel combination enumeration
+walked only `Fused` ring relations (exactly one shared bond), while each pyrrole shares a
+two-bond Cα–N–Cα run with the inner 16-ring — the `Bridged` relation — so no union
+containing the macrocycle ring was ever enumerated: porphine stranded marked atoms under
+every assignment (`AromaticValenceFailure`), phthalocyanine got a covering but distorted
+partition whose bridge-bond `#a` assertion contradicted at discharge. Settled: the walk
+covers `Fused` and `Bridged` (rings sharing at least one contiguous run of bonds) with no
+per-relation configuration — excluding bridged while allowing fused is not a meaningful
+state; `Spiro` breaks conjugation at the shared atom and `Noncontiguous` (several
+separate shared runs) stays out until a need arises. The `RingLimits` knob gates the
+whole union enumeration and the trio was renamed to union vocabulary:
+`include_fused`/`max_fused_combination`/`max_fused_search` →
+`include_unions`/`max_ring_count`/`max_unions`; `enumerate_fused_combinations` →
+`enumerate_unions`. Pinned by the bridged-union Hückel unit case (two five-rings sharing
+a two-bond run, neither passing alone, union of six accepted). Outcomes: aromatic
+porphine resolves to one 24-atom 26 π system with pyridinic azas (`MinElectronCount`),
+phthalocyanine to one 40-atom 42 π system, and the ChemSpider annulene-path notation
+`C1=Cc2cc3ccc(cc4nc(cc5ccc(cc1n2)[nH]5)C=C4)[nH]3` — the 16-ring conduction path
+aromatic, the pyrrolenine β–β bonds localized — to the 20-atom 22 π path system with the
+localized carbons staying out under closed-world admission; promoted as
+`aromatic/porphine-annulene.edn` (named for the annulene model it realizes — a
+structural distinction, not provenance; the system carries 20 atoms and 22 electrons). All three determined in all four cells; regeneration
+audit: zero success flips across the 653 historical cases. Recorded, separate item: the
+`AromaticityRule::Clar { ring_limits }` payload is discarded by the implementation
+(`ClarAromaticity` takes no limits and the ring request hardcodes size six) — the model
+surface advertises configuration Clar never reads.
+
 The critical path is A0 → A1 → A2; A2c is the defect fix's acceptance. A3 (Keep-mode
 policy) and A4 (scale) are independent of each other and deferrable behind the critical
 path; A5–A6 gate 194 S5d and need only A2. The doc 194 S5d dependency stays on A6.

@@ -569,31 +569,31 @@ def test_ring_limits_default():
 
     assert limits.min_ring_size == 3
     assert limits.max_ring_size == 22
-    assert limits.include_fused is True
-    assert limits.max_fused_combination == 6
-    assert limits.max_fused_search == 10_000
+    assert limits.include_unions is True
+    assert limits.max_ring_count == 6
+    assert limits.max_unions == 10_000
 
 
 def test_ring_limits_new():
     limits = RingLimits(
         min_ring_size=5,
         max_ring_size=18,
-        include_fused=False,
-        max_fused_combination=4,
-        max_fused_search=2_500,
+        include_unions=False,
+        max_ring_count=4,
+        max_unions=2_500,
     )
 
     assert limits.min_ring_size == 5
     assert limits.max_ring_size == 18
-    assert limits.include_fused is False
-    assert limits.max_fused_combination == 4
-    assert limits.max_fused_search == 2_500
+    assert limits.include_unions is False
+    assert limits.max_ring_count == 4
+    assert limits.max_unions == 2_500
     assert limits == RingLimits(
         min_ring_size=5,
         max_ring_size=18,
-        include_fused=False,
-        max_fused_combination=4,
-        max_fused_search=2_500,
+        include_unions=False,
+        max_ring_count=4,
+        max_unions=2_500,
     )
     assert limits != RingLimits()
 
@@ -603,8 +603,8 @@ def test_ring_limits_new():
     [
         "min_ring_size",
         "max_ring_size",
-        "max_fused_combination",
-        "max_fused_search",
+        "max_ring_count",
+        "max_unions",
     ],
 )
 def test_ring_limits_zero(field):
@@ -620,10 +620,10 @@ def test_ring_limits_zero(field):
         ("min_ring_size", 1 << 64),
         ("max_ring_size", -1),
         ("max_ring_size", 1 << 64),
-        ("max_fused_combination", -1),
-        ("max_fused_combination", 1 << 64),
-        ("max_fused_search", -1),
-        ("max_fused_search", 1 << 64),
+        ("max_ring_count", -1),
+        ("max_ring_count", 1 << 64),
+        ("max_unions", -1),
+        ("max_unions", 1 << 64),
     ],
 )
 def test_ring_limits_new_integer_error(field, value):
@@ -641,19 +641,19 @@ def test_ring_limits_new_positional_error():
     [
         (
             RingLimits(),
-            "RingLimits(min_ring_size=3, max_ring_size=22, include_fused=True, "
-            "max_fused_combination=6, max_fused_search=10000)",
+            "RingLimits(min_ring_size=3, max_ring_size=22, include_unions=True, "
+            "max_ring_count=6, max_unions=10000)",
         ),
         (
             RingLimits(
                 min_ring_size=5,
                 max_ring_size=18,
-                include_fused=False,
-                max_fused_combination=4,
-                max_fused_search=2_500,
+                include_unions=False,
+                max_ring_count=4,
+                max_unions=2_500,
             ),
-            "RingLimits(min_ring_size=5, max_ring_size=18, include_fused=False, "
-            "max_fused_combination=4, max_fused_search=2500)",
+            "RingLimits(min_ring_size=5, max_ring_size=18, include_unions=False, "
+            "max_ring_count=4, max_unions=2500)",
         ),
     ],
 )
@@ -757,9 +757,9 @@ def test_aromaticity_config_mutation(field, value):
             RingLimits(
                 min_ring_size=4,
                 max_ring_size=18,
-                include_fused=False,
-                max_fused_combination=3,
-                max_fused_search=2_000,
+                include_unions=False,
+                max_ring_count=3,
+                max_unions=2_000,
             ),
         ),
         (
@@ -767,9 +767,9 @@ def test_aromaticity_config_mutation(field, value):
             RingLimits(
                 min_ring_size=6,
                 max_ring_size=14,
-                include_fused=True,
-                max_fused_combination=4,
-                max_fused_search=1_500,
+                include_unions=True,
+                max_ring_count=4,
+                max_unions=1_500,
             ),
         ),
     ],
@@ -816,14 +816,14 @@ def test_aromaticity_rule_new_error(variant, args):
                 ring_limits=RingLimits(
                     min_ring_size=4,
                     max_ring_size=18,
-                    include_fused=False,
-                    max_fused_combination=3,
-                    max_fused_search=2_000,
+                    include_unions=False,
+                    max_ring_count=3,
+                    max_unions=2_000,
                 )
             ),
             "AromaticityRule.Hueckel(ring_limits=RingLimits(min_ring_size=4, "
-            "max_ring_size=18, include_fused=False, max_fused_combination=3, "
-            "max_fused_search=2000))",
+            "max_ring_size=18, include_unions=False, max_ring_count=3, "
+            "max_unions=2000))",
         ),
         (
             AromaticityRule.Hmo(stabilization_threshold=0.375),
@@ -834,13 +834,13 @@ def test_aromaticity_rule_new_error(variant, args):
                 ring_limits=RingLimits(
                     min_ring_size=6,
                     max_ring_size=14,
-                    max_fused_combination=4,
-                    max_fused_search=1_500,
+                    max_ring_count=4,
+                    max_unions=1_500,
                 )
             ),
             "AromaticityRule.Clar(ring_limits=RingLimits(min_ring_size=6, "
-            "max_ring_size=14, include_fused=True, max_fused_combination=4, "
-            "max_fused_search=1500))",
+            "max_ring_size=14, include_unions=True, max_ring_count=4, "
+            "max_unions=1500))",
         ),
     ],
 )
