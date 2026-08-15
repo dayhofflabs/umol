@@ -5,7 +5,10 @@
 use smallvec::SmallVec;
 use thiserror::Error;
 use umol_chem::element::Element;
-use umol_graph_ir::ir::{AsLit, AtomConstraintKey, AtomForm, AtomId, Lattice, Molecule};
+use umol_graph_ir::ir::{
+    AromaticValenceForm, AsLit, AtomConstraintForm, AtomConstraintKey, AtomForm, AtomId, Lattice,
+    Molecule, NumForm,
+};
 use umol_utils::solution::Solution;
 
 use super::{AtomCompletions, AtomTypeRegistry};
@@ -66,7 +69,16 @@ impl<'a> AtomTypingValence<'a> {
         id: AtomId,
     ) -> Result<Option<SmallVec<[AtomForm; 1]>>, AtomTypingError> {
         let atom = molecule.atom(id);
-        if atom.is_ground() {
+        let ground_contribution_open = atom.is_ground()
+            && matches!(
+                atom.constraints()
+                    .asserted_complete(AtomConstraintKey::AromaticValence),
+                Some(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Undetermined)
+                ))
+            )
+            && !atom.is_in_aromatic_system();
+        if atom.is_ground() && !ground_contribution_open {
             return Ok(None);
         }
         let Some(element) = atom.element().as_lit() else {
@@ -79,7 +91,43 @@ impl<'a> AtomTypingValence<'a> {
             .lookup(element, charge)
             .iter()
             .filter(|row| {
-                atom.attributes.is_compatible(row) && constraints.is_compatible(&row.constraints)
+                // A field-ground atom is under resolution only for its open
+                // aromatic contribution: only aromatic rows complete it.
+                if ground_contribution_open
+                    && !row
+                        .constraints
+                        .aromatic_valence()
+                        .is_some_and(|a| a.is_aromatic())
+                {
+                    return false;
+                }
+                atom.attributes.is_compatible(row)
+                    && row.constraints.iter().all(|entry| {
+                        let key = entry.key();
+                        let derived = match key {
+                            AtomConstraintKey::RingDegree
+                            | AtomConstraintKey::RingValence
+                            | AtomConstraintKey::RingMembership(_) => None,
+                            _ => constraints.derived(key),
+                        };
+                        // The resolution reading: present evidence as in the
+                        // open-world check, but a key with neither side reads
+                        // the closed-world assertion — absence is actual
+                        // absence, so an unmarked atom admits no aromatic row.
+                        let host = match (constraints.asserted(key), derived) {
+                            (Some(asserted), Some(derived)) => match asserted.meet(&derived) {
+                                Some(host) => host,
+                                None => return false,
+                            },
+                            (Some(asserted), None) => asserted.clone(),
+                            (None, Some(derived)) => derived,
+                            (None, None) => match constraints.asserted_complete(key) {
+                                Some(closed) => closed,
+                                None => return true,
+                            },
+                        };
+                        entry.is_compatible(&host)
+                    })
             })
             .map(|row| {
                 atom.attributes
@@ -185,9 +233,42 @@ mod tests {
     }
 
     #[rstest]
+    fn test_atom_typing_valence_admit_unmarked(plural_registry: AtomTypeRegistry) {
+        // Closed-world: an unmarked atom admits no aromatic row; with only
+        // aromatic rows for its element, admission is a contradiction.
+        let resolver = AtomTypingValence::new(&plural_registry);
+        let molecule = mol_dsl!(r#"{:atoms ["N#c0"]}"#);
+        assert_eq!(
+            resolver.admit(&molecule),
+            Solution::Contradictory(AtomTypingError::NoMatch {
+                atom_id: AtomId(0),
+                element: Element::N,
+                charge: Some(0),
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_atom_typing_valence_admit_ground_evidenced(plural_registry: AtomTypeRegistry) {
+        let resolver = AtomTypingValence::new(&plural_registry);
+        let molecule = mol_dsl_ground!(r#"{:atoms ["N#h1" "N#h1"] :bonds [[0 1 "1#a"]]}"#);
+        let Solution::Determined(completions) = resolver.admit(&molecule) else {
+            panic!("ground-evidenced admission did not determine");
+        };
+        let admitted: Vec<String> = completions
+            .iter()
+            .flat_map(|(_, forms)| forms.iter().map(ToString::to_string))
+            .collect();
+        assert_eq!(
+            admitted,
+            vec!["N#i=#c0#h#n0#u0#s#a2", "N#i=#c0#h#n0#u0#s#a2"]
+        );
+    }
+
+    #[rstest]
     fn test_atom_typing_valence_admit_plural(plural_registry: AtomTypeRegistry) {
         let resolver = AtomTypingValence::new(&plural_registry);
-        let molecule = mol_dsl!(r#"{:atoms ["C#c0" "N#c0"]}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["C#c0" "N#c0#a+"]}"#);
         let mut expected = AtomCompletions::new();
         expected.insert(AtomId(0), smallvec![atom_dsl!("C#c0#h4")]);
         expected.insert(

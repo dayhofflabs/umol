@@ -316,7 +316,20 @@ selection, then the model envelope and bindings, then the suites.
   (`umol-graph/src/ops/valence/atom_typing.rs`). Unmarked atoms no longer admit aromatic
   registry rows (the mixed-candidate case dissolves); field-ground evidenced atoms with
   undetermined contribution are admitted with the aromatic rows. `admit` table tests
-  migrate. Breaking. [dep: A0a]
+  migrate. Breaking. [dep: A0a] **Done 2026-08-13:** the row filter's open-world
+  `(None, None) ⇒ compatible` arm — exactly where unmarked atoms admitted aromatic rows —
+  now reads `asserted_complete(key)`; present evidence (asserted, derived, or both)
+  evaluates as before, and ring keys stay asserted-only. The ground-evidenced branch
+  admits only aromatic rows, field-compatibility filtering among them (a ground `N#h1`
+  takes the pyrrolic `h1·a2` row; the pyridinic `h0·a1` row is field-incompatible).
+  One test migrated as planned: the plural-admission input gains its `#a+` mark, since
+  unmarked plurality was the dissolved case; new pins cover the dissolution (an unmarked
+  atom against an aromatic-rows-only registry is `NoMatch`) and the ground-evidenced
+  bond-marked pair. `classify_molecule_atom` is untouched — classification is the
+  validator's conformance reading, not resolution's. Lib 912 green, pytest 1306, clippy
+  zero. One recorded asymmetry: with aromatic evidence unrealizable by any state,
+  atom-typing errors at admission while counts defers to the discharge `⊥` — each source's
+  native surfacing; alignment, if wanted, is an A2-adjacent question.
 - A0d: caller migration and the stage pin. Un-ignore
   `test_resolver_resolve_stages::case_2_aromaticity_bond_marks`; sweep lib and pytest
   expectations for inputs that previously acquired aromatic candidates without marks.
