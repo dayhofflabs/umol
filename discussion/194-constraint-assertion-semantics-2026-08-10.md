@@ -1149,6 +1149,49 @@ pub struct ResolveReport {
 - S6b: registry row `"C #v4 #a0"` (grounds as `#h0 #n0 #v4 #a0`; the exocyclic-carbonyl aromatic
   carbon of 2-pyridone, uracil, 4-pyranone, tropone, and tropolone) plus their snapshots. Pure
   data; independent — may land as early as S4h.
+  **Done 2026-08-15:** the row sits beside the other aromatic carbon rows in
+  `default-registry.toml`; five new conformance cases under `data/aromatic/` (2-pyridone,
+  uracil, 4-pyranone, tropone, tropolone — aromatic-written with exocyclic `:double`
+  carbonyls, generated as the verbatim SMILES raise). Atom-typing cells resolve all five
+  in both tie-breaks — 2-pyridone pins the textbook system, electrons `[0,1,1,1,1,2]`
+  with the carbonyl carbon contributing zero — and the delta audit shows no existing
+  snapshot moved (the row is reachable only by v4-aromatic carbons). Recorded asymmetry:
+  the counts cells fail with `no matching valence state` because the living counts
+  table's carbon entry has `aromatic_valences = [1]` — the counts-side twin of this row
+  (appending `0`) is not specced here and stays an open item. Lib 952, conformance 674,
+  umol-py 1620, pytest 1311, clippy zero. S6c and S6d unblock.
+- S6b1: the zero-slack rule — counts-side admission of the zero-π aromatic carbon.
+  Motivation: the S6b registry row's counts twin. Reference readers accept the
+  Daylight-canon exocyclic-carbonyl notation (`O=c1cccc[nH]1` is RDKit's canonical
+  2-pyridone output) by a structure-driven inference inside kekulization: an aromatic
+  atom whose σ/π frame is fully committed — an explicit exocyclic double bond — needs no
+  ring double bond and contributes zero π electrons. "Contributes zero" is always forced,
+  never chosen. A naive table append cannot express this: adding `0` to
+  `aromatic_valences` alone would also admit the positive-slack split `(h2, a0)` for
+  ordinary ring carbons, making every aromatic carbon flexible and letting
+  `MinElectronCount` prefer 2-electron readings of benzene-class rings (two `a1` plus
+  four `a0(h2)` sums to 2 = 4·0+2, all members claimed, minimal — accepted). The
+  positive-slack zero-π split describes an sp³ conjugation break, not a system member;
+  admitting it as aromatic is a category error.
+
+  **The rule:** counts admission admits a zero-π aromatic candidate only from the
+  zero-slack split — the localized valence equals the covalence target, so implicit
+  hydrogens and aromatic covalence are both zero. Zero-π splits with positive slack stay
+  inadmissible regardless of the table list. The rule is element-generic; the existing
+  charge-shifted zero-π admissions (tropylium through the isoelectronic shift) are
+  already zero-slack, so nothing moves there. No new flexibility arises anywhere: a
+  marked v4 carbon goes from empty candidates (`NoMatch`) to a singleton `(h0, a0)`;
+  marked v2/v3 carbons are untouched.
+
+  **Surface:** the admission rule in `counts.rs` `candidate_states`; `aromatic_valences`
+  for carbon becomes `[0, 1]` in all three tables (`default`, `smiles`, `mdl` — the
+  column is umol's π-contribution reading with no toolkit counterpart, so the frozen
+  presets take the same revision, with dated header notes and their content-hash pins
+  updated as a deliberate change). Tests: admission rows pinning the singleton v4
+  candidate and the blocked positive-slack split; the five S6b conformance cases'
+  counts cells regenerate from `NoMatch` to resolved (2-pyridone electrons
+  `[0,1,1,1,1,2]` and peers); an end-to-end `ingest_smiles` row for RDKit-canonical
+  2-pyridone pins the data-processing criterion. [dep: S6b]
 - S6c: correct the doc 174 "zero-contributor" diagnosis and pin it with tests. The perception
   refusal is the model's element scope, not zero handling: `AromaticityModel::daylight()` (the
   `ChemistryModel` default) excludes boron, so `is_atom_eligible` fails on scope

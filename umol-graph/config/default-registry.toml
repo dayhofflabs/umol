@@ -70,6 +70,7 @@
     "C #h4",       # CH4
     "C #v3 #a",    # C6H5X, C6H6
     "C #v2 #a #h", # C6H6
+    "C #v4 #a0",   # 2-pyridone, tropone (exocyclic-carbonyl ring carbon)
     "C #u #v3",    # CX3, CH3
     "C #u #v2 #h", # CX2H
     "C #u #v #h2", # CXH2
