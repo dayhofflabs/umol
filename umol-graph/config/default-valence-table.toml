@@ -9,6 +9,10 @@
 #   the largest target the atom is saturated: no hydrogens are added (the
 #   OpenSMILES over-valence reading). Literal #h overrides. Ions read the
 #   isoelectronic entry via an element shift.
+# fallback_aromatic_valences: consulted only when aromatic_valences admits no
+#   candidate for the atom. Carbon's zero-pi entry covers the aromatic carbon
+#   whose frame admits no pi contribution (the exocyclic-carbonyl ring carbon
+#   of 2-pyridone, tropone).
 [H]
 target_covalences = [1]
 
@@ -28,6 +32,7 @@ aromatic_valences = [0]
 [C]
 target_covalences = [4]
 aromatic_valences = [1]
+fallback_aromatic_valences = [0]
 
 [N]
 target_covalences = [3, 5]

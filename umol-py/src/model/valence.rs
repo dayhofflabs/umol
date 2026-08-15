@@ -137,13 +137,19 @@ pub struct ValenceEntry(GraphValenceEntry);
 #[pymethods]
 impl ValenceEntry {
     #[new]
-    #[pyo3(signature = (*, target_covalences=Vec::new(), aromatic_valences=Vec::new()))]
-    fn new(mut target_covalences: Vec<u8>, mut aromatic_valences: Vec<u8>) -> Self {
+    #[pyo3(signature = (*, target_covalences=Vec::new(), aromatic_valences=Vec::new(), fallback_aromatic_valences=Vec::new()))]
+    fn new(
+        mut target_covalences: Vec<u8>,
+        mut aromatic_valences: Vec<u8>,
+        mut fallback_aromatic_valences: Vec<u8>,
+    ) -> Self {
         target_covalences.sort_unstable();
         aromatic_valences.sort_unstable();
+        fallback_aromatic_valences.sort_unstable();
         Self(GraphValenceEntry {
             target_covalences,
             aromatic_valences,
+            fallback_aromatic_valences,
         })
     }
 
@@ -159,10 +165,17 @@ impl ValenceEntry {
         PyList::new(py, &self.0.aromatic_valences)
     }
 
+    /// Aromatic valences consulted only when `aromatic_valences` admits no
+    /// candidate for the atom, in ascending order.
+    #[getter]
+    fn fallback_aromatic_valences<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        PyList::new(py, &self.0.fallback_aromatic_valences)
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "ValenceEntry(target_covalences={:?}, aromatic_valences={:?})",
-            self.0.target_covalences, self.0.aromatic_valences
+            "ValenceEntry(target_covalences={:?}, aromatic_valences={:?}, fallback_aromatic_valences={:?})",
+            self.0.target_covalences, self.0.aromatic_valences, self.0.fallback_aromatic_valences
         )
     }
 }
@@ -237,10 +250,9 @@ impl ValenceTable {
             .filter_map(|element| {
                 self.0.entry(element).map(|entry| {
                     format!(
-                        "Element('{}'): ValenceEntry(target_covalences={:?}, aromatic_valences={:?})",
+                        "Element('{}'): {}",
                         element.symbol(),
-                        entry.target_covalences,
-                        entry.aromatic_valences
+                        ValenceEntry::from_rust(entry).__repr__()
                     )
                 })
             })
@@ -602,29 +614,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(Vec::new(), Vec::new(), GraphValenceEntry {
+    #[case::empty(Vec::new(), Vec::new(), Vec::new(), GraphValenceEntry {
         target_covalences: Vec::new(),
         aromatic_valences: Vec::new(),
+        fallback_aromatic_valences: Vec::new(),
     })]
-    #[case::multi_state(vec![6, 2, 4, 2], vec![4, 2], GraphValenceEntry {
+    #[case::multi_state(vec![6, 2, 4, 2], vec![4, 2], vec![1, 0], GraphValenceEntry {
         target_covalences: vec![2, 2, 4, 6],
         aromatic_valences: vec![2, 4],
+        fallback_aromatic_valences: vec![0, 1],
     })]
     fn test_valence_entry_new(
         #[case] target_covalences: Vec<u8>,
         #[case] aromatic_valences: Vec<u8>,
+        #[case] fallback_aromatic_valences: Vec<u8>,
         #[case] expected: GraphValenceEntry,
     ) {
         assert_eq!(
-            ValenceEntry::new(target_covalences, aromatic_valences).0,
+            ValenceEntry::new(
+                target_covalences,
+                aromatic_valences,
+                fallback_aromatic_valences
+            )
+            .0,
             expected
         );
     }
 
     #[rstest]
-    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new()), Vec::new())]
+    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new(), Vec::new()), Vec::new())]
     #[case::multi_state(
-        ValenceEntry::new(vec![6, 2, 4], vec![2]),
+        ValenceEntry::new(vec![6, 2, 4], vec![2], Vec::new()),
         vec![2, 4, 6]
     )]
     fn test_valence_entry_target_covalences(
@@ -644,9 +664,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new()), Vec::new())]
+    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new(), Vec::new()), Vec::new())]
     #[case::multi_state(
-        ValenceEntry::new(vec![4], vec![4, 2]),
+        ValenceEntry::new(vec![4], vec![4, 2], Vec::new()),
         vec![2, 4]
     )]
     fn test_valence_entry_aromatic_valences(
@@ -666,13 +686,35 @@ mod tests {
     }
 
     #[rstest]
+    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new(), Vec::new()), Vec::new())]
+    #[case::multi_state(
+        ValenceEntry::new(vec![4], vec![1], vec![1, 0]),
+        vec![0, 1]
+    )]
+    fn test_valence_entry_fallback_aromatic_valences(
+        #[case] entry: ValenceEntry,
+        #[case] expected: Vec<u8>,
+    ) {
+        Python::attach(|py| {
+            assert_eq!(
+                entry
+                    .fallback_aromatic_valences(py)
+                    .unwrap()
+                    .extract::<Vec<u8>>()
+                    .unwrap(),
+                expected
+            );
+        });
+    }
+
+    #[rstest]
     #[case::empty(
-        ValenceEntry::new(Vec::new(), Vec::new()),
-        "ValenceEntry(target_covalences=[], aromatic_valences=[])"
+        ValenceEntry::new(Vec::new(), Vec::new(), Vec::new()),
+        "ValenceEntry(target_covalences=[], aromatic_valences=[], fallback_aromatic_valences=[])"
     )]
     #[case::multi_state(
-        ValenceEntry::new(vec![6, 2, 4], vec![4, 2]),
-        "ValenceEntry(target_covalences=[2, 4, 6], aromatic_valences=[2, 4])"
+        ValenceEntry::new(vec![6, 2, 4], vec![4, 2], Vec::new()),
+        "ValenceEntry(target_covalences=[2, 4, 6], aromatic_valences=[2, 4], fallback_aromatic_valences=[])"
     )]
     fn test_valence_entry_repr(#[case] entry: ValenceEntry, #[case] expected: &str) {
         assert_eq!(entry.__repr__(), expected);
@@ -682,18 +724,20 @@ mod tests {
     #[case::empty(GraphValenceEntry {
         target_covalences: Vec::new(),
         aromatic_valences: Vec::new(),
+        fallback_aromatic_valences: Vec::new(),
     })]
     #[case::multi_state(GraphValenceEntry {
         target_covalences: vec![2, 4, 6],
         aromatic_valences: vec![2, 4],
+        fallback_aromatic_valences: Vec::new(),
     })]
     fn test_valence_entry_from_rust(#[case] entry: GraphValenceEntry) {
         assert_eq!(ValenceEntry::from_rust(&entry).0, entry);
     }
 
     #[rstest]
-    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new()))]
-    #[case::multi_state(ValenceEntry::new(vec![6, 2, 4], vec![4, 2]))]
+    #[case::empty(ValenceEntry::new(Vec::new(), Vec::new(), Vec::new()))]
+    #[case::multi_state(ValenceEntry::new(vec![6, 2, 4], vec![4, 2], Vec::new()))]
     fn test_valence_entry_to_rust(#[case] entry: ValenceEntry) {
         assert_eq!(entry.to_rust(), &entry.0);
     }
@@ -704,11 +748,11 @@ mod tests {
         BTreeMap::from([
             (
                 Element::from(ChemElement::C),
-                ValenceEntry::new(vec![6, 2, 4], vec![3, 2]),
+                ValenceEntry::new(vec![6, 2, 4], vec![3, 2], Vec::new()),
             ),
             (
                 Element::from(ChemElement::O),
-                ValenceEntry::new(vec![2], Vec::new()),
+                ValenceEntry::new(vec![2], Vec::new(), Vec::new()),
             ),
         ]),
         GraphValenceTable::from_toml_str(
@@ -768,7 +812,7 @@ mod tests {
     #[rstest]
     #[case::present(
         ChemElement::C,
-        Some(ValenceEntry::new(vec![2, 4], Vec::new()))
+        Some(ValenceEntry::new(vec![2, 4], Vec::new(), Vec::new()))
     )]
     #[case::missing(ChemElement::N, None)]
     fn test_valence_table_entry(
@@ -785,7 +829,7 @@ mod tests {
     #[case::empty(ValenceTable(GraphValenceTable::empty()), "ValenceTable(entries={})")]
     #[case::custom(
         ValenceTable(valence_table![C => [4, 2], O => [2]]),
-        "ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[]), Element('O'): ValenceEntry(target_covalences=[2], aromatic_valences=[])})"
+        "ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[], fallback_aromatic_valences=[]), Element('O'): ValenceEntry(target_covalences=[2], aromatic_valences=[], fallback_aromatic_valences=[])})"
     )]
     fn test_valence_table_repr(#[case] table: ValenceTable, #[case] expected: &str) {
         assert_eq!(table.__repr__(), expected);
@@ -871,7 +915,7 @@ mod tests {
     )]
     #[case::counts(
         ValenceModel::counts(ValenceTable(valence_table![C => [4, 2]])),
-        "ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict)"
+        "ValenceModel(candidates=ValenceCandidateSource.Counts(table=ValenceTable(entries={Element('C'): ValenceEntry(target_covalences=[2, 4], aromatic_valences=[], fallback_aromatic_valences=[])})), tie_break=ValenceTieBreak.Strict)"
     )]
     fn test_valence_model_repr(#[case] model: ValenceModel, #[case] expected: &str) {
         assert_eq!(model.__repr__(), expected);

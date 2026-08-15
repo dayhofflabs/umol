@@ -962,6 +962,22 @@ mod tests {
         "c1ccc2cnccc2c1",
         mol_dsl!(r##"{:aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "[1,1,1,1,1,1,1,1,1,1]#c0#u0#s"}] :atoms ["C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h0#n#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s"] :bonds [[0 9 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 8 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"] [6 7 "1#c0#u0#s"] [7 8 "1#c0#u0#s"] [8 9 "1#c0#u0#s"]]}"##)
     )]
+    #[case::pyridone_exocyclic(
+        "O=c1cccc[nH]1",
+        mol_dsl!(r##"{:aromatic-systems [{:atoms [1 2 3 4 5 6] :attrs "[0,1,1,1,1,2]#c0#u0#s"}] :atoms ["O#i=#c0#h0#n2#u0#s" "C#i=#c0#h0#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "C#i=#c0#h#n0#u0#s" "N#i=#c0#h#n0#u0#s"] :bonds [[0 1 "2#c0#u0#s"] [1 6 "1#c0#u0#s"] [1 2 "1#c0#u0#s"] [2 3 "1#c0#u0#s"] [3 4 "1#c0#u0#s"] [4 5 "1#c0#u0#s"] [5 6 "1#c0#u0#s"]]}"##)
+    )]
+    #[case::hydrogen_atom(
+        "[H]",
+        mol_dsl!(r##"{:atoms ["H#i=#c0#h0#n0#u#s2"]}"##)
+    )]
+    #[case::methyl_radical(
+        "[CH3]",
+        mol_dsl!(r##"{:atoms ["C#i=#c0#h3#n0#u#s2"]}"##)
+    )]
+    #[case::methane_bracket(
+        "[CH4]",
+        mol_dsl!(r##"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"##)
+    )]
     #[case::chloronium(
         "C1C[Cl+]1",
         mol_dsl!(r##"{:atoms ["C#i=#c0#h2#n0#u0#s" "C#i=#c0#h2#n0#u0#s" "Cl#i=#c+#h0#n2#u0#s"] :bonds [[0 2 "1#c0#u0#s"] [0 1 "1#c0#u0#s"] [1 2 "1#c0#u0#s"]]}"##)

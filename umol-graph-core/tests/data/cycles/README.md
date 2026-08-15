@@ -68,7 +68,7 @@ input graph.
 
 ## Last captured run
 
-The checked-in results were generated on 2026-07-25 with:
+The checked-in results were generated with:
 
 ```text
 NetworkX                 3.5

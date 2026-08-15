@@ -136,38 +136,51 @@ def test_atom_type_registry_mutation():
 
 
 @pytest.mark.parametrize(
-    ("target_covalences", "aromatic_valences", "expected"),
+    ("target_covalences", "aromatic_valences", "fallback_aromatic_valences", "expected"),
     [
-        ([], [], ValenceEntry()),
+        ([], [], [], ValenceEntry()),
         (
             [6, 2, 4, 2],
             [4, 2],
+            [1, 0],
             ValenceEntry(
-                target_covalences=[2, 2, 4, 6], aromatic_valences=[2, 4]
+                target_covalences=[2, 2, 4, 6],
+                aromatic_valences=[2, 4],
+                fallback_aromatic_valences=[0, 1],
             ),
         ),
     ],
 )
-def test_valence_entry_new(target_covalences, aromatic_valences, expected):
+def test_valence_entry_new(
+    target_covalences, aromatic_valences, fallback_aromatic_valences, expected
+):
     assert (
         ValenceEntry(
             target_covalences=target_covalences,
             aromatic_valences=aromatic_valences,
+            fallback_aromatic_valences=fallback_aromatic_valences,
         )
         == expected
     )
 
 
 def test_valence_entry_properties():
-    entry = ValenceEntry(target_covalences=[6, 2, 4], aromatic_valences=[4, 2])
+    entry = ValenceEntry(
+        target_covalences=[6, 2, 4],
+        aromatic_valences=[4, 2],
+        fallback_aromatic_valences=[1, 0],
+    )
 
     target_covalences = entry.target_covalences
     aromatic_valences = entry.aromatic_valences
+    fallback_aromatic_valences = entry.fallback_aromatic_valences
     target_covalences.append(8)
     aromatic_valences.clear()
+    fallback_aromatic_valences.clear()
 
     assert entry.target_covalences == [2, 4, 6]
     assert entry.aromatic_valences == [2, 4]
+    assert entry.fallback_aromatic_valences == [0, 1]
 
 
 @pytest.mark.parametrize(
@@ -175,11 +188,11 @@ def test_valence_entry_properties():
     [
         (
             ValenceEntry(),
-            "ValenceEntry(target_covalences=[], aromatic_valences=[])",
+            "ValenceEntry(target_covalences=[], aromatic_valences=[], fallback_aromatic_valences=[])",
         ),
         (
             ValenceEntry(target_covalences=[6, 2, 4], aromatic_valences=[4, 2]),
-            "ValenceEntry(target_covalences=[2, 4, 6], aromatic_valences=[2, 4])",
+            "ValenceEntry(target_covalences=[2, 4, 6], aromatic_valences=[2, 4], fallback_aromatic_valences=[])",
         ),
     ],
 )
@@ -268,8 +281,8 @@ def test_valence_table_entry():
                 }
             ),
             "ValenceTable(entries={Element('C'): "
-            "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[]), "
-            "Element('O'): ValenceEntry(target_covalences=[2], aromatic_valences=[])})",
+            "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[], fallback_aromatic_valences=[]), "
+            "Element('O'): ValenceEntry(target_covalences=[2], aromatic_valences=[], fallback_aromatic_valences=[])})",
         ),
     ],
 )
@@ -346,7 +359,7 @@ def test_valence_candidate_source_new_error(variant, payload):
             ),
             "ValenceCandidateSource.Counts(table=ValenceTable(entries="
             "{Element('C'): "
-            "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[])}))",
+            "ValenceEntry(target_covalences=[2, 4], aromatic_valences=[], fallback_aromatic_valences=[])}))",
         ),
     ],
 )
@@ -1366,7 +1379,7 @@ def test_chemistry_model_equality(other):
             "ChemistryModel(connectivity=ConnectivityModel.default(), "
             "valence=ValenceModel(candidates=ValenceCandidateSource.Counts("
             "table=ValenceTable(entries={Element('C'): ValenceEntry("
-            "target_covalences=[4], aromatic_valences=[])})), "
+            "target_covalences=[4], aromatic_valences=[], fallback_aromatic_valences=[])})), "
             "tie_break=ValenceTieBreak.Strict), aromaticity="
             "AromaticityModel(scope=ElementScope.Any(), "
             "rule=AromaticityRule.Hmo(stabilization_threshold=0.375), "

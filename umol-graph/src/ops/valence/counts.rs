@@ -18,7 +18,7 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::solution::Solution;
 
-use super::{AtomCompletions, ValenceTable};
+use super::{AtomCompletions, ValenceEntry, ValenceTable};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CountsError {
@@ -199,7 +199,8 @@ impl<'a> CountsValence<'a> {
 
     /// Every candidate state admitted by the table and the atom's literals,
     /// in enumeration order (implicit hydrogens ascending, then the table's
-    /// aromatic valences).
+    /// aromatic valences). The fallback aromatic-valence list is consulted
+    /// only when the primary list admits no candidate.
     fn candidate_states(
         &self,
         atom: &AtomForm,
@@ -246,58 +247,63 @@ impl<'a> CountsValence<'a> {
             _ => None,
         };
 
-        let aromatic_values = candidate_aromatic_valences(
-            aromatic_constraint,
-            is_aromatic,
-            entry.map(|e| e.aromatic_valences.as_slice()),
-        );
+        let hydrogen_values = candidate_implicit_hydrogens(
+            &atom.implicit_hydrogens,
+            bonding_budget,
+            entry.is_none(),
+        )?;
 
         let mut candidates = SmallVec::new();
-        for implicit_hydrogens in
-            candidate_implicit_hydrogens(&atom.implicit_hydrogens, bonding_budget, entry.is_none())?
+        for aromatic_values in candidate_aromatic_valences(aromatic_constraint, is_aromatic, entry)
         {
-            if !atom
-                .implicit_hydrogens
-                .matches(&NumForm::Lit(implicit_hydrogens))
-            {
-                continue;
-            }
-            for &aromatic_valence in &aromatic_values {
-                if !aromatic_constraint.matches_value(aromatic_valence) {
+            for &implicit_hydrogens in &hydrogen_values {
+                if !atom
+                    .implicit_hydrogens
+                    .matches(&NumForm::Lit(implicit_hydrogens))
+                {
                     continue;
                 }
-                if let Some(b) = bonding_budget {
-                    if implicit_hydrogens + aromatic_covalence(aromatic_valence) > b {
+                for &aromatic_valence in &aromatic_values {
+                    if !aromatic_constraint.matches_value(aromatic_valence) {
                         continue;
                     }
+                    if let Some(b) = bonding_budget {
+                        if implicit_hydrogens + aromatic_covalence(aromatic_valence) > b {
+                            continue;
+                        }
+                    }
+                    let electron_budget = i64::from(element.valence_electrons()) - charge;
+                    let nonbonding =
+                        electron_budget - valence - aromatic_valence - implicit_hydrogens;
+                    if nonbonding < 0 {
+                        continue;
+                    }
+                    let Some((lone_pairs, unpaired_electrons)) =
+                        derive_lone_pairs_and_unpaired_electrons(atom, element, nonbonding)
+                    else {
+                        continue;
+                    };
+                    let Some(multiplicity) =
+                        derive_multiplicity(&atom.unpaired_electrons, unpaired_electrons)
+                    else {
+                        continue;
+                    };
+                    let derived = derive_atom(
+                        implicit_hydrogens,
+                        unpaired_electrons,
+                        multiplicity,
+                        lone_pairs,
+                        valence,
+                        is_aromatic,
+                        aromatic_valence,
+                    );
+                    if let Some(candidate) = atom.meet(&derived) {
+                        candidates.push(candidate);
+                    }
                 }
-                let electron_budget = i64::from(element.valence_electrons()) - charge;
-                let nonbonding = electron_budget - valence - aromatic_valence - implicit_hydrogens;
-                if nonbonding < 0 {
-                    continue;
-                }
-                let Some((lone_pairs, unpaired_electrons)) =
-                    derive_lone_pairs_and_unpaired_electrons(atom, element, nonbonding)
-                else {
-                    continue;
-                };
-                let Some(multiplicity) =
-                    derive_multiplicity(&atom.unpaired_electrons, unpaired_electrons)
-                else {
-                    continue;
-                };
-                let derived = derive_atom(
-                    implicit_hydrogens,
-                    unpaired_electrons,
-                    multiplicity,
-                    lone_pairs,
-                    valence,
-                    is_aromatic,
-                    aromatic_valence,
-                );
-                if let Some(candidate) = atom.meet(&derived) {
-                    candidates.push(candidate);
-                }
+            }
+            if !candidates.is_empty() {
+                break;
             }
         }
 
@@ -326,16 +332,25 @@ fn candidate_implicit_hydrogens(
     Ok((0..=b).collect())
 }
 
+/// Aromatic-valence lists in trial order: the primary `aromatic_valences`
+/// list, then `fallback_aromatic_valences`, consulted only when the primary
+/// list admits no candidate.
 fn candidate_aromatic_valences(
     aromatic: &AromaticValenceForm,
     is_aromatic: bool,
-    table: Option<&[u8]>,
-) -> Vec<i64> {
+    entry: Option<&ValenceEntry>,
+) -> Vec<Vec<i64>> {
     match aromatic.as_lit().map(AromaticValence::valence_count) {
-        Some(a) => vec![a],
-        None => match table {
-            Some(table) if is_aromatic => table.iter().map(|&a| i64::from(a)).collect(),
-            _ => vec![0],
+        Some(a) => vec![vec![a]],
+        None => match entry {
+            Some(entry) if is_aromatic => {
+                [&entry.aromatic_valences, &entry.fallback_aromatic_valences]
+                    .into_iter()
+                    .filter(|list| !list.is_empty())
+                    .map(|list| list.iter().map(|&a| i64::from(a)).collect())
+                    .collect()
+            }
+            _ => vec![vec![0]],
         },
     }
 }
@@ -701,6 +716,8 @@ mod tests {
         "C#c-#h#n0#u0#s#v2#a2",
     ])]
     #[case::tropylium_carbocation("C#c1#v2#h1#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c+#h#n0#u0#s#v2#a0"])]
+    #[case::exocyclic_carbonyl_carbon("C#c0#v4#h*#a+", CountsInput { valence: 4, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h0#n0#u0#s#v4#a0"])]
+    #[case::sp3_carbon_h_pinned("C#c0#v2#h2#a+", CountsInput { valence: 2, accepted_pairs: 0, is_aromatic: true }, vec!["C#c0#h2#n0#u0#s#v2#a0"])]
     #[case::iron_out_of_table("Fe#c0#h0", CountsInput { valence: 0, accepted_pairs: 0, is_aromatic: false }, vec!["Fe#c0#h0#n4#u0#s#v0#a!"])]
     fn test_counts_valence_candidate_states(
         #[case] input: &str,

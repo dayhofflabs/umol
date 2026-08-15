@@ -1160,13 +1160,12 @@ pub struct ResolveReport {
   table's carbon entry has `aromatic_valences = [1]` — the counts-side twin of this row
   (appending `0`) is not specced here and stays an open item. Lib 952, conformance 674,
   umol-py 1620, pytest 1311, clippy zero. S6c and S6d unblock.
-- S6b1: the zero-slack rule — counts-side admission of the zero-π aromatic carbon.
-  Motivation: the S6b registry row's counts twin. Reference readers accept the
-  Daylight-canon exocyclic-carbonyl notation (`O=c1cccc[nH]1` is RDKit's canonical
-  2-pyridone output) by a structure-driven inference inside kekulization: an aromatic
-  atom whose σ/π frame is fully committed — an explicit exocyclic double bond — needs no
-  ring double bond and contributes zero π electrons. "Contributes zero" is always forced,
-  never chosen. A naive table append cannot express this: adding `0` to
+- S6b1: the fallback aromatic-valence column — counts-side admission of the zero-π
+  aromatic carbon. Motivation: the S6b registry row's counts twin. Reference readers
+  accept the Daylight-canon exocyclic-carbonyl notation (`O=c1cccc[nH]1` is RDKit's
+  canonical 2-pyridone output) by a structure-driven inference inside kekulization: an
+  aromatic atom whose σ/π frame is fully committed needs no ring double bond and
+  contributes zero π electrons. A naive table append cannot express this: adding `0` to
   `aromatic_valences` alone would also admit the positive-slack split `(h2, a0)` for
   ordinary ring carbons, making every aromatic carbon flexible and letting
   `MinElectronCount` prefer 2-electron readings of benzene-class rings (two `a1` plus
@@ -1174,24 +1173,122 @@ pub struct ResolveReport {
   positive-slack zero-π split describes an sp³ conjugation break, not a system member;
   admitting it as aromatic is a category error.
 
-  **The rule:** counts admission admits a zero-π aromatic candidate only from the
-  zero-slack split — the localized valence equals the covalence target, so implicit
-  hydrogens and aromatic covalence are both zero. Zero-π splits with positive slack stay
-  inadmissible regardless of the table list. The rule is element-generic; the existing
-  charge-shifted zero-π admissions (tropylium through the isoelectronic shift) are
-  already zero-slack, so nothing moves there. No new flexibility arises anywhere: a
-  marked v4 carbon goes from empty candidates (`NoMatch`) to a singleton `(h0, a0)`;
-  marked v2/v3 carbons are untouched.
+  Design trail (2026-08-15): a condition-based admission rule was designed twice and
+  rejected twice. The zero-slack formulation ("zero-π only when the localized valence
+  equals the covalence target") claimed element-generality and is falsified by boron:
+  borazine's aromatic boron contributes zero π *with* a hydrogen — the empty-p zero
+  legitimately carries slack, and tropylium inherits it through the isoelectronic
+  shift. The corrected chemical predicate ("zero-π only for atoms bearing an exocyclic
+  π bond", `v − degree ≥ 1`) is the RDKit-style exocyclic carve-out: correct on the
+  known cases but a chemical special case inside the algorithm, exactly the
+  human-interpreted reading the counts model exists to avoid. Both rejected in favor
+  of a mechanism with no chemical predicate at all.
 
-  **Surface:** the admission rule in `counts.rs` `candidate_states`; `aromatic_valences`
-  for carbon becomes `[0, 1]` in all three tables (`default`, `smiles`, `mdl` — the
-  column is umol's π-contribution reading with no toolkit counterpart, so the frozen
-  presets take the same revision, with dated header notes and their content-hash pins
-  updated as a deliberate change). Tests: admission rows pinning the singleton v4
-  candidate and the blocked positive-slack split; the five S6b conformance cases'
-  counts cells regenerate from `NoMatch` to resolved (2-pyridone electrons
-  `[0,1,1,1,1,2]` and peers); an end-to-end `ingest_smiles` row for RDKit-canonical
-  2-pyridone pins the data-processing criterion. [dep: S6b]
+  **The rule:** the valence table gains a second per-element column,
+  `fallback_aromatic_valences` (default empty). Candidate enumeration tries the
+  primary `aromatic_valences` list first; only when the primary list admits no
+  candidate for the atom is the enumeration rerun with the fallback list. Carbon gets
+  `fallback_aromatic_valences = [0]`: a marked v4 carbon goes from empty candidates
+  (`NoMatch`) to a singleton `(h0, a0)`, while an h-free v2/v3 carbon admits a primary
+  candidate and never consults the fallback — the disaster split never forms. Boron's
+  `0` stays primary (borazine, tropylium unchanged). Explicit `#a0` assertions take
+  the literal arm and bypass both lists. Accepted price, recorded deliberately: an
+  h-pinned sp³ ring atom marked aromatic (`[cH2]` in a seven-ring — cycloheptatriene
+  written lowercase — or a quaternary spiro carbon) admits `(h, a0)` through the
+  fallback with clean electron bookkeeping, and refusal is left to the ring-level
+  electron count; reference readers refuse these at kekulization. Real databases do
+  not emit this class; the pragmatic reading processes the data that exists and leaves
+  ring judgment at the system level.
+
+  **Surface:** `ValenceEntry.fallback_aromatic_valences` (serde default empty, sorted,
+  hashed); `candidate_aromatic_valences` returns the trial lists in order and
+  `candidate_states` breaks after the first list that admits a candidate; carbon's
+  fallback column lands in all three tables (`default`, `smiles`, `mdl` — the column
+  is umol's π-contribution reading with no toolkit counterpart, so the frozen presets
+  take the same revision as a deliberate change; header documentation stays timeless,
+  the revision record lives here). Tests:
+  admission rows pinning the singleton v4 candidate, the primary-suppressed fallback
+  for the h-free v2 carbon, and the h-pinned fallback admission; the five S6b
+  conformance cases' counts cells regenerate from `NoMatch` to resolved (2-pyridone
+  electrons `[0,1,1,1,1,2]` and peers); an end-to-end `ingest_smiles` row for
+  RDKit-canonical 2-pyridone pins the data-processing criterion. [dep: S6b]
+  **Done 2026-08-15:** `ValenceEntry.fallback_aromatic_valences` landed (sorted,
+  hashed, serde default, `valence_table!`, Python binding with kwarg/getter/repr);
+  `candidate_aromatic_valences` returns trial lists and `candidate_states` breaks
+  after the first admitting list; carbon's `[0]` fallback in all three tables, column
+  semantics documented in the table headers (timeless — configs carry no dev
+  history). Admission rows pin the v4 singleton `(h0, a0)`, the h-pinned
+  sp³ fallback, and (pre-existing benzene row) primary suppression; the five
+  conformance cells regenerated exactly as predicted (2-pyridone/uracil carbonyls at
+  zero, all systems 6 π); `ingest_smiles` rows pin `O=c1cccc[nH]1` end to end. The
+  Python table repr now delegates to the entry repr (the inline duplicate lacked the
+  new column).
+- S6b2: the Daylight-docs instrument — complete testing of the founding dialect's
+  examples, aromaticity above all. A fetch script stages the Daylight theory manual's
+  SMILES chapter and the tutorial examples page into `materials/formats/daylight/`
+  (local instrument, VEHICLe posture: nothing scraped is committed); extraction pulls
+  candidate strings from the markup and lets the parser self-curate (prose fragments
+  that fail to parse drop out). An `#[ignore]`d test resolves every candidate under the
+  smiles preset and writes the classification (parse-failure / determined /
+  underdetermined / contradictory) with a manifest for review; every example in those
+  pages is canonical by definition, so any non-determined row is either a documented
+  didactic divergence or a dialect gap. Findings promote into the conformance suite;
+  the instrument is deleted once the corpus is digested. [dep: S6b1 for the
+  exocyclic-carbonyl class; the baseline run may precede it]
+  **Baseline run 2026-08-15** (pre-S6b1): 122 parsed candidates — determined 101,
+  contradictory 13, underdetermined 2, execution failure 6. Full taxonomy of the
+  non-determined rows: (1) correct didactic refusals — the manual's antiaromatic
+  examples (`c1ccc1`, `c1cccc1` neutral, `c1ccccccc1`), wildcard-atom examples, the
+  deliberately mis-written neutral diazo, a reaction-map fragment, and the prose word
+  `no` parsing as acyclic aromatic atoms; (2) staged-off higher stereo kinds — the
+  allene, square-planar `As@`, and octahedral `Co@` examples fail in execution as the
+  `StereoModel` default stages those kinds off; (3) the S6b1 exocyclic-carbonyl class,
+  confirmed by the manual's own `O=c1[nH]cccc1` plus 2-pyrimidinone, sildenafil, and
+  caffeine — resolves when S6b1 lands; (4) **new: the biaryl default-bond class** —
+  zolpidem, atorvastatin, and minimal `c1ccc(cc1)c1ccccc1` fail at discharge because an
+  unwritten bond between two aromatic atoms raises as an `#a` assertion, and a linker
+  between two ring systems can never be claimed; the dashed form resolves; reference
+  readers take the dash-less form as single — raise-semantics design question, open;
+  (5) standalone `[H]` — first diagnosed as a missing covalence-0 target, which was
+  wrong (a covalence-0 append produced zero snapshot delta and left `[H]` failing; the
+  committed `atoms/h.edn` case already resolves to `H#u` under the unchanged table; the
+  append was reverted, having also silently changed the h-open bare-H saturation
+  reading). The actual mechanism: the raise's IO-defaults block pins
+  `unpaired_electrons = 0` on every atom the table leaves unset, so every open-shell
+  bracket species (`[H]`, `[CH3]`) arrives closed-shell-pinned with a hydrogen deficit
+  and correctly finds no valence state. Raise-semantics design question, open — the
+  reference-shaped rule would pin `u0` only where the notation itself implies the
+  closed shell (organic-subset atoms under the implicit-valence model) and raise
+  bracket atoms with explicit hydrogen counts `u`-open, letting resolution close the
+  shell (`MostSaturated` minimizes unpaired) or force the radical from the deficit;
+  unbracketed atoms keeping the pin is what preserves the determined `Strict` corpus
+  behavior.
+  **Re-run 2026-08-15** (post-S6b1/S6b3): 122 parsed — determined 107, contradictory
+  7, underdetermined 2, execution failure 6. Both closed classes flipped: the
+  exocyclic-carbonyl rows (the manual's `O=c1[nH]cccc1`, 2-pyrimidinone, caffeine)
+  and the open-shell brackets. Every remaining non-determined row is accounted
+  taxonomy: the four antiaromatic didactic refusals plus prose `no`, the two
+  wildcard-atom examples, the six staged-off stereo-kind failures, and the three
+  dash-less biaryl rows (zolpidem, atorvastatin, sildenafil — sildenafil's carbonyl
+  no longer blocks it; its biaryl linker still does). The biaryl raise-semantics
+  question is the only open item in this corpus.
+- S6b3: the bracket-atom open-shell rule — the raise pins `unpaired_electrons = 0`
+  only where the notation itself implies the closed shell: bare organic-subset atoms
+  (the implicit-valence model) keep the pin; bracket atoms — whose hydrogen count is
+  explicit, absence meaning zero — raise `u` undetermined, and resolution closes the
+  shell (`MostSaturated` minimizes unpaired electrons) or forces the radical from the
+  deficit. `[H]` resolves to the hydrogen atom, `[CH3]` to methyl radical, `[CH4]`
+  stays determined; the unbracketed pin is what preserves the determined `Strict`
+  corpus behavior, and DSL-path conformance inputs never pinned `u`, so the SMILES
+  raise converges on the conformance semantics. Explicit radical specifications (MOL
+  `M  RAD`) stay pinned as written. [dep: none; lands with S6b1]
+  **Done 2026-08-15:** the raise's `u0` IO-default is now conditional on
+  `implicit_hydrogens` being absent (the notation-implied closed shell); both parsers
+  already carry the distinction (SMILES brackets always explicit with absence
+  meaning zero, CTfile only under HCOUNT). `ingest_smiles` rows pin `[H]` → hydrogen
+  atom (`u1`, doublet), `[CH3]` → methyl radical, `[CH4]` → determined closed shell;
+  two raise expectations updated to the approved semantics (explicit-h atoms raise
+  `u`-open); DSL-path conformance (`atoms/h.edn`) unchanged, suite green.
 - S6c: correct the doc 174 "zero-contributor" diagnosis and pin it with tests. The perception
   refusal is the model's element scope, not zero handling: `AromaticityModel::daylight()` (the
   `ChemistryModel` default) excludes boron, so `is_atom_eligible` fails on scope

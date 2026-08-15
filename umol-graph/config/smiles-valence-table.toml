@@ -7,7 +7,7 @@
 # the general table. Frozen: revisions are new named files, never edits (the
 # content hash covers parsed entries only, so this header is documentation).
 #
-# Superset claim verified row by row, 2026-08-13, against:
+# Superset claim verified row by row against:
 #   [SPEC] OpenSMILES specification, "normal valence" table (the Daylight
 #          normal valences), opensmiles.org — vendored as PDF at
 #          materials/formats/opensmiles against the site's certificate rot —
@@ -43,6 +43,12 @@
 # aromatic subset is b c n o p s se as [SPEC]; the Si entry serves umol's
 # extended aromatics (Beam's permissive tier also admits Si).
 #
+# fallback_aromatic_valences: aromatic valences consulted only when
+# aromatic_valences admits no candidate for the atom; carbon's zero-pi entry
+# covers the exocyclic-carbonyl ring carbon (RDKit-canonical O=c1cccc[nH]1).
+# Like aromatic_valences, the column is umol's pi-contribution reading with
+# no toolkit counterpart.
+#
 # target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
 #   largest; Counts uses the first entry >= v + inc when #h is free, and past
 #   the largest target the atom is saturated: no hydrogens are added (the
@@ -67,6 +73,7 @@ aromatic_valences = [0]
 [C]
 target_covalences = [4]
 aromatic_valences = [1]
+fallback_aromatic_valences = [0]
 
 [N]
 target_covalences = [3, 5]

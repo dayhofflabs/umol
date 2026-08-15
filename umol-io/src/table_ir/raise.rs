@@ -189,7 +189,12 @@ impl TryIntoIr<AtomForm> for &TableAtom {
         if matches!(atom.charge, NumForm::Undetermined) {
             atom.charge = NumForm::Lit(0);
         }
-        if matches!(atom.unpaired_electrons.count, NumForm::Undetermined) {
+        // Closed shell is implied only where the notation owns the hydrogen
+        // count (implicit-valence atoms); an explicit hydrogen count leaves
+        // the shell open for resolution ([H], [CH3] resolve as radicals).
+        if matches!(atom.unpaired_electrons.count, NumForm::Undetermined)
+            && self.implicit_hydrogens.is_none()
+        {
             atom.unpaired_electrons.count = NumForm::Lit(0);
         }
         atom.constraints.retain(|c| !c.is_undetermined());
@@ -471,7 +476,7 @@ mod tests {
                     implicit_hydrogens: NumForm::Lit(4),
                     lone_pairs: NumForm::Undetermined,
                     unpaired_electrons: UnpairedElectronsForm {
-                        count: NumForm::Lit(0),
+                        count: NumForm::Undetermined,
                         multiplicity: NumForm::Undetermined,
                     },
                     constraints: AtomConstraintsForm::new(),
@@ -675,7 +680,7 @@ mod tests {
     #[rstest]
     #[case::methane(METHANE_MOL, "C#i=#c0#u0")]
     #[case::benzene(BENZENE_AROMATIC_MOL, "C#i=#c0#u0")]
-    #[case::carbon_h0(CARBON_H0_EXPLICIT_MOL, "C#i=#c0#h0#u0")]
+    #[case::carbon_h0(CARBON_H0_EXPLICIT_MOL, "C#i=#c0#h0")]
     fn test_parse_mol_to_ir(#[case] input: &str, #[case] expected_atom: &str) {
         let molecule = parse_mol_to_ir(input).unwrap();
         let atom = molecule.atom(AtomId(0)).attributes;

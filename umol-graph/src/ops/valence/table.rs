@@ -21,6 +21,9 @@ pub struct ValenceEntry {
     /// Admissible aromatic valence counts when aromaticity is active. Empty
     /// means the element is not aromatic-capable.
     pub aromatic_valences: Vec<u8>,
+    /// Aromatic valence counts consulted only when `aromatic_valences` admits
+    /// no candidate for the atom (carbon's zero-π exocyclic-carbonyl reading).
+    pub fallback_aromatic_valences: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +46,8 @@ struct ValenceEntryToml {
     target_covalences: Vec<u8>,
     #[serde(default)]
     aromatic_valences: Vec<u8>,
+    #[serde(default)]
+    fallback_aromatic_valences: Vec<u8>,
 }
 
 impl ValenceTable {
@@ -59,6 +64,7 @@ impl ValenceTable {
         let mut entry = entry;
         entry.target_covalences.sort_unstable();
         entry.aromatic_valences.sort_unstable();
+        entry.fallback_aromatic_valences.sort_unstable();
         self.entries.insert(element, entry);
         self.recompute_hash();
     }
@@ -76,8 +82,11 @@ impl ValenceTable {
         for (element, entry) in &self.entries {
             let _ = writeln!(
                 buf,
-                "{}:{:?}:{:?}",
-                element, entry.target_covalences, entry.aromatic_valences
+                "{}:{:?}:{:?}:{:?}",
+                element,
+                entry.target_covalences,
+                entry.aromatic_valences,
+                entry.fallback_aromatic_valences
             );
         }
         self.content_hash = xxh3_64(buf.as_bytes());
@@ -109,11 +118,14 @@ impl ValenceTable {
             target_covalences.sort_unstable();
             let mut aromatic_valences = entry.aromatic_valences;
             aromatic_valences.sort_unstable();
+            let mut fallback_aromatic_valences = entry.fallback_aromatic_valences;
+            fallback_aromatic_valences.sort_unstable();
             entries.insert(
                 element,
                 ValenceEntry {
                     target_covalences,
                     aromatic_valences,
+                    fallback_aromatic_valences,
                 },
             );
         }
@@ -142,6 +154,7 @@ macro_rules! valence_table {
                 $crate::ops::valence::ValenceEntry {
                     target_covalences: vec![$($v),*],
                     aromatic_valences: vec![],
+                    fallback_aromatic_valences: vec![],
                 },
             );
         )*
@@ -177,10 +190,12 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2, 4, 6],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
             ValenceEntry {
                 target_covalences: vec![2, 4, 6],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
         );
     }
@@ -190,20 +205,36 @@ mod tests {
         ValenceEntry {
             target_covalences: vec![2, 4],
             aromatic_valences: vec![2],
+            fallback_aromatic_valences: vec![],
         },
         ValenceEntry {
             target_covalences: vec![2, 4, 6],
             aromatic_valences: vec![2],
+            fallback_aromatic_valences: vec![],
         },
     )]
     #[case::aromatic_valences(
         ValenceEntry {
             target_covalences: vec![2, 4, 6],
             aromatic_valences: vec![2],
+            fallback_aromatic_valences: vec![],
         },
         ValenceEntry {
             target_covalences: vec![2, 4, 6],
             aromatic_valences: vec![2, 4],
+            fallback_aromatic_valences: vec![],
+        },
+    )]
+    #[case::fallback_aromatic_valences(
+        ValenceEntry {
+            target_covalences: vec![4],
+            aromatic_valences: vec![1],
+            fallback_aromatic_valences: vec![],
+        },
+        ValenceEntry {
+            target_covalences: vec![4],
+            aromatic_valences: vec![1],
+            fallback_aromatic_valences: vec![0],
         },
     )]
     fn test_valence_entry_eq_difference(#[case] left: ValenceEntry, #[case] right: ValenceEntry) {
@@ -218,6 +249,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![4, 2],
                 aromatic_valences: vec![3, 2],
+                fallback_aromatic_valences: vec![],
             },
         );
         left.insert(
@@ -225,6 +257,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
         );
         let mut right = ValenceTable::empty();
@@ -233,6 +266,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
         );
         right.insert(
@@ -240,6 +274,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2, 4],
                 aromatic_valences: vec![2, 3],
+                fallback_aromatic_valences: vec![],
             },
         );
 
@@ -251,10 +286,12 @@ mod tests {
     #[case::target_covalences(Some(ValenceEntry {
         target_covalences: vec![2, 4],
         aromatic_valences: vec![2],
+        fallback_aromatic_valences: vec![],
     }))]
     #[case::aromatic_valences(Some(ValenceEntry {
         target_covalences: vec![2],
         aromatic_valences: vec![2, 4],
+        fallback_aromatic_valences: vec![],
     }))]
     fn test_valence_table_eq_difference(#[case] right_oxygen: Option<ValenceEntry>) {
         let mut left = ValenceTable::empty();
@@ -263,6 +300,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![4],
                 aromatic_valences: vec![3],
+                fallback_aromatic_valences: vec![],
             },
         );
         left.insert(
@@ -270,6 +308,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
         );
         let mut right = ValenceTable::empty();
@@ -278,6 +317,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![4],
                 aromatic_valences: vec![3],
+                fallback_aromatic_valences: vec![],
             },
         );
         if let Some(entry) = right_oxygen {
@@ -295,6 +335,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![4],
                 aromatic_valences: vec![3],
+                fallback_aromatic_valences: vec![],
             },
         );
         let mut different_hash = table.clone();
@@ -311,6 +352,15 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![1],
                 aromatic_valences: vec![],
+                fallback_aromatic_valences: vec![],
+            },
+        );
+        expected.insert(
+            Element::C,
+            ValenceEntry {
+                target_covalences: vec![4],
+                aromatic_valences: vec![1],
+                fallback_aromatic_valences: vec![0, 1],
             },
         );
         expected.insert(
@@ -318,6 +368,7 @@ mod tests {
             ValenceEntry {
                 target_covalences: vec![2, 4, 6],
                 aromatic_valences: vec![2],
+                fallback_aromatic_valences: vec![],
             },
         );
 
@@ -326,6 +377,10 @@ mod tests {
                 r#"
                 [H]
                 target_covalences = [1]
+                [C]
+                target_covalences = [4]
+                aromatic_valences = [1]
+                fallback_aromatic_valences = [1, 0]
                 [S]
                 target_covalences = [6, 2, 4]
                 aromatic_valences = [2]

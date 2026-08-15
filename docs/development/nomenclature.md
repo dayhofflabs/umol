@@ -68,8 +68,8 @@ have none. Partiality from pairing and partiality from removal are different sem
 ## Suffixes
 
 The generative core of this guide. Each family gains members as work lands, so a new type's suffix
-should be chosen here rather than by analogy with whichever neighbour was read last. Counts are as of
-2026-08-10.
+should be chosen here rather than by analogy with whichever neighbour was read last. Counts are
+approximate.
 
 | Suffix | Means | Count | Crates |
 | --- | --- | --- | --- |
