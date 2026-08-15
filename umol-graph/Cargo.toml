@@ -28,9 +28,6 @@ name = "property"
 required-features = ["proptest"]
 
 [[test]]
-name = "vehicle"
-
-[[test]]
 name = "matching"
 
 [[test]]

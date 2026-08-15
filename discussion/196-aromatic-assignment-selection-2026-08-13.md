@@ -1,6 +1,7 @@
 # 196 — Assignment-level aromatic selection
 
-Status: Proposed
+Status: **Completed** (2026-08-15) — A0–A6 implemented and verified; the corpus
+instrument served and was deleted per plan. Successor work: doc 194 S5d.
 Date: 2026-08-13
 Relates: [174](174-aromatic-hydrogen-resolution-2026-07-31.md),
 [194](194-constraint-assertion-semantics-2026-08-10.md)
@@ -630,6 +631,16 @@ selection, then the model envelope and bindings, then the suites.
   ingest the OpenSMILES corpus panic-free (bench `--test` mode); the instrument is deleted
   unless A5's distribution argued for a shipped bulk suite, and that decision is recorded
   here. Stage green; 194 S5d unblocks. [dep: A6a]
+  **Done 2026-08-15:** both bench fixtures pass `--test` mode — the loaders tolerate
+  ingest errors but not panics, so a passing run is the panic-free acceptance for the
+  full ~9k-molecule corpus, closing the defect's original discovery surface. Decision:
+  the instrument is deleted (`tests/vehicle.rs`, its target registration, and
+  `scripts/fetch-vehicle.sh`); the distribution argued decisively against a shipped bulk
+  suite — 100 % determined after `MinElectronCount`, zero contradictions, zero invariant
+  violations — so the promoted conformance cases carry the regression coverage, per plan.
+  The staged corpus under `materials/aromaticity/vehicle/` remains a local artifact with
+  no consumer (git-ignored, never committed). Lib 949 green, clippy zero. A6 complete;
+  doc 194 S5d unblocks.
 
 The critical path is A0 → A1 → A2; A2c is the defect fix's acceptance. A3 (Keep-mode
 policy) and A4 (scale) are independent of each other and deferrable behind the critical
