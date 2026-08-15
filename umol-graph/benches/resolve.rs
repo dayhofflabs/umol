@@ -1,7 +1,9 @@
 //! End-to-end SMILES ingest benchmarks — parse, raise, and resolve — over
 //! representative single molecules: an unbranched alkane (localized valence
-//! only), benzene and pyridine (joint aromatic selection), and bare methane
-//! (plural admission collapsed by the tie-break).
+//! only), benzene and pyridine (joint aromatic selection), bare methane
+//! (plural admission collapsed by the tie-break), and the bare-nitrogen
+//! fused heteroaromatics quinoline and purine (assignment search over a
+//! flexible fused component).
 
 use std::hint::black_box;
 
@@ -17,6 +19,8 @@ fn bench_ingest_smiles(c: &mut Criterion) {
         ("benzene", "c1ccccc1"),
         ("pyridine", "c1ccncc1"),
         ("naphthalene", "c1ccc2ccccc2c1"),
+        ("quinoline", "c1ccc2ccccc2n1"),
+        ("purine", "c1ncc2ncnc2n1"),
     ] {
         g.bench_function(name, |b| {
             b.iter(|| ingest_smiles(black_box(smiles)).unwrap())

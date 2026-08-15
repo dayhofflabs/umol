@@ -26,8 +26,8 @@ use thiserror::Error;
 use umol_graph_core::{ConnectedComponentsAlgorithm, MaximumIndependentSetAlgorithm};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AromaticValenceForm, AsLit, AtomId, BondConstraintForm,
-    BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig, RingModel, RingSet,
-    RingSetKind, TransactionError,
+    BondId, BooleanForm, ElectronCountsForm, Molecule, NumForm, RingConfig, RingId, RingModel,
+    RingSet, RingSetKind, TransactionError,
 };
 use umol_utils::solution::Solution;
 
@@ -137,6 +137,40 @@ impl AromaticityPerception {
         molecule
             .rings(self.ring_request(), config.ring_config)
             .into_ring_set()
+    }
+
+    /// Whether some total contribution reachable from the members' ranges is
+    /// perceived as aromatic by the configured rule; rules without a usable
+    /// bound accept every range.
+    pub(crate) fn accepts_range(&self, members: &[(u32, u32)]) -> bool {
+        match self {
+            Self::HueckelRule(m) => m.accepts_range(members),
+            Self::Hmo(m) => m.accepts_range(members),
+            Self::Clar(m) => m.accepts_range(members),
+        }
+    }
+
+    /// The member sets a system could claim: every candidate ring, and —
+    /// under the Hückel rule — every fused union within the ring limits.
+    /// Member lists are sorted ascending.
+    pub(crate) fn claim_candidates(&self, rings: &RingSet) -> Vec<Vec<AtomId>> {
+        let mut candidates: Vec<Vec<AtomId>> = rings
+            .iter()
+            .map(|ring| {
+                let mut atoms = ring.atoms().to_vec();
+                atoms.sort_unstable();
+                atoms
+            })
+            .collect();
+        if let Self::HueckelRule(m) = self {
+            let eligible: Vec<RingId> = rings.ids().collect();
+            for union in m.enumerate_fused_combinations(rings, &eligible) {
+                let mut atoms: Vec<AtomId> = union.into_iter().collect();
+                atoms.sort_unstable();
+                candidates.push(atoms);
+            }
+        }
+        candidates
     }
 
     /// Find candidate aromatic systems via the configured algorithm.
@@ -453,6 +487,47 @@ mod tests {
                 maximum_independent_set_algorithm: MaximumIndependentSetAlgorithm::BranchAndBound,
             }
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::hueckel_rings_and_union(
+        AromaticityRule::Hueckel { ring_limits: RingLimits::default() },
+        vec![
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
+            (0..10).map(AtomId).collect::<Vec<_>>(),
+        ]
+    )]
+    #[case::hmo_rings_only(
+        AromaticityRule::Hmo { stabilization_threshold: 0.0 },
+        vec![
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
+        ]
+    )]
+    #[case::clar_rings_only(
+        AromaticityRule::Clar { ring_limits: RingLimits::default() },
+        vec![
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            vec![AtomId(4), AtomId(5), AtomId(6), AtomId(7), AtomId(8), AtomId(9)],
+        ]
+    )]
+    fn test_aromaticity_perception_claim_candidates(
+        #[case] rule: AromaticityRule,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        let molecule = mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                    [4 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 5 "1"]]}"#);
+        let perception = AromaticityPerception::new(&AromaticityModel {
+            scope: ElementScope::Any,
+            rule,
+            tie_break: AromaticityTieBreak::Strict,
+        });
+        let rings = perception.candidate_rings(&molecule, AromaticityConfig::default());
+        assert_eq!(perception.claim_candidates(&rings), expected);
     }
 
     #[rustfmt::skip]

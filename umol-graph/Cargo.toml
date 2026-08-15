@@ -24,6 +24,10 @@ name = "resolution"
 required-features = ["conformance"]
 
 [[test]]
+name = "property"
+required-features = ["proptest"]
+
+[[test]]
 name = "matching"
 
 [[test]]
@@ -58,6 +62,7 @@ bench = false
 
 [features]
 conformance = []
+proptest = []
 
 [dependencies]
 bitvec = "1.0.1"

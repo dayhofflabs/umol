@@ -302,6 +302,16 @@ impl AromaticityResolver {
     /// `Underdetermined` with the carrier unchanged. A carrier atom whose
     /// every disjunct requires aromaticity but which no accepted or tied
     /// system claims is `Contradictory`.
+    ///
+    /// # Semantic properties
+    ///
+    /// The outcome is search-independent: for carriers whose components stay
+    /// within [`MAX_ASSIGNMENTS`], the result (compared by `==` on the
+    /// returned solution) equals that of a selection enumerating every
+    /// assignment of every component exhaustively — the pruned search never
+    /// removes a valid assignment. Cross-checked in the `property` test
+    /// target against a definition-level flat enumeration over generated
+    /// one- and two-ring Hückel scenarios under every policy combination.
     pub fn select(
         &self,
         molecule: &Molecule,
@@ -396,27 +406,147 @@ impl AromaticityResolver {
             })
             .collect();
 
+        let claim_candidates = self.perception.claim_candidates(&rings);
         let mut accepted: Vec<(Vec<AtomId>, AromaticSystemForm)> = Vec::new();
         let mut tie_break_uses: BTreeSet<AtomId> = BTreeSet::new();
         let mut claimed: BTreeSet<AtomId> = BTreeSet::new();
         for component in &components {
-            let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = flexible
+            // Flexible atoms ordered ring-by-ring for the search; every
+            // component atom lies in a candidate ring, so the order is total.
+            let mut ordered_atoms: Vec<AtomId> = Vec::new();
+            for ring in rings.iter() {
+                if !ring.atoms().iter().all(|atom| component.contains(atom)) {
+                    continue;
+                }
+                let mut atoms = ring.atoms().to_vec();
+                atoms.sort_unstable();
+                for atom in atoms {
+                    if flexible
+                        .iter()
+                        .any(|&(flexible_atom, _)| flexible_atom == atom)
+                        && !ordered_atoms.contains(&atom)
+                    {
+                        ordered_atoms.push(atom);
+                    }
+                }
+            }
+            let component_flexible: Vec<(AtomId, Vec<Option<u8>>)> = ordered_atoms
                 .iter()
-                .filter(|(atom, _)| component.contains(atom))
-                .cloned()
+                .map(|&atom| {
+                    flexible
+                        .iter()
+                        .find(|&&(flexible_atom, _)| flexible_atom == atom)
+                        .cloned()
+                        .expect("ordered atom is flexible")
+                })
                 .collect();
+            let flexible_positions: BTreeMap<AtomId, usize> = component_flexible
+                .iter()
+                .enumerate()
+                .map(|(position, &(atom, _))| (atom, position))
+                .collect();
+            // Atoms whose every disjunct requires aromaticity: the carrier
+            // elimination criterion, shared by the search prunes and the
+            // validity filter below.
+            let aromatic_only: Vec<AtomId> = component
+                .iter()
+                .copied()
+                .filter(|&atom| {
+                    completions.get(atom).is_some_and(|disjuncts| {
+                        disjuncts.iter().all(|form| {
+                            matches!(
+                                form.constraints.aromatic_valence(),
+                                Some(AromaticValenceForm::Aromatic(_))
+                            )
+                        })
+                    })
+                })
+                .collect();
+            let fixed_contributions: BTreeMap<AtomId, Option<u8>> = component
+                .iter()
+                .filter(|atom| !flexible_positions.contains_key(atom))
+                .map(|&atom| {
+                    (
+                        atom,
+                        match completions.get(atom) {
+                            Some(disjuncts) => contribution(&disjuncts[0]),
+                            None => stored_contribution(molecule, atom),
+                        },
+                    )
+                })
+                .collect();
+            let component_candidates: Vec<&Vec<AtomId>> = claim_candidates
+                .iter()
+                .filter(|members| members.iter().all(|atom| component.contains(atom)))
+                .collect();
+
+            // A candidate is settled-rejected under a partial assignment when
+            // no completion can make the rule accept it: a member fixed to a
+            // non-contribution, or a reachable total range the rule refuses.
+            let settled_rejected = |members: &[AtomId], path: &[usize]| -> bool {
+                let mut ranges: Vec<(u32, u32)> = Vec::with_capacity(members.len());
+                for atom in members {
+                    let range = match flexible_positions.get(atom) {
+                        Some(&position) => {
+                            let options = &component_flexible[position].1;
+                            let assigned = (position < path.len())
+                                .then(|| options[path[position]])
+                                .map(|value| value.map(|value| (value, value)));
+                            match assigned {
+                                Some(value) => value,
+                                None => {
+                                    let values: Vec<u8> =
+                                        options.iter().filter_map(|&value| value).collect();
+                                    values
+                                        .iter()
+                                        .copied()
+                                        .min()
+                                        .zip(values.iter().copied().max())
+                                }
+                            }
+                        }
+                        None => fixed_contributions[atom].map(|value| (value, value)),
+                    };
+                    match range {
+                        Some((lower, upper)) => {
+                            ranges.push((u32::from(lower), u32::from(upper)));
+                        }
+                        None => return true,
+                    }
+                }
+                !self.perception.accepts_range(&ranges)
+            };
+            // A partial assignment is certainly invalid when some
+            // aromatic-only atom has every claim candidate settled-rejected.
+            let certainly_invalid = |path: &[usize]| -> bool {
+                aromatic_only.iter().any(|&atom| {
+                    component_candidates
+                        .iter()
+                        .filter(|members| members.contains(&atom))
+                        .all(|members| settled_rejected(members, path))
+                })
+            };
+            let prune_enabled =
+                self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error;
+
+            // Depth-first search over the flexible atoms; a subtree is cut
+            // only when every completion below it is certainly invalid, so
+            // the valid-assignment set equals the flat enumeration's.
             let mut assignments: Vec<Assignment> = Vec::new();
-            let mut assignment_indices = vec![0usize; component_flexible.len()];
+            let mut path: Vec<usize> = Vec::new();
+            let mut next = 0usize;
             loop {
-                let choice: BTreeMap<AtomId, usize> = component_flexible
-                    .iter()
-                    .zip(&assignment_indices)
-                    .map(|(&(atom, _), &index)| (atom, index))
-                    .collect();
-                let outcome =
-                    self.perception
-                        .find_systems(molecule, self.config.perception, |atom| {
-                            match choice.get(&atom) {
+                if path.len() == component_flexible.len() && next == 0 {
+                    let choice: BTreeMap<AtomId, usize> = component_flexible
+                        .iter()
+                        .zip(&path)
+                        .map(|(&(atom, _), &index)| (atom, index))
+                        .collect();
+                    let outcome =
+                        self.perception
+                            .find_systems(molecule, self.config.perception, |atom| match choice
+                                .get(&atom)
+                            {
                                 Some(&index) => contribution(
                                     &completions.get(atom).expect("flexible atom")[index],
                                 ),
@@ -424,67 +554,82 @@ impl AromaticityResolver {
                                     Some(disjuncts) => contribution(&disjuncts[0]),
                                     None => stored_contribution(molecule, atom),
                                 },
-                            }
-                        })?;
-                let found = match outcome {
-                    Solution::Determined(found) => found,
-                    Solution::Underdetermined(_) => {
-                        return Ok(Solution::Underdetermined(ResolveState {
-                            completions,
-                            systems,
-                            tie_breaks,
-                        }));
+                            })?;
+                    let found = match outcome {
+                        Solution::Determined(found) => found,
+                        Solution::Underdetermined(_) => {
+                            return Ok(Solution::Underdetermined(ResolveState {
+                                completions,
+                                systems,
+                                tie_breaks,
+                            }));
+                        }
+                        Solution::Contradictory(contradiction) => {
+                            return Ok(Solution::Contradictory(contradiction));
+                        }
+                    };
+                    // Systems outside the component arise under this
+                    // component's default indices; their own enumeration
+                    // accumulates them.
+                    let mut partition: Vec<(Vec<AtomId>, AromaticSystemForm)> = found
+                        .into_iter()
+                        .filter(|(atoms, _)| atoms.iter().all(|atom| component.contains(atom)))
+                        .collect();
+                    partition.sort_by(|(a, _), (b, _)| a.cmp(b));
+                    let restriction: Vec<(AtomId, AtomForm)> = choice
+                        .iter()
+                        .filter(|(atom, _)| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
+                        .map(|(&atom, &index)| {
+                            (
+                                atom,
+                                completions.get(atom).expect("flexible atom")[index].clone(),
+                            )
+                        })
+                        .collect();
+                    let assignment = (restriction, partition);
+                    if !assignments.contains(&assignment) {
+                        assignments.push(assignment);
                     }
-                    Solution::Contradictory(contradiction) => {
-                        return Ok(Solution::Contradictory(contradiction));
+                    match path.pop() {
+                        Some(index) => next = index + 1,
+                        None => break,
                     }
-                };
-                // Systems outside the component arise under this component's
-                // default indices; their own enumeration accumulates them.
-                let mut partition: Vec<(Vec<AtomId>, AromaticSystemForm)> = found
-                    .into_iter()
-                    .filter(|(atoms, _)| atoms.iter().all(|atom| component.contains(atom)))
-                    .collect();
-                partition.sort_by(|(a, _), (b, _)| a.cmp(b));
-                let restriction: Vec<(AtomId, AtomForm)> = choice
-                    .iter()
-                    .filter(|(atom, _)| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
-                    .map(|(&atom, &index)| {
-                        (
-                            atom,
-                            completions.get(atom).expect("flexible atom")[index].clone(),
-                        )
-                    })
-                    .collect();
-                let assignment = (restriction, partition);
-                if !assignments.contains(&assignment) {
-                    assignments.push(assignment);
+                    continue;
                 }
-
-                let mut position = component_flexible.len();
-                loop {
-                    if position == 0 {
-                        break;
+                if next >= component_flexible[path.len()].1.len() {
+                    match path.pop() {
+                        Some(index) => next = index + 1,
+                        None => break,
                     }
-                    position -= 1;
-                    assignment_indices[position] += 1;
-                    if assignment_indices[position] < component_flexible[position].1.len() {
-                        break;
-                    }
-                    assignment_indices[position] = 0;
+                    continue;
                 }
-                if component_flexible.is_empty()
-                    || assignment_indices.iter().all(|&index| index == 0)
-                {
-                    break;
+                path.push(next);
+                if prune_enabled && certainly_invalid(&path) {
+                    let index = path.pop().expect("pushed above");
+                    next = index + 1;
+                } else {
+                    next = 0;
                 }
             }
 
-            // Validity: every stored system touching the component must
-            // reappear with the same member set; when none of the component's
-            // assignments reproduces one, the failure policy decides between
-            // contradiction and an inert component.
+            // Validity under the `Error` failure policy first — the search
+            // prunes by the same criterion: an assignment may not leave an
+            // aromatic-only component atom unclaimed.
             let mut valid = assignments;
+            if prune_enabled {
+                valid.retain(|(_, partition)| {
+                    aromatic_only
+                        .iter()
+                        .all(|atom| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
+                });
+            }
+            if valid.is_empty() {
+                continue;
+            }
+            // Validity: every stored system touching the component must
+            // reappear with the same member set; when no carrier-valid
+            // assignment reproduces one, the failure policy decides between
+            // contradiction and an inert component.
             for (system, members) in stored_systems
                 .iter()
                 .filter(|(_, members)| members.iter().any(|atom| component.contains(atom)))
@@ -499,30 +644,6 @@ impl AromaticityResolver {
                     }
                     break;
                 }
-            }
-            // Validity under the `Error` failure policy: an assignment may
-            // not leave a component atom whose every disjunct requires
-            // aromaticity unclaimed.
-            if self.config.aromatic_valence_failure == AromaticityFailurePolicy::Error {
-                let aromatic_only: Vec<AtomId> = component
-                    .iter()
-                    .copied()
-                    .filter(|&atom| {
-                        completions.get(atom).is_some_and(|disjuncts| {
-                            disjuncts.iter().all(|form| {
-                                matches!(
-                                    form.constraints.aromatic_valence(),
-                                    Some(AromaticValenceForm::Aromatic(_))
-                                )
-                            })
-                        })
-                    })
-                    .collect();
-                valid.retain(|(_, partition)| {
-                    aromatic_only
-                        .iter()
-                        .all(|atom| partition.iter().any(|(atoms, _)| atoms.contains(atom)))
-                });
             }
             if valid.is_empty() {
                 continue;

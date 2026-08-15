@@ -54,6 +54,12 @@ impl HmoAromaticity {
         }
     }
 
+    /// The HMO rule supplies no usable contribution bound: no candidate is
+    /// settled early.
+    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+        true
+    }
+
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -443,6 +449,13 @@ mod tests {
     #[fixture]
     fn cyclobutadiene() -> Molecule {
         make_ring(vec![aromatic(Element::C, 1); 4])
+    }
+
+    #[rstest]
+    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
+    fn test_hmo_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
+        // No usable bound: every range is accepted, nothing settles early.
+        assert!(HmoAromaticity::new(ElementScope::Any, 0.0).accepts_range(members));
     }
 
     #[rstest]

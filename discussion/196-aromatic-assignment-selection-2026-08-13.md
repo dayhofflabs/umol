@@ -488,10 +488,47 @@ selection, then the model envelope and bindings, then the suites.
 - A4a: depth-first assignment search with the two sound prunes (rule-rejected completed
   rings when no valid completion remains; rule-supplied interval bounds on unassigned
   members) replacing the flat per-component enumeration. All suites green unchanged. [dep: A2c]
+  **Done 2026-08-15** (design settled in session): the two prune families collapse into
+  one criterion — claim candidates settle via intervals, and a partial assignment is cut
+  when some aromatic-only atom has every containing candidate settled-rejected. Claim
+  candidates count fused unions (settled: rings-only would wrongly eliminate
+  azulene-class assignments where every ring fails but a union passes); the perception
+  exposes `claim_candidates` (rings plus, under Hückel, the fused-combination enumeration
+  within the ring limits). The rule bound is `accepts_range(&self, members: &[(u32, u32)])`
+  — per-member reachable contribution ranges, what the search holds — as a method on each
+  rule struct beside `find_from_rings`: Hückel tests the summed interval for a 4n+2 value,
+  Hmo and Clar accept every range (no usable bound, never settle). A member fixed or
+  narrowed to no contribution settles its candidates directly. The DFS is inline iterative
+  backtracking in `select` (graph-core traversal has no visitor surface and the decision
+  tree is not a materialized graph); flexible atoms order ring-by-ring; leaves run
+  `find_systems` unchanged; pruning is active only under `aromatic_valence_failure: Error`,
+  the criterion's policy. One recorded semantics adjustment: the validity filter now runs
+  carrier elimination before the stored-system naming loop — the search prunes by the
+  carrier criterion, so stored-failure naming must act on the carrier-valid set to stay
+  enumeration-independent; observable only when both eliminations empty a component,
+  which now surfaces as the failure family (unclaimed carrier via the global check)
+  rather than the stored family — no suite expectation moved. Tests: `accepts_range`
+  tables per rule (seven Hückel rows incl. span and below-two edges), `claim_candidates`
+  table (Hückel rings-plus-union vs Hmo/Clar rings-only). Lib 947 green unchanged,
+  pytest 1311, clippy zero; quinoline, imidazole, and the bridged triazines confirmed
+  end-to-end.
 - A4b: the enumeration-equivalence property: on components within the bound, the pruned
   search returns exactly the flat enumeration's valid-assignment set; placed per
   `docs/development/property-tests.md` (a new umol-graph property target if none exists).
   Additive. [dep: A4a]
+  **Done 2026-08-15:** new `umol-graph` property target (`tests/property.rs`, feature-gated
+  `proptest` mirroring graph-ir). The executable form is search-independence at the public
+  boundary: `select` compared by `==` against a definition-level flat-enumeration selection
+  (`exhaustive_select` in `tests/property/resolve.rs`), sharing only perception
+  (`find_systems`) and the value-key comparison (`compare_by_key`) with production.
+  Operational domain (`strategies::select_scenario`): one- and two-ring (fused/coupled)
+  Hückel skeletons, sizes five and six, every ring atom in the carrier with literal
+  contributions from a five-entry completion pool, at most three flexible atoms, no stored
+  systems, both failure policies and both tie-breaks on each axis. The semantic property is
+  stated in `select`'s rustdoc (`# Semantic properties`). Domain notes: stored-system
+  consistency and non-carrier stored contributions are outside the generated domain (pinned
+  by the A2b unit tests); the assignment bound is unreachable within it. Green at 2000
+  cases (3 s); default run 0.4 s. Lib 947, clippy zero. A4 stage complete.
 
 ### A5 — the local instrument (additive, never committed data)
 

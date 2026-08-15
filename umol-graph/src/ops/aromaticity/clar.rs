@@ -24,6 +24,12 @@ pub enum ClarError {
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
+    /// The Clar rule supplies no usable contribution bound: no candidate is
+    /// settled early.
+    pub fn accepts_range(&self, _members: &[(u32, u32)]) -> bool {
+        true
+    }
+
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -235,6 +241,13 @@ mod tests {
                 (8, 10), (10, 11), (11, 12), (12, 13), (13, 9),
             ],
         )
+    }
+
+    #[rstest]
+    #[case::no_bound(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)])]
+    fn test_clar_aromaticity_accepts_range(#[case] members: &[(u32, u32)]) {
+        // No usable bound: every range is accepted, nothing settles early.
+        assert!(ClarAromaticity.accepts_range(members));
     }
 
     #[rstest]

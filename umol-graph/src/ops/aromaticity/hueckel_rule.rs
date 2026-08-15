@@ -28,6 +28,17 @@ impl HueckelRuleAromaticity {
         }
     }
 
+    /// Whether some total contribution reachable from the members' ranges is
+    /// perceived as aromatic by the rule: a candidate whose range admits no
+    /// 4n+2 value is settled early.
+    pub fn accepts_range(&self, members: &[(u32, u32)]) -> bool {
+        let lower: u32 = members.iter().map(|&(lower, _)| lower).sum();
+        let upper: u32 = members.iter().map(|&(_, upper)| upper).sum();
+        let lower = lower.max(2);
+        let first = lower + ((2 + 4 - lower % 4) % 4);
+        first <= upper
+    }
+
     pub fn find_from_rings<F>(
         &self,
         molecule: &Molecule,
@@ -137,7 +148,7 @@ impl HueckelRuleAromaticity {
             .all(|&a| self.is_atom_eligible(molecule, a, electrons_at))
     }
 
-    fn enumerate_fused_combinations(
+    pub(crate) fn enumerate_fused_combinations(
         &self,
         rings: &RingSet,
         eligible: &[RingId],
@@ -513,6 +524,21 @@ mod tests {
             ElectronCountsForm::Lit(counts) => counts.iter().sum(),
             ElectronCountsForm::Undetermined => 0,
         }
+    }
+
+    #[rstest]
+    #[case::point_accepted(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
+    #[case::point_rejected(&[(1, 1), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
+    #[case::span_accepted(&[(0, 3), (1, 1), (1, 1), (1, 1), (1, 1)], true)]
+    #[case::span_rejected(&[(3, 4), (1, 1), (1, 1), (1, 1), (1, 1)], false)]
+    #[case::two_electrons(&[(2, 2)], true)]
+    #[case::below_two(&[(0, 1)], false)]
+    #[case::empty(&[], false)]
+    fn test_hueckel_rule_aromaticity_accepts_range(
+        #[case] members: &[(u32, u32)],
+        #[case] expected: bool,
+    ) {
+        assert_eq!(daylight_model().accepts_range(members), expected);
     }
 
     #[rstest]
