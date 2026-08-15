@@ -297,7 +297,21 @@ selection, then the model envelope and bindings, then the suites.
   enumeration; field-ground atoms whose evidence is present but contribution undetermined
   are admitted with candidates varying only in the table's aromatic valences.
   `candidate_states` table tests migrate: unmarked rows lose aromatic candidates,
-  ground-evidenced rows are new. Breaking. [dep: A0a]
+  ground-evidenced rows are new. Breaking. [dep: A0a] **Done 2026-08-13:** the evidence
+  check reads stored-system membership from the derived side plus
+  `asserted_complete(AromaticValence)` — extensionally equal on the positive side for
+  counts (its per-atom boolean already made candidates uniform), so no existing row
+  migrated; the semantic change is the ground-evidenced branch in `admitted_completions`:
+  a field-ground atom whose closed-world evidence is `Aromatic(Undetermined)` and which is
+  in no stored system enters the carrier with one candidate per table aromatic valence.
+  The in-system guard is incidence (`is_in_aromatic_system`), not the derived reading —
+  the derived bond-adjacency arm would otherwise exclude exactly the bond-marked atoms the
+  branch serves. Only the bond-carried placement reaches the branch: an atom-carried `#a+`
+  makes the constraint store non-ground and the existing path admits it. Admit tests:
+  the six-atom bond-marked ring enters with `a1` candidates; contribution-asserted,
+  in-system, and unmarked ground atoms stay complete. The A0d stage pin came early:
+  `case_2_aromaticity_bond_marks` un-ignored and green — the MDL explicit-hydrogens shape
+  resolves end-to-end on the counts model. Lib 910 green, pytest 1306, clippy zero.
 - A0c: atom-typing admission on the same reading
   (`umol-graph/src/ops/valence/atom_typing.rs`). Unmarked atoms no longer admit aromatic
   registry rows (the mixed-candidate case dissolves); field-ground evidenced atoms with

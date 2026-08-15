@@ -52,14 +52,20 @@ impl CountsInput {
         Self {
             valence: atom.valence().as_lit().unwrap_or(0),
             accepted_pairs: atom.accepted_pairs().as_lit().unwrap_or(0),
+            // Aromatic evidence: membership in a stored system (a relation
+            // fact, read derived) or the closed-world assertion reading,
+            // which merges both mark placements and closes to `NotAromatic`.
             is_aromatic: matches!(
                 constraints.derived(AtomConstraintKey::AromaticValence),
                 Some(AtomConstraintForm::AromaticValence(
                     AromaticValenceForm::Aromatic(_)
                 ))
-            ) || constraints
-                .aromatic_valence()
-                .is_some_and(|a| a.is_aromatic()),
+            ) || matches!(
+                constraints.asserted_complete(AtomConstraintKey::AromaticValence),
+                Some(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(_)
+                ))
+            ),
         }
     }
 }
@@ -103,7 +109,44 @@ impl<'a> CountsValence<'a> {
     ) -> Result<Option<SmallVec<[AtomForm; 1]>>, CountsError> {
         let atom = molecule.atom(atom_id);
         if atom.is_ground() {
-            return Ok(None);
+            // A field-ground atom whose aromatic evidence is present but
+            // whose contribution is undetermined is still under resolution:
+            // the system entity needs its contribution. Membership in a
+            // stored system determines the contribution, so those atoms are
+            // complete.
+            let contribution_open = matches!(
+                atom.constraints()
+                    .asserted_complete(AtomConstraintKey::AromaticValence),
+                Some(AtomConstraintForm::AromaticValence(
+                    AromaticValenceForm::Aromatic(NumForm::Undetermined)
+                ))
+            ) && !atom.is_in_aromatic_system();
+            if !contribution_open {
+                return Ok(None);
+            }
+            let element = atom.element().as_lit().expect("ground element");
+            let charge = atom.charge().as_lit().expect("ground charge");
+            let accepted_pairs = atom.accepted_pairs().as_lit().unwrap_or(0);
+            let Some(entry) = element
+                .shift((2 * accepted_pairs - charge) as i8)
+                .and_then(|shifted| self.table.entry(shifted))
+            else {
+                return Ok(None);
+            };
+            if entry.aromatic_valences.is_empty() {
+                return Ok(None);
+            }
+            let mut candidates = SmallVec::new();
+            for &aromatic_valence in &entry.aromatic_valences {
+                let mut candidate = atom.attributes.clone();
+                candidate
+                    .constraints
+                    .set(AtomConstraintForm::aromatic_valence(
+                        AromaticValenceForm::aromatic(NumForm::Lit(i64::from(aromatic_valence))),
+                    ));
+                candidates.push(candidate);
+            }
+            return Ok(Some(candidates));
         }
         if atom.element().is_undetermined() {
             return Ok(None);
@@ -393,6 +436,7 @@ fn derive_multiplicity(unpaired_electrons: &UnpairedElectronsForm, count: i64) -
 mod tests {
     use rstest::rstest;
     use smallvec::smallvec;
+    use umol_graph_ir::ir::AromaticSystemForm;
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
     use super::*;
@@ -515,6 +559,50 @@ mod tests {
     ) {
         let resolver = CountsValence::new(ValenceTable::default_table());
         assert_eq!(resolver.admit(&molecule), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::bond_marked_ring(
+        mol_dsl!(r#"{
+            :atoms ["C#i=#c0#h1#n0#u0#s" "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h1#n0#u0#s"
+                    "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h1#n0#u0#s" "C#i=#c0#h1#n0#u0#s"]
+            :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"]
+                    [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#),
+        vec!["C#i=#c0#h#n0#u0#s#a"; 6]
+    )]
+    fn test_counts_valence_admit_ground_evidenced(
+        #[case] molecule: Molecule,
+        #[case] expected: Vec<&str>,
+    ) {
+        let resolver = CountsValence::new(ValenceTable::default_table());
+        let Solution::Determined(completions) = resolver.admit(&molecule) else {
+            panic!("ground-evidenced admission did not determine");
+        };
+        let admitted: Vec<String> = completions
+            .iter()
+            .flat_map(|(_, forms)| forms.iter().map(ToString::to_string))
+            .collect();
+        assert_eq!(admitted, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::contribution_asserted(mol_dsl!(r#"{:atoms ["C#i=#c0#h1#n0#u0#s#a2"]}"#))]
+    #[case::in_system(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![atom_dsl!("C#i=#c0#h1#n0#u0#s")],
+            aromatic: vec![(vec![AtomId(0)], AromaticSystemForm::from_electrons(vec![1]))],
+            ..Default::default()
+        })
+    )]
+    #[case::unmarked(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))]
+    fn test_counts_valence_admit_ground_complete(#[case] molecule: Molecule) {
+        let resolver = CountsValence::new(ValenceTable::default_table());
+        assert_eq!(
+            resolver.admit(&molecule),
+            Solution::Determined(AtomCompletions::new())
+        );
     }
 
     #[rstest]
