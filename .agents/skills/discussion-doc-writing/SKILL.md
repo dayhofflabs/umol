@@ -104,14 +104,21 @@ Before setting `Completed`:
 
 After closeout, treat the document as a historical artifact:
 
-- Do not rewrite its semantics when later decisions differ.
+- Do not silently rewrite its earlier semantics when later decisions differ.
 - Do not migrate old crate, type, method, field, or terminology names after a rename.
 - Do not perform cosmetic reflow or otherwise modernize the prose.
-- Record current policy in a permanent guide or a new discussion document instead, and connect the
-  records with links.
+- Record current policy in a permanent guide. Use a new discussion document when the correction or
+  follow-up has its own design reasoning or implementation scope.
+
+A narrow correction or clarification may be appended to a closed document when keeping it beside
+the original decision is more useful than creating another record. Give the addendum a dated,
+explicitly labeled heading; identify the earlier conclusion it corrects; and leave the original
+text intact. Do not use an addendum to conceal a broad redesign, reopen completed implementation
+scope, or retrofit current terminology throughout the historical account.
 
 Adding a `Relates` link after closeout is allowed, including a forward link to superseding or
-follow-up work. Make only the link change; do not update the surrounding historical account.
+follow-up work. Apart from a permitted dated addendum, make only the link change; do not update the
+surrounding historical account.
 `discussion/000-status.md` may reclassify a document as `Superseded` or `Outdated` and identify the
 replacement without rewriting the closed document.
 

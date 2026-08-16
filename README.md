@@ -29,7 +29,8 @@ from umol import Molecule
 mol = Molecule.from_smiles("CCO")  # ethanol: 3 atoms, 2 bonds
 ```
 
-Version 0.6.0 is an alpha release, and its interfaces may still change. The
+Version 0.6.0 is an alpha release, and its interfaces may still change. Canonical
+representatives are not persistent identifiers and may change between 0.x releases. The
 [whitepaper](https://github.com/dayhofflabs/umol/blob/main/docs/umol-whitepaper.pdf)
 introduces the model and gives a fuller Python and Rust primer. See the
 [0.6.0 release notes](https://github.com/dayhofflabs/umol/blob/main/RELEASE_NOTES.md)

@@ -2023,3 +2023,29 @@ until the reaction-application preconditions are approved. No stage in the core 
 The LHS-only reaction shortcut, connected-component optimization, alternate canonical-labeling
 backend, and higher-level relative stereo operations are explicitly deferred; none may change the
 frozen canonical comparison schema or canonical numbering.
+
+## Correction — 2026-08-16
+
+The cross-release compatibility conclusion in **Canonical comparison order**, and the corresponding
+append-only language in S4b, S9c, S14c, and the final paragraph above, is superseded for the 0.x
+series. The canonicalization implementation and its within-release semantic laws remain as recorded.
+
+For a fixed umol release, canonicalization is deterministic under a fixed level and context. The
+returned canonical form is an ordinary graph-IR value without a canonicalization-schema version or
+producer provenance. During 0.x, the typed comparison order, canonical numbering, and serialized
+canonical representatives may change between releases as the entity model and canonicalizer are
+corrected or extended. They are not persistent cross-release identifiers. A caller that persists a
+0.x canonical form must record the producing umol version externally.
+
+The explicit comparison positions remain normative for the current implementation. They prevent
+accidental dependence on Rust declaration order, platform details, or a backend's labeling
+convention, and the exact fixtures detect unintended drift. Append-only extensions that preserve
+the canonical representative of every earlier value are desirable where the model permits them,
+but they are not a 0.x compatibility promise.
+
+Protocol Buffers, Cap'n Proto, and Thrift remain useful precedents for governing a future durable
+canonicalization profile. Their stable field identities illustrate how such a profile could evolve;
+their wire formats do not themselves provide umol's canonical comparison encoding. A durable
+profile would need an explicit identity and conformance contract. That identity could be carried by
+an API selection or by the persisted artifact, media type, or hash prefix; it need not be stored on
+every `Molecule`. No durable canonicalization profile is defined by the unversioned 0.x API.
