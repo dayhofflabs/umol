@@ -87,6 +87,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
       - uses: actions/download-artifact@v7
         with:
           pattern: python-dist-*
@@ -101,4 +104,4 @@ jobs:
           dist/*
           --verify-tag
           --title "$RELEASE_TAG"
-          --generate-notes
+          --notes-file RELEASE_NOTES.md

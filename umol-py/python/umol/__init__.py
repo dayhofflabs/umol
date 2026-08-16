@@ -230,7 +230,7 @@ from ._native import (
 from .elements import E
 
 try:
-    __version__ = version("umol")
+    __version__ = version("umol-py")
 except PackageNotFoundError:
     __version__ = "0.0.0"
 

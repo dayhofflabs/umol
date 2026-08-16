@@ -1,12 +1,13 @@
 [package]
 name = "umol-io"
-version = "0.1.0"
-authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/rappoport/umol"
-keywords = ["chemistry", "cheminformatics", "file formats", "smiles", "molfile"]
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords = ["chemistry", "cheminformatics", "file-formats", "smiles", "molfile"]
 description = "Molecular file-format parsers (SMILES, CTFile) and the TableIR boundary type for umol."
 autotests = false
 
@@ -29,11 +30,11 @@ regex = "1.11.2"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
-umol-graph-ir = { path = "../umol-graph-ir", version = "0.1.0" }
-umol-geometric-core = { path = "../umol-geometric-core", version = "0.1.0" }
-umol-perm = { path = "../umol-perm", version = "0.1.0" }
-umol-chem = { path = "../umol-chem", version = "0.1.0" }
-umol-utils = { path = "../umol-utils", version = "0.1.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.6.0" }
+umol-geometric-core = { path = "../umol-geometric-core", version = "0.6.0" }
+umol-perm = { path = "../umol-perm", version = "0.6.0" }
+umol-chem = { path = "../umol-chem", version = "0.6.0" }
+umol-utils = { path = "../umol-utils", version = "0.6.0" }
 
 [dev-dependencies]
 criterion = "0.8.1"

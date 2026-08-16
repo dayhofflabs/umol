@@ -1,13 +1,17 @@
 [package]
 name = "umol-msym"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-description = "Ergonomic Rust wrapper for libmsym (molecular symmetry)"
+description = "Ergonomic Rust wrapper for libmsym (molecular symmetry)."
 license = "MIT"
+repository.workspace = true
+readme.workspace = true
+keywords = ["chemistry", "molecules", "symmetry", "libmsym"]
 
 [dependencies]
-umol-msym-sys = { path = "../umol-msym-sys" }
+umol-msym-sys = { path = "../umol-msym-sys", version = "0.6.0" }
 nalgebra = "0.34.0"
 thiserror = "2"
 

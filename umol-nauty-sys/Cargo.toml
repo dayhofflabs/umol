@@ -1,11 +1,14 @@
 [package]
 name = "umol-nauty-sys"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-description = "Vendored native foundation for umol's nauty integration"
+description = "Vendored native foundation for umol's nauty integration."
 license = "Apache-2.0"
-repository = "https://github.com/rappoport/umol"
+repository.workspace = true
+readme.workspace = true
+keywords = ["graph", "isomorphism", "canonicalization", "nauty", "ffi"]
 links = "umol_nauty"
 
 [build-dependencies]

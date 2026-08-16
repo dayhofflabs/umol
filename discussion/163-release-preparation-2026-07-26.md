@@ -1,8 +1,8 @@
-# Praparations for Rust and Python package release
+# Preparations for Rust and Python package release
 
-Status: **In Progress** — guiding document for the 0.6.0 release
+Status: In Progress
 Date: 2026-07-26
-Relates: [151](151-python-molecule-workflows-2026-07-13.md),
+Relates: [151](151-python-molecule-workflows-2026-07-13.md)
 
 ## Scope
 
@@ -101,40 +101,55 @@ Assessed and **not** blocking, with the reason recorded:
   `0.7`); closing off the individual crates behind it would be breaking and
   runs against the multi-model composition philosophy — the individual crates
   stay public regardless.
-- **Doc 182 (Python resolution exposure)**: reviewed 2026-08-15 — the gap is
-  real and current. Python has no `resolve` method anywhere: a molecule built
-  by editing or `parse` cannot be resolved except by round-tripping through
-  ingest, so the refine loop (assert, re-resolve) is not executable from
-  Python. Not a tag blocker — the whitepaper shows no `resolve()` listing,
-  and adding a method is additive (`0.6.x`) — but it is the most user-visible
-  API hole in this assessment, and it carries doc 182's open design question
-  (verdict value versus exception) to settle before implementing. The doc's
-  Rust reference section predates the S4 rework (`Resolver::with_config`,
-  `ResolverError` spellings) and needs refreshing against `ResolveConfig`
-  stored on `Resolver` and the `Resolve*` names.
+- **Doc 182 (Python resolution exposure)**: completed 2026-08-15.
+  `Molecule.resolve()` is non-mutating and returns the model's three-valued
+  `Solution`: a resolved molecule and report, surviving candidates, or a
+  contradiction. Molecules produced by editing or `Molecule.parse()` can
+  therefore enter the explicit resolve/refine loop directly from Python.
 - Behaviors to state in the release notes rather than change: higher stereo
   kinds (allene, square-planar, octahedral) are staged off by the default
   `StereoModel`; the whitepaper demonstrates tetrahedral and cis/trans only.
 
-## Release collateral (missing items)
+## Release collateral
 
 1. **README.md** at the repository root — Getting Started from the whitepaper
    primer (step already listed below); include the `pip install umol-py` /
    `import umol` distinction.
+   **Done 2026-08-15:** the root README adapts the whitepaper introduction and
+   primer, includes the first Python example, and states the distribution /
+   import-name distinction. The current paper is tracked as
+   `docs/umol-whitepaper.pdf`; replace that README target with the permanent
+   arXiv URL after publication.
 2. **Release notes for 0.6.0** — the whitepaper feature set, the known
    limitations above, and the data-update policy statement.
-3. **License files** — `pyproject.toml` declares `MIT OR Apache-2.0`, but the
-   repository has no `LICENSE-MIT`/`LICENSE-APACHE` files and the crate
-   manifests carry no `license` field; both are required for crates.io.
-4. **CI** — no `.github/` exists. Needed: a test workflow (workspace build,
-   `--all-features --tests` so the conformance and proptest suites run,
-   clippy, fmt) and a release workflow (crates.io publish in dependency
-   order; maturin wheel builds for linux x86_64 and macos-arm — the binding
-   uses abi3, so one wheel per platform — plus sdist, publish to PyPI).
+   **Done 2026-08-15:** `RELEASE_NOTES.md` records the included functionality,
+   explicit limitations, compatibility boundary, and chemistry-data update
+   policy. The GitHub release job uses it as the release body.
+3. **License files and metadata** — keep the repository-level
+   `LICENSE-MIT`/`LICENSE-APACHE` files, declare each crate's actual SPDX
+   license, and ensure the Python wheel and sdist carry their license texts.
+   **Done 2026-08-15:** Cargo metadata inherits the workspace dual license
+   except for the deliberately narrower native-wrapper licenses. `umol-py`
+   uses the PEP 639 SPDX form and package-local copies because license-file
+   paths in its nested `pyproject.toml` cannot refer to the repository parent.
+   The other members use relative symlinks to the root texts; Cargo
+   dereferences them into regular files in each published crate archive.
+4. **CI/CD** — test the workspace with all test features, clippy, rustfmt, and
+   the MSRV; build and test the Linux x86-64 and macOS ARM64 abi3 wheels and
+   the sdist; publish Python artifacts through trusted publishing. Publish
+   the Rust crates in dependency order when that release path is enabled.
+   **Partly done 2026-08-15:** Rust and Python CI, tag verification, PyPI
+   trusted publishing, and GitHub release creation exist under `.github/`.
+   Automated crates.io publication remains open.
 5. **Workspace version** — `[workspace.package] version = "0.6.0"` plus
    `version.workspace = true` in member crates (step 3 below), and the
    remaining Cargo metadata fields (description, license, repository,
    keywords, readme) per crate.
+   **Done 2026-08-15:** all eighteen members inherit version 0.6.0, author,
+   and repository. Most inherit the root README; `umol-edn` and
+   `umol-graph-core` retain their existing crate-specific READMEs. Every member
+   has a description, a valid keyword set, and its actual license. All
+   publishable internal path dependencies specify version 0.6.0.
 6. **Name availability re-check** — the 2026-08-02 check covered the old
    `umol-ast`/`umol-ast-macros` names; `umol-graph-ir` and
    `umol-graph-ir-macros` have not been checked. Re-check all names
