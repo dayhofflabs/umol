@@ -28,7 +28,7 @@ the statuses recorded here remain authoritative.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [163 — Release preparation](163-release-preparation-2026-07-26.md) is the
-  upcoming workstream; implementation has not started.
+  active release workstream; registry credentials and release execution remain.
 
 ## Document index
 
@@ -193,7 +193,7 @@ the statuses recorded here remain authoritative.
 | [160-relevant-cycle-algs-2026-07-25.md](160-relevant-cycle-algs-2026-07-25.md)                                   | Proposed      | 2026-07-27   | Algorithm spikes and comparative evaluation have not started.                                              |
 | [161-property-tests-as-specs-2026-07-25.md](161-property-tests-as-specs-2026-07-25.md)                           | Informational | 2026-07-25   | Original snapshot; the living property-test guide has moved to `docs/development`.                         |
 | [162-common-subgraph-algs-2026-07-25.md](162-common-subgraph-algs-2026-07-25.md)                                 | Completed     | 2026-07-25   |                                                                                                            |
-| [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | In Progress   | 2026-08-16   | 0.6.0 collateral and package metadata are prepared; CI runtime tuning, registry-name recheck, crates.io publication path, and the actual release remain. |
+| [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | In Progress   | 2026-08-16   | 0.6.0 collateral, metadata, CI, and resumable crates.io publication are prepared; registry credentials, CI runtime tuning, and release execution remain. |
 | [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
 | [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | Proposed      | 2026-07-27   | Hydrogen transformations and remaining validator implementation.                                           |

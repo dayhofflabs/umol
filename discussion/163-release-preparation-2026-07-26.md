@@ -140,9 +140,15 @@ Assessed and **not** blocking, with the reason recorded:
    the MSRV; build and test the Linux x86-64 and macOS ARM64 abi3 wheels and
    the sdist; publish Python artifacts through trusted publishing. Publish
    the Rust crates in dependency order when that release path is enabled.
-   **Partly done 2026-08-15:** Rust and Python CI, tag verification, PyPI
-   trusted publishing, and GitHub release creation exist under `.github/`.
-   Automated crates.io publication remains open.
+   **Done 2026-08-16:** Rust and Python CI, tag verification, PyPI trusted
+   publishing, resumable crates.io publication, and GitHub release creation
+   exist under `.github/`. The first crates.io release uses a temporary API
+   token because trusted publishers can only be configured after each crate
+   exists. The publication job checks for the requested version, skips crates
+   already published by an earlier partial run, and publishes the eighteen
+   members in dependency order. After 0.6.0, configure `release.yml` and its
+   `crates-io` environment as a trusted publisher for every crate, replace the
+   token with `rust-lang/crates-io-auth-action`, and revoke the token.
    **Performance follow-up (2026-08-16, not a 0.6 blocker):** the first Rust
    workspace test run passed but took more than 30 minutes on the private
    repository's standard `ubuntu-latest` runner. Re-measure after the
@@ -163,12 +169,14 @@ Assessed and **not** blocking, with the reason recorded:
    `umol-ast`/`umol-ast-macros` names; `umol-graph-ir` and
    `umol-graph-ir-macros` have not been checked. Re-check all names
    immediately before publishing.
+   **Done 2026-08-16:** all eighteen current workspace names returned HTTP 404
+   from the crates.io API when queried with an identifying User-Agent.
 
-## Registry name availability (checked 2026-08-02)
+## Registry name availability (rechecked 2026-08-16)
 
 Availability is time-sensitive; re-check immediately before publishing.
 
-**crates.io — `umol` is claimed; the other eighteen are free.**
+**crates.io — `umol` is claimed; all eighteen workspace crate names are free.**
 
 `umol` was published as a `0.0.0` placeholder on 2026-08-02 (https://crates.io/crates/umol): three
 files, no functionality, no dependencies, a README stating that it is a name reservation for a
@@ -179,10 +187,12 @@ The placeholder source is at `~/Source/rust/umol-placeholder`, outside the works
 Note for the real release: a version number can never be reused, so 0.6.0 must be published fresh;
 `0.0.0 -> 0.6.0` is a valid increase.
 
-The remaining eighteen were free as of the same date: `umol-ast`, `umol-ast-macros`, `umol-chem`,
-`umol-edn`, `umol-edn-macros`, `umol-geometric`, `umol-geometric-core`, `umol-geometric-graph`,
-`umol-graph`, `umol-graph-core`, `umol-io`, `umol-msym`, `umol-msym-sys`, `umol-nauty-sys`,
-`umol-params`, `umol-perm`, `umol-py`, `umol-utils`. Each returned HTTP 404 from `https://crates.io/api/v1/crates/<name>`. Nothing blocks the Rust side.
+The current eighteen workspace names were rechecked on 2026-08-16: `umol-graph-ir`,
+`umol-graph-ir-macros`, `umol-chem`, `umol-edn`, `umol-edn-macros`, `umol-geometric`,
+`umol-geometric-core`, `umol-geometric-graph`, `umol-graph`, `umol-graph-core`, `umol-io`,
+`umol-msym`, `umol-msym-sys`, `umol-nauty-sys`, `umol-params`, `umol-perm`, `umol-py`, and
+`umol-utils`. Each returned HTTP 404 from `https://crates.io/api/v1/crates/<name>` when queried
+with an identifying User-Agent. Nothing blocks the Rust side.
 These carry far less squatting risk than the bare four-letter name did, so they can wait for the real
 release rather than being reserved individually — a placeholder for a crate that never ships is the
 practice this project should avoid.
