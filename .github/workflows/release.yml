@@ -1,0 +1,103 @@
+name: Release (dayhofflabs/umol only)
+run-name: Release ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish, for example v0.6.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify-tag:
+    name: Verify release tag
+    if: ${{ github.repository == 'dayhofflabs/umol' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Match tag to package version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: >-
+          python -c 'import os, pathlib, tomllib;
+          root = tomllib.loads(pathlib.Path("Cargo.toml").read_text());
+          package = tomllib.loads(pathlib.Path("umol-py/Cargo.toml").read_text())["package"];
+          declared = package["version"];
+          version = root["workspace"]["package"]["version"] if isinstance(declared, dict) else declared;
+          tag = os.environ["RELEASE_TAG"];
+          assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
+
+  rust-ci:
+    name: Rust release gates
+    needs: verify-tag
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      checkout_ref: ${{ inputs.tag }}
+
+  python-distributions:
+    name: Python release artifacts
+    needs: verify-tag
+    uses: ./.github/workflows/python.yml
+    permissions:
+      contents: read
+    with:
+      checkout_ref: ${{ inputs.tag }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [rust-ci, python-distributions]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/umol-py
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: python-dist-*
+          path: dist
+          merge-multiple: true
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  github-release:
+    name: Create GitHub release
+    needs: [publish-pypi, python-distributions]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: python-dist-*
+          path: dist
+          merge-multiple: true
+      - name: Create release and attach distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dist/*
+          --verify-tag
+          --title "$RELEASE_TAG"
+          --generate-notes
