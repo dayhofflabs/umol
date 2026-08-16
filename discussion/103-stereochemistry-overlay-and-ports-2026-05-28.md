@@ -863,7 +863,7 @@ same core later:
   their changes attach to rule / condensed-graph edges.
 - **More stereo kinds.** Beyond TH/CT (/SP/TB/OH + allene `#A`): atropisomerism / axial (StereoMolGraph
   `AtropBond`) and hindered-rotation stereo (`HinderedBond{12,13,23,33}`). Keep in view, do not build.
-- **Reference implementations.** StereoMolGraph (`/Users/dr/Source/external/StereoMolGraph`): permutation-descriptor
+- **Reference implementations.** StereoMolGraph: permutation-descriptor
   model with `invert` (= our coset + `~`), WL color refinement (`algorithms/circular`), VF2++-with-stereo
   isomorphism (`algorithms/isomorphism`), symmetry numbers (`algorithms/symmetry`), 3D→stereo inference, RDKit
   interop; relative-only, no CIP. RDKit `GraphMol/{Chirality,FindStereo,new_canon,NontetrahedralStereo,StereoGroup,

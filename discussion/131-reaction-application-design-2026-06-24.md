@@ -19,7 +19,7 @@ variable, and one rule application yields several reactions (one per match).
 ## Prior art
 
 Reviewed under `materials/codes/`: RDKit, LillyMol, CDK, Indigo, MØD; plus
-`/Users/dr/Dayhoff/molintern` (CGR on RDKit).
+molintern (CGR on RDKit).
 
 ### Two rule representations
 

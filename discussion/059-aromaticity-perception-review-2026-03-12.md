@@ -1,6 +1,6 @@
 # Prompt
 
-Please review the plan in @/Users/dr/.cursor/plans/aromaticity_perception_framework_5071f98f.plan.md and the design document in @discussion/58-aromaticity-perception-2026-03-11.md for implementing aromaticity perception in umol resolution pipeline. Questions to address:
+Please review the external plan `aromaticity_perception_framework_5071f98f.plan.md` and the design document in @discussion/58-aromaticity-perception-2026-03-11.md for implementing aromaticity perception in umol resolution pipeline. Questions to address:
 
 1. Completeness of design
 2. Configurability (integration with @umol-models-graph/src/graph_ir/config.rs configuration) and presets (incl. naming)
@@ -705,7 +705,7 @@ pub struct AromaticityResolveConfig {
 
 ### Phase 1: Enforce strict aromatic hints in valence
 
-- Update atom-typing query construction in [/Users/dr/.cursor/worktrees/umol/uff/umol-models-graph/src/graph_ir/atom_type.rs](/Users/dr/.cursor/worktrees/umol/uff/umol-models-graph/src/graph_ir/atom_type.rs):
+- Update atom-typing query construction in `umol-models-graph/src/graph_ir/atom_type.rs`:
   - `aromatic_hint=true` constrains to aromatic-capable candidates (a > 0).
   - `aromatic_hint=false` remains non-aromatic constraint (a=None).
 - Add hint mismatch policy wiring for explicit diagnostics (atom-level and bond-level), reusing policy patterns from valence ambiguity/no-match.

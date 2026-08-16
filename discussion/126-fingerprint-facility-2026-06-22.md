@@ -761,7 +761,7 @@ fingerprint the environment around the reaction center.
 - Probst et al. 2022 (DRFP) — `materials/fingerprints/Probst-DRFP-2022.pdf`.
 - RDKit fingerprint generators — `materials/codes/rdkit` (Code/GraphMol/Fingerprints).
 - molintern (Python reference; DRFP/RDKit wrapping, reaction handling, CGR) —
-  `/Users/dr/Dayhoff/molintern/molintern` (`featurizer.py`, `cgr_graph.py`).
+  `featurizer.py`, `cgr_graph.py`.
 - Orsi & Reymond 2024, fingerprint comparison; scikit-fingerprints (Gugler/… 2024)
   as an API-shape reference; MAP4 (Capecchi, Probst & Reymond 2020); MHFP (Probst &
   Reymond 2018).

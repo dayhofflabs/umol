@@ -1,6 +1,6 @@
 # umol DSL specification
 
-Normative definition of the molecule **EDN** surface, **contexts**, **molecule map** shape, **value expressions**, and **atom-string** / **bond-string** subgrammars.
+Normative definition of the molecule, reaction, and reaction-span **EDN** surfaces, **contexts**, **map** shapes, **numeric forms**, and entity-string subgrammars.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED**, **MAY**, and **OPTIONAL** in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119).
 
@@ -10,26 +10,26 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 ## 1. General
 
-**Homoiconicity.** The same string grammars denote **ground** data and **constraint** patterns. A ground atom-string is a degenerate case of a query atom-string that matches exactly one interpretation.
+**Homoiconicity.** The same string grammars denote **concrete** data and **constraint** patterns. A concrete atom-string is a degenerate case of a query atom-string that matches exactly one interpretation.
 
 **Relational molecule.** A molecule map (**§4**) is a set of named relations (atoms, localized bonds, optional dative / aromatic / multicenter sections, and global fields). Fragment composition is relation-wise merge where defined.
 
-**EDN and reactions.** EDN carries the relational structure. The **reaction map** (**§8**) encodes an **LHS** molecule plus an ordered **`:deltas`** edit list whose application yields the product.
+**EDN and reactions.** EDN carries the relational structure. The operational **reaction map** (**§8.2**) encodes an **LHS** molecule plus an ordered **`:deltas`** edit list whose application yields the product. The interchangeable **span map** (**§8.2**) superimposes the left- and right-hand sides as `L ∪_K R`.
 
 Two contexts use the same surface grammar:
 
-- **Ground**: fully instantiated molecules. Every numeric slot is a concrete integer; element is a single symbol.
+- **Concrete**: fully instantiated molecules. Every numeric slot is a concrete integer; element is a single symbol.
 - **Pattern**: adds wildcards, finite sets, negation, and numeric ranges.
 
 The subgrammars in **§5.1** and **§7** define forms that are syntactically valid in one or both contexts; **§3** identifies the restrictions.
 
-**Case sensitivity.** **`atom-string`**, **`bond-string`**, and **`value-expr`** lexing (**§5.1**, **§7**) is **case-sensitive** throughout: e.g. **`#a`** and **`#A`** are distinct predicate tags; **`element-literal`** (**§5.2**) follows **IUPAC** element casing (**`Cl`**, **`Br`**, not arbitrary case folding). Implementations **MUST NOT** treat these fragments as case-insensitive.
+**Case sensitivity.** **`atom-string`**, **`bond-string`**, and **`num-form`** lexing (**§5.1**, **§7**) is **case-sensitive** throughout: e.g. **`#a`** and **`#A`** are distinct predicate tags; **`element-literal`** (**§5.2**) follows **IUPAC** element casing (**`Cl`**, **`Br`**, not arbitrary case folding). Implementations **MUST NOT** treat these fragments as case-insensitive.
 
 ---
 
 ## 2. EDN representation
 
-Molecule data **SHOULD** use **EDN** maps and **Clojure-style** **keywords** for atom site labels.
+A conforming molecule, operational reaction, or reaction span **MUST** use the [**EDN**](https://github.com/edn-format/edn) map surface defined for it in **§4** or **§8.2**. Map keys **MUST** be the **keywords** specified by the corresponding grammar; other EDN key types are invalid. An EDN keyword is an identifier beginning with **`:`**, such as **`:atoms`** or **`:site-1`**. Symbolic entity ids and atom aliases **MUST** be keywords; references use a keyword, positional integer, or structural reference map where admitted by the applicable grammar.
 
 An **atom literal** is an **EDN string** whose contents are an *atom-string* (**§7.3** / **§5.2**).
 
@@ -53,12 +53,12 @@ The same token grammars are used in both contexts; which shapes are legal depend
 
 | Context   | Constraints on strings |
 |-----------|-------------------------|
-| **Ground** | Wildcards, sets, negation, and ranges are invalid unless this specification explicitly allows them for that slot. |
+| **Concrete** | Wildcards, sets, negation, and ranges are invalid unless this specification explicitly allows them for that slot. |
 | **Pattern** | Wildcards, sets, negation, ranges, and constraints per **§5.1** and **§7**. |
 
-**Builder-oriented** use (expecting a unique ground resolution) and **query-oriented** use (selecting a set of matches) differ only in evaluation policy, not in the grammars.
+**Builder-oriented** use (expecting a unique concrete resolution) and **query-oriented** use (selecting a set of matches) differ only in evaluation policy, not in the grammars.
 
-**Ground / Pattern split.** **Ground** input uses the **same** grammars as **Pattern** input; only allowed token shapes differ. Implementations **MAY** provide a Ground-only parser or fast path. That split is not a second language: any string valid as **Ground** **MUST** be interpreted the same through either parser.
+**Concrete / Pattern split.** **Concrete** input uses the **same** grammars as **Pattern** input; only allowed token shapes differ. Implementations **MAY** provide a Concrete-only parser or fast path. That split is not a second language: any string valid as **Concrete** **MUST** be interpreted the same through either parser.
 
 ---
 
@@ -123,9 +123,9 @@ stereo-spec ::= "stereo-string" | stereo-keyword
 stereo-keyword ::= :ccw | :cw | :z | :e
 ```
 
-**`:attrs` is mandatory.** Every structural entry that has a DSL surface — **`bond-entry`**, **`dative-bond-entry`**, **`aromatic-system-entry`**, **`multicenter-bond-entry`**, **`noncovalent-bond-entry`**, **`stereo-atom-entry`**, **`stereo-bond-entry`** — **MUST** carry a **`:attrs`** key. The payload is a subgrammar string (or its EDN-keyword shorthand where defined); an entry without **`:attrs`** is a parse error.
+**`:attrs` in entity-definition maps.** Every entity-definition map whose grammar includes **`:attrs`** — the map form of **`bond-entry`** and every **`dative-bond-entry`**, **`aromatic-system-entry`**, **`multicenter-bond-entry`**, **`noncovalent-bond-entry`**, **`stereo-atom-entry`**, and **`stereo-bond-entry`** — **MUST** include that key. Its payload is a subgrammar string (or its EDN-keyword shorthand where defined); such a map without **`:attrs`** is a parse error. The vector form of **`bond-entry`** carries its **`bond-spec`** as the third element, and atom entries carry their **`atom-spec`** directly; neither form has an **`:attrs`** key. Structural reference maps are not entity definitions and **MUST NOT** carry **`:attrs`** (**§7.12**).
 
-An empty string **`:attrs ""`** is a **parse error** for **every** structural subgrammar — each **MUST** begin with a leading inherent-field token:
+An empty string in an **`:attrs`** slot, or as the **`bond-spec`** of a vector **`bond-entry`**, is a **parse error**. Each corresponding subgrammar **MUST** begin with a leading inherent-field token:
 
 - **`aromatic-string`** (**§7.8**) and **`multicenter-string`** (**§7.9**) lead with an **electron counts** specification — **`*`** (undetermined) or a **`[n,n,…]`** vector (the counterpart of the bond-string's order or the atom-string's element). Empty is invalid; use **`"*"`** for undetermined counts.
 - **`bond-string`** (**§7.4**), **`dative-string`** (**§7.7**), and **`noncovalent-string`** (**§7.10**) **MUST** begin with a leading inherent-field token (bond order, dative order, noncovalent kind). Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
@@ -135,7 +135,7 @@ An empty string **`:attrs ""`** is a **parse error** for **every** structural su
 
 **Multicenter entry.** The mandatory **`:attrs`** slot carries a **`multicenter-string`** payload (**§7.9**) — a leading **electron counts** specification then per-system charge, unpaired-electron count and multiplicity, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
 
-**Per-atom electron counts (aromatic and multicenter entries).** The **per-atom** electron contributions are the **mandatory leading** specification of the **`aromatic-string`** / **`multicenter-string`** (**§7.8** / **§7.9**), not a map key: a leading **`*`** (the whole vector undetermined) **or** a **`[n,n,…]`** vector of concrete integers, one per member atom. A concrete vector **MUST** have the same length as the entry's **`:atoms`** vector — position **`i`** is the contribution of the atom at position **`i`** of **`:atoms`**. The electron counts are independent of the optional **`#e`** total — when both are present, downstream validation **MAY** require their **sum** to equal **`#e`** on ground inputs.
+**Per-atom electron counts (aromatic and multicenter entries).** The **per-atom** electron contributions are the **mandatory leading** specification of the **`aromatic-string`** / **`multicenter-string`** (**§7.8** / **§7.9**), not a map key: a leading **`*`** (the whole vector undetermined) **or** a **`[n,n,…]`** vector of concrete integers, one per member atom. A concrete vector **MUST** have the same length as the entry's **`:atoms`** vector — position **`i`** is the contribution of the atom at position **`i`** of **`:atoms`**. The electron counts are independent of the optional **`#e`** total — when both are present, downstream validation **MAY** require their **sum** to equal **`#e`** on concrete inputs.
 
 **Noncovalent kind.** A **`noncovalent-bond-entry`** **MUST** carry **`:attrs`**. The value is a **`noncovalent-string`** (**§7.10**) carrying the interaction kind (e.g. **`"Hbd"`**).
 
@@ -153,7 +153,7 @@ An empty string **`:attrs ""`** is a **parse error** for **every** structural su
 
 **`:atom-aliases`**. The **`atom-alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be an **EDN string** carrying an **atom-string** payload. An **`atom-entry`** that is a bare **keyword** (not a string and not in a **`[id entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
 
-**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, and boolean combinators live here. The canonical grammar appears in **§7.12**. Whole-molecule charge and unpaired-electron coupling assertions are written as **`{:charge-sum {:sum n}}`** and **`{:unpaired-electron-coupling {:unpaired-electrons {:count n :multiplicity m}}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
+**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, and boolean combinators live here. The canonical grammar appears in **§7.12**. A whole-molecule charge assertion is written as **`{:charge-sum {:sum n}}`**; adding **`:atoms [...]`** restricts it to that subset. There is no top-level **`:charge`** key on the molecule map.
 
 **Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-spec* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
@@ -191,11 +191,11 @@ These rules apply **within** a single **molecule map**. **Constraints across** r
 
 ## 5. Leaf types
 
-The **leaf grammars** in this section — the numeric **`value-expr`** and the **element**, **isotope**, **boolean**, **ring-membership**, **electron-counts**, **noncovalent-kind**, **coset**, and **relation** leaves — are the atomic value-types that the entity-string subgrammars (**§7**) compose. Each entity string references these leaves rather than redefining them.
+The **leaf grammars** in this section — **`num-form`**, **element**, **isotope**, **boolean**, **ring-membership**, **electron-counts**, **noncovalent-kind**, **coset**, and **relation** — are the leaf types that the entity-string subgrammars (**§7**) compose. Entity-string subgrammars reference these shared definitions.
 
-### 5.1 Value expression
+### 5.1 Numeric form
 
-**`value-expr`** appears **only** inside a **predicate payload** (**§7.3**, **§7.4**) after **`#` *tag***. The character **`#`** **MUST NOT** appear inside a **`value-expr`** (it is reserved for starting the next predicate).
+**`num-form`** is the surface grammar for **`NumForm`**. It appears **only** inside a **predicate payload** (**§7.3**, **§7.4**) after **`#` *tag***. The character **`#`** **MUST NOT** appear inside a **`num-form`** (it is reserved for starting the next predicate).
 
 ```
 digit      ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
@@ -209,16 +209,16 @@ An empty **`nat-set`** **`{ }`** is **invalid**.
 sign       ::= '+' | '-'
 signed-int ::= sign? nat
 
-value-expr ::= '*'
-             | nat-set
-             | signed-int
-             | range                   (* half-open numeric range            *)
+num-form ::= '*'
+           | nat-set
+           | signed-int
+           | range                   (* half-open numeric range            *)
 
 range      ::= '(' signed-int '..' ')'   (* RangeFrom: bound <= value       *)
              | '(' '..' signed-int ')'    (* RangeTo:   value < bound        *)
 ```
 
-**Top-level integer.** A **`signed-int`** forms a complete top-level **`value-expr`** when it is followed by the next predicate or the end of the string. A sign is optional; unsigned slots reject negative values during validation. The common Ground case (**`#h3`**, **`#v0`**, **`#c-2`**) has this shape.
+**Top-level integer.** A **`signed-int`** forms a complete top-level **`num-form`** when it is followed by the next predicate or the end of the string. A sign is optional; unsigned slots reject negative values during validation. The common concrete case (**`#h3`**, **`#v0`**, **`#c-2`**) has this shape.
 
 **Top-level `nat-set`.** A **`nat-set`** denotes a finite numeric disjunction for the one quantity fixed by the enclosing predicate tag. For example, **`#h{1,2,3}`** admits the three listed implicit-hydrogen counts.
 
@@ -226,15 +226,15 @@ range      ::= '(' signed-int '..' ')'   (* RangeFrom: bound <= value       *)
 
 Inside **`nat-set`**, optional whitespace **MAY** appear only adjacent to commas, like **element-set** (**§5.2**).
 
-Ground numeric fields use a single **`signed-int`**. Wildcards, sets, and ranges are Pattern forms.
+Concrete numeric fields use a single **`signed-int`**. Wildcards, sets, and ranges are Pattern forms.
 
-**Parsing a predicate payload.** The **payload** substring (**§7.1**) is parsed as **`value-expr`** or a tag-specific leaf. It **MUST NOT** contain **`#`**.
+**Parsing a predicate payload.** The **payload** substring (**§7.1**) is parsed as **`num-form`** or a tag-specific leaf. It **MUST NOT** contain **`#`**.
 
 #### 5.1.1 `decimal-tail` and omitted numeral = 1
 
 **`decimal-tail`** is **`digit`*** (**§5.1**). Its numeric meaning is **1** when there are **no** digits; otherwise the usual base‑10 value of the digit sequence (no separate **`nat`** required for the all-zero-digits case).
 
-When a predicate (**§7.3**, **§7.4**) allows a decimal-only payload and the payload is only a **`decimal-tail`** rather than a special sentinel, the omitted form means **1**. Lexing **MUST** take the longest contiguous run of digits as that numeral.
+When a predicate (**§7.3**, **§7.4**) allows a decimal-only payload, an omitted **`decimal-tail`** means **1**. Special sentinels retain their separately defined meanings. Lexing **MUST** take the longest contiguous run of digits as the numeral.
 
 | Atom tag | Omitted numeral = 1 (decimal-only payloads) |
 |----------|-----------------------------------------------|
@@ -249,11 +249,11 @@ Bond predicates that use **decimal-only** payloads follow the same **`decimal-ta
 
 #### 5.1.2 Wildcards, sets, and ranges
 
-The **`*`** wildcard, **`nat-set`**, and **`range`** forms are Pattern forms. A Ground field uses one concrete value. Dative donated- and accepted-pair counts use predicates **`#d`** and **`#t`** (**§7.3**).
+The **`*`** wildcard, **`nat-set`**, and **`range`** forms are Pattern forms. A concrete field uses one value. Dative donated- and accepted-pair counts use predicates **`#d`** and **`#t`** (**§7.3**).
 
 ### 5.2 Element
 
-The **`element`** nonterminal (**atom-string** prefix) is a literal, wildcard, finite set, or negation. The **bond-string** **`order`** prefix (**§7.4**) uses the numeric **`value-expr`** (**§5.1**).
+The **`element`** nonterminal (**atom-string** prefix) is a literal, wildcard, finite set, or negation. The **bond-string** **`order`** prefix (**§7.4**) uses **`num-form`** (**§5.1**).
 
 ```
 element ::= element-literal
@@ -268,13 +268,13 @@ element-literal ::= [A-Z][a-z]*
 ```
 
 - **`element-literal`**: one chemical symbol; **§7.2** (H–Og).
-- **`*`**: any element; invalid in Ground.
+- **`*`**: any element; invalid in Concrete.
 - **`element-set`**: finite non-empty disjunction of one or more **`element-literal`** entries; a Pattern form.
-- **`!` *element-literal*** / **`!` *element-set***: cofinite **negation** — admits everything in the element domain **except** the named literal / set members. **§7.2** range applies to the excluded entries. **Invalid** in **Ground**.
+- **`!` *element-literal*** / **`!` *element-set***: cofinite **negation** — admits everything in the element domain **except** the named literal / set members. **§7.2** range applies to the excluded entries. **Invalid** in **Concrete**.
 
 ### 5.3 Isotope
 
-**`#i` isotope subgrammar.** The isotope-mass slot uses its own subgrammar, not **`value-expr`**, because isotope mass numbers are tagged enum-like. Empty payload (bare **`#i`**) denotes mass **1** (per §5.1.1 decimal-tail).
+**`#i` isotope subgrammar.** The isotope-mass slot uses its own subgrammar, not **`num-form`**, because isotope mass numbers are tagged enum-like. Empty payload (bare **`#i`**) denotes mass **1** (per §5.1.1 decimal-tail).
 
 ```
 isotope-payload ::= '='                           (* Natural — naturally-occurring ratios *)
@@ -287,7 +287,7 @@ isotope-payload ::= '='                           (* Natural — naturally-occur
 
 **Undetermined** value: **`\*`** describes an undetermined value. For constraints, **`\*`** means **no constraint** and MAY be elided.
 
-**Natural is its own channel.** **`=`** (Natural) **does not unify** with numeric variants in the lattice: **`Natural ∧ Lit(n) = ⊥`**, **`Natural ∨ Lit(n) = Undetermined`** for any **`n`**. Natural is the "no specific mass committed" state and is **disjoint** from any explicit mass number. **Ground** isotope is either **`Natural`** or a single **`Lit(n)`**.
+**Natural is its own channel.** **`=`** (Natural) **does not unify** with numeric variants in the lattice: **`Natural ∧ Lit(n) = ⊥`**, **`Natural ∨ Lit(n) = Undetermined`** for any **`n`**. Natural is the "no specific mass committed" state and is **disjoint** from any explicit mass number. A **concrete** isotope is either **`Natural`** or a single **`Lit(n)`**.
 
 ### 5.4 Boolean
 
@@ -301,7 +301,7 @@ boolean ::= '' | '+' | '!' | '*'
 - **`'!'`** — **`false`**.
 - **`'*'`** — **`Undetermined`** (no constraint); **vacuous** and **elided** from the canonical rendered string (**§7.1**), equivalent to omitting the predicate.
 
-It lowers to **`BooleanForm`** (**`Undetermined`** | **`Lit(bool)`**); its structured EDN form is **`bool ::= true | false | :undetermined`**.
+Its graph-IR representation is **`BooleanForm`** (**`Undetermined`** | **`Lit(bool)`**); its structured EDN form is **`bool ::= true | false | :undetermined`**.
 
 ### 5.5 Ring membership
 
@@ -310,14 +310,14 @@ The **`ring-membership`** leaf is the payload of the **`#R`** predicate on an at
 ```
 ring-membership ::= [ '(' size ')' ] count
 size            ::= nat
-count           ::= '*' | '+' | '!' | value-expr
+count           ::= '+' | '!' | num-form
 ```
 
 - **`#R<count>`** bounds the **total** ring count; **`#R(<size>)<count>`** bounds the count of rings of that **`size`**. Bare (**`#R`** / **`#R(<size>)`**) means count **1** (**§5.1.1**).
 - **special counts**: **`*`** = **`Undetermined`** (no constraint, **elided** on render, **§7.1**); **`+`** = **`RangeFrom(1)`** ("in at least one ring"); **`!`** = **`Lit(0)`** (acyclic, or no ring of that size).
 - SMARTS parity: **`R`** → **`#R+`**, **`Rn`** → **`#Rn`**, **`R0`** → **`#R!`**, **`rn`** → **`#R(n)+`**.
 
-It lowers to **`RingMembershipForm`** (a **`count`** value plus a **`RingScope`** of **`All`** or **`Size(n)`**); its structured EDN form is **`ring-membership-form`** (**§7.12**). The **`#R`** predicate **MAY** appear **multiple** times on one entity — one per ring scope (total and/or per-size).
+Its graph-IR representation is **`RingMembershipForm`** (a **`count`** value plus a **`RingScope`** of **`All`** or **`Size(n)`**); its structured EDN form is **`ring-membership-form`** (**§7.12**). The **`#R`** predicate **MAY** appear **multiple** times on one entity — one per ring scope (total and/or per-size).
 
 **Ring enumeration parameters.** Derived ring predicates use one fixed projection; their syntax does not carry a ring-set selector or an enumeration configuration.
 
@@ -343,14 +343,14 @@ electron-counts ::= '*' | '[' int (',' int)* ']'
 - **`*`** — the whole vector **`Undetermined`** (per-atom electrons unspecified).
 - **`[n,n,…]`** — a vector of concrete integers, **one per member atom** (whitespace ignored); position **`i`** is the contribution of the atom at position **`i`** of the entry's **`:atoms`** vector (**§4**). A concrete vector **MUST** have the same length as **`:atoms`**.
 
-It lowers to **`ElectronCountsForm`**. The optional **`#e<n>`** total (aromatic / multicenter) is cross-checked against the **sum** of the electron-counts on ground inputs.
+Its graph-IR representation is **`ElectronCountsForm`**. The optional **`#e<n>`** total (aromatic / multicenter) is cross-checked against the **sum** of the electron-counts on concrete inputs.
 
 ### 5.7 Noncovalent kind
 
 The **`noncovalent-kind`** leaf is the interaction-kind field of the noncovalent-string (**§7.10**).
 
 ```
-noncovalent-kind-expr    ::= noncovalent-kind-literal | '*'
+noncovalent-kind-form    ::= noncovalent-kind-literal | '*'
 noncovalent-kind-literal ::= 'Hbd' | 'Xbd' | 'Ybd' | 'Ion' | 'Vdw'
 ```
 
@@ -366,7 +366,7 @@ noncovalent-kind-literal ::= 'Hbd' | 'Xbd' | 'Ybd' | 'Ion' | 'Vdw'
 
 Each **`noncovalent-kind-literal`** is exactly three ASCII characters: one leading uppercase letter followed by two lowercase letters. The parser consumes the full three-character token; partial prefixes (**`H`**, **`Hb`**, …) **MUST** be rejected.
 
-**`*`** admits any kind and **MUST NOT** appear in Ground. The kind **MUST** be either a single **`noncovalent-kind-literal`** or the wildcard **`*`**. It lowers to **`NoncovalentBondKindForm`** (**`Undetermined`** | **`Lit`**).
+**`*`** admits any kind and **MUST NOT** appear in Concrete. The kind **MUST** be either a single **`noncovalent-kind-literal`** or the wildcard **`*`**. Its graph-IR representation is **`NoncovalentBondKindForm`** (**`Undetermined`** | **`Lit`**).
 
 ### 5.8 Coset
 
@@ -404,11 +404,11 @@ glyph     ::= '=' | '\'' | '/'
 
 ## 6. Match semantics
 
-**Ground molecule, pattern LHS.** The target is Ground. A pattern may contain wildcards, sets, negation, and ranges; those are pattern data, not an indeterminate target molecule.
+**Concrete molecule, pattern LHS.** The target is Concrete. A pattern may contain wildcards, sets, negation, and ranges; those are pattern data, not an indeterminate target molecule.
 
 ### 6.1 Inherent fields and derived predicates
 
-**Inherent fields.** Each entity form — atom, localized bond, aromatic system, multicenter bond, dative bond, noncovalent bond, stereo atom, stereo bond — carries a fixed set of inherent fields. An entity is Ground iff every inherent field holds a single concrete value rather than a wildcard, set, range, or other unresolved state. Nothing else affects grounding.
+**Inherent fields.** Each entity form — atom, localized bond, aromatic system, multicenter bond, dative bond, noncovalent bond, stereo atom, stereo bond — carries a fixed set of inherent fields. An entity is Concrete iff every inherent field holds a single value. A wildcard, set, range, or other unresolved state makes the entity non-concrete. Nothing else affects concreteness.
 
 | Form | Inherent fields |
 |------|-----------------|
@@ -421,7 +421,7 @@ glyph     ::= '=' | '\'' | '/'
 | stereo atom | coordination **`class`** (geometry) and **`coset`** configuration index (the **`:attrs`** payload, **§7.11**). The bearing **`:site`** atom and ordered **`:ligands`** frame (**§4**) are the relation's participants, not payload fields. |
 | stereo bond | cis/trans **`class`** and **`coset`** configuration (the **`:attrs`** payload, **§7.11**). The bearing **`:site`** bond and ordered **`:ligands`** frame (**§4**) are the relation's participants. |
 
-**Derived predicates.** Matching evaluates the per-atom **`#D`**, **`#X`**, **`#V`**, **`#x`**, **`#y`**, **`#H`**, and **`#R`** predicates and localized-bond **`#R`** against the host graph. These predicates filter matches and do not affect grounding. Matching semantics for constraints stored on overlay entities are outside this specification.
+**Derived predicates.** Matching evaluates the per-atom **`#D`**, **`#X`**, **`#V`**, **`#x`**, **`#y`**, **`#H`**, and **`#R`** predicates and localized-bond **`#R`** against the host graph. These predicates filter matches and do not affect concreteness. Matching semantics for constraints stored on overlay entities are outside this specification.
 
 ### 6.2 Pattern–target match
 
@@ -460,9 +460,9 @@ glyph     ::= '=' | '\'' | '/'
 
 **`#` (U+0023).**
 
-- **Inside** an **atom-string** or **bond-string**, **`#`** **MUST** appear **only** as the first character of a **predicate** (**`#` *tag***). **`#`** **MUST NOT** appear inside **`element`**, **`order`**, or inside any **`value-expr`** / **payload** substring.
+- **Inside** an **atom-string** or **bond-string**, **`#`** **MUST** appear **only** as the first character of a **predicate** (**`#` *tag***). **`#`** **MUST NOT** appear inside **`element`**, **`order`**, or inside any **`num-form`** / **payload** substring.
 
-**Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`value-expr`**: the payload text **MAY** contain ignored whitespace between **`value-expr`** tokens as in **§5.1**. The **payload** **MUST NOT** contain **`#`**.
+**Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`num-form`**: the payload text **MAY** contain ignored whitespace between **`num-form`** tokens as in **§5.1**. The **payload** **MUST NOT** contain **`#`**.
 
 **Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`!H`**, **`!{F,Cl}`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**.
 
@@ -475,11 +475,11 @@ glyph     ::= '=' | '\'' | '/'
 
 **Chemical elements.** Any **`element-literal`** and any entry in an **`element-set`** **MUST** refer only to elements from hydrogen through oganesson. Implementations **MUST** reject symbols outside that range.
 
-**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.8**), and atom-subset charge sums **`{:charge-sum {:atoms [...] :sum n}}`** (**§7.12**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
+**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.8**), and atom-subset charge sums **`{:charge-sum {:atoms [...] :sum n}}`** (**§7.12**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`num-form`** denoting the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
 
-**Isotope mass number.** The numeric value carried by **`#i`** in **Ground** **MUST** fit an **unsigned 32-bit** integer.
+**Isotope mass number.** The numeric value carried by **`#i`** in **Concrete** **MUST** fit an **unsigned 32-bit** integer.
 
-**Unsigned 8-bit numeric slots (0…255).** After parsing, **concrete Ground** values for the following **MUST** fit **`u8`** (atom tags, **§7.3**):
+**Unsigned 8-bit numeric slots (0…255).** After parsing, **concrete** values for the following **MUST** fit **`u8`** (atom tags, **§7.3**):
 
 | Slot | Atom predicate |
 |------|------------------|
@@ -498,7 +498,7 @@ glyph     ::= '=' | '\'' | '/'
 
 **Aromatic-string** **`#c`** / **`#u`** / **`#s`** / **`#e`** use the **aromatic-system** namespace (**§7.8**); **`#e`** denotes the total π-electron count (**`u8`**), other tags parallel the bond namespace.
 
-**Lexical** **`nat`** in the grammar is unbounded; **Ground** validation **MUST** reject values outside the **u8** (or **i8** / **u32** as above) range for the corresponding slot.
+**Lexical** **`nat`** in the grammar is unbounded; **Concrete** validation **MUST** reject values outside the **u8** (or **i8** / **u32** as above) range for the corresponding slot.
 
 **Bond order** (**§7.5**) uses a **discrete** model; **fractional** bond orders **MUST NOT** appear in the **bond-string**. **Aromatic** connectivity **MUST NOT** be encoded as a bond **order**; use the molecule map’s **`:aromatic-systems`** section (**§4**) and ordinary **`:bonds`** entries.
 
@@ -519,9 +519,9 @@ tag ::= [A-Za-z_]
 
 **`payload` parsing.** After trimming leading / trailing whitespace on the **payload** substring, parse as follows:
 
-1. **`#c`**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`value-expr`** (**§5.1**), subject to the current evaluation context (**§3**).
-2. **`#i`**: parsed by a **dedicated isotope subgrammar** (**§5.3**, after **`element`**), not as **`value-expr`**.
-3. **Any other tag**: parse the payload as **`value-expr`** (or **Ground** subset) unless the payload matches a **special** form below.
+1. **`#c`**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`num-form`** (**§5.1**), subject to the current evaluation context (**§3**).
+2. **`#i`**: parsed by a **dedicated isotope subgrammar** (**§5.3**, after **`element`**), not as **`num-form`**.
+3. **Any other tag**: parse the payload as **`num-form`** (or **Concrete** subset) unless the payload matches a **special** form below.
 
 **Special predicate payloads**:
 
@@ -538,7 +538,7 @@ tag ::= [A-Za-z_]
 | **`+`** | **`#T`** | Atom **is** a tetrahedral stereocenter with an **unspecified** coset. |
 | **`+`** / **`-`** | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
 
-Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / **`decimal-tail`** rules (**§5.1**, **§5.1.1**).
+Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`num-form`** / **`decimal-tail`** rules (**§5.1**, **§5.1.1**).
 
 | Tag | Meaning |
 |-----|---------|
@@ -554,7 +554,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a+`**, **`#a!`** (**§7.3**) |
 | **`#m`** | Multicenter valence; **special** **`#m*`**, **`#m+`**, **`#m!`** (**§7.3**) |
 | **`#T`** | **Tetrahedral stereo** configuration at the atom. Payload is a **`config`** (**§5.8**): **`#T*`**, **`#T!`**, **`#T+`**, or a coset literal **`#T<n>`**. Canonical constraint form **`{:atom [i {:tetrahedral-stereo …}]}`** (**§7.12**). |
-| **`#D`** | **Degree**: number of neighbors in the molecular graph (SMARTS `D`). Derived predicate evaluated against the target; **not** a ground atom field. |
+| **`#D`** | **Degree**: number of neighbors in the molecular graph (SMARTS `D`). Derived predicate evaluated against the target; **not** a concrete atom field. |
 | **`#X`** | **Total degree** (connectivity): degree plus implicit-H count (SMARTS `X`). Derived. |
 | **`#V`** | **Total valence**: localized valence plus implicit hydrogens, aromatic valence, and multicenter valence. Derived. |
 | **`#x`** | **Ring degree** (ring connectivity): number of ring bonds at the atom (SMARTS `x`). Derived. |
@@ -564,25 +564,25 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 
 ### 7.4 Bond subgrammar
 
-**Bond-string** uses a **separate** namespace from **atom-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on bonds (**§7.2**). The **`order`** prefix is a **`value-expr`** (**§5.1**); see **§5.2** for the parallel with **`element`**.
+**Bond-string** uses a **separate** namespace from **atom-string**: the **same** **`tag`** letter **MAY** denote a **different** meaning on bonds (**§7.2**). The **`order`** prefix is a **`num-form`** (**§5.1**); see **§5.2** for the parallel with **`element`**.
 
 ```
 bond-string ::= order bond-predicate*
 
 bond-predicate ::= '#' tag payload
 
-order ::= value-expr
+order ::= num-form
 ```
 
-**Segmentation.** Let **`order-text`** be the substring of the **`bond-string`** from the first character after any leading whitespace up to (but not including) the first **`#`** that starts a **`bond-predicate`** (**`#`** immediately followed by a **tag** letter, with **no** whitespace between **`#`** and the tag), or the whole **trimmed** string if there is no such **`#`**. **`order-text`** **MUST** be parsed as **`value-expr`** (**§5.1**).
+**Segmentation.** Let **`order-text`** be the substring of the **`bond-string`** from the first character after any leading whitespace up to (but not including) the first **`#`** that starts a **`bond-predicate`** (**`#`** immediately followed by a **tag** letter, with **no** whitespace between **`#`** and the tag), or the whole **trimmed** string if there is no such **`#`**. **`order-text`** **MUST** be parsed as **`num-form`** (**§5.1**).
 
 **Bond predicates.** **Zero or more** **`bond-predicate`** units follow **`order`**. **At most one** predicate per **tag** letter among **`c`**, **`u`**, **`s`**, **`a`**, **`C`**; **`#R`** **MAY** appear **multiple** times (one per ring scope — total and/or per-size). **Canonical** predicate order (stable serialization): **`#c`**, **`#u`**, **`#s`**, **`#a`**, **`#R`** (total first, then by size ascending), **`#C`**.
 
 **Whitespace** between **`#`** and the **tag** letter is **invalid** (**§7.1**).
 
-**`#c` (bond formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`value-expr`**, not **`#c+`** followed by junk.)
+**`#c` (bond formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`num-form`**, not **`#c+`** followed by junk.)
 
-**`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`value-expr`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **No** extra lookahead is required beyond **`value-expr`** termination and the next predicate or end of string.
+**`#u`** / **`#s`.** After **`#u`** or **`#s`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **No** extra lookahead is required beyond **`num-form`** termination and the next predicate or end of string.
 
 **`#R` (bond ring membership).** Same forms as atom-level **`#R`** (**§7.3**): **`#R<count>`** (total ring count) or **`#R(<size>)<count>`** (count of rings of that size); bare means **1**; **`#R*`** means no constraint; **`#R+`** is the range **`RangeFrom(1)`** ("bond lies in at least one ring"); **`#R!`** means count **0**.
 
@@ -611,14 +611,14 @@ order ::= value-expr
 
 ### 7.5 Bond order
 
-**Semantic model** for **localized** bond order in the **bond-string** (the **`order`** nonterminal is **`value-expr`**, **§7.4**):
+**Semantic model** for **localized** bond order in the **bond-string** (the **`order`** nonterminal is **`num-form`**, **§7.4**):
 
 - **Discrete** orders **1**, **2**, **3**, and **4**.
-- **Any** order: **`*`** as a Pattern **`value-expr`**.
-- **Finite set**: top-level **`nat-set`** in **`value-expr`** (e.g. **`{1,2,3}`** or **`{2}`**).
+- **Any** order: **`*`** as a Pattern **`num-form`**.
+- **Finite set**: top-level **`nat-set`** in **`num-form`** (e.g. **`{1,2,3}`** or **`{2}`**).
 - **Range**: a half-open **`range`** from §5.1.
 
-In Ground, **`order-text`** **MUST** denote one order in **{1,2,3,4}**. Pattern may use wildcard, finite-set, or range forms whose admitted values remain within that domain.
+In Concrete, **`order-text`** **MUST** denote one order in **{1,2,3,4}**. Pattern may use wildcard, finite-set, or range forms whose admitted values remain within that domain.
 
 This section does **not** define **`bond-keyword`** shorthands; see **§7.6**.
 
@@ -656,11 +656,11 @@ Implementations **MUST** accept these four keywords wherever **`dative-bond-spec
 ```
 dative-string ::= order dative-predicate*
 
-order            ::= value-expr | '*'
+order            ::= num-form
 dative-predicate ::= '#' tag payload
 ```
 
-**Order.** The leading **`order`** token is a **`value-expr`** (**§5.1**) — typically a positive integer literal — that records how many electron pairs are donated. **`*`** means **`Undetermined`**. The **`dative-keyword`** shorthands (**§7.6**) — **`:single`**, **`:double`**, **`:triple`**, **`:quadruple`** — expand to the literal forms **`"1"`**, **`"2"`**, **`"3"`**, **`"4"`**.
+**Order.** The leading **`order`** token is a **`num-form`** (**§5.1**) — typically a positive integer literal — that records how many electron pairs are donated. **`*`** means **`Undetermined`**. The **`dative-keyword`** shorthands (**§7.6**) — **`:single`**, **`:double`**, **`:triple`**, **`:quadruple`** — expand to the literal forms **`"1"`**, **`"2"`**, **`"3"`**, **`"4"`**.
 
 **Dative predicates.** **Zero or more** **`dative-predicate`** units after the order token. **Optional** ASCII whitespace **MAY** appear between the order and the first **`#`**, and between successive predicates. **At most one** **`#a`**; **`#R`** **MAY** appear **multiple** times (one per ring scope — total and/or per-size). **Canonical** predicate order (stable serialization): order, then **`#a`**, then **`#R`** (total first, then by size ascending).
 
@@ -696,9 +696,9 @@ aromatic-predicate ::= '#' tag payload
 
 **Whitespace** between **`#`** and the tag letter is **invalid** (**§7.1**).
 
-**`#c` (aromatic-system formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`value-expr`**, not **`#c+`** followed by junk.) Same convention as atom (**§7.3**) and bond (**§7.4**) **`#c`**.
+**`#c` (aromatic-system formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`num-form`**, not **`#c+`** followed by junk.) Same convention as atom (**§7.3**) and bond (**§7.4**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** π-electron.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** π-electron.
 
 | Tag | Meaning (aromatic-system namespace) | Storage |
 |-----|---------------------------------------|----------|
@@ -707,7 +707,7 @@ aromatic-predicate ::= '#' tag payload
 | **`#s`** | Spin multiplicity (2S+1) (system-centered); **`u8`** | inherent field |
 | **`#e`** | Asserted total π-electron count; **`u8`** | inline constraint (`AromaticSystemConstraint::ElectronCount`) |
 
-**`#e<n>` semantics.** **`#e<n>`** asserts the system's total π-electron count and parses to an inline aromatic-system constraint (`AromaticSystemConstraint::ElectronCount(n)`) on the entry's constraint store, **not** to a direct field. The per-atom contributions in the string's leading **`electron-counts`** are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against their **sum** on ground inputs. **`#e`** is omitted from the canonical entity-string form when no `ElectronCount` constraint is present.
+**`#e<n>` semantics.** **`#e<n>`** asserts the system's total π-electron count and parses to an inline aromatic-system constraint (`AromaticSystemConstraint::ElectronCount(n)`) on the entry's constraint store, **not** to a direct field. The per-atom contributions in the string's leading **`electron-counts`** are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against their **sum** on concrete inputs. **`#e`** is omitted from the canonical entity-string form when no `ElectronCount` constraint is present.
 
 **No canonical-constraint equivalent for charge / unpaired-electron state.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form.
 
@@ -727,9 +727,9 @@ multicenter-predicate ::= '#' tag payload
 
 **Whitespace** between **`#`** and the tag letter is **invalid** (**§7.1**).
 
-**`#c` (multicenter-bond formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. Same convention as atom (**§7.3**), bond (**§7.4**), and aromatic (**§7.8**) **`#c`**.
+**`#c` (multicenter-bond formal charge).** After **`#c`**, parse **either** a full **`num-form`** (**§5.1**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. Same convention as atom (**§7.3**), bond (**§7.4**), and aromatic (**§7.8**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** bonded electron.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`num-form`** (**§5.1**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.1.1** for decimal-only slots). **`#e`** omitted means **1** bonded electron.
 
 | Tag | Meaning (multicenter-bond namespace) | Storage |
 |-----|----------------------------------------|----------|
@@ -738,7 +738,7 @@ multicenter-predicate ::= '#' tag payload
 | **`#s`** | Spin multiplicity (2S+1) (bond-centered); **`u8`** | inherent field |
 | **`#e`** | Asserted total bonded electron count; **`u8`** | inline constraint (`MulticenterBondConstraint::ElectronCount`) |
 
-**`#e<n>` semantics.** **`#e<n>`** asserts the multicenter bond's total electron count and parses to an inline multicenter-bond constraint (`MulticenterBondConstraint::ElectronCount(n)`), parallel to the aromatic-system case (**§7.8**). Per-atom contributions in the string's leading **`electron-counts`** are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against their **sum** on ground inputs.
+**`#e<n>` semantics.** **`#e<n>`** asserts the multicenter bond's total electron count and parses to an inline multicenter-bond constraint (`MulticenterBondConstraint::ElectronCount(n)`), parallel to the aromatic-system case (**§7.8**). Per-atom contributions in the string's leading **`electron-counts`** are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against their **sum** on concrete inputs.
 
 **Per-atom participation.** The atom-side **`#m`** predicate (**§7.3**) is a per-atom multicenter-membership marker; the per-atom electron share for a given multicenter bond is the leading **`electron-counts`** of that bond's multicenter-string. Endpoint references (which atoms the bond spans) live in the **`:atoms`** vector of the **`multicenter-bond-entry`** (**§4**); they **MUST NOT** be encoded inside the multicenter-string.
 
@@ -747,13 +747,13 @@ multicenter-predicate ::= '#' tag payload
 **Noncovalent-string** encodes the **interaction kind** of a single **`noncovalent-bond-entry`** (**§4**), optionally followed by the **`#I`** intramolecular predicate. The leading kind is the inherent field; **`#I`** is its one inline constraint.
 
 ```
-noncovalent-string ::= noncovalent-kind-expr intramolecular?
+noncovalent-string ::= noncovalent-kind-form intramolecular?
 
 intramolecular ::= '#I' ( '' | '+' | '!' | '*' )
                    (* '' / '+' intramolecular (true); '!' intermolecular (false); '*' undetermined *)
 ```
 
-The **`noncovalent-kind-expr`** leading field is the **noncovalent-kind** leaf (**§5.7**). Leading / trailing whitespace on the whole **noncovalent-string** is ignored (**§7.1**).
+The **`noncovalent-kind-form`** leading field is the **noncovalent-kind** leaf (**§5.7**). Leading / trailing whitespace on the whole **noncovalent-string** is ignored (**§7.1**).
 
 **Intramolecular predicate (`#I`).** A trailing **`#I`** asserts whether the interaction is **intramolecular** — its two atoms lie in the **same** covalent connected component. The trailing polarity sets the truth value: **`#I`** / **`#I+`** intramolecular (true), **`#I!`** intermolecular (false), **`#I*`** undetermined. It is the noncovalent bond's **only** inline constraint (**`NoncovalentBondConstraint::Intramolecular`**); its structured EDN form is **`{:intramolecular bool}`** (**§7.12**). A **`#I*`** (undetermined) predicate is **vacuous** and **elided** from the canonical rendered string (**§7.1**), equivalent to omitting it.
 
@@ -793,7 +793,7 @@ Each predicate places its **parameter** (the permutation for **`#p`** / **`#f`**
 
 **Chiral-class restriction.** The **`'`** value — **`#p`** improper, **`#o`** enantiotopic, **`#g`** prochiral — is meaningful only on the chiral **`Th`** class; **`Ct`** is achiral. An inconsistent class/value pairing is rejected by validation.
 
-**`stereo-keyword` shorthand (`§4`).** The four **`stereo-keyword`** values expand to canonical **`class`**+**`coset`** literals: **`:ccw`** → **`Th0`**, **`:cw`** → **`Th1`**, **`:z`** → **`Ct0`**, **`:e`** → **`Ct1`**. They are a ground EDN shorthand on the **`stereo-spec`**'s **`:attrs`** and are semantically identical to the expanded string. On serialization, implementations **MUST** emit the **`stereo-keyword`** for these four canonical shapes **only when the element carries no inline predicates**, falling back to the **`stereo-string`** otherwise.
+**`stereo-keyword` shorthand (`§4`).** The four **`stereo-keyword`** values expand to canonical **`class`**+**`coset`** literals: **`:ccw`** → **`Th0`**, **`:cw`** → **`Th1`**, **`:z`** → **`Ct0`**, **`:e`** → **`Ct1`**. They are a concrete EDN shorthand on the **`stereo-spec`**'s **`:attrs`** and are semantically identical to the expanded string. On serialization, implementations **MUST** emit the **`stereo-keyword`** for these four canonical shapes **only when the element carries no inline predicates**, falling back to the **`stereo-string`** otherwise.
 
 ### 7.12 Constraint grammar
 
@@ -858,10 +858,8 @@ relational-constraint ::=
   | { :stereo-bond-any-ligand         [stereo-bond-ref atom-constraint-form]  }
 
 molecule-constraint ::=
-    { :charge-sum                 { [:atoms [atom-ref+]]? :sum value-expr } }
-  | { :unpaired-electron-coupling { [:atoms [atom-ref+]]?
-                                     :unpaired-electrons unpaired-electrons-form } }
-  | { :bond-order-sum             { [:bonds [bond-ref+]]? :sum value-expr } }
+    { :charge-sum                 { [:atoms [atom-ref+]]? :sum num-form } }
+  | { :bond-order-sum             { [:bonds [bond-ref+]]? :sum num-form } }
   | { :connected                  { [:atoms [atom-ref+]]? } }
 
 combinator-constraint ::=
@@ -870,18 +868,18 @@ combinator-constraint ::=
   | { :not constraint-entry }
 
 atom-constraint-form ::=
-    { :valence             value-expr }
-  | { :donated-pairs       value-expr }
-  | { :accepted-pairs      value-expr }
-  | { :aromatic-valence    ( value-expr | :not-aromatic | :undetermined ) }
-  | { :multicenter-valence ( value-expr | :not-multicenter | :undetermined ) }
+    { :valence             num-form }
+  | { :donated-pairs       num-form }
+  | { :accepted-pairs      num-form }
+  | { :aromatic-valence    ( num-form | :not-aromatic | :undetermined ) }
+  | { :multicenter-valence ( num-form | :not-multicenter | :undetermined ) }
   | { :tetrahedral-stereo  stereo-config-form }
-  | { :degree              value-expr }
-  | { :total-degree        value-expr }
-  | { :total-valence       value-expr }
-  | { :ring-degree         value-expr }
-  | { :ring-valence        value-expr }
-  | { :total-hydrogens     value-expr }
+  | { :degree              num-form }
+  | { :total-degree        num-form }
+  | { :total-valence       num-form }
+  | { :ring-degree         num-form }
+  | { :ring-valence        num-form }
+  | { :total-hydrogens     num-form }
   | { :ring-membership     ring-membership-form }
 
 bond-constraint-form ::=
@@ -898,12 +896,10 @@ boolean ::= true | false | :undetermined
 
 (* One ring-membership fact. With :size, a count of rings of that size;     *)
 (* without :size, the total ring count. :count is required.                 *)
-ring-membership-form ::= { :size nat :count value-expr } | { :count value-expr }
+ring-membership-form ::= { :size nat :count num-form } | { :count num-form }
 
-unpaired-electrons-form ::= { :count value-expr :multiplicity value-expr }
-
-aromatic-system-constraint-form  ::= { :electron-count value-expr }
-multicenter-bond-constraint-form ::= { :electron-count value-expr }
+aromatic-system-constraint-form  ::= { :electron-count num-form }
+multicenter-bond-constraint-form ::= { :electron-count num-form }
 noncovalent-bond-constraint-form ::= { :intramolecular bool }
 
 (* A stereo entity-constraint form is a positional 2-vector: the element's *)
@@ -955,7 +951,7 @@ stereo-bond-ref      ::= int | keyword | { :site bond-ref :ligands [ligand-ref+]
 
 **Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map. The kind is redundant with a referenced element but required at molecule scope, where the constraint is detached and Th and Ct have the same degree. The kind is first so a reader knows the predicate degree before reading its value. These constraints are distinct from atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) configurations and from stereo relational leaves.
 
-**Molecule-scope subset selectors.** `:charge-sum`, `:unpaired-electron-coupling`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When omitted, the predicate ranges over every atom or bond in the resulting molecule, including entities added by earlier deltas. When present, the predicate ranges over the listed entities only. An empty vector `[]` is distinct from omission: it selects no entities.
+**Molecule-scope subset selectors.** `:charge-sum` and `:connected` accept an **optional** `:atoms` vector; `:bond-order-sum` accepts an **optional** `:bonds` vector. When omitted, the predicate ranges over every atom or bond in the resulting molecule, including entities added by earlier deltas. When present, the predicate ranges over the listed entities only. An empty vector `[]` is distinct from omission: it selects no entities.
 
 **Sugar (inline string equivalents).** Narrow leaves whose entity has a string subgrammar admit two interchangeable serializations:
 
@@ -1328,7 +1324,7 @@ A bond-order change, with both atoms unchanged:
 
 Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`:id`** where useful.
 
-### 9.1 Methanol (CH₃OH) — Ground
+### 9.1 Methanol (CH₃OH) — Concrete
 
 ```clojure
 {:atoms [[:C  "C#h3"]
@@ -1340,7 +1336,7 @@ Examples use the vector **`:atoms`** form with inline ids. Bond entries show **`
 
 The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one wishes to name). Implicit H counts on **`C`** (**`#h3`**) and **`O`** (**`#h1`**) already account for the remaining hydrogens.
 
-### 9.2 Indole — Ground, aromatic ring
+### 9.2 Indole — Concrete, aromatic ring
 
 ```clojure
 {:atoms [[:N   "N#h1"]

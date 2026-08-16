@@ -151,15 +151,15 @@ Properties are recomputed only when needed
 
     __Both atom and bond parity rely on stable atomic IDs__. After an atom is assigned an ID, it can never change in a way that affects relative ordering to neighbors. Fortunately, this constraint is easy to achieve.
 
-* Claims that atoms and bonds are not unnecessary as concepts, can be replaced by atom indices or pairs of atom indices. Don't understand how he can make this big claim without having written necessary code. Seems stupid.
+* Proposes replacing Atom and Bond concepts with atom indices and atom-index pairs. The minimal interface does not include enough construction or mutation code to evaluate how this choice scales beyond read-only access.
 
-* Molecule extends graph. Fair enough but not natural; the terminology is different, which should create some strong friction.
+* Molecule extends graph, which exposes graph terminology at the molecular API boundary.
 
 ## [chiral-data](https://github.com/chiral-data/)
 
 * MIT license
 * Seems to belong to a company? 4 years old, seems to be mostly wrapping OpenBabel. 
-* Has a [SMILES writer](https://github.com/chiral-data/rust-chem/blob/main/src/smiles_writer.rs) of questionable quality?
+* Has a [SMILES writer](https://github.com/chiral-data/rust-chem/blob/main/src/smiles_writer.rs); not evaluated here.
 * __Has graph symmetry perception and canonicalization algorithms [Link](https://github.com/chiral-data/rust-graph-symmetry).__
 
 ## [molrs](https://github.com/molrs/molrs-core)

@@ -18,6 +18,11 @@ documents may use the former `Active` status or otherwise be stale.
 `Blocked` is not a synonym for deferred, lower-priority, or awaiting selection.
 Do not use `In Progress` merely because a document is still relevant.
 
+Some early informational documents preserve exploratory conversations and
+speculative analysis. They are historical research inputs, not statements of
+current project behavior or policy; current code, tests, specifications, and
+the statuses recorded here remain authoritative.
+
 ## Current frontier
 
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
@@ -29,9 +34,6 @@ Do not use `In Progress` merely because a document is still relevant.
 
 | Name                                                                                                             | Status        | Last Checked | Note                                                                                                       |
 | ---------------------------------------------------------------------------------------------------------------- | ------------- | ------------ | ---------------------------------------------------------------------------------------------------------- |
-| [001-design-chat-2025-02-14.md](001-design-chat-2025-02-14.md)                                                   | Informational | 2026-02-17   |                                                                                                            |
-| [002-design-summary-2025-02-16.md](002-design-summary-2025-02-16.md)                                             | Informational | 2026-02-17   |                                                                                                            |
-| [003-alternative-stacks-2025-03-01.md](003-alternative-stacks-2025-03-01.md)                                     | Informational | 2026-02-17   |                                                                                                            |
 | [004-implementation-start-2025-03-01.md](004-implementation-start-2025-03-01.md)                                 | Outdated      | 2026-02-17   |                                                                                                            |
 | [005-mutability-2025-03-01.md](005-mutability-2025-03-01.md)                                                     | Informational | 2026-02-17   |                                                                                                            |
 | [006-atom-bond-identity-iteration-2025-03-01.md](006-atom-bond-identity-iteration-2025-03-01.md)                 | Informational | 2026-02-17   |                                                                                                            |

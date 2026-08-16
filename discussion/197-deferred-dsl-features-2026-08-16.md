@@ -96,6 +96,15 @@ molecule-wide constraints, and boolean combinators during substructure matching
 is deferred to doc 195. The current matcher rejects patterns carrying such
 constraints rather than weakening them silently.
 
+### Molecule-wide unpaired-electron coupling
+
+The current `:unpaired-electron-coupling` form can be parsed, rendered, stored,
+and checked for an internally valid count/multiplicity pair. A valid concrete
+coupling is not evaluated against the selected atoms, however; validation
+returns `Underdetermined`. The surface remains deferred until the relationship
+between atom states and molecule-wide coupling, validation behavior, matching,
+and reaction handling has a complete contract and conformance coverage.
+
 ### Dative ring projection
 
 Deriving dative-bond ring membership requires a ring model whose topology
@@ -370,6 +379,40 @@ for overlays, and rejects a non-empty molecule-scope constraints list.
 Return placement: supported derived predicates in §6.1 and the complete
 molecule-level match contract in §6.2, after each constraint family has
 conformance coverage.
+
+### Molecule-wide unpaired-electron coupling
+
+Former placement: §4, `:constraints`:
+
+> Whole-molecule charge and unpaired-electron coupling assertions are written
+> as `{:charge-sum {:sum n}}` and
+> `{:unpaired-electron-coupling {:unpaired-electrons {:count n :multiplicity
+> m}}}` entries (omit `:atoms` to range over the whole molecule); a subset is
+> selected by adding `:atoms [...]`. There is no top-level `:charge` or `:spin`
+> key on the molecule map.
+
+Former placement: §7.12, `molecule-constraint` and its inner form:
+
+```ebnf
+  | { :unpaired-electron-coupling { [:atoms [atom-ref+]]?
+                                     :unpaired-electrons unpaired-electrons-form } }
+
+unpaired-electrons-form ::= { :count value-expr :multiplicity value-expr }
+```
+
+Former placement: §7.12, molecule-scope subset selectors:
+
+> **Molecule-scope subset selectors.** `:charge-sum`,
+> `:unpaired-electron-coupling`, `:bond-order-sum`, and `:connected` accept an
+> **optional** `:atoms` (or `:bonds`) vector. When omitted, the predicate ranges
+> over every atom or bond in the resulting molecule, including entities added
+> by earlier deltas. When present, the predicate ranges over the listed
+> entities only. An empty vector `[]` is distinct from omission: it selects no
+> entities.
+
+Return placement: molecule-map constraint placement in §4, the structured
+grammar and subset-selector rules in §7.12, and operation semantics in §6 and
+§8 after validation, matching, and reaction behavior are settled.
 
 ### Dative ring projection
 

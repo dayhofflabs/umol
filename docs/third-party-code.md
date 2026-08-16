@@ -17,8 +17,8 @@ crates; umol-specific interfaces are kept outside the upstream source trees.
 `umol-msym-sys/build.rs` selects and compiles the C source files used by the
 Rust wrapper. To refresh libmsym, replace the directory with a clean checkout
 of the chosen upstream revision, update the revision above, retain the
-upstream license, and verify the packaged `umol-msym-sys` crate rather than
-only the workspace checkout.
+upstream license, and verify the packaged `umol-msym-sys` crate. A successful
+workspace checkout alone does not establish package completeness.
 
 ## nauty
 
@@ -35,6 +35,7 @@ only the workspace checkout.
 
 `umol-nauty-sys/build.rs` records the selected upstream source and header
 files. The stable umol interface and portability configuration live in
-`umol-nauty-sys/src`, `umol-nauty-sys/include`, and the build script rather
-than in the vendored directory. An upstream refresh should preserve that
-separation and verify the packaged `umol-nauty-sys` crate.
+`umol-nauty-sys/src`, `umol-nauty-sys/include`, and the build script. The
+vendored directory contains the selected upstream source closure. An upstream
+refresh should preserve that separation and verify the packaged
+`umol-nauty-sys` crate.
