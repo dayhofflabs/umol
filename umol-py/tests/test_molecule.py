@@ -587,12 +587,11 @@ def test_molecule_resolve():
 
     solution = molecule.resolve(chemistry_model=_smiles_valence_model())
 
-    match solution:
-        case Solution.Determined(molecule=resolved, report=report):
-            assert resolved == Molecule.parse('{:atoms ["C#i=#c0#h4#n0#u0#s"]}')
-            assert report.tie_breaks == [0]
-        case _:
-            pytest.fail("expected Determined")
+    assert isinstance(solution, Solution.Determined)
+    assert solution.molecule == Molecule.parse(
+        '{:atoms ["C#i=#c0#h4#n0#u0#s"]}'
+    )
+    assert solution.report.tie_breaks == [0]
     assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
@@ -601,11 +600,8 @@ def test_molecule_resolve_underdetermined():
 
     solution = molecule.resolve(chemistry_model=_counts_strict_model())
 
-    match solution:
-        case Solution.Underdetermined(report=report):
-            assert len(report.unresolved.get(0)) == 5
-        case _:
-            pytest.fail("expected Underdetermined")
+    assert isinstance(solution, Solution.Underdetermined)
+    assert len(solution.report.unresolved.get(0)) == 5
     assert molecule == Molecule.parse('{:atoms ["C#c0"]}')
 
 
@@ -614,11 +610,8 @@ def test_molecule_resolve_contradiction():
 
     solution = molecule.resolve(chemistry_model=_smiles_valence_model())
 
-    match solution:
-        case Solution.Contradictory(contradiction=contradiction):
-            assert str(contradiction) == "no matching valence state"
-        case _:
-            pytest.fail("expected Contradictory")
+    assert isinstance(solution, Solution.Contradictory)
+    assert str(solution.contradiction) == "no matching valence state"
     assert molecule == Molecule.parse('{:atoms ["C#c0#h5"]}')
 
 

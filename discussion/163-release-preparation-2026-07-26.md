@@ -2,7 +2,8 @@
 
 Status: In Progress
 Date: 2026-07-26
-Relates: [151](151-python-molecule-workflows-2026-07-13.md)
+Relates: [151](151-python-molecule-workflows-2026-07-13.md),
+[197](197-deferred-dsl-features-2026-08-16.md)
 
 ## Scope
 
@@ -76,8 +77,8 @@ Assessed and **not** blocking, with the reason recorded:
   molecule-scope constraint is refused loudly with an error naming the
   construct (the doc 194 S1a gate) instead of matching as if unconstrained.
   The whitepaper neither documents molecule-scope constraints in patterns nor
-  promises their evaluation, so this is a documented limitation for the
-  release notes, not a gap against the specification. Same for the gated
+  promises their evaluation, so this is not part of the released contract.
+  Doc 197 retains the removed design language. Same for the gated
   constraint-remove reaction path (six `#[ignore]`d tests).
 - **Doc 193 (recursive subpattern constraints)**: unimplemented proposal; not
   in the whitepaper.
@@ -106,9 +107,10 @@ Assessed and **not** blocking, with the reason recorded:
   `Solution`: a resolved molecule and report, surviving candidates, or a
   contradiction. Molecules produced by editing or `Molecule.parse()` can
   therefore enter the explicit resolve/refine loop directly from Python.
-- Behaviors to state in the release notes rather than change: higher stereo
-  kinds (allene, square-planar, octahedral) are staged off by the default
-  `StereoModel`; the whitepaper demonstrates tetrahedral and cis/trans only.
+- Higher stereo kinds (allene, square-planar, octahedral) remain implemented
+  experimentally but are outside the normative DSL and release surface; doc
+  197 retains the removed design language. The whitepaper demonstrates
+  tetrahedral and cis/trans only.
 
 ## Release collateral
 
@@ -120,11 +122,11 @@ Assessed and **not** blocking, with the reason recorded:
    import-name distinction. The current paper is tracked as
    `docs/umol-whitepaper.pdf`; replace that README target with the permanent
    arXiv URL after publication.
-2. **Release notes for 0.6.0** — the whitepaper feature set, the known
-   limitations above, and the data-update policy statement.
+2. **Release notes for 0.6.0** — the shipped whitepaper feature set and the
+   data-update policy statement, without cataloguing unpromised experiments.
    **Done 2026-08-15:** `RELEASE_NOTES.md` records the included functionality,
-   explicit limitations, compatibility boundary, and chemistry-data update
-   policy. The GitHub release job uses it as the release body.
+   compatibility boundary, and chemistry-data update policy. The GitHub
+   release job uses it as the release body.
 3. **License files and metadata** — keep the repository-level
    `LICENSE-MIT`/`LICENSE-APACHE` files, declare each crate's actual SPDX
    license, and ensure the Python wheel and sdist carry their license texts.
@@ -141,6 +143,13 @@ Assessed and **not** blocking, with the reason recorded:
    **Partly done 2026-08-15:** Rust and Python CI, tag verification, PyPI
    trusted publishing, and GitHub release creation exist under `.github/`.
    Automated crates.io publication remains open.
+   **Performance follow-up (2026-08-16, not a 0.6 blocker):** the first Rust
+   workspace test run passed but took more than 30 minutes on the private
+   repository's standard `ubuntu-latest` runner. Re-measure after the
+   repository becomes public, add Cargo dependency/build caching, and set an
+   explicit 60–90 minute test-job timeout. Use a paid larger runner only if the
+   warm public-runner job remains near 30 minutes; do not oversubscribe a
+   standard runner with a larger `CARGO_BUILD_JOBS` value.
 5. **Workspace version** — `[workspace.package] version = "0.6.0"` plus
    `version.workspace = true` in member crates (step 3 below), and the
    remaining Cargo metadata fields (description, license, repository,

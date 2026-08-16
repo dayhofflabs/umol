@@ -334,9 +334,9 @@ def test_molecule_atoms_setitem_out_of_range():
 def test_molecule_atoms_iter():
     symbols = []
     for view in carbon_oxygen().atoms:
-        match view.element:
-            case ElementForm.Lit(e):
-                symbols.append(e.symbol)
+        element = view.element.as_lit()
+        assert element is not None
+        symbols.append(element.symbol)
     assert symbols == ["C", "O"]
 
 
@@ -353,15 +353,10 @@ def test_atom_form_charge_nested_variant_readable():
     # Py::new-vs-IntoPyObject bug.
     atom = AtomForm(Element("C"))
     atom.charge = NumForm.ArithExpr(ArithExpr.Var("h"))
-    match atom.charge:
-        case NumForm.ArithExpr(term):
-            match term:
-                case ArithExpr.Var(name):
-                    assert name == "h"
-                case _:
-                    raise AssertionError
-        case _:
-            raise AssertionError
+    charge = atom.charge
+    assert isinstance(charge, NumForm.ArithExpr)
+    assert isinstance(charge._0, ArithExpr.Var)
+    assert charge._0._0 == "h"
 
 
 @pytest.mark.parametrize("dsl", ["C", "N#c+", "C#v4", "O#n2", "C#R(6)"])
