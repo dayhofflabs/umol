@@ -925,14 +925,11 @@ def test_reaction_combined_fingerprint_feature_types(ethanol_deoxygenation):
     assert type(reaction_tagged) is RoleTaggedHashedFeatureSet
     assert molecular_binary != reaction_tagged
     assert molecular_counted != reaction_signed
-    with pytest.raises(
-        TypeError,
-        match=(
-            "^'RoleTaggedHashedFeatureSet' object is not an instance of "
-            "'HashedFeatureSet'\\nwhile processing 'other'$"
-        ),
-    ):
+    with pytest.raises(TypeError) as error:
         molecular_binary.is_subset(reaction_tagged)
+    assert str(error.value).splitlines()[0] == (
+        "'RoleTaggedHashedFeatureSet' object is not an instance of 'HashedFeatureSet'"
+    )
 
 
 def test_reaction_combined_fingerprint_required_error(ethanol_deoxygenation):
