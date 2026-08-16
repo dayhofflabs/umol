@@ -5,10 +5,10 @@
 //! SMILES, draw + verify it by name in ChemDraw, then commit the lowered DSL.
 //!
 //! Usage:
-//!   verify_stereo smiles "<SMILES>"   (or `-` to read the SMILES from stdin)
-//!   verify_stereo mol <file.mol>      (or `-` to read the MOL from stdin)
-//!   verify_stereo table               (lower every entry in `EXAMPLES`, print DSL)
-//!   verify_stereo write <data-dir>    (write `<data-dir>/<category>/<name>.edn`
+//!   `verify_stereo smiles "<SMILES>"`   (or `-` to read the SMILES from stdin)
+//!   `verify_stereo mol <file.mol>`      (or `-` to read the MOL from stdin)
+//!   `verify_stereo table`               (lower every entry in `EXAMPLES`, print DSL)
+//!   `verify_stereo write <data-dir>`    (write `<data-dir>/<category>/<name>.edn`
 //!                                      = `{:input <DSL>}` for every `EXAMPLES` entry)
 //!
 //! NOTE: the `EXAMPLES` SMILES are best-effort; the R/S and Z/E assignments must

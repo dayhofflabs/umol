@@ -41,15 +41,15 @@
 //! | [`serde::to_string`] | `&T: Serialize` | `String` | serde path (requires `serde` feature) |
 //! | [`serde::to_string_pretty`] | `&T: Serialize` | `String` | serde path, default pretty config |
 //! | [`serde::to_string_with`] | `&T`, [`FormatConfig`] | `String` | serde path + custom format |
-//! | [`serde::to_value`] | `&T: Serialize` | `EdnOwned` | serde → tree |
+//! | [`serde::to_value`] | `&T: Serialize` | `Edn<'static>` | serde → owned tree |
 //!
 //! # Type families
 //!
 //! **Core types** — always available, no feature flags:
 //!
 //! - [`Edn<'a>`](Edn) — parsed value tree. Borrows string data from the
-//!   input buffer via `'a`. Call [`Edn::into_owned`] to get [`EdnOwned`]
-//!   (`= Edn<'static>`) when the source outlives the tree.
+//!   input buffer via `'a`. Call [`Edn::into_owned`] to get an `Edn<'static>`
+//!   when the tree must outlive the source.
 //! - [`EdnKeyword<'a>`](EdnKeyword), [`EdnSymbol<'a>`](EdnSymbol) — EDN `:keyword`
 //!   and `symbol` values.
 //! - [`EdnMap<'a>`](EdnMap), [`EdnSet<'a>`](EdnSet),
@@ -66,8 +66,8 @@
 //!
 //! **[`serde`] module** — wrapper types and serde-feature functions:
 //!
-//! Wrapper types ([`serde::EdnKeyword`], [`serde::EdnSymbol`],
-//! [`serde::EdnList`], [`serde::EdnHashSet`], [`serde::EdnTagged`],
+//! Wrapper types ([`EdnKeyword`], [`EdnSymbol`], [`serde::EdnList`],
+//! [`serde::EdnSet`], [`serde::EdnTagged`],
 //! [`serde::DynEdn`]) carry EDN-only constructs through any serialization
 //! format. Through the EDN serializer they preserve full fidelity; through
 //! JSON or other formats they degrade to the closest equivalent.
@@ -89,7 +89,7 @@
 //! ```
 //!
 //! When the tree must outlive the input, call [`Edn::into_owned`] to get
-//! an [`EdnOwned`] (`Edn<'static>`).
+//! an `Edn<'static>`.
 //!
 //! For [`FromEdn`] implementations: types that own all their data implement
 //! `FromEdn<'de>` for any `'de`. Types that borrow strings tie `'de` to

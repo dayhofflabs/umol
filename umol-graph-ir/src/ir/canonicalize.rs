@@ -5095,7 +5095,7 @@ impl Canonicalize for Molecule {
     }
 }
 
-/// Failure to construct a canonical [`Molecule`](super::Molecule).
+/// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
     /// The molecule does not satisfy its representation-integrity contract.
@@ -5313,7 +5313,7 @@ impl Canonicalize for ReactionSpan {
     }
 }
 
-/// Failure to construct a canonical [`Reaction`](super::Reaction).
+/// Failure to construct a canonical [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionCanonicalizeError {
     /// The reaction does not satisfy its representation-integrity contract.
