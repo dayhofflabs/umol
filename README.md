@@ -40,4 +40,6 @@ for the included functionality and known limitations.
 Except where a crate states otherwise, umol is available under either the
 [Apache License 2.0](https://github.com/dayhofflabs/umol/blob/main/LICENSE-APACHE)
 or the [MIT license](https://github.com/dayhofflabs/umol/blob/main/LICENSE-MIT),
-at your option.
+at your option. The sources and licenses of vendored third-party code are
+recorded in the
+[third-party provenance document](https://github.com/dayhofflabs/umol/blob/main/docs/third-party-code.md).
