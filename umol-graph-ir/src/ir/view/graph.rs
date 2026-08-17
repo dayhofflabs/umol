@@ -349,7 +349,7 @@ impl<'a> GraphView<'a> {
 }
 
 /// Atom-level wrapper over `umol_graph_core::AutomorphismOutput` — the result of
-/// [`GraphView::automorphisms`]. Indexes the permutation in terms of `AtomId`
+/// a graph automorphism query. Indexes the permutation in terms of `AtomId`
 /// rather than raw `NodeId`.
 #[derive(Clone, Debug)]
 pub struct AtomAutomorphism(AutomorphismOutput);

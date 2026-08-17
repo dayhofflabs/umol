@@ -893,7 +893,7 @@ def test_reaction_from_reaction_smiles_aromaticity_policy(source, expected):
                     valence=ChemistryModel.default().valence,
                     aromaticity=AromaticityModel(
                         scope=ElementScope.Any(),
-                        rule=AromaticityRule.Clar(ring_limits=RingLimits()),
+                        rule=AromaticityRule.Clar(),
                     ),
                     stereo=ChemistryModel.default().stereo,
                 )

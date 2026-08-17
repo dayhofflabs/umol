@@ -43,7 +43,7 @@
   - Natively targets benzenoid (hexagonal) systems; generalizing to 5-member hetero rings or general conjugated networks requires extra rules beyond Clar’s original scope.
 - Citation: Liu & Green, a Clar-structures-based aromaticity algorithm (ScienceDirect link).
 
-[ScienceDirect link]: https://www.sciencedirect.com/science/article/pii/S1540748918301883?casa_token=MiGoaNDkIdEAAAAA:4mZgQSjlGxwBW501Oo5_EA-0GiIQElv0TLGBWzEz-SA-004LVn7tHt1Ei4R35j6u-FK-Yvs_zlEV
+[ScienceDirect link]: https://www.sciencedirect.com/science/article/pii/S1540748918301883
 
 ### A graph-based, formal path forward (answering your three questions)
 
@@ -130,7 +130,7 @@
   - Liu & Green Clar-structure algorithm [ScienceDirect link].
 
 - RDKit source link: https://github.com/rdkit/rdkit/blob/23ffd85f60d5cbedc86c698933f0fbaeabc81437/Code/GraphMol/Aromaticity.cpp
-- ScienceDirect link: https://www.sciencedirect.com/science/article/pii/S1540748918301883?casa_token=MiGoaNDkIdEAAAAA:4mZgQSjlGxwBW501Oo5_EA-0GiIQElv0TLGBWzEz-SA-004LVn7tHt1Ei4R35j6u-FK-Yvs_zlEV
+- ScienceDirect link: https://www.sciencedirect.com/science/article/pii/S1540748918301883
 
 - In short:
   - Use HMO for general fractional bond orders/π-charges; Clar-ILP for benzenoids; compute symmetry orbits against those descriptors; treat RDKit/MDL/MMFF as compatibility layers rather than the source of truth.

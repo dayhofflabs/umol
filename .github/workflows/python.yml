@@ -1,0 +1,193 @@
+name: Python distributions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: Git ref to check out when called by another workflow
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-distributions-${{ inputs.checkout_ref || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-wheel:
+    name: Linux x86-64 abi3 wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: Build manylinux wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: umol-py
+          maturin-version: v1.14.1
+          target: x86_64
+          manylinux: "2_17"
+          args: >-
+            --release
+            --locked
+            --interpreter python3.9
+            --compatibility pypi
+            --out dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: python-dist-linux-x86_64
+          path: umol-py/dist/*.whl
+          if-no-files-found: error
+
+  macos-wheel:
+    name: macOS ARM64 abi3 wheel
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: Build macOS wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: umol-py
+          maturin-version: v1.14.1
+          target: aarch64
+          args: >-
+            --release
+            --locked
+            --interpreter python3.9
+            --compatibility pypi
+            --out dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: python-dist-macos-aarch64
+          path: umol-py/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Build source distribution
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: umol-py
+          maturin-version: v1.14.1
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: python-dist-sdist
+          path: umol-py/dist/*.tar.gz
+          if-no-files-found: error
+
+  wheel-test:
+    name: Test ${{ matrix.artifact }} on Python ${{ matrix.python }}
+    needs: [linux-wheel, macos-wheel]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: python-dist-linux-x86_64
+            runner: ubuntu-latest
+            python: "3.9"
+          - artifact: python-dist-linux-x86_64
+            runner: ubuntu-latest
+            python: "3.13"
+          - artifact: python-dist-macos-aarch64
+            runner: macos-latest
+            python: "3.9"
+          - artifact: python-dist-macos-aarch64
+            runner: macos-latest
+            python: "3.13"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist
+      - name: Install built wheel
+        run: python -m pip install pytest dist/*.whl
+      - name: Check installed dependencies
+        run: python -m pip check
+      - name: Test installed wheel
+        working-directory: ${{ runner.temp }}
+        run: python -m pytest "$GITHUB_WORKSPACE/umol-py/tests"
+
+  sdist-test:
+    name: Build and test from sdist
+    needs: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v7
+        with:
+          name: python-dist-sdist
+          path: dist
+      - name: Build wheel from sdist
+        run: python -m pip wheel --no-deps --wheel-dir built dist/*.tar.gz
+      - name: Install wheel built from sdist
+        run: python -m pip install pytest built/*.whl
+      - name: Test wheel built from sdist
+        working-directory: ${{ runner.temp }}
+        run: python -m pytest "$GITHUB_WORKSPACE/umol-py/tests"
+
+  metadata:
+    name: Distribution metadata
+    needs: [linux-wheel, macos-wheel, sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: python-dist-*
+          path: dist
+          merge-multiple: true
+      - name: Check distribution metadata
+        run: |
+          python -m pip install twine
+          python -m twine check dist/*
+
+  gate:
+    name: Python distributions gate
+    if: ${{ always() }}
+    needs: [wheel-test, sdist-test, metadata]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every distribution job to pass
+        run: |
+          test "${{ needs.wheel-test.result }}" = success
+          test "${{ needs.sdist-test.result }}" = success
+          test "${{ needs.metadata.result }}" = success

@@ -65,7 +65,7 @@ impl fmt::Display for PermutationError {
 
 impl Error for PermutationError {}
 
-/// Invalid text supplied to [`ClassKey::from_str`](crate::ClassKey::from_str).
+/// Invalid text supplied to `ClassKey` through [`FromStr::from_str`](std::str::FromStr::from_str).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ParseClassKeyError {
     /// The input is neither a fixed class key nor a recognized class family.

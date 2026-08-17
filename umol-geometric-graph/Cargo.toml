@@ -1,21 +1,23 @@
 [package]
 name = "umol-geometric-graph"
-version = "0.1.0"
-authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/rappoport/umol"
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords = ["chemistry", "cheminformatics", "molecules", "geometry", "graph"]
 description = "Conversions between the geometric and graph molecular models for umol."
 
 [lib]
 bench = false
 
 [dependencies]
-umol-graph-ir = { path = "../umol-graph-ir", version = "0.1.0" }
-umol-chem = { path = "../umol-chem", version = "0.1.0" }
-umol-geometric = { path = "../umol-geometric", version = "0.1.0" }
-umol-params = { path = "../umol-params", version = "0.1.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.6.0" }
+umol-chem = { path = "../umol-chem", version = "0.6.0" }
+umol-geometric = { path = "../umol-geometric", version = "0.6.0" }
+umol-params = { path = "../umol-params", version = "0.6.0" }
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

@@ -1,0 +1,219 @@
+name: Release (dayhofflabs/umol only)
+run-name: Release ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and publish, for example v0.6.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify-tag:
+    name: Verify release tag
+    if: ${{ github.repository == 'dayhofflabs/umol' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Match tag to package version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: >-
+          python -c 'import os, pathlib, tomllib;
+          root = tomllib.loads(pathlib.Path("Cargo.toml").read_text());
+          package = tomllib.loads(pathlib.Path("umol-py/Cargo.toml").read_text())["package"];
+          declared = package["version"];
+          version = root["workspace"]["package"]["version"] if isinstance(declared, dict) else declared;
+          tag = os.environ["RELEASE_TAG"];
+          assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
+
+  rust-ci:
+    name: Rust release gates
+    needs: verify-tag
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      checkout_ref: ${{ inputs.tag }}
+
+  python-distributions:
+    name: Python release artifacts
+    needs: verify-tag
+    uses: ./.github/workflows/python.yml
+    permissions:
+      contents: read
+    with:
+      checkout_ref: ${{ inputs.tag }}
+
+  publish-crates:
+    name: Publish Rust crates
+    needs: [rust-ci, python-distributions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: crates-io
+    permissions:
+      contents: read
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Publish workspace crates in dependency order
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${CARGO_REGISTRY_TOKEN:-}" ]]; then
+            echo "::error::The crates-io environment has no CARGO_REGISTRY_TOKEN secret."
+            exit 1
+          fi
+
+          version="${RELEASE_TAG#v}"
+
+          crate_version_status() {
+            local crate="$1"
+            curl \
+              --silent \
+              --show-error \
+              --retry 5 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --output /dev/null \
+              --write-out '%{http_code}' \
+              --user-agent 'dayhofflabs/umol release workflow' \
+              "https://crates.io/api/v1/crates/${crate}/${version}"
+          }
+
+          publish_crate() {
+            local crate="$1"
+            local status
+            local attempt
+
+            status="$(crate_version_status "$crate")"
+            case "$status" in
+              200)
+                echo "$crate $version is already published; skipping."
+                return
+                ;;
+              404) ;;
+              *)
+                echo "::error::crates.io returned HTTP $status while checking $crate $version."
+                exit 1
+                ;;
+            esac
+
+            for attempt in {1..8}; do
+              if cargo publish --locked --package "$crate"; then
+                return
+              fi
+
+              status="$(crate_version_status "$crate")"
+              if [[ "$status" == 200 ]]; then
+                echo "$crate $version reached crates.io despite the Cargo error."
+                return
+              fi
+              if [[ "$status" != 404 ]]; then
+                echo "::error::crates.io returned HTTP $status while rechecking $crate $version."
+                exit 1
+              fi
+              if [[ "$attempt" == 8 ]]; then
+                echo "::error::Failed to publish $crate $version after $attempt attempts."
+                exit 1
+              fi
+
+              echo "Retrying $crate after crates.io index propagation."
+              sleep 15
+            done
+          }
+
+          publish_crate umol-edn-macros
+          publish_crate umol-geometric-core
+          publish_crate umol-graph-ir-macros
+          publish_crate umol-msym-sys
+          publish_crate umol-nauty-sys
+          publish_crate umol-perm
+          publish_crate umol-utils
+
+          publish_crate umol-chem
+          publish_crate umol-edn
+          publish_crate umol-graph-core
+          publish_crate umol-msym
+
+          publish_crate umol-graph-ir
+          publish_crate umol-params
+
+          publish_crate umol-geometric
+          publish_crate umol-io
+
+          publish_crate umol-geometric-graph
+          publish_crate umol-graph
+
+          publish_crate umol-py
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [publish-crates, python-distributions]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/umol-py
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: python-dist-*
+          path: dist
+          merge-multiple: true
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  github-release:
+    name: Create GitHub release
+    needs: [publish-crates, publish-pypi, python-distributions]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: python-dist-*
+          path: dist
+          merge-multiple: true
+      - name: Create release and attach distributions
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dist/*
+          --verify-tag
+          --title "$RELEASE_TAG"
+          --notes-file RELEASE_NOTES.md

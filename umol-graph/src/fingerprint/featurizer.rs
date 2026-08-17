@@ -1,5 +1,6 @@
 //! The featurizer enum: dispatches to a concrete featurizer struct.
 
+use thiserror::Error;
 use umol_graph_ir::ir::Molecule;
 
 use super::ecfp::EcfpFeaturizer;
@@ -16,15 +17,19 @@ pub enum Featurizer {
     Morgan(MorganFeaturizer),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum FingerprintError {
     /// The molecule is not concrete: an inherent field is undetermined.
+    #[error("fingerprint requires a concrete molecule")]
     NotConcrete,
     /// The reaction deltas cannot be applied consistently.
+    #[error("reaction deltas cannot be applied consistently")]
     Inconsistent,
     /// A fixed-width fingerprint cannot have zero width.
+    #[error("fingerprint width must be positive")]
     ZeroWidth,
     /// An operation requires equal-width fingerprints.
+    #[error("fingerprint widths differ: {left} versus {right}")]
     WidthMismatch { left: usize, right: usize },
 }
 

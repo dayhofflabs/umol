@@ -289,7 +289,7 @@ Entity and molecular structural identity is established from inherent fields and
 incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
 that structural identity. They therefore do not distinguish the initial structural automorphism
 orbits. After structural labeling establishes the minimum structure key, aggregate canonicalization
-normalizes entity-level and molecule-level constraints and minimizes the frozen canonical constraint
+normalizes entity-level and molecule-level constraints and minimizes the typed canonical constraint
 key over every admissible entity remapping and participant-frame action that attains that structure
 minimum. Equivalently, complete canonicalization minimizes `(structure key, constraint key)`
 lexicographically: constraints distinguish only tied structural frames and never make a larger
@@ -401,36 +401,32 @@ excluded data still makes that transformation fail. For `Topology`, `Constitutio
 `canonicalize_by` results; contradictions outside the selected layer do not affect that reduced
 relation. `Full` has no excluded data and is identical to unqualified `canonical_eq`.
 
-Backend canonical labels are search inputs, not the stable numbering contract. The canonical frame
+Backend canonical labels are search inputs, not the numbering authority. The canonical frame
 is the minimum under the library's typed comparison order. Automorphism generators and orbits may
 prune equivalent branches, but changing the selected graph algorithm must not change the resulting
 canonical representative.
 
-The typed comparison schema is a compatibility contract, but that contract must admit additive
-entity- and constraint-model extensions. Existing entity-kind blocks, field components, constraint
-variants, and their order have explicit stable schema positions. New entity kinds and constraint
-variants occupy append-only extension positions and do not renumber or reinterpret existing
-positions. A new inherent field is appended to its entity row. Its introduction must define one
-uniform migration value for every earlier value; otherwise the extension cannot make the
-compatibility promise below because the new field could split an earlier symmetry class. Values
-that determine the new field acquire their frozen order from the version introducing it onward.
-Schema positions must not be inferred from Rust enum declaration order.
+For a fixed umol release, canonicalization is deterministic under a fixed level and context. The
+returned canonical form is an ordinary IR value: it carries no canonicalization-schema version or
+producer provenance and is not a persistent identifier. During the 0.x series, the typed comparison
+schema and resulting canonical numbering may change between releases as the entity model and
+canonicalization rules are corrected or extended. Persisted canonical forms must therefore record
+their producing umol version externally and must not be compared across releases as stable ids.
 
-Adding an extension must leave the canonical numbering and the earlier-schema portion of the
-canonical form unchanged for every molecule expressible in the earlier schema. Molecules that use a
-new entity kind, a determined value of a new inherent field, or a new constraint variant acquire a
-coherent order that is frozen from the version introducing the extension onward. No comparison
-exists with versions that could not represent that extension. More generally, if one schema is an
-append-only extension of another, every earlier-schema molecule embedded through the defined
-neutral values retains its canonical numbering. This cumulative promise concerns the canonical IR,
-not an internal comparison-key encoding.
+The explicit positions below define the current implementation and keep its order independent of
+Rust enum declaration order. An append-only extension that leaves every earlier value unchanged is
+desirable when the model permits it, but it is not a 0.x compatibility guarantee. New entity kinds,
+fields, and constraint variants—and corrections to existing ones—must choose their positions
+deliberately and update the normative table and exact ordering tests together. A future durable
+canonicalization profile requires its own explicit version, compatibility rules, and conformance
+fixtures; the unversioned aggregate API does not imply that contract.
 
 ### Canonical comparison schema
 
-The following schema is the normative typed order for aggregate canonicalization. Numeric positions
-are local to the table in which they occur. A position is permanent once published: declarations may
-move in Rust, but an existing position must not be reused or assigned another meaning. New entries
-are appended after the highest assigned position in their table or structural domain.
+The following schema is the normative typed order for the current aggregate-canonicalization
+implementation. Numeric positions are local to the table in which they occur. Code must use these
+explicit positions instead of inferring order from Rust declarations. During 0.x, an intentional
+schema revision may change them together with this table and the corresponding exact tests.
 
 The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
 stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. The
@@ -469,7 +465,7 @@ are excluded here and enter through the constraint section.
 | Stereo atom | site, ligand frame, configuration |
 | Stereo bond | site, ligand frame, configuration |
 
-Canonical-search initial classes retain these published field positions even when participant data
+Canonical-search initial classes retain these listed field positions even when participant data
 is represented by incidence occurrences. Omitted participant-bearing fields are not renumbered: for
 example, a bond node uses positions 1 through 3 for order, charge, and unpaired electrons, while its
 endpoint pair is represented by two incidences. Entity-node classes contain only normalized,
@@ -477,7 +473,7 @@ constraint-free, frame-independent values. Aromatic and multicenter participant 
 stereo ligand kinds occur on their corresponding incidences; raw stereo configurations do not enter
 the initial node classes.
 
-Typed incidences use the following frozen order:
+Typed incidences use the following order:
 
 | Position | Incidence |
 | ---: | --- |
@@ -581,12 +577,13 @@ before its rhs value. Constraint spans use the first three tags. These positions
 independent of the Rust declaration order.
 
 An absent extension contributes no positioned entry. Therefore appending a later field, variant,
-constraint, or entity kind within its assigned domain leaves the key of every earlier-schema value
-byte-for-byte equivalent at the typed-key level. A genuinely new structural category may be
-appended as a domain after stereo. Moving an existing entity kind between domains or inserting a
-domain is schema-breaking because it changes both comparison order and cumulative-level semantics.
-The concrete Rust key storage remains private and may change, but exact ordering tests must
-instantiate these published positions and verify this append-only property.
+constraint, or entity kind within its assigned domain can leave the key of every earlier value
+byte-for-byte equivalent at the typed-key level. This is a useful extension property, not a
+cross-release promise. A genuinely new structural category may instead require another domain;
+moving an existing entity kind between domains or inserting a domain changes both comparison order
+and cumulative-level semantics. The concrete Rust key storage remains private and may change.
+Exact ordering tests instantiate the current positions to detect accidental drift; an intentional
+schema revision updates those tests and this table together.
 
 ## Provenance and contextual validity
 

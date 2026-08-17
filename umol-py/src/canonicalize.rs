@@ -158,6 +158,8 @@ fn reaction_canonicalization_error(error: GraphIrReactionCanonicalizeError) -> P
 #[pymethods]
 impl Molecule {
     /// Return the complete canonical form without changing this molecule.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize(
         &self,
@@ -172,6 +174,8 @@ impl Molecule {
     }
 
     /// Return this molecule in the canonical frame selected at `level`.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (level, *, stereo_model=None, config=None))]
     fn canonicalize_by(
         &self,
@@ -218,6 +222,8 @@ impl Molecule {
 #[pymethods]
 impl ReactionSpan {
     /// Return the complete canonical form without changing this reaction span.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize(
         &self,
@@ -232,6 +238,8 @@ impl ReactionSpan {
     }
 
     /// Return this reaction span in the canonical frame selected at `level`.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (level, *, stereo_model=None, config=None))]
     fn canonicalize_by(
         &self,
@@ -278,6 +286,8 @@ impl ReactionSpan {
 #[pymethods]
 impl Reaction {
     /// Return the complete canonical form without changing this reaction.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize(
         &self,
@@ -293,6 +303,8 @@ impl Reaction {
     }
 
     /// Return this reaction in the canonical frame selected at `level`.
+    ///
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (level, *, stereo_model=None, config=None))]
     fn canonicalize_by(
         &self,

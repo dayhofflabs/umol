@@ -10,14 +10,6 @@ def test_relop_hashable():
     assert len({RelOp.Lt, RelOp.Lt, RelOp.Ge}) == 2
 
 
-def test_relop_match():
-    match RelOp.Ne:
-        case RelOp.Ne:
-            pass
-        case _:
-            raise AssertionError
-
-
 def test_memop_eq():
     assert MemOp.In == MemOp.In
     assert MemOp.In != MemOp.NotIn

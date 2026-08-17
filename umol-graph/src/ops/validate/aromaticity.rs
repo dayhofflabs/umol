@@ -76,7 +76,7 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits};
+    use crate::ops::model::{AromaticityRule, AromaticityTieBreak, ElementScope};
 
     #[rstest]
     fn test_aromaticity_conformance_validator_new() {
@@ -205,7 +205,7 @@ mod tests {
         )),
     )]
     #[case::perception_rejection(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
         mol_dsl!(r#"{
             :atoms ["N#h#a2" "C#h#a" "C#h#a" "C#h#a" "C#h#a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]

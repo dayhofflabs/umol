@@ -169,56 +169,66 @@ fn atoms_strategy() -> impl Strategy<Value = [AtomId; 2]> {
     (0u32..3, 0u32..3).prop_map(|(a, b)| [AtomId(a), AtomId(b)])
 }
 
-fn atom_delta_strategy() -> impl Strategy<Value = AtomDelta> {
+fn atom_delta_strategy() -> BoxedStrategy<AtomDelta> {
     prop_oneof![
         (atom_id_strategy(), atom_form_strategy())
-            .prop_map(|(id, attributes)| AtomDelta::Add { id, attributes }),
+            .prop_map(|(id, attributes)| AtomDelta::Add { id, attributes })
+            .boxed(),
         (atom_id_strategy(), atom_form_strategy())
-            .prop_map(|(id, attributes)| AtomDelta::Remove { id, attributes }),
-        (atom_id_strategy(), value_basic(0..=3), value_basic(0..=3)).prop_map(|(id, old, new)| {
-            AtomDelta::ModifyField {
-                id,
-                change: AtomFieldChange::Charge { old, new },
-            }
-        }),
+            .prop_map(|(id, attributes)| AtomDelta::Remove { id, attributes })
+            .boxed(),
+        (atom_id_strategy(), value_basic(0..=3), value_basic(0..=3))
+            .prop_map(|(id, old, new)| {
+                AtomDelta::ModifyField {
+                    id,
+                    change: AtomFieldChange::Charge { old, new },
+                }
+            })
+            .boxed(),
         (
             atom_id_strategy(),
             prop::option::of(atom_constraint_strategy()),
             prop::option::of(atom_constraint_strategy()),
         )
-            .prop_map(|(id, old, new)| AtomDelta::ModifyConstraint { id, old, new }),
+            .prop_map(|(id, old, new)| AtomDelta::ModifyConstraint { id, old, new })
+            .boxed(),
     ]
+    .boxed()
 }
 
-fn bond_delta_strategy() -> impl Strategy<Value = BondDelta> {
+fn bond_delta_strategy() -> BoxedStrategy<BondDelta> {
     prop_oneof![
-        (bond_id_strategy(), atoms_strategy(), bond_form_strategy()).prop_map(
-            |(id, atoms, attributes)| BondDelta::Add {
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
+            .prop_map(|(id, atoms, attributes)| BondDelta::Add {
                 id,
                 atoms,
                 attributes
-            }
-        ),
-        (bond_id_strategy(), atoms_strategy(), bond_form_strategy()).prop_map(
-            |(id, atoms, attributes)| BondDelta::Remove {
+            })
+            .boxed(),
+        (bond_id_strategy(), atoms_strategy(), bond_form_strategy())
+            .prop_map(|(id, atoms, attributes)| BondDelta::Remove {
                 id,
                 atoms,
                 attributes
-            }
-        ),
-        (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3)).prop_map(|(id, old, new)| {
-            BondDelta::ModifyField {
-                id,
-                change: BondFieldChange::Order { old, new },
-            }
-        }),
+            })
+            .boxed(),
+        (bond_id_strategy(), value_basic(1..=3), value_basic(1..=3))
+            .prop_map(|(id, old, new)| {
+                BondDelta::ModifyField {
+                    id,
+                    change: BondFieldChange::Order { old, new },
+                }
+            })
+            .boxed(),
         (
             bond_id_strategy(),
             prop::option::of(bond_constraint_strategy()),
             prop::option::of(bond_constraint_strategy()),
         )
-            .prop_map(|(id, old, new)| BondDelta::ModifyConstraint { id, old, new }),
+            .prop_map(|(id, old, new)| BondDelta::ModifyConstraint { id, old, new })
+            .boxed(),
     ]
+    .boxed()
 }
 
 fn constraint_delta_strategy() -> impl Strategy<Value = ConstraintDelta> {
@@ -236,13 +246,15 @@ fn constraint_delta_strategy() -> impl Strategy<Value = ConstraintDelta> {
     ]
 }
 
-fn deltas_strategy() -> impl Strategy<Value = Deltas> {
+fn deltas_strategy() -> BoxedStrategy<Deltas> {
     let delta = prop_oneof![
         atom_delta_strategy().prop_map(Delta::Atom),
         bond_delta_strategy().prop_map(Delta::Bond),
         constraint_delta_strategy().prop_map(Delta::Constraint),
     ];
-    prop::collection::vec(delta, 0..8).prop_map(Deltas::from_iter)
+    prop::collection::vec(delta, 0..8)
+        .prop_map(Deltas::from_iter)
+        .boxed()
 }
 
 proptest! {

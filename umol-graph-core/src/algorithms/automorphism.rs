@@ -66,8 +66,7 @@ fn exact_scientific_value(mantissa: f64, exponent: i32) -> Option<u128> {
     let rounded = value.round();
     let rounding_tolerance = value.abs().max(1.0) * f64::EPSILON * EXACT_INTEGER_ROUNDING_ULPS;
     if !value.is_finite()
-        || value < 0.0
-        || value > MAX_EXACT_F64_INTEGER
+        || !(0.0..=MAX_EXACT_F64_INTEGER).contains(&value)
         || (value - rounded).abs() > rounding_tolerance
     {
         return None;

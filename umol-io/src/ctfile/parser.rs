@@ -400,7 +400,7 @@ fn parse_sdf_extended_molecule<'inp>(
     Ok((remaining, (molecule, line_offset)))
 }
 
-/// Parse SDF bytes into Vec<Molecule> with config (basic, optimized)
+/// Parse SDF bytes into `Vec<Molecule>` with config (basic, optimized)
 pub fn parse_sdf_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
@@ -428,23 +428,23 @@ pub fn parse_sdf_bytes_with(
     Ok(molecules)
 }
 
-/// Parse SDF bytes into Vec<Molecule>
+/// Parse SDF bytes into `Vec<Molecule>`
 pub fn parse_sdf_bytes(input: &[u8]) -> Result<Vec<Molecule>, ParseError> {
     let config = CtfileIoConfig::basic();
     parse_sdf_bytes_with(input, &config)
 }
 
-/// Parse SDF string into Vec<Molecule> with config
+/// Parse SDF string into `Vec<Molecule>` with config
 pub fn parse_sdf_with(input: &str, config: &CtfileIoConfig) -> Result<Vec<Molecule>, ParseError> {
     parse_sdf_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse SDF string into Vec<Molecule>
+/// Parse SDF string into `Vec<Molecule>`
 pub fn parse_sdf(input: &str) -> Result<Vec<Molecule>, ParseError> {
     parse_sdf_bytes(input.as_bytes())
 }
 
-/// Parse SDF bytes into Vec<ExtendedMolecule> with config
+/// Parse SDF bytes into `Vec<ExtendedMolecule>` with config
 pub fn parse_extended_sdf_bytes_with(
     input: &[u8],
     config: &CtfileIoConfig,
@@ -472,13 +472,13 @@ pub fn parse_extended_sdf_bytes_with(
     Ok(molecules)
 }
 
-/// Parse SDF bytes into Vec<ExtendedMolecule>
+/// Parse SDF bytes into `Vec<ExtendedMolecule>`
 pub fn parse_extended_sdf_bytes(input: &[u8]) -> Result<Vec<ExtendedMolecule>, ParseError> {
     let config = CtfileIoConfig::extended();
     parse_extended_sdf_bytes_with(input, &config)
 }
 
-/// Parse SDF string into Vec<ExtendedMolecule> with config
+/// Parse SDF string into `Vec<ExtendedMolecule>` with config
 pub fn parse_extended_sdf_with(
     input: &str,
     config: &CtfileIoConfig,
@@ -486,7 +486,7 @@ pub fn parse_extended_sdf_with(
     parse_extended_sdf_bytes_with(input.as_bytes(), config)
 }
 
-/// Parse SDF string into Vec<ExtendedMolecule>
+/// Parse SDF string into `Vec<ExtendedMolecule>`
 pub fn parse_extended_sdf(input: &str) -> Result<Vec<ExtendedMolecule>, ParseError> {
     parse_extended_sdf_bytes(input.as_bytes())
 }

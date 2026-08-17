@@ -919,10 +919,10 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 
 - Measureents as of 2026-04-02
 
-   Compiling umol-edn-macros v0.1.0 (/Users/dr/Dropbox/Source/rust/umol/umol-edn-macros)
-   Compiling umol-edn v0.1.0 (/Users/dr/Dropbox/Source/rust/umol/umol-edn)
+   Compiling umol-edn-macros v0.1.0 (<repo>/umol-edn-macros)
+   Compiling umol-edn v0.1.0 (<repo>/umol-edn)
     Finished `bench` profile [optimized + debuginfo] target(s) in 4.09s
-     Running benches/parsing.rs (/Users/dr/.cargo-target/release/deps/parsing-7e37e17e031509d2)
+     Running benches/parsing.rs (<cargo-target>/release/deps/parsing-7e37e17e031509d2)
 Gnuplot not found, using plotters backend
 parse_atoms/nil         time:   [35.349 ns 36.523 ns 37.533 ns]
                         change: [−12.102% −8.7053% −5.0658%] (p = 0.00 < 0.05)
@@ -1059,5 +1059,4 @@ serde/json_value_to_struct
 Found 4 outliers among 100 measurements (4.00%)
   1 (1.00%) high mild
   3 (3.00%) high severe
-
 

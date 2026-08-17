@@ -27,26 +27,6 @@ def test_moleculeconstraint_unpaired_electron_coupling():
     )
 
 
-def test_constraint_pattern_match():
-    constraint = Constraint.And(
-        [
-            Constraint.Relational(RelationalConstraint.DativeBondDonor(3, 5)),
-            Constraint.Not(connected_constraint()),
-        ]
-    )
-
-    match constraint:
-        case Constraint.And(
-            [
-                Constraint.Relational(RelationalConstraint.DativeBondDonor(bond, atom)),
-                Constraint.Not(Constraint.Molecule(MoleculeConstraint.Connected(atoms))),
-            ]
-        ):
-            assert (bond, atom, atoms) == (3, 5, None)
-        case _:
-            raise AssertionError("constraint tree did not match its structural variants")
-
-
 def test_constraints_sequence():
     entry = connected_constraint()
     constraints = Constraints([entry, entry])

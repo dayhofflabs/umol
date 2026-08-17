@@ -297,6 +297,11 @@ define that order.
 the search-based counterpart of `equiv_under`: the caller does not supply a correspondence because
 canonicalization selects the frame.
 
+For a fixed umol release, level, and context, canonicalization is deterministic. During the 0.x
+series, its typed order and canonical representatives may change between releases. A canonical form
+is therefore not a persistent identifier unless a future API supplies an explicitly versioned
+canonicalization profile.
+
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.
@@ -976,8 +981,9 @@ multicenter bonds, and noncovalent bonds. `Structure` adds stereo atoms and ster
 excluding constraints. `Full` adds normalized constraints through post-hoc selection among tied
 structural frames and is identical to unqualified canonicalization. Para-stereo is context-dependent
 refinement within the structure pass shared by `Structure` and `Full`, not another level. Future
-structural entity kinds extend the first applicable structural level without changing the meanings
-of the earlier ones; future constraint variants extend `Full` append-only.
+structural entity kinds enter the first applicable structural level without changing the meanings
+of the earlier levels; future constraint variants enter `Full`. Their comparison positions remain
+a current-release schema decision during the 0.x series.
 
 `IncidenceLevel` stops at `Full`, using that name for the complete structural carrier because
 constraints do not occur in an incidence graph. Thus `IncidenceLevel::Full` supplies the carrier for

@@ -1,17 +1,18 @@
 [package]
 name = "umol-params"
-version = "0.1.0"
-authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/rappoport/umol"
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
 keywords = [
     "chemistry",
     "cheminformatics",
-    "computational chemistry",
-    "molecular modeling",
-    "molecular representation",
+    "molecules",
+    "parameters",
+    "modeling",
 ]
 description = "Model-dependent parameters for umol."
 
@@ -19,7 +20,7 @@ description = "Model-dependent parameters for umol."
 bench = false
 
 [dependencies]
-umol-chem = { path = "../umol-chem", version = "0.1.0" }
+umol-chem = { path = "../umol-chem", version = "0.6.0" }
 
 [dev-dependencies]
 rstest = "0.26.1"

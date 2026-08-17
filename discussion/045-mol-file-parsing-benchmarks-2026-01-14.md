@@ -2,7 +2,7 @@
 
 ## Revision 6e85fb01 (2026-01-14)
 
-     Running benches/mol_parsing.rs (/Users/dr/.cargo-target/release/deps/mol_parsing-783530498285640c)
+     Running benches/mol_parsing.rs (<cargo-target>/release/deps/mol_parsing-783530498285640c)
 mol_parsing/counts/valid
                         time:   [65.762 ns 66.104 ns 66.659 ns]
 Found 8 outliers among 100 measurements (8.00%)
@@ -593,7 +593,7 @@ Found 5 outliers among 100 measurements (5.00%)
 
 ## Revision 649d6120 (2025-09-05)
 
-     Running benches/parsing_bench.rs (/Users/dr/.cargo-target/release/deps/parsing_bench-81be5e344550426e)
+     Running benches/parsing_bench.rs (<cargo-target>/release/deps/parsing_bench-81be5e344550426e)
 mol_parsing/counts/valid
                         time:   [71.883 ns 72.111 ns 72.344 ns]
                         change: [+8.3348% +8.9695% +9.5100%] (p = 0.00 < 0.05)

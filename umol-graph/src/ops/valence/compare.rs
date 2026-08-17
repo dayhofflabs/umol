@@ -3,7 +3,7 @@
 //! [`compare_by_key`] evaluates a policy's lexicographic key
 //! (`ValenceTieBreak::key`); the greatest candidate under the composed
 //! ordering is the selected one. Use with
-//! [`Iterator::max_by`](Iterator::max_by).
+//! [`Iterator::max_by`].
 
 use std::cmp::Ordering;
 

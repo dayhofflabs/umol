@@ -84,7 +84,7 @@ impl<'a> CountsValence<'a> {
     /// Admission: every atom under resolution gets its candidate set —
     /// the counts enumeration per atom — and no edits are produced. A
     /// non-literal element makes the whole admission underdetermined and
-    /// empty; plurality is state, not a verdict.
+    /// empty; plurality is state, not a solution.
     pub fn admit(&self, molecule: &Molecule) -> Solution<AtomCompletions, CountsError> {
         for atom in molecule.atoms().iter() {
             if atom.element().as_lit().is_none() {

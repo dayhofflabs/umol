@@ -297,7 +297,7 @@ impl AromaticityResolver {
     /// assignments, so accepted systems are disjoint. Returns the narrowed
     /// carrier, the accepted systems, and the atoms selected by the key.
     ///
-    /// More than [`MAX_ASSIGNMENTS`] assignments in one candidate-ring
+    /// More than `MAX_ASSIGNMENTS` assignments in one candidate-ring
     /// component, a non-literal
     /// stored `#a` outside the carrier, or an undetermined perception yields
     /// `Underdetermined` with the carrier unchanged. A carrier atom whose
@@ -307,7 +307,7 @@ impl AromaticityResolver {
     /// # Semantic properties
     ///
     /// The outcome is search-independent: for carriers whose components stay
-    /// within [`MAX_ASSIGNMENTS`], the result (compared by `==` on the
+    /// within `MAX_ASSIGNMENTS`, the result (compared by `==` on the
     /// returned solution) equals that of a selection enumerating every
     /// assignment of every component exhaustively — the pruned search never
     /// removes a valid assignment. Cross-checked in the `property` test
@@ -1880,7 +1880,7 @@ mod tests {
 
     #[rstest]
     #[case::clar_heterocycle(
-        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+        AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
         mol_dsl_concrete!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                               :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AromaticityContradiction::ClarNonBenzenoid(

@@ -78,8 +78,9 @@ macro_rules! stereo_element {
                 }
             }
 
-            /// Add a single constraint.
-            pub fn with_constraint(self, _constraint: impl Into<$constraint>) -> Self {
+            /// Add a single constraint, replacing any existing entry with the same key.
+            pub fn with_constraint(mut self, constraint: impl Into<$constraint>) -> Self {
+                self.constraints.set(constraint.into());
                 self
             }
 
@@ -1572,6 +1573,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::stereogenicity(
+        StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        StereoAtomForm { configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32), constraints: StereoAtomConstraintsForm::from(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+    )]
+    fn test_stereo_atom_form_with_methods(
+        #[case] atom: StereoAtomForm,
+        #[case] constraint: StereoAtomConstraintForm,
+        #[case] expected: StereoAtomForm,
+    ) {
+        assert_eq!(atom.clone().with_constraint(constraint.clone()), expected);
+        assert_eq!(atom.with_constraints([constraint]), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::undetermined(StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Undetermined), false)]
     #[case::ground(StereoAtomForm::new(StereoKind::Tetrahedral, 1u32), true)]
     fn test_stereo_atom_form_is_ground(#[case] atom: StereoAtomForm, #[case] expected: bool) {
@@ -1656,6 +1673,22 @@ mod tests {
     #[case::same(StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32))]
     fn test_stereo_atom_form_difference_to_identity(#[case] atom: StereoAtomForm) {
         assert_eq!(atom.difference_to(&atom), StereoAtomUpdate::default());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stereogenicity(
+        StereoBondForm::new(StereoKind::CisTrans, 1_u32),
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        StereoBondForm { configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32), constraints: StereoBondConstraintsForm::from(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))) },
+    )]
+    fn test_stereo_bond_form_with_methods(
+        #[case] bond: StereoBondForm,
+        #[case] constraint: StereoBondConstraintForm,
+        #[case] expected: StereoBondForm,
+    ) {
+        assert_eq!(bond.clone().with_constraint(constraint.clone()), expected);
+        assert_eq!(bond.with_constraints([constraint]), expected);
     }
 
     #[rustfmt::skip]

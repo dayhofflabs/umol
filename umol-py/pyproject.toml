@@ -3,16 +3,24 @@ requires = ["maturin>=1.14,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "umol"
+name = "umol-py"
 description = "Python bindings for umol molecular representation."
+readme = "../README.md"
 requires-python = ">=3.9"
-license = { text = "MIT OR Apache-2.0" }
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 authors = [{ name = "Dmitrij Rappoport", email = "dmitrij@rappoport.org" }]
+keywords = ["chemistry", "cheminformatics", "molecules", "reactions"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/dayhofflabs/umol"
+Documentation = "https://github.com/dayhofflabs/umol/blob/main/docs/umol-whitepaper.pdf"
+Issues = "https://github.com/dayhofflabs/umol/issues"
 
 [project.optional-dependencies]
 test = ["pytest"]

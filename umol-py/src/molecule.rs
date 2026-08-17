@@ -3,20 +3,21 @@
 
 use std::str::FromStr;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use umol_graph::fingerprint::PatternFingerprinter as GraphPatternFingerprinter;
 use umol_graph::ingest::ingest_smiles_with;
 use umol_graph::ops::model::{
     ChemistryModel as GraphChemistryModel, ValenceModel as GraphValenceModel,
 };
-use umol_graph::ops::resolve::ResolveConfig as GraphResolveConfig;
+use umol_graph::ops::resolve::{ResolveConfig as GraphResolveConfig, Resolver as GraphResolver};
 use umol_graph_ir::dsl::MoleculeDsl as GraphIrMoleculeDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, FromIr, IntoIr, Molecule as GraphIrMolecule,
     MoleculeEntries as GraphIrMoleculeEntries, React as GraphIrReact,
 };
 use umol_io::smiles::SmilesIoConfig as IoSmilesIoConfig;
+use umol_utils::solution::Solution as GraphSolution;
 
 use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
@@ -41,7 +42,7 @@ use crate::model::ChemistryModel;
 use crate::multicenter::{MulticenterBondForm, MulticenterBondViews};
 use crate::noncovalent::{NoncovalentBondForm, NoncovalentBondViews};
 use crate::reaction::{Reaction, ReactionApplicationConfig, ReactionProductsIter};
-use crate::resolve::ResolveConfig;
+use crate::resolve::{ResolveConfig, ResolveContradiction, ResolveReport, Solution};
 use crate::smiles::SmilesIoConfig;
 use crate::stereo::{
     StereoAtomForm, StereoAtomViews, StereoBondForm, StereoBondViews, StereoLigand,
@@ -50,8 +51,8 @@ use crate::substructure::SubstructureSearchConfig;
 use crate::transaction::MoleculeEditor;
 
 /// A molecule: the owned graph-IR root.
-#[pyclass(eq)]
-#[derive(Debug, PartialEq)]
+#[pyclass(eq, from_py_object)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Molecule(GraphIrMolecule);
 
 #[pymethods]
@@ -318,6 +319,43 @@ impl Molecule {
         ))
     }
 
+    /// Resolve under a chemistry model, returning the three-valued solution.
+    ///
+    /// The receiver is never modified; `Determined` carries the resolved copy
+    /// together with the tie-break record, `Underdetermined` the surviving
+    /// per-atom candidate lists, and `Contradictory` the model's rejection.
+    /// `chemistry_model` defaults to `ChemistryModel.default()` — presets are
+    /// reader conventions, and a constructed molecule has no format.
+    /// Resolution fills what is open; validating committed structure under a
+    /// chemistry model is a separate operation.
+    #[pyo3(signature = (*, chemistry_model=None, resolve_config=None))]
+    fn resolve(
+        &self,
+        chemistry_model: Option<ChemistryModel>,
+        resolve_config: Option<ResolveConfig>,
+    ) -> PyResult<Solution> {
+        let chemistry_model =
+            chemistry_model.map_or_else(GraphChemistryModel::default, |model| model.to_rust());
+        let resolve_config =
+            resolve_config.map_or_else(GraphResolveConfig::default, ResolveConfig::to_rust);
+        let mut molecule = self.0.clone();
+        let solution = GraphResolver::with_config(&chemistry_model, resolve_config)
+            .resolve(&mut molecule)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(match solution {
+            GraphSolution::Determined(report) => Solution::Determined {
+                molecule: Self(molecule),
+                report: ResolveReport::from_rust(&report),
+            },
+            GraphSolution::Underdetermined(report) => Solution::Underdetermined {
+                report: ResolveReport::from_rust(&report),
+            },
+            GraphSolution::Contradictory(contradiction) => Solution::Contradictory {
+                contradiction: ResolveContradiction::from_rust(contradiction),
+            },
+        })
+    }
+
     /// Apply `reaction` and lazily emit one connected product-component list per match.
     ///
     /// Matching is eager; product construction and splitting are lazy. The returned one-shot
@@ -522,7 +560,7 @@ impl Molecule {
         Ok(())
     }
 
-    fn __repr__(&self) -> String {
+    pub(crate) fn __repr__(&self) -> String {
         // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
         // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
@@ -566,6 +604,8 @@ impl Molecule {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use pyo3::types::{PyBytes, PyList};
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
@@ -574,6 +614,7 @@ mod tests {
         SubstructureFeaturizer as GraphSubstructureFeaturizer,
     };
     use umol_graph::ingest::ingest_smiles;
+    use umol_graph::ops::valence::ValenceTable as GraphValenceTable;
     use umol_graph_core::{
         Correspondence as GraphCoreCorrespondence,
         RelevantCycleEnumerationAlgorithm as GraphCoreRelevantCycleEnumerationAlgorithm,
@@ -1611,5 +1652,87 @@ mod tests {
     )]
     fn test_molecule_repr(#[case] molecule: Molecule, #[case] expected: &str) {
         assert_eq!(molecule.__repr__(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_resolve() {
+        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+        let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            valence: GraphValenceModel::smiles(),
+            ..GraphChemistryModel::default()
+        });
+
+        let solution = molecule.resolve(Some(model), None).unwrap();
+
+        let Solution::Determined {
+            molecule: resolved,
+            report,
+        } = solution
+        else {
+            panic!("expected Determined");
+        };
+        assert_eq!(
+            resolved,
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#i=#c0#h4#n0#u0#s"]}"#))
+        );
+        assert_eq!(report.tie_breaks(), vec![0]);
+        assert_eq!(
+            molecule,
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_resolve_underdetermined() {
+        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#));
+        let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            valence: GraphValenceModel::counts(Cow::Borrowed(GraphValenceTable::default_table())),
+            ..GraphChemistryModel::default()
+        });
+
+        let solution = molecule.resolve(Some(model), None).unwrap();
+
+        let Solution::Underdetermined { report } = solution else {
+            panic!("expected Underdetermined");
+        };
+        assert_eq!(report.unresolved().get(0).unwrap().len(), 5);
+        assert_eq!(
+            molecule,
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0"]}"#))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_resolve_contradiction() {
+        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#));
+        let model = ChemistryModel::from_rust(&GraphChemistryModel {
+            valence: GraphValenceModel::smiles(),
+            ..GraphChemistryModel::default()
+        });
+
+        let solution = molecule.resolve(Some(model), None).unwrap();
+
+        let Solution::Contradictory { contradiction } = solution else {
+            panic!("expected Contradictory");
+        };
+        assert_eq!(contradiction.__str__(), "no matching valence state");
+        assert_eq!(
+            molecule,
+            Molecule::from_rust(mol_dsl!(r#"{:atoms ["C#c0#h5"]}"#))
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_resolve_default_model() {
+        let molecule = Molecule::from_rust(mol_dsl!(r#"{:atoms ["C"]}"#));
+
+        let solution = molecule.resolve(None, None).unwrap();
+
+        let Solution::Underdetermined { report } = solution else {
+            panic!("expected Underdetermined under the default model");
+        };
+        // The charge-open atom takes the registry's charge-less lookup: every
+        // carbon row is a candidate.
+        assert_eq!(report.unresolved().get(0).unwrap().len(), 9);
     }
 }

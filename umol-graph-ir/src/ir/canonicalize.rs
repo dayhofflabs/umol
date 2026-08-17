@@ -97,6 +97,11 @@ pub enum CanonicalizeLevel {
 /// A level-specific transformation returns a complete aggregate, but features excluded from frame
 /// selection have no promised ordering. Therefore only its selected-layer equality, not the
 /// complete returned representation, is invariant under remapping.
+///
+/// For a fixed umol release, level, and context, canonicalization is deterministic. During the 0.x
+/// series, the typed comparison schema and resulting representatives may change between releases.
+/// Returned canonical forms are ordinary IR values without schema-version provenance and must not
+/// be used as persistent cross-release identifiers.
 pub trait Canonicalize: Sized {
     type Error;
 
@@ -5095,7 +5100,7 @@ impl Canonicalize for Molecule {
     }
 }
 
-/// Failure to construct a canonical [`Molecule`](super::Molecule).
+/// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
     /// The molecule does not satisfy its representation-integrity contract.
@@ -5313,7 +5318,7 @@ impl Canonicalize for ReactionSpan {
     }
 }
 
-/// Failure to construct a canonical [`Reaction`](super::Reaction).
+/// Failure to construct a canonical [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionCanonicalizeError {
     /// The reaction does not satisfy its representation-integrity contract.

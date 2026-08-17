@@ -18,20 +18,22 @@ documents may use the former `Active` status or otherwise be stale.
 `Blocked` is not a synonym for deferred, lower-priority, or awaiting selection.
 Do not use `In Progress` merely because a document is still relevant.
 
+Some early informational documents preserve exploratory conversations and
+speculative analysis. They are historical research inputs, not statements of
+current project behavior or policy; current code, tests, specifications, and
+the statuses recorded here remain authoritative.
+
 ## Current frontier
 
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [163 — Release preparation](163-release-preparation-2026-07-26.md) is the
-  upcoming workstream; implementation has not started.
+  active release workstream; registry credentials and release execution remain.
 
 ## Document index
 
 | Name                                                                                                             | Status        | Last Checked | Note                                                                                                       |
 | ---------------------------------------------------------------------------------------------------------------- | ------------- | ------------ | ---------------------------------------------------------------------------------------------------------- |
-| [001-design-chat-2025-02-14.md](001-design-chat-2025-02-14.md)                                                   | Informational | 2026-02-17   |                                                                                                            |
-| [002-design-summary-2025-02-16.md](002-design-summary-2025-02-16.md)                                             | Informational | 2026-02-17   |                                                                                                            |
-| [003-alternative-stacks-2025-03-01.md](003-alternative-stacks-2025-03-01.md)                                     | Informational | 2026-02-17   |                                                                                                            |
 | [004-implementation-start-2025-03-01.md](004-implementation-start-2025-03-01.md)                                 | Outdated      | 2026-02-17   |                                                                                                            |
 | [005-mutability-2025-03-01.md](005-mutability-2025-03-01.md)                                                     | Informational | 2026-02-17   |                                                                                                            |
 | [006-atom-bond-identity-iteration-2025-03-01.md](006-atom-bond-identity-iteration-2025-03-01.md)                 | Informational | 2026-02-17   |                                                                                                            |
@@ -191,7 +193,7 @@ Do not use `In Progress` merely because a document is still relevant.
 | [160-relevant-cycle-algs-2026-07-25.md](160-relevant-cycle-algs-2026-07-25.md)                                   | Proposed      | 2026-07-27   | Algorithm spikes and comparative evaluation have not started.                                              |
 | [161-property-tests-as-specs-2026-07-25.md](161-property-tests-as-specs-2026-07-25.md)                           | Informational | 2026-07-25   | Original snapshot; the living property-test guide has moved to `docs/development`.                         |
 | [162-common-subgraph-algs-2026-07-25.md](162-common-subgraph-algs-2026-07-25.md)                                 | Completed     | 2026-07-25   |                                                                                                            |
-| [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | Proposed      | 2026-07-27   | Upcoming release workstream; implementation has not started.                                               |
+| [163-release-preparation-2026-07-26.md](163-release-preparation-2026-07-26.md)                                   | In Progress   | 2026-08-16   | 0.6.0 collateral, metadata, CI, and resumable crates.io publication are prepared; registry credentials, CI runtime tuning, and release execution remain. |
 | [164-dsl-edn-worklist-2026-07-27.md](164-dsl-edn-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated DSL, EDN, specification, and parsing-infrastructure work.                                     |
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
 | [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | Proposed      | 2026-07-27   | Hydrogen transformations and remaining validator implementation.                                           |
@@ -210,11 +212,11 @@ Do not use `In Progress` merely because a document is still relevant.
 | [179-python-editing-and-transactions-2026-08-02.md](179-python-editing-and-transactions-2026-08-02.md)           | Completed     | 2026-08-03   |                                                                                                            |
 | [180-umol-facade-crate-2026-08-02.md](180-umol-facade-crate-2026-08-02.md)                                       | Proposed      | 2026-08-02   | Scope the top-level umol facade crate: re-exports, prelude, and the one feature flag.                      |
 | [181-python-boundary-ownership-2026-08-03.md](181-python-boundary-ownership-2026-08-03.md)                       | Proposed      | 2026-08-03   | Review Rust/Python ownership, copy costs, and reusable model data after doc 179.                           |
-| [182-python-resolution-2026-08-03.md](182-python-resolution-2026-08-03.md)                                       | Proposed      | 2026-08-03   | Expose resolution on MoleculeAst in umol-py; decide verdict-versus-exception.                              |
+| [182-python-resolution-2026-08-03.md](182-python-resolution-2026-08-03.md)                                       | Completed     | 2026-08-15   | Molecule.resolve returns the Solution value (Determined/Underdetermined/Contradictory); ResolveContradiction exposed; ingest keeps raising. |
 | [183-python-entity-update-parsing-2026-08-03.md](183-python-entity-update-parsing-2026-08-03.md)                 | Completed     | 2026-08-03   | Add direct Rust and Python parsing and rendering for all eight entity update types.                        |
 | [184-deltas-and-edits-2026-08-04.md](184-deltas-and-edits-2026-08-04.md)                                         | Informational | 2026-08-04   | Why Delta and Edit both exist: algebraic value versus imperative interface.                                |
 | [185-python-reaction-span-2026-08-04.md](185-python-reaction-span-2026-08-04.md)                                 | Completed     | 2026-08-07   |                                                                                                            |
-| [186-molecule-canonicalization-2026-08-05.md](186-molecule-canonicalization-2026-08-05.md)                       | Completed     | 2026-08-12   | Aggregate canonicalization for molecules, reaction spans, reactions, and Python.                           |
+| [186-molecule-canonicalization-2026-08-05.md](186-molecule-canonicalization-2026-08-05.md)                       | Completed     | 2026-08-16   | Aggregate canonicalization complete; dated correction limits stability guarantees during 0.x.             |
 | [187-assembly-disassembly-2026-08-05.md](187-assembly-disassembly-2026-08-05.md)                                 | Completed     | 2026-08-12   | Owned reaction application and multimolecular product convenience are complete.                            |
 | [188-inchi-migration-2026-08-09.md](188-inchi-migration-2026-08-09.md)                                           | Informational | 2026-08-09   | InChI 1.07 review: rewrite vs vendor-and-wrap cost, call overhead, canonicalization/tautomer cores, RInChI.|
 | [189-property-test-organization-2026-08-06.md](189-property-test-organization-2026-08-06.md)                     | Proposed      | 2026-08-06   | Reorganize property suites, strategies, references, and fixtures without changing their semantics.         |
@@ -225,3 +227,4 @@ Do not use `In Progress` merely because a document is still relevant.
 | [194-constraint-assertion-semantics-2026-08-10.md](194-constraint-assertion-semantics-2026-08-10.md)             | Completed     | 2026-08-15   | Constraint channel holds assertions only; views + discharge + candidate sets. S0–S6 complete (S2 dissolved); dash-less biaryls refuse per OpenSMILES; workspace fully green. |
 | [195-molecule-constraint-matching-2026-08-12.md](195-molecule-constraint-matching-2026-08-12.md)                 | Proposed      | 2026-08-12   | Evaluate molecule-level pattern constraints (entity leaves, relational, molecule, combinators) in matching. |
 | [196-aromatic-assignment-selection-2026-08-13.md](196-aromatic-assignment-selection-2026-08-13.md)               | Completed     | 2026-08-15   | Assignment-level aromatic selection A0–A6 done: overlap panic fixed; AromaticityTieBreak (MinElectronCount, presets adopt); pruned search + equivalence property; VEHICLe instrument 100 % determined, promoted and deleted. |
+| [197-deferred-dsl-features-2026-08-16.md](197-deferred-dsl-features-2026-08-16.md)                               | Proposed      | 2026-08-16   | Non-normative inventory of staged DSL and matching features removed from the specification.                 |

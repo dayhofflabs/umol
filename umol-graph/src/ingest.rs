@@ -292,8 +292,8 @@ mod tests {
         AromaticityContradiction, AromaticityError, AromaticityInconsistency,
     };
     use crate::ops::model::{
-        AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, RingLimits,
-        ValenceModel, ValenceTieBreak,
+        AromaticityModel, AromaticityRule, AromaticityTieBreak, ElementScope, ValenceModel,
+        ValenceTieBreak,
     };
     use crate::ops::resolve::{
         AromaticityFailurePolicy, AromaticityResolveConfig, DischargeContradiction,
@@ -677,7 +677,7 @@ mod tests {
     #[case::reactants_contradiction(
         "[nH]1cccc1>>",
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Reactants(
@@ -693,7 +693,7 @@ mod tests {
     #[case::products_contradiction(
         ">>[nH]1cccc1",
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ReactionInterpretationError::Products(
@@ -1237,7 +1237,7 @@ mod tests {
         "[nH]1cccc1",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),
@@ -1423,7 +1423,7 @@ mod tests {
         "[nH]1cccc1>>",
         SmilesIoConfig::opensmiles(),
         ChemistryModel {
-            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar { ring_limits: RingLimits::default() }, tie_break: AromaticityTieBreak::Strict },
+            aromaticity: AromaticityModel { scope: ElementScope::Any, rule: AromaticityRule::Clar, tie_break: AromaticityTieBreak::Strict },
             ..ChemistryModel::default()
         },
         ResolveConfig::default(),

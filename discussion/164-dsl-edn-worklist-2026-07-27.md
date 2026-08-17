@@ -1,11 +1,12 @@
 # DSL and EDN worklist
 
-Status: **Proposed**
+Status: Proposed
 Date: 2026-07-27
 Relates: [105](105-dsl-fixes-2026-06-06.md),
 [115](115-variable-facility-2026-06-16.md),
 [153](153-format-parsing-outstanding-tasks-2026-07-18.md),
-[169](169-dsl-metadata-context-2026-07-27.md)
+[169](169-dsl-metadata-context-2026-07-27.md),
+[197](197-deferred-dsl-features-2026-08-16.md)
 
 ## Scope
 
@@ -44,9 +45,9 @@ inventory.
 
 ### Specification conformance
 
-- Sweep the specification and examples for residual `ref` and `bind`
-  terminology. Variables use the `var` vocabulary; historic names must not
-  survive in prose, grammar productions, methods, or test names.
+- Keep variable syntax and semantics outside the normative specification until
+  doc 115 settles the facility. Doc 197 indexes this and the other deferred DSL
+  features without committing their current internal forms.
 - Update the normative-keyword declaration from RFC 2119 to RFC 8174 and verify
   that every `MUST` and `MUST NOT` expresses an implemented, testable rule.
 - Add or identify property tests for normative grammar laws. Table tests remain
@@ -59,7 +60,7 @@ inventory.
   parser or formatter for them.
 
 Variable scope and cross-object variable references are owned by doc 115 and
-are not redesigned here.
+indexed by doc 197; they are not redesigned here.
 
 ## Conversion and entry-point APIs
 
@@ -130,6 +131,6 @@ of one-use helper functions.
 - Every live DSL task has a settled owner and no task is duplicated with docs
   112, 115, or 153.
 - Public entry points use one consistent naming scheme.
-- Normative specification clauses are covered by a discoverable test or are
-  explicitly marked as design-only.
+- Normative specification clauses are covered by a discoverable test; proposed
+  or staged behavior is removed and indexed by doc 197.
 - Tree, streaming, and source-preserving parsing share one language semantics.

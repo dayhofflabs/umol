@@ -46,7 +46,7 @@ impl<'a> ValenceResolver<'a> {
 
     /// Admission: the candidate sets of every atom under resolution, with
     /// the incidence-constraint invariants checked first; no edits are
-    /// produced. The chemistry verdict rides `Solution`; the operational
+    /// produced. The chemistry solution rides `Solution`; the operational
     /// channel is currently uninhabited.
     pub fn admit(
         &self,

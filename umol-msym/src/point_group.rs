@@ -642,7 +642,7 @@ impl PointGroup {
         }
     }
 
-    /// Symmetric square [a²]: decompose the symmetric part of a ⊗ a.
+    /// Symmetric square \[a²\]: decompose the symmetric part of a ⊗ a.
     pub fn symmetric_square(&'static self, a: Irrep) -> Vec<(Irrep, u32)> {
         debug_assert!(ptr::eq(a.group, self));
         let Some(f) = &self.finite else {
