@@ -5,7 +5,7 @@
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
 //! system tuples `(Vec<AtomId>, AromaticSystemForm)` ready for `Molecule::edit`.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use umol_graph_core::UnionFind;
 use umol_graph_ir::ir::{
@@ -79,7 +79,7 @@ impl HueckelAromaticity {
             }
         }
 
-        let merged = merge_overlapping_systems(&aromatic_atom_sets);
+        let merged = merge_overlapping_systems(aromatic_atom_sets);
 
         let mut candidates = Vec::new();
         for atom_set in merged {
@@ -90,7 +90,7 @@ impl HueckelAromaticity {
             let mut valid = true;
             for &atom in &atoms {
                 if let Some(e) = electrons_at(atom) {
-                    electrons.push(e as i64);
+                    electrons.push(i64::from(e));
                 } else {
                     valid = false;
                     break;
@@ -235,35 +235,41 @@ where
     Some(total)
 }
 
-fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSet<AtomId>> {
-    if aromatic_systems.is_empty() {
-        return Vec::new();
+fn merge_overlapping_systems(aromatic_systems: Vec<HashSet<AtomId>>) -> Vec<HashSet<AtomId>> {
+    if aromatic_systems.len() < 2 {
+        return aromatic_systems;
     }
 
     let n = aromatic_systems.len();
-    let mut uf = UnionFind::new(n);
+    let mut components = UnionFind::new(n);
+    let atom_capacity = aromatic_systems
+        .iter()
+        .flat_map(|system| system.iter())
+        .map(|atom| atom.index() + 1)
+        .max()
+        .unwrap_or(0);
+    let mut owner = vec![None; atom_capacity];
 
-    for i in 0..n {
-        for j in (i + 1)..n {
-            if !aromatic_systems[i].is_disjoint(&aromatic_systems[j]) {
-                uf.union(i, j);
+    for (system_index, system) in aromatic_systems.iter().enumerate() {
+        for atom in system {
+            match owner[atom.index()] {
+                Some(previous) => components.union(system_index, previous),
+                None => owner[atom.index()] = Some(system_index),
             }
         }
     }
 
-    // TODO: Check if usize-typed indices are correct.
-    let mut groups: HashMap<usize, Vec<usize>> = HashMap::new();
-    for i in 0..n {
-        groups.entry(uf.find(i)).or_default().push(i);
-    }
-
-    let mut result = Vec::new();
-    for (_, indices) in groups {
-        let mut merged_atoms: HashSet<AtomId> = HashSet::new();
-        for &idx in &indices {
-            merged_atoms.extend(aromatic_systems[idx].iter());
+    let mut result: Vec<HashSet<AtomId>> = Vec::new();
+    let mut output_for_root: Vec<Option<usize>> = vec![None; n];
+    for (system_index, system) in aromatic_systems.into_iter().enumerate() {
+        let root = components.find(system_index);
+        match output_for_root[root] {
+            Some(output) => result[output].extend(system),
+            None => {
+                output_for_root[root] = Some(result.len());
+                result.push(system);
+            }
         }
-        result.push(merged_atoms);
     }
 
     result
@@ -690,5 +696,70 @@ mod tests {
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].0.len(), 6);
         assert_eq!(electron_total(&systems[0]), 6);
+    }
+
+    #[rstest]
+    #[case::empty(vec![], vec![])]
+    #[case::single(
+        vec![HashSet::from([AtomId(0), AtomId(1)])],
+        vec![vec![AtomId(0), AtomId(1)]]
+    )]
+    #[case::disjoint(
+        vec![
+            HashSet::from([AtomId(0), AtomId(1)]),
+            HashSet::from([AtomId(3), AtomId(4)]),
+        ],
+        vec![
+            vec![AtomId(0), AtomId(1)],
+            vec![AtomId(3), AtomId(4)],
+        ]
+    )]
+    #[case::overlapping(
+        vec![
+            HashSet::from([AtomId(0), AtomId(1)]),
+            HashSet::from([AtomId(1), AtomId(2)]),
+        ],
+        vec![vec![AtomId(0), AtomId(1), AtomId(2)]]
+    )]
+    #[case::transitive(
+        vec![
+            HashSet::from([AtomId(0), AtomId(1)]),
+            HashSet::from([AtomId(3), AtomId(4)]),
+            HashSet::from([AtomId(1), AtomId(3)]),
+        ],
+        vec![vec![
+            AtomId(0),
+            AtomId(1),
+            AtomId(3),
+            AtomId(4),
+        ]]
+    )]
+    #[case::two_components(
+        vec![
+            HashSet::from([AtomId(0), AtomId(1)]),
+            HashSet::from([AtomId(1), AtomId(2)]),
+            HashSet::from([AtomId(5), AtomId(6)]),
+            HashSet::from([AtomId(6), AtomId(7)]),
+        ],
+        vec![
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            vec![AtomId(5), AtomId(6), AtomId(7)],
+        ]
+    )]
+    fn test_merge_overlapping_systems(
+        #[case] aromatic_systems: Vec<HashSet<AtomId>>,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        let mut actual: Vec<Vec<AtomId>> = merge_overlapping_systems(aromatic_systems)
+            .into_iter()
+            .map(|system| {
+                let mut atoms: Vec<AtomId> = system.into_iter().collect();
+                atoms.sort_unstable();
+                atoms
+            })
+            .collect();
+        actual.sort_unstable();
+
+        assert_eq!(actual, expected);
     }
 }
