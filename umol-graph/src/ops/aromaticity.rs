@@ -191,12 +191,29 @@ impl AromaticityPerceiver {
         F: Fn(AtomId) -> Option<u8>,
     {
         let rings = self.candidate_rings(molecule, config);
+        self.find_systems_from_rings(molecule, &rings, config, electrons_at)
+    }
 
+    /// Find candidate aromatic systems from an existing candidate ring set.
+    #[allow(clippy::complexity)]
+    pub(crate) fn find_systems_from_rings<F>(
+        &self,
+        molecule: &Molecule,
+        rings: &RingSet,
+        config: AromaticityConfig,
+        electrons_at: F,
+    ) -> Result<
+        Solution<Vec<(Vec<AtomId>, AromaticSystemForm)>, AromaticityContradiction>,
+        AromaticityError,
+    >
+    where
+        F: Fn(AtomId) -> Option<u8>,
+    {
         let systems = match self {
-            Self::Hueckel(m) => m.find_from_rings(molecule, &rings, &electrons_at),
+            Self::Hueckel(m) => m.find_from_rings(molecule, rings, &electrons_at),
             Self::Hmo(m) => match m.find_from_rings(
                 molecule,
-                &rings,
+                rings,
                 config.connected_components_algorithm,
                 &electrons_at,
             ) {
@@ -215,7 +232,7 @@ impl AromaticityPerceiver {
             },
             Self::Clar(m) => match m.find_from_rings(
                 molecule,
-                &rings,
+                rings,
                 config.maximum_independent_set_algorithm,
                 &electrons_at,
             ) {
@@ -582,8 +599,10 @@ mod tests {
             tie_break: AromaticityTieBreak::Strict,
         });
         let electrons = |_: AtomId| Some(1);
+        let config = AromaticityConfig::default();
+        let rings = perception.candidate_rings(&molecule, config);
         let Solution::Determined(first) = perception
-            .find_systems(&molecule, AromaticityConfig::default(), electrons)
+            .find_systems_from_rings(&molecule, &rings, config, electrons)
             .unwrap()
         else {
             panic!("perception did not determine");
@@ -599,7 +618,7 @@ mod tests {
             }
         }
         let Solution::Determined(second) = perception
-            .find_systems(&molecule, AromaticityConfig::default(), electrons)
+            .find_systems(&molecule, config, electrons)
             .unwrap()
         else {
             panic!("perception did not determine");

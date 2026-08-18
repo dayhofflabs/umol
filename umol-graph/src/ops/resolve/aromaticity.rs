@@ -543,19 +543,20 @@ impl AromaticityResolver {
                         .zip(&path)
                         .map(|(&(atom, _), &index)| (atom, index))
                         .collect();
-                    let outcome =
-                        self.perception
-                            .find_systems(molecule, self.config.perception, |atom| match choice
-                                .get(&atom)
-                            {
-                                Some(&index) => contribution(
-                                    &completions.get(atom).expect("flexible atom")[index],
-                                ),
-                                None => match completions.get(atom) {
-                                    Some(disjuncts) => contribution(&disjuncts[0]),
-                                    None => stored_contribution(molecule, atom),
-                                },
-                            })?;
+                    let outcome = self.perception.find_systems_from_rings(
+                        molecule,
+                        &rings,
+                        self.config.perception,
+                        |atom| match choice.get(&atom) {
+                            Some(&index) => {
+                                contribution(&completions.get(atom).expect("flexible atom")[index])
+                            }
+                            None => match completions.get(atom) {
+                                Some(disjuncts) => contribution(&disjuncts[0]),
+                                None => stored_contribution(molecule, atom),
+                            },
+                        },
+                    )?;
                     let found = match outcome {
                         Solution::Determined(found) => found,
                         Solution::Underdetermined(_) => {
