@@ -13,6 +13,7 @@ use umol_graph_ir::ir::{
 };
 
 use crate::algorithm::AutomorphismAlgorithm;
+use crate::correspondence::MoleculeCorrespondence;
 use crate::error::{ContradictionError, InvalidStructureError};
 use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
@@ -173,6 +174,28 @@ impl Molecule {
             .map_err(molecule_canonicalization_error)
     }
 
+    /// Return the complete canonical form and its source-to-canonical correspondence.
+    ///
+    /// The correspondence is total across every entity family. Canonical representatives may
+    /// change between umol 0.x releases and are not persistent ids.
+    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    fn canonicalize_with_correspondence(
+        &self,
+        stereo_model: Option<StereoModel>,
+        config: Option<CanonicalizeConfig>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        self.to_rust()
+            .clone()
+            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
+            .map(|(canonical, correspondence)| {
+                (
+                    Self::from_rust(canonical),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
+            .map_err(molecule_canonicalization_error)
+    }
+
     /// Return this molecule in the canonical frame selected at `level`.
     ///
     /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
@@ -234,6 +257,28 @@ impl ReactionSpan {
             .clone()
             .canonicalize(&canonicalize_context(stereo_model, config))
             .map(Self::from_rust)
+            .map_err(reaction_span_canonicalization_error)
+    }
+
+    /// Return the complete canonical form and its source-to-canonical correspondence.
+    ///
+    /// The correspondence is total across every union-frame entity family. Canonical
+    /// representatives may change between umol 0.x releases and are not persistent ids.
+    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    fn canonicalize_with_correspondence(
+        &self,
+        stereo_model: Option<StereoModel>,
+        config: Option<CanonicalizeConfig>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        self.to_rust()
+            .clone()
+            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
+            .map(|(canonical, correspondence)| {
+                (
+                    Self::from_rust(canonical),
+                    MoleculeCorrespondence::from_rust(correspondence),
+                )
+            })
             .map_err(reaction_span_canonicalization_error)
     }
 
@@ -300,6 +345,27 @@ impl Reaction {
             .canonicalize(&canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Self::from_rust(py, canonical)
+    }
+
+    /// Return the complete canonical form and its source-to-canonical correspondence.
+    ///
+    /// The correspondence is total across every materialized union-frame entity family.
+    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
+    #[pyo3(signature = (*, stereo_model=None, config=None))]
+    fn canonicalize_with_correspondence(
+        &self,
+        py: Python<'_>,
+        stereo_model: Option<StereoModel>,
+        config: Option<CanonicalizeConfig>,
+    ) -> PyResult<(Self, MoleculeCorrespondence)> {
+        let (canonical, correspondence) = self
+            .to_rust(py)
+            .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
+            .map_err(reaction_canonicalization_error)?;
+        Ok((
+            Self::from_rust(py, canonical)?,
+            MoleculeCorrespondence::from_rust(correspondence),
+        ))
     }
 
     /// Return this reaction in the canonical frame selected at `level`.

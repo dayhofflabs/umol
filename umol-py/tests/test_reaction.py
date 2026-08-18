@@ -1094,6 +1094,20 @@ def test_reaction_canonicalize():
     assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
+def test_reaction_canonicalize_with_correspondence():
+    source = Reaction.parse(
+        '{:lhs {:atoms ["C#c0" "C#c0"]} '
+        ':deltas [{:atom {:modify [0 "#c1"]}}]}'
+    )
+
+    canonical, correspondence = source.canonicalize_with_correspondence()
+
+    assert canonical == source.canonicalize()
+    assert isinstance(correspondence, MoleculeCorrespondence)
+    assert correspondence.is_total()
+    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+
+
 def test_reaction_canonicalize_by():
     plain = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
     constrained = Reaction.parse('{:lhs {:atoms ["C#v4"]} :deltas []}')
@@ -1125,6 +1139,8 @@ def test_reaction_canonicalize_error():
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         reaction.canonicalize()
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        reaction.canonicalize_with_correspondence()
 
 
 def test_reaction_reverse():

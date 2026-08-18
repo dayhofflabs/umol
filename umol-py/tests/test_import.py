@@ -348,6 +348,10 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
+            umol.Molecule.canonicalize_with_correspondence,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
             umol.Molecule.canonicalize_by,
             "(self, /, level, *, stereo_model=None, config=None)",
         ),
@@ -385,6 +389,10 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
+            umol.Reaction.canonicalize_with_correspondence,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
             umol.Reaction.canonicalize_by,
             "(self, /, level, *, stereo_model=None, config=None)",
         ),
@@ -398,6 +406,10 @@ def test_deferred_member(owner, name):
         ),
         (
             umol.ReactionSpan.canonicalize,
+            "(self, /, *, stereo_model=None, config=None)",
+        ),
+        (
+            umol.ReactionSpan.canonicalize_with_correspondence,
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
