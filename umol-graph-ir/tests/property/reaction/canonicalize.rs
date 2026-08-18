@@ -9,7 +9,6 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
-use umol_graph_ir::ir::canonicalize::canonicalize_reaction_with_correspondence;
 use umol_graph_ir::ir::{
     AtomDelta, Canonicalize, CanonicalizeContext, CanonicalizeLevel, Contradiction, Delta, Deltas,
     Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
@@ -322,7 +321,9 @@ proptest! {
         let source_span = reaction
             .to_reaction_span()
             .expect("generated reaction materializes");
-        let (canonical, union) = canonicalize_reaction_with_correspondence(&reaction, &context)
+        let (canonical, union) = reaction
+            .clone()
+            .canonicalize_with_correspondence(&context)
             .map_err(|error| {
                 TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
             })?;

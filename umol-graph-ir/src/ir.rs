@@ -4,7 +4,7 @@ pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod bond;
 pub(crate) mod boolean;
-pub mod canonicalize;
+pub(crate) mod canonicalize;
 pub(crate) mod coloring;
 pub(crate) mod compose;
 pub(crate) mod constraint;

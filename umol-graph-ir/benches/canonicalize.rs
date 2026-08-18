@@ -7,11 +7,6 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
-use umol_graph_ir::ir::canonicalize::{
-    constitution_partition_descriptors, constraint_blocks, initial_class_keys,
-    partition_descriptors, rank_initial_classes, structure_partition, AutomorphismAdapter,
-    OrderedPartition,
-};
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
     Canonicalize, CanonicalizeContext, CanonicalizeLevel, Constraint, DativeBondForm, DativeBondId,
@@ -393,14 +388,6 @@ fn graph_size(nodes: usize, edges: usize) -> String {
     format!("n{nodes}_e{edges}")
 }
 
-fn incidence_level(level: CanonicalizeLevel) -> IncidenceLevel {
-    match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
-    }
-}
-
 fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
     fn reverse<Id>(count: usize) -> Correspondence<Id>
     where
@@ -442,142 +429,6 @@ fn bench_incidence_construction(c: &mut Criterion) {
         }
         group.finish();
     }
-}
-
-fn bench_initial_class_construction(c: &mut Criterion) {
-    let corpus = corpus();
-
-    for level in LEVELS {
-        let mut group = c.benchmark_group(format!(
-            "canonicalize/initial_class_construction/{}",
-            level_name(level)
-        ));
-        for case in &corpus {
-            let incidence = case.molecule.incidence_graph(level);
-            let size = graph_size(
-                incidence.graph().node_count(),
-                incidence.graph().edge_count(),
-            );
-            group.bench_function(BenchmarkId::new(case.name, size), |b| {
-                b.iter(|| {
-                    let (entity_keys, incidence_keys) =
-                        initial_class_keys(black_box(&case.molecule), black_box(&incidence))
-                            .expect("benchmark corpus normalizes");
-                    rank_initial_classes(&entity_keys, &incidence_keys)
-                })
-            });
-        }
-        group.finish();
-    }
-}
-
-fn bench_adapter_construction(c: &mut Criterion) {
-    let corpus = corpus();
-
-    for level in LEVELS {
-        let mut group = c.benchmark_group(format!(
-            "canonicalize/adapter_construction/{}",
-            level_name(level)
-        ));
-        for case in &corpus {
-            let incidence = case.molecule.incidence_graph(level);
-            let (entity_keys, incidence_keys) = initial_class_keys(&case.molecule, &incidence)
-                .expect("benchmark corpus normalizes");
-            let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-            let adapter = AutomorphismAdapter::new(&incidence, &classes);
-            let size = graph_size(adapter.graph().node_count(), adapter.graph().edge_count());
-            group.bench_function(BenchmarkId::new(case.name, size), |b| {
-                b.iter(|| AutomorphismAdapter::new(black_box(&incidence), black_box(&classes)))
-            });
-        }
-        group.finish();
-    }
-}
-
-fn bench_adapter_labeling(c: &mut Criterion) {
-    let corpus = corpus();
-
-    for level in LEVELS {
-        let mut group = c.benchmark_group(format!(
-            "canonicalize/adapter_labeling/{}",
-            level_name(level)
-        ));
-        for case in &corpus {
-            let incidence = case.molecule.incidence_graph(level);
-            let (entity_keys, incidence_keys) = initial_class_keys(&case.molecule, &incidence)
-                .expect("benchmark corpus normalizes");
-            let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-            let adapter = AutomorphismAdapter::new(&incidence, &classes);
-            let size = graph_size(adapter.graph().node_count(), adapter.graph().edge_count());
-            group.bench_function(BenchmarkId::new(case.name, size), |b| {
-                b.iter(|| black_box(adapter.automorphisms(ALGORITHM)))
-            });
-        }
-        group.finish();
-    }
-}
-
-fn bench_refinement(c: &mut Criterion) {
-    let corpus = corpus();
-
-    for (operation, level, para_stereo) in OPERATIONS {
-        let mut group = c.benchmark_group(format!("canonicalize/refinement/{operation}"));
-        for case in &corpus {
-            let incidence = case.molecule.incidence_graph(incidence_level(level));
-            let (entity_keys, incidence_keys) = initial_class_keys(&case.molecule, &incidence)
-                .expect("benchmark corpus normalizes");
-            let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-            let adapter = AutomorphismAdapter::new(&incidence, &classes);
-            let size = graph_size(adapter.graph().node_count(), adapter.graph().edge_count());
-            group.bench_function(BenchmarkId::new(case.name, size), |b| match level {
-                CanonicalizeLevel::Topology => {
-                    let descriptors =
-                        partition_descriptors(&adapter, &entity_keys, &incidence_keys);
-                    b.iter(|| {
-                        OrderedPartition::from_descriptors(black_box(&descriptors))
-                            .refine(black_box(adapter.graph()))
-                    })
-                }
-                CanonicalizeLevel::Constitution => {
-                    let descriptors =
-                        constitution_partition_descriptors(&adapter, &entity_keys, &incidence);
-                    b.iter(|| {
-                        OrderedPartition::from_descriptors(black_box(&descriptors))
-                            .refine(black_box(adapter.graph()))
-                    })
-                }
-                CanonicalizeLevel::Structure | CanonicalizeLevel::Full => b.iter(|| {
-                    structure_partition(
-                        black_box(&case.molecule),
-                        black_box(&incidence),
-                        black_box(&adapter),
-                        black_box(&entity_keys),
-                        para_stereo,
-                    )
-                    .expect("benchmark corpus refines")
-                }),
-            });
-        }
-        group.finish();
-    }
-}
-
-fn bench_constraint_key_construction(c: &mut Criterion) {
-    let corpus = corpus();
-    let mut group = c.benchmark_group("canonicalize/constraint_key_construction");
-
-    for case in &corpus {
-        let counts = molecule_counts(&case.molecule)
-            .into_iter()
-            .map(|count| count.to_string())
-            .collect::<Vec<_>>()
-            .join("_");
-        group.bench_function(BenchmarkId::new(case.name, counts), |b| {
-            b.iter(|| constraint_blocks(black_box(&case.molecule)))
-        });
-    }
-
-    group.finish();
 }
 
 fn bench_remapping(c: &mut Criterion) {
@@ -648,11 +499,6 @@ fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
 criterion_group!(
     canonicalize,
     bench_incidence_construction,
-    bench_initial_class_construction,
-    bench_adapter_construction,
-    bench_adapter_labeling,
-    bench_refinement,
-    bench_constraint_key_construction,
     bench_remapping,
     bench_canonicalize,
 );
