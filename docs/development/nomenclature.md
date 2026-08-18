@@ -266,7 +266,7 @@ higher layers follow the same suffix.
 ### Application
 
 **Application** realizes an operation against a concrete host. Edit application executes a complete
-edit plan transactionally and publishes the result only when every edit succeeds. Reaction
+edit plan and publishes the result only when every edit succeeds. Reaction
 application matches a reaction rule against a host and emits one `ReactionDerivation` per successful
 match.
 
