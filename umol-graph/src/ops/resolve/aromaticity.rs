@@ -303,7 +303,9 @@ impl AromaticityResolver {
     /// stored `#a` outside the carrier, or an undetermined perception yields
     /// `Underdetermined` with the carrier unchanged. A carrier atom whose
     /// every disjunct requires aromaticity but which no accepted or tied
-    /// system claims is `Contradictory`.
+    /// system claims is `Contradictory`. If the input molecule has no `#a`
+    /// constraint on any atom, localized bond, or dative bond, selection
+    /// returns the carrier unchanged without running perception.
     ///
     /// # Semantic properties
     ///
@@ -320,6 +322,26 @@ impl AromaticityResolver {
         state: ResolveState,
         tie_break: ValenceTieBreak,
     ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
+        let has_aromaticity_constraint = molecule
+            .atoms()
+            .iter()
+            .any(|atom| atom.attributes.constraints.aromatic_valence().is_some())
+            || molecule.bonds().iter().any(|bond| {
+                bond.attributes
+                    .constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, BondConstraintForm::Aromatic(_)))
+            })
+            || molecule.dative_bonds().iter().any(|bond| {
+                bond.attributes
+                    .constraints
+                    .iter()
+                    .any(|constraint| matches!(constraint, DativeBondConstraintForm::Aromatic(_)))
+            });
+        if !has_aromaticity_constraint {
+            return Ok(Solution::Determined(state));
+        }
+
         let ResolveState {
             mut completions,
             mut systems,
@@ -1438,7 +1460,7 @@ mod tests {
     #[rstest]
     #[case::unique_survivor(
         mol_dsl!(r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
+                     :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         AtomCompletions::from_iter([
             (AtomId(0), smallvec![
                 atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a"),
@@ -1465,7 +1487,7 @@ mod tests {
     )]
     #[case::quinoline(
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "N#c0" "C#c0"]
-                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+                     :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
                              [5 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]]}"#),
         AtomCompletions::from_iter([
             (AtomId(0), smallvec![atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a")]),
@@ -1503,7 +1525,7 @@ mod tests {
     )]
     #[case::tie_most_saturated(
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+                     :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         AtomCompletions::from_iter([
             (AtomId(0), smallvec![
                 atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
@@ -1545,7 +1567,27 @@ mod tests {
             )], tie_breaks: Vec::new() })
     )]
     #[case::unclaimed_aromatic_contradiction(
-        mol_dsl!(r#"{:atoms ["N#c0"] :bonds []}"#),
+        mol_dsl!(r#"{:atoms ["N#c0#a+"] :bonds []}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
+        ValenceTieBreak::Strict,
+        Solution::Contradictory(AromaticityContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
+        ))
+    )]
+    #[case::localized_bond_constraint(
+        mol_dsl!(r#"{:atoms ["N#c0" "C#c0"] :bonds [[0 1 "1#a+"]]}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
+        ValenceTieBreak::Strict,
+        Solution::Contradictory(AromaticityContradiction::Inconsistency(
+            AromaticityInconsistency::AromaticValenceFailure { atom: AtomId(0) }
+        ))
+    )]
+    #[case::dative_bond_constraint(
+        mol_dsl!(r#"{
+            :atoms ["N#c0" "C#c0"]
+            :bonds []
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#a+"}]
+        }"#),
         AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
         ValenceTieBreak::Strict,
         Solution::Contradictory(AromaticityContradiction::Inconsistency(
@@ -1579,9 +1621,14 @@ mod tests {
     }
 
     #[rstest]
+    #[case::absent_aromaticity_constraints(
+        mol_dsl!(r#"{:atoms ["N#c0"] :bonds []}"#),
+        AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
+        ValenceTieBreak::Strict
+    )]
     #[case::tie_strict(
         mol_dsl!(r#"{:atoms ["C#c0" "C#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                     :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
+                     :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         AtomCompletions::from_iter([
             (AtomId(0), smallvec![
                 atom_dsl!("C#i=#c0#h#n0#u0#s#v2#a0"),
@@ -1632,7 +1679,7 @@ mod tests {
         };
         let molecule = mol_dsl!(
             r#"{:atoms ["N#c0" "N#c0" "C#c0" "N#c0" "N#c0" "C#c0"]
-                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
+                :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#
         );
         assert_eq!(
             AromaticityResolver::new(&model).select(
@@ -1707,7 +1754,7 @@ mod tests {
         };
         let molecule = mol_dsl!(
             r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#
+                :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#
         );
         assert_eq!(
             AromaticityResolver::with_config(
@@ -1764,7 +1811,7 @@ mod tests {
         // distinct, so the members stay plural and the state passes through.
         let molecule = mol_dsl!(
             r#"{:atoms ["N#c0" "C#c0" "C#c0" "C#c0" "C#c0"]
-                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#
+                :bonds [[0 1 "1#a+"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#
         );
         let state = ResolveState {
             completions: AtomCompletions::from_iter([
