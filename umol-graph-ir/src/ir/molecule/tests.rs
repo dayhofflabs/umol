@@ -28,7 +28,7 @@ use super::super::constraint::{
 };
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::dative::DativeBondForm;
-use super::super::edit::{AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
+use super::super::edit::{AddBond, AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{
@@ -46,7 +46,8 @@ use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
 };
-use super::{Molecule, MoleculeEntries, MoleculeIntegrityError, TransactionError};
+use super::transact::TransactionError;
+use super::{Molecule, MoleculeApplyError, MoleculeEntries, MoleculeIntegrityError};
 use crate::{mol_dsl, mol_dsl_concrete};
 
 fn ground_atom() -> AtomForm {
@@ -2437,7 +2438,7 @@ fn test_molecule_apply(
 }
 
 #[rstest]
-#[case::stale_after_add(
+#[case::transaction(
     mol_dsl!(r#"{:atoms ["C"]}"#),
     Edits::from_iter([
         Edit::AddAtoms {
@@ -2451,12 +2452,24 @@ fn test_molecule_apply(
             },
         },
     ]),
-    TransactionError::OldStateMismatch,
+    MoleculeApplyError::Transaction(TransactionError::OldStateMismatch),
+)]
+#[case::integrity(
+    mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+    Edits::from_iter([Edit::AddBonds {
+        bonds: vec![AddBond {
+            endpoints: [AtomHandle::Id(AtomId(0)), AtomHandle::Id(AtomId(1))],
+            attributes: BondForm::from_order(1),
+        }],
+    }]),
+    MoleculeApplyError::Integrity(MoleculeIntegrityError::BondsParallel {
+        atoms: [AtomId(0), AtomId(1)],
+    }),
 )]
 fn test_molecule_apply_error(
     #[case] molecule: Molecule,
     #[case] edits: Edits,
-    #[case] expected: TransactionError,
+    #[case] expected: MoleculeApplyError,
 ) {
     let original = molecule.clone();
 

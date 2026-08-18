@@ -266,7 +266,8 @@ higher layers follow the same suffix.
 ### Application
 
 **Application** realizes an operation against a concrete host. Edit application executes a complete
-edit plan and publishes the result only when every edit succeeds. Reaction
+edit plan and publishes the result only when edit execution and the result's publication checks
+succeed. Reaction
 application matches a reaction rule against a host and emits one `ReactionDerivation` per successful
 match.
 
@@ -1536,7 +1537,8 @@ multi-stage operation can be reversed as a unit.
 `transact` borrows an editor mutably, restores it on application failure, and returns a journal on
 success. Editor `apply` consumes the editor and returns its modified state without producing a
 journal; on failure, the consumed partial state is dropped. Molecule `apply` additionally publishes
-the modified state as a checked `Molecule` while leaving its source unchanged.
+the modified state as a checked `Molecule` while leaving its source unchanged, and distinguishes
+transaction failure from failure of the molecule-integrity publication gate.
 
 **Not:** *application*, which executes a plan and publishes only on success; a transaction is the
 rollback mechanism for callers that retain an editor. Not *patch algebra*, which is the entity-level

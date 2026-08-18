@@ -750,7 +750,7 @@ mod tests {
         #[case] aromatic_systems: Vec<HashSet<AtomId>>,
         #[case] expected: Vec<Vec<AtomId>>,
     ) {
-        let mut actual: Vec<Vec<AtomId>> = merge_overlapping_systems(aromatic_systems)
+        let mut merged: Vec<Vec<AtomId>> = merge_overlapping_systems(aromatic_systems)
             .into_iter()
             .map(|system| {
                 let mut atoms: Vec<AtomId> = system.into_iter().collect();
@@ -758,8 +758,8 @@ mod tests {
                 atoms
             })
             .collect();
-        actual.sort_unstable();
+        merged.sort_unstable();
 
-        assert_eq!(actual, expected);
+        assert_eq!(merged, expected);
     }
 }

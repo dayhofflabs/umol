@@ -2,7 +2,9 @@
 
 Status: Completed
 Date: 2026-08-02
-Relates: [178](178-python-lattice-ops-2026-08-01.md), [043](043-mutative-undoable-mutation-2025-12-23.md)
+Relates: [178](178-python-lattice-ops-2026-08-01.md),
+[043](043-mutative-undoable-mutation-2025-12-23.md),
+[199](199-open-container-integrity-2026-08-18.md)
 
 Doc 178 exposed the lattice operations because a central part of the model was unreachable from the
 interface most users have. The same problem applies to molecule mutation: Python exposes reaction
@@ -724,3 +726,12 @@ the promised Python surface; and S6 closes the reader-facing requirement that mo
 
 - Naming is unaffected by doc [176](176-ast-naming-2026-07-31.md): these are new names on the Python
   surface, and if `*Ast` later becomes `*Def` the classes move but the methods do not.
+
+## 2026-08-18 addendum — immutable application failure
+
+The completed S5d surface originally mapped only edit-execution failure from
+`Molecule.apply`. Publicly constructed edits can execute successfully and then
+fail the checked molecule-integrity publication gate. Rust now reports these
+causes through `MoleculeApplyError`; Python retains `TransactionError` for edit
+execution and reports failed publication as `InvalidStructureError`. In both
+cases the source molecule remains unchanged.

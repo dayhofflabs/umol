@@ -28,7 +28,7 @@ use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, parse_error, smiles_input_error, transaction_error,
+    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
     InvalidStructureError,
 };
 use crate::fingerprint::config::{
@@ -268,11 +268,14 @@ impl Molecule {
     }
 
     /// Apply a checked edit batch without modifying this molecule.
+    ///
+    /// Raises `TransactionError` when the edits cannot be applied and `InvalidStructureError` when
+    /// the modified draft cannot be published as a molecule.
     fn apply(&self, py: Python<'_>, edits: Py<Edits>) -> PyResult<Self> {
         self.0
             .apply(edits.bind(py).borrow().to_rust().clone())
             .map(Self::from_rust)
-            .map_err(transaction_error)
+            .map_err(molecule_apply_error)
     }
 
     /// Combine this molecule and `other` by disjoint concatenation without modifying either input.
@@ -647,7 +650,9 @@ mod tests {
     use crate::atom::AtomForm as PyAtomForm;
     use crate::constraint::molecule::Constraints;
     use crate::convert::into_py_variant;
-    use crate::error::{MetadataError, ParseError, TransactionError, UnderdeterminedError};
+    use crate::error::{
+        InvalidStructureError, MetadataError, ParseError, TransactionError, UnderdeterminedError,
+    };
     use crate::fingerprint::config::{
         EcfpHashScheme, PatternFingerprintConfig, RefinementRounds, StructuralFingerprintConfig,
         WlHashScheme,
@@ -1047,6 +1052,31 @@ mod tests {
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
                 "atom handle 7 is out of range for 1 entries"
+            );
+            assert_eq!(molecule.to_rust(), &initial);
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_apply_publication_error() {
+        let initial = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        let molecule = Molecule::from_rust(initial.clone());
+        let mut rust_edits = GraphIrEdits::new();
+        rust_edits.add_bond(
+            GraphIrAtomHandle::Id(GraphIrAtomId(0)),
+            GraphIrAtomHandle::Id(GraphIrAtomId(1)),
+            GraphIrBondForm::from_order(1),
+        );
+
+        Python::attach(|py| {
+            let edits = Py::new(py, Edits::from_rust(rust_edits)).unwrap();
+
+            let error = molecule.apply(py, edits).unwrap_err();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "bond: parallel bonds on atoms [AtomId(0), AtomId(1)]"
             );
             assert_eq!(molecule.to_rust(), &initial);
         });

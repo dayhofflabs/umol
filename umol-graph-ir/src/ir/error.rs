@@ -5,6 +5,7 @@ use thiserror::Error;
 use super::entity::Entity;
 use super::id::AtomId;
 use super::molecule::transact::TransactionError;
+use super::molecule::MoleculeIntegrityError;
 use super::reaction::DpoContradiction;
 use super::substructure::SubstructureMatchError;
 
@@ -17,6 +18,17 @@ pub struct Contradiction;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[error("no join: elements have no least upper bound")]
 pub struct NoJoin;
+
+/// Error from applying an edit batch to an immutable molecule.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum MoleculeApplyError {
+    /// The edit batch could not be applied to the evolving draft.
+    #[error("edit application failed: {0}")]
+    Transaction(#[from] TransactionError),
+    /// The modified draft could not be published as a representation-integral molecule.
+    #[error("modified molecule failed integrity checking: {0}")]
+    Integrity(#[from] MoleculeIntegrityError),
+}
 
 /// Error from applying a reaction onto a host molecule (`Reaction::apply_at`).
 #[derive(Clone, Debug, PartialEq, Eq, Error)]

@@ -1,6 +1,6 @@
 # Relevant-cycle counting and enumeration alternatives
 
-Status: **Active**
+Status: Proposed
 Date: 2026-07-25
 Relates: [105](105-dsl-fixes-2026-06-06.md),
 [158](158-ring-model-and-enumeration-2026-07-22.md),
@@ -11,17 +11,22 @@ Relates: [105](105-dsl-fixes-2026-06-06.md),
 Doc 158 established the cycle-set semantics and implemented bounded
 Read--Tarjan simple-cycle enumeration, compact Vismara relevant-cycle analysis,
 Horton minimum cycle bases, and Kolodzik Unique Ring Families. This document
-tracks three follow-ups:
+tracks four follow-ups in two distinct algorithm families:
 
 1. expose the exact number of bounded relevant cycles without materializing
    them;
-2. evaluate the Hanser path-graph reduction with the May--Steinbeck
+2. evaluate the Berger--Gritzmann--de Vries minimum-basis replacement method
+   as a second relevant-cycle enumerator;
+3. evaluate the Hanser path-graph reduction with the May--Steinbeck
    implementation refinements as a second simple-cycle enumerator;
-3. evaluate the Birmelé et al. output-optimal enumerator as a more ambitious
+4. evaluate the Birmelé et al. output-optimal enumerator as a more ambitious
    alternative.
 
-The count operation is required work. The two enumerators are benchmark and
-design spikes. Neither becomes a public algorithm value merely because it has
+The Berger method is the direct alternative to Vismara for relevant cycles.
+Hanser--May and Birmelé enumerate all elementary cycles; they are alternatives
+to Read--Tarjan and do not directly replace relevant-cycle construction. The
+count operation is required work. The three enumerators are benchmark and
+design spikes. None becomes a public algorithm value merely because it has
 been prototyped.
 
 This work does not add another `RingSetKind`, change the definition of simple
@@ -126,6 +131,52 @@ The count implementation must establish:
 The last property should use compact path-family construction rather than
 attempting to enumerate the represented cycles.
 
+## Berger--Gritzmann--de Vries spike
+
+Berger, Gritzmann, and de Vries compute relevant cycles from one fixed minimum
+cycle basis. For each basis cycle they derive a kernel vector from the
+cycle-edge incidence matrix, construct an auxiliary graph, and enumerate
+equal-weight paths whose projections are exactly the cycles that can replace
+that basis member in another minimum basis. The union of those replacement
+sets is the set of relevant cycles.
+
+Their published bound is
+
+```text
+O(max(MCB(m, n), m^omega, m^2 n, m n^2 log n) + |R| m n^2)
+```
+
+where `R` is the explicitly enumerated relevant-cycle set. This is a genuine
+alternative to Vismara's prototype-family construction, but it has a different
+output model: Vismara retains a polynomial-size compact representation even
+when `R` is exponential, while the Berger method as published constructs `R`.
+The CDK work provides evidence that the minimum-basis replacement family can be
+practical on chemical graphs, but it does not establish an advantage over the
+current umol implementation.
+
+The spike must answer:
+
+1. Can the method preserve the current bounded visitor contract by excluding
+   over-bound basis weights before path enumeration and stopping path
+   generation on visitor break?
+2. Can it provide the exact bounded count without materializing every relevant
+   cycle, or must the existing Vismara analysis remain the counting
+   implementation?
+3. How do minimum-basis construction, kernel-vector computation,
+   auxiliary-graph construction, and path enumeration divide runtime and peak
+   memory on the measured molecular workload?
+4. Does it materially improve on Vismara for a repeatable graph region
+   characterized by component size, cyclomatic number, relevant-cycle count,
+   or relevant-cycle-family count?
+5. Can it preserve graph-core's loop, parallel-edge, source-edge-bound, and
+   deterministic-emission contracts through the established direct and
+   subdivision-fallback split?
+
+The first prototype remains private. A public selector is justified only if
+the two algorithms have meaningfully different measured performance regions or
+the Berger method is a clear general replacement without loss of Vismara's
+compact count and visitor properties.
+
 ## Hanser--May spike
 
 Hanser, Jauffret, and Kaufmann enumerate all elementary cycles by progressively
@@ -193,7 +244,7 @@ without a corresponding argument. Promotion also requires a multigraph path,
 most likely loop extraction followed by subdivision and projection, with bounds
 translated back into source-edge units.
 
-## Comparative evaluation
+## Simple-cycle comparative evaluation
 
 The two spikes must share one harness and compare against the completed
 Read--Tarjan implementation. Correctness and performance evidence are separate.
@@ -249,6 +300,31 @@ justified only when their performance regions are meaningfully different. The
 public enum variant names require approval after the spikes identify which
 algorithms, if any, deserve promotion.
 
+## Relevant-cycle comparative evaluation
+
+The Berger spike compares against `RelevantCycleAnalysis`, not against the
+simple-cycle enumerators. Correctness uses the existing relevant-cycle
+literature fixtures, generated small graphs, normalized external corpus, exact
+bounded counts, and visitor/collector parity. Every case must compare exact
+normalized edge-cycle sets at several source-edge bounds.
+
+Performance evaluation must include both the ChEBI aromaticity workload and
+parameterized graphs that separate input size from output size. Measure:
+
+- analysis construction time and visitation time separately;
+- time to first cycle and early termination after fixed output counts;
+- peak retained memory and allocation volume;
+- biconnected-component size and cyclomatic number;
+- relevant-cycle count, Vismara family count, and emitted edge count;
+- Berger minimum-basis, kernel, auxiliary-graph, and path-enumeration time.
+
+An experimental relevant-cycle implementation is eligible for the public
+selector only when it returns exactly the existing bounded relevant-cycle set,
+preserves visitor early termination and non-simple fallback semantics, and
+demonstrates a material repeatable advantage for an identified workload. If it
+cannot support compact exact counting, Vismara remains available for that
+operation even if visitation selects another algorithm.
+
 ## References
 
 - Hanser, Jauffret, and Kaufmann, [*A New Algorithm for Exhaustive Ring
@@ -257,5 +333,7 @@ algorithms, if any, deserve promotion.
   Kit*](https://doi.org/10.1186/1758-2946-6-3), 2014.
 - Vismara, [*Union of All the Minimum Cycle Bases of a
   Graph*](https://doi.org/10.37236/1294), 1997.
+- Berger, Gritzmann, and de Vries, [*Computing Cyclic Invariants for Molecular
+  Graphs*](https://doi.org/10.1002/net.21757), 2017.
 - Birmelé et al., [*Optimal Listing of Cycles and st-Paths in Undirected
   Graphs*](https://doi.org/10.1137/1.9781611973105.134), 2013.
