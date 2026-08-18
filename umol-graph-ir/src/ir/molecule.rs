@@ -1729,9 +1729,13 @@ impl Molecule {
 
     /// Apply a checked edit batch to an immutable molecule, returning the modified molecule while
     /// leaving `self` unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransactionError`] when an edit handle, precondition, or shape is invalid for the
+    /// evolving draft.
     pub fn apply(&self, edits: Edits) -> Result<Molecule, TransactionError> {
-        let mut editor = self.edit();
-        editor.transact(edits)?;
+        let editor = self.edit().apply(edits)?;
         Ok(editor.build())
     }
 

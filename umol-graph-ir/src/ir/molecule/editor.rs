@@ -676,9 +676,8 @@ impl MoleculeEditor {
 
     /// Append an atom directly to the editor.
     ///
-    /// This is a low-level, non-transactional construction primitive. Use
-    /// `transact` for checked atomic edits or `transact_unchecked` for trusted
-    /// generated edit batches.
+    /// This is a low-level, non-transactional construction primitive. Use `transact` for checked
+    /// atomic edits with rollback or `apply` for consuming application without an undo journal.
     pub fn add_atom(&mut self, atom: AtomForm) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);

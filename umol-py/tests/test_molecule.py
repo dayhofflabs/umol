@@ -403,6 +403,20 @@ def test_molecule_canonicalize():
     assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
+def test_molecule_canonicalize_with_correspondence():
+    source = Molecule.parse(
+        '{:atoms ["C#c+" "C"] :constraints '
+        '[{:charge-sum {:atoms [0 0] :sum 0}}]}'
+    )
+
+    canonical, correspondence = source.canonicalize_with_correspondence()
+
+    assert canonical == source.canonicalize()
+    assert isinstance(correspondence, MoleculeCorrespondence)
+    assert correspondence.is_total()
+    assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
+
+
 def test_molecule_canonicalize_by():
     plain = Molecule.parse('{:atoms ["C" "C"]}')
     constrained = Molecule.parse(
@@ -425,6 +439,8 @@ def test_molecule_canonicalize_error():
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         molecule.canonicalize()
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        molecule.canonicalize_with_correspondence()
 
 
 def test_molecule_canonicalize_integrity_error():
@@ -441,6 +457,8 @@ def test_molecule_canonicalize_integrity_error():
 
     with pytest.raises(InvalidStructureError, match="ligands"):
         molecule.canonicalize()
+    with pytest.raises(InvalidStructureError, match="ligands"):
+        molecule.canonicalize_with_correspondence()
 
 
 def test_molecule_from_smiles():

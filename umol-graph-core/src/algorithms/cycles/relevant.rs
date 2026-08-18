@@ -169,25 +169,28 @@ impl ShortestPathDag {
         }
     }
 
-    fn vismara(graph: &Graph, root: NodeId, component: &[NodeId], degrees: &[usize]) -> Self {
-        let mut allowed = vec![false; graph.node_bound()];
-        for &node in component {
-            allowed[node.index()] = true;
-        }
-        let distances = bfs_distances(graph, root, &allowed);
+    fn vismara(
+        graph: &Graph,
+        root: NodeId,
+        component: &[NodeId],
+        allowed: &[bool],
+        degrees: &[usize],
+    ) -> Self {
+        let (distances, visitation_order) = bfs_distances(graph, root, allowed);
 
         let root_key = (degrees[root.index()], root);
-        let mut preceding = allowed.clone();
-        for &node in component {
-            preceding[node.index()] = node == root || (degrees[node.index()], node) < root_key;
-        }
-        let ordered_distances = bfs_distances(graph, root, &preceding);
         let mut included = vec![false; graph.node_bound()];
-        for &node in component {
-            included[node.index()] =
-                node != root && ordered_distances[node.index()] == distances[node.index()];
-        }
         included[root.index()] = true;
+        for &node in visitation_order.iter().skip(1) {
+            if (degrees[node.index()], node) >= root_key {
+                continue;
+            }
+            let distance = distances[node.index()].expect("visited node has a distance");
+            included[node.index()] = graph.neighbors(node).iter().any(|neighbor| {
+                included[neighbor.node.index()]
+                    && distances[neighbor.node.index()].is_some_and(|other| other + 1 == distance)
+            });
+        }
 
         let mut predecessors = vec![Vec::new(); graph.node_bound()];
         for &node in component {
@@ -476,10 +479,12 @@ impl RelevantCycleAnalysis {
         let mut components =
             graph.enumerate_biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
         components.sort();
+        let mut allowed = vec![false; graph.node_bound()];
+        let mut degrees = vec![0; graph.node_bound()];
 
         for component in components {
-            let mut degrees = vec![0; graph.node_bound()];
             for &node in &component {
+                allowed[node.index()] = true;
                 degrees[node.index()] = graph
                     .neighbors(node)
                     .iter()
@@ -488,7 +493,7 @@ impl RelevantCycleAnalysis {
             }
 
             for &root in &component {
-                let dag = ShortestPathDag::vismara(graph, root, &component, &degrees);
+                let dag = ShortestPathDag::vismara(graph, root, &component, &allowed, &degrees);
                 let dag_index = dags.len();
 
                 for &middle in &component {
@@ -569,6 +574,11 @@ impl RelevantCycleAnalysis {
 
                 dags.push(dag);
             }
+
+            for &node in &component {
+                allowed[node.index()] = false;
+                degrees[node.index()] = 0;
+            }
         }
 
         candidates.sort_by(compare_families);
@@ -632,20 +642,27 @@ impl RelevantCycleAnalysis {
     }
 }
 
-fn bfs_distances(graph: &Graph, root: NodeId, allowed: &[bool]) -> Vec<Option<usize>> {
+fn bfs_distances(
+    graph: &Graph,
+    root: NodeId,
+    allowed: &[bool],
+) -> (Vec<Option<usize>>, Vec<NodeId>) {
     let mut distances = vec![None; graph.node_bound()];
-    let mut queue = VecDeque::from([root]);
+    let mut visitation_order = Vec::new();
+    visitation_order.push(root);
     distances[root.index()] = Some(0);
-    while let Some(current) = queue.pop_front() {
+    let mut cursor = 0;
+    while let Some(&current) = visitation_order.get(cursor) {
+        cursor += 1;
         let next_distance = distances[current.index()].expect("queued node has a distance") + 1;
         for neighbor in graph.neighbors(current) {
             if allowed[neighbor.node.index()] && distances[neighbor.node.index()].is_none() {
                 distances[neighbor.node.index()] = Some(next_distance);
-                queue.push_back(neighbor.node);
+                visitation_order.push(neighbor.node);
             }
         }
     }
-    distances
+    (distances, visitation_order)
 }
 
 fn compare_families(first: &RelevantCycleFamily, second: &RelevantCycleFamily) -> Ordering {

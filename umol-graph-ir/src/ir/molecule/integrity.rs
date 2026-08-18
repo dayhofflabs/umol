@@ -126,7 +126,7 @@ impl Molecule {
             let entity = Entity::Bond(view.id);
             let atoms = view.atom_ids();
             require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
-            check_unique_participants(entity, atoms)?;
+            check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
             if !bond_pairs.insert(pair) {
                 return Err(MoleculeIntegrityError::BondsParallel { atoms: pair });
@@ -188,7 +188,7 @@ impl Molecule {
             let entity = Entity::NoncovalentBond(view.id);
             let atoms = view.atom_ids();
             require_references(&contains, atoms.into_iter().map(Entity::Atom))?;
-            check_unique_participants(entity, atoms)?;
+            check_unique_pair(entity, atoms)?;
             let pair = unordered_pair(atoms);
             if !noncovalent_pairs.insert(pair) {
                 return Err(MoleculeIntegrityError::NoncovalentBondsParallel { atoms: pair });
@@ -258,6 +258,20 @@ fn unordered_pair([first, second]: [AtomId; 2]) -> [AtomId; 2] {
         [first, second]
     } else {
         [second, first]
+    }
+}
+
+fn check_unique_pair(
+    entity: Entity,
+    [first, second]: [AtomId; 2],
+) -> Result<(), MoleculeIntegrityError> {
+    if first == second {
+        Err(MoleculeIntegrityError::DuplicateParticipant {
+            entity,
+            atom: first,
+        })
+    } else {
+        Ok(())
     }
 }
 

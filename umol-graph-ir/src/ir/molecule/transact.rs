@@ -1,8 +1,11 @@
-//! Transactional `Edit` application on `MoleculeEditor`.
+//! `Edit` application on `MoleculeEditor`.
 //!
 //! `transact(edits)` applies each `Edit` in order, records realized `Undo`
 //! entries, and either returns a rollback-capable `Transaction` or reverse-
 //! replays the journal before surfacing a `TransactionError`.
+//! `apply(edits)` consumes the editor and returns its modified state without
+//! constructing an undo journal. A failed application drops the consumed
+//! editor, so partially applied state cannot escape.
 //!
 //! `Id(n)` handles retain the identity of entity `n` in the initial host, while
 //! `New(n)` handles retain the identity of the `n`th same-kind creation in the
@@ -382,7 +385,7 @@ impl MoleculeEditor {
         let mut journal: Vec<Undo> = Vec::with_capacity(edits.len());
         let mut state = ApplicationState::new(self);
         for edit in edits {
-            match self.apply_edit(edit, &mut state) {
+            match self.apply_edit_with_undo(edit, &mut state) {
                 Ok(undo) => journal.push(undo),
                 Err(apply) => {
                     if let Err(rollback) = rollback_journal(self, journal) {
@@ -398,16 +401,31 @@ impl MoleculeEditor {
         Ok(Transaction { undo: journal })
     }
 
-    pub fn transact_unchecked(&mut self, edits: Edits) {
-        let mut state = ApplicationState::new(self);
+    /// Apply an ordered [`Edits`] batch without constructing an undo journal.
+    ///
+    /// The editor is consumed so that a failed batch cannot expose partially applied state. On
+    /// success, the returned editor remains transient; [`MoleculeEditor::try_build`] or
+    /// [`MoleculeEditor::build`] performs the molecule-integrity publication gate.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransactionError`] when an edit handle, precondition, or shape is invalid for the
+    /// evolving editor state.
+    ///
+    /// # Semantic properties
+    ///
+    /// For every edit batch accepted by [`Self::transact`] from the same initial editor,
+    /// successfully building the returned editor produces the same molecule as building the
+    /// post-transaction editor. On failure, no intermediate editor state is returned.
+    pub fn apply(mut self, edits: Edits) -> Result<Self, TransactionError> {
+        let mut state = ApplicationState::new(&self);
         for edit in edits {
-            if let Err(e) = self.apply_edit_unchecked(edit, &mut state) {
-                panic!("invalid unchecked transaction edit: {e}");
-            }
+            self.apply_edit(edit, &mut state)?;
         }
+        Ok(self)
     }
 
-    fn apply_edit_unchecked(
+    fn apply_edit(
         &mut self,
         edit: Edit,
         state: &mut ApplicationState,
@@ -770,7 +788,7 @@ impl MoleculeEditor {
         }
     }
 
-    fn apply_edit(
+    fn apply_edit_with_undo(
         &mut self,
         edit: Edit,
         state: &mut ApplicationState,
@@ -5207,10 +5225,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_editor_transact_unchecked(mut empty: MoleculeEditor) {
+    fn test_molecule_editor_apply(empty: MoleculeEditor) {
         let mut edits = Edits::new();
         edits.add_atom(AtomForm::from_element(Element::C));
-        empty.transact_unchecked(edits);
+        let empty = empty.apply(edits).unwrap();
         assert_eq!(empty.atom_count(), 1);
         assert_eq!(
             empty.atom(AtomId(0)).attributes.element,
@@ -5219,10 +5237,20 @@ mod tests {
     }
 
     #[rstest]
-    #[should_panic(expected = "invalid unchecked transaction edit")]
-    fn test_molecule_editor_transact_unchecked_error(mut empty: MoleculeEditor) {
+    fn test_molecule_editor_apply_error(empty: MoleculeEditor) {
         let mut edits = Edits::new();
         edits.remove_atom(AtomHandle::Id(AtomId(0)));
-        empty.transact_unchecked(edits);
+        let error = match empty.apply(edits) {
+            Ok(_) => panic!("invalid edit unexpectedly applied"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error,
+            TransactionError::HandleOutOfRange {
+                kind: EntityKind::Atom,
+                index: 0,
+                count: 0,
+            }
+        );
     }
 }

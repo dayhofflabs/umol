@@ -12,6 +12,7 @@ from umol import (
     Entity,
     MetadataError,
     Molecule,
+    MoleculeCorrespondence,
     MoleculeDefaults,
     MoleculeMetadata,
     ParseError,
@@ -195,6 +196,22 @@ def test_reaction_span_canonicalize():
     assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
+def test_reaction_span_canonicalize_with_correspondence():
+    source = ReactionSpan.parse(
+        '{:atoms [{:add "O"} {:modify ["C" "N"]} {:remove "F"} "Cl"] '
+        ':bonds [{:remove [2 3 :single]} {:add [0 1 :double]} '
+        '{:modify [1 3 [:single :double]]}]}'
+    )
+
+    canonical, correspondence = source.canonicalize_with_correspondence()
+
+    assert canonical == source.canonicalize()
+    assert isinstance(correspondence, MoleculeCorrespondence)
+    assert correspondence.is_total()
+    assert correspondence.atoms.matched_pairs == [(0, 3), (1, 2), (2, 1), (3, 0)]
+    assert correspondence.bonds.matched_pairs == [(0, 0), (1, 2), (2, 1)]
+
+
 def test_reaction_span_canonicalize_by():
     plain = ReactionSpan.parse('{:atoms ["C"]}')
     constrained = ReactionSpan.parse('{:atoms ["C#v4"]}')
@@ -218,6 +235,8 @@ def test_reaction_span_canonicalize_error():
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
         span.canonicalize()
+    with pytest.raises(ContradictionError, match="^reached a contradiction$"):
+        span.canonicalize_with_correspondence()
 
 
 def test_reaction_to_reaction_span_error():

@@ -7,8 +7,8 @@
 //!
 //! Operational domain: `strategies::select_scenario` — one- and two-ring
 //! Hückel skeletons, all ring atoms in the carrier with literal
-//! contributions, no stored systems, both failure policies and both
-//! tie-breaks on each axis.
+//! contributions, no stored systems, one positive localized-bond aromaticity
+//! constraint, both failure policies and both tie-breaks on each axis.
 //!
 //! Validation method: comparison with the definition-level selection below,
 //! which enumerates assignments flat with no pruning. Perception

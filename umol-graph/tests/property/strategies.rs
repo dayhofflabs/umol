@@ -4,8 +4,9 @@
 //! two-ring skeletons (fused or coupled) under the Hückel rule, every ring
 //! atom carrying a carrier entry, at most three flexible atoms drawn from a
 //! fixed completion pool, all contributions literal, no stored systems and no
-//! atom-level assertions. Policies vary over both failure policies, both
-//! aromaticity tie-breaks, and both valence tie-breaks.
+//! atom-level assertions. One localized bond carries a positive aromaticity
+//! constraint to activate selection. Policies vary over both failure policies,
+//! both aromaticity tie-breaks, and both valence tie-breaks.
 
 use proptest::collection::vec;
 use proptest::prelude::*;
@@ -118,7 +119,11 @@ pub(crate) fn select_scenario() -> impl Strategy<Value = SelectScenario> {
                     let atoms = vec!["\"C#c0\""; atom_count].join(" ");
                     let bond_list = bonds
                         .iter()
-                        .map(|(from, to)| format!("[{from} {to} \"1\"]"))
+                        .enumerate()
+                        .map(|(index, (from, to))| {
+                            let attributes = if index == 0 { "1#a+" } else { "1" };
+                            format!("[{from} {to} \"{attributes}\"]")
+                        })
                         .collect::<Vec<_>>()
                         .join(" ");
                     let molecule: Molecule = format!("{{:atoms [{atoms}] :bonds [{bond_list}]}}")
