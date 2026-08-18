@@ -712,16 +712,18 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_editor_transact_unchecked((base, edits) in transaction_edits_strategy()) {
+    fn test_molecule_editor_apply((base, edits) in transaction_edits_strategy()) {
         let mut checked = base.edit();
         checked
             .transact(edits.clone())
             .map_err(|e| TestCaseError::fail(format!("checked transact failed: {e}")))?;
 
-        let mut unchecked = base.edit();
-        unchecked.transact_unchecked(edits);
+        let applied = base
+            .edit()
+            .apply(edits)
+            .map_err(|e| TestCaseError::fail(format!("apply failed: {e}")))?;
 
-        prop_assert_eq!(unchecked.build(), checked.build());
+        prop_assert_eq!(applied.build(), checked.build());
     }
 
     /// A valid journal applied to an independently generated valid post-transaction state may

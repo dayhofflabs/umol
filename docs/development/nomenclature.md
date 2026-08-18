@@ -622,17 +622,18 @@ dative bond from a multicenter bond over the same atoms.
 ### Edit and undo
 
 An **`Edit`** is caller-facing mutation data: the symbolic vocabulary handed to
-`MoleculeEditor::transact`. An **`Undo`** is realized rollback data produced by the checked
-transaction path. The two are not two views of one thing — an edit says what was asked for, an undo
-says what actually has to be reversed.
+`MoleculeEditor::apply` or `MoleculeEditor::transact`. An **`Undo`** is realized rollback data
+produced by the transaction path. The two are not two views of one thing — an edit says what was
+asked for, an undo says what actually has to be reversed.
 
 The symbolic references (`AtomHandle`, `BondHandle`, …) appear only inside `Edit`. `Id(_)` names an
 existing entity, `New(n)` names the entity created by the nth edit earlier in the same batch, which
 is why a handle is meaningless outside its batch.
 
 **Not:** *delta*, which is the reaction-side change encoding, nor `*Update`, which is a field-level
-change to one entity. Edits are molecule-level and transactional.
-**In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::transact`.
+change to one entity. Edits are molecule-level application data; only `transact` realizes undos.
+**In code:** `Edit`, `Undo`, `UndoCompaction`, `MoleculeEditor::apply`,
+`MoleculeEditor::transact`.
 
 ### Electron counts
 
@@ -1226,8 +1227,8 @@ The law is `apply(lhs, diff(lhs, rhs)) == rhs`. The entity update API states the
 `update`/`difference_to` on the entity update surface. Pick one pair before either grows further; a
 reader who learns the law under one name will not find it under the other.
 
-**Not:** transaction application, which executes a whole edit plan and publishes only on success. A
-patch is an entity-level morphism; a transaction is a molecule-level lifecycle.
+**Not:** edit application, which executes a whole edit plan and publishes only on success. A patch
+is an entity-level morphism; a transaction is a rollback-capable molecule-level lifecycle.
 **In code:** `EntityPatch::apply`, `EntityPatch::diff`, `update`, `difference_to`.
 
 ### Perception
@@ -1409,8 +1410,9 @@ expresses removal by leaving removed source ids without images.
 
 ### Resolution
 
-**Resolution** applies configured recovery policy, constructs one atomic edit plan, and may apply
-that plan transactionally.
+**Resolution** applies configured recovery policy, constructs edit plans against private drafts,
+and publishes the result only when it is determined. An underdetermined, contradictory, or failed
+resolution leaves its source unchanged.
 
 **Not:** transformation (which rewrites determined representation), validation (which does not
 mutate), perception (which is policy-free).
@@ -1531,13 +1533,16 @@ A **transaction** is the journal of realized undos for one batch of edits. `tran
 and returns it; `rollback` consumes it to restore the prior state; `append` concatenates two so a
 multi-stage operation can be reversed as a unit.
 
-`transact` is the checked path. `transact_unchecked` applies without producing a journal and cannot
-be rolled back.
+`transact` borrows an editor mutably, restores it on application failure, and returns a journal on
+success. Editor `apply` consumes the editor and returns its modified state without producing a
+journal; on failure, the consumed partial state is dropped. Molecule `apply` additionally publishes
+the modified state as a checked `Molecule` while leaving its source unchanged.
 
 **Not:** *application*, which executes a plan and publishes only on success; a transaction is the
-mechanism application uses. Not *patch algebra*, which is the entity-level `apply`/`diff` pair.
-**In code:** `Transaction`, `transact`, `transact_unchecked`, `rollback`, `append`,
-`TransactionError`.
+rollback mechanism for callers that retain an editor. Not *patch algebra*, which is the entity-level
+`apply`/`diff` pair.
+**In code:** `Transaction`, `transact`, `rollback`, `append`, `TransactionError`;
+`MoleculeEditor::apply`, `Molecule::apply`.
 
 ### Transformation
 

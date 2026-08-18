@@ -9,7 +9,8 @@ use smallvec::smallvec;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, Edits, ElectronCountsForm, Molecule, NumForm, RingSet,
+    BondUpdate, BooleanForm, DativeBondConstraintForm, Edits, ElectronCountsForm, Molecule,
+    NumForm, RingSet,
 };
 use umol_utils::solution::Solution;
 
