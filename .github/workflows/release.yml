@@ -67,8 +67,8 @@ jobs:
       name: crates-io
     permissions:
       contents: read
+      id-token: write
     env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v6
@@ -99,13 +99,18 @@ jobs:
           fi
       - name: Package and verify workspace crates
         run: cargo package --locked --workspace
+      - name: Authenticate with crates.io
+        id: crates_io_auth
+        uses: rust-lang/crates-io-auth-action@v1
       - name: Publish workspace crates in dependency order
         shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_io_auth.outputs.token }}
         run: |
           set -euo pipefail
 
           if [[ -z "${CARGO_REGISTRY_TOKEN:-}" ]]; then
-            echo "::error::The crates-io environment has no CARGO_REGISTRY_TOKEN secret."
+            echo "::error::Trusted publishing did not return a crates.io token."
             exit 1
           fi
 
