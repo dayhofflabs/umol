@@ -67,8 +67,8 @@ jobs:
       name: crates-io
     permissions:
       contents: read
+      id-token: write
     env:
-      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v6
@@ -77,13 +77,40 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - name: Publish workspace crates in dependency order
+      - name: Reject package self-dependencies
         shell: bash
         run: |
           set -euo pipefail
 
+          self_dependencies="$(
+            cargo metadata --locked --no-deps --format-version 1 |
+              jq --raw-output '
+                .packages[] as $package
+                | $package.dependencies[]
+                | select(.name == $package.name)
+                | "\($package.name): \(.kind // "normal") dependency via \(.rename // .name)"
+              '
+          )"
+
+          if [[ -n "$self_dependencies" ]]; then
+            echo "::error::Package self-dependencies are not publishable:"
+            echo "$self_dependencies"
+            exit 1
+          fi
+      - name: Package and verify workspace crates
+        run: cargo package --locked --workspace
+      - name: Authenticate with crates.io
+        id: crates_io_auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish workspace crates in dependency order
+        shell: bash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates_io_auth.outputs.token }}
+        run: |
+          set -euo pipefail
+
           if [[ -z "${CARGO_REGISTRY_TOKEN:-}" ]]; then
-            echo "::error::The crates-io environment has no CARGO_REGISTRY_TOKEN secret."
+            echo "::error::Trusted publishing did not return a crates.io token."
             exit 1
           fi
 
@@ -124,7 +151,7 @@ jobs:
             esac
 
             for attempt in {1..8}; do
-              if cargo publish --locked --package "$crate"; then
+              if cargo publish --locked --no-verify --package "$crate"; then
                 return
               fi
 
