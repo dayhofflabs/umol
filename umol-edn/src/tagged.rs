@@ -120,9 +120,11 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for EdnTagged<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::read_string;
     #[cfg(feature = "serde")]
     use crate::serde::{from_str, from_str_with, to_string};
-    use crate::{read_string, ParseConfig};
+    #[cfg(feature = "serde")]
+    use crate::ParseConfig;
 
     /// Unknown-tag config needed for `EdnTagged<T>` with caller-chosen tag
     /// names that have no registered reader.
