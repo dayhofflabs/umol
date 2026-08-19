@@ -2,6 +2,11 @@
 
 ## Status and scope
 
+The aggregate-container integrity, finalization, and `Molecule::apply` questions
+are now scoped separately in [doc 199](199-open-container-integrity-2026-08-18.md).
+This document retains transaction acceptance, validator composition,
+transformer atomicity, and resolver lifecycle.
+
 This discussion was prompted by kekulization, but the issue is broader than one transformer. A
 mutation may be locally well-formed as a sequence of edits while its completed result violates a
 structural, physical, or model-dependent invariant. Conversely, a resolver deliberately starts from

@@ -9,8 +9,7 @@ use smallvec::smallvec;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemHandle, AromaticSystemId, AromaticValenceForm, AsLit,
     AtomConstraintForm, AtomForm, AtomHandle, AtomId, AtomUpdate, BondConstraintForm, BondHandle,
-    BondUpdate, BooleanForm, DativeBondConstraintForm, Edits, ElectronCountsForm, Molecule,
-    NumForm, RingSet,
+    BondUpdate, BooleanForm, Edits, ElectronCountsForm, Molecule, NumForm, RingSet,
 };
 use umol_utils::solution::Solution;
 
@@ -303,9 +302,10 @@ impl AromaticityResolver {
     /// stored `#a` outside the carrier, or an undetermined perception yields
     /// `Underdetermined` with the carrier unchanged. A carrier atom whose
     /// every disjunct requires aromaticity but which no accepted or tied
-    /// system claims is `Contradictory`. If the input molecule has no `#a`
-    /// constraint on any atom, localized bond, or dative bond, selection
-    /// returns the carrier unchanged without running perception.
+    /// system claims is `Contradictory`. Selection returns the carrier unchanged without running
+    /// perception when the molecule has no positive aromatic atom or bond assertion and no stored
+    /// aromatic system. Vacuous and explicitly non-aromatic assertions do not require aromaticity
+    /// selection.
     ///
     /// # Semantic properties
     ///
@@ -322,23 +322,26 @@ impl AromaticityResolver {
         state: ResolveState,
         tie_break: ValenceTieBreak,
     ) -> Result<Solution<ResolveState, AromaticityContradiction>, AromaticityError> {
-        let has_aromaticity_constraint = molecule
-            .atoms()
-            .iter()
-            .any(|atom| atom.attributes.constraints.aromatic_valence().is_some())
+        let requires_aromaticity = molecule.aromatic_systems().count() != 0
+            || molecule.atoms().iter().any(|atom| {
+                matches!(
+                    atom.attributes.constraints.aromatic_valence(),
+                    Some(AromaticValenceForm::Aromatic(_))
+                )
+            })
             || molecule.bonds().iter().any(|bond| {
-                bond.attributes
-                    .constraints
-                    .iter()
-                    .any(|constraint| matches!(constraint, BondConstraintForm::Aromatic(_)))
+                matches!(
+                    bond.attributes.constraints.aromatic(),
+                    BooleanForm::Lit(true)
+                )
             })
             || molecule.dative_bonds().iter().any(|bond| {
-                bond.attributes
-                    .constraints
-                    .iter()
-                    .any(|constraint| matches!(constraint, DativeBondConstraintForm::Aromatic(_)))
+                matches!(
+                    bond.attributes.constraints.aromatic(),
+                    BooleanForm::Lit(true)
+                )
             });
-        if !has_aromaticity_constraint {
+        if !requires_aromaticity {
             return Ok(Solution::Determined(state));
         }
 
@@ -1566,6 +1569,25 @@ mod tests {
                     .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
             )], tie_breaks: Vec::new() })
     )]
+    #[case::stored_system_without_assertion(
+        mol_dsl!(r#"{
+            :atoms ["C" "C" "C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :attrs "[1,1,1,1,1,1]"}]
+        }"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict,
+        Solution::Determined(ResolveState {
+            completions: AtomCompletions::new(),
+            systems: vec![(
+                (0..6).map(AtomId).collect(),
+                AromaticSystemForm::from_electrons(vec![1; 6])
+                    .with_charge(0)
+                    .with_unpaired_electrons(UnpairedElectronsForm::closed_shell()),
+            )],
+            tie_breaks: Vec::new(),
+        })
+    )]
     #[case::unclaimed_aromatic_contradiction(
         mol_dsl!(r#"{:atoms ["N#c0#a+"] :bonds []}"#),
         AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
@@ -1624,6 +1646,24 @@ mod tests {
     #[case::absent_aromaticity_constraints(
         mol_dsl!(r#"{:atoms ["N#c0"] :bonds []}"#),
         AtomCompletions::from_iter([(AtomId(0), smallvec![atom_dsl!("N#i=#c0#h0#n#u0#s#v2#a")])]),
+        ValenceTieBreak::Strict
+    )]
+    #[case::vacuous_aromaticity_constraints(
+        mol_dsl!(r#"{
+            :atoms ["N#c0#a*" "C#a*"]
+            :bonds [[0 1 "1#a*"]]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#a*"}]
+        }"#),
+        AtomCompletions::new(),
+        ValenceTieBreak::Strict
+    )]
+    #[case::negative_aromaticity_constraints(
+        mol_dsl!(r#"{
+            :atoms ["N#c0#a!" "C#a!"]
+            :bonds [[0 1 "1#a!"]]
+            :dative-bonds [{:donors [0] :acceptor 1 :attrs "1#a!"}]
+        }"#),
+        AtomCompletions::new(),
         ValenceTieBreak::Strict
     )]
     #[case::tie_strict(

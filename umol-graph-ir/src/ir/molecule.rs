@@ -16,7 +16,6 @@ use umol_graph_core::{
 };
 use umol_perm::Permutation;
 
-use self::transact::TransactionError;
 use super::aromatic::AromaticSystemForm;
 use super::atom::AtomForm;
 use super::bond::BondForm;
@@ -25,7 +24,7 @@ use super::correspondence::MoleculeCorrespondence;
 use super::dative::DativeBondForm;
 use super::edit::{AtomHandle, BondHandle, Edits};
 use super::entity::Entity;
-use super::error::Contradiction;
+use super::error::{Contradiction, MoleculeApplyError};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -1732,11 +1731,17 @@ impl Molecule {
     ///
     /// # Errors
     ///
-    /// Returns [`TransactionError`] when an edit handle, precondition, or shape is invalid for the
-    /// evolving draft.
-    pub fn apply(&self, edits: Edits) -> Result<Molecule, TransactionError> {
+    /// Returns [`MoleculeApplyError::Transaction`] when an edit handle, precondition, or shape is
+    /// invalid for the evolving draft. Returns [`MoleculeApplyError::Integrity`] when the modified
+    /// draft cannot be published as a representation-integral molecule.
+    ///
+    /// # Semantic properties
+    ///
+    /// On success, the returned molecule passes [`Molecule::check_integrity`]. On either failure,
+    /// `self` remains unchanged and no partially modified molecule is returned.
+    pub fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError> {
         let editor = self.edit().apply(edits)?;
-        Ok(editor.build())
+        Ok(editor.try_build()?)
     }
 
     /// Combine molecules by disjoint concatenation. Input order determines each entity family's

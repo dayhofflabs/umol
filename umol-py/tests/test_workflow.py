@@ -18,6 +18,7 @@ from umol import (
     Edit,
     Edits,
     HashedFingerprintConfig,
+    InvalidStructureError,
     MaximumIndependentSetAlgorithm,
     Molecule,
     ParseError,
@@ -181,7 +182,17 @@ def test_molecule_editing_workflow():
     ):
         molecule.apply(failing)
 
+    conflicting = Edits()
+    conflicting.add_bond(0, 1, BondForm(1))
+
+    with pytest.raises(
+        InvalidStructureError,
+        match=r"^bond: parallel bonds on atoms \[AtomId\(0\), AtomId\(1\)\]$",
+    ):
+        expected.apply(conflicting)
+
     assert molecule == original
+    assert expected == applied
 
 
 def test_fingerprint_workflow():

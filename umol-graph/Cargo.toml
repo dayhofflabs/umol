@@ -16,6 +16,7 @@ keywords = [
 ]
 description = "Graph-based molecular models for umol."
 autotests = false
+exclude = ["/tests"]
 
 [lib]
 bench = false
