@@ -9,6 +9,7 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["algorithms", "graph", "isomorphism", "canonicalization"]
 description = "Graph data structures and algorithms for umol."
+exclude = ["/tests"]
 
 [lib]
 bench = false

@@ -10,6 +10,7 @@ readme.workspace = true
 keywords = ["chemistry", "cheminformatics", "file-formats", "smiles", "molfile"]
 description = "Molecular file-format parsers (SMILES, CTFile) and the TableIR boundary type for umol."
 autotests = false
+exclude = ["/tests"]
 
 [lib]
 bench = false
