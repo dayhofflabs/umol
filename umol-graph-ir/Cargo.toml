@@ -65,6 +65,9 @@ name = "frag_macro"
 [[test]]
 name = "canonicalization"
 
+[[test]]
+name = "reaction_span"
+
 [[bench]]
 name = "parsing"
 harness = false
