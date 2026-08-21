@@ -50,6 +50,9 @@ serde = { version = "1.0.221", features = ["derive"] }
 name = "mol_parsing"
 
 [[test]]
+name = "layout"
+
+[[test]]
 name = "sdf_parsing"
 
 [[test]]

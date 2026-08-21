@@ -2,6 +2,7 @@
 //! and the TableIR boundary type.
 
 pub mod ctfile;
+pub mod layout;
 pub mod smiles;
 pub mod table_ir;
 mod utils;
