@@ -1,5 +1,7 @@
 //! Format-neutral drawing items for molecular and reaction depictions.
 
+pub mod molecule;
+
 use umol_graph_ir::ir::Entity;
 
 use crate::layout::Point2D;
@@ -16,7 +18,6 @@ pub struct Depiction {
 }
 
 impl Depiction {
-    #[allow(dead_code)]
     fn from_items(items: Vec<DepictionItem>) -> Self {
         let bounds = Bounds::from_items(&items);
         Self { items, bounds }
