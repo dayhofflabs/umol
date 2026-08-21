@@ -1,0 +1,29 @@
+[package]
+name = "umol-coordgen-sys"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Vendored native foundation for umol's CoordGen integration."
+license = "(MIT OR Apache-2.0) AND BSD-3-Clause"
+repository.workspace = true
+readme.workspace = true
+keywords = ["chemistry", "coordinates", "depiction", "coordgen", "ffi"]
+links = "umol_coordgen"
+
+[features]
+native = []
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+rstest = "0.26.1"
+
+[[test]]
+name = "abi"
+required-features = ["native"]
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

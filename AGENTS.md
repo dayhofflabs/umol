@@ -21,6 +21,7 @@ models. Do not treat a format boundary type as the one true molecular model.
 
 | Crate | Responsibility |
 | --- | --- |
+| `umol-coordgen-sys` | Feature-gated vendored CoordGen source and native 2D-coordinate boundary |
 | `umol-graph-ir`, `umol-graph-ir-macros` | Molecular and reaction DSLs, graph IR, constraints, edits, deltas, and validation vocabulary |
 | `umol-chem` | Elements, isotopes, spin, occupation, units, and other chemistry vocabulary |
 | `umol-edn`, `umol-edn-macros` | EDN parsing, formatting, and macros |
