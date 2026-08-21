@@ -1279,39 +1279,45 @@ impl ReactionSpan {
         &self.bonds
     }
 
-    pub(crate) fn dative_bonds(
+    /// Dative-bond entities in union-frame id order.
+    pub fn dative_bonds(
         &self,
     ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>
     {
         &self.dative_bonds
     }
 
-    pub(crate) fn aromatic_systems(
+    /// Aromatic-system entities in union-frame id order.
+    pub fn aromatic_systems(
         &self,
     ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>> {
         &self.aromatic_systems
     }
 
-    pub(crate) fn multicenter_bonds(
+    /// Multicenter-bond entities in union-frame id order.
+    pub fn multicenter_bonds(
         &self,
     ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>> {
         &self.multicenter_bonds
     }
 
-    pub(crate) fn noncovalent_bonds(
+    /// Noncovalent-bond entities in union-frame id order.
+    pub fn noncovalent_bonds(
         &self,
     ) -> &FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2> {
         &self.noncovalent_bonds
     }
 
-    pub(crate) fn stereo_atoms(
+    /// Stereo-atom entities in union-frame id order.
+    pub fn stereo_atoms(
         &self,
     ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomForm>>
     {
         &self.stereo_atoms
     }
 
-    pub(crate) fn stereo_bonds(
+    /// Stereo-bond entities in union-frame id order.
+    pub fn stereo_bonds(
         &self,
     ) -> &FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondForm>>
     {
