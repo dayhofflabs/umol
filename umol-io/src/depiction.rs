@@ -198,10 +198,15 @@ fn include_point(bounds: &mut Option<Bounds>, point: Point2D) {
 
 #[cfg(test)]
 mod tests {
+    use roxmltree::Document;
     use rstest::rstest;
-    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, Entity, StereoAtomId};
+    use umol_graph_ir::ir::{
+        AromaticSystemId, AtomId, BondId, DativeBondId, Entity, MulticenterBondId,
+        NoncovalentBondId, StereoAtomId, StereoBondId,
+    };
 
     use super::*;
+    use crate::svg::render;
 
     #[rstest]
     #[case::empty(Vec::new(), None)]
@@ -348,5 +353,105 @@ mod tests {
         #[case] expected: Vec<DepictionReference>,
     ) {
         assert_eq!(item.references(), expected);
+    }
+
+    #[test]
+    fn test_svg_render_all_depiction_items_and_references() {
+        let text = "C<&>\"'";
+        let depiction = Depiction::from_items(vec![
+            DepictionItem::Atom(AtomItem {
+                position: Point2D::new(1.0, 2.0),
+                label: text.to_owned(),
+                references: vec![
+                    DepictionReference::Molecule(Entity::Atom(AtomId(0))),
+                    DepictionReference::ReactionLhs(Entity::Bond(BondId(1))),
+                    DepictionReference::ReactionRhs(Entity::DativeBond(DativeBondId(2))),
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(3))),
+                    DepictionReference::ReactionLhs(Entity::MulticenterBond(MulticenterBondId(4))),
+                    DepictionReference::ReactionRhs(Entity::NoncovalentBond(NoncovalentBondId(5))),
+                    DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(6))),
+                    DepictionReference::ReactionLhs(Entity::StereoBond(StereoBondId(7))),
+                    DepictionReference::CorrespondencePair(8),
+                    DepictionReference::Delta(9),
+                ],
+            }),
+            DepictionItem::Bond(BondItem {
+                start: Point2D::new(-2.0, -1.0),
+                end: Point2D::new(2.0, -1.0),
+                line_count: 2,
+                references: Vec::new(),
+            }),
+            DepictionItem::Text(TextItem {
+                position: Point2D::new(0.0, 3.0),
+                text: text.to_owned(),
+                references: vec![DepictionReference::CorrespondencePair(8)],
+            }),
+            DepictionItem::Marker(MarkerItem {
+                position: Point2D::new(-1.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: Vec::new(),
+            }),
+            DepictionItem::Marker(MarkerItem {
+                position: Point2D::new(1.0, 0.0),
+                kind: MarkerKind::Stereo,
+                references: Vec::new(),
+            }),
+            DepictionItem::Arrow(ArrowItem {
+                start: Point2D::new(-3.0, -2.0),
+                end: Point2D::new(3.0, -2.0),
+                references: vec![DepictionReference::Delta(9)],
+            }),
+        ]);
+
+        let svg = render(&depiction);
+        let document = Document::parse(&svg).unwrap();
+        let root = document.root_element();
+        let groups: Vec<_> = root.children().filter(|child| child.is_element()).collect();
+
+        assert_eq!(root.attribute("viewBox"), Some("-3.5 -3.5 7 6"));
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.attribute("data-umol-item").unwrap())
+                .collect::<Vec<_>>(),
+            ["atom", "bond", "text", "marker", "marker", "arrow"]
+        );
+        assert_eq!(
+            groups[0].attribute("data-umol-references"),
+            Some(
+                "molecule/atom/0 reaction-lhs/bond/1 reaction-rhs/dative-bond/2 \
+                 molecule/aromatic-system/3 reaction-lhs/multicenter-bond/4 \
+                 reaction-rhs/noncovalent-bond/5 molecule/stereo-atom/6 \
+                 reaction-lhs/stereo-bond/7 correspondence-pair/8 delta/9"
+            )
+        );
+        assert_eq!(groups[0].first_element_child().unwrap().text(), Some(text));
+        assert_eq!(groups[1].attribute("data-umol-references"), None);
+        let bond_lines: Vec<_> = groups[1]
+            .children()
+            .filter(|child| child.is_element())
+            .collect();
+        assert_eq!(bond_lines.len(), 2);
+        assert_eq!(bond_lines[0].attribute("x1"), Some("-2"));
+        assert_eq!(bond_lines[0].attribute("y1"), Some("1.06"));
+        assert_eq!(bond_lines[0].attribute("x2"), Some("2"));
+        assert_eq!(bond_lines[0].attribute("y2"), Some("1.06"));
+        assert_eq!(bond_lines[1].attribute("x1"), Some("-2"));
+        assert_eq!(bond_lines[1].attribute("y1"), Some("0.94"));
+        assert_eq!(bond_lines[1].attribute("x2"), Some("2"));
+        assert_eq!(bond_lines[1].attribute("y2"), Some("0.94"));
+        assert_eq!(groups[2].first_element_child().unwrap().text(), Some(text));
+        assert_eq!(groups[3].attribute("data-umol-marker"), Some("aromatic"));
+        assert_eq!(groups[4].attribute("data-umol-marker"), Some("stereo"));
+        assert_eq!(
+            groups[5]
+                .children()
+                .filter(|child| child.is_element())
+                .map(|child| child.tag_name().name())
+                .collect::<Vec<_>>(),
+            ["line", "polygon"]
+        );
+        assert_eq!(groups[5].attribute("data-umol-references"), Some("delta/9"));
+        assert!(svg.contains("C&lt;&amp;&gt;&quot;&apos;"));
     }
 }

@@ -5,5 +5,6 @@ pub mod ctfile;
 pub mod depiction;
 pub mod layout;
 pub mod smiles;
+pub mod svg;
 pub mod table_ir;
 mod utils;
