@@ -1,7 +1,98 @@
 use rstest::rstest;
 use umol_graph_ir::ir::AtomId;
+#[cfg(feature = "coordgen")]
+use umol_graph_ir::ir::Molecule;
 use umol_graph_ir::mol;
+#[cfg(feature = "coordgen")]
+use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 use umol_io::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+fn test_layout_molecule_frame(#[case] algorithm: MoleculeLayoutAlgorithm) {
+    let molecule = mol! {
+        (oxygen: O), (nitrogen: N), (fluorine: F), (carbon: C),
+        (carbon) - (oxygen),
+        (carbon) = (nitrogen),
+        (carbon) - (fluorine),
+    };
+    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+
+    assert_eq!(layout.atom_count(), molecule.atoms().count());
+    for atom_id in molecule.atoms().ids() {
+        assert!(layout.position(atom_id).is_some());
+    }
+    for terminal in [AtomId(0), AtomId(1), AtomId(2)] {
+        let distance = layout_distance(&layout, AtomId(3), terminal);
+        assert!((distance - 1.0).abs() < 1e-3, "bond length was {distance}");
+    }
+    assert!(layout_distance(&layout, AtomId(0), AtomId(1)) > 1.0);
+}
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+fn test_layout_molecule_empty_frame(#[case] algorithm: MoleculeLayoutAlgorithm) {
+    let layout = layout_molecule(&Molecule::new(), algorithm).expect("layout succeeds");
+
+    assert_eq!(layout.positions(), &[]);
+}
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+fn test_layout_molecule_scale(#[case] algorithm: MoleculeLayoutAlgorithm) {
+    let molecule = mol! {
+        (carbon_0: C) - (carbon_1: C),
+        (carbon_1) - (oxygen: O),
+    };
+    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+
+    assert!(layout
+        .positions()
+        .iter()
+        .all(|position| position.x.is_finite() && position.y.is_finite()));
+    for bond in molecule.bonds().iter() {
+        let [atom_0, atom_1] = bond.atom_ids();
+        let distance = layout_distance(&layout, atom_0, atom_1);
+        assert!((distance - 1.0).abs() < 1e-3, "bond length was {distance}");
+    }
+}
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+fn test_layout_molecule_projection(#[case] algorithm: MoleculeLayoutAlgorithm) {
+    let molecule = mol! {
+        (generic: "*") -[ "*" ]- (oxygen: O),
+    };
+
+    let layout = layout_molecule(&molecule, algorithm).expect("layout succeeds");
+
+    assert_eq!(layout.atom_count(), 2);
+    assert!(layout
+        .positions()
+        .iter()
+        .all(|point| point.x.is_finite() && point.y.is_finite()));
+    let distance = layout_distance(&layout, AtomId(0), AtomId(1));
+    assert!((distance - 1.0).abs() < 1e-3, "bond length was {distance}");
+}
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+fn test_layout_molecule_determinism(#[case] algorithm: MoleculeLayoutAlgorithm) {
+    let molecule = mol! {
+        (carbon_0: C) - (carbon_1: C) = (oxygen: O),
+        (carbon_1) - (nitrogen: N),
+    };
+
+    let first = layout_molecule(&molecule, algorithm).expect("first layout succeeds");
+    let second = layout_molecule(&molecule, algorithm).expect("second layout succeeds");
+
+    assert_eq!(first, second);
+}
 
 #[rstest]
 #[case::nan(Point2D::new(0.0, f64::NAN))]
@@ -82,4 +173,15 @@ fn test_molecule_layout_check_frame() {
             layout_atom_count: 1,
         })
     );
+}
+
+#[cfg(feature = "coordgen")]
+fn layout_distance(layout: &MoleculeLayout, atom_0: AtomId, atom_1: AtomId) -> f64 {
+    let point_0 = layout
+        .position(atom_0)
+        .expect("first atom is in the layout frame");
+    let point_1 = layout
+        .position(atom_1)
+        .expect("second atom is in the layout frame");
+    (point_1.x - point_0.x).hypot(point_1.y - point_0.y)
 }

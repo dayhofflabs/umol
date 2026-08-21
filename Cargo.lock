@@ -1986,6 +1986,7 @@ dependencies = [
  "strum",
  "thiserror",
  "umol-chem",
+ "umol-coordgen-sys",
  "umol-geometric-core",
  "umol-graph-core",
  "umol-graph-ir",

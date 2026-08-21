@@ -6,6 +6,53 @@ use thiserror::Error;
 use umol_graph_ir::ir::{AtomId, Molecule};
 use umol_utils::error::UmolError;
 
+#[cfg(feature = "coordgen")]
+mod coordgen;
+
+/// Algorithm used to generate a two-dimensional molecule layout.
+///
+/// This selector has no default: callers choose the operational backend explicitly.
+#[cfg(feature = "coordgen")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MoleculeLayoutAlgorithm {
+    /// The vendored CoordGen 2D coordinate generator.
+    CoordGen,
+}
+
+/// Generates a two-dimensional layout for `molecule` with the selected algorithm.
+///
+/// The result preserves the supplied dense [`AtomId`] frame. Backend projection uses localized
+/// topology and literal element and bond-order hints, with generic fallback values for forms the
+/// backend cannot represent. It does not canonicalize or change the graph-IR molecule.
+///
+/// # Errors
+///
+/// Returns [`LayoutError::CoordGen`] if the selected backend cannot generate coordinates.
+#[cfg(feature = "coordgen")]
+pub fn layout_molecule(
+    molecule: &Molecule,
+    algorithm: MoleculeLayoutAlgorithm,
+) -> Result<MoleculeLayout, LayoutError> {
+    match algorithm {
+        MoleculeLayoutAlgorithm::CoordGen => coordgen::layout(molecule).map_err(LayoutError::from),
+    }
+}
+
+/// Failure while generating a molecule layout.
+#[cfg(feature = "coordgen")]
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum LayoutError {
+    #[error("CoordGen layout failed: {0}")]
+    CoordGen(#[from] umol_coordgen_sys::CoordgenError),
+}
+
+#[cfg(feature = "coordgen")]
+impl UmolError for LayoutError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// A point in the dimensionless, mathematical coordinate system used by molecule layouts.
 ///
 /// The coordinate system is y-up and uses a nominal bond length of one. Output formats with a

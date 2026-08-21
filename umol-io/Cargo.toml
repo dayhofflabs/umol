@@ -17,6 +17,7 @@ bench = false
 
 [features]
 conformance = []
+coordgen = ["dep:umol-coordgen-sys", "umol-coordgen-sys/native"]
 proptest = []
 
 [dependencies]
