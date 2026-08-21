@@ -1,6 +1,7 @@
 //! Format-neutral drawing items for molecular and reaction depictions.
 
 pub mod molecule;
+pub mod reaction;
 
 use umol_graph_ir::ir::Entity;
 
