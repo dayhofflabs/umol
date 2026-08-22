@@ -4201,7 +4201,9 @@ fn canonicalize_structure_with_options(
     // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
     // whose coupled frame action changes the leaf key. Keep full stereo search exhaustive within
     // each refined cell until orbit representatives carry that covariant action as well.
-    options.automorphism_pruning = false;
+    options.automorphism_pruning &= molecule.stereo_atoms().count() == 0
+        && molecule.stereo_bonds().count() == 0
+        && molecule.constraints().is_empty();
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
@@ -4243,7 +4245,7 @@ fn canonicalize_full(
         molecule,
         context,
         CanonicalSearchOptions {
-            automorphism_pruning: false,
+            automorphism_pruning: true,
             prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
@@ -4254,9 +4256,12 @@ fn canonicalize_full(
 fn canonicalize_full_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
-    options: CanonicalSearchOptions,
+    mut options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
+    // Projected graph orbits preserve the full leaf key only when no covariant stereo frame or
+    // global constraint remains outside the adapter coloring.
+    options.automorphism_pruning = false;
     let normalized = normalize_molecule(molecule.clone())?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -4281,10 +4286,7 @@ fn canonicalize_full_with_options(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            ..options
-        },
+        options,
         &leaf_candidate,
         &no_prefix,
     );
@@ -4832,7 +4834,7 @@ impl Canonicalize for Molecule {
             &self,
             context,
             CanonicalSearchOptions {
-                automorphism_pruning: false,
+                automorphism_pruning: true,
                 prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
@@ -4922,6 +4924,23 @@ fn reaction_span_canonical_candidate(
     level: CanonicalizeLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    // Stereo frames and global constraints can distinguish graph-orbit-equivalent entity orders.
+    reaction_span_canonical_candidate_with_options(
+        span,
+        level,
+        context,
+        span.stereo_atoms().count() == 0
+            && span.stereo_bonds().count() == 0
+            && span.constraints().is_empty(),
+    )
+}
+
+fn reaction_span_canonical_candidate_with_options(
+    span: &ReactionSpan,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+    automorphism_pruning: bool,
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
         CanonicalizeLevel::Topology => IncidenceLevel::Topology,
         CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
@@ -4965,7 +4984,7 @@ fn reaction_span_canonical_candidate(
         &descriptors,
         context.automorphism_algorithm,
         CanonicalSearchOptions {
-            automorphism_pruning: false,
+            automorphism_pruning,
             prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },

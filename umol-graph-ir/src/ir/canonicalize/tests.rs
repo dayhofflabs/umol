@@ -4523,3 +4523,54 @@ fn test_relational_constraint_position_cmp(
 ) {
     assert_eq!(lhs.cmp(&rhs), Ordering::Less);
 }
+
+#[rstest]
+fn test_canonicalize_full_automorphism_pruning(canonicalize_context: CanonicalizeContext) {
+    let molecule: Molecule = r#"{
+        :atoms ["C" "H" "H" "H" "H"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    }"#
+    .parse()
+    .unwrap();
+    let options = |automorphism_pruning| CanonicalSearchOptions {
+        automorphism_pruning,
+        prefix_pruning: false,
+        branch_order: backend_canonical_branch_order,
+    };
+
+    let pruned =
+        canonicalize_full_with_options(&molecule, &canonicalize_context, options(true)).unwrap();
+    let exhaustive =
+        canonicalize_full_with_options(&molecule, &canonicalize_context, options(false)).unwrap();
+
+    assert_eq!(pruned, exhaustive);
+}
+
+#[rstest]
+fn test_reaction_span_canonical_candidate_automorphism_pruning(
+    canonicalize_context: CanonicalizeContext,
+) {
+    let span: ReactionSpan = r#"{
+        :atoms ["C" "H" "H" "H" "H"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+    }"#
+    .parse()
+    .unwrap();
+
+    let pruned = reaction_span_canonical_candidate_with_options(
+        &span,
+        CanonicalizeLevel::Full,
+        &canonicalize_context,
+        true,
+    )
+    .unwrap();
+    let exhaustive = reaction_span_canonical_candidate_with_options(
+        &span,
+        CanonicalizeLevel::Full,
+        &canonicalize_context,
+        false,
+    )
+    .unwrap();
+
+    assert_eq!(pruned, exhaustive);
+}
