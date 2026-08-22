@@ -18,9 +18,10 @@ use crate::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
 ///
 /// Localized bonds are followed by atom labels, aromatic markers, and stereo markers, with each
-/// group ordered by graph-IR id. Nonliteral projected fields and unsupported overlays or
-/// constraints are omitted. The first projection does not represent dative, multicenter, or
-/// noncovalent bonds, unprojected inherent fields, or any constraint.
+/// group ordered by graph-IR id. Aromatic markers project both aromatic-system membership and
+/// definite aromatic atom or bond constraints. Nonliteral projected fields and unsupported
+/// overlays or constraints are omitted. The first projection does not represent dative,
+/// multicenter, or noncovalent bonds, unprojected inherent fields, or unsupported constraints.
 ///
 /// # Errors
 ///
@@ -62,33 +63,46 @@ pub fn depict(
         }));
     }
 
-    for system in molecule.aromatic_systems().iter() {
-        let system_reference = DepictionReference::Molecule(Entity::AromaticSystem(system.id));
-        let mut atoms: Vec<_> = system.atoms().collect();
-        atoms.sort_unstable_by_key(|atom| atom.id);
-        for atom in atoms {
-            items.push(DepictionItem::Marker(MarkerItem {
-                position: position(layout, atom.id),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    system_reference,
-                    DepictionReference::Molecule(Entity::Atom(atom.id)),
-                ],
-            }));
+    for atom in molecule.atoms().iter() {
+        let system = atom.aromatic_system_id();
+        let asserted = atom
+            .constraints()
+            .aromatic_valence()
+            .is_some_and(|value| value.is_aromatic());
+        if system.is_none() && !asserted {
+            continue;
         }
-        let mut bonds: Vec<_> = system.bonds().collect();
-        bonds.sort_unstable_by_key(|bond| bond.id);
-        for bond in bonds {
-            let [first, second] = bond.atom_ids();
-            items.push(DepictionItem::Marker(MarkerItem {
-                position: midpoint(position(layout, first), position(layout, second)),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    system_reference,
-                    DepictionReference::Molecule(Entity::Bond(bond.id)),
-                ],
-            }));
+
+        let mut references = Vec::with_capacity(2);
+        if let Some(system) = system {
+            references.push(DepictionReference::Molecule(Entity::AromaticSystem(system)));
         }
+        references.push(DepictionReference::Molecule(Entity::Atom(atom.id)));
+        items.push(DepictionItem::Marker(MarkerItem {
+            position: position(layout, atom.id),
+            kind: MarkerKind::Aromatic,
+            references,
+        }));
+    }
+
+    for bond in molecule.bonds().iter() {
+        let system = bond.aromatic_system().map(|system| system.id);
+        let asserted = bond.constraints().aromatic().as_lit() == Some(true);
+        if system.is_none() && !asserted {
+            continue;
+        }
+
+        let [first, second] = bond.atom_ids();
+        let mut references = Vec::with_capacity(2);
+        if let Some(system) = system {
+            references.push(DepictionReference::Molecule(Entity::AromaticSystem(system)));
+        }
+        references.push(DepictionReference::Molecule(Entity::Bond(bond.id)));
+        items.push(DepictionItem::Marker(MarkerItem {
+            position: midpoint(position(layout, first), position(layout, second)),
+            kind: MarkerKind::Aromatic,
+            references,
+        }));
     }
 
     items.extend(
@@ -295,49 +309,100 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_depict_aromatic_system_marks_members_and_induced_bonds() {
-        let molecule = mol_dsl!(
-            r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]#e3"}]}"##
-        );
-        let layout = layout(&[[0.0, 0.0], [2.0, 0.0], [1.0, 2.0]]);
-
-        let depiction = depict(&molecule, &layout).unwrap();
+    #[rstest]
+    #[case::constraint_only(
+        r#"{:atoms ["C#a+" "C#a+"] :bonds [[0 1 "1#a"]]}"#,
+        vec![
+            MarkerItem {
+                position: Point2D::new(0.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(0)))],
+            },
+            MarkerItem {
+                position: Point2D::new(2.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
+            },
+            MarkerItem {
+                position: Point2D::new(1.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![DepictionReference::Molecule(Entity::Bond(BondId(0)))],
+            },
+        ]
+    )]
+    #[case::overlay_only(
+        r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :aromatic-systems [{:atoms [0 1] :attrs "*"}]}"#,
+        vec![
+            MarkerItem {
+                position: Point2D::new(0.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Atom(AtomId(0))),
+                ],
+            },
+            MarkerItem {
+                position: Point2D::new(2.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Atom(AtomId(1))),
+                ],
+            },
+            MarkerItem {
+                position: Point2D::new(1.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
+                ],
+            },
+        ]
+    )]
+    #[case::combined(
+        r#"{:atoms ["C#a+" "C#a+"] :bonds [[0 1 "1#a"]] :aromatic-systems [{:atoms [0 1] :attrs "*"}]}"#,
+        vec![
+            MarkerItem {
+                position: Point2D::new(0.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Atom(AtomId(0))),
+                ],
+            },
+            MarkerItem {
+                position: Point2D::new(2.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Atom(AtomId(1))),
+                ],
+            },
+            MarkerItem {
+                position: Point2D::new(1.0, 0.0),
+                kind: MarkerKind::Aromatic,
+                references: vec![
+                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
+                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
+                ],
+            },
+        ]
+    )]
+    #[case::nonaromatic(
+        r#"{:atoms ["C#a!" "C#a!"] :bonds [[0 1 "1#a!"]]}"#,
+        vec![]
+    )]
+    #[case::undetermined(
+        r#"{:atoms ["C#a*" "C#a*"] :bonds [[0 1 "1#a*"]]}"#,
+        vec![]
+    )]
+    fn test_depict_aromatic_projection(#[case] input: &str, #[case] expected: Vec<MarkerItem>) {
+        let molecule = mol_dsl!(input);
+        let layout = layout(&[[0.0, 0.0], [2.0, 0.0]]);
 
         assert_eq!(
-            markers(&depiction, MarkerKind::Aromatic),
-            [
-                MarkerItem {
-                    position: Point2D::new(0.0, 0.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Atom(AtomId(0))),
-                },
-                MarkerItem {
-                    position: Point2D::new(2.0, 0.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Atom(AtomId(1))),
-                },
-                MarkerItem {
-                    position: Point2D::new(1.0, 2.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Atom(AtomId(2))),
-                },
-                MarkerItem {
-                    position: Point2D::new(1.0, 0.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Bond(BondId(0))),
-                },
-                MarkerItem {
-                    position: Point2D::new(1.5, 1.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Bond(BondId(1))),
-                },
-                MarkerItem {
-                    position: Point2D::new(0.5, 1.0),
-                    kind: MarkerKind::Aromatic,
-                    references: aromatic_references(Entity::Bond(BondId(2))),
-                },
-            ]
+            markers(&depict(&molecule, &layout).unwrap(), MarkerKind::Aromatic),
+            expected
         );
     }
 
@@ -475,12 +540,5 @@ mod tests {
                 _ => None,
             })
             .collect()
-    }
-
-    fn aromatic_references(anchor: Entity) -> Vec<DepictionReference> {
-        vec![
-            DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-            DepictionReference::Molecule(anchor),
-        ]
     }
 }
