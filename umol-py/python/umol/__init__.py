@@ -2,6 +2,8 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from . import _native as _native_module
+
 from ._native import (
     AromaticBondConstraintMismatchPolicy,
     AromaticityConfig,
@@ -227,6 +229,10 @@ from ._native import (
     WlHashScheme,
 )
 from .elements import E
+
+if hasattr(_native_module, "Svg"):
+    MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
+    Svg = _native_module.Svg
 
 try:
     __version__ = version("umol-py")
@@ -459,3 +465,6 @@ __all__ = [
     "__version__",
     "ValenceTieBreak",
 ]
+
+if hasattr(_native_module, "Svg"):
+    __all__.extend(["MoleculeLayoutAlgorithm", "Svg"])

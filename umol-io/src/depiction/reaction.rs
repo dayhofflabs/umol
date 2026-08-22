@@ -1,13 +1,19 @@
-//! Indexed-side depiction construction from two molecules, layouts, and an atom correspondence.
+//! Indexed-side depiction from two molecules, layouts, and an atom correspondence.
 
 use std::any::Any;
 
 use thiserror::Error;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{AtomId, Entity, Molecule};
+#[cfg(feature = "coordgen")]
+use umol_graph_ir::ir::{Contradiction, Reaction};
 use umol_utils::error::UmolError;
 
+#[cfg(feature = "coordgen")]
+use super::Depict;
 use super::{molecule, ArrowItem, Depiction, DepictionItem, DepictionReference, TextItem};
+#[cfg(feature = "coordgen")]
+use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
 use crate::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
 
 const ARROW_HALF_LENGTH: f64 = 1.0;
@@ -32,7 +38,7 @@ const MAP_INDEX_OFFSET: Point2D = Point2D::new(0.35, 0.35);
 ///
 /// # Errors
 ///
-/// Returns [`ReactionDepictionError`] if either layout or either atom-correspondence frame size
+/// Returns [`DepictFromSidesError`] if either layout or either atom-correspondence frame size
 /// disagrees with its supplied molecule.
 ///
 /// # Semantic properties
@@ -40,26 +46,26 @@ const MAP_INDEX_OFFSET: Point2D = Point2D::new(0.35, 0.35);
 /// Side-item order is preserved. Correspondence-pair indices depend only on the correspondence's
 /// left-id order, so identical inputs produce structurally equal depictions. Each supplied layout
 /// is changed only by one translation.
-pub fn depict(
+pub fn depict_from_sides(
     lhs: &Molecule,
     lhs_layout: &MoleculeLayout,
     rhs: &Molecule,
     rhs_layout: &MoleculeLayout,
     atom_correspondence: &Correspondence<AtomId>,
-) -> Result<Depiction, ReactionDepictionError> {
+) -> Result<Depiction, DepictFromSidesError> {
     let lhs_depiction = molecule::depict(lhs, lhs_layout).map_err(lhs_layout_error)?;
     let rhs_depiction = molecule::depict(rhs, rhs_layout).map_err(rhs_layout_error)?;
 
     let lhs_atom_count = lhs.atoms().count();
     if atom_correspondence.left_count() != lhs_atom_count {
-        return Err(ReactionDepictionError::LhsCorrespondenceFrameSizeMismatch {
+        return Err(DepictFromSidesError::LhsCorrespondenceFrameSizeMismatch {
             molecule_atom_count: lhs_atom_count,
             correspondence_atom_count: atom_correspondence.left_count(),
         });
     }
     let rhs_atom_count = rhs.atoms().count();
     if atom_correspondence.right_count() != rhs_atom_count {
-        return Err(ReactionDepictionError::RhsCorrespondenceFrameSizeMismatch {
+        return Err(DepictFromSidesError::RhsCorrespondenceFrameSizeMismatch {
             molecule_atom_count: rhs_atom_count,
             correspondence_atom_count: atom_correspondence.right_count(),
         });
@@ -110,9 +116,78 @@ pub fn depict(
     Ok(Depiction::from_items(items))
 }
 
-/// Failures caused by mismatched molecular, layout, or atom-correspondence frames.
+/// Generates both molecular layouts and composes an indexed-side reaction depiction.
+///
+/// The selected molecule-layout algorithm is applied independently to each side. The atom
+/// correspondence is passed only to [`depict_from_sides`], where it determines the displayed map
+/// indices; it does not influence either generated layout.
+///
+/// # Establishes
+///
+/// The result is structurally equal to generating each side with [`layout_molecule`] and passing
+/// those layouts, the molecules, and the correspondence to [`depict_from_sides`].
+///
+/// # Errors
+///
+/// Returns [`DepictFromSidesError::LhsLayout`] or [`DepictFromSidesError::RhsLayout`] if layout
+/// generation fails for the corresponding side. Returns a frame-size error if the atom
+/// correspondence does not agree with the molecular sides.
+///
+/// # Semantic properties
+///
+/// Correspondence-pair indices retain the zero-based, left-id ordering defined by
+/// [`depict_from_sides`].
+#[cfg(feature = "coordgen")]
+pub fn depict_from_sides_with(
+    lhs: &Molecule,
+    rhs: &Molecule,
+    atom_correspondence: &Correspondence<AtomId>,
+    layout_algorithm: MoleculeLayoutAlgorithm,
+) -> Result<Depiction, DepictFromSidesError> {
+    let lhs_layout =
+        layout_molecule(lhs, layout_algorithm).map_err(DepictFromSidesError::LhsLayout)?;
+    let rhs_layout =
+        layout_molecule(rhs, layout_algorithm).map_err(DepictFromSidesError::RhsLayout)?;
+
+    depict_from_sides(lhs, &lhs_layout, rhs, &rhs_layout, atom_correspondence)
+}
+
+#[cfg(feature = "coordgen")]
+impl Depict for Reaction {
+    type Error = ReactionDepictionError;
+
+    fn depict_with(
+        &self,
+        layout_algorithm: MoleculeLayoutAlgorithm,
+    ) -> Result<Depiction, Self::Error> {
+        let span = self
+            .to_reaction_span()
+            .map_err(ReactionDepictionError::Materialization)?;
+        let lhs = span.lhs();
+        let rhs = span.rhs();
+        let correspondence = span.correspondence();
+        let lhs_layout =
+            layout_molecule(&lhs, layout_algorithm).map_err(ReactionDepictionError::LhsLayout)?;
+        let rhs_layout =
+            layout_molecule(&rhs, layout_algorithm).map_err(ReactionDepictionError::RhsLayout)?;
+
+        Ok(
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, correspondence.atoms()).expect(
+                "reaction materialization and generated layouts establish matching side frames",
+            ),
+        )
+    }
+}
+
+/// Failures while depicting independently supplied molecular sides.
 #[derive(Clone, Debug, Error, PartialEq)]
-pub enum ReactionDepictionError {
+pub enum DepictFromSidesError {
+    #[cfg(feature = "coordgen")]
+    #[error("lhs layout: {0}")]
+    LhsLayout(#[source] LayoutError),
+    #[cfg(feature = "coordgen")]
+    #[error("rhs layout: {0}")]
+    RhsLayout(#[source] LayoutError),
     #[error(
         "lhs molecule atom count {molecule_atom_count} does not match layout atom count {layout_atom_count}"
     )]
@@ -143,6 +218,25 @@ pub enum ReactionDepictionError {
     },
 }
 
+impl UmolError for DepictFromSidesError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Failures while depicting a [`Reaction`].
+#[cfg(feature = "coordgen")]
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum ReactionDepictionError {
+    #[error("reaction materialization: {0}")]
+    Materialization(#[source] Contradiction),
+    #[error("lhs layout: {0}")]
+    LhsLayout(#[source] LayoutError),
+    #[error("rhs layout: {0}")]
+    RhsLayout(#[source] LayoutError),
+}
+
+#[cfg(feature = "coordgen")]
 impl UmolError for ReactionDepictionError {
     fn as_any(&self) -> &dyn Any {
         self
@@ -155,12 +249,12 @@ enum ReactionSide {
     Rhs,
 }
 
-fn lhs_layout_error(error: MoleculeLayoutError) -> ReactionDepictionError {
+fn lhs_layout_error(error: MoleculeLayoutError) -> DepictFromSidesError {
     match error {
         MoleculeLayoutError::FrameSizeMismatch {
             molecule_atom_count,
             layout_atom_count,
-        } => ReactionDepictionError::LhsLayoutFrameSizeMismatch {
+        } => DepictFromSidesError::LhsLayoutFrameSizeMismatch {
             molecule_atom_count,
             layout_atom_count,
         },
@@ -171,12 +265,12 @@ fn lhs_layout_error(error: MoleculeLayoutError) -> ReactionDepictionError {
     }
 }
 
-fn rhs_layout_error(error: MoleculeLayoutError) -> ReactionDepictionError {
+fn rhs_layout_error(error: MoleculeLayoutError) -> DepictFromSidesError {
     match error {
         MoleculeLayoutError::FrameSizeMismatch {
             molecule_atom_count,
             layout_atom_count,
-        } => ReactionDepictionError::RhsLayoutFrameSizeMismatch {
+        } => DepictFromSidesError::RhsLayoutFrameSizeMismatch {
             molecule_atom_count,
             layout_atom_count,
         },
@@ -279,16 +373,28 @@ mod tests {
     use rstest::rstest;
     use umol_graph_core::Correspondence;
     use umol_graph_ir::ir::{AtomId, BondId, Entity};
+    #[cfg(feature = "coordgen")]
+    use umol_graph_ir::ir::{
+        BondDelta, BondFieldChange, Contradiction, Delta, Deltas, NumForm, Reaction,
+    };
     use umol_graph_ir::mol_dsl;
 
-    use super::{depict, ReactionDepictionError};
+    #[cfg(feature = "coordgen")]
+    use super::depict_from_sides_with;
+    #[cfg(feature = "coordgen")]
+    use super::ReactionDepictionError;
+    use super::{depict_from_sides, DepictFromSidesError};
+    #[cfg(feature = "coordgen")]
+    use crate::depiction::Depict;
     use crate::depiction::{
         ArrowItem, AtomItem, BondItem, Bounds, DepictionItem, DepictionReference, TextItem,
     };
+    #[cfg(feature = "coordgen")]
+    use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
     use crate::layout::{MoleculeLayout, Point2D};
 
     #[rstest]
-    fn test_depict() {
+    fn test_depict_from_sides() {
         let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let rhs = mol_dsl!(r#"{:atoms ["O" "C"] :bonds [[0 1 "1"]]}"#);
         let lhs_layout =
@@ -299,7 +405,8 @@ mod tests {
             Correspondence::new(vec![(AtomId(1), AtomId(0)), (AtomId(0), AtomId(1))], 2, 2)
                 .unwrap();
 
-        let depiction = depict(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+        let depiction =
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
 
         assert_eq!(
             depiction.items(),
@@ -383,13 +490,13 @@ mod tests {
             })
         );
         assert_eq!(
-            depict(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence,),
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence,),
             Ok(depiction)
         );
     }
 
     #[rstest]
-    fn test_depict_partial() {
+    fn test_depict_from_sides_partial() {
         let lhs = mol_dsl!(r#"{:atoms ["C" "F" "O"] :bonds []}"#);
         let rhs = mol_dsl!(r#"{:atoms ["O" "C"] :bonds [[0 1 "1"]]}"#);
         let lhs_layout = MoleculeLayout::try_new(vec![
@@ -404,7 +511,8 @@ mod tests {
             Correspondence::new(vec![(AtomId(2), AtomId(0)), (AtomId(0), AtomId(1))], 3, 2)
                 .unwrap();
 
-        let depiction = depict(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+        let depiction =
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
         let index_items = depiction
             .items()
             .iter()
@@ -454,7 +562,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_depict_projection_omission() {
+    fn test_depict_from_sides_projection() {
         let lhs = mol_dsl!(r#"{:atoms ["C" "*"] :bonds []}"#);
         let rhs = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
         let lhs_layout =
@@ -462,7 +570,8 @@ mod tests {
         let rhs_layout = MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap();
         let correspondence = Correspondence::new(vec![(AtomId(1), AtomId(0))], 2, 1).unwrap();
 
-        let depiction = depict(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+        let depiction =
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
 
         assert_eq!(
             depiction.items(),
@@ -507,7 +616,7 @@ mod tests {
         MoleculeLayout::try_new(Vec::new()).unwrap(),
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 1).unwrap(),
-        ReactionDepictionError::LhsLayoutFrameSizeMismatch {
+        DepictFromSidesError::LhsLayoutFrameSizeMismatch {
             molecule_atom_count: 1,
             layout_atom_count: 0,
         }
@@ -516,7 +625,7 @@ mod tests {
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         MoleculeLayout::try_new(Vec::new()).unwrap(),
         Correspondence::new(vec![(AtomId(0), AtomId(0))], 1, 1).unwrap(),
-        ReactionDepictionError::RhsLayoutFrameSizeMismatch {
+        DepictFromSidesError::RhsLayoutFrameSizeMismatch {
             molecule_atom_count: 1,
             layout_atom_count: 0,
         }
@@ -525,7 +634,7 @@ mod tests {
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         Correspondence::new(Vec::new(), 0, 1).unwrap(),
-        ReactionDepictionError::LhsCorrespondenceFrameSizeMismatch {
+        DepictFromSidesError::LhsCorrespondenceFrameSizeMismatch {
             molecule_atom_count: 1,
             correspondence_atom_count: 0,
         }
@@ -534,23 +643,164 @@ mod tests {
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
         Correspondence::new(Vec::new(), 1, 0).unwrap(),
-        ReactionDepictionError::RhsCorrespondenceFrameSizeMismatch {
+        DepictFromSidesError::RhsCorrespondenceFrameSizeMismatch {
             molecule_atom_count: 1,
             correspondence_atom_count: 0,
         }
     )]
-    fn test_depict_error(
+    fn test_depict_from_sides_error(
         #[case] lhs_layout: MoleculeLayout,
         #[case] rhs_layout: MoleculeLayout,
         #[case] correspondence: Correspondence<AtomId>,
-        #[case] expected: ReactionDepictionError,
+        #[case] expected: DepictFromSidesError,
     ) {
         let lhs = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
         let rhs = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
 
         assert_eq!(
-            depict(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence,),
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence,),
             Err(expected)
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+    fn test_depict_from_sides_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
+        let lhs = mol_dsl!(r#"{:atoms ["C" "F" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"#);
+        let rhs = mol_dsl!(r#"{:atoms ["O" "C" "F"] :bonds [[0 2 "1"] [2 1 "1"]]}"#);
+        let correspondence =
+            Correspondence::new(vec![(AtomId(2), AtomId(0)), (AtomId(0), AtomId(1))], 3, 3)
+                .unwrap();
+        let lhs_layout = layout_molecule(&lhs, algorithm).unwrap();
+        let rhs_layout = layout_molecule(&rhs, algorithm).unwrap();
+        let expected =
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+
+        let actual = depict_from_sides_with(&lhs, &rhs, &correspondence, algorithm).unwrap();
+        let index_references = actual
+            .items()
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Text(item) => Some(item.references.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+        assert_eq!(
+            index_references,
+            [
+                vec![
+                    DepictionReference::ReactionLhs(Entity::Atom(AtomId(0))),
+                    DepictionReference::CorrespondencePair(0),
+                ],
+                vec![
+                    DepictionReference::ReactionLhs(Entity::Atom(AtomId(2))),
+                    DepictionReference::CorrespondencePair(1),
+                ],
+                vec![
+                    DepictionReference::ReactionRhs(Entity::Atom(AtomId(1))),
+                    DepictionReference::CorrespondencePair(0),
+                ],
+                vec![
+                    DepictionReference::ReactionRhs(Entity::Atom(AtomId(0))),
+                    DepictionReference::CorrespondencePair(1),
+                ],
+            ]
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    #[case::lhs_correspondence(
+        1,
+        2,
+        DepictFromSidesError::LhsCorrespondenceFrameSizeMismatch {
+            molecule_atom_count: 2,
+            correspondence_atom_count: 1,
+        }
+    )]
+    #[case::rhs_correspondence(
+        2,
+        1,
+        DepictFromSidesError::RhsCorrespondenceFrameSizeMismatch {
+            molecule_atom_count: 2,
+            correspondence_atom_count: 1,
+        }
+    )]
+    fn test_depict_from_sides_with_error(
+        #[case] left_count: usize,
+        #[case] right_count: usize,
+        #[case] expected: DepictFromSidesError,
+    ) {
+        let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
+        let rhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
+        let correspondence = Correspondence::new(Vec::new(), left_count, right_count).unwrap();
+
+        assert_eq!(
+            depict_from_sides_with(
+                &lhs,
+                &rhs,
+                &correspondence,
+                MoleculeLayoutAlgorithm::CoordGen,
+            ),
+            Err(expected)
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+    fn test_reaction_depict_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })]),
+        );
+        let span = reaction.to_reaction_span().unwrap();
+        let lhs = span.lhs();
+        let rhs = span.rhs();
+        let correspondence = span.correspondence();
+        let expected =
+            depict_from_sides_with(&lhs, &rhs, correspondence.atoms(), algorithm).unwrap();
+
+        let depiction = reaction.depict_with(algorithm).unwrap();
+        let line_counts = depiction
+            .items()
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Bond(item) => Some(item.line_count),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(depiction, expected);
+        assert_eq!(line_counts, [1, 2]);
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_depict_with_error() {
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(3),
+                },
+            })]),
+        );
+
+        assert_eq!(
+            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen),
+            Err(ReactionDepictionError::Materialization(Contradiction))
         );
     }
 }

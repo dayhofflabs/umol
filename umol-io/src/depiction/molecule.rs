@@ -6,9 +6,13 @@ use umol_graph_ir::ir::{
     AsLit, AtomId, AtomView, Entity, IsotopeMass, Molecule, StereoAtomView, StereoBondView,
 };
 
+#[cfg(feature = "coordgen")]
+use super::Depict;
 use super::{
     AtomItem, BondItem, Depiction, DepictionItem, DepictionReference, MarkerItem, MarkerKind,
 };
+#[cfg(feature = "coordgen")]
+use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
 use crate::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
 
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
@@ -103,6 +107,19 @@ pub fn depict(
     Ok(Depiction::from_items(items))
 }
 
+#[cfg(feature = "coordgen")]
+impl Depict for Molecule {
+    type Error = LayoutError;
+
+    fn depict_with(
+        &self,
+        layout_algorithm: MoleculeLayoutAlgorithm,
+    ) -> Result<Depiction, Self::Error> {
+        let layout = layout_molecule(self, layout_algorithm)?;
+        Ok(depict(self, &layout).expect("generated layout preserves the molecule atom frame"))
+    }
+}
+
 fn atom_label(atom: AtomView<'_>) -> Option<String> {
     let element = atom.element().as_lit()?;
     let mut label = String::new();
@@ -176,7 +193,11 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
+    #[cfg(feature = "coordgen")]
+    use crate::depiction::Depict;
     use crate::depiction::{Bounds, MarkerItem};
+    #[cfg(feature = "coordgen")]
+    use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
     fn layout(positions: &[[f64; 2]]) -> MoleculeLayout {
         MoleculeLayout::try_new(positions.iter().map(|&[x, y]| Point2D::new(x, y)).collect())
@@ -410,6 +431,17 @@ mod tests {
                 layout_atom_count: 0,
             })
         );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
+    fn test_molecule_depict_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
+        let layout = layout_molecule(&molecule, algorithm).unwrap();
+        let expected = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(molecule.depict_with(algorithm), Ok(expected));
     }
 
     fn atom_labels(depiction: &Depiction) -> Vec<&str> {

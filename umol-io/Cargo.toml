@@ -76,6 +76,11 @@ harness = false
 name = "svg"
 harness = false
 
+[[bin]]
+name = "depict_dsl"
+bench = false
+required-features = ["coordgen"]
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

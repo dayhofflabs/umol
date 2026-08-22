@@ -5,7 +5,27 @@ pub mod reaction;
 
 use umol_graph_ir::ir::Entity;
 
+#[cfg(feature = "coordgen")]
+use crate::layout::MoleculeLayoutAlgorithm;
 use crate::layout::Point2D;
+
+/// Constructs a format-neutral depiction using an explicitly selected layout algorithm.
+#[cfg(feature = "coordgen")]
+pub trait Depict {
+    /// Failure produced while laying out or depicting this value.
+    type Error;
+
+    /// Constructs the depiction with `layout_algorithm`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the selected layout algorithm or depiction operation cannot
+    /// produce the result.
+    fn depict_with(
+        &self,
+        layout_algorithm: MoleculeLayoutAlgorithm,
+    ) -> Result<Depiction, Self::Error>;
+}
 
 /// An ordered, format-neutral molecular drawing scene.
 ///
