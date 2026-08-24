@@ -10,7 +10,7 @@
 //! type, ordering, and arity. The union incidence spans both factors, so a relation
 //! is reachable from any of its participants regardless of id-space.
 
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
 use crate::correspondence::Correspondence;
@@ -356,6 +356,13 @@ impl<P: PartialEq, O, D: PartialEq, const N: usize> PartialEq for FixedRelationS
 
 impl<P: Eq, O, D: Eq, const N: usize> Eq for FixedRelationSet<P, O, D, N> {}
 
+impl<P: Hash, O, D: Hash, const N: usize> Hash for FixedRelationSet<P, O, D, N> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.participants.hash(state);
+        self.data.hash(state);
+    }
+}
+
 /// Relabel a factor's participants through a general `Remapping`, preserving their stored order.
 /// The owning relation-set constructor canonicalizes the result and transports positional data.
 fn remap_factor<P>(participants: &[P], remapping: &Remapping) -> Vec<P>
@@ -664,6 +671,14 @@ impl<P: PartialEq, O, D: PartialEq> PartialEq for VarRelationSet<P, O, D> {
 }
 
 impl<P: Eq, O, D: Eq> Eq for VarRelationSet<P, O, D> {}
+
+impl<P: Hash, O, D: Hash> Hash for VarRelationSet<P, O, D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.offsets.hash(state);
+        self.participants.hash(state);
+        self.data.hash(state);
+    }
+}
 
 impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     pub fn new(entries: Vec<(Vec<P>, D)>) -> Self
@@ -1305,6 +1320,20 @@ where
     L2: Eq,
     D: Eq,
 {
+}
+
+impl<L1, O1, const N1: usize, L2, O2, D> Hash for FixedVarBirelationSet<L1, O1, N1, L2, O2, D>
+where
+    L1: Hash,
+    L2: Hash,
+    D: Hash,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.participants_1.hash(state);
+        self.f2_offsets.hash(state);
+        self.participants_2.hash(state);
+        self.data.hash(state);
+    }
 }
 
 impl<L1, O1, const N1: usize, L2, O2, D> FixedVarBirelationSet<L1, O1, N1, L2, O2, D>
@@ -2016,11 +2045,18 @@ impl<L1, O1, L2, O2, D> Default for VarVarBirelationSet<L1, O1, L2, O2, D> {
 #[cfg(test)]
 mod tests {
     use std::fmt::Debug;
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+
+    fn hash<T: Hash>(value: &T) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct PositionLabels(Vec<u32>);
@@ -2206,6 +2242,16 @@ mod tests {
     }
 
     #[rstest]
+    fn test_fixed_relation_set_hash() {
+        let entries = vec![([n(2), n(0)], "first"), ([n(3), n(1)], "second")];
+        let left: FixedRelationSet<NodeId, Unordered, &str, 2> =
+            FixedRelationSet::new(entries.clone());
+        let right: FixedRelationSet<NodeId, Unordered, &str, 2> = FixedRelationSet::new(entries);
+        assert_eq!(left, right);
+        assert_eq!(hash(&left), hash(&right));
+    }
+
+    #[rstest]
     #[case::canonical_entries(
         vec![([n(2), n(0)], "first"), ([n(3), n(1)], "second")],
         vec![([n(0), n(2)], "first"), ([n(1), n(3)], "second")],
@@ -2343,6 +2389,18 @@ mod tests {
             rs.participants(RelationId(0)),
             &[n(0), n(1), n(2), n(3), n(4), n(5)]
         );
+    }
+
+    #[rstest]
+    fn test_var_relation_set_hash() {
+        let entries = vec![
+            (vec![n(2), n(0)], "first"),
+            (vec![n(4), n(3), n(1)], "second"),
+        ];
+        let left: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(entries.clone());
+        let right: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(entries);
+        assert_eq!(left, right);
+        assert_eq!(hash(&left), hash(&right));
     }
 
     #[rstest]
@@ -2691,6 +2749,20 @@ mod tests {
         assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(0)]);
         assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2), n(3)]);
         assert_eq!(rs.data(RelationId(0)), &"ct");
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_hash() {
+        let entries = vec![
+            ([EdgeId(2)], vec![n(3), n(1)], "first"),
+            ([EdgeId(4)], vec![n(5), n(0)], "second"),
+        ];
+        let left: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Unordered, &str> =
+            FixedVarBirelationSet::new(entries.clone());
+        let right: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Unordered, &str> =
+            FixedVarBirelationSet::new(entries);
+        assert_eq!(left, right);
+        assert_eq!(hash(&left), hash(&right));
     }
 
     #[rstest]
