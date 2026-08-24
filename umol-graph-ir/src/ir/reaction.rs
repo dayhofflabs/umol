@@ -51,7 +51,7 @@ use super::substructure::SubstructureMatchConfig;
 use super::traits::Normalize;
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Reaction {
     pub lhs: Molecule,
     pub deltas: Deltas,

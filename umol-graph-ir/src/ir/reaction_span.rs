@@ -48,7 +48,7 @@ use super::traits::{EntityPatch, Equiv, Normalize};
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
 /// appended; `atoms` / `bonds` are indexed parallel to the graph's nodes / edges.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ReactionSpan {
     graph: Graph,
     atoms: Vec<EntitySpan<AtomForm>>,

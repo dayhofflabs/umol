@@ -47,7 +47,7 @@ use super::stereo::{
 use super::traits::{EntityPatch, Equiv, Lattice, Normalize};
 
 /// A resolved edit to a single atom.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomDelta {
     Add {
         id: AtomId,
@@ -168,7 +168,7 @@ impl AtomDelta {
 }
 
 /// A resolved edit to a single bond.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BondDelta {
     Add {
         id: BondId,
@@ -274,7 +274,7 @@ impl BondDelta {
 
 /// A resolved edit to a single dative bond. `donors`/`acceptor` are the directed
 /// participants (structural payload, like `BondDelta::atoms`); identity is the id.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DativeBondDelta {
     Add {
         id: DativeBondId,
@@ -367,7 +367,7 @@ impl DativeBondDelta {
 
 /// A resolved edit to a single aromatic system. `atoms` are the member atoms
 /// (structural payload); identity is the id.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticSystemDelta {
     Add {
         id: AromaticSystemId,
@@ -477,7 +477,7 @@ impl AromaticSystemDelta {
 
 /// A resolved edit to a single multicenter bond. `atoms` are the member atoms
 /// (structural payload); identity is the id.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterBondDelta {
     Add {
         id: MulticenterBondId,
@@ -587,7 +587,7 @@ impl MulticenterBondDelta {
 
 /// A resolved edit to a single noncovalent bond. `atoms` are its two participants
 /// (structural payload); identity is the id.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondDelta {
     Add {
         id: NoncovalentBondId,
@@ -677,7 +677,7 @@ impl NoncovalentBondDelta {
 /// `site` and `ligands` carry the structural incidence while `id` carries identity. Field and
 /// constraint modifications state both the expected old value and the replacement value, matching
 /// the absolute delta vocabulary used by the other entity kinds.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoAtomDelta {
     Add {
         id: StereoAtomId,
@@ -790,7 +790,7 @@ impl StereoAtomDelta {
 ///
 /// `site` and `ligands` carry the structural incidence while `id` carries identity. Field and
 /// constraint modifications use the same absolute before/after vocabulary as `StereoAtomDelta`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoBondDelta {
     Add {
         id: StereoBondId,
@@ -898,7 +898,7 @@ impl StereoBondDelta {
 }
 
 /// A resolved change to the molecule-level constraint set, as a set-diff.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ConstraintDelta {
     Add(Constraint),
     Remove(Constraint),
@@ -929,7 +929,7 @@ impl ConstraintDelta {
 ///
 /// Applying a reaction converts its deltas into [`Edit`](crate::ir::edit::Edit) values against the
 /// matched host; the match supplies the translation between the two id spaces.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Delta {
     Atom(AtomDelta),
     Bond(BondDelta),
@@ -1146,7 +1146,7 @@ impl<T: Normalize> EntitySpan<T> {
 
 /// A molecule-level constraint's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`.
 /// A *state*, not an operation (unlike `ConstraintDelta`). `lhs()` / `rhs()` read the side values.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ConstraintSpan {
     /// In the interface `K` — present and identical on both sides.
     Unchanged(Constraint),
@@ -2846,7 +2846,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
 /// [`Normalize::normalize`] folds each entity's chain, rejects contradictions, and sorts the
 /// normalized result. Unlike an edit sequence, the normal form retains no incidental source
 /// ordering.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Deltas(Vec<Delta>);
 
 impl Deltas {

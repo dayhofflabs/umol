@@ -75,7 +75,7 @@ pub enum BondHandle {
 
 /// Per-field old/new payload for an atom attribute mutation. Variant
 /// discriminant identifies the field; `old` and `new` carry the typed values.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AtomFieldChange {
     Element {
         old: ElementForm,
@@ -117,7 +117,7 @@ impl AtomFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BondFieldChange {
     Order {
         old: NumForm,
@@ -143,7 +143,7 @@ impl BondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DativeBondFieldChange {
     Order { old: NumForm, new: NumForm },
 }
@@ -156,7 +156,7 @@ impl DativeBondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticSystemFieldChange {
     Electrons {
         old: ElectronCountsForm,
@@ -182,7 +182,7 @@ impl AromaticSystemFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterBondFieldChange {
     Electrons {
         old: ElectronCountsForm,
@@ -208,7 +208,7 @@ impl MulticenterBondFieldChange {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondFieldChange {
     Kind {
         old: NoncovalentBondKindForm,
@@ -225,7 +225,7 @@ impl NoncovalentBondFieldChange {
 }
 
 /// Per-field old/new payload for an absolute stereo-atom configuration mutation.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoAtomFieldChange {
     Configuration {
         old: StereoConfigurationForm,
@@ -243,7 +243,7 @@ impl StereoAtomFieldChange {
 
 /// Per-field old/new payload for a stereo-bond mutation. Coset-only, for the
 /// same reason as `StereoAtomFieldChange`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoBondFieldChange {
     Configuration {
         old: StereoConfigurationForm,

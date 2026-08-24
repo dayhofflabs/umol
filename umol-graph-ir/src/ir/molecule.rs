@@ -58,7 +58,7 @@ pub(super) mod transact;
 ///
 /// Per-entity data are `Arc`-shared (copy-on-write). The molecule itself only allows
 /// attribute mutation; structural edits go through `MoleculeEditor` via [`Molecule::edit`].
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Molecule {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
