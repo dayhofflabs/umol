@@ -1485,6 +1485,24 @@ fn test_molecule_canonical_eq_by_topology(canonicalize_context: CanonicalizeCont
 }
 
 #[rstest]
+fn test_molecule_canonical_hash_by_topology(canonicalize_context: CanonicalizeContext) {
+    let left = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        ..Default::default()
+    });
+    let right = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
+        ..Default::default()
+    });
+
+    assert_eq!(
+        left.canonical_hash_by(CanonicalizeLevel::Topology, &canonicalize_context),
+        right.canonical_hash_by(CanonicalizeLevel::Topology, &canonicalize_context),
+    );
+}
+
+#[rstest]
 fn test_molecule_canonical_eq_by_constitution(
     stereo_atom_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
@@ -1503,6 +1521,22 @@ fn test_molecule_canonical_eq_by_constitution(
         CanonicalizeLevel::Structure,
         &canonicalize_context,
     ));
+}
+
+#[rstest]
+fn test_molecule_canonical_hash_by_constitution(
+    stereo_atom_canonicalization_molecule: Molecule,
+    canonicalize_context: CanonicalizeContext,
+) {
+    let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
+    entries.stereo_atoms.clear();
+    let constitution = Molecule::from_entries(entries);
+
+    assert_eq!(
+        constitution.canonical_hash_by(CanonicalizeLevel::Constitution, &canonicalize_context),
+        stereo_atom_canonicalization_molecule
+            .canonical_hash_by(CanonicalizeLevel::Constitution, &canonicalize_context),
+    );
 }
 
 #[rstest]
@@ -1527,6 +1561,25 @@ fn test_molecule_canonical_eq_by_structure(canonicalize_context: CanonicalizeCon
     assert_eq!(
         plain.canonical_eq_by(&constrained, CanonicalizeLevel::Full, &canonicalize_context,),
         plain.canonical_eq(&constrained, &canonicalize_context),
+    );
+}
+
+#[rstest]
+fn test_molecule_canonical_hash_by_structure(canonicalize_context: CanonicalizeContext) {
+    let plain = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C)],
+        ..Default::default()
+    });
+    let constrained = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))
+        ],
+        ..Default::default()
+    });
+
+    assert_eq!(
+        plain.canonical_hash_by(CanonicalizeLevel::Structure, &canonicalize_context),
+        constrained.canonical_hash_by(CanonicalizeLevel::Structure, &canonicalize_context),
     );
 }
 
@@ -1657,6 +1710,34 @@ fn test_reaction_canonical_eq_by(
 
     assert!(excluded_contradiction.canonical_eq_by(&identity, level, &canonicalize_context,));
     assert!(!excluded_contradiction.canonical_eq(&identity, &canonicalize_context));
+}
+
+#[rstest]
+#[case::topology(CanonicalizeLevel::Topology)]
+#[case::constitution(CanonicalizeLevel::Constitution)]
+#[case::structure(CanonicalizeLevel::Structure)]
+fn test_reaction_canonical_hash_by(
+    canonicalize_context: CanonicalizeContext,
+    #[case] level: CanonicalizeLevel,
+) {
+    let lhs = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C)],
+        ..Default::default()
+    });
+    let identity = Reaction::new(lhs.clone(), Deltas::new());
+    let excluded_contradiction = Reaction::new(
+        lhs,
+        [Delta::Constraint(ConstraintDelta::Remove(
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ))]
+        .into_iter()
+        .collect(),
+    );
+
+    assert_eq!(
+        excluded_contradiction.canonical_hash_by(level, &canonicalize_context),
+        identity.canonical_hash_by(level, &canonicalize_context),
+    );
 }
 
 #[rstest]
