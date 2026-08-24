@@ -1,9 +1,9 @@
 //! Aggregate canonicalization and reaction-normal-form properties for reaction spans.
 //!
 //! Integrity-valid generated spans are compared with independently renumbered union frames. The
-//! properties cover exact complete-form idempotence, all level-specific equality relations, LHS
-//! anchoring, reaction-normal-form convergence, integrity, and the documented weakened reversal
-//! law.
+//! properties cover exact complete-form idempotence, all level-specific equality and canonical-hash
+//! relations, LHS anchoring, reaction-normal-form convergence, integrity, and the documented
+//! weakened reversal law.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -58,6 +58,37 @@ proptest! {
             prop_assert_eq!(reaction_normal_form(&canonical), canonical.clone());
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
+    }
+
+    #[test]
+    fn test_reaction_span_canonical_hash(
+        scenario in reaction_span_scenario_strategy(),
+    ) {
+        let context = context();
+        let renumbered = scenario.span.remap(&scenario.first);
+
+        prop_assert_eq!(
+            scenario.span.clone().canonical_hash(&context),
+            renumbered.clone().canonical_hash(&context),
+        );
+        for level in [
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
+        ] {
+            prop_assert_eq!(
+                scenario.span.clone().canonical_hash_by(level, &context),
+                renumbered.clone().canonical_hash_by(level, &context),
+            );
+        }
+        prop_assert_eq!(
+            scenario
+                .span
+                .clone()
+                .canonical_hash_by(CanonicalizeLevel::Full, &context),
+            scenario.span.canonical_hash(&context),
+        );
     }
 
     #[test]

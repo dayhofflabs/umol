@@ -1,10 +1,11 @@
 //! Reaction canonicalization properties.
 //!
 //! Materializable reactions and independently renumbered reaction spans exercise exact canonical
-//! forms, equality, normalization, reversal, and covariant application. Named defects separately
-//! cover integrity failure, discontinuous deltas, and intrinsically contradictory forms. Nauty is
-//! currently the only canonical-labeling selector; frozen canonical fixtures, rather than a
-//! tautological second case, remain the compatibility target for future algorithms.
+//! forms, equality, canonical hashes, normalization, reversal, and covariant application. Named
+//! defects separately cover integrity failure, discontinuous deltas, and intrinsically
+//! contradictory forms. Nauty is currently the only canonical-labeling selector; frozen canonical
+//! fixtures, rather than a tautological second case, remain the compatibility target for future
+//! algorithms.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -253,6 +254,35 @@ proptest! {
         prop_assert_eq!(
             source.clone().canonicalize_by(CanonicalizeLevel::Full, &context),
             source.canonicalize(&context),
+        );
+    }
+
+    #[test]
+    fn test_reaction_canonical_hash(scenario in reaction_span_scenario_strategy()) {
+        let context = context();
+        let source = scenario.span.to_reaction();
+        let renumbered = scenario.span.remap(&scenario.first).to_reaction();
+
+        prop_assert_eq!(
+            source.clone().canonical_hash(&context),
+            renumbered.clone().canonical_hash(&context),
+        );
+        for level in [
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
+        ] {
+            prop_assert_eq!(
+                source.clone().canonical_hash_by(level, &context),
+                renumbered.clone().canonical_hash_by(level, &context),
+            );
+        }
+        prop_assert_eq!(
+            source
+                .clone()
+                .canonical_hash_by(CanonicalizeLevel::Full, &context),
+            source.canonical_hash(&context),
         );
     }
 
