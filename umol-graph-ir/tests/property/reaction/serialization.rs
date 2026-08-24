@@ -1,9 +1,17 @@
 //! Property tests for reaction serialization.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 
 use crate::strategies::*;
+
+fn hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
 
 proptest! {
     #![proptest_config(Config {
@@ -53,6 +61,16 @@ proptest! {
     }
 
     #[test]
+    fn test_reaction_structural_equality_implies_equal_hash(
+        reaction in comprehensive_reaction_strategy(),
+    ) {
+        let defaults = ReactionDefaults::new();
+        let rebuilt = ReactionDsl::from_ir(&reaction, &defaults).into_ir(&defaults);
+        prop_assert_eq!(&reaction, &rebuilt);
+        prop_assert_eq!(hash(&reaction), hash(&rebuilt));
+    }
+
+    #[test]
     fn test_reaction_defaults_roundtrip_ground(reaction in comprehensive_reaction_strategy()) {
         let required = ReactionDefaults::new();
         let ground = ReactionDefaults::concrete();
@@ -93,5 +111,18 @@ proptest! {
         let grounded = ReactionSpanDsl::from_ir(&span, &required).into_ir(&ground);
         let rebuilt = ReactionSpanDsl::from_ir(&grounded, &ground).into_ir(&ground);
         prop_assert_eq!(rebuilt, grounded);
+    }
+
+    #[test]
+    fn test_reaction_span_structural_equality_implies_equal_hash(
+        reaction in materializable_reaction_strategy(),
+    ) {
+        let span = reaction
+            .to_reaction_span()
+            .expect("generated reaction materializes a span");
+        let defaults = MoleculeDefaults::new();
+        let rebuilt = ReactionSpanDsl::from_ir(&span, &defaults).into_ir(&defaults);
+        prop_assert_eq!(&span, &rebuilt);
+        prop_assert_eq!(hash(&span), hash(&rebuilt));
     }
 }

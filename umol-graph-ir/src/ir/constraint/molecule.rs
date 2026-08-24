@@ -33,7 +33,7 @@ use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 /// ref-bearing constraints (e.g. a dative-bond donor identity, aromatic
 /// system membership, noncovalent endpoints) live only at molecule scope
 /// via `Relational`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Constraint {
     Atom(AtomId, AtomConstraintForm),
     Bond(BondId, BondConstraintForm),
@@ -244,7 +244,7 @@ fn normalize_logical_constraints(
 /// (molecule-scope predicates, combinators, and entity-leaves that appear
 /// inside combinators). Unconditional per-entity constraints live on the
 /// entity form's own `constraints` field; the DSL parser lifts them there.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Constraints(Vec<Constraint>);
 
 impl Constraints {
@@ -359,7 +359,7 @@ impl From<Vec<Constraint>> for Constraints {
 /// an `atoms` (or `bonds`) value of `None` denotes the entire molecule's atoms
 /// (or bonds), making the predicate stable across structural growth.
 /// `Some(vec)` denotes a fixed subset.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MoleculeConstraint {
     ChargeSum {
         atoms: Option<Vec<AtomId>>,

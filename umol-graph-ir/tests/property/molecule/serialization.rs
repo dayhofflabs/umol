@@ -1,10 +1,18 @@
 //! Molecule graph IR and DSL serialization properties.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use rstest::rstest;
 
 use crate::strategies::*;
+
+fn hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
 
 proptest! {
     #![proptest_config(Config {
@@ -71,6 +79,16 @@ proptest! {
         let parsed = Molecule::from_edn_str(&rendered)
             .map_err(|e| TestCaseError::fail(format!("streaming parse failed: {e}\nrendered: {rendered}")))?;
         prop_assert_eq!(molecule, parsed);
+    }
+
+    #[test]
+    fn test_molecule_structural_equality_implies_equal_hash(
+        molecule in molecule_with_constraints_strategy(),
+    ) {
+        let parsed = Molecule::from_edn(&molecule.to_edn())
+            .map_err(|e| TestCaseError::fail(format!("tree parse failed: {e}")))?;
+        prop_assert_eq!(&molecule, &parsed);
+        prop_assert_eq!(hash(&molecule), hash(&parsed));
     }
 
     #[test]

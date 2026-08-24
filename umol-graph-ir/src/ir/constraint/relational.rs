@@ -34,7 +34,7 @@ use super::atom::AtomConstraintForm;
 /// site identity and the atom-kind ligands. Lives only at molecule scope (in
 /// [`Constraint::Relational`](super::Constraint::Relational) or inside
 /// `And`/`Or`/`Not`); cannot appear inline on an entity.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RelationalConstraint {
     /// Dative bond `bond` has exactly `atoms` as its donors (as a set).
     DativeBondDonors {

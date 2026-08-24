@@ -6,6 +6,7 @@
 //! it and produce a `Compaction` for reindexing external data.
 
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::correspondence::{Correspondence, GraphCorrespondence};
@@ -46,7 +47,7 @@ impl From<usize> for EdgeId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Csr {
     offsets: Vec<u32>,
     neighbors: Vec<Neighbor>,
@@ -74,6 +75,12 @@ impl PartialEq for Graph {
 }
 
 impl Eq for Graph {}
+
+impl Hash for Graph {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.csr.hash(state);
+    }
+}
 
 impl Graph {
     pub fn new(node_count: usize, edges: &[[u32; 2]]) -> Self {
@@ -677,11 +684,18 @@ impl Remapping {
 #[cfg(test)]
 mod tests {
     use std::fmt::Debug;
+    use std::hash::{DefaultHasher, Hash, Hasher};
 
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+
+    fn hash<T: Hash>(value: &T) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
 
     fn assert_exact_size<T>(mut iterator: impl ExactSizeIterator<Item = T>, expected: Vec<T>)
     where
@@ -724,6 +738,16 @@ mod tests {
         assert_eq!(g.node_count(), expected_nodes);
         assert_eq!(g.edge_count(), expected_edges);
         assert!(g.is_dense());
+    }
+
+    #[rstest]
+    #[case::empty(0, vec![])]
+    #[case::parallel_edges(3, vec![[0, 1], [1, 2], [0, 1]])]
+    fn test_graph_hash(#[case] node_count: usize, #[case] edges: Vec<[u32; 2]>) {
+        let left = Graph::new(node_count, &edges);
+        let right = Graph::new(node_count, &edges);
+        assert_eq!(left, right);
+        assert_eq!(hash(&left), hash(&right));
     }
 
     #[rstest]

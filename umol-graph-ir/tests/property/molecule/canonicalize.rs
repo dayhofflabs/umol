@@ -3,7 +3,8 @@
 //! The generated domain contains integrity-valid molecules with every entity family and optional
 //! constraints. A complete reverse permutation in every entity namespace supplies the independent
 //! dense-remapping action. Exact fixtures and bounded exhaustive minima remain in the unit suite;
-//! this module asserts the public idempotence, remapping-invariance, and equality laws.
+//! this module asserts the public idempotence, remapping-invariance, equality, and canonical-hash
+//! laws.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -60,6 +61,32 @@ proptest! {
         if let Ok(canonical) = canonical {
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
+    }
+
+    #[test]
+    fn test_molecule_canonical_hash(molecule in molecule_with_constraints_strategy()) {
+        let context = context();
+        let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+
+        prop_assert_eq!(
+            molecule.clone().canonical_hash(&context),
+            renumbered.clone().canonical_hash(&context),
+        );
+        for level in [
+            CanonicalizeLevel::Topology,
+            CanonicalizeLevel::Constitution,
+            CanonicalizeLevel::Structure,
+            CanonicalizeLevel::Full,
+        ] {
+            prop_assert_eq!(
+                molecule.clone().canonical_hash_by(level, &context),
+                renumbered.clone().canonical_hash_by(level, &context),
+            );
+        }
+        prop_assert_eq!(
+            molecule.clone().canonical_hash_by(CanonicalizeLevel::Full, &context),
+            molecule.canonical_hash(&context),
+        );
     }
 
     #[test]

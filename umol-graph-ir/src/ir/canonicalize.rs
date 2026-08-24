@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -91,6 +92,8 @@ pub enum CanonicalizeLevel {
 ///   entity remapping;
 /// - `canonical_eq` and each `canonical_eq_by` relation are reflexive, symmetric, and transitive
 ///   under their documented failure totalization;
+/// - successful canonical hashes are invariant under valid dense entity remapping, and canonical
+///   equality implies equal canonical hashes when both hash operations succeed;
 /// - [`CanonicalizeLevel::Full`] is identical to the corresponding unqualified operation;
 /// - `canonical_eq_by` is invariant under valid dense entity remapping at every level.
 ///
@@ -152,6 +155,54 @@ pub trait Canonicalize: Sized {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
+    /// Hash the complete canonical form.
+    ///
+    /// The returned value uses Rust's [`DefaultHasher`]. It may collide and is not a persistent
+    /// identifier: both the hasher and umol's canonical comparison schema may change between
+    /// releases.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same error as [`Self::canonicalize`].
+    ///
+    /// # Semantic properties
+    ///
+    /// Successful hashes are invariant under valid dense entity remapping. Two successfully
+    /// canonicalized values that are equal have equal canonical hashes.
+    fn canonical_hash(self, context: &CanonicalizeContext) -> Result<u64, Self::Error>
+    where
+        Self: Hash,
+    {
+        self.canonicalize(context)
+            .map(|canonical| hash_value(&canonical))
+    }
+
+    /// Hash the canonical comparison key at the selected structural layer.
+    ///
+    /// Excluded features do not contribute to the hash. The returned value uses Rust's
+    /// [`DefaultHasher`], may collide, and is not a persistent identifier.
+    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_hash`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the aggregate-specific integrity error for malformed representation state and
+    /// [`Contradiction`] when normalization of selected data is unsatisfiable. At reduced levels,
+    /// contradictions confined to excluded features do not affect the hash. A [`Reaction`] may
+    /// also report failure to materialize its selected reaction span.
+    ///
+    /// # Semantic properties
+    ///
+    /// When two values compare equal through [`Self::canonical_eq_by`] and both hashes succeed,
+    /// their canonical hashes at that level are equal. The hash is invariant under valid dense
+    /// entity remapping at every level.
+    fn canonical_hash_by(
+        self,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error>
+    where
+        Self: Hash;
+
     /// Compare complete canonical forms.
     ///
     /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
@@ -170,7 +221,7 @@ pub trait Canonicalize: Sized {
     ) -> bool;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct StructuralDomainPosition(u16);
 
 impl StructuralDomainPosition {
@@ -179,7 +230,7 @@ impl StructuralDomainPosition {
     const STEREO: Self = Self(2);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct EntityBlockPosition {
     domain: StructuralDomainPosition,
     slot: u16,
@@ -200,13 +251,13 @@ impl EntityBlockPosition {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct FieldPosition(u16);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct VariantPosition(u16);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct SpanTagPosition(u16);
 
 impl SpanTagPosition {
@@ -216,7 +267,7 @@ impl SpanTagPosition {
     const MODIFIED: Self = Self(3);
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum ConstraintBlockPosition {
     Inline(EntityBlockPosition),
     Molecule,
@@ -251,7 +302,7 @@ impl PartialOrd for ConstraintBlockPosition {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct RelationalConstraintPosition {
     entity: EntityBlockPosition,
     slot: u16,
@@ -263,7 +314,7 @@ impl RelationalConstraintPosition {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct PositionedKey<P> {
     position: P,
     value: CanonicalKeyValue,
@@ -287,7 +338,7 @@ type FieldKey = PositionedKey<FieldPosition>;
 type EntityBlockKey = PositionedKey<EntityBlockPosition>;
 type ConstraintBlockKey = PositionedKey<ConstraintBlockPosition>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct VariantKey {
     position: VariantPosition,
     fields: Vec<FieldKey>,
@@ -307,7 +358,7 @@ impl PartialOrd for VariantKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct SpanKey {
     position: SpanTagPosition,
     values: Vec<CanonicalKeyValue>,
@@ -327,7 +378,7 @@ impl PartialOrd for SpanKey {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum CanonicalKeyValue {
     Bool(bool),
     Unsigned(u64),
@@ -378,7 +429,7 @@ impl PartialOrd for CanonicalKeyValue {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CanonicalComparisonKey {
     entity_blocks: Vec<EntityBlockKey>,
     constraints: Vec<ConstraintBlockKey>,
@@ -396,6 +447,12 @@ impl PartialOrd for CanonicalComparisonKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
+}
+
+fn hash_value<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn field(position: u16, value: CanonicalKeyValue) -> FieldKey {
@@ -4852,6 +4909,17 @@ impl Canonicalize for Molecule {
         }
     }
 
+    fn canonical_hash_by(
+        self,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error> {
+        if level == CanonicalizeLevel::Full {
+            return self.canonical_hash(context);
+        }
+        canonical_key_by(&self, level, context).map(|key| hash_value(&key))
+    }
+
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
@@ -5080,6 +5148,17 @@ impl Canonicalize for ReactionSpan {
         canonicalize_reaction_span_by(&self, level, context)
     }
 
+    fn canonical_hash_by(
+        self,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error> {
+        if level == CanonicalizeLevel::Full {
+            return self.canonical_hash(context);
+        }
+        canonical_reaction_span_key(&self, level, context).map(|key| hash_value(&key))
+    }
+
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
@@ -5212,6 +5291,20 @@ impl Canonicalize for Reaction {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         canonicalize_reaction_by(&self, level, context)
+    }
+
+    fn canonical_hash_by(
+        self,
+        level: CanonicalizeLevel,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error> {
+        if level == CanonicalizeLevel::Full {
+            return self.canonical_hash(context);
+        }
+        self.check_integrity()?;
+        let span = project_reaction(&self, level).to_reaction_span()?;
+        let key = reaction_span_canonical_candidate(&span, level, context)?.key;
+        Ok(hash_value(&key))
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
