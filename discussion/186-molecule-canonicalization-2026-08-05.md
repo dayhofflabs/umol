@@ -6,7 +6,8 @@ Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
 [117](117-entity-model-extensibility-2026-06-20.md),
 [185](185-python-reaction-span-2026-08-04.md),
-[188](188-inchi-migration-2026-08-09.md)
+[188](188-inchi-migration-2026-08-09.md),
+[208](208-canonicalization-scaling-2026-08-24.md)
 
 `Molecule` does not provide a canonical representation with respect to entity renumbering.
 `Graph::canonical_key` and canonical labels are available in

@@ -27,8 +27,11 @@ the statuses recorded here remain authoritative.
 
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
-- [163 — Release preparation](163-release-preparation-2026-07-26.md) is the
-  active release workstream; registry credentials and release execution remain.
+- [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
+  first OIDC-authenticated release, CI runtime, published Rust and Python
+  documentation, and the eventual arXiv link.
+- [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
+  improves canonicalization performance.
 
 ## Document index
 
@@ -228,3 +231,14 @@ the statuses recorded here remain authoritative.
 | [195-molecule-constraint-matching-2026-08-12.md](195-molecule-constraint-matching-2026-08-12.md)                 | Proposed      | 2026-08-12   | Evaluate molecule-level pattern constraints (entity leaves, relational, molecule, combinators) in matching. |
 | [196-aromatic-assignment-selection-2026-08-13.md](196-aromatic-assignment-selection-2026-08-13.md)               | Completed     | 2026-08-15   | Assignment-level aromatic selection A0–A6 done: overlap panic fixed; AromaticityTieBreak (MinElectronCount, presets adopt); pruned search + equivalence property; VEHICLe instrument 100 % determined, promoted and deleted. |
 | [197-deferred-dsl-features-2026-08-16.md](197-deferred-dsl-features-2026-08-16.md)                               | Proposed      | 2026-08-16   | Non-normative inventory of staged DSL and matching features removed from the specification.                 |
+| [198-resolver-performance-2026-08-17.md](198-resolver-performance-2026-08-17.md)                                 | In Progress   | 2026-08-18   | Linear aromatic merging removes the quadratic tail; phase lifecycle, valence, and cycle-analysis follow-ups remain. |
+| [199-open-container-integrity-2026-08-18.md](199-open-container-integrity-2026-08-18.md)                         | Proposed      | 2026-08-18   | The checked `Molecule::apply` failure boundary is settled; broader open-container and finalization semantics remain. |
+| [200-molecular-data-substrate-2026-08-19.md](200-molecular-data-substrate-2026-08-19.md)                         | Informational | 2026-08-19   | Molecular data substrate: template libraries, reaction networks, binary and columnar forms, query, geometry, ontology, and notebooks. |
+| [201-molecular-data-first-steps-2026-08-19.md](201-molecular-data-first-steps-2026-08-19.md)                     | In Progress   | 2026-08-22   | S6 is complete; S7 is deferred pending doc 205 corpus experience. The temporary Python storage bridge awaits disposition; S8 remains. |
+| [202-release-followups-2026-08-19.md](202-release-followups-2026-08-19.md)                                       | Proposed      | 2026-08-19   | Validate crates.io OIDC live, review CI runtime and docs.rs, publish Python docs, and update the arXiv link. |
+| [203-atom-mapping-2026-08-19.md](203-atom-mapping-2026-08-19.md)                                                 | Completed     | 2026-08-20   | Exact structural baseline complete; broader test-corpus, objective, and performance work moved to doc 205. |
+| [204-reaction-application-redesign-2026-08-19.md](204-reaction-application-redesign-2026-08-19.md)               | Proposed      | 2026-08-19   | Redesign the application result and decide whether `ReactionDerivation` remains, changes, or is removed.    |
+| [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.                      |
+| [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
+| [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.         |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | Proposed      | 2026-08-24   | Stage feature reduction, stereo-safe orbit pruning, and typed prefix pruning.                               |
