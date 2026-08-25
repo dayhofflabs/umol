@@ -29,8 +29,9 @@ fn node_branch_order(
     _algorithm: AutomorphismAlgorithm,
     _automorphisms: Option<&ProjectedAutomorphismOutput>,
     candidates: &mut [NodeId],
-) {
+) -> bool {
     candidates.sort_unstable();
+    false
 }
 
 fn reverse_node_branch_order(
@@ -39,8 +40,9 @@ fn reverse_node_branch_order(
     _algorithm: AutomorphismAlgorithm,
     _automorphisms: Option<&ProjectedAutomorphismOutput>,
     candidates: &mut [NodeId],
-) {
+) -> bool {
     candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs));
+    false
 }
 
 impl OrderedPartition {
@@ -3034,6 +3036,85 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     assert_eq!(reversed.candidate.key, expected.key);
     assert_eq!(pruned.candidate.key, expected.key);
     assert!(pruned.stats.visited_leaves <= unpruned.stats.visited_leaves);
+}
+
+#[rstest]
+#[case::singleton(
+    1,
+    CanonicalSearchOptions {
+        automorphism_pruning: false,
+        prefix_pruning: false,
+        branch_order: node_branch_order,
+    },
+    CanonicalSearchStats {
+        initial_residual_cell_sizes: vec![],
+        refinement_calls: 1,
+        branch_order_calls: 0,
+        backend_calls: 0,
+        visited_leaves: 1,
+        leaf_comparisons: 0,
+        prefix_pruned_branches: 0,
+        orbit_pruned_branches: 0,
+    },
+)]
+#[case::symmetric(
+    2,
+    CanonicalSearchOptions {
+        automorphism_pruning: false,
+        prefix_pruning: false,
+        branch_order: backend_canonical_branch_order,
+    },
+    CanonicalSearchStats {
+        initial_residual_cell_sizes: vec![2],
+        refinement_calls: 3,
+        branch_order_calls: 1,
+        backend_calls: 1,
+        visited_leaves: 2,
+        leaf_comparisons: 1,
+        prefix_pruned_branches: 0,
+        orbit_pruned_branches: 0,
+    },
+)]
+#[case::orbit_pruned(
+    2,
+    CanonicalSearchOptions {
+        automorphism_pruning: true,
+        prefix_pruning: false,
+        branch_order: backend_canonical_branch_order,
+    },
+    CanonicalSearchStats {
+        initial_residual_cell_sizes: vec![2],
+        refinement_calls: 2,
+        branch_order_calls: 1,
+        backend_calls: 1,
+        visited_leaves: 1,
+        leaf_comparisons: 0,
+        prefix_pruned_branches: 0,
+        orbit_pruned_branches: 1,
+    },
+)]
+fn test_canonical_search_stats(
+    #[case] node_count: usize,
+    #[case] options: CanonicalSearchOptions,
+    #[case] expected: CanonicalSearchStats,
+) {
+    let source = Graph::new(node_count, &[]);
+    let adapter = direct_graph_adapter(&source);
+    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
+        key: order.to_vec(),
+        entity_order: order.to_vec(),
+    };
+    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<Vec<NodeId>>| false;
+    let actual = canonical_search(
+        &adapter,
+        &adapter.classes,
+        AutomorphismAlgorithm::Nauty,
+        options,
+        &leaf_candidate,
+        &no_prefix,
+    );
+
+    assert_eq!(actual.stats, expected);
 }
 
 #[rstest]

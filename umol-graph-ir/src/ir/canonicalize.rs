@@ -1843,7 +1843,7 @@ type BranchOrdering = fn(
     AutomorphismAlgorithm,
     Option<&ProjectedAutomorphismOutput>,
     &mut [NodeId],
-);
+) -> bool;
 
 fn backend_canonical_branch_order(
     adapter: &AutomorphismAdapter,
@@ -1851,7 +1851,8 @@ fn backend_canonical_branch_order(
     algorithm: AutomorphismAlgorithm,
     automorphisms: Option<&ProjectedAutomorphismOutput>,
     candidates: &mut [NodeId],
-) {
+) -> bool {
+    let backend_called = automorphisms.is_none();
     let labels = automorphisms.map_or_else(
         || {
             adapter
@@ -1865,6 +1866,7 @@ fn backend_canonical_branch_order(
         ranks[node.index()] = rank;
     }
     candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+    backend_called
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1874,10 +1876,14 @@ struct CanonicalSearchOptions {
     branch_order: BranchOrdering,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalSearchStats {
+    initial_residual_cell_sizes: Vec<usize>,
     refinement_calls: usize,
+    branch_order_calls: usize,
+    backend_calls: usize,
     visited_leaves: usize,
+    leaf_comparisons: usize,
     prefix_pruned_branches: usize,
     orbit_pruned_branches: usize,
 }
@@ -1917,6 +1923,17 @@ where
     let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
     let mut best = None;
     let mut stats = CanonicalSearchStats {
+        initial_residual_cell_sizes: initial
+            .cells
+            .iter()
+            .filter(|cell| {
+                cell.len() > 1
+                    && cell
+                        .first()
+                        .is_some_and(|node| node.index() < adapter.source_node_count)
+            })
+            .map(Vec::len)
+            .collect(),
         refinement_calls: 1,
         ..Default::default()
     };
@@ -1967,16 +1984,23 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
         stats.visited_leaves += 1;
         let entity_order = partition.entity_order(adapter.source_node_count);
         let candidate = leaf_candidate(&entity_order);
-        if best.as_ref().is_none_or(|best| candidate.key < best.key) {
+        let improves = if let Some(best) = best.as_ref() {
+            stats.leaf_comparisons += 1;
+            candidate.key < best.key
+        } else {
+            true
+        };
+        if improves {
             *best = Some(candidate);
         }
         return;
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = options
-        .automorphism_pruning
-        .then(|| adapter.automorphisms_for_partition(&partition, algorithm));
+    let automorphisms = options.automorphism_pruning.then(|| {
+        stats.backend_calls += 1;
+        adapter.automorphisms_for_partition(&partition, algorithm)
+    });
 
     if options.automorphism_pruning {
         let orbits = &automorphisms
@@ -1994,13 +2018,15 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
         candidates = representatives.into_values().collect();
     }
 
-    (options.branch_order)(
+    stats.branch_order_calls += 1;
+    let backend_called = (options.branch_order)(
         adapter,
         &partition,
         algorithm,
         automorphisms.as_ref(),
         &mut candidates,
     );
+    stats.backend_calls += usize::from(backend_called);
 
     for candidate in candidates {
         stats.refinement_calls += 1;

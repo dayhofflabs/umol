@@ -204,10 +204,12 @@ classification, or the atom-mapping objective.
 
 ## Staged implementation plan
 
-Each stage ends with a green build. Search counters and comparison switches remain private test and
-benchmark infrastructure; this work does not add a public profiling API. The implementation order
-separates feature reduction, orbit pruning, and prefix pruning so their correctness and performance
-effects remain attributable.
+Each stage ends with a green build. Search counters are temporary research instrumentation, and
+comparison switches remain private test infrastructure; this work does not add a public profiling
+API. Before the S6 verification gate, all statistics types, result fields, and counter updates must
+be removed from ordinary builds. Any retained instrumentation must compile only under `cfg(test)`.
+The implementation order separates feature reduction, orbit pruning, and prefix pruning so their
+correctness and performance effects remain attributable.
 
 ### S0 — Retain benchmark cases and establish the search baseline
 
@@ -256,22 +258,39 @@ test thresholds.
 
 **Depends on:** none.
 
-#### S0b — Extend private search accounting
+#### S0b — Extend private search accounting **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and
 `umol-graph-ir/src/ir/canonicalize/tests.rs`.
 
 Extend the existing private `CanonicalSearchStats` with backend-call counts and enough residual-cell
 information to distinguish refinement, backend ordering, leaf comparison, orbit pruning, and prefix
-pruning. Thread the counters only through internal search entry points used by module-local tests.
-Criterion continues to measure timings through the public operation; do not add diagnostics to
-`Canonicalize` or expose a public search result wrapper for the benchmark harness.
+pruning. Keep the accounting confined to canonical-search internals and module-local tests. It may
+remain on the shared internal search path during the investigation, but it is temporary and subject
+to the S6a release-code removal gate. Criterion continues to measure timings through the public
+operation; do not add diagnostics to `Canonicalize` or expose a public search result wrapper for the
+benchmark harness.
 
 This is additive private instrumentation with no public API change.
 
 **Tests and evidence:** Add example-based `rstest` cases for a singleton partition, a symmetric
 partition, and an orbit-pruned partition. Assert exact counter relationships only where they are
 algorithmic invariants; timings remain benchmark evidence rather than test assertions.
+
+`CanonicalSearchStats` now records initial residual entity-cell sizes, refinement calls,
+branch-order calls, backend calls, visited leaves, leaf comparisons, and both pruning counts. The
+private branch-order callback reports whether it invoked the backend, allowing the collector to
+count ordering calls without double-counting automorphism output reused for orbit pruning. The
+module-local table establishes these exact base cases:
+
+| Case | Residual cells | Refinements | Branch orders | Backend | Leaves | Comparisons | Prefix-pruned | Orbit-pruned |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Singleton | `[]` | 1 | 0 | 0 | 1 | 0 | 0 | 0 |
+| Symmetric, backend-ordered | `[2]` | 3 | 1 | 1 | 2 | 1 | 0 | 0 |
+| Symmetric, orbit-pruned | `[2]` | 2 | 1 | 1 | 1 | 0 | 0 | 1 |
+
+The accounting remains temporary release-path code during the investigation and is still subject
+to the mandatory S6a removal gate.
 
 **Depends on:** S0a.
 
@@ -524,13 +543,18 @@ and timings. The stage is not complete merely because the counter becomes non-ze
 
 Run formatting, focused unit tests, feature-gated canonicalization property tests, graph-IR linting,
 and the canonicalization benchmark. Reconcile the public API inventory against the implementation
-and confirm that no diagnostic type or duplicate selector escaped into the public surface.
+and confirm that no diagnostic type or duplicate selector escaped into the public surface. Before
+running the performance gate, remove search accounting from the ordinary build: delete it or place
+the statistics type, instrumented result fields and entry points, and every counter update behind
+`cfg(test)`. The release benchmark must exercise the uninstrumented production search.
 
 This is verification only.
 
 **Tests and evidence:** All graph-IR canonicalization tests and properties pass; every retained
 benchmark case preserves the exact aggregate and transport law; benchmark results and search
-counters are recorded in this document.
+counters are recorded in this document. A source audit and release build confirm that
+`CanonicalSearchStats` and its updates are absent from the release-compiled path. This is a
+completion gate, not deferred cleanup.
 
 **Depends on:** S3b, S4c, and S5c.
 
@@ -575,7 +599,8 @@ remaining bottleneck.
 
 Document the implemented `FeatureLevel` contract, selector removal, effective-level rules, pruning
 boundary, benchmark evidence, and any deliberately unresolved behavior. Mark this document
-Completed only after the public inventory and all verification gates agree with the implementation.
+Completed only after the public inventory and all verification gates agree with the implementation,
+including the S6a removal of release-path search accounting.
 
 This is documentation and lifecycle work.
 
