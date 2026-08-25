@@ -8,6 +8,7 @@ use std::{array, iter};
 
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
+use umol_edn::FromEdn;
 use umol_perm::{Orientation, Permutation};
 
 use super::*;
@@ -1309,6 +1310,105 @@ fn test_molecule_canonicalize(canonicalize_context: CanonicalizeContext) {
         expected.clone().canonicalize(&canonicalize_context),
         Ok(expected.clone()),
     );
+}
+
+#[rstest]
+#[case::feature_free_connected(
+    r#"
+{:atoms ["H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"]
+ :bonds [[0 8 "1#c0#u0#s"]
+         [1 8 "1#c0#u0#s"]
+         [2 8 "1#c0#u0#s"]
+         [3 9 "1#c0#u0#s"]
+         [4 9 "1#c0#u0#s"]
+         [5 9 "1#c0#u0#s"]
+         [6 10 "1#c0#u0#s"]
+         [7 10 "1#c0#u0#s"]
+         [8 10 "1#c0#u0#s"]
+         [9 10 "1#c0#u0#s"]]}
+"#
+)]
+#[case::feature_free_disconnected(
+    r#"
+{:atoms ["H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"]
+ :bonds [[0 8 "1#c0#u0#s"]
+         [1 8 "1#c0#u0#s"]
+         [2 8 "1#c0#u0#s"]
+         [3 8 "1#c0#u0#s"]
+         [4 9 "1#c0#u0#s"]
+         [5 9 "1#c0#u0#s"]
+         [6 10 "1#c0#u0#s"]
+         [7 10 "1#c0#u0#s"]
+         [9 10 "1#c0#u0#s"]]}
+"#
+)]
+#[case::symmetry_heavy_radicals(
+    r#"
+{:atoms ["H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"]
+ :bonds [[6 7 "3#c0#u0#s"]]}
+"#
+)]
+fn test_molecule_canonicalize_retained(
+    canonicalize_context: CanonicalizeContext,
+    #[case] source: &str,
+) {
+    let source = Molecule::from_edn_str(source).expect("retained molecule parses");
+    let expected = source.clone();
+
+    for level in [
+        CanonicalizeLevel::Topology,
+        CanonicalizeLevel::Constitution,
+        CanonicalizeLevel::Structure,
+        CanonicalizeLevel::Full,
+    ] {
+        let canonical = source
+            .clone()
+            .canonicalize_by(level, &canonicalize_context)
+            .expect("retained molecule canonicalizes");
+
+        assert_eq!(canonical, expected);
+        assert_eq!(
+            canonical_key_by(&canonical, level, &canonicalize_context),
+            canonical_key_by(&expected, level, &canonicalize_context),
+        );
+    }
+
+    let (canonical, correspondence) = source
+        .clone()
+        .canonicalize_with_correspondence(&canonicalize_context)
+        .expect("retained molecule canonicalizes with a correspondence");
+    let transported = source.remap(&correspondence);
+
+    assert_eq!(canonical, expected);
+    assert_eq!(transported, expected);
+    assert!(source.equiv_under(&canonical, &correspondence));
 }
 
 #[rstest]

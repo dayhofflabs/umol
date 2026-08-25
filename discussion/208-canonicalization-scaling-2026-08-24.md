@@ -294,7 +294,7 @@ to the mandatory S6a removal gate.
 
 **Depends on:** S0a.
 
-#### S0c — Lock the semantic baseline
+#### S0c — Lock the semantic baseline **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize/tests.rs` and the canonicalization property-test
 module.
@@ -309,6 +309,35 @@ This is additive verification work with no public API change.
 **Tests and evidence:** Use example tests for retained expected aggregates and property tests for
 dense entity renumberings. The properties must compare the transported aggregate and canonical key,
 not the raw permutation chosen inside a symmetry class.
+
+The retained native DSL values are already the exact canonical aggregates at topology,
+constitution, structure, and full levels. The module-local table parses each value independently,
+asserts exact aggregate and selected-key equality at all four levels, and checks that the full
+source-to-result correspondence transports the source to that aggregate. It asserts semantic
+transport through `equiv_under`; it does not record or compare a particular correspondence image.
+
+The property suite now generates independently shuffled dense bijections in all eight entity
+namespaces instead of exercising only the reverse numbering. Over integrity-valid generated
+molecules, it compares the complete canonical aggregate, hashes, and level-specific canonical
+equality after transport, and checks the correspondence law for successful complete
+canonicalization.
+
+Together with the S0a timings, the retained-case search counters establish this pre-change
+baseline. Topology and constitution have identical accounting for these feature-free values, as do
+structure and full:
+
+| Case | Level | Residual cells | Refinements | Branch orders | Backend | Leaves | Comparisons | Prefix-pruned | Orbit-pruned |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Connected | Topology / constitution | `[6, 2, 2, 6, 2, 2]` | 6 | 5 | 5 | 1 | 0 | 0 | 10 |
+| Connected | Structure / full | `[6, 2, 2, 6, 2, 2]` | 271 | 127 | 127 | 144 | 143 | 0 | 0 |
+| Disconnected | Topology / constitution | `[4, 4, 2, 4, 4]` | 6 | 5 | 5 | 1 | 0 | 0 | 10 |
+| Disconnected | Structure / full | `[4, 4, 2, 4, 4]` | 329 | 137 | 137 | 192 | 191 | 0 | 0 |
+| Radicals | Topology / constitution | `[6, 2]` | 7 | 6 | 6 | 1 | 0 | 0 | 16 |
+| Radicals | Structure / full | `[6, 2]` | 2,677 | 1,237 | 1,237 | 1,440 | 1,439 | 0 | 0 |
+
+No retained counter collector or printing path was added. The values above were read from the S0b
+private search result during the focused baseline run; ordinary tests retain only semantic
+assertions, and the S6a release-code removal gate remains unchanged.
 
 **Depends on:** S0b.
 

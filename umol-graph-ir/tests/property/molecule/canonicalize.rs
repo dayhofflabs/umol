@@ -1,10 +1,10 @@
 //! Aggregate-canonicalization properties.
 //!
 //! The generated domain contains integrity-valid molecules with every entity family and optional
-//! constraints. A complete reverse permutation in every entity namespace supplies the independent
+//! constraints. Independently shuffled complete permutations in every entity namespace supply the
 //! dense-remapping action. Exact fixtures and bounded exhaustive minima remain in the unit suite;
 //! this module asserts the public idempotence, remapping-invariance, equality, and canonical-hash
-//! laws.
+//! laws without selecting a particular symmetry-equivalent correspondence.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -15,24 +15,45 @@ use umol_graph_ir::ir::{
 
 use crate::strategies::*;
 
-fn reverse<Id>(count: usize) -> Correspondence<Id>
-where
-    Id: Copy + Ord + From<usize>,
-{
-    Correspondence::from_images(&(0..count).rev().map(Id::from).collect::<Vec<_>>(), count)
-}
-
-fn reverse_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
-    MoleculeCorrespondence::new(
-        reverse::<AtomId>(molecule.atoms().count()),
-        reverse::<BondId>(molecule.bonds().count()),
-        reverse::<DativeBondId>(molecule.dative_bonds().count()),
-        reverse::<AromaticSystemId>(molecule.aromatic_systems().count()),
-        reverse::<MulticenterBondId>(molecule.multicenter_bonds().count()),
-        reverse::<NoncovalentBondId>(molecule.noncovalent_bonds().count()),
-        reverse::<StereoAtomId>(molecule.stereo_atoms().count()),
-        reverse::<StereoBondId>(molecule.stereo_bonds().count()),
-    )
+fn dense_renumbering_strategy() -> impl Strategy<Value = (Molecule, MoleculeCorrespondence)> {
+    molecule_with_constraints_strategy().prop_flat_map(|molecule| {
+        (
+            Just(molecule.clone()),
+            Just(molecule.atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.dative_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.aromatic_systems().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.multicenter_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.noncovalent_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.stereo_atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.stereo_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+        )
+            .prop_map(
+                |(
+                    molecule,
+                    atoms,
+                    bonds,
+                    dative,
+                    aromatic,
+                    multicenter,
+                    noncovalent,
+                    stereo_atoms,
+                    stereo_bonds,
+                )| {
+                    let correspondence = MoleculeCorrespondence::new(
+                        Correspondence::from_images(&atoms, atoms.len()),
+                        Correspondence::from_images(&bonds, bonds.len()),
+                        Correspondence::from_images(&dative, dative.len()),
+                        Correspondence::from_images(&aromatic, aromatic.len()),
+                        Correspondence::from_images(&multicenter, multicenter.len()),
+                        Correspondence::from_images(&noncovalent, noncovalent.len()),
+                        Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
+                        Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+                    );
+                    (molecule, correspondence)
+                },
+            )
+    })
 }
 
 fn context() -> CanonicalizeContext {
@@ -51,22 +72,32 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_canonicalize(molecule in molecule_with_constraints_strategy()) {
+    fn test_molecule_canonicalize(
+        (molecule, renumbering) in dense_renumbering_strategy(),
+    ) {
         let context = context();
-        let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+        let renumbered = molecule.remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
         let renumbered_canonical = renumbered.canonicalize(&context);
 
         prop_assert_eq!(&renumbered_canonical, &canonical);
         if let Ok(canonical) = canonical {
+            let (_, correspondence) = molecule
+                .clone()
+                .canonicalize_with_correspondence(&context)
+                .expect("successful canonicalization returns its correspondence");
+
+            prop_assert!(molecule.equiv_under(&canonical, &correspondence));
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
     }
 
     #[test]
-    fn test_molecule_canonical_hash(molecule in molecule_with_constraints_strategy()) {
+    fn test_molecule_canonical_hash(
+        (molecule, renumbering) in dense_renumbering_strategy(),
+    ) {
         let context = context();
-        let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+        let renumbered = molecule.remap(&renumbering);
 
         prop_assert_eq!(
             molecule.clone().canonical_hash(&context),
@@ -90,9 +121,11 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_canonical_eq(molecule in molecule_with_constraints_strategy()) {
+    fn test_molecule_canonical_eq(
+        (molecule, renumbering) in dense_renumbering_strategy(),
+    ) {
         let context = context();
-        let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+        let renumbered = molecule.remap(&renumbering);
         let canonical = molecule.clone().canonicalize(&context);
 
         prop_assert!(molecule.canonical_eq(&molecule, &context));
@@ -108,9 +141,11 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_canonical_eq_by(molecule in molecule_with_constraints_strategy()) {
+    fn test_molecule_canonical_eq_by(
+        (molecule, renumbering) in dense_renumbering_strategy(),
+    ) {
         let context = context();
-        let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+        let renumbered = molecule.remap(&renumbering);
 
         for level in [
             CanonicalizeLevel::Topology,
