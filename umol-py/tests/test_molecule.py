@@ -15,7 +15,7 @@ from umol import (
     AtomTypeRegistry,
     BondForm,
     CanonicalizeConfig,
-    CanonicalizeLevel,
+    DescriptionLevel,
     ChemistryModel,
     ConnectedComponentsAlgorithm,
     Constraint,
@@ -82,15 +82,40 @@ def test_canonicalization_config():
 @pytest.mark.parametrize(
     ("level", "expected_repr"),
     [
-        (CanonicalizeLevel.Topology, "CanonicalizeLevel.Topology"),
-        (CanonicalizeLevel.Constitution, "CanonicalizeLevel.Constitution"),
-        (CanonicalizeLevel.Structure, "CanonicalizeLevel.Structure"),
-        (CanonicalizeLevel.Full, "CanonicalizeLevel.Full"),
+        (DescriptionLevel.Topology, "DescriptionLevel.Topology"),
+        (DescriptionLevel.Constitution, "DescriptionLevel.Constitution"),
+        (DescriptionLevel.Structure, "DescriptionLevel.Structure"),
+        (DescriptionLevel.Full, "DescriptionLevel.Full"),
     ],
 )
-def test_canonicalization_level(level, expected_repr):
+def test_description_level(level, expected_repr):
     assert repr(level) == expected_repr
     assert {level: expected_repr}[level] == expected_repr
+
+
+@pytest.mark.parametrize(
+    ("molecule", "expected"),
+    [
+        (Molecule.parse('{:atoms ["C"]}'), DescriptionLevel.Topology),
+        (
+            Molecule.from_entries(
+                [AtomForm(Element("N")), AtomForm(Element("B"))],
+                dative_bonds=[([0], 1, DativeBondForm(1))],
+            ),
+            DescriptionLevel.Constitution,
+        ),
+        (
+            Molecule.parse(
+                '{:atoms ["C" "F" "Cl" "Br" "I"] '
+                ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}'
+            ),
+            DescriptionLevel.Structure,
+        ),
+        (Molecule.parse('{:atoms ["C#v4"]}'), DescriptionLevel.Full),
+    ],
+)
+def test_molecule_description_level(molecule, expected):
+    assert molecule.description_level() == expected
 
 
 def test_molecule_new():
@@ -399,8 +424,8 @@ def test_molecule_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(CanonicalizeLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
+    assert source.canonicalize_by(DescriptionLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, DescriptionLevel.Full)
 
 
 def test_molecule_canonicalize_with_correspondence():
@@ -425,7 +450,7 @@ def test_molecule_canonicalize_by():
 
     assert plain.canonical_eq_by(
         constrained,
-        CanonicalizeLevel.Structure,
+        DescriptionLevel.Structure,
         stereo_model=StereoModel.default(),
         config=CanonicalizeConfig.default(),
     )

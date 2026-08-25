@@ -6,7 +6,7 @@ use umol_graph::ops::canonicalize::CanonicalizeConfig as GraphCanonicalizeConfig
 use umol_graph::ops::model::StereoModel as GraphStereoModel;
 use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext as GraphIrCanonicalizeContext,
-    CanonicalizeLevel as GraphIrCanonicalizeLevel,
+    DescriptionLevel as GraphIrDescriptionLevel,
     MoleculeCanonicalizeError as GraphIrMoleculeCanonicalizeError,
     ReactionCanonicalizeError as GraphIrReactionCanonicalizeError,
     ReactionSpanCanonicalizeError as GraphIrReactionSpanCanonicalizeError,
@@ -20,39 +20,32 @@ use crate::molecule::Molecule;
 use crate::reaction::Reaction;
 use crate::reaction_span::ReactionSpan;
 
-/// Nested structural layer used to select or compare a canonical entity frame.
+/// One level in the cumulative graph-IR description hierarchy.
 #[pyclass(eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CanonicalizeLevel {
+pub enum DescriptionLevel {
     Topology,
     Constitution,
     Structure,
     Full,
 }
 
-impl CanonicalizeLevel {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Rust-to-Python conversion is part of the canonicalization binding contract"
-        )
-    )]
-    pub(crate) fn from_rust(level: GraphIrCanonicalizeLevel) -> Self {
+impl DescriptionLevel {
+    pub(crate) fn from_rust(level: GraphIrDescriptionLevel) -> Self {
         match level {
-            GraphIrCanonicalizeLevel::Topology => Self::Topology,
-            GraphIrCanonicalizeLevel::Constitution => Self::Constitution,
-            GraphIrCanonicalizeLevel::Structure => Self::Structure,
-            GraphIrCanonicalizeLevel::Full => Self::Full,
+            GraphIrDescriptionLevel::Topology => Self::Topology,
+            GraphIrDescriptionLevel::Constitution => Self::Constitution,
+            GraphIrDescriptionLevel::Structure => Self::Structure,
+            GraphIrDescriptionLevel::Full => Self::Full,
         }
     }
 
-    pub(crate) fn to_rust(self) -> GraphIrCanonicalizeLevel {
+    pub(crate) fn to_rust(self) -> GraphIrDescriptionLevel {
         match self {
-            Self::Topology => GraphIrCanonicalizeLevel::Topology,
-            Self::Constitution => GraphIrCanonicalizeLevel::Constitution,
-            Self::Structure => GraphIrCanonicalizeLevel::Structure,
-            Self::Full => GraphIrCanonicalizeLevel::Full,
+            Self::Topology => GraphIrDescriptionLevel::Topology,
+            Self::Constitution => GraphIrDescriptionLevel::Constitution,
+            Self::Structure => GraphIrDescriptionLevel::Structure,
+            Self::Full => GraphIrDescriptionLevel::Full,
         }
     }
 }
@@ -202,7 +195,7 @@ impl Molecule {
     #[pyo3(signature = (level, *, stereo_model=None, config=None))]
     fn canonicalize_by(
         &self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
@@ -230,7 +223,7 @@ impl Molecule {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> bool {
@@ -288,7 +281,7 @@ impl ReactionSpan {
     #[pyo3(signature = (level, *, stereo_model=None, config=None))]
     fn canonicalize_by(
         &self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
@@ -316,7 +309,7 @@ impl ReactionSpan {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> bool {
@@ -375,7 +368,7 @@ impl Reaction {
     fn canonicalize_by(
         &self,
         py: Python<'_>,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
@@ -407,7 +400,7 @@ impl Reaction {
         &self,
         other: &Self,
         py: Python<'_>,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
     ) -> bool {
@@ -427,18 +420,15 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::topology(GraphIrCanonicalizeLevel::Topology, CanonicalizeLevel::Topology)]
-    #[case::constitution(
-        GraphIrCanonicalizeLevel::Constitution,
-        CanonicalizeLevel::Constitution
-    )]
-    #[case::structure(GraphIrCanonicalizeLevel::Structure, CanonicalizeLevel::Structure)]
-    #[case::full(GraphIrCanonicalizeLevel::Full, CanonicalizeLevel::Full)]
-    fn test_canonicalize_level_conversion(
-        #[case] rust: GraphIrCanonicalizeLevel,
-        #[case] python: CanonicalizeLevel,
+    #[case::topology(GraphIrDescriptionLevel::Topology, DescriptionLevel::Topology)]
+    #[case::constitution(GraphIrDescriptionLevel::Constitution, DescriptionLevel::Constitution)]
+    #[case::structure(GraphIrDescriptionLevel::Structure, DescriptionLevel::Structure)]
+    #[case::full(GraphIrDescriptionLevel::Full, DescriptionLevel::Full)]
+    fn test_description_level_conversion(
+        #[case] rust: GraphIrDescriptionLevel,
+        #[case] python: DescriptionLevel,
     ) {
-        assert_eq!(CanonicalizeLevel::from_rust(rust), python);
+        assert_eq!(DescriptionLevel::from_rust(rust), python);
         assert_eq!(python.to_rust(), rust);
     }
 

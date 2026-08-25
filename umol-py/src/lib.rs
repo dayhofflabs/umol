@@ -15,7 +15,7 @@ use crate::{
     atom::{AtomForm, AtomUpdate, AtomView, AtomViews, ElementForm, IsotopeMass, IsotopeMassForm},
     bond::{BondForm, BondUpdate, BondView, BondViews},
     boolean::BooleanForm,
-    canonicalize::{CanonicalizeConfig, CanonicalizeLevel},
+    canonicalize::{CanonicalizeConfig, DescriptionLevel},
     constraint::{
         aromatic::{
             AromaticSystemConstraintForm, AromaticSystemConstraintKey,
@@ -203,7 +203,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "graph")]
     {
         module.add_class::<AutomorphismAlgorithm>()?;
-        module.add_class::<CanonicalizeLevel>()?;
+        module.add_class::<DescriptionLevel>()?;
         module.add_class::<CanonicalizeConfig>()?;
         module.add_class::<CommonSubgraphEnumerationAlgorithm>()?;
         module.add_class::<ConnectedComponentsAlgorithm>()?;

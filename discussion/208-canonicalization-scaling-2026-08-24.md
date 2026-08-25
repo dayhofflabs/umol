@@ -419,7 +419,7 @@ benchmark build, and graph-IR Clippy with all targets and the property-test feat
 
 **Depends on:** S1a.
 
-#### S2b — Migrate the Python selector and feature query
+#### S2b — Migrate the Python selector and feature query **Done**
 
 **Module:** `umol-py/src/canonicalize.rs`, molecule bindings, package exports, type stubs or Python
 surface declarations, and Python tests.
@@ -440,6 +440,16 @@ This is a breaking Python rename plus one additive query.
 
 **Tests and evidence:** Update import, enum-conversion, molecule-query, and canonicalization tests.
 Build against the repository Python 3.13 environment and run the focused Python suite.
+
+The Python binding now exports `DescriptionLevel` as the only description selector and exposes
+`Molecule.description_level()`. The enum conversion remains a direct total correspondence with the
+Rust variants, and every molecule, reaction, and reaction-span canonicalization method now accepts
+the renamed value without changing its result or exception surface. Package exports and public
+operation signatures have been migrated; `CanonicalizeLevel` is absent from `umol-py`.
+
+The migration passes the `umol-py` Rust suite (`1632` passed, `2` ignored), a fresh editable build
+against Python 3.13.15, the complete Python suite (`1324` passed, `2` skipped), and `umol-py` Clippy
+over all targets with warnings denied.
 
 **Depends on:** S2a.
 

@@ -4,7 +4,7 @@ from umol import (
     BondForm,
     BondDelta,
     BondFieldChange,
-    CanonicalizeLevel,
+    DescriptionLevel,
     ContradictionError,
     Delta,
     Deltas,
@@ -192,8 +192,8 @@ def test_reaction_span_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(CanonicalizeLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
+    assert source.canonicalize_by(DescriptionLevel.Full) == canonical
+    assert source.canonical_eq_by(expected, DescriptionLevel.Full)
 
 
 def test_reaction_span_canonicalize_with_correspondence():
@@ -218,7 +218,7 @@ def test_reaction_span_canonicalize_by():
 
     assert plain.canonical_eq_by(
         constrained,
-        CanonicalizeLevel.Structure,
+        DescriptionLevel.Structure,
     )
     assert not plain.canonical_eq(constrained)
 

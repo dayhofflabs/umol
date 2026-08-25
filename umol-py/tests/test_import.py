@@ -55,7 +55,7 @@ PUBLIC_EXPORTS = frozenset(
     BondViews
     BooleanForm
     CanonicalizeConfig
-    CanonicalizeLevel
+    DescriptionLevel
     ChemistryModel
     CisTransConfiguration
     CisTransStereo
@@ -335,6 +335,7 @@ def test_deferred_member(owner, name):
             umol.Molecule.from_smiles,
             "(source, *, io_config=None, chemistry_model=None, resolve_config=None)",
         ),
+        (umol.Molecule.description_level, "(self, /)"),
         (umol.Molecule.edit, "(self, /)"),
         (umol.Molecule.apply, "(self, /, edits)"),
         (umol.Molecule.combine, "(self, /, other)"),
