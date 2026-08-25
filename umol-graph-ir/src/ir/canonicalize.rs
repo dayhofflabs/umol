@@ -78,7 +78,6 @@ fn canonicalize_level_with_constraints(
     }
 }
 
-#[allow(dead_code)]
 fn entity_span_canonicalize_level<T>(
     span: &EntitySpan<T>,
     base: CanonicalizeLevel,
@@ -95,7 +94,6 @@ fn entity_span_canonicalize_level<T>(
     canonicalize_level_with_constraints(base, has_inline_constraints)
 }
 
-#[allow(dead_code)]
 fn delta_canonicalize_level(delta: &Delta) -> CanonicalizeLevel {
     match delta {
         Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
@@ -179,6 +177,130 @@ fn delta_canonicalize_level(delta: &Delta) -> CanonicalizeLevel {
         Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
         Delta::Constraint(_) => CanonicalizeLevel::Full,
     }
+}
+
+#[allow(dead_code)]
+fn molecule_canonicalize_level(molecule: &Molecule) -> CanonicalizeLevel {
+    let has_inline_constraints = molecule
+        .atoms()
+        .iter()
+        .any(|atom| !atom.attributes.constraints.is_empty())
+        || molecule
+            .bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .dative_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .aromatic_systems()
+            .iter()
+            .any(|system| !system.attributes.constraints.is_empty())
+        || molecule
+            .multicenter_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .noncovalent_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .stereo_atoms()
+            .iter()
+            .any(|stereo| !stereo.attributes.constraints.is_empty())
+        || molecule
+            .stereo_bonds()
+            .iter()
+            .any(|stereo| !stereo.attributes.constraints.is_empty());
+
+    if has_inline_constraints || molecule.has_constraints() {
+        CanonicalizeLevel::Full
+    } else if molecule.has_stereo_atoms() || molecule.has_stereo_bonds() {
+        CanonicalizeLevel::Structure
+    } else if molecule.has_dative_bonds()
+        || molecule.has_aromatic_systems()
+        || molecule.has_multicenter_bonds()
+        || molecule.has_noncovalent_bonds()
+    {
+        CanonicalizeLevel::Constitution
+    } else {
+        CanonicalizeLevel::Topology
+    }
+}
+
+#[allow(dead_code)]
+fn reaction_canonicalize_level(reaction: &Reaction) -> CanonicalizeLevel {
+    reaction.deltas.iter().fold(
+        molecule_canonicalize_level(&reaction.lhs),
+        |level, delta| level.max(delta_canonicalize_level(delta)),
+    )
+}
+
+#[allow(dead_code)]
+fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
+    if !span.constraints().is_empty() {
+        return CanonicalizeLevel::Full;
+    }
+
+    let mut level = CanonicalizeLevel::Topology;
+    for entity in span.atoms() {
+        level = level.max(entity_span_canonicalize_level(
+            entity,
+            CanonicalizeLevel::Topology,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for entity in span.bonds() {
+        level = level.max(entity_span_canonicalize_level(
+            entity,
+            CanonicalizeLevel::Topology,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.dative_bonds().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.dative_bonds().data(id),
+            CanonicalizeLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.aromatic_systems().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.aromatic_systems().data(id),
+            CanonicalizeLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.multicenter_bonds().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.multicenter_bonds().data(id),
+            CanonicalizeLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.noncovalent_bonds().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.noncovalent_bonds().data(id),
+            CanonicalizeLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.stereo_atoms().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.stereo_atoms().data(id),
+            CanonicalizeLevel::Structure,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.stereo_bonds().relation_ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.stereo_bonds().data(id),
+            CanonicalizeLevel::Structure,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    level
 }
 
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.

@@ -126,7 +126,7 @@ constraint deltas. Assert the private containment order without adding a public 
 
 **Dependencies:** [dep: none]
 
-#### S0b — Derive the effective level of each aggregate
+#### S0b — Derive the effective level of each aggregate **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and its unit tests.
 
