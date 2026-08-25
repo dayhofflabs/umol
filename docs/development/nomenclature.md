@@ -79,7 +79,7 @@ approximate.
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
-| `*Level` | closed enum selecting one of several nested named layers | 3 | graph-ir |
+| `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
@@ -231,7 +231,8 @@ spelling.
 | `apply_remapping`, `try_apply_remapping` | `remap`, `try_remap` | the receiver is transported through the supplied remapping |
 | `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
-| operation-noun composites for run artifacts (`KekulizationConfig`, `CanonicalizationLevel`) | verb stem (`KekulizeConfig`, `CanonicalizeLevel`) | the operation noun names a completed act, not a run's parameters |
+| operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
+| `CanonicalizeLevel`, `CanonicalizationLevel` | `DescriptionLevel` | the nested hierarchy belongs to the represented description, not to canonicalization |
 | `ground` for a molecule's or entity's chemistry-level determinedness | `concrete` | ground is the lattice term (constraint coordinates included) and risks the ground-state reading |
 
 ## Open issues
@@ -601,7 +602,8 @@ adds stereo atoms and stereo bonds. `Full` adds inline and molecule-level constr
 
 **Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
 switches; *domain*, which names a compositional entity group; *scope*, which does not express the
-projected reading or the cumulative order; *representation level*, which compares distinct models.
+projected reading or the cumulative order; *representation level*, which compares distinct models;
+*canonicalization level*, which assigns the representation hierarchy to one operation.
 **In code:** `DescriptionLevel`, `Molecule::description_level`.
 
 ### Determined
@@ -885,7 +887,7 @@ directed bond, so a dative donor and acceptor are never automorphism-equivalent.
 `IncidenceLevel` names three carrier levels, which land on the chemist's own hierarchy: `Topology`
 is atoms and localized bonds (AB), `Constitution` adds the non-stereo domain (DAMN), and `Full` adds
 the stereo domain (SS). The final name means the complete incidence carrier; constraints have no
-incidence nodes. The parallel canonicalization level for this carrier is `Structure`.
+incidence nodes. The parallel description level for this carrier is `Structure`.
 
 **Cost, and why it is not the default.** Because nauty does not accept edge colours, every localized
 bond must also become a pseudonode, and a molecule has far more bonds than overlays. So
@@ -1180,8 +1182,8 @@ and the operation noun (*resolution*) — and composites choose by referent:
   nothing else: `Resolver`, `ValenceResolver`, `ConstraintValidator`, `ParserType`.
 - The **verb stem** names everything a run consumes, threads, or emits — configs, state,
   reports, errors, contradictions: `ResolveConfig`, `ResolveState`, `ResolveReport`,
-  `ResolveError`, `ParseError`, `ValidateConfig`, `KekulizeConfig`, `CanonicalizeLevel`. This is
-  the default for operation-adjacent types.
+  `ResolveError`, `ParseError`, `ValidateConfig`, `KekulizeConfig`. This is the default for
+  operation-adjacent types.
 - The **operation noun** is reserved for prose and for result objects that name a completed act
   as data (`AromaticityDerivation`); when the result object has a more specific name
   (`ResolveReport`, a coloring, a matching), prefer it.
@@ -1196,11 +1198,11 @@ naming work; appending the agent noun to a dispatch variant's payload adds lengt
 stutters against the facade that selects it.
 
 **Not:** agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`,
-`KekulizerError`); operation-noun composites for run artifacts (`KekulizationConfig`,
-`CanonicalizationLevel`); agent suffixes on method-qualified engines
+`KekulizerError`); operation-noun composites for run artifacts (`KekulizationConfig`); agent
+suffixes on method-qualified engines
 (`HueckelAromaticityPerceiver`).
 **In code:** `Resolver`/`ResolveConfig`/`ResolveState`/`ResolveReport`, `ValidateError`,
-`KekulizeConfig`, `CanonicalizeLevel`, `AromaticityPerceiver`, `CountsValence`.
+`KekulizeConfig`, `AromaticityPerceiver`, `CountsValence`.
 
 ### Overlay
 

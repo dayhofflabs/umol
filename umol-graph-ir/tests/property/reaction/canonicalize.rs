@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::{
-    AtomDelta, Canonicalize, CanonicalizeContext, CanonicalizeLevel, Contradiction, Delta, Deltas,
+    AtomDelta, Canonicalize, CanonicalizeContext, Contradiction, Delta, Deltas, DescriptionLevel,
     Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
     ReactionCanonicalizeError, ReactionDerivation, ReactionIntegrityError, ReactionSpan,
 };
@@ -231,17 +231,17 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first).to_reaction();
 
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             let left = source.clone().canonicalize_by(level, &context);
             let right = renumbered.clone().canonicalize_by(level, &context);
             match (left, right) {
                 (Ok(left), Ok(right)) => {
                     prop_assert!(left.canonical_eq_by(&right, level, &context));
-                    if level == CanonicalizeLevel::Full {
+                    if level == DescriptionLevel::Full {
                         prop_assert_eq!(left, right);
                     }
                 }
@@ -252,7 +252,7 @@ proptest! {
             }
         }
         prop_assert_eq!(
-            source.clone().canonicalize_by(CanonicalizeLevel::Full, &context),
+            source.clone().canonicalize_by(DescriptionLevel::Full, &context),
             source.canonicalize(&context),
         );
     }
@@ -268,10 +268,10 @@ proptest! {
             renumbered.clone().canonical_hash(&context),
         );
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             prop_assert_eq!(
                 source.clone().canonical_hash_by(level, &context),
@@ -281,7 +281,7 @@ proptest! {
         prop_assert_eq!(
             source
                 .clone()
-                .canonical_hash_by(CanonicalizeLevel::Full, &context),
+                .canonical_hash_by(DescriptionLevel::Full, &context),
             source.canonical_hash(&context),
         );
     }
@@ -293,10 +293,10 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first).to_reaction();
 
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             prop_assert!(source.canonical_eq_by(&source, level, &context));
             prop_assert!(source.canonical_eq_by(&renumbered, level, &context));
@@ -306,7 +306,7 @@ proptest! {
             );
         }
         prop_assert_eq!(
-            source.canonical_eq_by(&renumbered, CanonicalizeLevel::Full, &context),
+            source.canonical_eq_by(&renumbered, DescriptionLevel::Full, &context),
             source.canonical_eq(&renumbered, &context),
         );
     }

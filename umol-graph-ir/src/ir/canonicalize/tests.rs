@@ -1383,10 +1383,10 @@ fn test_molecule_canonicalize_retained(
     let expected = source.clone();
 
     for level in [
-        CanonicalizeLevel::Topology,
-        CanonicalizeLevel::Constitution,
-        CanonicalizeLevel::Structure,
-        CanonicalizeLevel::Full,
+        DescriptionLevel::Topology,
+        DescriptionLevel::Constitution,
+        DescriptionLevel::Structure,
+        DescriptionLevel::Full,
     ] {
         let canonical = source
             .clone()
@@ -1485,14 +1485,14 @@ fn test_molecule_canonicalize_integrity_error(
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_molecule_canonicalize_by(
     initial_class_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let canonical = initial_class_molecule
         .clone()
@@ -1505,7 +1505,7 @@ fn test_molecule_canonicalize_by(
             .canonicalize_by(level, &canonicalize_context),
         Ok(canonical),
     );
-    if level == CanonicalizeLevel::Full {
+    if level == DescriptionLevel::Full {
         assert_eq!(
             initial_class_molecule
                 .clone()
@@ -1578,10 +1578,10 @@ fn test_molecule_canonical_eq_by_topology(canonicalize_context: CanonicalizeCont
         ..Default::default()
     });
 
-    assert!(left.canonical_eq_by(&right, CanonicalizeLevel::Topology, &canonicalize_context,));
+    assert!(left.canonical_eq_by(&right, DescriptionLevel::Topology, &canonicalize_context,));
     assert!(!left.canonical_eq_by(
         &right,
-        CanonicalizeLevel::Constitution,
+        DescriptionLevel::Constitution,
         &canonicalize_context,
     ));
 }
@@ -1599,8 +1599,8 @@ fn test_molecule_canonical_hash_by_topology(canonicalize_context: CanonicalizeCo
     });
 
     assert_eq!(
-        left.canonical_hash_by(CanonicalizeLevel::Topology, &canonicalize_context),
-        right.canonical_hash_by(CanonicalizeLevel::Topology, &canonicalize_context),
+        left.canonical_hash_by(DescriptionLevel::Topology, &canonicalize_context),
+        right.canonical_hash_by(DescriptionLevel::Topology, &canonicalize_context),
     );
 }
 
@@ -1615,12 +1615,12 @@ fn test_molecule_canonical_eq_by_constitution(
 
     assert!(constitution.canonical_eq_by(
         &stereo_atom_canonicalization_molecule,
-        CanonicalizeLevel::Constitution,
+        DescriptionLevel::Constitution,
         &canonicalize_context,
     ));
     assert!(!constitution.canonical_eq_by(
         &stereo_atom_canonicalization_molecule,
-        CanonicalizeLevel::Structure,
+        DescriptionLevel::Structure,
         &canonicalize_context,
     ));
 }
@@ -1635,9 +1635,9 @@ fn test_molecule_canonical_hash_by_constitution(
     let constitution = Molecule::from_entries(entries);
 
     assert_eq!(
-        constitution.canonical_hash_by(CanonicalizeLevel::Constitution, &canonicalize_context),
+        constitution.canonical_hash_by(DescriptionLevel::Constitution, &canonicalize_context),
         stereo_atom_canonicalization_molecule
-            .canonical_hash_by(CanonicalizeLevel::Constitution, &canonicalize_context),
+            .canonical_hash_by(DescriptionLevel::Constitution, &canonicalize_context),
     );
 }
 
@@ -1656,12 +1656,12 @@ fn test_molecule_canonical_eq_by_structure(canonicalize_context: CanonicalizeCon
 
     assert!(plain.canonical_eq_by(
         &constrained,
-        CanonicalizeLevel::Structure,
+        DescriptionLevel::Structure,
         &canonicalize_context,
     ));
-    assert!(!plain.canonical_eq_by(&constrained, CanonicalizeLevel::Full, &canonicalize_context,));
+    assert!(!plain.canonical_eq_by(&constrained, DescriptionLevel::Full, &canonicalize_context,));
     assert_eq!(
-        plain.canonical_eq_by(&constrained, CanonicalizeLevel::Full, &canonicalize_context,),
+        plain.canonical_eq_by(&constrained, DescriptionLevel::Full, &canonicalize_context,),
         plain.canonical_eq(&constrained, &canonicalize_context),
     );
 }
@@ -1680,8 +1680,8 @@ fn test_molecule_canonical_hash_by_structure(canonicalize_context: CanonicalizeC
     });
 
     assert_eq!(
-        plain.canonical_hash_by(CanonicalizeLevel::Structure, &canonicalize_context),
-        constrained.canonical_hash_by(CanonicalizeLevel::Structure, &canonicalize_context),
+        plain.canonical_hash_by(DescriptionLevel::Structure, &canonicalize_context),
+        constrained.canonical_hash_by(DescriptionLevel::Structure, &canonicalize_context),
     );
 }
 
@@ -1705,13 +1705,13 @@ fn reaction_canonicalization_fixture() -> Reaction {
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_reaction_canonicalize_by(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let source = reaction_canonicalization_fixture();
     let expected = source
@@ -1725,7 +1725,7 @@ fn test_reaction_canonicalize_by(
         source.clone().canonicalize_by(level, &canonicalize_context),
         Ok(expected.clone()),
     );
-    if level == CanonicalizeLevel::Full {
+    if level == DescriptionLevel::Full {
         assert_eq!(source.canonicalize(&canonicalize_context), Ok(expected),);
     }
 }
@@ -1783,18 +1783,18 @@ fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
 
     assert!(source.canonical_eq(&canonical, &canonicalize_context));
     assert_eq!(
-        source.canonical_eq_by(&canonical, CanonicalizeLevel::Full, &canonicalize_context,),
+        source.canonical_eq_by(&canonical, DescriptionLevel::Full, &canonicalize_context,),
         source.canonical_eq(&canonical, &canonicalize_context),
     );
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
 fn test_reaction_canonical_eq_by(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let lhs = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
@@ -1815,12 +1815,12 @@ fn test_reaction_canonical_eq_by(
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
 fn test_reaction_canonical_hash_by(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let lhs = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
@@ -1881,7 +1881,7 @@ fn test_reaction_canonical_eq_error(canonicalize_context: CanonicalizeContext) {
     assert!(malformed.canonical_eq(&malformed, &canonicalize_context));
     assert!(!malformed.canonical_eq_by(
         &left_contradiction,
-        CanonicalizeLevel::Topology,
+        DescriptionLevel::Topology,
         &canonicalize_context,
     ));
 }
@@ -1899,7 +1899,7 @@ fn test_molecule_canonical_eq_by_contradiction(canonicalize_context: Canonicaliz
         ..Default::default()
     });
 
-    assert!(left.canonical_eq_by(&right, CanonicalizeLevel::Structure, &canonicalize_context,));
+    assert!(left.canonical_eq_by(&right, DescriptionLevel::Structure, &canonicalize_context,));
     assert!(!left.canonical_eq(&right, &canonicalize_context));
 }
 
@@ -4352,13 +4352,13 @@ fn test_molecule_canonicalize_error_from(
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_canonicalize_checked_reaction_span_by(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let source = ReactionSpan::from_entries(ReactionSpanEntries {
         atoms: vec![

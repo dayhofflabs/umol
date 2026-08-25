@@ -2574,7 +2574,9 @@ impl Molecule {
 /// One level in the cumulative graph-IR description hierarchy.
 ///
 /// The derived order is the containment order: topology is contained by constitution,
-/// constitution by structure, and structure by the full representation.
+/// constitution by structure, and structure by the full representation. A value supplied to an
+/// operation selects the greatest description level that participates. [`Molecule::description_level`]
+/// projects the least level containing every populated part of a molecule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DescriptionLevel {
     /// Atom-bond topology and inherent atom and bond fields.

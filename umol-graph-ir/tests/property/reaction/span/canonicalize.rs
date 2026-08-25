@@ -8,7 +8,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, CanonicalizeLevel, ReactionSpan};
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, DescriptionLevel, ReactionSpan};
 
 use super::reaction_span_scenario_strategy;
 
@@ -72,10 +72,10 @@ proptest! {
             renumbered.clone().canonical_hash(&context),
         );
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             prop_assert_eq!(
                 scenario.span.clone().canonical_hash_by(level, &context),
@@ -86,7 +86,7 @@ proptest! {
             scenario
                 .span
                 .clone()
-                .canonical_hash_by(CanonicalizeLevel::Full, &context),
+                .canonical_hash_by(DescriptionLevel::Full, &context),
             scenario.span.canonical_hash(&context),
         );
     }
@@ -119,10 +119,10 @@ proptest! {
         let renumbered = scenario.span.remap(&scenario.first);
 
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             let canonical = scenario.span.clone().canonicalize_by(level, &context);
 
@@ -140,7 +140,7 @@ proptest! {
         prop_assert_eq!(
             scenario.span.canonical_eq_by(
                 &renumbered,
-                CanonicalizeLevel::Full,
+                DescriptionLevel::Full,
                 &context,
             ),
             scenario.span.canonical_eq(&renumbered, &context),

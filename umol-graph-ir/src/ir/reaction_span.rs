@@ -2573,7 +2573,7 @@ mod tests {
     use umol_chem::element::Element;
     use umol_graph_core::AutomorphismAlgorithm;
 
-    use super::super::canonicalize::{Canonicalize, CanonicalizeContext, CanonicalizeLevel};
+    use super::super::canonicalize::{Canonicalize, CanonicalizeContext};
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
@@ -2583,6 +2583,7 @@ mod tests {
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
+    use super::super::molecule::DescriptionLevel;
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
     use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
@@ -3043,13 +3044,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::topology(CanonicalizeLevel::Topology)]
-    #[case::constitution(CanonicalizeLevel::Constitution)]
-    #[case::structure(CanonicalizeLevel::Structure)]
-    #[case::full(CanonicalizeLevel::Full)]
+    #[case::topology(DescriptionLevel::Topology)]
+    #[case::constitution(DescriptionLevel::Constitution)]
+    #[case::structure(DescriptionLevel::Structure)]
+    #[case::full(DescriptionLevel::Full)]
     fn test_reaction_span_canonicalize_by(
         canonicalize_context: CanonicalizeContext,
-        #[case] level: CanonicalizeLevel,
+        #[case] level: DescriptionLevel,
     ) {
         let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
@@ -3095,7 +3096,7 @@ mod tests {
 
         assert!(constrained.canonical_eq_by(
             &plain,
-            CanonicalizeLevel::Structure,
+            DescriptionLevel::Structure,
             &canonicalize_context,
         ));
         assert!(!constrained.canonical_eq(&plain, &canonicalize_context));

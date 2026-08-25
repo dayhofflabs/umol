@@ -383,7 +383,7 @@ canonicalization properties continue to pass against the same strategy.
 
 ### S2 — Replace the canonicalization-specific selector
 
-#### S2a — Migrate the Rust canonicalization API
+#### S2a — Migrate the Rust canonicalization API **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs`, aggregate implementations, crate exports,
 benches, tests, and all Rust callers in the workspace.
@@ -405,6 +405,17 @@ with duplicate public names.
 
 **Tests and evidence:** Migrate existing example and property tests without weakening their laws.
 Compile-check all Rust call sites and run the graph-IR test and benchmark targets.
+
+`CanonicalizeLevel` has been removed from the Rust API without an alias. `DescriptionLevel`, owned
+by the molecule representation, now selects the level used by `Canonicalize` for `Molecule`,
+`Reaction`, and `ReactionSpan`; `IncidenceLevel` is unchanged. Every non-Python Rust caller, unit
+test, property test, and canonicalization benchmark has been migrated. The development data-type
+and nomenclature guides now use the representation-owned term as well. The Python wrapper remains
+the deliberate S2b boundary.
+
+The migration passes `cargo check --workspace --exclude umol-py`, the complete graph-IR unit suite
+(`6096` passed, `3` ignored), all `18` focused canonicalization properties, the canonicalization
+benchmark build, and graph-IR Clippy with all targets and the property-test feature.
 
 **Depends on:** S1a.
 

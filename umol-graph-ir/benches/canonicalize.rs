@@ -11,7 +11,7 @@ use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Canonicalize, CanonicalizeContext, CanonicalizeLevel, Constraint, DativeBondForm, DativeBondId,
+    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, DescriptionLevel,
     IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
     MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
     NoncovalentBondKind, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
@@ -478,12 +478,12 @@ const LEVELS: [IncidenceLevel; 3] = [
     IncidenceLevel::Full,
 ];
 
-const OPERATIONS: [(&str, CanonicalizeLevel, bool); 5] = [
-    ("topology", CanonicalizeLevel::Topology, false),
-    ("constitution", CanonicalizeLevel::Constitution, false),
-    ("structure", CanonicalizeLevel::Structure, false),
-    ("para_stereo_structure", CanonicalizeLevel::Structure, true),
-    ("full", CanonicalizeLevel::Full, true),
+const OPERATIONS: [(&str, DescriptionLevel, bool); 5] = [
+    ("topology", DescriptionLevel::Topology, false),
+    ("constitution", DescriptionLevel::Constitution, false),
+    ("structure", DescriptionLevel::Structure, false),
+    ("para_stereo_structure", DescriptionLevel::Structure, true),
+    ("full", DescriptionLevel::Full, true),
 ];
 
 fn level_name(level: IncidenceLevel) -> &'static str {

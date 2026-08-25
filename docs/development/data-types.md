@@ -341,7 +341,7 @@ pub trait Canonicalize: Sized {
 
     fn canonicalize_by(
         self,
-        level: CanonicalizationLevel,
+        level: DescriptionLevel,
         context: &CanonicalizationContext,
     ) -> Result<Self, Self::Error>;
 
@@ -354,7 +354,7 @@ pub trait Canonicalize: Sized {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizationLevel,
+        level: DescriptionLevel,
         context: &CanonicalizationContext,
     ) -> bool;
 }
@@ -390,7 +390,7 @@ the complete original molecule in that frame. Its guarantee is deliberately limi
   determined.
 
 An excluded feature must not break such a tie. Complete outputs from differently numbered inputs
-may therefore differ by an automorphism of the selected layer. `CanonicalizationLevel::Full` is not
+may therefore differ by an automorphism of the selected layer. `DescriptionLevel::Full` is not
 a coarser operation: it includes normalized constraints and is exactly equivalent to the
 unqualified operation. `canonicalize_by(Full, context)` equals `canonicalize(context)`, and
 `canonical_eq_by(other, Full, context)` equals `canonical_eq(other, context)`.
@@ -430,7 +430,7 @@ schema revision may change them together with this table and the corresponding e
 
 The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
 stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. The
-public cumulative canonicalization levels are `Topology`, `Constitution`, `Structure`, and `Full`.
+public cumulative description levels are `Topology`, `Constitution`, `Structure`, and `Full`.
 `Structure` is topology plus overlays and excludes constraints. `Full` appends normalized
 entity-level and molecule-level constraints and is identical to unqualified canonicalization.
 `NonStereo` names the middle entity domain; it is not another cumulative level.

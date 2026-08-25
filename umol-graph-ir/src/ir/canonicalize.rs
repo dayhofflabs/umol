@@ -37,7 +37,7 @@ use super::id::{
 };
 use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
+use super::molecule::{DescriptionLevel, Molecule, MoleculeEntries, MoleculeIntegrityError};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
@@ -59,23 +59,6 @@ pub struct CanonicalizeContext {
     pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
-/// Level used to select or compare an aggregate's entity frame.
-///
-/// The variants form a nested hierarchy. [`Topology`](Self::Topology) contains atoms and localized
-/// bonds. [`Constitution`](Self::Constitution) additionally contains dative bonds, aromatic
-/// systems, multicenter bonds, and noncovalent bonds. [`Structure`](Self::Structure) additionally
-/// contains stereo atoms and stereo bonds. [`Full`](Self::Full) additionally uses normalized
-/// constraints to select among tied structure frames. In entity-domain terminology, topology is
-/// AB, non-stereo is DAMN, stereo is SS, constitution is topology plus non-stereo, and overlays are
-/// non-stereo plus stereo.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CanonicalizeLevel {
-    Topology,
-    Constitution,
-    Structure,
-    Full,
-}
-
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.
 ///
 /// Unlike [`Normalize`], canonicalization may change entity ids and participant frames. It
@@ -94,7 +77,7 @@ pub enum CanonicalizeLevel {
 ///   under their documented failure totalization;
 /// - successful canonical hashes are invariant under valid dense entity remapping, and canonical
 ///   equality implies equal canonical hashes when both hash operations succeed;
-/// - [`CanonicalizeLevel::Full`] is identical to the corresponding unqualified operation;
+/// - [`DescriptionLevel::Full`] is identical to the corresponding unqualified operation;
 /// - `canonical_eq_by` is invariant under valid dense entity remapping at every level.
 ///
 /// A level-specific transformation returns a complete aggregate, but features excluded from frame
@@ -142,7 +125,7 @@ pub trait Canonicalize: Sized {
     /// Construct a complete normalized aggregate whose selected structural layer is canonical.
     ///
     /// Features excluded by `level` are preserved but do not break ties in the selected frame.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonicalize`].
+    /// [`DescriptionLevel::Full`] is identical to [`Self::canonicalize`].
     ///
     /// # Errors
     ///
@@ -151,7 +134,7 @@ pub trait Canonicalize: Sized {
     /// value excluded from frame selection.
     fn canonicalize_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
@@ -181,7 +164,7 @@ pub trait Canonicalize: Sized {
     ///
     /// Excluded features do not contribute to the hash. The returned value uses Rust's
     /// [`DefaultHasher`], may collide, and is not a persistent identifier.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_hash`].
+    /// [`DescriptionLevel::Full`] is identical to [`Self::canonical_hash`].
     ///
     /// # Errors
     ///
@@ -197,7 +180,7 @@ pub trait Canonicalize: Sized {
     /// entity remapping at every level.
     fn canonical_hash_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error>
     where
@@ -212,11 +195,11 @@ pub trait Canonicalize: Sized {
     /// Compare canonical forms at the selected structural layer.
     ///
     /// Contradictions in features excluded by `level` do not affect this relation.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_eq`].
+    /// [`DescriptionLevel::Full`] is identical to [`Self::canonical_eq`].
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> bool;
 }
@@ -4380,19 +4363,19 @@ fn canonicalize_full_with_options(
 
 fn canonical_key_by(
     molecule: &Molecule,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     molecule.check_integrity()?;
-    if level == CanonicalizeLevel::Full {
+    if level == DescriptionLevel::Full {
         let normalized = normalize_molecule(molecule.clone())?;
         return canonical_key_by_full(&normalized, context);
     }
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure => IncidenceLevel::Full,
-        CanonicalizeLevel::Full => unreachable!("handled before incidence construction"),
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure => IncidenceLevel::Full,
+        DescriptionLevel::Full => unreachable!("handled before incidence construction"),
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
@@ -4400,13 +4383,13 @@ fn canonical_key_by(
     let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let options = CanonicalSearchOptions {
-        automorphism_pruning: level != CanonicalizeLevel::Structure,
+        automorphism_pruning: level != DescriptionLevel::Structure,
         prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     };
 
     let key = match level {
-        CanonicalizeLevel::Topology => {
+        DescriptionLevel::Topology => {
             let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
@@ -4423,7 +4406,7 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizeLevel::Constitution => {
+        DescriptionLevel::Constitution => {
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             let leaf_candidate = |order: &[NodeId]| {
@@ -4441,7 +4424,7 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizeLevel::Structure => {
+        DescriptionLevel::Structure => {
             let (partition, _) = structure_partition(
                 molecule,
                 &incidence_graph,
@@ -4465,7 +4448,7 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        CanonicalizeLevel::Full => unreachable!("handled before selected-layer search"),
+        DescriptionLevel::Full => unreachable!("handled before selected-layer search"),
     };
     Ok(key)
 }
@@ -4526,7 +4509,7 @@ fn reaction_span_entity_keys(
 
 fn reaction_span_comparison_key(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
 ) -> Result<CanonicalComparisonKey, Contradiction> {
     let entries = span.entries();
     let atoms = entries
@@ -4562,7 +4545,7 @@ fn reaction_span_comparison_key(
 
     if matches!(
         level,
-        CanonicalizeLevel::Constitution | CanonicalizeLevel::Structure | CanonicalizeLevel::Full
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full
     ) {
         let dative = entries
             .dative
@@ -4642,10 +4625,7 @@ fn reaction_span_comparison_key(
         );
     }
 
-    if matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    ) {
+    if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
         let stereo_atoms = entries
             .stereo_atoms
             .iter()
@@ -4696,7 +4676,7 @@ fn reaction_span_comparison_key(
         );
     }
 
-    let constraints = if level == CanonicalizeLevel::Full {
+    let constraints = if level == DescriptionLevel::Full {
         let mut blocks = Vec::new();
         macro_rules! inline_span_block {
             ($position:expr, $entries:expr, $constraints:expr, $key:expr) => {{
@@ -4924,23 +4904,23 @@ impl Canonicalize for Molecule {
 
     fn canonicalize_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         match level {
-            CanonicalizeLevel::Topology => canonicalize_topology(&self, context),
-            CanonicalizeLevel::Constitution => canonicalize_constitution(&self, context),
-            CanonicalizeLevel::Structure => canonicalize_structure(&self, context),
-            CanonicalizeLevel::Full => canonicalize_full(&self, context),
+            DescriptionLevel::Topology => canonicalize_topology(&self, context),
+            DescriptionLevel::Constitution => canonicalize_constitution(&self, context),
+            DescriptionLevel::Structure => canonicalize_structure(&self, context),
+            DescriptionLevel::Full => canonicalize_full(&self, context),
         }
     }
 
     fn canonical_hash_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_hash(context);
         }
         canonical_key_by(&self, level, context).map(|key| hash_value(&key))
@@ -4951,8 +4931,8 @@ impl Canonicalize for Molecule {
             return true;
         }
         match (
-            canonical_key_by(self, CanonicalizeLevel::Full, context),
-            canonical_key_by(other, CanonicalizeLevel::Full, context),
+            canonical_key_by(self, DescriptionLevel::Full, context),
+            canonical_key_by(other, DescriptionLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -4966,13 +4946,13 @@ impl Canonicalize for Molecule {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_eq(other, context);
         }
         match (
@@ -5013,35 +4993,30 @@ pub enum ReactionSpanCanonicalizeError {
 
 fn reaction_span_canonical_candidate(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
     let descriptors = match level {
-        CanonicalizeLevel::Topology => {
+        DescriptionLevel::Topology => {
             partition_descriptors(&adapter, &entity_keys, &incidence_keys)
         }
-        CanonicalizeLevel::Constitution
-        | CanonicalizeLevel::Structure
-        | CanonicalizeLevel::Full => {
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
             constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph)
         }
     };
     let leaf_candidate = |order: &[NodeId]| {
         let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
         let remapped = span.remap(&correspondence);
-        let remapped = if matches!(
-            level,
-            CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-        ) {
+        let remapped = if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
             canonicalize_reaction_span_stereo_frames(remapped)
                 .expect("initial classes established stereo normalization")
         } else {
@@ -5071,22 +5046,19 @@ fn reaction_span_canonical_candidate(
 
 fn reaction_span_from_candidate(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     candidate: &CanonicalCandidate<CanonicalComparisonKey>,
 ) -> Result<ReactionSpan, Contradiction> {
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let correspondence =
         lhs_anchored_correspondence_from_order(span, &incidence_graph, &candidate.entity_order);
     let remapped = span.remap(&correspondence);
-    if matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    ) {
+    if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
         Ok(canonicalize_reaction_span_stereo_frames(remapped)?)
     } else {
         Ok(remapped)
@@ -5095,7 +5067,7 @@ fn reaction_span_from_candidate(
 
 fn canonicalize_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
     span.check_integrity()?;
@@ -5104,7 +5076,7 @@ fn canonicalize_reaction_span_by(
 
 fn canonicalize_checked_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, Contradiction> {
     Ok(canonicalize_checked_reaction_span_with_correspondence_by(span, level, context)?.0)
@@ -5112,15 +5084,15 @@ fn canonicalize_checked_reaction_span_by(
 
 fn canonicalize_checked_reaction_span_with_correspondence_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<(ReactionSpan, MoleculeCorrespondence), Contradiction> {
     let normalized = normalize_reaction_span(span.clone())?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = normalized.incidence_graph(incidence_level);
     let correspondence = lhs_anchored_correspondence_from_order(
@@ -5136,11 +5108,11 @@ fn canonicalize_checked_reaction_span_with_correspondence_by(
 
 fn canonical_reaction_span_key(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
     span.check_integrity()?;
-    if level == CanonicalizeLevel::Full {
+    if level == DescriptionLevel::Full {
         let normalized = normalize_reaction_span(span.clone())?;
         return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
     }
@@ -5151,7 +5123,7 @@ impl Canonicalize for ReactionSpan {
     type Error = ReactionSpanCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_span_by(&self, CanonicalizeLevel::Full, context)
+        canonicalize_reaction_span_by(&self, DescriptionLevel::Full, context)
     }
 
     fn canonicalize_with_correspondence(
@@ -5161,14 +5133,14 @@ impl Canonicalize for ReactionSpan {
         self.check_integrity()?;
         Ok(canonicalize_checked_reaction_span_with_correspondence_by(
             &self,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Full,
             context,
         )?)
     }
 
     fn canonicalize_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         canonicalize_reaction_span_by(&self, level, context)
@@ -5176,10 +5148,10 @@ impl Canonicalize for ReactionSpan {
 
     fn canonical_hash_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_hash(context);
         }
         canonical_reaction_span_key(&self, level, context).map(|key| hash_value(&key))
@@ -5190,8 +5162,8 @@ impl Canonicalize for ReactionSpan {
             return true;
         }
         match (
-            canonical_reaction_span_key(self, CanonicalizeLevel::Full, context),
-            canonical_reaction_span_key(other, CanonicalizeLevel::Full, context),
+            canonical_reaction_span_key(self, DescriptionLevel::Full, context),
+            canonical_reaction_span_key(other, DescriptionLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5205,13 +5177,13 @@ impl Canonicalize for ReactionSpan {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_eq(other, context);
         }
         match (
@@ -5239,13 +5211,10 @@ pub enum ReactionCanonicalizeError {
     Contradiction(#[from] Contradiction),
 }
 
-fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizeLevel) -> bool {
-    let includes_non_stereo = level != CanonicalizeLevel::Topology;
-    let includes_stereo = matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    );
-    let includes_constraints = level == CanonicalizeLevel::Full;
+fn reaction_delta_is_selected(delta: &Delta, level: DescriptionLevel) -> bool {
+    let includes_non_stereo = level != DescriptionLevel::Topology;
+    let includes_stereo = matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full);
+    let includes_constraints = level == DescriptionLevel::Full;
     match delta {
         Delta::Atom(AtomDelta::ModifyConstraint { .. })
         | Delta::Bond(BondDelta::ModifyConstraint { .. })
@@ -5269,7 +5238,7 @@ fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizeLevel) -> bool {
     }
 }
 
-fn project_reaction(reaction: &Reaction, level: CanonicalizeLevel) -> Reaction {
+fn project_reaction(reaction: &Reaction, level: DescriptionLevel) -> Reaction {
     let deltas = reaction
         .deltas
         .iter()
@@ -5281,7 +5250,7 @@ fn project_reaction(reaction: &Reaction, level: CanonicalizeLevel) -> Reaction {
 
 fn canonicalize_reaction_by(
     reaction: &Reaction,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<Reaction, ReactionCanonicalizeError> {
     reaction.check_integrity()?;
@@ -5293,7 +5262,7 @@ impl Canonicalize for Reaction {
     type Error = ReactionCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_by(&self, CanonicalizeLevel::Full, context)
+        canonicalize_reaction_by(&self, DescriptionLevel::Full, context)
     }
 
     fn canonicalize_with_correspondence(
@@ -5305,7 +5274,7 @@ impl Canonicalize for Reaction {
         let (canonical, correspondence) =
             canonicalize_checked_reaction_span_with_correspondence_by(
                 &span,
-                CanonicalizeLevel::Full,
+                DescriptionLevel::Full,
                 context,
             )?;
         Ok((canonical.to_reaction(), correspondence))
@@ -5313,7 +5282,7 @@ impl Canonicalize for Reaction {
 
     fn canonicalize_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error> {
         canonicalize_reaction_by(&self, level, context)
@@ -5321,10 +5290,10 @@ impl Canonicalize for Reaction {
 
     fn canonical_hash_by(
         self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_hash(context);
         }
         self.check_integrity()?;
@@ -5338,8 +5307,8 @@ impl Canonicalize for Reaction {
             return true;
         }
         match (
-            canonicalize_reaction_by(self, CanonicalizeLevel::Full, context),
-            canonicalize_reaction_by(other, CanonicalizeLevel::Full, context),
+            canonicalize_reaction_by(self, DescriptionLevel::Full, context),
+            canonicalize_reaction_by(other, DescriptionLevel::Full, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5353,13 +5322,13 @@ impl Canonicalize for Reaction {
     fn canonical_eq_by(
         &self,
         other: &Self,
-        level: CanonicalizeLevel,
+        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> bool {
         if self == other {
             return true;
         }
-        if level == CanonicalizeLevel::Full {
+        if level == DescriptionLevel::Full {
             return self.canonical_eq(other, context);
         }
         if self.check_integrity().is_err() || other.check_integrity().is_err() {

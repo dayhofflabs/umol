@@ -9,7 +9,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, CanonicalizeLevel};
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, DescriptionLevel};
 
 use crate::strategies::*;
 
@@ -61,10 +61,10 @@ proptest! {
             renumbered.clone().canonical_hash(&context),
         );
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             prop_assert_eq!(
                 molecule.clone().canonical_hash_by(level, &context),
@@ -72,7 +72,7 @@ proptest! {
             );
         }
         prop_assert_eq!(
-            molecule.clone().canonical_hash_by(CanonicalizeLevel::Full, &context),
+            molecule.clone().canonical_hash_by(DescriptionLevel::Full, &context),
             molecule.canonical_hash(&context),
         );
     }
@@ -105,10 +105,10 @@ proptest! {
         let renumbered = molecule.remap(&renumbering);
 
         for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
+            DescriptionLevel::Topology,
+            DescriptionLevel::Constitution,
+            DescriptionLevel::Structure,
+            DescriptionLevel::Full,
         ] {
             let canonical = molecule.clone().canonicalize_by(level, &context);
 
@@ -124,7 +124,7 @@ proptest! {
             }
         }
         prop_assert_eq!(
-            molecule.canonical_eq_by(&renumbered, CanonicalizeLevel::Full, &context),
+            molecule.canonical_eq_by(&renumbered, DescriptionLevel::Full, &context),
             molecule.canonical_eq(&renumbered, &context),
         );
     }
