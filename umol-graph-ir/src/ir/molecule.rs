@@ -1442,6 +1442,57 @@ impl Molecule {
         &mut self.constraints
     }
 
+    /// Returns the lowest [`DescriptionLevel`] containing every populated part of this molecule.
+    ///
+    /// The operation inspects collection and constraint-store presence only. It does not validate
+    /// the molecule, interpret stored values, normalize, or canonicalize.
+    ///
+    /// # Semantic properties
+    ///
+    /// Dense renumbering of any entity namespace leaves the result unchanged.
+    pub fn description_level(&self) -> DescriptionLevel {
+        let has_inline_constraints = self.atoms.iter().any(|atom| !atom.constraints.is_empty())
+            || self.bonds.iter().any(|bond| !bond.constraints.is_empty())
+            || self
+                .dative_bonds
+                .relation_ids()
+                .any(|id| !self.dative_bonds.data(id).constraints.is_empty())
+            || self
+                .aromatic_systems
+                .relation_ids()
+                .any(|id| !self.aromatic_systems.data(id).constraints.is_empty())
+            || self
+                .multicenter_bonds
+                .relation_ids()
+                .any(|id| !self.multicenter_bonds.data(id).constraints.is_empty())
+            || self
+                .noncovalent_bonds
+                .relation_ids()
+                .any(|id| !self.noncovalent_bonds.data(id).constraints.is_empty())
+            || self
+                .stereo_atoms
+                .relation_ids()
+                .any(|id| !self.stereo_atoms.data(id).constraints.is_empty())
+            || self
+                .stereo_bonds
+                .relation_ids()
+                .any(|id| !self.stereo_bonds.data(id).constraints.is_empty());
+
+        if has_inline_constraints || !self.constraints.is_empty() {
+            DescriptionLevel::Full
+        } else if self.has_stereo_atoms() || self.has_stereo_bonds() {
+            DescriptionLevel::Structure
+        } else if self.has_dative_bonds()
+            || self.has_aromatic_systems()
+            || self.has_multicenter_bonds()
+            || self.has_noncovalent_bonds()
+        {
+            DescriptionLevel::Constitution
+        } else {
+            DescriptionLevel::Topology
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.atoms.is_empty()
     }
@@ -2518,6 +2569,22 @@ impl Molecule {
             } => stereo_bond(*id, &[]),
         }
     }
+}
+
+/// One level in the cumulative graph-IR description hierarchy.
+///
+/// The derived order is the containment order: topology is contained by constitution,
+/// constitution by structure, and structure by the full representation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DescriptionLevel {
+    /// Atom-bond topology and inherent atom and bond fields.
+    Topology,
+    /// Topology plus non-stereo overlays.
+    Constitution,
+    /// Constitution plus stereo atoms and stereo bonds.
+    Structure,
+    /// Structure plus inline or molecule-level constraints.
+    Full,
 }
 
 /// The correspondence mapping one input family's ids to their offset ids in a combined family.

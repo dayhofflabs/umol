@@ -76,14 +76,14 @@ those are the two additions needed for the investigation rather than a new bench
 
 ## Settled design boundary
 
-### Molecular feature level
+### Molecular description level
 
-`FeatureLevel` is a representation-owned nested level, not canonicalization-specific operational
+`DescriptionLevel` is a representation-owned nested level, not canonicalization-specific operational
 configuration. Define it beside `Molecule` and re-export it from the graph-IR root:
 
 ```rust
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum FeatureLevel {
+pub enum DescriptionLevel {
     Topology,
     Constitution,
     Structure,
@@ -92,25 +92,26 @@ pub enum FeatureLevel {
 ```
 
 The derived order is the documented containment order
-`Topology < Constitution < Structure < Full`. `Molecule::feature_level()` returns the lowest level
-containing every populated part of the molecule: non-stereo overlay counts raise the result to
-`Constitution`, stereo-atom or stereo-bond counts raise it to `Structure`, and any inline or
-molecule-level constraint raises it to `Full`. The operation reads the lengths of collections that
-are always present; it does not inspect feature values, validate chemistry, or canonicalize.
+`Topology < Constitution < Structure < Full`. `Molecule::description_level()` returns the lowest
+level containing every populated part of the molecule: non-stereo overlay counts raise the result
+to `Constitution`, stereo-atom or stereo-bond counts raise it to `Structure`, and any inline or
+molecule-level constraint raises it to `Full`. This is the projected reading of the description
+level: what the molecule actually contains. The operation reads the lengths of collections that
+are always present; it does not inspect values, validate chemistry, or canonicalize.
 
-Replace the operation-owned `CanonicalizeLevel` with `FeatureLevel` throughout aggregate
+Replace the operation-owned `CanonicalizeLevel` with `DescriptionLevel` throughout aggregate
 canonicalization. The effective search level for a molecule is
-`requested.min(molecule.feature_level())`. This is an exact reduction: every typed key section above
-the molecule's feature level is empty. It changes neither the selected key nor the returned complete
-molecule and correspondence. `IncidenceLevel` remains a distinct carrier selector because its
-`Full` value contains every structural entity but no constraints.
+`requested.min(molecule.description_level())`. This is an exact reduction: every typed key section
+above the molecule's description level is empty. It changes neither the selected key nor the
+returned complete molecule and correspondence. `IncidenceLevel` remains a distinct carrier
+selector because its `Full` value contains every structural entity but no constraints.
 
 Unary operations use the effective level above. Binary canonical equality must retain features
 present on either side, so its effective level is
-`requested.min(lhs.feature_level().max(rhs.feature_level()))`. This preserves the requested
+`requested.min(lhs.description_level().max(rhs.description_level()))`. This preserves the requested
 distinction when only one operand contains a higher-level feature. Reaction and reaction-span APIs
-adopt `FeatureLevel` as their selector in this scope, but do not acquire aggregate feature-level
-inference or automatic lowering.
+adopt `DescriptionLevel` as their selector in this scope, but do not acquire aggregate
+description-level inference or automatic lowering.
 
 ### Stereo-preserving automorphism orbits
 
@@ -135,7 +136,7 @@ subgroup of `H`, so this may under-prune when a product of individually rejected
 `H`, but it cannot discard a required branch. A full stabilizer calculation is a later optimization
 only if the conservative subgroup leaves material search work. Full-level pruning for genuinely
 constrained molecules additionally requires the corresponding action on normalized constraints;
-the feature-level reduction avoids imposing that unresolved case on unconstrained molecules.
+the description-level reduction avoids imposing that unresolved case on unconstrained molecules.
 
 ## Investigation boundary
 
@@ -167,8 +168,8 @@ infallible oracle.
 The investigation should distinguish the following possibilities rather than combining them into
 one optimization patch:
 
-1. **Feature-level reduction.** Use the molecule's representation-owned `FeatureLevel` to avoid
-   searching empty higher-level key sections. Verify exact canonical forms and correspondence
+1. **Description-level reduction.** Use the molecule's representation-owned `DescriptionLevel` to
+   avoid searching empty higher-level key sections. Verify exact canonical forms and correspondence
    action against the unreduced search on bounded dense renumberings and retained slow benchmark
    cases.
 2. **Stereo-preserving automorphism action.** Retain the occurrence-node action, restrict pruning
@@ -184,10 +185,10 @@ one optimization patch:
    may miss pruning opportunities but cannot reject an improving completion.
 
 Topology-level canonicalization is an especially useful diagnostic for the current network domain:
-its molecules contain no feature above topology, so full canonicalization has exactly the same
-non-empty typed key. The `FeatureLevel` reduction makes this fact part of general graph-IR behavior
-rather than a reaction-network-specific identity path. The unreduced search remains useful during
-verification but is not a distinct semantic operation.
+its molecules contain no description above topology, so full canonicalization has exactly the same
+non-empty typed key. The `DescriptionLevel` reduction makes this fact part of general graph-IR
+behavior rather than a reaction-network-specific identity path. The unreduced search remains useful
+during verification but is not a distinct semantic operation.
 
 ## Relationship to the corpus campaign
 
@@ -220,14 +221,15 @@ correctness and performance effects remain attributable.
 Retain a small set of slow, structurally distinct products from the ethane and propane reaction
 networks alongside the existing naphthalene and disconnected-ring cases. The set must include a
 feature-free connected molecule, a feature-free disconnected molecule, and a symmetry-heavy
-electronic-state variant. Record the molecule size, populated feature level, and provenance needed
-to reproduce each value without depending on the experimental reaction-network crate.
+electronic-state variant. Record the molecule size, projected description level, and provenance
+needed to reproduce each value without depending on the experimental reaction-network crate.
 
 This is additive benchmark infrastructure with no public API change.
 
 **Tests and evidence:** Parse or construct every retained value through an existing graph-IR
-boundary, assert that it is valid, and run the existing Criterion groups at all four feature levels.
-The benchmark must report the retained cases individually rather than hiding them in an aggregate.
+boundary, assert that it is valid, and run the existing Criterion groups at all four description
+levels. The benchmark must report the retained cases individually rather than hiding them in an
+aggregate.
 
 The benchmark target retains the exact native molecule DSL for these three values. The benchmark
 ids describe the scaling behavior; provenance remains attached data:
@@ -341,29 +343,41 @@ assertions, and the S6a release-code removal gate remains unchanged.
 
 **Depends on:** S0b.
 
-### S1 — Introduce the representation-owned feature level
+### S1 — Introduce the representation-owned description level
 
-#### S1a — Add `FeatureLevel` and molecule feature inspection
+#### S1a — Add `DescriptionLevel` and molecule description inspection **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule.rs`, the graph-IR crate root, and their unit tests.
 
-Add the public `FeatureLevel` enum with the settled ordering and add
-`pub fn Molecule::feature_level(&self) -> FeatureLevel`. Determine the result from collection
-lengths: topology alone, any non-stereo overlay, any stereo atom or bond, and any inline or
-molecule-level constraint. The operation neither validates nor interprets feature values.
+Add the public `DescriptionLevel` enum with the settled ordering and add
+`pub fn Molecule::description_level(&self) -> DescriptionLevel`. Determine the result from
+collection lengths: topology alone, any non-stereo overlay, any stereo atom or bond, and any inline
+or molecule-level constraint. The operation neither validates nor interprets values.
 
 This is an additive public API change.
 
 **Public surface:**
 
-- add `FeatureLevel::{Topology, Constitution, Structure, Full}`;
+- add `DescriptionLevel::{Topology, Constitution, Structure, Full}`;
 - derive `Clone`, `Copy`, `Debug`, `PartialEq`, `Eq`, `PartialOrd`, and `Ord`;
-- add `Molecule::feature_level()`;
+- add `Molecule::description_level()`;
 - introduce no constructor, conversion failure, or new error type.
 
 **Tests and evidence:** Use an `rstest` table covering the four levels, including both inline and
 molecule-level constraints. Test the documented order and `min`/`max` behavior directly. Add a
-property test stating that dense id renumbering does not change the feature level.
+property test stating that dense id renumbering does not change the description level.
+
+`DescriptionLevel` now lives beside `Molecule` and is re-exported from `umol_graph_ir::ir` with the
+settled derived containment order. `Molecule::description_level()` checks all non-stereo overlay and
+stereo collections, every entity family's inline constraint store, and the molecule-level
+constraint store without validating or interpreting their values.
+
+The module-local `rstest` table covers ordinary topology, each non-stereo overlay family, stereo
+atoms and bonds, every inline entity-constraint family, and a molecule-level constraint. A separate
+table pins the adjacent ordering and `min`/`max` laws. The property suite promotes the existing
+independent dense permutations of all eight entity namespaces to a shared molecule strategy and
+verifies that description inspection is invariant under those renumberings; the existing
+canonicalization properties continue to pass against the same strategy.
 
 **Depends on:** S0c.
 
@@ -374,7 +388,7 @@ property test stating that dense id renumbering does not change the feature leve
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs`, aggregate implementations, crate exports,
 benches, tests, and all Rust callers in the workspace.
 
-Replace `CanonicalizeLevel` with `FeatureLevel` in `Canonicalize`, `Molecule`, `Reaction`, and
+Replace `CanonicalizeLevel` with `DescriptionLevel` in `Canonicalize`, `Molecule`, `Reaction`, and
 `ReactionSpan` canonicalization APIs. Remove `CanonicalizeLevel`; do not retain an alias or a second
 selector with identical variants. `IncidenceLevel` remains unchanged. Migrate the graph-IR crate and
 non-Python Rust callers here; the binding crate completes the workspace migration in S2b.
@@ -386,7 +400,7 @@ with duplicate public names.
 **Public surface:**
 
 - remove `CanonicalizeLevel`;
-- use `FeatureLevel` in `canonicalize_by`, `canonical_hash_by`, and `canonical_eq_by`;
+- use `DescriptionLevel` in `canonicalize_by`, `canonical_hash_by`, and `canonical_eq_by`;
 - preserve the existing return values and failure behavior of every canonicalization operation.
 
 **Tests and evidence:** Migrate existing example and property tests without weakening their laws.
@@ -399,17 +413,18 @@ Compile-check all Rust call sites and run the graph-IR test and benchmark target
 **Module:** `umol-py/src/canonicalize.rs`, molecule bindings, package exports, type stubs or Python
 surface declarations, and Python tests.
 
-Expose the Rust `FeatureLevel` as Python `FeatureLevel`, remove Python `CanonicalizeLevel`, and add
-the molecule feature-level query. Boundary conversions remain `from_rust` and `to_rust`; do not add
-a second Python spelling or retain a deprecated duplicate during this experimental migration.
+Expose the Rust `DescriptionLevel` as Python `DescriptionLevel`, remove Python
+`CanonicalizeLevel`, and add the molecule description-level query. Boundary conversions remain
+`from_rust` and `to_rust`; do not add a second Python spelling or retain a deprecated duplicate
+during this experimental migration.
 
 This is a breaking Python rename plus one additive query.
 
 **Public surface:**
 
 - remove Python `CanonicalizeLevel`;
-- add Python `FeatureLevel` with the four Rust variants;
-- add `Molecule.feature_level()` returning `FeatureLevel`;
+- add Python `DescriptionLevel` with the four Rust variants;
+- add `Molecule.description_level()` returning `DescriptionLevel`;
 - preserve all existing canonicalization return and exception behavior.
 
 **Tests and evidence:** Update import, enum-conversion, molecule-query, and canonicalization tests.
@@ -417,15 +432,16 @@ Build against the repository Python 3.13 environment and run the focused Python 
 
 **Depends on:** S2a.
 
-### S3 — Lower empty feature levels exactly
+### S3 — Lower empty description levels exactly
 
 #### S3a — Route molecule operations through their effective level
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and molecule canonicalization implementations.
 
 Add private effective-level selection and use it for all molecule canonicalization entry points.
-Unary canonicalization and hashing use `requested.min(molecule.feature_level())`; binary canonical
-equality uses `requested.min(lhs.feature_level().max(rhs.feature_level()))`. Unqualified operations
+Unary canonicalization and hashing use `requested.min(molecule.description_level())`; binary
+canonical equality uses
+`requested.min(lhs.description_level().max(rhs.description_level()))`. Unqualified operations
 continue to request `Full` before this reduction. Reaction and reaction-span operations use the new
 selector type but retain their current search-level behavior.
 
@@ -597,9 +613,9 @@ the workspace test and lint gates. Search source, tests, examples, and documenta
 
 This verifies the breaking selector migration across language boundaries.
 
-**Tests and evidence:** The Python and workspace gates pass with `FeatureLevel` as the only public
-selector name. Any fixture or generated artifact that embeds the old spelling is either migrated or
-explicitly disposed of.
+**Tests and evidence:** The Python and workspace gates pass with `DescriptionLevel` as the only
+public selector name. Any fixture or generated artifact that embeds the old spelling is either
+migrated or explicitly disposed of.
 
 **Depends on:** S2b and S6a.
 
@@ -626,8 +642,8 @@ remaining bottleneck.
 
 **Module:** this document, `discussion/000-status.md`, and the nomenclature and development guides.
 
-Document the implemented `FeatureLevel` contract, selector removal, effective-level rules, pruning
-boundary, benchmark evidence, and any deliberately unresolved behavior. Mark this document
+Document the implemented `DescriptionLevel` contract, selector removal, effective-level rules,
+pruning boundary, benchmark evidence, and any deliberately unresolved behavior. Mark this document
 Completed only after the public inventory and all verification gates agree with the implementation,
 including the S6a removal of release-path search accounting.
 

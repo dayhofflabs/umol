@@ -17,6 +17,8 @@ mod compaction;
 mod comparison;
 #[path = "molecule/correspondence.rs"]
 mod correspondence;
+#[path = "molecule/description.rs"]
+mod description;
 #[path = "molecule/iterators.rs"]
 mod iterators;
 #[path = "molecule/meet_pushout.rs"]

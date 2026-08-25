@@ -79,7 +79,7 @@ approximate.
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
 | `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
-| `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
+| `*Level` | closed enum selecting one of several nested named layers | 3 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
 | `*Constraints` | the container holding an entity's constraints | 9 | graph-ir, py — as `*ConstraintsForm`, because the container is lattice-shaped |
 | `*Key` | identifies a constraint slot within a container | 13 | graph-ir, perm, py |
@@ -418,7 +418,7 @@ structural composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the structure level. Not
 constraints, which do not contribute to structural identity.
-**In code:** the `Constitution` variants of `IncidenceLevel` and `CanonicalizationLevel`.
+**In code:** the `Constitution` variants of `DescriptionLevel` and `IncidenceLevel`.
 
 ### Constraint
 
@@ -585,6 +585,24 @@ side; not a mode parameter or stored molecule state — the closure choice is pe
 parameterized accessor unifying the readings.
 **In code:** `asserted`, `asserted_complete`, `derived`, `derived_complete` on the
 constraints views.
+
+### Description level
+
+A **description level** is one member of the cumulative graph-IR description hierarchy:
+`Topology`, `Constitution`, `Structure`, and `Full`. Each level includes every lower level.
+
+The value has two coordinated readings. As an assertion, it states the greatest level an operation
+should use. When projected from a molecule, `Molecule::description_level` returns the least level
+containing everything the molecule actually has. A `Topology` result does not imply an incomplete
+molecule; it says that no higher description section is populated.
+
+`Topology` contains atoms and localized bonds. `Constitution` adds non-stereo overlays. `Structure`
+adds stereo atoms and stereo bonds. `Full` adds inline and molecule-level constraints.
+
+**Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
+switches; *domain*, which names a compositional entity group; *scope*, which does not express the
+projected reading or the cumulative order; *representation level*, which compares distinct models.
+**In code:** `DescriptionLevel`, `Molecule::description_level`.
 
 ### Determined
 
@@ -765,19 +783,16 @@ because they are complete graph-model objects, not lattice values. Role-bearing 
 
 ### Full
 
-**Full** is the terminal aggregate canonicalization level: the complete molecular structure plus
-normalized entity-level and molecule-level constraints. Constraints enter only after the minimum
-structure key has been established and distinguish only tied structural frames. `Full` is exactly
-equivalent to the unqualified canonicalization operation, so callers may opt into the complete
-operation either directly or through the level selector.
+**Full** is the terminal description level: the complete molecular structure plus inline and
+molecule-level constraints.
 
 `IncidenceLevel::Full` has a narrower carrier-specific use: it means every structural entity is
 present in the incidence graph. Constraints are not incidence entities, so this carrier corresponds
-to `CanonicalizationLevel::Structure`, not to its `Full` constraint-selection step.
+to `DescriptionLevel::Structure`, not `DescriptionLevel::Full`.
 
-**Not:** a chemistry model or conformance pass. Full canonicalization preserves and orders the
-complete represented assertion; it does not validate it.
-**In code:** `CanonicalizationLevel::Full`; `IncidenceLevel::Full` in its carrier-specific sense.
+**Not:** a chemistry model or conformance pass. The full description preserves the complete
+represented assertion; it does not validate it.
+**In code:** `DescriptionLevel::Full`; `IncidenceLevel::Full` in its carrier-specific sense.
 
 ### Ground term
 
@@ -977,19 +992,14 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 A **level** is one member of a closed enum of nested named layers. Selecting a level includes every
 lower layer; the alternatives cannot be combined independently.
 
-The aggregate canonicalization levels are `Topology`, `Constitution`, `Structure`, and `Full`.
-`Topology` contains atoms and localized bonds. `Constitution` adds dative bonds, aromatic systems,
-multicenter bonds, and noncovalent bonds. `Structure` adds stereo atoms and stereo bonds while
-excluding constraints. `Full` adds normalized constraints through post-hoc selection among tied
-structural frames and is identical to unqualified canonicalization. Para-stereo is context-dependent
-refinement within the structure pass shared by `Structure` and `Full`, not another level. Future
-structural entity kinds enter the first applicable structural level without changing the meanings
-of the earlier levels; future constraint variants enter `Full`. Their comparison positions remain
-a current-release schema decision during the 0.x series.
+`DescriptionLevel` classifies cumulative parts of the graph-IR description. Its asserted and
+projected readings are defined under *Description level*. Future structural entity kinds enter the
+first applicable level without changing the meanings of earlier levels; future constraint variants
+enter `Full`.
 
 `IncidenceLevel` stops at `Full`, using that name for the complete structural carrier because
 constraints do not occur in an incidence graph. Thus `IncidenceLevel::Full` supplies the carrier for
-`CanonicalizationLevel::Structure` and for the structural phase of `CanonicalizationLevel::Full`.
+`DescriptionLevel::Structure`.
 
 The corresponding entity domains are topology (AB), non-stereo (DAMN), and stereo (SS).
 Constitution is topology plus non-stereo; overlays are non-stereo plus stereo. Domains are
@@ -997,7 +1007,7 @@ compositional groups, whereas levels are the nested public selectors.
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** `IncidenceLevel`, `CanonicalizationLevel`.
+**In code:** `DescriptionLevel`, `IncidenceLevel`.
 
 ### Ligand and site
 
@@ -1496,14 +1506,13 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 ### Structure
 
-**Structure** is the complete structural canonicalization level: topology plus every overlay,
+**Structure** is the complete structural description level: topology plus every overlay,
 AB + DAMN + SS. It includes all inherent fields and typed incidences of every entity kind while
-excluding constraints. Para-stereo changes refinement within this level rather than defining
-another level.
+excluding constraints.
 
-**Not:** `Full`, which additionally uses normalized constraints to select among tied structure
-frames; molecular topology, which excludes overlays.
-**In code:** `CanonicalizationLevel::Structure`.
+**Not:** `Full`, which additionally includes constraints; molecular topology, which excludes
+overlays.
+**In code:** `DescriptionLevel::Structure`.
 
 ### Tie-break
 
@@ -1526,7 +1535,7 @@ including the inherent values carried by those entities. It does not include ove
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** the `Topology` variants of `IncidenceLevel` and `CanonicalizationLevel`.
+**In code:** the `Topology` variants of `DescriptionLevel` and `IncidenceLevel`.
 
 ### Transaction
 

@@ -92,8 +92,8 @@ pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{
-    spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
-    MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
+    spec, AtomArg, DescriptionLevel, Fragment, Molecule, MoleculeBuilder, MoleculeEditor,
+    MoleculeEntries, MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
 pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 pub use noncovalent::{

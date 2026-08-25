@@ -2225,6 +2225,48 @@ pub(crate) fn molecule_with_constraints_strategy() -> impl Strategy<Value = Mole
     molecule_entries_with_constraints_strategy().prop_map(Molecule::from_entries)
 }
 
+pub(crate) fn molecule_dense_renumbering_strategy(
+) -> impl Strategy<Value = (Molecule, MoleculeCorrespondence)> {
+    molecule_with_constraints_strategy().prop_flat_map(|molecule| {
+        (
+            Just(molecule.clone()),
+            Just(molecule.atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.dative_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.aromatic_systems().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.multicenter_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.noncovalent_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.stereo_atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
+            Just(molecule.stereo_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
+        )
+            .prop_map(
+                |(
+                    molecule,
+                    atoms,
+                    bonds,
+                    dative,
+                    aromatic,
+                    multicenter,
+                    noncovalent,
+                    stereo_atoms,
+                    stereo_bonds,
+                )| {
+                    let correspondence = MoleculeCorrespondence::new(
+                        Correspondence::from_images(&atoms, atoms.len()),
+                        Correspondence::from_images(&bonds, bonds.len()),
+                        Correspondence::from_images(&dative, dative.len()),
+                        Correspondence::from_images(&aromatic, aromatic.len()),
+                        Correspondence::from_images(&multicenter, multicenter.len()),
+                        Correspondence::from_images(&noncovalent, noncovalent.len()),
+                        Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
+                        Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+                    );
+                    (molecule, correspondence)
+                },
+            )
+    })
+}
+
 pub(crate) fn molecule_entries_with_constraints_strategy() -> impl Strategy<Value = MoleculeEntries>
 {
     molecule_entries_strategy().prop_flat_map(|entries| {

@@ -8,53 +8,10 @@
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
-use umol_graph_ir::ir::{
-    Canonicalize, CanonicalizeContext, CanonicalizeLevel, MoleculeCorrespondence,
-};
+use umol_graph_core::AutomorphismAlgorithm;
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, CanonicalizeLevel};
 
 use crate::strategies::*;
-
-fn dense_renumbering_strategy() -> impl Strategy<Value = (Molecule, MoleculeCorrespondence)> {
-    molecule_with_constraints_strategy().prop_flat_map(|molecule| {
-        (
-            Just(molecule.clone()),
-            Just(molecule.atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.dative_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.aromatic_systems().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.multicenter_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.noncovalent_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.stereo_atoms().ids().collect::<Vec<_>>()).prop_shuffle(),
-            Just(molecule.stereo_bonds().ids().collect::<Vec<_>>()).prop_shuffle(),
-        )
-            .prop_map(
-                |(
-                    molecule,
-                    atoms,
-                    bonds,
-                    dative,
-                    aromatic,
-                    multicenter,
-                    noncovalent,
-                    stereo_atoms,
-                    stereo_bonds,
-                )| {
-                    let correspondence = MoleculeCorrespondence::new(
-                        Correspondence::from_images(&atoms, atoms.len()),
-                        Correspondence::from_images(&bonds, bonds.len()),
-                        Correspondence::from_images(&dative, dative.len()),
-                        Correspondence::from_images(&aromatic, aromatic.len()),
-                        Correspondence::from_images(&multicenter, multicenter.len()),
-                        Correspondence::from_images(&noncovalent, noncovalent.len()),
-                        Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
-                        Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
-                    );
-                    (molecule, correspondence)
-                },
-            )
-    })
-}
 
 fn context() -> CanonicalizeContext {
     CanonicalizeContext {
@@ -73,7 +30,7 @@ proptest! {
 
     #[test]
     fn test_molecule_canonicalize(
-        (molecule, renumbering) in dense_renumbering_strategy(),
+        (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
         let renumbered = molecule.remap(&renumbering);
@@ -94,7 +51,7 @@ proptest! {
 
     #[test]
     fn test_molecule_canonical_hash(
-        (molecule, renumbering) in dense_renumbering_strategy(),
+        (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
         let renumbered = molecule.remap(&renumbering);
@@ -122,7 +79,7 @@ proptest! {
 
     #[test]
     fn test_molecule_canonical_eq(
-        (molecule, renumbering) in dense_renumbering_strategy(),
+        (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
         let renumbered = molecule.remap(&renumbering);
@@ -142,7 +99,7 @@ proptest! {
 
     #[test]
     fn test_molecule_canonical_eq_by(
-        (molecule, renumbering) in dense_renumbering_strategy(),
+        (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
         let context = context();
         let renumbered = molecule.remap(&renumbering);
