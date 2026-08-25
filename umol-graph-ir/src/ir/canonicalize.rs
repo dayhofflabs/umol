@@ -59,6 +59,128 @@ pub struct CanonicalizeContext {
     pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum CanonicalizeLevel {
+    Topology,
+    Constitution,
+    Structure,
+    Full,
+}
+
+fn canonicalize_level_with_constraints(
+    base: CanonicalizeLevel,
+    has_inline_constraints: bool,
+) -> CanonicalizeLevel {
+    if has_inline_constraints {
+        CanonicalizeLevel::Full
+    } else {
+        base
+    }
+}
+
+#[allow(dead_code)]
+fn entity_span_canonicalize_level<T>(
+    span: &EntitySpan<T>,
+    base: CanonicalizeLevel,
+    has_inline_constraints: impl Fn(&T) -> bool,
+) -> CanonicalizeLevel {
+    let has_inline_constraints = match span {
+        EntitySpan::Unchanged(attributes)
+        | EntitySpan::Added(attributes)
+        | EntitySpan::Removed(attributes) => has_inline_constraints(attributes),
+        EntitySpan::Modified { lhs, rhs } => {
+            has_inline_constraints(lhs) || has_inline_constraints(rhs)
+        }
+    };
+    canonicalize_level_with_constraints(base, has_inline_constraints)
+}
+
+#[allow(dead_code)]
+fn delta_canonicalize_level(delta: &Delta) -> CanonicalizeLevel {
+    match delta {
+        Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
+            canonicalize_level_with_constraints(
+                CanonicalizeLevel::Topology,
+                !attributes.constraints.is_empty(),
+            )
+        }
+        Delta::Atom(AtomDelta::ModifyField { .. }) => CanonicalizeLevel::Topology,
+        Delta::Atom(AtomDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
+        Delta::Bond(BondDelta::Add { attributes, .. } | BondDelta::Remove { attributes, .. }) => {
+            canonicalize_level_with_constraints(
+                CanonicalizeLevel::Topology,
+                !attributes.constraints.is_empty(),
+            )
+        }
+        Delta::Bond(BondDelta::ModifyField { .. }) => CanonicalizeLevel::Topology,
+        Delta::Bond(BondDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
+        Delta::DativeBond(
+            DativeBondDelta::Add { attributes, .. } | DativeBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::DativeBond(DativeBondDelta::ModifyField { .. }) => CanonicalizeLevel::Constitution,
+        Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
+        Delta::AromaticSystem(
+            AromaticSystemDelta::Add { attributes, .. }
+            | AromaticSystemDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyField { .. }) => {
+            CanonicalizeLevel::Constitution
+        }
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. }) => {
+            CanonicalizeLevel::Full
+        }
+        Delta::MulticenterBond(
+            MulticenterBondDelta::Add { attributes, .. }
+            | MulticenterBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::MulticenterBond(MulticenterBondDelta::ModifyField { .. }) => {
+            CanonicalizeLevel::Constitution
+        }
+        Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. }) => {
+            CanonicalizeLevel::Full
+        }
+        Delta::NoncovalentBond(
+            NoncovalentBondDelta::Add { attributes, .. }
+            | NoncovalentBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { .. }) => {
+            CanonicalizeLevel::Constitution
+        }
+        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
+            CanonicalizeLevel::Full
+        }
+        Delta::StereoAtom(
+            StereoAtomDelta::Add { attributes, .. } | StereoAtomDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Structure,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::StereoAtom(StereoAtomDelta::ModifyField { .. }) => CanonicalizeLevel::Structure,
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
+        Delta::StereoBond(
+            StereoBondDelta::Add { attributes, .. } | StereoBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            CanonicalizeLevel::Structure,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::StereoBond(StereoBondDelta::ModifyField { .. }) => CanonicalizeLevel::Structure,
+        Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => CanonicalizeLevel::Full,
+        Delta::Constraint(_) => CanonicalizeLevel::Full,
+    }
+}
+
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.
 ///
 /// Unlike [`Normalize`], canonicalization may change entity ids and participant frames. It

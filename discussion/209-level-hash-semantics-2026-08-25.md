@@ -1,6 +1,6 @@
 # 209 — Level and hash semantics
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-25
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
@@ -109,7 +109,7 @@ optimization.
 
 ### S0 — Establish private aggregate dispatch
 
-#### S0a — Restore the private canonicalization level and leaf inspection
+#### S0a — Restore the private canonicalization level and leaf inspection **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and its unit tests.
 
@@ -120,7 +120,7 @@ public `DescriptionLevel` surface temporarily so this subitem is additive and gr
 
 **Tests and evidence:** Use module-local `rstest` tables covering every delta family and operation,
 every entity-span position, both sides of `Modified`, all inline constraint stores, and explicit
-constraint deltas and spans. Assert the private containment order without adding a public query.
+constraint deltas. Assert the private containment order without adding a public query.
 
 **Change class:** additive private infrastructure (green).
 
@@ -138,7 +138,8 @@ validate, normalize, apply deltas, or materialize a reaction span.
 
 **Tests and evidence:** Cover the four levels for each aggregate, including a reaction whose lhs
 and delta require different levels and a modified entity span whose two sides require different
-levels. Assert that dense id remapping and delta inversion preserve the selected level.
+levels. Cover explicit constraint-span presence here. Assert that dense id remapping and delta
+inversion preserve the selected level.
 
 **Change class:** additive private infrastructure (green).
 

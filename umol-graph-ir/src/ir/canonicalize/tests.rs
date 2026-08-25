@@ -13,15 +13,17 @@ use umol_perm::{Orientation, Permutation};
 
 use super::*;
 use crate::ir::{
-    AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomFieldChange, AtomForm, AtomId,
-    BondForm, BondId, BooleanForm, Constraint, ConstraintDelta, Constraints, DativeBondForm,
-    DativeBondId, Entity, FluxionalityForm, IncidenceLevel, LigandPermutation, LigandSymmetryForm,
-    MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm, MulticenterBondId,
-    NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation, ReactionSpanEntries,
-    StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
-    StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand,
-    StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
-    TopicityRelationForm,
+    AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
+    AtomFieldChange, AtomForm, AtomId, BondFieldChange, BondForm, BondId, BooleanForm, Constraint,
+    ConstraintDelta, Constraints, DativeBondFieldChange, DativeBondForm, DativeBondId, Entity,
+    FluxionalityForm, IncidenceLevel, LigandPermutation, LigandSymmetryForm,
+    MoleculeCorrespondence, MoleculeEntries, MulticenterBondFieldChange, MulticenterBondForm,
+    MulticenterBondId, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondId,
+    OrientedLigandPermutation, ReactionSpanEntries, StereoAtomConstraintForm,
+    StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
+    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm,
+    Topicity, TopicityForm, TopicityRelationForm,
 };
 
 fn node_branch_order(
@@ -604,6 +606,429 @@ fn selected_structure_key(molecule: &Molecule) -> CanonicalComparisonKey {
     let order = incidence_graph.graph().node_ids().collect::<Vec<_>>();
     structure_comparison_key(molecule, &incidence_graph, &order)
         .expect("canonical molecule has a structure comparison key")
+}
+
+#[rstest]
+#[case::topology_constitution(CanonicalizeLevel::Topology, CanonicalizeLevel::Constitution)]
+#[case::constitution_structure(CanonicalizeLevel::Constitution, CanonicalizeLevel::Structure)]
+#[case::structure_full(CanonicalizeLevel::Structure, CanonicalizeLevel::Full)]
+fn test_canonicalize_level_order(
+    #[case] lower: CanonicalizeLevel,
+    #[case] upper: CanonicalizeLevel,
+) {
+    assert_eq!(lower.cmp(&upper), Ordering::Less);
+    assert_eq!(lower.max(upper), upper);
+}
+
+#[rstest]
+#[case::unchanged(
+    EntitySpan::Unchanged(false),
+    CanonicalizeLevel::Topology,
+    CanonicalizeLevel::Topology
+)]
+#[case::added(
+    EntitySpan::Added(false),
+    CanonicalizeLevel::Constitution,
+    CanonicalizeLevel::Constitution
+)]
+#[case::removed(
+    EntitySpan::Removed(false),
+    CanonicalizeLevel::Structure,
+    CanonicalizeLevel::Structure
+)]
+#[case::modified(
+    EntitySpan::Modified { lhs: false, rhs: false },
+    CanonicalizeLevel::Constitution,
+    CanonicalizeLevel::Constitution,
+)]
+#[case::unchanged_constraint(
+    EntitySpan::Unchanged(true),
+    CanonicalizeLevel::Topology,
+    CanonicalizeLevel::Full
+)]
+#[case::added_constraint(
+    EntitySpan::Added(true),
+    CanonicalizeLevel::Constitution,
+    CanonicalizeLevel::Full
+)]
+#[case::removed_constraint(
+    EntitySpan::Removed(true),
+    CanonicalizeLevel::Structure,
+    CanonicalizeLevel::Full
+)]
+#[case::modified_lhs_constraint(
+    EntitySpan::Modified { lhs: true, rhs: false },
+    CanonicalizeLevel::Topology,
+    CanonicalizeLevel::Full,
+)]
+#[case::modified_rhs_constraint(
+    EntitySpan::Modified { lhs: false, rhs: true },
+    CanonicalizeLevel::Topology,
+    CanonicalizeLevel::Full,
+)]
+fn test_entity_span_canonicalize_level(
+    #[case] span: EntitySpan<bool>,
+    #[case] base: CanonicalizeLevel,
+    #[case] expected: CanonicalizeLevel,
+) {
+    assert_eq!(
+        entity_span_canonicalize_level(&span, base, |has_inline_constraints| {
+            *has_inline_constraints
+        }),
+        expected,
+    );
+}
+
+#[rstest]
+#[case::atom_add(
+    Delta::Atom(AtomDelta::Add {
+        id: AtomId(0),
+        attributes: AtomForm::from_element(Element::C),
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::atom_remove(
+    Delta::Atom(AtomDelta::Remove {
+        id: AtomId(0),
+        attributes: AtomForm::from_element(Element::C),
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::atom_modify_field(
+    Delta::Atom(AtomDelta::ModifyField {
+        id: AtomId(0),
+        change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(1) },
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::atom_modify_constraint(
+    Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: None }),
+    CanonicalizeLevel::Full,
+)]
+#[case::atom_inline_constraint(
+    Delta::Atom(AtomDelta::Add {
+        id: AtomId(0),
+        attributes: AtomForm::from_element(Element::C)
+            .with_constraint(AtomConstraintForm::valence(4)),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::bond_add(
+    Delta::Bond(BondDelta::Add {
+        id: BondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: BondForm::from_order(1),
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::bond_remove(
+    Delta::Bond(BondDelta::Remove {
+        id: BondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: BondForm::from_order(1),
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::bond_modify_field(
+    Delta::Bond(BondDelta::ModifyField {
+        id: BondId(0),
+        change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+    }),
+    CanonicalizeLevel::Topology,
+)]
+#[case::bond_modify_constraint(
+    Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: None }),
+    CanonicalizeLevel::Full,
+)]
+#[case::bond_inline_constraint(
+    Delta::Bond(BondDelta::Add {
+        id: BondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: BondForm::from_order(1)
+            .with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::dative_add(
+    Delta::DativeBond(DativeBondDelta::Add {
+        id: DativeBondId(0),
+        donors: vec![AtomId(0)],
+        acceptor: AtomId(1),
+        attributes: DativeBondForm::from_order(1),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::dative_remove(
+    Delta::DativeBond(DativeBondDelta::Remove {
+        id: DativeBondId(0),
+        donors: vec![AtomId(0)],
+        acceptor: AtomId(1),
+        attributes: DativeBondForm::from_order(1),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::dative_modify_field(
+    Delta::DativeBond(DativeBondDelta::ModifyField {
+        id: DativeBondId(0),
+        change: DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::dative_modify_constraint(
+    Delta::DativeBond(DativeBondDelta::ModifyConstraint {
+        id: DativeBondId(0),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::dative_inline_constraint(
+    Delta::DativeBond(DativeBondDelta::Add {
+        id: DativeBondId(0),
+        donors: vec![AtomId(0)],
+        acceptor: AtomId(1),
+        attributes: DativeBondForm::from_order(1)
+            .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::aromatic_add(
+    Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::aromatic_remove(
+    Delta::AromaticSystem(AromaticSystemDelta::Remove {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::aromatic_modify_field(
+    Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+        id: AromaticSystemId(0),
+        change: AromaticSystemFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::aromatic_modify_constraint(
+    Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint {
+        id: AromaticSystemId(0),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::aromatic_inline_constraint(
+    Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: AromaticSystemForm::from_electrons(vec![1, 1])
+            .with_constraint(AromaticSystemConstraintForm::electron_count(2)),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::multicenter_add(
+    Delta::MulticenterBond(MulticenterBondDelta::Add {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::multicenter_remove(
+    Delta::MulticenterBond(MulticenterBondDelta::Remove {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::multicenter_modify_field(
+    Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
+        id: MulticenterBondId(0),
+        change: MulticenterBondFieldChange::Charge {
+            old: NumForm::Lit(0),
+            new: NumForm::Lit(1),
+        },
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::multicenter_modify_constraint(
+    Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint {
+        id: MulticenterBondId(0),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::multicenter_inline_constraint(
+    Delta::MulticenterBond(MulticenterBondDelta::Add {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 1])
+            .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::noncovalent_add(
+    Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::noncovalent_remove(
+    Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::noncovalent_modify_field(
+    Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
+        id: NoncovalentBondId(0),
+        change: NoncovalentBondFieldChange::Kind {
+            old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+            new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
+        },
+    }),
+    CanonicalizeLevel::Constitution,
+)]
+#[case::noncovalent_modify_constraint(
+    Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint {
+        id: NoncovalentBondId(0),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::noncovalent_inline_constraint(
+    Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+            .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::stereo_atom_add(
+    Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: vec![],
+        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_atom_remove(
+    Delta::StereoAtom(StereoAtomDelta::Remove {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: vec![],
+        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_atom_modify_field(
+    Delta::StereoAtom(StereoAtomDelta::ModifyField {
+        id: StereoAtomId(0),
+        change: StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32),
+            new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32),
+        },
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_atom_modify_constraint(
+    Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+        id: StereoAtomId(0),
+        kind: Some(StereoKind::Tetrahedral),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::stereo_atom_inline_constraint(
+    Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: vec![],
+        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            )),
+        ),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::stereo_bond_add(
+    Delta::StereoBond(StereoBondDelta::Add {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: vec![],
+        attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_bond_remove(
+    Delta::StereoBond(StereoBondDelta::Remove {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: vec![],
+        attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_bond_modify_field(
+    Delta::StereoBond(StereoBondDelta::ModifyField {
+        id: StereoBondId(0),
+        change: StereoBondFieldChange::Configuration {
+            old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+            new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
+        },
+    }),
+    CanonicalizeLevel::Structure,
+)]
+#[case::stereo_bond_modify_constraint(
+    Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+        id: StereoBondId(0),
+        kind: Some(StereoKind::CisTrans),
+        old: None,
+        new: None,
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::stereo_bond_inline_constraint(
+    Delta::StereoBond(StereoBondDelta::Add {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: vec![],
+        attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32).with_constraint(
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                Stereogenicity::Stereogenic,
+            )),
+        ),
+    }),
+    CanonicalizeLevel::Full,
+)]
+#[case::constraint(
+    Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
+        MoleculeConstraint::Connected { atoms: None },
+    ))),
+    CanonicalizeLevel::Full,
+)]
+fn test_delta_canonicalize_level(#[case] delta: Delta, #[case] expected: CanonicalizeLevel) {
+    assert_eq!(delta_canonicalize_level(&delta), expected);
 }
 
 #[rstest]
