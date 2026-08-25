@@ -4,7 +4,8 @@ Status: In Progress
 Date: 2026-08-24
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
-[207](207-reaction-network-spike-2026-08-24.md)
+[207](207-reaction-network-spike-2026-08-24.md),
+[209](209-level-hash-semantics-2026-08-25.md)
 
 ## Purpose
 
@@ -19,6 +20,14 @@ mapping corpus, which led to reaction-network generation, which has now supplied
 canonicalization workload. That provenance is a reason to keep the work sharply bounded.
 Canonicalization is already a central graph-IR operation and should be corrected there if the
 problem is general; the reaction-network crate must not acquire a corpus-specific identity scheme.
+
+## Semantic correction from doc 209
+
+Doc 209 removes description levels and level-selecting canonicalization methods from the public
+Rust and Python APIs. The completed S1 and S2 work below records how the current branch reached its
+present state; it is not the operative API direction. The nested levels remain available privately
+for exact search reduction. S3 must implement that private reduction while preserving complete
+canonicalization, equality, correspondence, and hash semantics.
 
 ## Current evidence
 
@@ -76,42 +85,17 @@ those are the two additions needed for the investigation rather than a new bench
 
 ## Settled design boundary
 
-### Molecular description level
+### Private canonicalization level
 
-`DescriptionLevel` is a representation-owned nested level, not canonicalization-specific operational
-configuration. Define it beside `Molecule` and re-export it from the graph-IR root:
+Doc 209 restores private `CanonicalizeLevel::{Topology, Constitution, Structure, Full}` inside the
+canonicalizer and removes every public level selector. Private inspection selects the lowest level
+required by a molecule, reaction, or reaction span from the entity families and constraints carried
+by that representation. Complete unary operations use that level, while complete binary equality
+uses the greater level required by either operand.
 
-```rust
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum DescriptionLevel {
-    Topology,
-    Constitution,
-    Structure,
-    Full,
-}
-```
-
-The derived order is the documented containment order
-`Topology < Constitution < Structure < Full`. `Molecule::description_level()` returns the lowest
-level containing every populated part of the molecule: non-stereo overlay counts raise the result
-to `Constitution`, stereo-atom or stereo-bond counts raise it to `Structure`, and any inline or
-molecule-level constraint raises it to `Full`. This is the projected reading of the description
-level: what the molecule actually contains. The operation reads the lengths of collections that
-are always present; it does not inspect values, validate chemistry, or canonicalize.
-
-Replace the operation-owned `CanonicalizeLevel` with `DescriptionLevel` throughout aggregate
-canonicalization. The effective search level for a molecule is
-`requested.min(molecule.description_level())`. This is an exact reduction: every typed key section
-above the molecule's description level is empty. It changes neither the selected key nor the
-returned complete molecule and correspondence. `IncidenceLevel` remains a distinct carrier
-selector because its `Full` value contains every structural entity but no constraints.
-
-Unary operations use the effective level above. Binary canonical equality must retain features
-present on either side, so its effective level is
-`requested.min(lhs.description_level().max(rhs.description_level()))`. This preserves the requested
-distinction when only one operand contains a higher-level feature. Reaction and reaction-span APIs
-adopt `DescriptionLevel` as their selector in this scope, but do not acquire aggregate
-description-level inference or automatic lowering.
+This is an exact search reduction, not a public projection. `IncidenceLevel` remains a distinct
+public carrier selector because its `Full` value contains every structural entity but no
+constraints.
 
 ### Stereo-preserving automorphism orbits
 
@@ -168,8 +152,8 @@ infallible oracle.
 The investigation should distinguish the following possibilities rather than combining them into
 one optimization patch:
 
-1. **Description-level reduction.** Use the molecule's representation-owned `DescriptionLevel` to
-   avoid searching empty higher-level key sections. Verify exact canonical forms and correspondence
+1. **Private-level reduction.** Use the canonicalizer's private aggregate-level selection to avoid
+   searching empty higher-level key sections. Verify exact canonical forms and correspondence
    action against the unreduced search on bounded dense renumberings and retained slow benchmark
    cases.
 2. **Stereo-preserving automorphism action.** Retain the occurrence-node action, restrict pruning
@@ -183,12 +167,17 @@ one optimization patch:
    position is unresolved. The branch is worse only when this guaranteed prefix is
    lexicographically greater than the incumbent prefix of the same length. This conservative rule
    may miss pruning opportunities but cannot reject an improving completion.
+4. **Complete-operation materialization.** After private-level reduction, compare complete
+   canonicalization, canonicalization with correspondence, canonical hash, and canonical equality.
+   A hash-specific path is justified only if materializing and structurally hashing the canonical
+   aggregate remains material. It must reproduce `hash(canonicalize(x))`; hashing a different
+   canonical key would change the operation rather than optimize it.
 
 Topology-level canonicalization is an especially useful diagnostic for the current network domain:
 its molecules contain no description above topology, so full canonicalization has exactly the same
-non-empty typed key. The `DescriptionLevel` reduction makes this fact part of general graph-IR
-behavior rather than a reaction-network-specific identity path. The unreduced search remains useful
-during verification but is not a distinct semantic operation.
+non-empty typed key. Private-level reduction handles this as canonicalizer dispatch rather than a
+reaction-network-specific identity path. The unreduced search remains useful during verification
+but is not a distinct semantic operation.
 
 ## Relationship to the corpus campaign
 
@@ -455,42 +444,35 @@ over all targets with warnings denied.
 
 ### S3 — Lower empty description levels exactly
 
-#### S3a — Route molecule operations through their effective level
+#### S3a — Route aggregate operations through their effective level **Transferred to doc 209**
 
-**Module:** `umol-graph-ir/src/ir/canonicalize.rs` and molecule canonicalization implementations.
+**Module:** `umol-graph-ir/src/ir/canonicalize.rs` and aggregate canonicalization implementations.
 
-Add private effective-level selection and use it for all molecule canonicalization entry points.
-Unary canonicalization and hashing use `requested.min(molecule.description_level())`; binary
-canonical equality uses
-`requested.min(lhs.description_level().max(rhs.description_level()))`. Unqualified operations
-continue to request `Full` before this reduction. Reaction and reaction-span operations use the new
-selector type but retain their current search-level behavior.
+Doc 209 now owns the private `CanonicalizeLevel`, molecule, reaction, and reaction-span dispatch,
+the complete-only public API, and their exactness tests. This subitem has no independent
+implementation remaining in doc 208.
 
-This changes internal dispatch but not the public semantic result.
-
-**Tests and evidence:** Add example tests for every requested/available level pair and asymmetric
-binary cases where only one operand carries an overlay, stereo entity, or constraint. Assert that
-lowered and explicitly unlowered internal searches return the same canonical aggregate and satisfy
-the same transport law.
-
-**Depends on:** S2a.
+**Depends on:** doc 209 completion.
 
 #### S3b — Verify the reduction under renumbering and retained workloads
 
 **Module:** canonicalization property tests and `umol-graph-ir/benches/canonicalize.rs`.
 
 Apply the existing dense-renumbering generators to feature-free and partially featured molecules.
-Benchmark the retained feature-free cases through the ordinary `Full` API and through explicit
-lower-level searches so the expected collapse in work is visible.
+After doc 209 removes the public level operations, benchmark the retained cases through
+`canonicalize`, `canonicalize_with_correspondence`, `canonical_hash`, and `canonical_eq` for an
+equal remapping and a structurally unequal input. The existing pre-change explicit-level results
+provide the forced-full and lower-level timing baselines without retaining a public forcing API.
 
 This is additive verification and benchmark work with no public API change.
 
 **Tests and evidence:** Property-test equality of canonical aggregates, hashes, and transported
 results under renumbering. For binary equality, generate operands with different populated feature
-levels. Record search counters and Criterion results in this document; do not assert wall-clock
-thresholds in tests.
+levels. Record search counters and complete-operation Criterion results in this document; do not
+assert wall-clock thresholds in tests. Use the result to decide whether a separate canonical-hash
+materialization optimization is justified.
 
-**Depends on:** S3a.
+**Depends on:** doc 209 completion.
 
 ### S4 — Restore sound orbit pruning at structure level
 
@@ -630,15 +612,16 @@ completion gate, not deferred cleanup.
 
 Activate `umol-py/.venv`, confirm Python 3.13, rebuild the extension, run the Python tests, and run
 the workspace test and lint gates. Search source, tests, examples, and documentation for the removed
-`CanonicalizeLevel` name.
+`DescriptionLevel` and `_by` surface. `CanonicalizeLevel` may remain only in
+canonicalization-private code and module-local tests.
 
 This verifies the breaking selector migration across language boundaries.
 
-**Tests and evidence:** The Python and workspace gates pass with `DescriptionLevel` as the only
-public selector name. Any fixture or generated artifact that embeds the old spelling is either
+**Tests and evidence:** The Python and workspace gates pass with complete-only canonicalization and
+no public selector. Any fixture or generated artifact that embeds the removed surface is either
 migrated or explicitly disposed of.
 
-**Depends on:** S2b and S6a.
+**Depends on:** doc 209 completion and S6a.
 
 #### S6c — Re-run the reaction-network workloads
 
@@ -663,10 +646,10 @@ remaining bottleneck.
 
 **Module:** this document, `discussion/000-status.md`, and the nomenclature and development guides.
 
-Document the implemented `DescriptionLevel` contract, selector removal, effective-level rules,
-pruning boundary, benchmark evidence, and any deliberately unresolved behavior. Mark this document
-Completed only after the public inventory and all verification gates agree with the implementation,
-including the S6a removal of release-path search accounting.
+Document the implemented private `CanonicalizeLevel` dispatch, complete-only API, pruning boundary,
+benchmark evidence, and any deliberately unresolved behavior. Mark this document Completed only
+after the public inventory and all verification gates agree with the implementation, including the
+S6a removal of release-path search accounting.
 
 This is documentation and lifecycle work.
 
@@ -677,12 +660,11 @@ and the status row describes completed rather than proposed scope.
 
 ### Dependency summary
 
-The critical path is
-`S0a -> S0b -> S0c -> S1a -> S2a -> S3a -> S3b -> S4a -> S4b -> S4c -> S5a ->`
-`S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
-`S2b` may proceed after `S2a` while the Rust search work continues, but it must finish before S6b.
+The remaining critical path is
+`doc 209 -> S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
 S5 follows S4 deliberately so benchmark deltas remain attributable even though their private
-infrastructure is largely independent. No implementation stage is optional within this scope.
+infrastructure is largely independent. No remaining implementation stage is optional within this
+scope.
 
 ## Potential issues after the current scope
 

@@ -32,6 +32,9 @@ the statuses recorded here remain authoritative.
   documentation, and the eventual arXiv link.
 - [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
   improves canonicalization performance.
+- [209 - Level and hash semantics](209-level-hash-semantics-2026-08-25.md)
+  confines canonicalization tiers to private internals and separates complete canonical hash
+  and equality semantics from allocation optimizations before the development-trunk API is released.
 
 ## Document index
 
@@ -241,4 +244,5 @@ the statuses recorded here remain authoritative.
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.                      |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.         |
-| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-24   | S2 complete; S3a lowers molecule operations; S6a removes release-path accounting.                             |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-25   | S2 complete; S3 awaits the level and hash semantics in doc 209; S6a removes release-path accounting.        |
+| [209-level-hash-semantics-2026-08-25.md](209-level-hash-semantics-2026-08-25.md)                               | Proposed      | 2026-08-25   | Staged plan settled; S0 restores private effective-level dispatch for all canonical aggregates.             |
