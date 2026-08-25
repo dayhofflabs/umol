@@ -6,7 +6,9 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use umol_chem::element::Element;
+use umol_edn::FromEdn;
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
     Canonicalize, CanonicalizeContext, CanonicalizeLevel, Constraint, DativeBondForm, DativeBondId,
@@ -22,6 +24,86 @@ struct CorpusCase {
     name: &'static str,
     molecule: Molecule,
 }
+
+// Extended C/H propane network, seed flask 0.
+const FEATURE_FREE_CONNECTED: &str = r#"
+{:atoms ["H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"]
+ :bonds [[0 8 "1#c0#u0#s"]
+         [1 8 "1#c0#u0#s"]
+         [2 8 "1#c0#u0#s"]
+         [3 9 "1#c0#u0#s"]
+         [4 9 "1#c0#u0#s"]
+         [5 9 "1#c0#u0#s"]
+         [6 10 "1#c0#u0#s"]
+         [7 10 "1#c0#u0#s"]
+         [8 10 "1#c0#u0#s"]
+         [9 10 "1#c0#u0#s"]]}
+"#;
+
+// Extended C/H propane network, product flask 72.
+const FEATURE_FREE_DISCONNECTED: &str = r#"
+{:atoms ["H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "H#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u0#s"
+         "C#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"]
+ :bonds [[0 8 "1#c0#u0#s"]
+         [1 8 "1#c0#u0#s"]
+         [2 8 "1#c0#u0#s"]
+         [3 8 "1#c0#u0#s"]
+         [4 9 "1#c0#u0#s"]
+         [5 9 "1#c0#u0#s"]
+         [6 10 "1#c0#u0#s"]
+         [7 10 "1#c0#u0#s"]
+         [9 10 "1#c0#u0#s"]]}
+"#;
+
+// Extended C/H ethane network, product flask 99.
+const SYMMETRY_HEAVY_RADICALS: &str = r#"
+{:atoms ["H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "H#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"
+         "C#i=#c0#h0#n0#u#s2"]
+ :bonds [[6 7 "3#c0#u0#s"]]}
+"#;
+
+const SCALING_CASES: [(&str, &str, [usize; 8]); 3] = [
+    (
+        "feature_free_connected",
+        FEATURE_FREE_CONNECTED,
+        [11, 10, 0, 0, 0, 0, 0, 0],
+    ),
+    (
+        "feature_free_disconnected",
+        FEATURE_FREE_DISCONNECTED,
+        [11, 9, 0, 0, 0, 0, 0, 0],
+    ),
+    (
+        "symmetry_heavy_radicals",
+        SYMMETRY_HEAVY_RADICALS,
+        [8, 1, 0, 0, 0, 0, 0, 0],
+    ),
+];
 
 fn atom(element: Element) -> AtomForm {
     AtomForm::from_element(element)
@@ -329,8 +411,8 @@ fn para_stereo_cascade() -> Molecule {
     })
 }
 
-fn corpus() -> [CorpusCase; 7] {
-    [
+fn corpus() -> Vec<CorpusCase> {
+    let mut corpus = vec![
         CorpusCase {
             name: "ordinary_naphthalene",
             molecule: ordinary_naphthalene(),
@@ -359,7 +441,35 @@ fn corpus() -> [CorpusCase; 7] {
             name: "para_stereo_cascade",
             molecule: para_stereo_cascade(),
         },
-    ]
+    ];
+    corpus.extend(SCALING_CASES.map(|(name, source, expected_counts)| {
+        let molecule = MoleculeDsl::from_edn_str(source)
+            .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
+            .into_parts()
+            .0;
+        molecule
+            .check_integrity()
+            .unwrap_or_else(|error| panic!("benchmark case {name} must be valid: {error}"));
+        assert_eq!(
+            molecule_counts(&molecule),
+            expected_counts,
+            "benchmark case {name} changed shape"
+        );
+        assert!(
+            !molecule.has_constraints()
+                && molecule
+                    .atoms()
+                    .iter()
+                    .all(|atom| atom.attributes.constraints.is_empty())
+                && molecule
+                    .bonds()
+                    .iter()
+                    .all(|bond| bond.attributes.constraints.is_empty()),
+            "benchmark case {name} must remain feature-free"
+        );
+        CorpusCase { name, molecule }
+    }));
+    corpus
 }
 
 const LEVELS: [IncidenceLevel; 3] = [

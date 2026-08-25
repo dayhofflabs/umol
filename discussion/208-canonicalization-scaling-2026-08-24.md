@@ -1,6 +1,6 @@
 # 208 — Canonicalization scaling
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-24
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
@@ -141,8 +141,8 @@ the feature-level reduction avoids imposing that unresolved case on unconstraine
 
 The first investigation must isolate complete canonicalization from the reaction-network loop. It
 needs representative slow products, not only the ethane and propane seeds, because electronic-state
-changes and disconnected intermediates may alter the residual symmetry classes. For each witness it
-should record at least:
+changes and disconnected intermediates may alter the residual symmetry classes. For each benchmark
+case it should record at least:
 
 - incidence construction, normalization, refinement, backend, leaf-key, and final-remapping time;
 - refinement calls, backend calls, leaves visited, and branches removed by each sound pruning rule;
@@ -150,8 +150,8 @@ should record at least:
 - timings and canonical results at topology, constitution, structure, and full levels.
 
 The existing private canonical-search statistics are a suitable starting point for research
-instrumentation. They are not a reason to expose a permanent diagnostics API. Slow witnesses should
-be retained as canonicalization benchmarks and correctness fixtures once their behavior is
+instrumentation. They are not a reason to expose a permanent diagnostics API. Slow cases should be
+retained as canonicalization benchmarks and correctness fixtures once their behavior is
 understood.
 
 Every candidate change must preserve exact canonical forms and the correspondence transport law
@@ -169,7 +169,8 @@ one optimization patch:
 
 1. **Feature-level reduction.** Use the molecule's representation-owned `FeatureLevel` to avoid
    searching empty higher-level key sections. Verify exact canonical forms and correspondence
-   action against the unreduced search on bounded dense renumberings and retained slow witnesses.
+   action against the unreduced search on bounded dense renumberings and retained slow benchmark
+   cases.
 2. **Stereo-preserving automorphism action.** Retain the occurrence-node action, restrict pruning
    to generators that preserve stereo atoms and bonds, and measure whether the resulting sound
    subgroup recovers the useful orbits. Compute the full stabilizer only if generator filtering is
@@ -208,11 +209,11 @@ benchmark infrastructure; this work does not add a public profiling API. The imp
 separates feature reduction, orbit pruning, and prefix pruning so their correctness and performance
 effects remain attributable.
 
-### S0 — Retain witnesses and establish the search baseline
+### S0 — Retain benchmark cases and establish the search baseline
 
-#### S0a — Retain representative canonicalization witnesses
+#### S0a — Retain representative scaling cases **Done**
 
-**Module:** `umol-graph-ir/benches/canonicalize.rs` and its nearest benchmark fixture module.
+**Module:** `umol-graph-ir/benches/canonicalize.rs`.
 
 Retain a small set of slow, structurally distinct products from the ethane and propane reaction
 networks alongside the existing naphthalene and disconnected-ring cases. The set must include a
@@ -225,6 +226,33 @@ This is additive benchmark infrastructure with no public API change.
 **Tests and evidence:** Parse or construct every retained value through an existing graph-IR
 boundary, assert that it is valid, and run the existing Criterion groups at all four feature levels.
 The benchmark must report the retained cases individually rather than hiding them in an aggregate.
+
+The benchmark target retains the exact native molecule DSL for these three values. The benchmark
+ids describe the scaling behavior; provenance remains attached data:
+
+| Benchmark id | Reaction-network provenance | Atoms | Bonds | Components | Populated level |
+| --- | --- | ---: | ---: | ---: | --- |
+| `feature_free_connected` | Extended C/H propane seed, flask 0 | 11 | 10 | 1 | Topology |
+| `feature_free_disconnected` | Extended C/H propane product, flask 72 | 11 | 9 | 2 | Topology |
+| `symmetry_heavy_radicals` | Extended C/H ethane product, flask 99 | 8 | 1 | 7 | Topology |
+
+Every value is parsed through `MoleculeDsl`, checked for graph-IR integrity, and asserted to contain
+only atoms and localized bonds: no overlays, stereo entities, inline constraints, or molecule-level
+constraints. The connected seed anchors the ordinary connected shape, while the two retained
+products cover disconnected and symmetry-heavy electronic-state shapes without a dependency on the
+experimental reaction-network crate.
+
+An optimized Criterion quick run on 2026-08-24 produced these individual operation ranges:
+
+| Benchmark id | Topology | Constitution | Structure | Para structure | Full |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 95.5-98.7 us | 99.1-101.1 us | 2.890-2.892 ms | 2.834-2.876 ms | 3.728-3.836 ms |
+| `feature_free_disconnected` | 91.3-93.9 us | 92.8 us | 3.989-3.997 ms | 3.899-3.952 ms | 5.092-5.136 ms |
+| `symmetry_heavy_radicals` | 47.0 us | 47.4-47.7 us | 10.77-10.92 ms | 10.48-10.55 ms | 15.57-15.84 ms |
+
+The results confirm the intended separation: topology and constitution remain below `0.11 ms`,
+while empty higher-level searches cost up to `15.84 ms`. These timings are baseline evidence, not
+test thresholds.
 
 **Depends on:** none.
 
@@ -252,10 +280,10 @@ algorithmic invariants; timings remain benchmark evidence rather than test asser
 **Module:** `umol-graph-ir/src/ir/canonicalize/tests.rs` and the canonicalization property-test
 module.
 
-Record the exact canonical aggregate for each retained witness and the source-to-result transport
-law for its returned correspondence. Do not freeze an arbitrary correspondence representative when
-multiple symmetry-equivalent representatives satisfy that law. Record baseline timings and search
-counters in this document before changing dispatch or pruning.
+Record the exact canonical aggregate for each retained benchmark case and the source-to-result
+transport law for its returned correspondence. Do not freeze an arbitrary correspondence
+representative when multiple symmetry-equivalent representatives satisfy that law. Record baseline
+timings and search counters in this document before changing dispatch or pruning.
 
 This is additive verification work with no public API change.
 
@@ -367,7 +395,7 @@ the same transport law.
 **Module:** canonicalization property tests and `umol-graph-ir/benches/canonicalize.rs`.
 
 Apply the existing dense-renumbering generators to feature-free and partially featured molecules.
-Benchmark the retained feature-free witnesses through the ordinary `Full` API and through explicit
+Benchmark the retained feature-free cases through the ordinary `Full` API and through explicit
 lower-level searches so the expected collapse in work is visible.
 
 This is additive verification and benchmark work with no public API change.
@@ -396,8 +424,7 @@ This is an additive internal representation change with no public API change.
 stereo-atom ligand occurrences, and stereo-bond endpoint occurrences. Assert that projection agrees
 with the current source action while the retained action covers every occurrence node.
 
-**Depends on:** S0b, S3b, and S4c. The algorithm does not require orbit pruning, but this ordering
-keeps the measured effects attributable.
+**Depends on:** S0b and S3b.
 
 #### S4b — Filter generators by stereo preservation
 
@@ -423,7 +450,7 @@ retained.
 Build source-entity orbits from the retained generator subgroup and enable orbit pruning for
 `Structure` searches. Feature-free searches use the full structural orbit information. Constrained
 `Full` searches remain exhaustive in this scope. If the retained-generator subgroup under-prunes a
-representative stereo witness, record that fact; do not silently introduce a full stabilizer
+representative stereo case, record that fact; do not silently introduce a full stabilizer
 algorithm into this subitem.
 
 This changes private search behavior while preserving exact results.
@@ -431,7 +458,7 @@ This changes private search behavior while preserving exact results.
 **Tests and evidence:** Compare pruning enabled and disabled on bounded exhaustive cases, forward
 and reverse candidate orders, retained stereo examples, para-stereo examples, and dense
 renumberings. Assert exact canonical aggregates and transport laws, then record leaves, backend
-calls, orbit-pruned branches, and timings for the retained witnesses.
+calls, orbit-pruned branches, and timings for the retained benchmark cases.
 
 **Depends on:** S4b.
 
@@ -452,7 +479,8 @@ This is additive private algorithm infrastructure with no public API change.
 prefix of every descendant leaf key. Cover an empty prefix, a partially fixed topology prefix, and a
 branch whose guaranteed prefix is already worse than the incumbent.
 
-**Depends on:** S0b and S3b.
+**Depends on:** S0b, S3b, and S4c. Prefix pruning does not require orbit pruning, but this ordering
+keeps the measured effects attributable.
 
 #### S5b — Extend prefixes across typed feature sections
 
@@ -481,7 +509,7 @@ a public algorithm selector.
 
 This changes private search behavior while preserving exact results.
 
-**Tests and evidence:** Compare prefix pruning enabled and disabled on retained witnesses, bounded
+**Tests and evidence:** Compare prefix pruning enabled and disabled on retained benchmark cases, bounded
 exhaustive partitions, both candidate orders, and dense renumberings. Assert exact canonical
 aggregates and correspondence transport, then record prefix-pruned branches, leaves, backend calls,
 and timings. The stage is not complete merely because the counter becomes non-zero.
@@ -501,8 +529,8 @@ and confirm that no diagnostic type or duplicate selector escaped into the publi
 This is verification only.
 
 **Tests and evidence:** All graph-IR canonicalization tests and properties pass; every retained
-witness preserves the exact aggregate and transport law; benchmark results and search counters are
-recorded in this document.
+benchmark case preserves the exact aggregate and transport law; benchmark results and search
+counters are recorded in this document.
 
 **Depends on:** S3b, S4c, and S5c.
 
@@ -522,7 +550,7 @@ explicitly disposed of.
 
 **Depends on:** S2b and S6a.
 
-#### S6c — Re-run the reaction-network witnesses
+#### S6c — Re-run the reaction-network workloads
 
 **Module:** `experimental/reaction-network` benchmark or reporting path; no production dependency
 from graph-IR to the experimental crate.
@@ -536,8 +564,8 @@ This is external evidence, not a graph-IR API change.
 
 **Tests and evidence:** Record end-to-end generation time, product-canonicalization time, and calls
 per produced derivation, and pair them with the final module-local counter runs on retained graph-IR
-witnesses. A larger case is justified only if the propane run no longer identifies the remaining
-bottleneck.
+benchmark cases. A larger case is justified only if the propane run no longer identifies the
+remaining bottleneck.
 
 **Depends on:** S6a.
 
