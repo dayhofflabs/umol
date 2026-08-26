@@ -6,6 +6,8 @@
 //! this module asserts the public idempotence, remapping-invariance, equality, and canonical-hash
 //! laws without selecting a particular symmetry-equivalent correspondence.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
@@ -18,6 +20,12 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
+}
+
+fn structural_hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 proptest! {
@@ -38,12 +46,19 @@ proptest! {
         let renumbered_canonical = renumbered.canonicalize(&context);
 
         prop_assert_eq!(&renumbered_canonical, &canonical);
+        prop_assert_eq!(
+            molecule
+                .clone()
+                .canonicalize_by(DescriptionLevel::Full, &context),
+            canonical.clone(),
+        );
         if let Ok(canonical) = canonical {
-            let (_, correspondence) = molecule
+            let (with_correspondence, correspondence) = molecule
                 .clone()
                 .canonicalize_with_correspondence(&context)
                 .expect("successful canonicalization returns its correspondence");
 
+            prop_assert_eq!(&with_correspondence, &canonical);
             prop_assert!(molecule.equiv_under(&canonical, &correspondence));
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
@@ -73,8 +88,14 @@ proptest! {
         }
         prop_assert_eq!(
             molecule.clone().canonical_hash_by(DescriptionLevel::Full, &context),
-            molecule.canonical_hash(&context),
+            molecule.clone().canonical_hash(&context),
         );
+        if let Ok(canonical) = molecule.clone().canonicalize(&context) {
+            prop_assert_eq!(
+                molecule.canonical_hash(&context),
+                Ok(structural_hash(&canonical)),
+            );
+        }
     }
 
     #[test]

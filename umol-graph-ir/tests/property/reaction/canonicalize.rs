@@ -7,6 +7,8 @@
 //! fixtures, rather than a tautological second case, remain the compatibility target for future
 //! algorithms.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
@@ -30,6 +32,12 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
+}
+
+fn structural_hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn is_present<T>(value: &EntitySpan<T>, side: Side) -> bool {
@@ -219,8 +227,17 @@ proptest! {
         let canonical = reaction.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
         })?;
+        let (with_correspondence, _) = reaction
+            .clone()
+            .canonicalize_with_correspondence(&context)
+            .map_err(|error| {
+                TestCaseError::fail(format!(
+                    "generated reaction did not canonicalize with a correspondence: {error}"
+                ))
+            })?;
 
         prop_assert_eq!(canonical.check_integrity(), Ok(()));
+        prop_assert_eq!(&with_correspondence, &canonical);
         prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
     }
 
@@ -282,8 +299,14 @@ proptest! {
             source
                 .clone()
                 .canonical_hash_by(DescriptionLevel::Full, &context),
-            source.canonical_hash(&context),
+            source.clone().canonical_hash(&context),
         );
+        if let Ok(canonical) = source.clone().canonicalize(&context) {
+            prop_assert_eq!(
+                source.canonical_hash(&context),
+                Ok(structural_hash(&canonical)),
+            );
+        }
     }
 
     #[test]

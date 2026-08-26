@@ -5,6 +5,8 @@
 //! relations, LHS anchoring, reaction-normal-form convergence, integrity, and the documented
 //! weakened reversal law.
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
@@ -17,6 +19,12 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
+}
+
+fn structural_hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn reaction_normal_form(span: &ReactionSpan) -> ReactionSpan {
@@ -53,8 +61,29 @@ proptest! {
         let renumbered_canonical = renumbered.canonicalize(&context);
 
         prop_assert_eq!(&renumbered_canonical, &canonical);
+        prop_assert_eq!(
+            scenario
+                .span
+                .clone()
+                .canonicalize_by(DescriptionLevel::Full, &context),
+            canonical.clone(),
+        );
         if let Ok(canonical) = canonical {
+            let (with_correspondence, correspondence) = scenario
+                .span
+                .clone()
+                .canonicalize_with_correspondence(&context)
+                .expect("successful canonicalization returns its correspondence");
+
             prop_assert_eq!(canonical.check_integrity(), Ok(()));
+            prop_assert_eq!(&with_correspondence, &canonical);
+            prop_assert_eq!(
+                scenario
+                    .span
+                    .remap(&correspondence)
+                    .canonicalize(&context),
+                Ok(canonical.clone()),
+            );
             prop_assert_eq!(reaction_normal_form(&canonical), canonical.clone());
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
@@ -87,8 +116,14 @@ proptest! {
                 .span
                 .clone()
                 .canonical_hash_by(DescriptionLevel::Full, &context),
-            scenario.span.canonical_hash(&context),
+            scenario.span.clone().canonical_hash(&context),
         );
+        if let Ok(canonical) = scenario.span.clone().canonicalize(&context) {
+            prop_assert_eq!(
+                scenario.span.canonical_hash(&context),
+                Ok(structural_hash(&canonical)),
+            );
+        }
     }
 
     #[test]

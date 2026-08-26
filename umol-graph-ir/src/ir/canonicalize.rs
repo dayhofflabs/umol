@@ -67,6 +67,17 @@ enum CanonicalizeLevel {
     Full,
 }
 
+impl CanonicalizeLevel {
+    fn as_description_level(self) -> DescriptionLevel {
+        match self {
+            Self::Topology => DescriptionLevel::Topology,
+            Self::Constitution => DescriptionLevel::Constitution,
+            Self::Structure => DescriptionLevel::Structure,
+            Self::Full => DescriptionLevel::Full,
+        }
+    }
+}
+
 fn canonicalize_level_with_constraints(
     base: CanonicalizeLevel,
     has_inline_constraints: bool,
@@ -179,7 +190,6 @@ fn delta_canonicalize_level(delta: &Delta) -> CanonicalizeLevel {
     }
 }
 
-#[allow(dead_code)]
 fn molecule_canonicalize_level(molecule: &Molecule) -> CanonicalizeLevel {
     let has_inline_constraints = molecule
         .atoms()
@@ -229,7 +239,6 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> CanonicalizeLevel {
     }
 }
 
-#[allow(dead_code)]
 fn reaction_canonicalize_level(reaction: &Reaction) -> CanonicalizeLevel {
     reaction.deltas.iter().fold(
         molecule_canonicalize_level(&reaction.lhs),
@@ -237,7 +246,6 @@ fn reaction_canonicalize_level(reaction: &Reaction) -> CanonicalizeLevel {
     )
 }
 
-#[allow(dead_code)]
 fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
     if !span.constraints().is_empty() {
         return CanonicalizeLevel::Full;
@@ -5124,26 +5132,56 @@ fn constraint_span_key(span: &ConstraintSpan) -> CanonicalKeyValue {
     }
 }
 
+fn canonicalize_molecule_with_correspondence_by_effective(
+    molecule: &Molecule,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+    let options = CanonicalSearchOptions {
+        automorphism_pruning: matches!(
+            level,
+            CanonicalizeLevel::Topology | CanonicalizeLevel::Constitution
+        ),
+        prefix_pruning: false,
+        branch_order: backend_canonical_branch_order,
+    };
+    match level {
+        CanonicalizeLevel::Topology => {
+            canonicalize_topology_with_options(molecule, context, options)
+        }
+        CanonicalizeLevel::Constitution => {
+            canonicalize_constitution_with_options(molecule, context, options)
+        }
+        CanonicalizeLevel::Structure => {
+            canonicalize_structure_with_options(molecule, context, options)
+        }
+        CanonicalizeLevel::Full => canonicalize_full_with_options(molecule, context, options),
+    }
+}
+
+fn canonicalize_molecule_by_effective(
+    molecule: &Molecule,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
+    canonicalize_molecule_with_correspondence_by_effective(molecule, level, context)
+        .map(|(canonical, _)| canonical)
+}
+
 impl Canonicalize for Molecule {
     type Error = MoleculeCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_full(&self, context)
+        let level = molecule_canonicalize_level(&self);
+        canonicalize_molecule_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        canonicalize_full_with_options(
-            &self,
-            context,
-            CanonicalSearchOptions {
-                automorphism_pruning: false,
-                prefix_pruning: false,
-                branch_order: backend_canonical_branch_order,
-            },
-        )
+        let level = molecule_canonicalize_level(&self);
+        canonicalize_molecule_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonicalize_by(
@@ -5174,9 +5212,12 @@ impl Canonicalize for Molecule {
         if self == other {
             return true;
         }
+        let level = molecule_canonicalize_level(self)
+            .max(molecule_canonicalize_level(other))
+            .as_description_level();
         match (
-            canonical_key_by(self, DescriptionLevel::Full, context),
-            canonical_key_by(other, DescriptionLevel::Full, context),
+            canonical_key_by(self, level, context),
+            canonical_key_by(other, level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5363,23 +5404,41 @@ fn canonical_reaction_span_key(
     Ok(reaction_span_canonical_candidate(span, level, context)?.key)
 }
 
+fn canonicalize_reaction_span_by_effective(
+    span: &ReactionSpan,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
+    canonicalize_reaction_span_by(span, level.as_description_level(), context)
+}
+
+fn canonicalize_reaction_span_with_correspondence_by_effective(
+    span: &ReactionSpan,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<(ReactionSpan, MoleculeCorrespondence), ReactionSpanCanonicalizeError> {
+    span.check_integrity()?;
+    Ok(canonicalize_checked_reaction_span_with_correspondence_by(
+        span,
+        level.as_description_level(),
+        context,
+    )?)
+}
+
 impl Canonicalize for ReactionSpan {
     type Error = ReactionSpanCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_span_by(&self, DescriptionLevel::Full, context)
+        let level = reaction_span_canonicalize_level(&self);
+        canonicalize_reaction_span_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        self.check_integrity()?;
-        Ok(canonicalize_checked_reaction_span_with_correspondence_by(
-            &self,
-            DescriptionLevel::Full,
-            context,
-        )?)
+        let level = reaction_span_canonicalize_level(&self);
+        canonicalize_reaction_span_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonicalize_by(
@@ -5405,9 +5464,12 @@ impl Canonicalize for ReactionSpan {
         if self == other {
             return true;
         }
+        let level = reaction_span_canonicalize_level(self)
+            .max(reaction_span_canonicalize_level(other))
+            .as_description_level();
         match (
-            canonical_reaction_span_key(self, DescriptionLevel::Full, context),
-            canonical_reaction_span_key(other, DescriptionLevel::Full, context),
+            canonical_reaction_span_key(self, level, context),
+            canonical_reaction_span_key(other, level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
@@ -5502,26 +5564,43 @@ fn canonicalize_reaction_by(
     Ok(canonicalize_checked_reaction_span_by(&span, level, context)?.to_reaction())
 }
 
+fn canonicalize_reaction_by_effective(
+    reaction: &Reaction,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<Reaction, ReactionCanonicalizeError> {
+    canonicalize_reaction_by(reaction, level.as_description_level(), context)
+}
+
+fn canonicalize_reaction_with_correspondence_by_effective(
+    reaction: &Reaction,
+    level: CanonicalizeLevel,
+    context: &CanonicalizeContext,
+) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizeError> {
+    reaction.check_integrity()?;
+    let span = reaction.to_reaction_span()?;
+    let (canonical, correspondence) = canonicalize_checked_reaction_span_with_correspondence_by(
+        &span,
+        level.as_description_level(),
+        context,
+    )?;
+    Ok((canonical.to_reaction(), correspondence))
+}
+
 impl Canonicalize for Reaction {
     type Error = ReactionCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_by(&self, DescriptionLevel::Full, context)
+        let level = reaction_canonicalize_level(&self);
+        canonicalize_reaction_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        self.check_integrity()?;
-        let span = self.to_reaction_span()?;
-        let (canonical, correspondence) =
-            canonicalize_checked_reaction_span_with_correspondence_by(
-                &span,
-                DescriptionLevel::Full,
-                context,
-            )?;
-        Ok((canonical.to_reaction(), correspondence))
+        let level = reaction_canonicalize_level(&self);
+        canonicalize_reaction_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonicalize_by(
@@ -5550,9 +5629,10 @@ impl Canonicalize for Reaction {
         if self == other {
             return true;
         }
+        let level = reaction_canonicalize_level(self).max(reaction_canonicalize_level(other));
         match (
-            canonicalize_reaction_by(self, DescriptionLevel::Full, context),
-            canonicalize_reaction_by(other, DescriptionLevel::Full, context),
+            canonicalize_reaction_by_effective(self, level, context),
+            canonicalize_reaction_by_effective(other, level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
