@@ -1,9 +1,28 @@
 # 210 — Relation frame storage
 
-Status: Proposed
-Date: 2026-08-25
+Status: Superseded
+Date: 2026-08-26
 Relates: [209](209-normalization-canonical-semantics-2026-08-25.md),
+[211](211-relation-frames-and-api-2026-08-26.md),
 [data-type guide](../docs/development/data-types.md)
+
+## Superseded
+
+Doc [211](211-relation-frames-and-api-2026-08-26.md) replaces this document. The two could not be
+separated: removing the `RelationData` payload callback makes frame-preserving construction
+mandatory in the same change, because sorting participants without transporting the payload
+desynchronises the electron-count vectors. This document's storage semantics, operational audit,
+structural-equality consequences, and evidence boundary are absorbed there.
+
+Two items went elsewhere. Molecule-level stereo constraint transport under pushout belongs to doc
+[209](209-normalization-canonical-semantics-2026-08-25.md), which owns aggregate constraint
+transport. Reaction application of frame-relative constraint changes belongs to doc
+[204](204-reaction-application-redesign-2026-08-19.md).
+
+The `equiv_under` name collision recorded below closes when `RelationEquiv` is removed, so
+`Molecule::equiv_under` is retained unchanged.
+
+The material below is retained as the analysis that led to doc 211 and is no longer a work plan.
 
 ## Purpose
 
@@ -14,8 +33,9 @@ their supplied ligand frame and require explicit semantic transport elsewhere.
 
 This document scopes a separate migration toward frame-preserving relation storage and explicit
 graph-IR frame transport. It follows doc 209: normalization must first define the canonical
-representative that storage will cease to choose implicitly. The migration is a separate work unit,
-not part of the canonicalization-level and hash correction.
+representative that storage will cease to choose implicitly. Doc 211 separately audits the complete
+relation API that this migration must use. The migration is a separate work unit, not part of the
+canonicalization-level and hash correction.
 
 No staged implementation plan is appropriate until the relation semantics, alignment carrier, and
 operation boundaries below are settled.
@@ -26,6 +46,11 @@ Doc 209 owns complete normalization semantics for leaves, entity entries, `Molec
 `Reaction`, and `ReactionSpan`, together with stereo-frame integrity. It must produce a normal form
 that is independent of whether an aromatic or multicenter participant sequence was sorted at
 construction.
+
+Doc [211](211-relation-frames-and-api-2026-08-26.md) owns the current relation-set API accounting,
+candidate lookup, explicit relation overlap, graph-id transformation results, and cleanup of the
+parallel editor surface. This document must consume those decisions rather than add an independent
+lookup, alignment, mutation, or composition API.
 
 This document owns:
 
@@ -69,21 +94,25 @@ markers once they no longer control storage-time ordering.
 
 ## Participant alignment
 
-Any operation that matches two stored relation entries must make their participant alignment
-visible before combining their payloads. A structural match should carry both the relation id and a
-right-to-left alignment; a combining operation must not receive two apparently aligned payloads
-without that information. Graph-core may derive and carry the alignment but must not interpret or
-transform graph-IR payloads.
+Any operation that combines two stored relation entries must make their participant-frame
+relationship explicit before combining their payloads. A combining operation must not receive two
+apparently aligned payloads without either aligned-entry evidence or the information needed to
+transport one side. Graph core does not interpret or transform graph-IR payloads.
 
-The alignment has a named direction and arbitrary degree. Its defining law is:
+For distinct participants, a positional alignment can have a named direction and arbitrary degree.
+Its defining law is:
 
 ```text
 target[i] = source[alignment.source_position(i)]
 ```
 
 It cannot generally be represented by `umol_perm::Permutation`, whose fixed degree is appropriate
-for supported stereo kinds but not for arbitrary aromatic and multicenter systems. A validated
-alignment may be converted to `Permutation` when a stereo operation requires its group action.
+for supported stereo kinds but not for arbitrary aromatic and multicenter systems. Repeated equal
+participants make the alignment non-unique: a single positional bijection does not represent the
+complete equivalence class. Graph IR owns that ambiguity because stereo stabilizers and other
+family-specific invariance determine whether choosing a representative is meaningful. Doc 211
+therefore leaves a general `ParticipantAlignment` carrier unselected until its required semantics
+are demonstrated.
 
 Graph-IR needs one exhaustive, consuming frame-transport operation per position-sensitive form. An
 illustrative internal shape, not a selected public API, is:
@@ -106,10 +135,12 @@ carried side; it must not independently select an alignment for each side.
 
 ## Relation lookup and composition
 
-`find_by_participants` already identifies relations by participant multiset rather than stored
-order, including relation sets whose factors are marked `Ordered`. Deferred ordering therefore does
-not require a new lookup identity. Lookup finds the relation id; the caller derives the alignment
-between the two stored sequences.
+`find_by_participants` currently identifies the first relation whose participant multiset matches,
+including relation sets whose factors are marked `Ordered`. Relation-set construction does not
+establish the uniqueness assumed by that return type, and `participant_permutation` does not use
+the same matching rule. Doc 211 therefore proposes an explicitly multiset-based candidate iterator
+rather than a unique lookup. Graph-IR integrity may reduce that candidate set to one relation for a
+specific entity family.
 
 Stereo pushout is a partial precedent. After remapping the right molecule into the common id space,
 `stereo_glue_entries` finds a coincident left entry, restates the right configuration in the retained
@@ -118,9 +149,10 @@ shape: find the coincident entry, transport the right electron-count vector into
 frame, and combine aligned forms. Right-only entries retain their supplied frame until aggregate
 normalization.
 
-The generic relation-set pushout may remain payload-opaque if coincident payloads are pre-aligned to
-the retained left frame. Alternatively, pushout could supply the participant alignment to its
-combining closure. That interface decision remains open.
+The generic relation-set pushout remains payload-opaque only if coincident payloads are pre-aligned
+to the retained left frame. Doc 211 proposes explicit relation overlap evidence rather than having
+pushout and pullback infer semantic identity from participant storage. The concrete overlap and
+aligned-entry contract must be settled there before this migration is planned.
 
 ## Operational audit
 
@@ -176,12 +208,19 @@ correspondence verification.
 
 Before implementation planning, settle:
 
-1. whether graph-core retains any semantic distinction between `Ordered` and `Unordered` factors
-   after both preserve supplied participant sequences;
-2. the concrete participant-alignment carrier, its direction, validation, and visibility;
-3. whether relation pushout exposes alignment to the combining closure or requires pre-aligned
-   payloads;
-4. the exact ownership and visibility of graph-IR frame-transport operations;
-5. which existing stereo omissions are prerequisites for the migration and which remain separate
+1. doc 211's selected relation-set contract, including ordering markers, candidate lookup,
+   repeated-participant alignment, compaction results, and explicit relation overlap;
+2. the exact ownership and visibility of graph-IR frame-transport operations;
+3. which existing stereo omissions are prerequisites for the migration and which remain separate
    corrections; and
-6. whether `Molecule::equiv_under` is retained or renamed after the payload protocol is removed.
+4. whether `Molecule::equiv_under` is retained or renamed after the payload protocol is removed.
+
+## Handoff
+
+- This document remains proposed. No frame-preserving storage migration has begun.
+- Doc 209 owns the normal forms that make deferred frame selection well-defined and is currently
+  blocked at its relation reconstruction prerequisite.
+- Doc 211 owns the relation API review. Resolve it before adding lookup, alignment, mutation,
+  compaction, pushout, or pullback surfaces here.
+- After docs 209 and 211 are settled, revisit the operational audit against current code, settle the
+  four questions above, and only then write the staged implementation plan for this migration.

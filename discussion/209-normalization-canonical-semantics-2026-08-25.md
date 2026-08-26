@@ -6,6 +6,7 @@ Relates: [168](168-api-hygiene-2026-07-27.md),
 [186](186-molecule-canonicalization-2026-08-05.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
 [210](210-relation-frame-storage-2026-08-25.md),
+[211](211-relation-frames-and-api-2026-08-26.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
@@ -19,8 +20,9 @@ is settled below; allocation and key representation remain non-blocking implemen
 The immediate scope is the shared `Canonicalize` implementation for `Molecule`, `Reaction`, and
 `ReactionSpan`. This includes private effective-level inspection for their stored forms; an
 independent redesign of any of the three representations remains out of scope. Normalization-driven
-changes to relation storage are tracked separately in doc 210. This document defines normalization
-against the current storage while avoiding assumptions that would prevent that later migration.
+changes to relation storage are tracked in doc 211, which owns the relation API and the
+frame-transport operation used here and supersedes doc 210. This document defines normalization so
+that it is valid both under the current eager-ordering storage and after that migration.
 
 `Molecule: Hash` is present on the development trunk but has not appeared in a release. The hash
 scope must therefore be settled and implemented before the next release. Neither its current
@@ -72,8 +74,13 @@ For `Molecule`, `canonicalize_with_correspondence` must satisfy:
 
 ```text
 canonicalize_with_correspondence(x).0 == canonicalize(x)
-x.remap(canonicalize_with_correspondence(x).1) == canonicalize(x)
+reframe(x).remap(canonicalize_with_correspondence(x).1) == canonicalize(x)
 ```
+
+The second law relates `canonicalize` to the level below it, not to the raw input. The earlier form
+`x.remap(c) == canonicalize(x)` was false whenever `x` was not already reduced and reframed, because
+`remap` relabels ids and does neither. S5a already stated the correct relation against a normalized
+source; the discrepancy was a product of the partial nesting corrected below.
 
 It need not reproduce the correspondence that an inaccessible forced-`Full` path would select
 among symmetry-equivalent alternatives. That comparison is useful only as internal evidence.
@@ -122,13 +129,51 @@ Three existing operations must be distinguished:
 - the private `normalize_reaction_span_entries` only collapses an equivalent `Modified` span to
   `Unchanged`. It does not normalize the values and should eventually be named for that reduction.
 
-`Deltas::normalize` retains its existing fixed-frame fold and normal form. It preserves input order
+`Deltas::normalize` retains its existing fold and normal form, but not its fixed-frame premise. That
+premise holds today only because `Delta::remap` re-sorts an aromatic or multicenter atom list and
+permutes the attributes through the resulting order (`delta.rs:2631`, `:2645`, `:2672`, `:2686`).
+Doc [211](211-relation-frames-and-api-2026-08-26.md) S5a makes `Delta::remap` frame-preserving, so
+frame selection for a delta becomes this operation's responsibility, discharged by S3a below. The
+fold itself is unchanged: it preserves input order
 within each entity's operation chain while folding that chain, then canonically orders the
 independent results. Entity `Add`/`Remove` lifecycles retain their existing cancellation and
 contradiction rules. Repeated molecule-level constraint additions and removals are deduplicated,
 and a matching addition and removal cancel. This work does not redesign those semantics; it only
 requires aggregate normalization to express participant-bearing delta values in the coordinated
 normalized frames before applying the existing fold.
+
+### Nesting correction
+
+Doc [211](211-relation-frames-and-api-2026-08-26.md) settles the operation layer this document sits
+in. Only prefixes of the pipeline are meaningful, so the three operations are nested:
+
+```text
+normalize     = reduce
+reframe       = reduce + frame
+canonicalize  = reduce + frame + id
+```
+
+`Normalize` is the **reduction only**: it folds value expressions, normalizes set representations,
+and deduplicates constraints. It does not select participant frames. Frame selection is `reframe`,
+whose surface and laws are in doc 211. `canonicalize` is unchanged as the outermost composite and
+keeps its familiar name.
+
+`equiv` and the `Equiv` trait retire. `equiv` mixed the reduction and the frame quotient under one
+name, which is why it means something different on a form than on a molecule. Its replacement is
+`normalized_eq`, answering the reduction question only, with `framed_eq` and `canonical_eq` for the
+outer levels.
+
+`Normalized<T>` is removed in the same pass. It has no construction site and no use anywhere in the
+workspace: six mentions total, being its definition, its impl block, a module doc line, the
+re-export, and two unrelated comments containing the word. The semantic-deduplication key it was
+built for was never taken up. No `Canonical<T>` counterpart is added; its only justification was the
+analogy to a type that never earned its keep.
+
+Where the sections below say that entity or aggregate normalization selects a participant frame,
+read `reframe`. The semantics recorded there — the residual stabilizer, the admissible frame
+actions, the coordinated transport of inline and molecule-level constraints — are unchanged; only
+which operation owns them moves. Every subitem naming `Normalize` for frame work is respecified
+accordingly.
 
 ### Normalization decomposition
 
@@ -257,11 +302,13 @@ exercise this domain.
 
 ### Deferred relation-storage redesign
 
-Doc [210](210-relation-frame-storage-2026-08-25.md) owns the separate migration from eager
-aromatic and multicenter participant ordering in graph-core to explicit frame transport in
-graph-IR. Its callback removal, cross-operation audit, raw structural-equality consequences, and
-correspondence-equivalence naming are not completion conditions for doc 209. The normalization
-contract settled here must remain valid before and after that migration.
+Doc [211](211-relation-frames-and-api-2026-08-26.md) owns the migration from eager aromatic and
+multicenter participant ordering in graph-core to explicit frame transport in graph-IR, absorbing
+what doc [210](210-relation-frame-storage-2026-08-25.md) previously scoped. Its callback removal,
+cross-operation audit, and raw structural-equality consequences are prerequisites for S2b rather
+than completion conditions here. The normalization contract settled in this document is valid
+before and after that migration: under eager ordering an aromatic frame is already sorted, and
+after the migration this document's frame selection sorts it, so the normal form is the same.
 
 ### Settled normalization laws
 
@@ -275,11 +322,15 @@ For supported aggregates `x` and `y` whose normalization succeeds:
 
 ```text
 normalize(normalize(x)) == normalize(x)
-x.equiv(y) iff normalize(x) == normalize(y)
+normalized_eq(x, y) iff normalize(x) == normalize(y)
+
+reframe(reframe(x)) == reframe(x)
+framed_eq(x, y) iff reframe(x) == reframe(y)
 ```
 
-The second law uses structural equality of the normal forms. Inputs differing only by an admissible
-local participant-frame restatement therefore normalize to the same stored value. Normalization
+Both equality laws use structural equality of the respective forms. Inputs differing only by an
+admissible local participant-frame restatement are `framed_eq` but not `normalized_eq`, because the
+reduction does not select a frame. Normalization
 preserves entity ids and graph topology. It reports `Contradiction` when carried value normalization
 fails or a frame-relative constraint is not representable under the residual stabilizer.
 
@@ -404,63 +455,185 @@ existing integrity cases.
 
 **Dependencies:** [dep: S0c]
 
+#### S1c — Require a stereo kind admissible for its site type
+
+**Module:** `umol-graph-ir/src/ir/molecule/integrity.rs`, its public error type, and construction
+tests.
+
+Integrity validates a stereo entry's ligand arity (`check_stereo_frame_arity`) and its coset index,
+but never that the asserted `StereoKind` is admissible for the site it sits on. `Tetrahedral`,
+`CisTrans`, `Axial`, and `SquarePlanar` all have degree 4, so the arity check passes for a stereo
+bond asserting `Tetrahedral`. Add the check with a new `MoleculeIntegrityError` variant naming the
+entity, the asserted kind, and the site type.
+
+The admissible table is:
+
+| site | kinds |
+| --- | --- |
+| stereo atom | `Tetrahedral`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral`, `Axial` |
+| stereo bond | `CisTrans`, `Axial` |
+
+`Axial` is admissible on both, since axial chirality arises at an allene's central atom and about an
+atropisomeric biaryl bond. `CisTrans` is bond-only and the other four are atom-only.
+
+This rule is a property of a single molecule, so it propagates without further code:
+`ReactionSpanIntegrityError::{Lhs, Rhs}` wrap `MoleculeIntegrityError` per side, and
+`Reaction::check_integrity` calls `self.lhs.check_integrity()` first.
+
+**Tests and evidence:** Cover every kind on both site types, asserting the exact error variant for
+each inadmissible pairing and success for each admissible one. Include a degree-4 inadmissible case
+so the new check is shown to catch what the arity check cannot. Retain all existing integrity cases.
+
+**Change class:** strengthened representation-integrity contract (green).
+
+**Dependencies:** [dep: S1b]
+
+#### S1d — Prohibit a stereo kind change within one entity
+
+**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `umol-graph-ir/src/ir/reaction/integrity.rs`,
+their public error types, and construction tests.
+
+Unlike S1c this is a property of a *pair*, so each side can be individually valid while the pairing
+is not, and it needs a check at both entry points rather than riding the per-side delegation:
+
+- `ReactionSpan::check_integrity` — reject an `EntitySpan::Modified { lhs, rhs }` whose two sides
+  assert different `StereoKind` values. A new `ReactionSpanIntegrityError` variant.
+- `Reaction::check_integrity`, inside `ReactionIntegrityCheck` — reject a `ModifyField` delta that
+  replaces `StereoConfigurationForm::Kinded(k1, _)` with `Kinded(k2, _)` for `k1 != k2`. A new
+  `ReactionIntegrityError` variant.
+
+`StereoConfigurationForm::Undetermined` on either side remains admissible and contributes no
+restriction. A genuine kind change is expressed as removal plus addition, which is representable:
+the two entities carry different ids and neither side ends with a duplicate site.
+
+**This is an opinionated restriction on what a reaction can express** and is recorded as such.
+Converting a stereocenter's geometry class — an sp3 center becoming an allene axial center — must be
+written as removal plus addition rather than modification. That matches the chemistry, since the
+stereogenic unit itself changes rather than its configuration.
+
+Together with S1c this makes frame selection unambiguous at every carrier under the intersection
+rule in doc [211](211-relation-frames-and-api-2026-08-26.md): the only ambiguous case is two carried
+sides asserting different kinds, which these two rules exclude.
+
+**Tests and evidence:** Cover a modified span whose sides differ in kind, one whose sides share a
+kind, one with an undetermined side, and the equivalent delta cases. Assert the exact error
+variants, and assert that the removal-plus-addition encoding of a kind change is accepted.
+
+**Change class:** strengthened representation-integrity contract; breaking for any caller that
+expressed a kind change as a modification (green).
+
+**Dependencies:** [dep: S1c]
+
 ### S2 — Implement complete molecule normalization
 
-#### S2a — Normalize complete non-stereo entity entries
+#### S2a — Take the relation surface from doc 211
 
-**Module:** new `umol-graph-ir/src/ir/molecule/normalize.rs` and its unit tests.
+**Current state:** Settled. Doc [211](211-relation-frames-and-api-2026-08-26.md) selects the
+relation contract this subitem was waiting for, and doc 210 is superseded there.
 
-Add the owned molecule-normalization kernel beside `Molecule`. Normalize complete atom, bond,
-dative, aromatic, multicenter, and noncovalent entries rather than cloning attribute forms into
-temporary vectors. Preserve entity ids and topology, use the current relation frames, and mutate
-copy-on-write stores only when required.
+The withdrawal of `permute_participants_with` is **lifted**, narrowed, and renamed. Doc
+[211](211-relation-frames-and-api-2026-08-26.md) S4a adds `permute_with`, and `permute_1_with` /
+`permute_2_with` on the birelation shapes: one entry, a validated permutation, no payload access.
+Because the multiset cannot change, incidence stays valid and is not rebuilt. The original proposal
+was a general public mutation family put forward before the relation API had been reviewed; this is
+the reviewed and much narrower form, and it is required because removing eager sorting removes the
+only path that could reorder a stored frame. Complete entry normalization therefore applies the
+selected action in place rather than through owned reconstruction, which would cost one heap
+allocation per entity out of a flat CSR plus two index rebuilds.
 
-**Tests and evidence:** Cover every non-stereo family, nonuniform aromatic and multicenter electron
-counts, already-normal inputs, and a leaf contradiction. Assert topology and ids are unchanged,
-normalization is idempotent, and shared input stores are not mutated. Add focused normalization
-benchmarks for already-normal and non-normal owned molecules.
+The operations this subitem depends on are:
 
-**Change class:** additive private normalization kernel (green).
+- the form-level `reframe_to` methods on all six forms, inherent rather than a trait, from doc 211
+  S3b;
+- `StereoAtomForm::select_frame` and `reframe_by` for the stereo case, from doc 211 S3b; and
+- frame-preserving `new` and `into_entries`, from doc 211 S5b.
 
-**Dependencies:** [dep: S0c]
+`Reframe` declines an ambiguous frame change rather than selecting a representative. Resolving that
+ambiguity is this document's work, through `CosetSpace::normalizer` and generator-based
+residual-invariance checking; doc 211 does not do it.
 
-#### S2b — Normalize complete stereo entries
+Doc 211 S5b ends with thirteen enumerated canonicalization and hash failures which this document
+closes. They are `test_canonicalize_constitution_family_minimum`,
+`test_canonicalize_constitution_participant_order`, `test_kindless_stereo_atom_frame_order`,
+`test_kindless_stereo_bond_frame_order`, `test_minimum_kinded_stereo_frames` cases 1 to 4,
+`reaction_span::test_reaction_span_canonicalize::case_2_constitution`, and the property tests
+`reaction::canonicalize::test_reaction_canonical_eq_by`,
+`reaction::canonicalize::test_reaction_canonical_hash`,
+`reaction::span::canonicalize::test_reaction_span_canonical_hash`, and
+`reaction::span::canonicalize::test_reaction_span_canonicalize`. Restoring them green is the exit
+condition for S2 and S3 of this document.
 
-**Module:** `umol-graph-ir/src/ir/molecule/normalize.rs`, `stereo.rs`, stereo constraints, and their
-unit tests.
+Molecule-level stereo constraint transport under pushout is absorbed here from doc 210 and belongs
+to S2b's aggregate constraint handling.
 
-Extend the kernel to select one stereo frame action, reframe the ligand list, and transport the
-configuration and inline constraints together. Compute the residual stabilizer from equal-kind
-virtual ligands, structural incidence, and every asserted kind. Check each frame-relative
-constraint independently with stabilizer generators and report `Contradiction` when it is not
-invariant. Apply the same frame normalization to undetermined configurations.
+**Change class:** dependency resolution; no implementation in this subitem.
 
-**Tests and evidence:** Exercise nonidentity frame changes with nonuniform position-sensitive
-constraints, inverse frame roundtrips, each unrestricted kind, both restricted kinds, undetermined
-configuration, same-kind virtual ligands, and a non-invariant constraint. Do not use uniform
-payloads or pre-sorted frames as the only evidence.
+**Dependencies:** [dep: S1a, S1b, S1c, S1d, doc 211 S5b]
 
-**Change class:** additive private stereo-entry normalization (green).
+#### S2b — Implement complete molecule normalization
+
+**Module:** `umol-graph-ir/src/ir/molecule.rs`, a focused `molecule/normalize.rs` implementation
+module if needed for file size, `stereo.rs`, constraints, and their unit tests.
+
+**Respecified by the nesting correction.** This subitem implements two operations, not one:
+`Normalize for Molecule` is the reduction over every entity family and every constraint store, and
+`Reframe for Molecule` is the frame prefix that reduces and then selects each entity's frame. The
+frame semantics below — the residual stabilizer, the admissible actions, the coordinated transport
+of inline and molecule-level constraints — belong to the second, and the selected action reaches
+molecule-level constraints through `reframe_with_action`.
+
+Implement both directly as aggregate operations over every entity family.
+Keep the aggregate control flow in that trait implementation; a separate source module may keep the
+file readable, but must not introduce free-function kernels or a semantic split between stereo and
+non-stereo entities. Preserve entity ids and topology, mutate copy-on-write stores through
+`Arc::make_mut`, and drop the consumed partially normalized value if a leaf reports
+`Contradiction`; no rollback is required.
+
+Normalize ordinary entity forms in their stored frames. Under the current eager-ordering storage,
+aromatic and multicenter entries already have a selected participant frame; normalize their
+position-sensitive electron-count payload in that frame. Doc 210 later moves frame selection into
+this operation and uses the relation contract selected through S2a. For stereo entries now, select
+one admissible normalizing action and use the owned reconstruction seam selected in S2a to apply
+that action to the ligand list while transporting the configuration and inline constraints. Apply
+the same selected action to molecule-level constraints referring to the entry, then normalize the
+complete constraint store. Undetermined configurations undergo the same frame normalization.
+
+For stereo, compute the residual stabilizer from equal-kind virtual ligands, structural incidence,
+and every asserted kind. Check each frame-relative constraint independently with stabilizer
+generators and report `Contradiction` when it is not invariant. Do not enumerate a complete
+permutation group during normalization.
+
+**Tests and evidence:** Cover every entity family, nonuniform aromatic and multicenter electron
+counts, already-normal inputs, and a leaf contradiction. Exercise nonidentity stereo frame changes
+with nonuniform position-sensitive constraints, inverse frame roundtrips, every unrestricted kind,
+both restricted kinds, undetermined configuration, same-kind virtual ligands, coordinated inline
+and molecule-level constraints, and a non-invariant constraint. Assert that topology and ids are
+unchanged, shared input stores are not mutated, and uniquely owned stores are not cloned solely for
+normalization. Do not use uniform payloads or pre-sorted stereo frames as the only evidence. Add
+focused benchmarks for already-normal and non-normal owned molecules.
+
+**Change class:** additive public trait implementation (green).
 
 **Dependencies:** [dep: S1a, S1b, S2a]
 
-#### S2c — Publish molecule normalization and coordinated constraints
+#### S2c — Integrate and verify molecule normalization
 
-**Module:** `umol-graph-ir/src/ir/molecule.rs`, `molecule/normalize.rs`, `canonicalize.rs`, and
-molecule property tests.
+**Module:** `umol-graph-ir/src/ir/canonicalize.rs`, molecule property tests, and normalization
+benchmarks.
 
-Implement `Normalize` for `Molecule`. Apply every selected stereo frame action to the entity entry
-and all molecule-level constraints that refer to it, then normalize the complete constraint store.
-Replace the private canonicalization-only molecule normalizer with this operation and make
-`Molecule::equiv` compare the resulting complete normal forms in the current id frame.
+Replace the private canonicalization-only molecule normalizer with the operations from S2b. Remove
+the inherent `Molecule::equiv`: it compares field by field rather than comparing normal forms, so it
+answers a different question under the same name, and `normalized_eq` and `framed_eq` replace it.
+Correct its retired doc comment's claim of equality "in the current id and participant frame". Do
+not add a second public normalization entry point or a free-function alias.
 
-**Tests and evidence:** State and test `normalize(normalize(x)) == normalize(x)` and
-`x.equiv(y) iff normalize(x) == normalize(y)`. Cover coordinated inline and molecule-level stereo
-constraints, structural equality after normalizing an admissible reframing, contradiction behavior,
-and canonicalization convergence. Retain the stronger structural-equality assertion rather than
-only rechecking `equiv`.
+**Tests and evidence:** State and test idempotence and the equality law at both levels:
+`normalize(normalize(x)) == normalize(x)` with `normalized_eq`, and `reframe(reframe(x)) ==
+reframe(x)` with `framed_eq`. Assert the containment `normalized_eq => framed_eq => canonical_eq`. Assert structural equality after normalizing an
+admissible reframing, contradiction behavior, and canonicalization convergence. Retain the stronger
+structural-equality assertion rather than only rechecking `equiv`.
 
-**Change class:** public trait implementation and semantics-preserving integration (green).
+**Change class:** semantics-preserving integration and property evidence (green).
 
 **Dependencies:** [dep: S2b]
 
@@ -547,8 +720,50 @@ aggregate implementations. Remove public `DescriptionLevel`, `Molecule::descript
 root re-export. Convert every retained internal level parameter to private `CanonicalizeLevel` and
 remove reaction-projection helpers that existed only for the public reduced operations.
 
+Complete the trait's quotient shape in the same pass, rather than editing it twice. `Canonicalize`
+is the entity-id quotient, and a group quotient has four members: act by a supplied witness, select
+a representative, select and expose the witness, and equality modulo the group.
+`canonicalize` and `canonicalize_with_correspondence` are already the middle two.
+
+- **Absorb `remap` as the act member.** It is inherent today only because the witness types were
+  never layered. Note the consequence: `remap` exists on `Molecule` and `ReactionSpan` but **not on
+  `Reaction`**, so `Reaction` gains one, transporting its normalized materialized span and converting
+  back, which is the shape S5a already assumes.
+- **Give `canonical_eq` a default body.** It is a required member today, so its meaning lives in
+  three separate implementations, and `Molecule::canonical_eq` (`canonicalize.rs:5211`) does not
+  canonicalize and compare at all: it short-circuits on `==` and then compares `canonical_key_by` at
+  a selected level. That is a legitimate optimization, but it should override a default body that
+  states the meaning, exactly as `canonical_hash` already does.
+- **Derive `equiv_under`.** It is act-by-witness followed by equality one level down —
+  `x.equiv_under(y, w)` is `x.remap(w)` compared to `y` — so it becomes a provided method rather
+  than a hand-written one. `Molecule::equiv_under` has no non-test callers, is absent from the
+  Python bindings, and appears only in canonicalization and molecule test assertions, so nothing
+  depends on its hand-optimized form. It currently spans two quotient levels at once, fixing the id
+  witness while *searching* frame witnesses for stereo through `Permutation::between_all`; under the
+  layering that decomposes into act by the id witness, then frame-level equality.
+
+The context stays a concrete `&CanonicalizeContext` parameter on this trait only. `Normalize` and
+`Reframe` take no context because they are deterministic computations rather than searches; the
+parameter enters exactly where configurable tie-breaking does. No associated context type is
+introduced, because all three implementations use the same context. Splitting that type's semantic
+and algorithmic halves is recorded in doc [168](168-api-hygiene-2026-07-27.md) and is deliberately
+out of scope here.
+
+The act member is `remap` alone. `try_remap` is removed at this layer and at the relation-set layer
+together, so the two stay aligned. `remap` has six non-test call sites here and thirty-four at the
+relation-set layer; `try_remap` has none at either. Its preconditions stay individually checkable
+through `Molecule::check_integrity`, `Correspondence::is_total`, and the entity counts, so what is
+removed is a pre-bundled check rather than a capability. Closure under laws is not an argument for
+keeping it: that argument covers algebraic members, and checked-versus-asserted is an ergonomics
+pair. Doc [211](211-relation-frames-and-api-2026-08-26.md) records the matching relation-set
+removal.
+
 **Tests and evidence:** Compile the graph-IR library and confirm that `Canonicalize` exposes only
-`canonicalize`, `canonicalize_with_correspondence`, `canonical_hash`, and `canonical_eq`. The next
+the four quotient members plus `canonical_hash`. Assert the trait laws directly: idempotence of
+`canonicalize`; that transporting through the exposed correspondence reproduces the canonical form;
+that `canonical_eq` agrees with comparing canonical forms; and that `canonicalize` is invariant
+under `remap`. Because `canonical_eq` gains a default body that `Molecule` overrides, assert on
+generated inputs that the override and the default agree. The next
 subitem migrates test and benchmark callers, so this breaking subitem may be red within S4.
 
 **Change class:** breaking Rust API removal (red until S4c).
@@ -584,9 +799,34 @@ methods, and level-specific property claims. Describe aggregate canonicalization
 and canonical equality only through their complete operations. Retain structural domain and
 incidence-level terminology where it remains independently meaningful.
 
+Correct the four places where the guides state that normalization does not touch participant frames,
+which this document reverses:
+
+- `nomenclature.md:307` — "**Not:** *normalize*, which operates within an existing id and participant
+  frame."
+- `nomenclature.md:718` — "`equiv` — equality of normalized forms in the current id and participant
+  frame."
+- `nomenclature.md:1160` — "**Normalize** puts a form into a deterministic normal form without
+  changing entity ids or participant frames."
+- `nomenclature.md:1172` — "**Not:** aggregate canonicalization, which selects an entity and
+  participant frame."
+
+The correction is a scoping one, not a reversal. A form cannot see a participant frame, because the
+frame lives with the participants in the relation set, so each statement stays true at the form
+level and must say so. A relation set and an aggregate can see frames and select them; only
+`Canonicalize` additionally selects entity ids, so the `canonicalize` entry at `:291` should stop
+double-counting the frame.
+
+Correct `Molecule::equiv`'s doc comment (`molecule.rs:469`), "Complete semantic equality in the
+current id and participant frame". S2c makes it compare normal forms, so the participant clause is
+wrong; the id clause remains. This also restores the law that `equiv` agrees with
+`equiv_under` under the identity correspondence, which
+`test_molecule_equiv_under_identity_reduces_to_equiv` asserts but cannot currently exercise.
+
 **Tests and evidence:** Search the living guides for `DescriptionLevel`, `description_level`, and
 the removed `_by` names; every remaining occurrence must describe another current API rather than
-the retired surface. Run `git diff --check`.
+the retired surface. Search for "participant frame" and confirm every remaining occurrence names its
+carrier. Run `git diff --check`.
 
 **Change class:** documentation migration (green).
 
@@ -646,9 +886,13 @@ private and public surfaces, and `git diff --check` passes.
 
 ### Dependency summary
 
-After completed S0, S1a, S1b, and S2a are independent additive prerequisites that join at S2b.
-S3a and S3b then branch from S2c and join at S3c. The remaining critical path is
+S0 is complete, as are S1a and S1b. S1c and S1d are new stereo-integrity subitems that make frame
+selection unambiguous and are prerequisites for S2b. S2a is settled and depends on doc 211 S5b,
+which must land before S2b begins. After S2c, S3a and S3b branch and join at S3c. The critical path from S2b is
 `S2b -> S2c -> S3a/S3b -> S3c -> S4a -> S4b -> S4c -> S4d -> S5a -> S5b -> S5c`.
 Canonical-hash allocation, key allocation, orbit pruning, and prefix pruning remain in doc 208 and
-are not completion conditions here. The relation-storage redesign remains independently deferrable
-in doc 210.
+are not completion conditions here.
+
+Doc 211 S5b leaves the workspace red on thirteen canonicalization and hash tests, enumerated in S2a.
+S2 and S3 of this document restore them. That is a deliberate red period across the two documents,
+not an unplanned regression.

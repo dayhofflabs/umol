@@ -5,7 +5,8 @@ Date: 2026-08-24
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
 [207](207-reaction-network-spike-2026-08-24.md),
-[209](209-normalization-canonical-semantics-2026-08-25.md)
+[209](209-normalization-canonical-semantics-2026-08-25.md),
+[211](211-relation-frames-and-api-2026-08-26.md)
 
 ## Purpose
 
@@ -191,6 +192,34 @@ The campaign output remains the doc-207 artifact pair: durable QRS GraphML plus 
 mapping records stored through the doc-201 substrate or another explicit database. The
 canonicalization investigation must not redesign that artifact, QRS selection, endpoint symmetry
 classification, or the atom-mapping objective.
+
+## Entity lookup index cost
+
+Doc [211](211-relation-frames-and-api-2026-08-26.md) relocates entity lookup from graph-core's
+`find_by_participants` to the entity-family types, keyed by whatever integrity establishes as each
+family's uniqueness key. That settles the semantics but leaves the index shape open, and the shapes
+differ per family:
+
+| family | uniqueness key | index available today |
+| --- | --- | --- |
+| aromatic system | any member atom | incidence is already exactly right — systems are atom-disjoint |
+| multicenter bond | atom set | incidence gives candidates; an atom may be in several |
+| noncovalent bond | unordered pair | incidence on one endpoint plus a check |
+| dative bond | acceptor and donor set | incidence on the acceptor plus a donor-set check |
+| stereo atom, stereo bond | the site alone | none — incidence indexes ligands as well as sites |
+
+Stereo is the case worth measuring. Its union incidence index is over-inclusive for lookup: a ligand
+atom belongs to every stereo entity it participates in, and adjacent stereocentres routinely make
+each other ligands, so `incident(atom)` returns several entries and a filter to the site position
+exists only to undo that. A direct site-to-id map would remove the filter at the cost of a second
+structure to build and keep valid across construction, remapping, and compaction.
+
+The DSL namespace already answered the same question for itself with a `HashMap` keyed by what it
+calls the canonical participant key, so there is a precedent to measure against rather than a design
+to invent.
+
+This is a cost question, not a semantic one; doc 211 settles the semantics and does not depend on
+the outcome.
 
 ## Staged implementation plan
 

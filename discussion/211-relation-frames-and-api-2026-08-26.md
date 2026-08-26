@@ -1,0 +1,1183 @@
+# 211 — Relation frames and the relation API
+
+Status: Proposed
+Date: 2026-08-26
+Relates: [168](168-api-hygiene-2026-07-27.md),
+[204](204-reaction-application-redesign-2026-08-19.md),
+[208](208-canonicalization-scaling-2026-08-24.md),
+[209](209-normalization-canonical-semantics-2026-08-25.md),
+[210](210-relation-frame-storage-2026-08-25.md),
+[212](212-remapping-layer-2026-08-26.md),
+[data-type guide](../docs/development/data-types.md),
+[nomenclature guide](../docs/development/nomenclature.md)
+
+## Purpose
+
+The graph-core relation types carry construction-time participant ordering, a payload reindex
+callback, participant lookup, participant alignment, graph-id transport, incidence, and relation
+algebra on one set of storage types. Three mutually incompatible participant-alignment rules exist,
+and the payload protocol that was added to repair construction-time sorting is implemented
+non-trivially by two of six payload types while the hardest frame problem bypasses it entirely.
+
+This document replaces the earlier API accounting with one selected design, absorbs the storage
+migration previously scoped in doc [210](210-relation-frame-storage-2026-08-25.md), and carries the
+staged implementation plan.
+
+## What the current design complects
+
+One concept — a **frame** (a relation's ordered participant presentation) and a **reframing** (a
+bijection between two presentations of the same participant multiset) — is spread over three
+carriers and four owners.
+
+| carrier | degree | location |
+| --- | --- | --- |
+| `Vec<ParticipantPosition>` | unbounded | `FactorOrdering::canonicalize_positions` |
+| `Permutation` | at most 6, `Copy` | `umol-perm`, stereo configuration |
+| implicit, from both sides having been sorted at construction | — | aromatic and multicenter pushout |
+
+The action has four owners: `RelationData::on_permutation`, `RelationEquiv::equiv_under`,
+`StereoAtomForm::transform_frame_by`, and `ElectronCountsForm::permute`. Alignment is derived by
+three different rules: sorting in `FixedRelationSet::participant_permutation`, multiset search in
+the storage participant matcher, and first-position search in the two private `MoleculeEditor`
+copies. A
+reordered query can therefore be found by one and rejected by another.
+
+### Evidence
+
+Six entity families use three of the five storage shapes.
+
+| family | shape | factor 1 | factor 2 | payload position-sensitive |
+| --- | --- | --- | --- | --- |
+| aromatic system | `VarRelationSet` | `NodeId` `Unordered` | — | yes, `electrons` |
+| multicenter bond | `VarRelationSet` | `NodeId` `Unordered` | — | yes, `electrons` |
+| noncovalent bond | `FixedRelationSet<2>` | `NodeId` `Unordered` | — | no, `on_permutation` is empty |
+| dative bond | `FixedVarBirelationSet` | `NodeId` `Ordered` 1 | `NodeId` `Unordered` | no, `on_permutation` is empty |
+| stereo atom | `FixedVarBirelationSet` | `NodeId` `Ordered` 1 | `StereoLigand` `Ordered` | no; frame transport bypasses the protocol |
+| stereo bond | `FixedVarBirelationSet` | `EdgeId` `Ordered` 1 | `StereoLigand` `Ordered` | no; frame transport bypasses the protocol |
+
+`RelationData` and `BiRelationData` therefore exist to serve construction-time sorting, which is the
+behaviour this design removes. Stereo ligands are marked `Ordered`, so every stereo
+`on_permutation` receives the identity and does nothing; stereo frame transport runs through
+`transform_frame_by` instead.
+
+`FixedFixedBirelationSet` and `VarVarBirelationSet` have no consumer outside their own property
+tests. They are retained: they are the closure of the arity and factor-count axes, and a foundation
+crate keeps a complete uniform surface.
+
+`try_remap` is **not** retained on that argument, and is removed at both the relation-set and
+aggregate layers. Closure under laws covers algebraic members; checked-versus-asserted is an
+ergonomics pair and does not get that argument. The evidence agrees: `remap` has 34 non-test call
+sites at the relation-set layer and 6 at the aggregate layer, while `try_remap` has none at either.
+Its preconditions remain individually checkable through existing public predicates —
+`Molecule::check_integrity`, `Correspondence::is_total`, and the entity counts — so removing it takes
+away a pre-bundled check rather than a capability. As it stands it also returns a bare `Option` that
+conflates a failing integrity contract with a correspondence that does not fit, which doc
+[168](168-api-hygiene-2026-07-27.md) records as a failure-expression question in its own right.
+
+Both layers keep exactly one member, and they keep the same one.
+
+`has_incident` and `has_incident_edge` are retained. They have eighteen call sites across the six
+entity views and atom-constraint evaluation, and they are a `binary_search` where `incident` is two
+`partition_point` calls.
+
+`find_by_participants` and `participants_match` are **removed**. They conflate two operations whose
+keys differ: lookup, which names an entity by its constituents, and coincidence, which decides
+whether two entries from two sides denote the same relation. Neither key is derivable from a storage
+shape, for the same reason frame structure is not. Both move to the entity-family types, and
+graph-core keeps only the mechanical parts — `participants`, `incident`, `incident_edge`,
+`has_incident`, `has_incident_edge`.
+
+Aromatic and multicenter pushout is correct today only because construction sorted both sides into
+the same frame. Removing eager ordering without explicit transport would let `combine` meet
+misaligned electron vectors. This is confirmed by measurement below.
+
+## The identity rule
+
+`Ordered` and `Unordered` encode whether storage sorts. They describe the semantics wrongly in both
+directions.
+
+An aromatic system is `Unordered`, meaning order is not the datum, but once the electron counts
+moved into the payload its order became the coordinate frame of that vector. Sorting a frame whose
+payload rides along is what required `on_permutation`. Stereo ligands are `Ordered`, meaning order
+is the datum, but the order is not the datum either: it is the coordinate frame the coset is read
+against, and any reordering carried by a matching coset transform denotes the same entity. This is
+why the storage matcher ignores the marker and compares stereo ligands as a multiset.
+
+One rule replaces the axis for all six families:
+
+> The participant multiset is the relation's identity. The stored frame is the coordinate system its
+> payload is expressed in.
+
+Every factor is a frame. Removing the markers changes no comparison: the storage matcher already
+ignored them, which was itself the contradiction between what the marker claimed and what matching
+did.
+
+The rule also settles why electron counts are payload rather than part of the participant key.
+Identity must be invariant under resolution. `ElectronCountsForm::Undetermined` is filled in later
+by resolution and by format raising; if counts were part of the key, an aromatic system's identity
+would change when its counts were resolved.
+
+**Stereo asymmetry to preserve.** Integrity establishes stereo uniqueness by *site alone*. Lookup
+and pushout coincidence key on *site and ligand multiset*. `of_id(site, ligands)` therefore does not
+find a stereo entity that exists on that site under a different ligand set, and a same-site
+different-ligand collision remains two distinct entries which checked publication rejects. The
+lookup key is a strict superset of the uniqueness key, for stereo only, deliberately.
+
+## Comparison semantics
+
+Every relation comparison is a composition of three independent choices. Today each site makes all
+three by hand, per family, which is why no two of them agree. The composition is normative:
+**identity is the participant multiset, frame transport is `reframe`, and the value relation is the
+caller's. No site derives its own alignment.**
+
+| operation | identity | frame transport | value relation |
+| --- | --- | --- | --- |
+| relation-set `PartialEq` | stored sequence equal | none | `==` |
+| family lookup | the family's uniqueness key | none — the key has no frame in it | none |
+| pushout coincidence | full participants | into the retained left frame | `meet` |
+| `Molecule::equiv` | stored sequence equal | none | normalized equality |
+| `Molecule::equiv_under(c)` | mapped through `c` | `reframe`; enumerate for stereo | normalized equality |
+| `superimpose`, `difference_to` | participant multiset | rhs into the lhs frame | span or delta construction |
+| `canonical_eq` | canonicalize both | selected by normalization | structural `==` |
+
+**Lookup is not a quotient operation.** Its key is whatever integrity establishes as the family's
+uniqueness key, and every one of those is order-free, so no frame enters and no reframing is
+involved. That is deliberate rather than incidental, and it is why lookup sits outside the three
+nested equalities entirely:
+
+| family | uniqueness key | integrity rule |
+| --- | --- | --- |
+| aromatic system | its atom set, and in fact any single member atom | `AromaticSystemsOverlap` |
+| multicenter bond | its atom set | `MulticenterBondsIdentical` |
+| noncovalent bond | its unordered pair | `NoncovalentBondsParallel` |
+| dative bond | acceptor and donor set | `DativeBondsParallel` |
+| stereo atom | the site atom alone | `StereoAtomSitesDuplicate` |
+| stereo bond | the site bond alone | `StereoBondSitesDuplicate` |
+
+Ligands are therefore **not** part of stereo lookup. A site bears at most one stereo entity, so
+`StereoAtomViews::of_id(site, ligands)` and its stereo-bond counterpart carry an argument that cannot
+change the answer; the ligand argument is removed. Ligands could not have served as a key in any
+case, because a ligand atom belongs to every stereo entity it participates in and adjacent
+stereocentres routinely make each other ligands.
+
+Coincidence is the separate operation, and it does compare full participants: two overlays on one
+site with different ligand sets must stay **distinct**, so the glued molecule carries both and
+checked publication reports the over-coordination. Merging them instead would ask a frame transport
+to relate two different ligand sets.
+
+The key is currently computed in three places — a sort inside the storage matcher, seven view
+`of_id` methods translating each family's natural key, and the DSL namespace's `HashMap`, whose
+entries it already calls the canonical participant key. The family type becomes the single owner of
+both the key and the index that serves it. Index shape differs per family and is a cost question
+recorded in doc [208](208-canonicalization-scaling-2026-08-24.md); graph-core's union incidence
+index remains, since `has_incident` and incident iteration have their own consumers.
+
+The last row states a relation, not an algorithm. `canonical_eq` is equality modulo entity
+relabeling, frame selection, and value normalization; canonicalizing both operands is how it is
+decided, not what it means.
+
+## Layer boundary
+
+**graph-core** owns dense relation ids, participant and payload storage, the derived incidence
+index, structural equality and hashing, graph-id transport, and relation algebra under explicit
+entry evidence. It never inspects a payload.
+
+**graph-IR** owns frame selection, payload frame transport, semantic relation identity,
+family-specific uniqueness, and symmetry-aware alignment.
+
+Under this boundary graph-core has no frame operation at all. `remap` and `compact` relabel
+participant ids and preserve sequence; `pushout` and `pullback` hand entries to a caller-supplied
+closure.
+
+## graph-core surface
+
+### Id transport
+
+`Correspondence` is currently the only one of the three id-transport concepts with a complete
+layering. The two missing single-id-space layers are where the duplication sits.
+
+| concept | single id space | graph, node and edge | molecule, eight families |
+| --- | --- | --- | --- |
+| partial bijection | `Correspondence<Id>` | `GraphCorrespondence` | `MoleculeCorrespondence` |
+| removal and dense shift | absent | `Compaction` | `IdCompaction` |
+| total relabel | absent | `Remapping` | `IdRemapping` |
+
+`compact_relation`, `uncompact_dense`, and `normalize_removed` in `ir/remap.rs` reimplement
+`Compaction::compact_node`, `Compaction::uncompact_node`, and the sort-and-dedup in
+`Compaction::new` over a different id type. Filling the compaction layer deletes them.
+
+The selected layering, regular on both axes:
+
+```rust
+pub struct Compaction<Id> { .. }        // removal-driven dense renumbering, one id space
+pub struct GraphCompaction { .. }       // Compaction<NodeId> + Compaction<EdgeId>
+pub struct MoleculeCompaction { .. }    // GraphCompaction + six Compaction<..Id>
+```
+
+`GraphCompaction` remains two-space because `RelationParticipant::compact` needs both spaces for a
+participant that may be a node or an edge. The generic layer is extracted from inside it rather than
+imposed on it. `MoleculeCompaction` holds typed per-family compactions rather than untyped
+`Vec<RelationId>`, parallel to `MoleculeCorrespondence` holding typed correspondences. Every entity
+id is a `u32` newtype with bidirectional `From`, so the `Compaction<RelationId>` to
+`Compaction<DativeBondId>` conversion at the six family boundaries is a zero-cost typed map.
+
+The remapping row is out of scope here and is recorded in doc
+[212](212-remapping-layer-2026-08-26.md). It is the same concept at three layers, but unlike
+compaction it is not duplicated code: `Remapping` is dense positional
+(`self.nodes.get(old.0 as usize)`) while `IdRemapping` is eight `HashMap<Id, Id>`. Extracting
+`Remapping<Id>` therefore requires a representation decision that `Compaction<Id>` does not, and
+nothing in this document depends on it.
+
+### Relation storage
+
+The implemented storage contract is retained except where the identity rule changes it. Relation ids
+are dense and follow entry order; the participant and payload vectors have equal length; incidence
+is derived, deduplicated per relation and reference, and excluded from equality and hashing; indexed
+access panics for an out-of-range `RelationId`; structural equality and hashing compare the stored
+participant sequences and payloads; and construction does not reject two relations with the same
+participant multiset. The type stays a dense collection of relation instances rather than a
+participant-keyed map: graph-IR integrity establishes family-specific uniqueness, graph-core does
+not.
+
+The two clauses that change are the ordering-dependent ones. `Unordered` construction sorting
+participants and transporting `D` through `RelationData::on_permutation`, and `Ordered` construction
+preserving the supplied sequence, both become one rule: construction preserves the supplied
+sequence and never inspects `D`.
+
+Shown for `VarRelationSet`; the other four shapes carry the identical surface with their own
+participant and arity parameters.
+
+```rust
+#[derive(Clone, Debug, Default)]
+pub struct VarRelationSet<P, D> { .. }
+// PartialEq, Eq, and Hash are hand-written over participants and payloads; incidence is derived
+// and excluded.
+
+impl<P: RelationParticipant, D> VarRelationSet<P, D> {
+    pub fn new(entries: Vec<(Vec<P>, D)>) -> Self;
+    pub fn into_entries(self) -> Vec<(Vec<P>, D)>;
+
+    pub fn count(&self) -> usize;
+    pub fn contains(&self, id: RelationId) -> bool;
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId>;
+    pub fn participants(&self, id: RelationId) -> &[P];
+    pub fn data(&self, id: RelationId) -> &D;
+    pub fn data_mut(&mut self, id: RelationId) -> &mut D;
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[P], &D)>;
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (RelationId, &[P], &mut D)>;
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId];
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId];
+    pub fn has_incident(&self, node: NodeId) -> bool;
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool;
+
+    /// Permute one entry's participants in place. `order` must be a permutation of
+    /// `0..arity`, which is validated; the participant multiset is therefore unchanged and the
+    /// incidence index stays valid. Birelation shapes carry `permute_1_with` and `permute_2_with`.
+    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]);
+
+    pub fn remap(&self, remapping: &GraphRemapping) -> Self;
+    pub fn compact(&self, compaction: &GraphCompaction)
+        -> (Self, Compaction<RelationId>);
+
+    pub fn pushout(
+        &self,
+        right: &Self,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<RelationPushout<Self>>;
+
+    pub fn pullback(
+        &self,
+        right: &Self,
+        combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
+    ) -> Option<RelationPullback<Self>>;
+}
+```
+
+`iter_mut` yields immutable participants and a mutable payload. Participants own the incidence
+index, so mutating them in place would desynchronise it; the only way to change a frame is to
+reconstruct through `into_entries` and `new`. That states the frame-preserving contract at the type
+level.
+
+`combine` receives the borrowed form of the `(participants, data)` entry currency that `new` and
+`into_entries` already use. Birelation shapes pass the three-element tuple. The object retains the
+left frame, so `combine` must return a payload expressed in the left entry's frame; that is a
+documented precondition rather than an inferred one. This replaces the current signature, whose
+correctness depends on both sides having been sorted at construction.
+
+`new` preserves the supplied participant sequence and treats `D` as opaque, and loses its `D: Clone`
+bound, which is already unused: the constructor moves each payload out of the supplied entries and
+never clones one. `Default` constructs the empty parallel storage and incidence directly and is
+retained on all five shapes.
+
+`compact` and `remap` relabel participants and preserve sequence, and must not be collapsed into one
+operation. Compaction is partial and renumbers relation ids; remapping is total over the asserted
+source range and preserves them. `RelationParticipant::compact`, `uncompact`, and `remap` likewise
+remain three distinct graph-id operations: `uncompact` exists for editor rollback and is not the
+inverse surface of relation-set `compact`.
+
+`count`, `contains`, `relation_ids`, `participants`, and `data` answer different direct collection
+questions and are not redundant. No public relation-view layer is introduced to combine them, and no
+entry-view wrapper is introduced for the entry iterators; either would add indirection without
+resolving a semantic problem.
+
+No `permute_participants_with` operation or factor-specific variant is added. Owned entry
+reconstruction through `into_entries` and `new` is the transformation seam. A general consuming
+entry transformation would have to be assessed against that pair and is not presumed here.
+
+Removed, each because the redesign removes its referent:
+
+| removed | reason |
+| --- | --- |
+| `FactorOrdering`, `Ordered`, `Unordered` | encode a distinction that is false in both directions |
+| `RelationData`, `BiRelationData` | exist only to repair construction-time sorting |
+| `RelationEquiv`, `BiRelationEquiv` | subsumed by the form's `reframe_to` composed with `normalized_eq` |
+| `find_by_participants`, `participants_match` | conflate lookup with coincidence; neither key is derivable from a storage shape |
+| `FixedRelationSet::participant_permutation` and the two `MoleculeEditor` copies | three incompatible implementations of one concept |
+| `ParticipantAnchor`, `RelationParticipant::anchor` | a second routing protocol beside `refs`, which already carries the information |
+| `data_iter_mut` | becomes `iter_mut`, which also carries the id and participants |
+
+### In-place participant permutation
+
+Removing eager sorting removes the only path that could reorder a stored frame, so one must replace
+it. `permute_with`, and `permute_1_with` / `permute_2_with` on the birelation shapes, permute a
+single entry's participants in place.
+
+Taking a permutation rather than a closure over the slice is what makes the operation safe: the
+multiset cannot change, so each relation's participant *set* and its relation id are both preserved,
+and **the incidence index stays valid without being rebuilt**. The contract and the safety condition
+are the same statement.
+
+`ParticipantPosition` is therefore retained, no longer as the callback protocol's `σ` but as this
+operation's position argument. `RelationData`, `BiRelationData`, and `FactorOrdering` are still
+removed.
+
+The order is a one-line image under the convention `new[i] = old[order[i]]` — the same convention as
+today's `canonicalize_positions` and as `Permutation::act` in umol-perm, so no second convention is
+introduced. A stereo caller writes its degree-6 `Permutation` into that form, leaving `Permutation`
+bounded and `Copy`.
+
+The caller must build the order in a **buffer reused across entries**, one per `reframe` call. A
+fresh vector per entity would reintroduce the per-entity allocation that reconstruction was rejected
+for.
+
+Graph core moves participants and nothing else; the caller transports the payload itself through the
+form's own method. Two in-place steps, no allocation, and the layer boundary is unchanged.
+
+The alternative — reconstruction through `into_entries` and `new` — is what doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) S2a settled on when this operation was
+withdrawn, and it is expensive for a reason that only became visible once the storage was examined.
+`VarRelationSet` is CSR: one `offsets` vector and one flat `participants` vector, with no per-entity
+allocation. `into_entries` explodes that into one heap allocation per entity, and `new` then rebuilds
+both the CSR and the incidence index — the latter provably unnecessary, since reframing cannot change
+what is incident on what. That also contradicts this document's own owned-normalization intent of
+mutating copy-on-write stores through `Arc::make_mut` rather than cloning into temporary vectors.
+
+The operation withdrawn in doc 209 was a general public mutation family proposed before the relation
+API had been reviewed. What is reinstated here is narrower: one entry, a validated permutation, no
+payload access, and an invariant that is checked rather than promised.
+
+Raw relation-set and aggregate `Eq`, `Ord`, and `Hash` remain representation-sensitive. Two values
+whose participant sequences differ are structurally distinct before normalization. Faithful boundary
+serialization preserves the supplied frame. No uniqueness or canonical-storage guarantee is
+introduced.
+
+### Private implementation
+
+The graph-core `Incidence` representation is a coherent derived index and stays private.
+`remap_factor`, coverage checking, and participant matching stay implementation helpers rather than
+public concepts; their duplicated traversals consolidate under the public contracts above.
+
+`MoleculeEditor` keeps its private `FixedSetStorage`, `VarSetStorage`, and `FixedVarSetStorage`
+wrappers. Their copy-on-write materialization, append, removal, rollback extraction, and publication
+roles are legitimate editor machinery. Three duplications inside them are not, and this work removes
+all three: the separate participant-alignment implementations, the removal-discovery traversal
+beside the compaction path, and the difference in participant-frame behaviour before and after
+publication, which disappears once construction preserves frames. The wrappers remain thin storage
+adapters; no public relation-set editor type is justified by the present evidence.
+
+## graph-IR surface
+
+### Quotient structure
+
+Three things act on graph-IR values, and only two of them are groups.
+
+| | value normalization | `G_frame` | `G_id` |
+| --- | --- | --- | --- |
+| group action | no; idempotent confluent rewriting | yes | yes |
+| witness | none | permutation, or the frame pair | correspondence |
+| transport by a witness | meaningless | `reframe` | `remap` |
+| select a representative | `normalize` | frame selection | `canonicalize` |
+| equality modulo it | normalized equality | this document | `canonical_eq` |
+
+Value normalization cannot join the quotient shape: folding `1 + 1` to `2` is a reduction, not a
+group element, so there is nothing to transport by. `Normalize` paired with a blanket equality is
+the right structure for equality modulo a confluent rewriting, and its separation from the frame
+and id operations is not an accident.
+
+The other two columns are the same shape at two carriers. A group quotient has four members: act by
+a supplied witness, select a representative, select a representative and expose the witness that
+reaches it, and equality modulo the group. `Canonicalize` is already three of the four at the id
+level; the frame level currently has none of them collected in one place. Completing the id level —
+`Canonicalize` absorbing `remap`, defaulting `canonical_eq`, and deriving `equiv_under` — belongs to
+doc [209](209-normalization-canonical-semantics-2026-08-25.md) S4b, which already edits that trait;
+this document owns the frame level.
+
+**Frame selection does not belong under `Normalize`.** A confluent rewriting and the selection of an
+orbit representative are different operations: the rewriting has no witness, no inverse, and no
+composition law, while the orbit selection has all three. Placing them under one name — whether by
+carrier-relative scoping or otherwise — leaves the combined operation with neither algebra cleanly,
+so nothing about it can be stated as a law. That is the same conflation as `Ordered`/`Unordered`
+meaning two things, and it is what makes properties over the combined operation degenerate into
+laws that cannot fail.
+
+The frame quotient therefore needs its own operation set and its own name. Neither is settled in
+this document.
+
+The equalities are nested because the quotients are applied in order, each reading the output of
+the one before it:
+
+```text
+==  subset of  modulo reduction  subset of  modulo reduction and frame  subset of  canonical_eq
+```
+
+That containment must be a consequence of the separated operations, not a property secured by
+defining the middle term loosely enough to make it hold.
+
+**Why these operations are scattered today.** The trait chain is derivational and terminates before
+the aggregates. `Equiv` is a blanket impl over `Normalize`; `Molecule` does not implement
+`Normalize`, so it gets no `Equiv` either, and `Molecule::equiv` (`molecule.rs:473`) is an inherent
+method shadowing a trait the type does not implement, comparing field by field rather than comparing
+normal forms. `equiv_under` and `remap` are inherent for the same reason. Each trait
+was therefore scoped to wherever its derivation happened to work rather than to a carrier level, and
+the relation set — which falls between form and aggregate — belongs to no trait at all. That is why
+its frame operations became storage callbacks and free functions. Doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) S2b repairs the chain by implementing
+`Normalize` for `Molecule`; the inherent `Molecule::equiv` must then be removed rather than
+re-pointed, because it answers a different question under the same name.
+
+### Reframe
+
+The frame quotient. `Reframe` selects a determinate participant frame and restates the
+frame-relative payload accordingly.
+
+#### The three nested operations
+
+Only prefixes of the pipeline are meaningful, so the design is nested rather than a free pipeline.
+Frame selection reads reduced values to break ties, and id selection reads both, so no stage stands
+alone.
+
+```text
+normalize     = reduce
+reframe       = reduce + frame
+canonicalize  = reduce + frame + id
+```
+
+| level | operation | equality | quotient |
+| --- | --- | --- | --- |
+| reduction | `normalize` | `normalized_eq` | value rewriting, confluent, no group |
+| frame | `reframe` | `framed_eq` | `G_frame` |
+| id | `canonicalize` | `canonical_eq` | `G_id` |
+
+Each operation contains the one above it, so the containment of the equalities is a consequence of
+the definitions rather than a property secured by defining a middle term loosely:
+
+```text
+==  subset of  normalized_eq  subset of  framed_eq  subset of  canonical_eq
+```
+
+`equiv` and the `Equiv` trait retire. `equiv` was a compromise that mixed the reduction and the
+frame quotient under one name, which is why it means something different on a form than on a
+molecule and why the properties written over it degenerate. Its replacement is `normalized_eq`,
+derived from `Normalize` exactly as `Equiv` is blanket-derived today, and answering only the
+reduction question.
+
+#### Where the semantics live
+
+Reframe semantics cannot be derived from a storage shape. A bound such as `D: Reframe<L2>` on
+`FixedVarBirelationSet` decides that factor 2 bears the frame and factor 1 does not, which is entity
+semantics that no storage type states: the shape admits `N1 > 1`, and the retained
+`FixedFixedBirelationSet` and `VarVarBirelationSet` could have both factors frame-bearing.
+
+Each entity family therefore gets a type that carries its own frame structure, wrapping its storage
+shape on the `Graph(Arc<Csr>)` precedent and replacing the corresponding `Arc<..>` field on
+`Molecule`:
+
+| family | wraps | frame-bearing factor | site |
+| --- | --- | --- | --- |
+| aromatic systems | `VarRelationSet<NodeId, _>` | members | — |
+| multicenter bonds | `VarRelationSet<NodeId, _>` | members | — |
+| noncovalent bonds | `FixedRelationSet<NodeId, _, 2>` | the pair | — |
+| dative bonds | `FixedVarBirelationSet<NodeId, 1, NodeId, _>` | donors | acceptor |
+| stereo atoms | `FixedVarBirelationSet<NodeId, 1, StereoLigand, _>` | ligands | atom |
+| stereo bonds | `FixedVarBirelationSet<EdgeId, 1, StereoLigand, _>` | ligands | bond |
+
+The family type owns the quotient members — select, select-with-action, and frame-equality — because
+it is the value that knows both which factor is a frame and what the payload means. graph-core owns
+storage shapes and knows nothing about frames.
+
+#### The per-form methods are inherent, not a trait
+
+There is no trait for the form-level methods. The only site that would need generic dispatch is
+`EntitySpan<T>`, and that is served by a closure-taking `try_map` over its four variants rather than
+a bound; `EntitySpan` currently has only `lhs`, `rhs`, and `superimpose`, so the combinator is new
+but small.
+
+The trait's apparent benefit — forcing an explicit frame decision at compile time — was never real.
+A trait forces a decision when a new form *type* appears, not when a new *field* appears on an
+existing form. What catches a new field is exhaustive destructuring in the method body, and that
+works with or without a trait.
+
+Selection is form-dependent only for stereo. Everywhere else it is "sort the participants", which
+the family type does without consulting the payload:
+
+| family | selects the frame | the form's method |
+| --- | --- | --- |
+| aromatic, multicenter | family type sorts participants | `reframe_to(from, to)` — reindex `electrons`; `Undetermined` unchanged |
+| noncovalent, dative | family type sorts participants | `reframe_to(from, to)` — returns `self`; payload is frame-invariant |
+| stereo atom, bond | the form, via `CosetSpace::normalizer` under the asserted kind | `select_frame(current)` and `reframe_by(Permutation)` |
+
+The four frame-invariant families keep a method that does nothing, deliberately, and it must
+destructure exhaustively so that adding a position-indexed field fails to compile here rather than
+being silently left unframed. Today's equivalent — `DativeBondForm`'s empty `on_permutation` — has
+no such guard, which is why the ceremony is worth its four bodies:
+
+```rust
+impl DativeBondForm {
+    /// Frame-invariant: no field is position-indexed, so a frame change carries the form unchanged.
+    /// Destructured exhaustively on purpose — a new positional field must fail to compile here.
+    pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> {
+        let Self { order, constraints } = self;
+        Some(Self { order, constraints })
+    }
+}
+```
+
+The multiset precondition is checked once by the family type rather than repeated in each form.
+
+`reframe_by` exists exactly where the action is self-contained, which is stereo; a permutation stands
+alone, whereas a target frame means nothing to a form that does not carry its source. It is
+`transform_frame_by` under its settled name.
+
+The action is per entry and keyed by the family's own id type rather than positionally, and it is
+present only on the two stereo families — only they carry frame-relative content outside the payload
+and therefore need the action to escape to molecule-level constraints.
+
+#### Carriers that hold more than one form per frame
+
+`Deltas` and `ReactionSpan` both hold frame-bearing values whose shape differs from a molecule's,
+and neither bends the nesting.
+
+**`Deltas`** runs reduce and reframe but never canonicalize: its deltas *reference* entity ids
+without owning them, as a relation set references participants. Its reduction is frame-insensitive,
+so `reduce` then `frame` is well defined here. `fold_group` keys on entity id, `fold_created` seeds
+from `Add { atoms, attributes }`, and `EntityOp::Remove { .. }` ignores its payload entirely, so an
+`Add`/`Remove` cancellation never compares frames. The sorting in `Delta::remap` was therefore never
+serving the fold; it was making structural equality of `Deltas` frame-insensitive, exactly the role
+storage sorting played for relation sets, and it gets the same treatment in S5a.
+
+**`ReactionSpan`** stores `EntitySpan<Form>` against a *single* participant list, so a `Modified`
+span carries two forms in one frame. The family type carries every side through one frame change
+using `EntitySpan::try_map`, declining if any side declines. `reframe_with_action`
+returns a single action, which is correct because it is genuinely shared. Doc 209's requirement that
+one action reach every carried side stops being a special rule and becomes a consequence of the
+representation.
+
+Selection then needs one rule, stated once for every carrier:
+
+> The frame action is selected in the **intersection of the admissible groups over all carried
+> sides**.
+
+| carried sides | intersection |
+| --- | --- |
+| none kinded | the full symmetric group on the frame |
+| one kinded, one undetermined | the kinded side's parent group |
+| both kinded, same kind | that kind's parent group |
+| both kinded, different kinds | rejected by integrity; see below |
+
+With one carried side this degenerates to that side's own group, so `Molecule` and `Deltas` use the
+same rule as `ReactionSpan` rather than a simplification of it.
+
+The last row is a real hazard, not a hypothetical. `Axial` is a stereo-**atom** kind and its parent
+group is restricted, while `Tetrahedral` at the same degree is unrestricted, so a `Modified`
+stereo-atom span could carry sides wanting different normalizers. Doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) adds the integrity rules that exclude it.
+
+#### The ambiguity boundary
+
+Where participants are distinct — every family except stereo — integrity makes the frame change
+unique and `reframe_to` is total on multiset-equal inputs. Where participants repeat, `reframe_to`
+**declines** rather than choosing a representative, because an exchange of equal virtual ligands
+preserves meaning only when the configuration and every frame-relative constraint are invariant
+under it. Callers that must consider every admissible alternative use `Permutation::between_all`
+with `reframe_by`. Resolving the ambiguity by selecting a normalizing action is `reframe` itself,
+through `CosetSpace::normalizer` and generator-based residual-invariance checking.
+
+Every form keeps a `reframe_to` method, including the four whose payload is frame-invariant, and
+each body destructures exhaustively. That is what forces an explicit decision when a
+position-sensitive field is added — not a trait, which would only force one when a new form *type*
+appeared. It is the one property of `RelationData` worth carrying forward, and today's
+`DativeBondForm::on_permutation` does not have it.
+
+The family-level members are retained even where one has no current consumer, because the members of
+an algebraically closed set constrain one another through laws; omitting one leaves a hole in the law
+set. That is not the situation of a speculative feature, which has no logical connection to the rest
+of the surface.
+
+#### Laws
+
+Within the frame quotient:
+
+```text
+reframe(reframe(x)) == reframe(x)
+reframe_with_action(x) == (y, a)  =>  reframe_by(normalize(x), a) == y
+framed_eq(x, y)  <=>  reframe(x) == reframe(y)
+framed_eq(x, reframe_to(x, f, g))            for every admissible f, g
+reframe_to(x, f, f) == x
+reframe_by(reframe_by(x, a), b) == reframe_by(x, a . b)
+reframe_by(reframe_by(x, a), inverse(a)) == x
+```
+
+Between adjacent levels, each law relating a level to the one below it rather than to the raw input:
+
+```text
+normalized_eq(x, y)  =>  framed_eq(x, y)  =>  canonical_eq(x, y)
+reframe(x).remap(c) == canonicalize(x)       where c is canonicalize's own witness
+```
+
+The second is the correct form of the transport law. Doc 209 currently states it two ways: its
+settled-boundary section has `x.remap(c) == canonicalize(x)`, which is false whenever `x` is not
+already reduced and reframed, while S5a states the correct version against a normalized source. The
+discrepancy is a direct product of the previous partial nesting.
+
+### Frame selection
+
+Frame selection is `reframe` and belongs here. Doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) owns what an *aggregate* does with the
+selected action: applying it to molecule-level constraints referring to the entity, coordinating one
+action across both sides of an entity span, and the aggregate normal-form laws. The boundary is
+entries against aggregates — this document owns selecting, transporting, and comparing a relation
+entry's frame; doc 209 owns carrying the exposed action through the rest of an aggregate.
+
+Doc 209's S2b currently specifies `Normalize for Molecule` as selecting participant frames *and*
+normalizing attributes. Under the nesting above, `Normalize` is the reduction only and frame
+selection is `reframe`, so that subitem is respecified there.
+
+## Operational audit
+
+Absorbed from doc 210 and reconciled against current code. Every site that combines or compares two
+relation entries must make the frame relationship explicit.
+
+| operation | current handling | required |
+| --- | --- | --- |
+| construction, compaction, id remapping | sorts `Unordered` factors and transports the payload through the callback | preserve the supplied sequence; leave the payload untouched |
+| `Molecule::equiv_under` | `participant_permutation` plus `RelationEquiv::equiv_under` for four families; `Permutation::between_all` filtered by `transform_frame_by` for stereo | `Reframe` for the four; the existing enumerate-and-filter retained for stereo |
+| `Molecule::meet_pushout` | `glue_var_overlays` relies on both sides being sorted; `stereo_glue_entries` pre-aligns the right side in a separate find-and-rebuild pass | one entry-passing `pushout` per family, reframing the right entry into the retained left frame inside `combine` |
+| editor equality and alignment | two private `participant_permutation` copies whose first-position search can reuse a query position and need not be a permutation | `Reframe` on the one shared path |
+| editor removal | `birelation_removed`, `var_relation_removed`, `fixed_relation_removed` rediscover removed ids in a second traversal | consume `Compaction<RelationId>` returned by `compact` |
+| `ReactionSpan::superimpose`, `Molecule::difference_to` | remaps rhs participant ids but places matched rhs forms in the lhs frame without transforming them | explicit `Reframe` of the rhs entry into the lhs frame |
+| substructure matching | maps the pattern ligand frame and asks the host for the coset in that frame | retain the explicit overlay alignment without a payload callback |
+| reaction application of frame-relative constraint changes | not covered for every constraint kind | out of scope here; flagged for doc [204](204-reaction-application-redesign-2026-08-19.md) |
+| molecule-level stereo constraints under pushout | id-remapped only, not frame-transported | doc 209, which owns aggregate constraint transport |
+
+The editor, superposition, difference, and pushout entries in this table are corrections, not only
+migrations. They are sites this work touches regardless, and touching them correctly is the fix.
+
+## Migration evidence
+
+The behavioural blast radius of frame-preserving storage was measured, not estimated.
+`Unordered::canonicalize_positions` was made an identity — no type changes — and every suite was run.
+
+| crate and target | passed | failed |
+| --- | --- | --- |
+| `umol-graph-core` lib | 681 | 14 |
+| `umol-graph-core` property and integration | 170 | 0 |
+| `umol-graph-ir` lib | 6170 | 14 |
+| `umol-graph-ir` canonicalization | 14 | 1 |
+| `umol-graph-ir` property | 324 | 4 |
+| `umol-graph-ir` other integration | 24 | 0 |
+| `umol-graph`, including resolution, kekulization, fingerprint | 1725 | 0 |
+| `umol-io`, including SMILES, MOL, SDF parsing | 15989 | 0 |
+
+Thirty-three failures in roughly 25,130 tests, in three groups and no others.
+
+**Nineteen assert the removed behaviour by name** and change with it: graph-core
+`test_unordered_canonicalize::{case_2_reversed, case_3_shuffled}`, `test_*_participants_sorted`,
+`test_*_into_entries::case_1_canonical_entries`, `test_*_remap`; graph-IR
+`test_remap_delta::{case_03_dative_resort, case_04_aromatic_resort_permute, case_05_aromatic_remove,
+case_06_multicenter_resort_permute, case_07_noncovalent_resort}`.
+
+**Thirteen are canonicalization frame selection**, repaired by doc 209:
+`test_canonicalize_constitution_family_minimum`, `test_canonicalize_constitution_participant_order`,
+`test_kindless_stereo_atom_frame_order`, `test_kindless_stereo_bond_frame_order`,
+`test_minimum_kinded_stereo_frames` cases 1 to 4,
+`reaction_span::test_reaction_span_canonicalize::case_2_constitution`, and the property tests
+`reaction::canonicalize::test_reaction_canonical_eq_by`,
+`reaction::canonicalize::test_reaction_canonical_hash`,
+`reaction::span::canonicalize::test_reaction_span_canonical_hash`, and
+`reaction::span::canonicalize::test_reaction_span_canonicalize`.
+
+**One is the predicted correctness dependency**, `test_molecule_meet_pushout_overlays`, confirming
+that aromatic pushout is correct today only because both sides were sorted. Explicit transport in S5
+repairs it.
+
+Resolution, kekulization, SMILES, MOL, and SDF parsing are unaffected, so the change does not reach
+the I/O layer.
+
+## Absorbed and superseded scope
+
+Doc [210](210-relation-frame-storage-2026-08-25.md) is superseded by this document. Its storage
+semantics, operational audit, structural-equality consequences, and evidence boundary are absorbed
+above. Its `equiv_under` name collision closes when `RelationEquiv` is removed, so
+`Molecule::equiv_under` is retained unchanged. Its molecule-level stereo constraint transport
+belongs to doc 209 and its reaction-application item to doc 204.
+
+Doc 209 keeps its scope and its own plan. Its S3a is revised from a blocked reconstruction
+prerequisite to a dependency on S5b of this document.
+
+## Open item
+
+**Naming.** `Compaction<Id>`, `GraphCompaction`, `MoleculeCompaction`, `Reframe`, `reframe`, and
+`reframe_by` are proposed and are subject to the nomenclature guide. Nothing else in this document
+introduces a public name.
+
+## Staged implementation plan
+
+Every stage ends green except S5, which ends with the thirteen enumerated canonicalization failures
+and is closed by doc 209. That exception is deliberate and its exact contents are listed above.
+
+### S0 — Establish the evidence boundary
+
+The property suite constrains the operations this work leaves alone and is vacuous on the ones it
+changes. That must be corrected before any surface changes, not delivered alongside them.
+
+Two measurements establish the position. `test_molecule_equiv_under_identity_reduces_to_equiv`
+(`tests/property/molecule/comparison.rs:127`) asserts exactly the law most at risk,
+`equiv_under(identity) == equiv`, but builds its second operand as a clone with one atom's charge
+changed. The two participant frames are therefore identical by construction, and the law cannot
+fail on a frame difference. `test_molecule_equiv_agrees_with_equality_for_normalized_molecules`
+at `:120` holds trivially while storage sorts every frame.
+
+`stereo_frame_permutation_strategy` exists and is correct, generating permutations inside the
+kind's parent group. Its consumers are `stereo/semantics.rs`, `molecule/meet_pushout.rs`, and
+`reaction/application.rs`. No comparison or canonicalization property uses it. No aromatic or
+multicenter frame-variation strategy exists at all, because eager sorting makes one unwritable
+until S5b.
+
+#### S0a — Reach comparison and canonicalization with reframed pairs
+
+**Module:** `umol-graph-ir/tests/property/strategies.rs`,
+`tests/property/molecule/comparison.rs`, and `tests/property/molecule/canonicalize.rs`.
+
+Add a strategy producing a molecule together with an admissible stereo reframing of it, built from
+the existing `stereo_frame_permutation_strategy` so the reframing stays inside the kind's parent
+group and carries configuration and frame-relative constraints. Extend the comparison and
+canonicalization properties to draw from it.
+
+**Done.** `stereo_reframed_molecule_pair_strategy` in `tests/property/strategies.rs` yields a
+tetrahedral stereo atom over four element-distinguishable ligands and its reframing under a
+nonidentity parent-group action, with the configuration and constraints carried through
+`transform_frame_by`. `test_molecule_equiv_under_reframed` and
+`test_molecule_canonicalize_reframed` consume it.
+
+The clone-and-perturb operand in `test_molecule_equiv_under_identity_reduces_to_equiv` was
+**kept rather than replaced**: it covers the frame-identical domain, which the reframed strategy
+does not, and the property-test guide treats distinct operational domains as distinct evidence.
+Adding the second domain achieves what this subitem needs — the law becomes capable of failing —
+without discarding the first.
+
+The aromatic and multicenter half of this generator is not writable here. It arrives with S5b,
+whose evidence requirements already state it.
+
+**Tests and evidence:** The strategy must guarantee a nonidentity frame action and a nonuniform
+position-sensitive payload; a generator that can emit only the identity action or uniform payloads
+does not establish the boundary. Assert the reframing is admissible by construction.
+
+**Change class:** additive evidence; expected to turn existing laws red (green is not the success
+condition for this subitem).
+
+**Dependencies:** [dep: none]
+
+#### S0b — Classify and record the resulting failures
+
+**Module:** this document.
+
+Run the graph-IR unit and property suites under the strengthened generators and classify every
+failure as one of: the law is wrong, the current implementation is wrong, or the difference is an
+intended consequence of this work. Record the list here, as the frame-preserving measurement above
+is recorded. An unexplained failure stops the plan rather than being carried into S1.
+
+The expected finding is that `equiv` and `equiv_under` diverge on an admissibly reframed stereo
+pair, since `Molecule::equiv` compares stored ligand frames directly (`molecule.rs:540`, `:551`)
+while `Molecule::equiv_under` documents that "stereo ligand frames may differ by any admissible
+permutation". That divergence exists today and is not introduced by this work.
+
+**Result.** Under the strengthened generators the graph-IR suites report **one** failure, and it is
+the new property.
+
+| target | passed | failed |
+| --- | --- | --- |
+| `umol-graph-ir` lib | 6184 | 0 |
+| `tests/canonicalization.rs` | 15 | 0 |
+| `tests/property.rs` | 329 | **1** |
+| `frag_macro`, `mol_macro`, `mol_macro_ui`, `reaction_span` | 24 | 0 |
+
+`molecule::comparison::test_molecule_equiv_under_reframed` — **the current implementation is wrong**,
+in the sense that the two operations disagree about a case both document. Reduced to a minimal
+example, an admissibly reframed tetrahedral pair gives `equiv_under(identity) == true` and
+`equiv == false`. `Molecule::equiv_under` documents that "stereo ligand frames may differ by any
+admissible permutation"; `Molecule::equiv` compares stored ligand frames directly (`molecule.rs:540`,
+`:551`). The divergence is pre-existing and is repaired by doc 209 S2c, which makes `equiv` compare
+normal forms.
+
+`molecule::canonicalize::test_molecule_canonicalize_reframed` **passes**, which is the informative
+negative: `canonicalize`, `canonical_eq`, and `canonical_hash` already agree across an admissible
+stereo reframing. The defect is confined to `equiv`, not general to the comparison surface.
+
+No unexplained failure arose, so the plan continues to S1.
+
+This evidence covers stereo only. The aromatic and multicenter half of the generator remains
+unwritable until S5b removes eager sorting, and S5b's evidence requirements state it.
+
+**Tests and evidence:** The classification above, with each failure named.
+
+**Change class:** verification and record only.
+
+**Dependencies:** [dep: S0a]
+
+### S1 — Extract the single-id-space compaction layer
+
+#### S1a — Add `Compaction<Id>` and re-express the graph compaction
+
+**Module:** `umol-graph-core/src/graph.rs` and its unit tests.
+
+Add generic `Compaction<Id>` carrying the removal list, dense forward shift, and reverse lookup.
+Re-express the existing two-space type as `GraphCompaction` holding `Compaction<NodeId>` and
+`Compaction<EdgeId>`, preserving `compact_node`, `compact_edge`, `uncompact_node`, `uncompact_edge`,
+`compact_node_vec`, and `compact_edge_vec` behaviour exactly. Migrate graph-core callers, including
+`RelationParticipant` and the five relation shapes.
+
+**Tests and evidence:** Table tests for `Compaction<Id>` covering removal at the front, middle, and
+end, a removed id, an id beyond the range, empty removals, and the forward-then-reverse roundtrip.
+Retain every existing graph compaction assertion against `GraphCompaction`.
+
+**Change class:** breaking rename with an additive generic (red until S1b).
+
+**Dependencies:** [dep: S0b]
+
+#### S1b — Migrate graph-IR to `GraphCompaction`
+
+**Module:** `umol-graph-ir/src/ir/remap.rs`, `molecule/editor.rs`, `ligand.rs`, and the six
+constraint modules.
+
+Rename every `Compaction` reference to `GraphCompaction`. No semantic change.
+
+**Tests and evidence:** Existing graph-IR unit and property suites pass unchanged.
+
+**Change class:** caller migration (restores green).
+
+**Dependencies:** [dep: S1a]
+
+### S2 — Type the molecule-level compaction
+
+#### S2a — Replace `IdCompaction` with `MoleculeCompaction`
+
+**Module:** `umol-graph-ir/src/ir/remap.rs`, `molecule/editor.rs`, and their unit tests.
+
+Hold a `GraphCompaction` plus six typed `Compaction<..Id>` in place of six `Vec<RelationId>`. Delete
+`compact_relation`, `uncompact_dense`, and `normalize_removed`. Preserve `UndoCompaction` behaviour
+over the new representation. Add the zero-cost `Compaction<RelationId>` to `Compaction<..Id>` typed
+map used at the six family boundaries.
+
+**Tests and evidence:** Retain every existing compaction and rollback assertion. Add cases where a
+removed entity of one family does not shift another family's ids, and where graph removal cascades
+into a relation removal.
+
+**Change class:** breaking type replacement with caller migration (red then green within the stage).
+
+**Dependencies:** [dep: S1b]
+
+### S3 — Establish the entity families and the reframe operations
+
+#### S3a — Introduce the six entity-family types
+
+**Module:** `umol-graph-ir/src/ir/molecule.rs`, the six family modules, and their unit tests.
+
+Add one type per entity family, each wrapping its storage shape as `Graph` wraps `Arc<Csr>`, and
+replace `Molecule`'s six `Arc<..>` fields with them. Each type states which factor bears the frame
+and which, if any, is a site. No behaviour changes here; the accessors delegate.
+
+**Tests and evidence:** Assert delegation for count, indexed access, incidence, and lookup on every
+family, and that `Molecule`'s existing entity-family behaviour is unchanged.
+
+**Change class:** additive types with a field-type change on `Molecule` (green).
+
+**Dependencies:** [dep: S2a]
+
+#### S3b — Add the form-level reframe methods
+
+**Module:** `umol-graph-ir/src/ir/aromatic.rs`, `multicenter.rs`, `noncovalent.rs`, `dative.rs`,
+`stereo.rs`, `electrons.rs`, and their unit tests.
+
+Add `reframe_to` to all six forms as an inherent method — no trait. `AromaticSystemForm` and
+`MulticenterBondForm` reindex `electrons` by participant, leaving `Undetermined` unchanged.
+`NoncovalentBondForm` and `DativeBondForm` return `self`, **destructuring exhaustively** so a future
+position-indexed field fails to compile there, with a comment saying why the no-op is written the
+long way. Stereo adds `select_frame(current)` and renames `transform_frame_by` to `reframe_by`.
+
+**Tests and evidence:** Table tests over nonuniform electron vectors with a nonidentity frame change,
+`Undetermined`, mismatched lengths, a frame pair that is not a reordering of one multiset, the
+identity frame, and the inverse roundtrip. For stereo cover every kind, both restricted kinds, an
+undetermined configuration, a frame change outside the parent group, and repeated virtual ligands
+where the change is ambiguous. Do not use uniform payloads as the only evidence.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: none]
+
+#### S3c — Add `EntitySpan::try_map`
+
+**Module:** `umol-graph-ir/src/ir/delta.rs` and its unit tests.
+
+Add a closure-taking fallible map over the four `EntitySpan` variants, so a span can carry every side
+through one frame change without a trait bound on its payload.
+
+**Tests and evidence:** Cover all four variants, including a `Modified` span where the closure fails
+on one side only.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: none]
+
+#### S3d — Add the family-level reframe operations
+
+**Module:** the six family modules and their unit tests.
+
+Implement `reframe`, `reframe_with_action`, and `framed_eq` on each family type. Reduce first, then
+select: the four frame-invariant and electron-bearing families sort their frame-bearing factor
+without consulting the payload; the two stereo families ask the form under the intersection rule.
+Return one action per entry, keyed by the family's own id type; only the stereo families carry a
+meaningful action.
+
+Apply the selected order **in place** — `permute_with` for participants, the form's own method for
+the payload — rather than through `into_entries` and `new`. The reconstruction route costs one heap
+allocation per entity out of a flat CSR, plus a CSR rebuild and an incidence rebuild that reframing
+cannot invalidate.
+
+The span-bearing families reuse the same implementations with `EntitySpan<Form>` as the payload,
+applying one action to every carried side through S3c's combinator and declining if any side
+declines. That path depends on doc [209](209-normalization-canonical-semantics-2026-08-25.md) S1c and
+S1d: without them a `Modified` span can carry sides asserting different stereo kinds and the
+intersection rule has no unambiguous answer.
+
+**Tests and evidence:** Assert idempotence, that `framed_eq` agrees with comparing `reframe` results,
+that the returned action carries the reduced value into the selected frame, and the inverse
+roundtrip. Cover a `Modified` span whose two sides need the same nonidentity action, and one where a
+frame-relative constraint on a single side forces the whole span to decline.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: S3a, S3b, S3c, doc 209 S1d]
+
+### S4 — Move entry comparison and composition onto the new surface
+
+#### S4a — Add in-place participant permutation
+
+**Module:** `umol-graph-core/src/relation.rs` and its unit tests.
+
+Add `permute_with` to the single-factor shapes and `permute_1_with` / `permute_2_with` to the
+birelation shapes. Validate that `order` is a permutation of `0..arity` and panic otherwise; the
+participant multiset is then unchanged by construction, so the incidence index is left untouched
+rather than rebuilt.
+
+**Tests and evidence:** Assert the permuted participant sequence exactly under the
+`new[i] = old[order[i]]` convention, that the payload is untouched, that incidence answers identically before and after, that the identity order is a no-op,
+and that a non-permutation order is rejected. Cover both factors independently on a birelation.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: S2a]
+
+#### S4b — Add `iter` and `iter_mut` to the five relation shapes
+
+**Module:** `umol-graph-core/src/relation.rs`, its unit tests, and `umol-graph-ir/src/ir/molecule.rs`.
+
+Replace `data_iter_mut` with `iter` and `iter_mut` yielding the id, immutable participants, and the
+payload. Migrate the six `Molecule::modify_*` callers.
+
+**Tests and evidence:** Assert exact yielded tuples in relation-id order for all five shapes, the
+`ExactSizeIterator` length, and the empty set. Retain the existing `modify_*` assertions.
+
+**Change class:** breaking replacement with caller migration (green within the stage).
+
+**Dependencies:** [dep: S2a]
+
+#### S4c — Return the relation compaction from `compact`
+
+**Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
+`umol-graph-ir/src/ir/molecule/editor.rs`.
+
+Return `(Self, Compaction<RelationId>)` from all five shapes. Delete `fixed_relation_removed`,
+`var_relation_removed`, and `birelation_removed` and the traversal in `MoleculeEditor::remove`.
+
+**Tests and evidence:** Assert the surviving set and the returned compaction together, including a
+relation dropped because one participant was removed, a relation dropped because a second-factor
+participant was removed, and an empty compaction leaving ids unchanged.
+
+**Change class:** breaking return-type change with caller migration (green within the stage).
+
+**Dependencies:** [dep: S4a]
+
+#### S4d — Pass entries to `pushout` and `pullback`
+
+**Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
+`umol-graph-ir/src/ir/molecule/pushout.rs`.
+
+Change `combine` to receive both entries. Collapse `glue_var_overlays` and `stereo_glue_entries`
+into one per-family call that reframes the right entry into the retained left frame inside
+`combine`, using the bare act member `reframe_to`; the entries are already reduced, so the prefix
+member must not be used here. Document the retained-left-frame precondition.
+
+**Tests and evidence:** Cover a coincidence whose two sides carry different frames, a right-only
+entry, an inadmissible meet, and the existing pushout and pullback correspondence laws. Add an
+aromatic case with nonuniform electron counts supplied in different frames on the two sides.
+
+**Change class:** breaking signature change with caller migration (green within the stage).
+
+**Dependencies:** [dep: S3b, S3c, S4b]
+
+#### S4e — Move `Molecule::equiv_under` and the editor onto `Reframe`
+
+**Module:** `umol-graph-ir/src/ir/molecule.rs`, `molecule/editor.rs`,
+`umol-graph-core/src/relation.rs`, and their unit tests.
+
+Replace `participant_permutation` with the bare act member `reframe_to` in `Molecule::equiv_under`
+for the four distinct-participant families, retaining the stereo enumerate-and-filter path. Replace both private
+editor copies with the same operation. Delete `participant_permutation` from all five graph-core
+shapes, delete `RelationEquiv` and `BiRelationEquiv`, and delete `ParticipantAnchor` and
+`RelationParticipant::anchor`, and remove `find_by_participants` and `participants_match`, moving
+lookup and coincidence to the entity-family types keyed by their uniqueness keys.
+
+**Tests and evidence:** Retain every `equiv_under` case. Add a correspondence under which the mapped
+left frame differs from the stored right frame for each of the four families, and an editor
+comparison against a reordered frame. Assert family lookup for all six families, including that a
+stereo site bearing one entity is found without reference to its ligands, and that a ligand atom
+shared by two adjacent stereocentres does not confuse either lookup. Because this subitem replaces three hand-written
+alignment rules with one derived operation, keep each replaced implementation as a private function
+for the duration of the subitem and assert on generated inputs that the derived result agrees with
+it, or record precisely where it does not. The editor's first-position search is known to differ:
+it can reuse a query position and need not return a permutation, so the differential is there to
+characterise that difference, not to prove there is none.
+
+**Change class:** breaking removal with caller migration (green within the stage).
+
+**Dependencies:** [dep: S4d]
+
+#### S4f — Add explicit transport to superposition, difference, and matching
+
+**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `molecule.rs`, `substructure.rs`, and their
+unit tests.
+
+Apply `reframe_to` to carry the rhs entry into the lhs frame in `ReactionSpan::superimpose` and
+`Molecule::difference_to` instead of relying on reconstruction. Retain the explicit overlay
+alignment in substructure matching without a payload callback.
+
+**Tests and evidence:** Cover independently framed sides with nonuniform position-sensitive payloads
+for superposition and difference, the existing span and reaction conversion laws, and pattern-to-host
+frame transport in matching.
+
+**Change class:** correctness change with caller migration (green).
+
+**Dependencies:** [dep: S4e]
+
+### S5 — Make storage frame-preserving
+
+#### S5a — Move the graph-IR frame-order utility sites off the storage protocol
+
+**Module:** `umol-graph-ir/src/ir/delta.rs`, `canonicalize.rs`, and their unit tests.
+
+Five graph-IR sites call `Unordered::canonicalize_positions` as a general sorting utility, entirely
+outside relation storage, and would break when the protocol is deleted:
+
+- `delta.rs:2631`, `:2645`, `:2672`, and `:2686` sort an aromatic or multicenter delta's atom list
+  in `Delta::remap` and permute the attributes through the resulting order. These are the
+  implementation behind the five `test_remap_delta` resort cases.
+- `canonicalize.rs:3606` `sort_ligand_frame` sorts a stereo ligand multiset and returns a
+  `Vec<ParticipantPosition>` order, with `permutation_from_position_order` at `:3598` converting a
+  `Permutation` into that order and `reframe_stereo_atom_constraint_by_order` consuming it.
+
+Make the delta sites **frame-preserving**: `Delta::remap` relabels the atom list and leaves both the
+list and the attributes in their supplied frame, exactly as relation-set `remap` does. Do not
+replace the sort with an explicit sort plus `Reframe`; that would relocate the eager canonicalization
+into `delta.rs` rather than remove it. Frame selection for a delta is normalization and belongs to
+doc 209 S3a, which already reuses the lhs molecule's selected frame actions for existing entity
+deltas. Doc 209's statement that `Deltas::normalize` "retains its existing fixed-frame fold" holds
+only while `remap` sorts on its behalf and is corrected there.
+
+Make the canonicalization sites `Permutation`-native, since a stereo ligand frame is bounded by the
+kind's degree; delete `permutation_from_position_order` and reframe the constraints through
+`reframe_by`.
+
+**Tests and evidence:** Retain every `Delta::remap` and canonicalization assertion. Cover an
+aromatic delta whose atom list is supplied unsorted with nonuniform electron counts, and a stereo
+ligand frame with repeated virtual ligands where equal occurrences keep their input order.
+
+**Change class:** semantics-preserving migration (green).
+
+**Dependencies:** [dep: S4f]
+
+#### S5b — Remove the ordering markers and the payload callback
+
+**Module:** `umol-graph-core/src/relation.rs`, `lib.rs`, their unit and property tests, and every
+graph-IR type annotation carrying an ordering marker.
+
+Delete `FactorOrdering`, `Ordered`, `Unordered`, `RelationData`, and `BiRelationData`. Retain
+`ParticipantPosition` as `permute_with`'s position argument. Remove the `O` parameters from all five shapes, the `D: RelationData` bounds,
+and the unused `D: Clone` bound on `new`. Stop sorting in `new`. Delete `ElectronCountsForm::permute`.
+Update the nineteen tests that assert the removed behaviour.
+
+**Tests and evidence:** Assert that `new` preserves a supplied unsorted frame for every shape, that
+`remap` and `compact` preserve sequence, and that structural equality distinguishes two frames of
+the same multiset. Convert the resort cases in `test_remap_delta` to frame-preservation cases.
+
+**Change class:** breaking removal (red; the thirteen canonicalization failures remain).
+
+**Dependencies:** [dep: S5a]
+
+**Exit state:** The workspace compiles and every suite passes except the thirteen enumerated
+canonicalization and hash tests, which require frame selection from doc 209. Doc 209 S2 resumes
+here.
+
+### S6 — Align the guides
+
+#### S6a — Update the nomenclature and development guides
+
+**Module:** `docs/development/nomenclature.md` and `docs/development/data-types.md`.
+
+Add a *reframe* entry. Rewrite the relation-set entry, whose three axes still name `Unordered` and
+`Ordered` as what controls canonicalization. Remove `ParticipantPosition` and `ParticipantAnchor`
+from the participant and incidence entries. Rewrite the equivalence entry, which describes the
+frame-aware `equiv_under` traits and permutation-invariance skipping. Restate the electron-counts
+entry in frame terms. Record the compaction layering and the participant-multiset identity rule.
+
+**Tests and evidence:** Search both guides for every removed name; each remaining occurrence must
+describe another current API. Run `git diff --check`.
+
+**Change class:** documentation migration (green).
+
+**Dependencies:** [dep: S5b]
+
+### Dependency summary
+
+The critical path is
+`S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S4a -> S4b -> S4c -> S4d -> S4e -> S4f -> S5a -> S5b -> S6a`.
+S3b and S3c are additive and may be built at any point before S3d, which consumes them. S3a
+introduces the family types and gates S3d. S3d additionally depends on doc 209 S1d for its span
+path. S5b is the only subitem that ends red, and doc 209 S2 onward closes it. Every stage is
+required; nothing here is deferrable.
+
+S0 is a prerequisite for the whole sequence and not only for this document: the same laws guard doc
+209's normalization and its completion of the `Canonicalize` quotient. It is deliberately expected
+to end with failures rather than green, and S0b's recorded classification is what makes the rest of
+the plan safe to execute.

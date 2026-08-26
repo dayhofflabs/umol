@@ -11,8 +11,13 @@ the reasoning and state of a work unit; they are not living developer documentat
 ## Read before editing
 
 1. Read `CLAUDE.md`.
-2. Read the target document completely when revising it.
-3. Read `discussion/000-status.md`; its vocabulary and index are authoritative for status.
+2. Read the target document's header, the sections being changed, and enough adjacent or linked
+   material to understand their role. Use its headings and targeted searches to locate that
+   context. Read the complete document only when the requested restructuring or closeout genuinely
+   requires a whole-document audit.
+3. Read the status vocabulary and the affected or directly related rows in
+   `discussion/000-status.md`; its vocabulary and index are authoritative for status. Do not load
+   the complete index merely to update one work unit.
 4. Read directly related discussion documents and permanent guides only as needed to establish the
    current context. Do not infer their contents from titles.
 
@@ -52,8 +57,9 @@ Header rules:
 - Omit `Relates` only after checking that the document is genuinely independent.
 
 Add the document to `discussion/000-status.md` when creating it. Keep the index row's status in sync
-with the header. Use the index note for the concrete outstanding work or blocker, not for a running
-history.
+with the header. While a work unit is open, use the index note for the concrete outstanding work or
+blocker, not for a running history. Leave the note empty for a completed document; its outcome
+belongs in the document itself.
 
 ## Follow the document lifecycle
 
@@ -98,7 +104,7 @@ Before setting `Completed`:
 1. Verify every agreed, non-deferred item is implemented and checked.
 2. Move deferred or newly discovered work into a separate `Proposed` document and link it.
 3. Mark the document header and status-index row `Completed`.
-4. Set the index `Last Checked` date to the closeout date and make its note concise.
+4. Set the index `Last Checked` date to the closeout date and clear its note.
 
 ## Preserve closed documents
 
