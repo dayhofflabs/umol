@@ -5,7 +5,7 @@ Date: 2026-08-24
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
 [207](207-reaction-network-spike-2026-08-24.md),
-[209](209-level-hash-semantics-2026-08-25.md)
+[209](209-normalization-canonical-semantics-2026-08-25.md)
 
 ## Purpose
 

@@ -32,9 +32,12 @@ the statuses recorded here remain authoritative.
   documentation, and the eventual arXiv link.
 - [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
   improves canonicalization performance.
-- [209 - Level and hash semantics](209-level-hash-semantics-2026-08-25.md)
-  confines canonicalization tiers to private internals and separates complete canonical hash
-  and equality semantics from allocation optimizations before the development-trunk API is released.
+- [209 - Normalization and canonical semantics](209-normalization-canonical-semantics-2026-08-25.md)
+  defines complete normalization across graph-IR aggregates, confines canonicalization tiers to
+  private internals, and separates canonical hash and equality semantics from their optimizations.
+- [210 - Relation frame storage](210-relation-frame-storage-2026-08-25.md)
+  separates deferred participant ordering and explicit graph-IR frame transport from normalization
+  and canonicalization work.
 
 ## Document index
 
@@ -204,7 +207,7 @@ the statuses recorded here remain authoritative.
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
 | [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | Proposed      | 2026-07-27   | Hydrogen transformations and remaining validator implementation.                                           |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   | Visitor, eager, and resumable graph-algorithm execution APIs.                                              |
-| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-07-27   | Crate boundaries, visibility, re-exports, errors, and diagnostic representations.                          |
+| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-25   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and explicit `Equiv` failure semantics. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
 | [170-reaction-smiles-python-2026-07-28.md](170-reaction-smiles-python-2026-07-28.md)                             | Completed     | 2026-07-28   |                                                                                                            |
 | [171-aromaticity-inconsistency-policy-2026-07-29.md](171-aromaticity-inconsistency-policy-2026-07-29.md)         | Completed     | 2026-08-01   | Follow-up diagnostics and Python operation surfaces remain in docs 168 and 166.                            |
@@ -244,5 +247,6 @@ the statuses recorded here remain authoritative.
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.                      |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.         |
-| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-25   | S2 complete; S3 awaits the level and hash semantics in doc 209; S6a removes release-path accounting.        |
-| [209-level-hash-semantics-2026-08-25.md](209-level-hash-semantics-2026-08-25.md)                               | In Progress   | 2026-08-25   | S0b complete; S0c routes complete aggregate operations through the private levels.                          |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-25   | S2 complete; S3 awaits normalization and canonical semantics in doc 209; S6a removes release-path accounting. |
+| [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)     | In Progress   | 2026-08-25   | S1a complete; S1b adds stereo-site incidence integrity.                                                      |
+| [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                           | Proposed      | 2026-08-25   | Frame-preserving storage is scoped after doc 209; relation and alignment semantics remain unsettled.        |
