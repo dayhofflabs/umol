@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::iter;
 
 use thiserror::Error;
+use umol_graph_core::NodeId;
 use umol_perm::Permutation;
 
 use super::super::constraint::{
@@ -12,7 +13,7 @@ use super::super::constraint::{
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{AtomId, BondId};
-use super::super::ligand::StereoLigandKind;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::Molecule;
 
@@ -56,6 +57,8 @@ pub enum MoleculeIntegrityError {
     StereoAtomSitesDuplicate { atom: AtomId },
     #[error("stereo bond: duplicate site {bond:?}")]
     StereoBondSitesDuplicate { bond: BondId },
+    #[error("{entity}: ligand frame does not match stereo-site incidence")]
+    StereoLigandIncidenceMismatch { entity: Entity },
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
     StereoLigandArity {
         entity: Entity,
@@ -199,18 +202,19 @@ impl Molecule {
         for view in self.stereo_atoms().iter() {
             let entity = Entity::StereoAtom(view.id);
             let site = view.site_id();
+            let ligand_frame = view.ligand_frame();
             require_reference(&contains, Entity::Atom(site))?;
             require_references(
                 &contains,
-                view.ligand_frame()
-                    .into_iter()
+                ligand_frame
+                    .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
             check_unique_participants(
                 entity,
                 iter::once(site).chain(
-                    view.ligand_frame()
-                        .into_iter()
+                    ligand_frame
+                        .iter()
                         .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
                         .map(|ligand| ligand.atom_id),
                 ),
@@ -219,23 +223,30 @@ impl Molecule {
                 return Err(MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: site });
             }
             check_stereo_atom(entity, view.ligands().count(), view.attributes)?;
+            if ligand_frame
+                .iter()
+                .any(|&ligand| !ligand_matches_site(self, ligand, site, None))
+            {
+                return Err(MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity });
+            }
         }
 
         let mut stereo_bond_sites = HashSet::new();
         for view in self.stereo_bonds().iter() {
             let entity = Entity::StereoBond(view.id);
             let site = view.site_id();
+            let ligand_frame = view.ligand_frame();
             require_reference(&contains, Entity::Bond(site))?;
             require_references(
                 &contains,
-                view.ligand_frame()
-                    .into_iter()
+                ligand_frame
+                    .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
             check_unique_participants(
                 entity,
-                view.ligand_frame()
-                    .into_iter()
+                ligand_frame
+                    .iter()
                     .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
                     .map(|ligand| ligand.atom_id),
             )?;
@@ -243,6 +254,19 @@ impl Molecule {
                 return Err(MoleculeIntegrityError::StereoBondSitesDuplicate { bond: site });
             }
             check_stereo_bond(entity, view.ligands().count(), view.attributes)?;
+            let [first, second] = view.site().atom_ids();
+            let matches_endpoint_order = |first, second| {
+                ligand_frame.len() == 4
+                    && ligand_frame[..2]
+                        .iter()
+                        .all(|&ligand| ligand_matches_site(self, ligand, first, Some(second)))
+                    && ligand_frame[2..]
+                        .iter()
+                        .all(|&ligand| ligand_matches_site(self, ligand, second, Some(first)))
+            };
+            if !matches_endpoint_order(first, second) && !matches_endpoint_order(second, first) {
+                return Err(MoleculeIntegrityError::StereoLigandIncidenceMismatch { entity });
+            }
         }
         for constraint in self.constraints.iter() {
             super::validate_constraint_references(constraint, &contains)
@@ -250,6 +274,24 @@ impl Molecule {
             check_molecule_constraint(self, constraint)?;
         }
         Ok(())
+    }
+}
+
+fn ligand_matches_site(
+    molecule: &Molecule,
+    ligand: StereoLigand,
+    site: AtomId,
+    opposite_site: Option<AtomId>,
+) -> bool {
+    match ligand.kind {
+        StereoLigandKind::Atom => {
+            Some(ligand.atom_id) != opposite_site
+                && molecule
+                    .graph
+                    .find_edge(NodeId::from(site), NodeId::from(ligand.atom_id))
+                    .is_some()
+        }
+        StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => ligand.atom_id == site,
     }
 }
 

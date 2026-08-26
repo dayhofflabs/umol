@@ -39,12 +39,17 @@ fn reaction_span() -> ReactionSpan {
         )],
         stereo_atoms: vec![(
             AtomId(0),
-            vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+            vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
             EntitySpan::Unchanged(StereoAtomForm::default()),
         )],
         stereo_bonds: vec![(
             BondId(0),
-            vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
             EntitySpan::Unchanged(StereoBondForm::default()),
         )],
         constraints: Vec::new(),
@@ -114,7 +119,7 @@ fn test_reaction_span_noncovalent_bonds(reaction_span: ReactionSpan) {
 #[rstest]
 fn test_reaction_span_stereo_atoms(reaction_span: ReactionSpan) {
     let id = RelationId(0);
-    let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
+    let ligand = StereoLigand::new(AtomId(1), StereoLigandKind::Atom);
 
     assert_eq!(
         reaction_span.stereo_atoms().participants_1(id),
@@ -130,13 +135,18 @@ fn test_reaction_span_stereo_atoms(reaction_span: ReactionSpan) {
 #[rstest]
 fn test_reaction_span_stereo_bonds(reaction_span: ReactionSpan) {
     let id = RelationId(0);
-    let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
+    let ligands = [
+        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+    ];
 
     assert_eq!(
         reaction_span.stereo_bonds().participants_1(id),
         &[EdgeId(0)]
     );
-    assert_eq!(reaction_span.stereo_bonds().participants_2(id), &[ligand]);
+    assert_eq!(reaction_span.stereo_bonds().participants_2(id), &ligands);
     assert_eq!(
         reaction_span.stereo_bonds().data(id),
         &EntitySpan::Unchanged(StereoBondForm::default()),

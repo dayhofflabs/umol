@@ -2665,7 +2665,9 @@ mod tests {
                 BondId(0),
                 vec![
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
                 ],
                 EntitySpan::Unchanged(StereoBondForm::default()),
             )],
@@ -2718,7 +2720,9 @@ mod tests {
                     BondId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                     ],
                     StereoBondForm::default(),
                 )],
@@ -2768,7 +2772,9 @@ mod tests {
                     BondId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                     ],
                     StereoBondForm::default(),
                 )],
@@ -2845,7 +2851,12 @@ mod tests {
             )],
             stereo_bonds: vec![(
                 BondId(0),
-                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
                 EntitySpan::Modified {
                     lhs: StereoBondForm::default(),
                     rhs: StereoBondForm::default(),
@@ -3358,6 +3369,11 @@ mod tests {
                 vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
                 EntitySpan::Unchanged(StereoAtomForm::default()),
             )],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Removed(BondForm::default()),
+            )],
             ..Default::default()
         },
         ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::InvalidReference {
@@ -3397,10 +3413,19 @@ mod tests {
                 AtomId(0),
                 AtomId(1),
                 EntitySpan::Unchanged(BondForm::default()),
+            ), (
+                AtomId(0),
+                AtomId(2),
+                EntitySpan::Removed(BondForm::default()),
             )],
             stereo_bonds: vec![(
                 BondId(0),
-                vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
                 EntitySpan::Unchanged(StereoBondForm::default()),
             )],
             ..Default::default()
@@ -3535,8 +3560,8 @@ mod tests {
                     stereo_atoms: vec![(
                         AtomId(2),
                         vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                         ],
                         StereoAtomForm::default(),
                     )],
@@ -3544,7 +3569,9 @@ mod tests {
                         BondId(2),
                         vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                         ],
                         StereoBondForm::default(),
                     )],
@@ -3622,8 +3649,8 @@ mod tests {
                         id: StereoAtomId(0),
                         site: AtomId(2),
                         ligands: vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                         ],
                         attributes: StereoAtomForm::default(),
                     }),
@@ -3631,8 +3658,8 @@ mod tests {
                         id: StereoAtomId(1),
                         site: AtomId(4),
                         ligands: vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
                         ],
                         attributes: StereoAtomForm::default(),
                     }),
@@ -3641,7 +3668,9 @@ mod tests {
                         site: BondId(2),
                         ligands: vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                         ],
                         attributes: StereoBondForm::default(),
                     }),
@@ -3650,7 +3679,9 @@ mod tests {
                         site: BondId(3),
                         ligands: vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
                         ],
                         attributes: StereoBondForm::default(),
                     }),
@@ -3745,16 +3776,16 @@ mod tests {
                     (
                         AtomId(2),
                         vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                         ],
                         EntitySpan::Removed(StereoAtomForm::default()),
                     ),
                     (
                         AtomId(4),
                         vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
                         ],
                         EntitySpan::Added(StereoAtomForm::default()),
                     ),
@@ -3764,7 +3795,9 @@ mod tests {
                         BondId(2),
                         vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                         ],
                         EntitySpan::Removed(StereoBondForm::default()),
                     ),
@@ -3772,7 +3805,9 @@ mod tests {
                         BondId(3),
                         vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
                         ],
                         EntitySpan::Added(StereoBondForm::default()),
                     ),
@@ -4049,6 +4084,9 @@ mod tests {
                     AtomForm::from_element(Element::Br),
                     AtomForm::from_element(Element::I),
                 ],
+                bonds: (1..=4)
+                    .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                    .collect(),
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
@@ -4082,7 +4120,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
-            bonds: vec![],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             ..Default::default()
         }),
         Molecule::from_entries(MoleculeEntries {
@@ -4093,6 +4133,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -4359,7 +4402,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
-            bonds: vec![],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             ..Default::default()
         }),
         Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
@@ -4383,6 +4428,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -4417,6 +4465,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -4669,8 +4720,8 @@ mod tests {
             stereo_atoms: vec![(
                 AtomId(2),
                 vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoAtomForm::default(),
             )],
@@ -4678,7 +4729,9 @@ mod tests {
                 BondId(2),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::default(),
             )],
@@ -4716,8 +4769,8 @@ mod tests {
             stereo_atoms: vec![(
                 AtomId(3),
                 vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoAtomForm::default(),
             )],
@@ -4725,7 +4778,9 @@ mod tests {
                 BondId(2),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::default(),
             )],
@@ -4831,16 +4886,16 @@ mod tests {
                     (
                         AtomId(2),
                         vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                         ],
                         EntitySpan::Removed(StereoAtomForm::default()),
                     ),
                     (
                         AtomId(4),
                         vec![
-                            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
                         ],
                         EntitySpan::Added(StereoAtomForm::default()),
                     ),
@@ -4850,7 +4905,9 @@ mod tests {
                         BondId(2),
                         vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                         ],
                         EntitySpan::Removed(StereoBondForm::default()),
                     ),
@@ -4858,7 +4915,9 @@ mod tests {
                         BondId(3),
                         vec![
                             StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::LonePair),
                         ],
                         EntitySpan::Added(StereoBondForm::default()),
                     ),
@@ -5015,6 +5074,7 @@ mod tests {
                 AtomForm::from_element(Element::F),
                 AtomForm::from_element(Element::Cl),
             ],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
@@ -5028,6 +5088,7 @@ mod tests {
                 AtomForm::from_element(Element::F),
                 AtomForm::from_element(Element::Cl),
             ],
+            bonds: vec![(AtomId(0), AtomId(2), BondForm::from_order(1))],
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom)],
@@ -5046,7 +5107,7 @@ mod tests {
                 3,
             )
             .unwrap(),
-            Correspondence::new(vec![], 0, 0).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
             Correspondence::new(vec![], 0, 0).unwrap(),
             Correspondence::new(vec![], 0, 0).unwrap(),
             Correspondence::new(vec![], 0, 0).unwrap(),

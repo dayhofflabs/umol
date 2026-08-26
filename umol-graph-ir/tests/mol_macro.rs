@@ -175,6 +175,7 @@ fn test_mol_noncovalent() {
 fn test_mol_stereo_atom() {
     let molecule: Molecule = mol! {
         (c: C), (f: F), (cl: Cl), (br: Br), (i: I),
+        (c) - (f), (c) - (cl), (c) - (br), (c) - (i),
         stereo atom (c) [(f) (cl) (br) (i)] : "Th0",
     };
 
@@ -186,6 +187,7 @@ fn test_mol_stereo_atom() {
 fn test_mol_stereo_bond() {
     let molecule: Molecule = mol! {
         (c1: C) -[db: "2"]- (c2: C), (f: F), (cl: Cl), (br: Br), (i: I),
+        (c1) - (f), (c1) - (cl), (c2) - (br), (c2) - (i),
         stereo bond (db) [(f) (cl) (br) (i)] : "Ct1",
     };
 

@@ -89,6 +89,13 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
             (AtomId(3), AtomId(4), BondForm::from_order(4)),
             (AtomId(4), AtomId(5), BondForm::from_order(5)),
             (AtomId(0), AtomId(5), BondForm::from_order(6)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            (AtomId(2), AtomId(5), BondForm::from_order(1)),
         ],
         dative: vec![
             (
@@ -184,17 +191,17 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
         stereo_bonds: vec![
             (
                 BondId(0),
-                ligands([5, 2, 0, 1]),
+                ligands([5, 2, 4, 3]),
                 StereoBondForm::new(StereoKind::CisTrans, 0u32),
             ),
             (
                 BondId(1),
-                ligands([0, 3, 1, 2]),
+                ligands([0, 4, 3, 5]),
                 StereoBondForm::new(StereoKind::CisTrans, 1u32),
             ),
             (
                 BondId(2),
-                ligands([1, 4, 2, 3]),
+                ligands([1, 5, 4, 0]),
                 StereoBondForm::new(StereoKind::CisTrans, 0u32),
             ),
         ],

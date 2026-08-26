@@ -3832,17 +3832,17 @@ mod tests {
                     StereoLigand::new(second, StereoLigandKind::Atom),
                     StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(first, StereoLigandKind::LonePair),
-                    StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             );
             editor.add_stereo_bond(
                 bond,
                 vec![
-                    StereoLigand::new(first, StereoLigandKind::Atom),
                     StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(second, StereoLigandKind::Atom),
+                    StereoLigand::new(first, StereoLigandKind::LonePair),
                     StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(second, StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             );
@@ -3982,7 +3982,7 @@ mod tests {
                                     StereoLigandKind::LonePair,
                                 ),
                                 (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
+                                    AtomHandle::Id(AtomId(index * 2)),
                                     StereoLigandKind::ImplicitHydrogen,
                                 ),
                             ],
@@ -4004,18 +4004,21 @@ mod tests {
                             )),
                             BondHandle::Id(BondId(index)),
                             vec![
-                                (AtomHandle::Id(AtomId(index * 2)), StereoLigandKind::Atom),
                                 (
                                     AtomHandle::Id(AtomId(index * 2)),
                                     StereoLigandKind::ImplicitHydrogen,
                                 ),
                                 (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::Atom,
+                                    AtomHandle::Id(AtomId(index * 2)),
+                                    StereoLigandKind::LonePair,
                                 ),
                                 (
                                     AtomHandle::Id(AtomId(index * 2 + 1)),
                                     StereoLigandKind::ImplicitHydrogen,
+                                ),
+                                (
+                                    AtomHandle::Id(AtomId(index * 2 + 1)),
+                                    StereoLigandKind::LonePair,
                                 ),
                             ],
                             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
@@ -4131,7 +4134,7 @@ mod tests {
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
-                                AtomHandle::Id(AtomId(1)),
+                                AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                         ],
@@ -4148,7 +4151,7 @@ mod tests {
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
-                                AtomHandle::Id(AtomId(1)),
+                                AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                         ],
@@ -4162,16 +4165,16 @@ mod tests {
                         StereoBondHandle::Id(StereoBondId(0)),
                         BondHandle::Id(BondId(0)),
                         vec![
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                             (
                                 AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
                                 AtomHandle::Id(AtomId(1)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
                         ],
                         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                     ),
@@ -4179,16 +4182,16 @@ mod tests {
                         StereoBondHandle::Id(StereoBondId(0)),
                         BondHandle::Id(BondId(0)),
                         vec![
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                             (
                                 AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
                                 AtomHandle::Id(AtomId(1)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
                         ],
                         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                     ),

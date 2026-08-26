@@ -385,7 +385,7 @@ selecting again from the resulting frame returns the identity action.
 
 **Dependencies:** [dep: S0c]
 
-#### S1b — Enforce stereo-site incidence integrity
+#### S1b — Enforce stereo-site incidence integrity **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule/integrity.rs`, its public error type, and construction
 tests.

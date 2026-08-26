@@ -383,6 +383,9 @@ mod tests {
         let cl = builder.atom(Element::Cl);
         let br = builder.atom(Element::Br);
         let i = builder.atom(Element::I);
+        for ligand in [f, cl, br, i] {
+            builder.single(c, ligand);
+        }
         let stereo = builder.stereo_atom(
             c,
             [
@@ -416,6 +419,8 @@ mod tests {
         let f = builder.atom(Element::F);
         let h = builder.atom(Element::H);
         let bond = builder.double(c1, c2);
+        builder.single(c1, f);
+        builder.single(c2, h);
         let stereo = builder.stereo_bond(
             bond,
             [

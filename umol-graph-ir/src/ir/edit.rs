@@ -3124,6 +3124,9 @@ mod tests {
         let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 5],
+            bonds: (1..=4)
+                .map(|index| (AtomId(0), AtomId(index), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 (1..=4)
@@ -3207,7 +3210,13 @@ mod tests {
         let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(); 6],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
             stereo_bonds: vec![(
                 BondId(0),
                 (2..=5)

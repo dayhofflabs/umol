@@ -1405,8 +1405,8 @@ mod tests {
         })],
     )]
     #[case::stereo_atom(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds []}"#,
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
         vec![(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)],
         vec![GraphIrDelta::StereoAtom(GraphIrStereoAtomDelta::Add {
             id: GraphIrStereoAtomId(0),

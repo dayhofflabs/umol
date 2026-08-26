@@ -356,9 +356,15 @@ proptest! {
             AtomForm::from_element(Element::O),
             AtomForm::from_element(Element::F),
         ];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+        ];
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
+                bonds: bonds.clone(),
                 stereo_atoms: vec![(AtomId(0), ligands.clone(), pattern_atom.clone())],
                 ..Default::default()
             }),
@@ -366,11 +372,13 @@ proptest! {
         );
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
+            bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), ligands.clone(), host_atom)],
             ..Default::default()
         });
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms,
+            bonds,
             stereo_atoms: vec![(AtomId(0), ligands, expected_atom)],
             ..Default::default()
         });
@@ -397,10 +405,10 @@ proptest! {
         update in stereo_bond_application_update_strategy(),
     ) {
         let ligands = vec![
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
         ];
         let pattern_bond = StereoBondForm::new(
             StereoKind::CisTrans,
@@ -418,7 +426,11 @@ proptest! {
             AtomForm::from_element(Element::O),
             AtomForm::from_element(Element::F),
         ];
-        let bonds = vec![(AtomId(0), AtomId(1), BondForm::from_order(2))];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+        ];
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),

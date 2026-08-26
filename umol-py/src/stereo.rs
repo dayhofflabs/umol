@@ -3256,6 +3256,15 @@ mod tests {
     fn stereo_atom_molecule(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 5],
+            bonds: (1..5)
+                .map(|ligand| {
+                    (
+                        GraphIrAtomId(0),
+                        GraphIrAtomId(ligand),
+                        GraphIrBondForm::from_order(1),
+                    )
+                })
+                .collect(),
             stereo_atoms: vec![(
                 GraphIrAtomId(0),
                 vec![

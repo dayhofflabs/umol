@@ -554,16 +554,16 @@ mod tests {
                 ),
             ];
             let stereo_bond_ligands = vec![
-                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom),
-                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(
                     GraphIrAtomId(0),
                     GraphIrStereoLigandKind::ImplicitHydrogen,
                 ),
+                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::LonePair),
                 GraphIrStereoLigand::new(
                     GraphIrAtomId(1),
                     GraphIrStereoLigandKind::ImplicitHydrogen,
                 ),
+                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::LonePair),
             ];
             let unchanged_constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });

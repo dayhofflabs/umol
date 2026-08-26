@@ -564,8 +564,8 @@ mod tests {
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
@@ -714,11 +714,11 @@ mod tests {
                 ),
                 (EdgeId(21), Incidence::StereoSite),
                 (EdgeId(22), Incidence::StereoLigand(StereoLigandKind::Atom),),
-                (EdgeId(23), Incidence::StereoLigand(StereoLigandKind::Atom),),
                 (
-                    EdgeId(24),
+                    EdgeId(23),
                     Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
                 ),
+                (EdgeId(24), Incidence::StereoLigand(StereoLigandKind::Atom),),
                 (
                     EdgeId(25),
                     Incidence::StereoLigand(StereoLigandKind::LonePair),
@@ -772,6 +772,10 @@ mod tests {
                 AtomForm::from_element(Element::F),
                 AtomForm::from_element(Element::Cl),
             ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            ],
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -785,21 +789,25 @@ mod tests {
             ..Default::default()
         }),
         vec![
-            ([NodeId(0), NodeId(3)], Incidence::StereoSite),
+            ([NodeId(0), NodeId(3)], Incidence::BondEndpoint),
+            ([NodeId(1), NodeId(3)], Incidence::BondEndpoint),
+            ([NodeId(0), NodeId(4)], Incidence::BondEndpoint),
+            ([NodeId(2), NodeId(4)], Incidence::BondEndpoint),
+            ([NodeId(0), NodeId(5)], Incidence::StereoSite),
             (
-                [NodeId(1), NodeId(3)],
+                [NodeId(1), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::Atom),
             ),
             (
-                [NodeId(2), NodeId(3)],
+                [NodeId(2), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::Atom),
             ),
             (
-                [NodeId(0), NodeId(3)],
+                [NodeId(0), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
             ),
             (
-                [NodeId(0), NodeId(3)],
+                [NodeId(0), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
             ),
         ],

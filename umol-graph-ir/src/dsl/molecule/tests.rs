@@ -29,7 +29,7 @@ fn populated_molecule_dsl() -> MoleculeDsl {
         :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
         :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
         :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-        :stereo-bonds [{:id :sb :site 0 :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
+        :stereo-bonds [{:id :sb :site 0 :ligands [2 3 [:h 1] [:lp 1]] :attrs "Ct1"}]
         :atom-aliases [:x "O"]
     }"#
     .parse()

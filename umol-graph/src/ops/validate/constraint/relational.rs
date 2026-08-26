@@ -533,8 +533,8 @@ mod tests {
                 :aromatic-systems [{:atoms [0 1 2] :attrs "[1,1,1]"}]
                 :multicenter-bonds [{:atoms [0 2 6] :attrs "[1,1,0]"}]
                 :noncovalent-bonds [{:atoms [1 4] :attrs "Hbd"}]
-                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-                :stereo-bonds [{:site 3 :ligands [0 5 6 7] :attrs "Ct1"}]}"#
+                :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:lp 0]] :attrs "Th1"}]
+                :stereo-bonds [{:site 0 :ligands [2 [:h 0] [:h 1] [:lp 1]] :attrs "Ct1"}]}"#
         )
     }
 
@@ -632,11 +632,11 @@ mod tests {
     })]
     #[case::stereo_atom_contains(RelationalConstraint::StereoAtomContains {
         stereo_atom: StereoAtomId(0),
-        atom: AtomId(3),
+        atom: AtomId(2),
     })]
     #[case::stereo_atom_ligands(RelationalConstraint::StereoAtomLigands {
         stereo_atom: StereoAtomId(0),
-        atoms: vec![AtomId(4), AtomId(3), AtomId(2), AtomId(1)],
+        atoms: vec![AtomId(2), AtomId(1)],
     })]
     #[case::stereo_atom_all(RelationalConstraint::StereoAtomAllLigands {
         stereo_atom: StereoAtomId(0),
@@ -644,19 +644,19 @@ mod tests {
     })]
     #[case::stereo_atom_any(RelationalConstraint::StereoAtomAnyLigand {
         stereo_atom: StereoAtomId(0),
-        predicate: Box::new(AtomConstraintForm::degree(1)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::stereo_bond_site(RelationalConstraint::StereoBondSite {
         stereo_bond: StereoBondId(0),
-        bond: BondId(3),
+        bond: BondId(0),
     })]
     #[case::stereo_bond_contains(RelationalConstraint::StereoBondContains {
         stereo_bond: StereoBondId(0),
-        atom: AtomId(5),
+        atom: AtomId(2),
     })]
     #[case::stereo_bond_ligands(RelationalConstraint::StereoBondLigands {
         stereo_bond: StereoBondId(0),
-        atoms: vec![AtomId(7), AtomId(6), AtomId(5), AtomId(0)],
+        atoms: vec![AtomId(2)],
     })]
     #[case::stereo_bond_all(RelationalConstraint::StereoBondAllLigands {
         stereo_bond: StereoBondId(0),
@@ -664,7 +664,7 @@ mod tests {
     })]
     #[case::stereo_bond_any(RelationalConstraint::StereoBondAnyLigand {
         stereo_bond: StereoBondId(0),
-        predicate: Box::new(AtomConstraintForm::degree(0)),
+        predicate: Box::new(AtomConstraintForm::degree(2)),
     })]
     #[case::vacuous_predicate(RelationalConstraint::DativeBondAllDonors {
         bond: DativeBondId(0),
@@ -757,11 +757,11 @@ mod tests {
     })]
     #[case::bond_site(RelationalConstraint::StereoBondSite {
         stereo_bond: StereoBondId(0),
-        bond: BondId(0),
+        bond: BondId(3),
     })]
     #[case::atom_ligands(RelationalConstraint::StereoAtomLigands {
         stereo_atom: StereoAtomId(0),
-        atoms: vec![AtomId(1), AtomId(2)],
+        atoms: vec![AtomId(1)],
     })]
     #[case::bond_ligands(RelationalConstraint::StereoBondLigands {
         stereo_bond: StereoBondId(0),

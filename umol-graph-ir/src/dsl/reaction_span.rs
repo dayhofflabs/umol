@@ -1703,7 +1703,7 @@ mod tests {
             :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
             :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
             :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-            :stereo-bonds [{:id :sb :site :b :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
+            :stereo-bonds [{:id :sb :site :b :ligands [2 3 [:h 1] [:lp 1]] :attrs "Ct1"}]
             :atom-aliases [:x "O"]
         }"#
         .parse()
@@ -2280,7 +2280,7 @@ mod tests {
         "n"
     )]
     #[case::stereo_atom(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
         Entity::StereoAtom(StereoAtomId(0)),
         "s",
     )]

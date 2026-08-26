@@ -25,7 +25,9 @@ const CONSTITUTION: &str = r#"{
 
 const STEREO: &str = r#"{
     :atoms ["C" "F" "Cl" "Br" "I" "C" "C"]
-    :bonds [[5 6 :double]]
+    :bonds [[5 6 :double]
+            [0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]
+            [5 1 :single] [5 2 :single] [6 3 :single] [6 4 :single]]
     :stereo-atoms [{:modify {:site 0 :ligands [1 2 3 4] :attrs ["Th0" "Th1"]}}]
     :stereo-bonds [{:site 0 :ligands [1 2 3 4] :attrs "Ct1"}]
 }"#;
@@ -42,7 +44,7 @@ fn context() -> CanonicalizeContext {
 #[rstest]
 #[case::lifecycle(LIFECYCLE, r#"{:atoms ["Cl" {:remove "F"} {:modify ["C" "N"]} {:add "O"}] :bonds [{:remove [0 1 :single]} {:modify [0 2 [:single :double]]} {:add [2 3 :double]}]}"#)]
 #[case::constitution(CONSTITUTION, r#"{:aromatic-systems [{:atoms [4 5 6] :attrs "*#e3"}] :atoms ["H" "B" "B" "C" "C" "C" "C" "N"] :dative-bonds [{:acceptor 7 :attrs "1#R" :donors [3]}] :multicenter-bonds [{:modify {:atoms [0 1 2] :attrs ["*#e2" "*#e4"]}}] :noncovalent-bonds [{:add {:atoms [1 3] :attrs "Hbd"}}]}"#)]
-#[case::stereo(STEREO, r#"{:atoms ["C" "C" "C" "F" "Cl" "Br" "I"] :bonds [[0 1 :double]] :stereo-atoms [{:modify {:attrs [:ccw :cw] :ligands [3 4 5 6] :site 2}}] :stereo-bonds [{:attrs :e :ligands [3 4 5 6] :site 0}]}"#)]
+#[case::stereo(STEREO, r#"{:atoms ["C" "C" "C" "F" "Cl" "Br" "I"] :bonds [[0 3 :single] [1 3 :single] [0 4 :single] [1 4 :single] [0 5 :single] [2 5 :single] [0 6 :single] [2 6 :single] [1 2 :double]] :stereo-atoms [{:modify {:attrs [:ccw :cw] :ligands [3 4 5 6] :site 0}}] :stereo-bonds [{:attrs :e :ligands [3 4 5 6] :site 8}]}"#)]
 #[case::constraint(CONSTRAINT, r#"{:atoms ["C"] :constraints [{:add {:connected {}}}]}"#)]
 fn test_reaction_span_canonicalize(#[case] input: &str, #[case] expected: &str) {
     let span = input.parse::<ReactionSpan>().unwrap();

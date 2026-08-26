@@ -355,6 +355,9 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
             Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 5],
+                    bonds: (1..=4)
+                        .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                        .collect(),
                     stereo_atoms: vec![(
                         AtomId(0),
                         (1..=4)
@@ -382,7 +385,13 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
             Reaction::new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 6],
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                    bonds: vec![
+                        (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                        (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                        (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                        (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                        (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                    ],
                     stereo_bonds: vec![(
                         BondId(0),
                         (2..=5)
@@ -417,6 +426,9 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
         Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); kind.degree() + 1],
+                bonds: (1..=kind.degree() as u32)
+                    .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                    .collect(),
                 stereo_atoms: vec![(AtomId(0), ligands, StereoAtomForm::new(kind, 0u32))],
                 ..Default::default()
             }),
@@ -434,7 +446,13 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
         Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 6],
-                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                ],
                 stereo_bonds: vec![(
                     BondId(0),
                     (2..=5)

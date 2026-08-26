@@ -1427,7 +1427,8 @@ impl Reaction {
                 | MoleculeIntegrityError::AromaticSystemsOverlap { .. }
                 | MoleculeIntegrityError::MulticenterBondsIdentical { .. }
                 | MoleculeIntegrityError::StereoAtomSitesDuplicate { .. }
-                | MoleculeIntegrityError::StereoBondSitesDuplicate { .. },
+                | MoleculeIntegrityError::StereoBondSitesDuplicate { .. }
+                | MoleculeIntegrityError::StereoLigandIncidenceMismatch { .. },
             ) => {
                 return Err(ApplyError::StructuralConflict);
             }
@@ -2202,6 +2203,9 @@ mod tests {
     fn test_reaction_apply_at_stereo_atom_error(#[case] delta: Delta) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -2216,6 +2220,9 @@ mod tests {
         });
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: [1, 2, 3, 5]
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .into(),
             stereo_atoms: vec![(
                 AtomId(0),
                 vec![
@@ -2231,7 +2238,7 @@ mod tests {
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::new((0..6u32).map(|id| (AtomId(id), AtomId(id))).collect(), 6, 6)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-            Correspondence::new(vec![], 0, 0)
+            Correspondence::new((0..3u32).map(|id| (BondId(id), BondId(id))).collect(), 4, 4)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -2278,7 +2285,13 @@ mod tests {
     fn test_reaction_apply_at_stereo_bond_error(#[case] delta: Delta) {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            ],
             stereo_bonds: vec![(
                 BondId(0),
                 vec![
@@ -2293,7 +2306,13 @@ mod tests {
         });
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 7],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(6), BondForm::from_order(1)),
+            ],
             stereo_bonds: vec![(
                 BondId(0),
                 vec![
@@ -2309,7 +2328,7 @@ mod tests {
         let correspondence = MoleculeCorrespondence::new(
             Correspondence::new((0..7u32).map(|id| (AtomId(id), AtomId(id))).collect(), 7, 7)
                 .expect("correspondence producer preserves partial-bijection invariants"),
-            Correspondence::new(vec![(BondId(0), BondId(0))], 1, 1)
+            Correspondence::new((0..4u32).map(|id| (BondId(id), BondId(id))).collect(), 5, 5)
                 .expect("correspondence producer preserves partial-bijection invariants"),
             Correspondence::new(vec![], 0, 0)
                 .expect("correspondence producer preserves partial-bijection invariants"),
@@ -2459,7 +2478,7 @@ mod tests {
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                     ],
                     attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 }),
@@ -2467,10 +2486,10 @@ mod tests {
                     id: StereoBondId(0),
                     site: BondId(0),
                     ligands: vec![
-                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                     ],
                     attributes: StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                 }),
@@ -2766,6 +2785,9 @@ mod tests {
                 AtomForm::from_element(Element::Br),
                 AtomForm::from_element(Element::I),
             ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
             stereo_atoms: vec![(
                 AtomId(0),
                 stored_ligands.clone(),
@@ -3067,10 +3089,10 @@ mod tests {
                     id: StereoBondId(0),
                     site: BondId(0),
                     ligands: vec![
-                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                     ],
                     attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
                 }),
@@ -3090,10 +3112,10 @@ mod tests {
             stereo_bonds: vec![(
                 BondId(0),
                 vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, coset),
             )],
@@ -3124,6 +3146,11 @@ mod tests {
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::F),
                 AtomForm::from_element(Element::Cl),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![
                 (

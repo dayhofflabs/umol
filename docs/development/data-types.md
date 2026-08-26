@@ -62,6 +62,13 @@ participants, repeated actual-atom stereo ligands, and a stereo-atom site reused
 ligand. Stereo virtual ligands anchored at the same atom are ligand occurrences rather than repeated
 atom participants and remain valid.
 
+Stereo ligand frames also carry site-relative incidence. An actual ligand of a stereo atom must be
+a covalent graph neighbor of the site, while an implicit hydrogen or lone pair is borne by the site
+itself. A stereo-bond frame consists of two consecutive two-ligand endpoint blocks. Each block's
+actual ligands must be adjacent to its endpoint and cannot be the opposite site endpoint; its
+virtual ligands must be borne by that endpoint. Exchanging the two complete endpoint blocks is
+valid, but moving one ligand across the endpoint boundary is not.
+
 The same contract supplies the cross-entity uniqueness needed to interpret each relation family:
 localized bonds have unique unordered endpoint pairs; dative `(acceptor, donor)` incidences are
 unique; aromatic systems are atom-disjoint; multicenter participant sets are unique; noncovalent

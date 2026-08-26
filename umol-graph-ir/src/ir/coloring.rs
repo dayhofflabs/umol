@@ -283,6 +283,10 @@ mod tests {
                 (AtomId(1), AtomId(2), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
                 (AtomId(3), AtomId(4), BondForm::from_order(1)),
+                (AtomId(1), AtomId(3), BondForm::from_order(1)),
+                (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                (AtomId(3), AtomId(0), BondForm::from_order(1)),
+                (AtomId(3), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![
                 (
@@ -310,9 +314,9 @@ mod tests {
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             )],

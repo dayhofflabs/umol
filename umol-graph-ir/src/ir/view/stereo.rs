@@ -907,6 +907,12 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(2)),
                 (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(5), BondForm::from_order(1)),
+                (AtomId(3), AtomId(1), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -940,6 +946,9 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(2)),
                 (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(1)),
+                (AtomId(3), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
