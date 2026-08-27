@@ -1164,7 +1164,7 @@ representative rather than a unique reordering.
 
 **Dependencies:** [dep: S3a, S3b, S3d]
 
-#### S3f — Require a stereo kind admissible for its site type
+#### S3f — Require a stereo kind admissible for its site type **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule/integrity.rs`, its public error type, and construction
 tests.
@@ -1192,6 +1192,17 @@ This rule is a property of a single molecule, so it propagates without further c
 **Tests and evidence:** Cover every kind on both site types, asserting the exact error variant for
 each inadmissible pairing and success for each admissible one. Include a degree-4 inadmissible case
 so the new check is shown to catch what the arity check cannot. Retain all existing integrity cases.
+
+The check runs before the arity check, so an inadmissible pairing reports the site mismatch rather
+than a ligand count, and the site/kind table is matched exhaustively: a new stereo kind must decide
+its site in `integrity.rs` or fail to compile.
+
+One canonicalization fixture had to change. `para_stereo_canonicalization_molecule` gave its eight
+outer stereo atoms a cycle of four distinct kinds — `Tetrahedral`, `CisTrans`, `Axial`,
+`SquarePlanar` — using the kind purely as a label to make the sites distinguishable during partition
+refinement. Only three kinds are admissible on an atom at degree 4, so the fourth descriptor is now
+a second `Tetrahedral` coset instead. The sites stay pairwise distinguishable and
+`test_structure_partition`'s round counts are unchanged.
 
 **Change class:** strengthened representation-integrity contract (green).
 

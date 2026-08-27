@@ -525,6 +525,10 @@ fn repeated_ligand_canonicalization_molecule() -> Molecule {
     })
 }
 
+/// Eight outer stereo atoms in two mirrored groups of four, each site bearing a distinct stereo
+/// descriptor so partition refinement can separate them. Only three stereo kinds are admissible on
+/// an atom at degree 4, so the fourth descriptor is a second `Tetrahedral` coset rather than a
+/// fourth kind.
 #[fixture]
 fn para_stereo_canonicalization_molecule() -> Molecule {
     let outer_ligands = vec![
@@ -584,7 +588,7 @@ fn para_stereo_canonicalization_molecule() -> Molecule {
             (
                 AtomId(3),
                 outer_ligands.clone(),
-                StereoAtomForm::new(StereoKind::CisTrans, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
             ),
             (
                 AtomId(4),
@@ -604,7 +608,7 @@ fn para_stereo_canonicalization_molecule() -> Molecule {
             (
                 AtomId(7),
                 outer_ligands.clone(),
-                StereoAtomForm::new(StereoKind::CisTrans, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
             ),
             (
                 AtomId(8),

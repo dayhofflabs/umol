@@ -941,10 +941,62 @@ fn test_molecule_try_from_entries_stereo_bond(
 }
 
 #[rstest]
-#[case::axial_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::Axial)]
-#[case::cis_trans_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::CisTrans)]
-#[case::tetrahedral_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Tetrahedral)]
-fn test_molecule_try_from_entries_stereo_kind(
+#[case::tetrahedral_atom(StereoKind::Tetrahedral, 4)]
+#[case::square_planar_atom(StereoKind::SquarePlanar, 4)]
+#[case::axial_atom(StereoKind::Axial, 4)]
+#[case::trigonal_bipyramidal_atom(StereoKind::TrigonalBipyramidal, 5)]
+#[case::octahedral_atom(StereoKind::Octahedral, 6)]
+fn test_molecule_try_from_entries_stereo_atom_kind(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] kind: StereoKind,
+    #[case] degree: usize,
+) {
+    let mut ligands = vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+    ];
+    ligands.resize(
+        degree,
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    );
+    entries.stereo_atoms[0].1 = ligands;
+    entries.stereo_atoms[0].2.configuration =
+        StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0));
+
+    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
+
+    assert_eq!(molecule.stereo_atom(StereoAtomId(0)).kind(), kind);
+}
+
+#[rstest]
+#[case::cis_trans_bond(StereoKind::CisTrans)]
+#[case::axial_bond(StereoKind::Axial)]
+fn test_molecule_try_from_entries_stereo_bond_kind(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] kind: StereoKind,
+) {
+    entries.stereo_bonds[0].2.configuration =
+        StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0));
+
+    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
+
+    assert_eq!(molecule.stereo_bond(StereoBondId(0)).kind(), kind);
+}
+
+/// A stereo kind names a coordination geometry, and a geometry belongs to an atom or to a bond.
+/// Arity cannot separate them: every kind below shares degree 4 with the fixture's frame, so the
+/// arity check passes and only the site-kind rule rejects the pairing.
+#[rstest]
+#[case::cis_trans_on_atom(Entity::StereoAtom(StereoAtomId(0)), StereoKind::CisTrans)]
+#[case::tetrahedral_on_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Tetrahedral)]
+#[case::square_planar_on_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::SquarePlanar)]
+#[case::trigonal_bipyramidal_on_bond(
+    Entity::StereoBond(StereoBondId(0)),
+    StereoKind::TrigonalBipyramidal
+)]
+#[case::octahedral_on_bond(Entity::StereoBond(StereoBondId(0)), StereoKind::Octahedral)]
+fn test_molecule_try_from_entries_stereo_kind_error(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] entity: Entity,
     #[case] kind: StereoKind,
@@ -961,14 +1013,10 @@ fn test_molecule_try_from_entries_stereo_kind(
         _ => unreachable!("test cases contain only stereo entities"),
     }
 
-    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
-    let actual = match entity {
-        Entity::StereoAtom(id) => molecule.stereo_atom(id).kind(),
-        Entity::StereoBond(id) => molecule.stereo_bond(id).kind(),
-        _ => unreachable!("test cases contain only stereo entities"),
-    };
-
-    assert_eq!(actual, kind);
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind }),
+    );
 }
 
 #[rstest]

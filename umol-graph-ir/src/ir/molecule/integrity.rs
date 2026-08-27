@@ -59,6 +59,8 @@ pub enum MoleculeIntegrityError {
     StereoBondSitesDuplicate { bond: BondId },
     #[error("{entity}: ligand frame does not match stereo-site incidence")]
     StereoLigandIncidenceMismatch { entity: Entity },
+    #[error("{entity}: stereo kind {kind:?} is not admissible for this site type")]
+    StereoKindSiteMismatch { entity: Entity, kind: StereoKind },
     #[error("{entity}: stereo frame has {actual} ligands, expected {expected} for {kind:?}")]
     StereoLigandArity {
         entity: Entity,
@@ -373,6 +375,7 @@ fn check_stereo_atom(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_site_kind(entity, &attributes.configuration, StereoSite::Atom)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_atom_constraint(entity, ligand_count, constraint)?;
@@ -385,6 +388,7 @@ fn check_stereo_bond(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_site_kind(entity, &attributes.configuration, StereoSite::Bond)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_bond_constraint(entity, ligand_count, constraint)?;
@@ -417,6 +421,54 @@ fn check_molecule_constraint(
         }
         Constraint::Not(constraint) => check_molecule_constraint(molecule, constraint),
         _ => Ok(()),
+    }
+}
+
+/// Which site a stereo entry sits on. Local to the admissibility check; the entity id already
+/// carries the distinction everywhere else.
+#[derive(Clone, Copy)]
+enum StereoSite {
+    Atom,
+    Bond,
+}
+
+/// A stereo kind describes a coordination geometry, and a geometry belongs to an atom or to a bond.
+/// Arity cannot separate them: `Tetrahedral`, `CisTrans`, `Axial`, and `SquarePlanar` all have
+/// degree 4. `Axial` is admissible on both, since axial chirality arises at an allene's central
+/// atom and about an atropisomeric biaryl bond.
+///
+/// Matched exhaustively so that a new stereo kind must decide its site here.
+fn check_stereo_site_kind(
+    entity: Entity,
+    configuration: &StereoConfigurationForm,
+    site: StereoSite,
+) -> Result<(), MoleculeIntegrityError> {
+    let Some(kind) = configuration.kind() else {
+        return Ok(());
+    };
+    let admissible = match (site, kind) {
+        (
+            StereoSite::Atom,
+            StereoKind::Tetrahedral
+            | StereoKind::SquarePlanar
+            | StereoKind::TrigonalBipyramidal
+            | StereoKind::Octahedral
+            | StereoKind::Axial,
+        ) => true,
+        (StereoSite::Atom, StereoKind::CisTrans) => false,
+        (StereoSite::Bond, StereoKind::CisTrans | StereoKind::Axial) => true,
+        (
+            StereoSite::Bond,
+            StereoKind::Tetrahedral
+            | StereoKind::SquarePlanar
+            | StereoKind::TrigonalBipyramidal
+            | StereoKind::Octahedral,
+        ) => false,
+    };
+    if admissible {
+        Ok(())
+    } else {
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind })
     }
 }
 
