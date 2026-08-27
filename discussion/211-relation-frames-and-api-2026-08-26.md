@@ -1322,7 +1322,7 @@ from `iter_mut`, so `Molecule::modify_*` is unchanged. The relation property sui
 
 **Dependencies:** [dep: S2a]
 
-#### S4b — Return the relation compaction from `compact`
+#### S4b — Return the relation compaction from `compact` **Done**
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
 `umol-graph-ir/src/ir/molecule/editor.rs`.
@@ -1333,6 +1333,18 @@ Return `(Self, Compaction<RelationId>)` from all five shapes. Delete `fixed_rela
 **Tests and evidence:** Assert the surviving set and the returned compaction together, including a
 relation dropped because one participant was removed, a relation dropped because a second-factor
 participant was removed, and an empty compaction leaving ids unchanged.
+
+`RelationId` gained `Add<usize>` and `Sub<usize>`, which `Compaction<Id>` requires, on the
+`NodeId`/`EdgeId` precedent from S1a.
+
+Each `compact` body stopped short-circuiting through `filter_map` and `?`: that form discarded the
+drop instead of recording it. They now match on the mapped participants and push the relation id
+onto the removal list when any factor is gone.
+
+The editor's three `*Storage::compact` wrappers report the same way. Their `Shared` arm forwards
+what the relation set returns; their `Mutable` arm, which walks its own `Vec`, collects the ids
+itself. `MoleculeEditor::remove` then reads the six compactions its own calls return, which is what
+retires the separate traversal.
 
 **Change class:** breaking return-type change with caller migration (green within the stage).
 

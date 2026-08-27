@@ -12,8 +12,9 @@
 
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ops::{Add, Sub};
 
-use crate::compaction::GraphCompaction;
+use crate::compaction::{Compaction, GraphCompaction};
 use crate::correspondence::Correspondence;
 use crate::graph::{EdgeId, NodeId};
 use crate::remapping::Remapping;
@@ -30,6 +31,22 @@ impl RelationId {
 impl From<usize> for RelationId {
     fn from(index: usize) -> Self {
         Self(index as u32)
+    }
+}
+
+impl Add<usize> for RelationId {
+    type Output = Self;
+
+    fn add(self, offset: usize) -> Self {
+        Self(self.0 + offset as u32)
+    }
+}
+
+impl Sub<usize> for RelationId {
+    type Output = Self;
+
+    fn sub(self, offset: usize) -> Self {
+        Self(self.0 - offset as u32)
     }
 }
 
@@ -563,24 +580,31 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant, and
+    /// report which relation ids the drop consumed.
+    ///
+    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
+    /// carry them across the removal without a second traversal.
+    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: RelationData + Clone,
     {
-        let entries: Vec<([P; N], D)> = (0..self.count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let parts: Option<Vec<P>> = self
-                    .participants(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                let parts: [P; N] = parts?.try_into().ok()?;
-                Some((parts, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
+        let mut removed = Vec::new();
+        let mut entries: Vec<([P; N], D)> = Vec::with_capacity(self.count());
+        for i in 0..self.count() {
+            let rid = RelationId(i as u32);
+            let parts: Option<[P; N]> = self
+                .participants(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect::<Option<Vec<P>>>()
+                .and_then(|parts| parts.try_into().ok());
+            match parts {
+                Some(parts) => entries.push((parts, self.data(rid).clone())),
+                None => removed.push(rid),
+            }
+        }
+        (Self::new(entries), Compaction::new(removed))
     }
 
     /// Relabel every participant and transport positional data into canonical participant order.
@@ -901,23 +925,30 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant, and
+    /// report which relation ids the drop consumed.
+    ///
+    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
+    /// carry them across the removal without a second traversal.
+    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: RelationData + Clone,
     {
-        let entries: Vec<(Vec<P>, D)> = (0..self.count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let parts: Option<Vec<P>> = self
-                    .participants(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                Some((parts?, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
+        let mut removed = Vec::new();
+        let mut entries: Vec<(Vec<P>, D)> = Vec::with_capacity(self.count());
+        for i in 0..self.count() {
+            let rid = RelationId(i as u32);
+            let parts: Option<Vec<P>> = self
+                .participants(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect();
+            match parts {
+                Some(parts) => entries.push((parts, self.data(rid).clone())),
+                None => removed.push(rid),
+            }
+        }
+        (Self::new(entries), Compaction::new(removed))
     }
 
     /// Relabel every participant and transport positional data into canonical participant order.
@@ -1267,30 +1298,37 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant, and
+    /// report which relation ids the drop consumed.
+    ///
+    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
+    /// carry them across the removal without a second traversal.
+    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> = self
-                    .participants_1(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                let f1: [L1; N1] = f1?.try_into().ok()?;
-                let f2: Option<Vec<L2>> = self
-                    .participants_2(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                let f2: [L2; N2] = f2?.try_into().ok()?;
-                Some((f1, f2, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
+        let mut removed = Vec::new();
+        let mut entries: Vec<([L1; N1], [L2; N2], D)> = Vec::with_capacity(self.count());
+        for i in 0..self.count() {
+            let rid = RelationId(i as u32);
+            let f1: Option<[L1; N1]> = self
+                .participants_1(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect::<Option<Vec<L1>>>()
+                .and_then(|parts| parts.try_into().ok());
+            let f2: Option<[L2; N2]> = self
+                .participants_2(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect::<Option<Vec<L2>>>()
+                .and_then(|parts| parts.try_into().ok());
+            match (f1, f2) {
+                (Some(f1), Some(f2)) => entries.push((f1, f2, self.data(rid).clone())),
+                _ => removed.push(rid),
+            }
+        }
+        (Self::new(entries), Compaction::new(removed))
     }
 
     /// Relabel every participant and transport positional data into canonical participant order.
@@ -1697,29 +1735,36 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant, and
+    /// report which relation ids the drop consumed.
+    ///
+    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
+    /// carry them across the removal without a second traversal.
+    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> = self
-                    .participants_1(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                let f1: [L1; N1] = f1?.try_into().ok()?;
-                let f2: Option<Vec<L2>> = self
-                    .participants_2(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                Some((f1, f2?, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
+        let mut removed = Vec::new();
+        let mut entries: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(self.count());
+        for i in 0..self.count() {
+            let rid = RelationId(i as u32);
+            let f1: Option<[L1; N1]> = self
+                .participants_1(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect::<Option<Vec<L1>>>()
+                .and_then(|parts| parts.try_into().ok());
+            let f2: Option<Vec<L2>> = self
+                .participants_2(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect();
+            match (f1, f2) {
+                (Some(f1), Some(f2)) => entries.push((f1, f2, self.data(rid).clone())),
+                _ => removed.push(rid),
+            }
+        }
+        (Self::new(entries), Compaction::new(removed))
     }
 
     /// Relabel every participant and transport positional data into canonical participant order.
@@ -2133,28 +2178,35 @@ where
         (0..self.data.len() as u32).map(RelationId)
     }
 
-    /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self
+    /// Compact participant ids, dropping every relation that contains a removed participant, and
+    /// report which relation ids the drop consumed.
+    ///
+    /// The returned compaction moves this set's own ids, so a caller holding relation ids can
+    /// carry them across the removal without a second traversal.
+    pub fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>)
     where
         D: BiRelationData + Clone,
     {
-        let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> = self
-                    .participants_1(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                let f2: Option<Vec<L2>> = self
-                    .participants_2(rid)
-                    .iter()
-                    .map(|&p| p.compact(compaction))
-                    .collect();
-                Some((f1?, f2?, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
+        let mut removed = Vec::new();
+        let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = Vec::with_capacity(self.count());
+        for i in 0..self.count() {
+            let rid = RelationId(i as u32);
+            let f1: Option<Vec<L1>> = self
+                .participants_1(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect();
+            let f2: Option<Vec<L2>> = self
+                .participants_2(rid)
+                .iter()
+                .map(|&p| p.compact(compaction))
+                .collect();
+            match (f1, f2) {
+                (Some(f1), Some(f2)) => entries.push((f1, f2, self.data(rid).clone())),
+                _ => removed.push(rid),
+            }
+        }
+        (Self::new(entries), Compaction::new(removed))
     }
 
     /// Relabel every participant and transport positional data into canonical participant order.
@@ -2657,10 +2709,15 @@ mod tests {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
         let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let out = rs.compact(&compaction);
+        let (out, removed) = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+        assert_eq!(removed.removed(), &[RelationId(1)]);
+
+        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
+        assert_eq!(unchanged, rs);
+        assert_eq!(none_removed.removed(), &[]);
     }
 
     #[rstest]
@@ -2932,10 +2989,15 @@ mod tests {
             (vec![n(1), n(3)], "drop"),
         ]);
         let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let out = rs.compact(&compaction);
+        let (out, removed) = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+        assert_eq!(removed.removed(), &[RelationId(1)]);
+
+        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
+        assert_eq!(unchanged, rs);
+        assert_eq!(none_removed.removed(), &[]);
     }
 
     #[rstest]
@@ -3116,11 +3178,16 @@ mod tests {
                 ([n(1)], [n(5), n(6)], "drop"),
             ]);
         let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let out = rs.compact(&compaction);
+        let (out, removed) = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+        assert_eq!(removed.removed(), &[RelationId(1)]);
+
+        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
+        assert_eq!(unchanged, rs);
+        assert_eq!(none_removed.removed(), &[]);
     }
 
     #[rstest]
@@ -3407,11 +3474,16 @@ mod tests {
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
         let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let out = rs.compact(&compaction);
+        let (out, removed) = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+        assert_eq!(removed.removed(), &[RelationId(1)]);
+
+        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
+        assert_eq!(unchanged, rs);
+        assert_eq!(none_removed.removed(), &[]);
     }
 
     #[rstest]
@@ -3639,11 +3711,16 @@ mod tests {
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
         let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
-        let out = rs.compact(&compaction);
+        let (out, removed) = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
+        assert_eq!(removed.removed(), &[RelationId(1)]);
+
+        let (unchanged, none_removed) = rs.compact(&GraphCompaction::new(vec![], vec![]));
+        assert_eq!(unchanged, rs);
+        assert_eq!(none_removed.removed(), &[]);
     }
 
     #[rstest]

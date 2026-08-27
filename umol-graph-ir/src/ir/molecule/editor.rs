@@ -11,9 +11,9 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, BiRelationData, EdgeId, FactorOrdering, FixedRelationSet,
-    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered, ParticipantPosition,
-    RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
+    compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
+    FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered,
+    ParticipantPosition, RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
@@ -135,22 +135,35 @@ where
             .collect()
     }
 
-    fn compact(self, compaction: &GraphCompaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.compact(compaction)))
+                let (compacted, removed) = arc.compact(compaction);
+                (FixedSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedSetStorage::Mutable(vec) => {
-                let compacted: Vec<([P; N], D)> = vec
-                    .into_iter()
-                    .filter_map(|(mut participants, d)| {
-                        for participant in &mut participants {
-                            *participant = (*participant).compact(compaction)?;
-                        }
-                        Some((participants, d))
-                    })
-                    .collect();
-                FixedSetStorage::Mutable(compacted)
+                let mut removed = Vec::new();
+                let mut compacted: Vec<([P; N], D)> = Vec::with_capacity(vec.len());
+                for (index, (mut participants, d)) in vec.into_iter().enumerate() {
+                    let survives = participants
+                        .iter_mut()
+                        .all(|participant| match (*participant).compact(compaction) {
+                            Some(mapped) => {
+                                *participant = mapped;
+                                true
+                            }
+                            None => false,
+                        });
+                    if survives {
+                        compacted.push((participants, d));
+                    } else {
+                        removed.push(RelationId(index as u32));
+                    }
+                }
+                (
+                    FixedSetStorage::Mutable(compacted),
+                    Compaction::new(removed),
+                )
             }
         }
     }
@@ -275,21 +288,26 @@ where
             .collect()
     }
 
-    fn compact(self, compaction: &GraphCompaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
-            VarSetStorage::Shared(arc) => VarSetStorage::Shared(Arc::new(arc.compact(compaction))),
+            VarSetStorage::Shared(arc) => {
+                let (compacted, removed) = arc.compact(compaction);
+                (VarSetStorage::Shared(Arc::new(compacted)), removed)
+            }
             VarSetStorage::Mutable(vec) => {
-                let compacted: Vec<(Vec<P>, D)> = vec
-                    .into_iter()
-                    .filter_map(|(participants, d)| {
-                        let mapped: Option<Vec<P>> = participants
-                            .into_iter()
-                            .map(|p| p.compact(compaction))
-                            .collect();
-                        mapped.map(|p| (p, d))
-                    })
-                    .collect();
-                VarSetStorage::Mutable(compacted)
+                let mut removed = Vec::new();
+                let mut compacted: Vec<(Vec<P>, D)> = Vec::with_capacity(vec.len());
+                for (index, (participants, d)) in vec.into_iter().enumerate() {
+                    let mapped: Option<Vec<P>> = participants
+                        .into_iter()
+                        .map(|p| p.compact(compaction))
+                        .collect();
+                    match mapped {
+                        Some(participants) => compacted.push((participants, d)),
+                        None => removed.push(RelationId(index as u32)),
+                    }
+                }
+                (VarSetStorage::Mutable(compacted), Compaction::new(removed))
             }
         }
     }
@@ -438,26 +456,41 @@ where
         Some((sigma_1, sigma_2))
     }
 
-    fn compact(self, compaction: &GraphCompaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.compact(compaction)))
+                let (compacted, removed) = arc.compact(compaction);
+                (FixedVarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedVarSetStorage::Mutable(vec) => {
-                let compacted: Vec<([L1; N1], Vec<L2>, D)> = vec
-                    .into_iter()
-                    .filter_map(|(mut participants_1, participants_2, d)| {
-                        for participant in &mut participants_1 {
-                            *participant = (*participant).compact(compaction)?;
+                let mut removed = Vec::new();
+                let mut compacted: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(vec.len());
+                for (index, (mut participants_1, participants_2, d)) in vec.into_iter().enumerate()
+                {
+                    let f1 = participants_1.iter_mut().all(|participant| {
+                        match (*participant).compact(compaction) {
+                            Some(mapped) => {
+                                *participant = mapped;
+                                true
+                            }
+                            None => false,
                         }
-                        let participants_2: Option<Vec<L2>> = participants_2
-                            .into_iter()
-                            .map(|p| p.compact(compaction))
-                            .collect();
-                        Some((participants_1, participants_2?, d))
-                    })
-                    .collect();
-                FixedVarSetStorage::Mutable(compacted)
+                    });
+                    let f2: Option<Vec<L2>> = participants_2
+                        .into_iter()
+                        .map(|p| p.compact(compaction))
+                        .collect();
+                    match (f1, f2) {
+                        (true, Some(participants_2)) => {
+                            compacted.push((participants_1, participants_2, d))
+                        }
+                        _ => removed.push(RelationId(index as u32)),
+                    }
+                }
+                (
+                    FixedVarSetStorage::Mutable(compacted),
+                    Compaction::new(removed),
+                )
             }
         }
     }
@@ -511,36 +544,6 @@ where
         .collect()
 }
 
-/// Indices of birelations whose first or second factor maps to `None` under
-/// `compaction` (i.e. dropped by the structural removal).
-fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
-    storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    compaction: &GraphCompaction,
-) -> Vec<RelationId>
-where
-    L1: RelationParticipant,
-    O1: FactorOrdering,
-    L2: RelationParticipant,
-    O2: FactorOrdering,
-    D: BiRelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        let f1_gone = storage
-            .participants_1(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none());
-        let f2_gone = storage
-            .participants_2(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none());
-        if f1_gone || f2_gone {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
-}
-
 /// Un-map a surviving birelation's factors back to the pre-removal coordinate
 /// system during rollback.
 fn restore_birelation_participants<L1, const N1: usize, L2>(
@@ -560,50 +563,6 @@ where
             .map(|p| p.uncompact(graph))
             .collect(),
     )
-}
-
-fn fixed_relation_removed<P, O, D, const N: usize>(
-    storage: &FixedSetStorage<P, O, D, N>,
-    compaction: &GraphCompaction,
-) -> Vec<RelationId>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        if storage
-            .participants(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none())
-        {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
-}
-
-fn var_relation_removed<P, O, D>(
-    storage: &VarSetStorage<P, O, D>,
-    compaction: &GraphCompaction,
-) -> Vec<RelationId>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        if storage
-            .participants(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none())
-        {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
 }
 
 fn restore_var_participants<P: RelationParticipant>(
@@ -1263,74 +1222,83 @@ impl MoleculeEditor {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let removed_dative = birelation_removed(&self.dative_bonds, &compaction);
-        let removed_aromatic = var_relation_removed(&self.aromatic_systems, &compaction);
-        let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &compaction);
-        let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &compaction);
-        let removed_stereo_atoms = birelation_removed(&self.stereo_atoms, &compaction);
-        let removed_stereo_bonds = birelation_removed(&self.stereo_bonds, &compaction);
-
+        // Each family reports the relation ids its own compaction consumed, so the drop is
+        // discovered once rather than traversed separately. A stereo element whose site or any
+        // ligand atom or bond was removed drops out the same way (cascade), and the reported ids
+        // feed `MoleculeCompaction` so rollback (`restore_topology`) can reinsert them.
         let dative = mem::replace(
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.compact(&compaction);
+        let (dative, removed_dative) = dative.compact(&compaction);
+        self.dative_bonds = dative;
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.compact(&compaction);
+        let (aromatic, removed_aromatic) = aromatic.compact(&compaction);
+        self.aromatic_systems = aromatic;
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.compact(&compaction);
+        let (multicenter, removed_multicenter) = multicenter.compact(&compaction);
+        self.multicenter_bonds = multicenter;
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.compact(&compaction);
+        let (noncovalent, removed_noncovalent) = noncovalent.compact(&compaction);
+        self.noncovalent_bonds = noncovalent;
 
-        // Forward-compact stereo overlays: a stereo element whose site or any
-        // ligand atom/bond was removed drops out (cascade). The dropped ids
-        // (computed above) feed `MoleculeCompaction` so rollback (`restore_topology`)
-        // can reinsert them.
         let stereo_atoms = mem::replace(
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.compact(&compaction);
+        let (stereo_atoms, removed_stereo_atoms) = stereo_atoms.compact(&compaction);
+        self.stereo_atoms = stereo_atoms;
+
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.compact(&compaction);
+        let (stereo_bonds, removed_stereo_bonds) = stereo_bonds.compact(&compaction);
+        self.stereo_bonds = stereo_bonds;
 
         let id_compaction = MoleculeCompaction::new(
             compaction,
-            removed_dative.into_iter().map(DativeBondId::from).collect(),
+            removed_dative
+                .removed()
+                .iter()
+                .map(|&id| DativeBondId::from(id))
+                .collect(),
             removed_aromatic
-                .into_iter()
-                .map(AromaticSystemId::from)
+                .removed()
+                .iter()
+                .map(|&id| AromaticSystemId::from(id))
                 .collect(),
             removed_multicenter
-                .into_iter()
-                .map(MulticenterBondId::from)
+                .removed()
+                .iter()
+                .map(|&id| MulticenterBondId::from(id))
                 .collect(),
             removed_noncovalent
-                .into_iter()
-                .map(NoncovalentBondId::from)
+                .removed()
+                .iter()
+                .map(|&id| NoncovalentBondId::from(id))
                 .collect(),
             removed_stereo_atoms
-                .into_iter()
-                .map(StereoAtomId::from)
+                .removed()
+                .iter()
+                .map(|&id| StereoAtomId::from(id))
                 .collect(),
             removed_stereo_bonds
-                .into_iter()
-                .map(StereoBondId::from)
+                .removed()
+                .iter()
+                .map(|&id| StereoBondId::from(id))
                 .collect(),
         );
         self.constraints.compact(&id_compaction);
