@@ -1137,11 +1137,14 @@ and that a non-permutation order is rejected. Cover both factors independently o
 
 **Dependencies:** [dep: S2a]
 
-#### S3e — Add the family-level reframe operations
+#### S3e — Add the family-level reframe operations **Done**
 
 **Module:** the six family modules and their unit tests.
 
-Implement `reframe`, `reframe_with_action`, and `framed_eq` on each family type. Reduce first, then
+Implement `reframe`, `reframe_with_action`, and `framed_eq` on each family type, as the
+`Reframe` trait in `traits.rs`: `reframe_with_action` is the required member and the other two are
+laws defaulted over it, with an associated `Action` — a position order for the four
+distinct-participant families, a `Permutation` for the two stereo families. Reduce first, then
 select: the four frame-invariant and electron-bearing families sort their frame-bearing factor
 without consulting the payload; the two stereo families ask the form under the intersection rule.
 Return one action per entry, keyed by the family's own id type; only the stereo families carry a
@@ -1424,6 +1427,15 @@ Update the nineteen tests that assert the removed behaviour.
 **Tests and evidence:** Assert that `new` preserves a supplied unsorted frame for every shape, that
 `remap` and `compact` preserve sequence, and that structural equality distinguishes two frames of
 the same multiset. Convert the resort cases in `test_remap_delta` to frame-preservation cases.
+
+**Also rewrite S3e's `reframe` fixtures here.** The four `Unordered` families — aromatic,
+multicenter, noncovalent, and dative donors — sort at construction today, so a freshly built family
+is already in its selected frame and `reframe` is a no-op on it. Their S3e tests therefore build a
+family and then reach into the wrapped storage with `permute_with` to manufacture an unselected
+frame, which is fixture surgery standing in for the storage this subitem delivers. Once `new` stops
+sorting, each of those four fixtures constructs the unsorted frame directly and the
+`Arc::make_mut(..).permute_with(..)` line goes away. The two stereo families need no change: their
+ligand factor is already `Ordered` and preserves the supplied frame.
 
 **Change class:** breaking removal (red; the thirteen canonicalization failures remain).
 

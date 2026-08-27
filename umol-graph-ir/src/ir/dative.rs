@@ -9,9 +9,10 @@ use umol_graph_core::{
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
+use super::error::Contradiction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
-use super::traits::{Equiv, Lattice};
+use super::traits::{Equiv, Lattice, Normalize, Reframe};
 
 /// The site this entry is borne by.
 /// The molecule's dative bonds.
@@ -183,6 +184,42 @@ impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, Dativ
     }
 }
 
+impl Reframe for DativeBonds {
+    type Action = (DativeBondId, Vec<ParticipantPosition>);
+
+    /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
+    ///
+    /// The payload is frame-invariant, so the action records the reordering of the donors without
+    /// changing what the bond means.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = (*self.0).clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants_2(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let attributes = reframed.data(id).clone().normalize()?;
+            *reframed.data_mut(id) = attributes
+                .reframe_to(&stored, &selected)
+                .ok_or(Contradiction)?;
+            reframed.permute_2_with(id, &order);
+            actions.push((DativeBondId::from(id), order));
+        }
+        Ok((Self(Arc::new(reframed)), actions))
+    }
+}
+
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
@@ -330,6 +367,88 @@ mod tests {
     use crate::ir::traits::{Lattice, Normalize};
 
     #[rustfmt::skip]
+    /// The donors are an `Unordered` factor, so storage sorts them on construction; the stored
+    /// frame is permuted first to model the frame-preserving storage S5 introduces.
+    #[fixture]
+    fn unsorted_bond() -> DativeBonds {
+        let mut bonds = DativeBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AtomId(0),
+            DativeBondForm::from_order(1),
+        )]);
+        Arc::make_mut(&mut bonds.0).permute_2_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        bonds
+    }
+
+    #[rstest]
+    fn test_dative_bonds_reframe(unsorted_bond: DativeBonds) {
+        assert_eq!(
+            unsorted_bond.donors(DativeBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+
+        let reframed = unsorted_bond.reframe().expect("the form is satisfiable");
+
+        assert_eq!(
+            reframed.donors(DativeBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(reframed.acceptor(DativeBondId(0)), AtomId(0));
+        assert_eq!(
+            reframed.attributes(DativeBondId(0)),
+            &DativeBondForm::from_order(1),
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bonds_reframe_identity(unsorted_bond: DativeBonds) {
+        let once = unsorted_bond.reframe().expect("the form is satisfiable");
+        let twice = once.reframe().expect("the form is satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    #[rstest]
+    fn test_dative_bonds_reframe_with_action(unsorted_bond: DativeBonds) {
+        let (_, actions) = unsorted_bond
+            .reframe_with_action()
+            .expect("the form is satisfiable");
+        assert_eq!(
+            actions,
+            vec![(
+                DativeBondId(0),
+                vec![
+                    ParticipantPosition(1),
+                    ParticipantPosition(2),
+                    ParticipantPosition(0),
+                ],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bonds_framed_eq(unsorted_bond: DativeBonds) {
+        let selected = DativeBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AtomId(0),
+            DativeBondForm::from_order(1),
+        )]);
+        assert!(unsorted_bond.framed_eq(&selected));
+
+        let different = DativeBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AtomId(0),
+            DativeBondForm::from_order(2),
+        )]);
+        assert!(!unsorted_bond.framed_eq(&different));
+    }
+
     #[rstest]
     #[case::new(DativeBondForm::new(NumForm::Lit(2)),
         DativeBondForm { order: NumForm::Lit(2), constraints: DativeBondConstraintsForm::new() })]

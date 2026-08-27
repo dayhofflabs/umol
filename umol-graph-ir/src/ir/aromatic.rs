@@ -9,10 +9,11 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
 use super::electrons::ElectronCountsForm;
+use super::error::Contradiction;
 use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Equiv, Lattice};
+use super::traits::{Equiv, Lattice, Normalize, Reframe};
 
 /// The molecule's aromatic systems.
 ///
@@ -142,6 +143,42 @@ impl From<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> for AromaticSys
 impl From<Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>> for AromaticSystems {
     fn from(set: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>) -> Self {
         Self(set)
+    }
+}
+
+impl Reframe for AromaticSystems {
+    type Action = (AromaticSystemId, Vec<ParticipantPosition>);
+
+    /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each system.
+    ///
+    /// The action is the position order taking the stored frame to the selected one, so
+    /// `reframe_by(reduce(x), action)` reproduces the reframed value.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = (*self.0).clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let attributes = reframed.data(id).clone().normalize()?;
+            *reframed.data_mut(id) = attributes
+                .reframe_to(&stored, &selected)
+                .ok_or(Contradiction)?;
+            reframed.permute_with(id, &order);
+            actions.push((AromaticSystemId::from(id), order));
+        }
+        Ok((Self(Arc::new(reframed)), actions))
     }
 }
 
@@ -331,6 +368,99 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    /// Storage sorts an `Unordered` factor on construction, so the stored frame is permuted first
+    /// to model the frame-preserving storage S5 introduces.
+    #[fixture]
+    fn unsorted_system() -> AromaticSystems {
+        let mut systems = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        Arc::make_mut(&mut systems.0).permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        systems
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe(unsorted_system: AromaticSystems) {
+        assert_eq!(
+            unsorted_system
+                .atoms(AromaticSystemId(0))
+                .collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+
+        let reframed = unsorted_system.reframe().expect("the form is satisfiable");
+
+        assert_eq!(
+            reframed.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(
+            reframed.attributes(AromaticSystemId(0)),
+            &AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe_identity(unsorted_system: AromaticSystems) {
+        let once = unsorted_system.reframe().expect("the form is satisfiable");
+        let twice = once.reframe().expect("the form is satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe_with_action(unsorted_system: AromaticSystems) {
+        let (reframed, actions) = unsorted_system
+            .reframe_with_action()
+            .expect("the form is satisfiable");
+
+        assert_eq!(
+            actions,
+            vec![(
+                AromaticSystemId(0),
+                vec![
+                    ParticipantPosition(1),
+                    ParticipantPosition(2),
+                    ParticipantPosition(0),
+                ],
+            )],
+        );
+
+        let (_, order) = &actions[0];
+        let stored: Vec<AtomId> = unsorted_system.atoms(AromaticSystemId(0)).collect();
+        let selected: Vec<AtomId> = order.iter().map(|p| stored[p.index()]).collect();
+        assert_eq!(
+            unsorted_system
+                .attributes(AromaticSystemId(0))
+                .clone()
+                .reframe_to(&stored, &selected),
+            Some(reframed.attributes(AromaticSystemId(0)).clone()),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_framed_eq(unsorted_system: AromaticSystems) {
+        let selected = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        assert!(unsorted_system.framed_eq(&selected));
+        assert!(!unsorted_system.eq(&selected));
+
+        let different = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        assert!(!unsorted_system.framed_eq(&different));
+    }
 
     #[rustfmt::skip]
     #[rstest]

@@ -9,10 +9,11 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
 use super::electrons::ElectronCountsForm;
+use super::error::Contradiction;
 use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Equiv, Lattice};
+use super::traits::{Equiv, Lattice, Normalize, Reframe};
 
 /// The molecule's multicenter bonds.
 ///
@@ -143,6 +144,42 @@ impl From<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> for Multicente
 impl From<Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>> for MulticenterBonds {
     fn from(set: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>) -> Self {
         Self(set)
+    }
+}
+
+impl Reframe for MulticenterBonds {
+    type Action = (MulticenterBondId, Vec<ParticipantPosition>);
+
+    /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
+    ///
+    /// The action is the position order taking the stored frame to the selected one, so
+    /// `reframe_by(reduce(x), action)` reproduces the reframed value.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = (*self.0).clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let attributes = reframed.data(id).clone().normalize()?;
+            *reframed.data_mut(id) = attributes
+                .reframe_to(&stored, &selected)
+                .ok_or(Contradiction)?;
+            reframed.permute_with(id, &order);
+            actions.push((MulticenterBondId::from(id), order));
+        }
+        Ok((Self(Arc::new(reframed)), actions))
     }
 }
 
@@ -332,6 +369,99 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    /// Storage sorts an `Unordered` factor on construction, so the stored frame is permuted first
+    /// to model the frame-preserving storage S5 introduces.
+    #[fixture]
+    fn unsorted_bond() -> MulticenterBonds {
+        let mut systems = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            MulticenterBondForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        Arc::make_mut(&mut systems.0).permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        systems
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_reframe(unsorted_bond: MulticenterBonds) {
+        assert_eq!(
+            unsorted_bond
+                .atoms(MulticenterBondId(0))
+                .collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+
+        let reframed = unsorted_bond.reframe().expect("the form is satisfiable");
+
+        assert_eq!(
+            reframed.atoms(MulticenterBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(
+            reframed.attributes(MulticenterBondId(0)),
+            &MulticenterBondForm::from_electrons(vec![20, 30, 10]),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_reframe_identity(unsorted_bond: MulticenterBonds) {
+        let once = unsorted_bond.reframe().expect("the form is satisfiable");
+        let twice = once.reframe().expect("the form is satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_reframe_with_action(unsorted_bond: MulticenterBonds) {
+        let (reframed, actions) = unsorted_bond
+            .reframe_with_action()
+            .expect("the form is satisfiable");
+
+        assert_eq!(
+            actions,
+            vec![(
+                MulticenterBondId(0),
+                vec![
+                    ParticipantPosition(1),
+                    ParticipantPosition(2),
+                    ParticipantPosition(0),
+                ],
+            )],
+        );
+
+        let (_, order) = &actions[0];
+        let stored: Vec<AtomId> = unsorted_bond.atoms(MulticenterBondId(0)).collect();
+        let selected: Vec<AtomId> = order.iter().map(|p| stored[p.index()]).collect();
+        assert_eq!(
+            unsorted_bond
+                .attributes(MulticenterBondId(0))
+                .clone()
+                .reframe_to(&stored, &selected),
+            Some(reframed.attributes(MulticenterBondId(0)).clone()),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bonds_framed_eq(unsorted_bond: MulticenterBonds) {
+        let selected = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            MulticenterBondForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        assert!(unsorted_bond.framed_eq(&selected));
+        assert!(!unsorted_bond.eq(&selected));
+
+        let different = MulticenterBonds::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            MulticenterBondForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        assert!(!unsorted_bond.framed_eq(&different));
+    }
 
     #[rustfmt::skip]
     #[rstest]

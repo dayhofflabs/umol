@@ -124,7 +124,7 @@ pub use substructure::{
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, BiRelationEquiv, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized,
-    RelationEquiv, TryFromIr, TryIntoIr,
+    Reframe, RelationEquiv, TryFromIr, TryIntoIr,
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,

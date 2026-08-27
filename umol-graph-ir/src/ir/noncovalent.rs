@@ -11,7 +11,7 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::error::{Contradiction, NoJoin};
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, Equiv, Lattice, Normalize};
+use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 
 /// The molecule's noncovalent bonds.
 ///
@@ -140,6 +140,42 @@ impl From<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> for Nonco
 impl From<Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>> for NoncovalentBonds {
     fn from(set: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>) -> Self {
         Self(set)
+    }
+}
+
+impl Reframe for NoncovalentBonds {
+    type Action = (NoncovalentBondId, Vec<ParticipantPosition>);
+
+    /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
+    ///
+    /// The payload is frame-invariant, so the action records the reordering without changing what
+    /// the bond means.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = (*self.0).clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let attributes = reframed.data(id).clone().normalize()?;
+            *reframed.data_mut(id) = attributes
+                .reframe_to(&stored, &selected)
+                .ok_or(Contradiction)?;
+            reframed.permute_with(id, &order);
+            actions.push((NoncovalentBondId::from(id), order));
+        }
+        Ok((Self(Arc::new(reframed)), actions))
     }
 }
 
@@ -369,6 +405,76 @@ mod tests {
     use crate::ir::boolean::BooleanForm;
 
     #[rustfmt::skip]
+    /// Storage sorts an `Unordered` factor on construction, so the stored pair is permuted first to
+    /// model the frame-preserving storage S5 introduces.
+    #[fixture]
+    fn unsorted_bond() -> NoncovalentBonds {
+        let mut bonds = NoncovalentBonds::new(vec![(
+            AtomId(2),
+            AtomId(5),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )]);
+        Arc::make_mut(&mut bonds.0).permute_with(
+            RelationId(0),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        bonds
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_reframe(unsorted_bond: NoncovalentBonds) {
+        assert_eq!(
+            unsorted_bond.atoms(NoncovalentBondId(0)),
+            [AtomId(5), AtomId(2)],
+        );
+
+        let reframed = unsorted_bond.reframe().expect("the form is satisfiable");
+
+        assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
+        assert_eq!(
+            reframed.attributes(NoncovalentBondId(0)),
+            &NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_reframe_identity(unsorted_bond: NoncovalentBonds) {
+        let once = unsorted_bond.reframe().expect("the form is satisfiable");
+        let twice = once.reframe().expect("the form is satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_reframe_with_action(unsorted_bond: NoncovalentBonds) {
+        let (_, actions) = unsorted_bond
+            .reframe_with_action()
+            .expect("the form is satisfiable");
+        assert_eq!(
+            actions,
+            vec![(
+                NoncovalentBondId(0),
+                vec![ParticipantPosition(1), ParticipantPosition(0)],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_framed_eq(unsorted_bond: NoncovalentBonds) {
+        let selected = NoncovalentBonds::new(vec![(
+            AtomId(2),
+            AtomId(5),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )]);
+        assert!(unsorted_bond.framed_eq(&selected));
+
+        let different = NoncovalentBonds::new(vec![(
+            AtomId(2),
+            AtomId(6),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )]);
+        assert!(!unsorted_bond.framed_eq(&different));
+    }
+
     #[rstest]
     #[case::new(NoncovalentBondForm::new(NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond)),
         NoncovalentBondForm { kind: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),

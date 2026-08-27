@@ -179,6 +179,38 @@ pub trait Equiv: Normalize {
     }
 }
 
+/// The frame quotient over an entity family: select a determinate participant frame and restate the
+/// frame-relative payload accordingly.
+///
+/// The family is the carrier that knows both which factor bears a frame and what the payload means,
+/// so it owns the quotient rather than the storage shape or the form. One member is required and
+/// the other two are laws over it: `reframe` is the selection alone, and `framed_eq` is equality of
+/// selected values.
+pub trait Reframe: Sized + PartialEq {
+    /// The frame action selected for one entry, keyed by the family's own id type. Four families
+    /// carry a position order; the two stereo families carry a `Permutation`, since a stereo frame
+    /// is bounded by its kind's degree.
+    type Action;
+
+    /// Reduce every entry, then present each in its selected frame, returning the action per entry.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction>;
+
+    /// Reduce every entry, then present each in its selected frame.
+    fn reframe(&self) -> Result<Self, Contradiction> {
+        Ok(self.reframe_with_action()?.0)
+    }
+
+    /// Equality modulo the stored frame: the reframed values agree. Two unsatisfiable families
+    /// count as equal, as they do under [`Equiv`].
+    fn framed_eq(&self, other: &Self) -> bool {
+        match (self.reframe(), other.reframe()) {
+            (Ok(left), Ok(right)) => left == right,
+            (Err(_), Err(_)) => true,
+            _ => false,
+        }
+    }
+}
+
 /// Frame-aware equivalence for a single-factor relation payload.
 pub trait RelationEquiv: RelationData + Equiv {
     /// Reindex a single-factor relation value into `other`'s participant frame before comparison.
