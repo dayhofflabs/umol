@@ -3,150 +3,146 @@
 use std::sync::Arc;
 
 use umol_graph_core::{
-    EdgeId, GraphCompaction, NodeId, ParticipantPosition, RelationData, RelationId,
-    RelationPushout, Remapping, Unordered, VarRelationSet,
+    NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered, VarRelationSet,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
 use super::electrons::ElectronCountsForm;
-use super::id::AtomId;
+use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Equiv, Lattice};
 
-/// The molecule's multicenter bonds. The member atoms bear the frame, in parallel with the per-member electron
-/// counts. There is no site.
+/// The molecule's multicenter bonds.
 ///
-/// Owns the frame structure its storage shape cannot state: which factor bears the participant
-/// frame, and which, if any, is a site.
+/// The atoms bear the participant frame: the per-member electron counts of
+/// [`MulticenterBondForm`] are read against it, position by position.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MulticenterBonds(Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>);
 
-impl From<Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>> for MulticenterBonds {
-    fn from(set: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>) -> Self {
-        Self(set)
-    }
-}
-
 impl MulticenterBonds {
-    pub fn new(entries: Vec<(Vec<NodeId>, MulticenterBondForm)>) -> Self {
-        Self(Arc::new(VarRelationSet::new(entries)))
-    }
-
-    pub fn participants(&self, id: RelationId) -> &[NodeId] {
-        self.0.participants(id)
-    }
-
-    pub fn find_by_participants(&self, query: &[NodeId]) -> Option<RelationId> {
-        self.0.find_by_participants(query)
-    }
-
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query: &[NodeId],
-    ) -> Option<Vec<ParticipantPosition>> {
-        self.0.participant_permutation(id, query)
-    }
-
-    pub fn pushout(
-        &self,
-        right: &Self,
-        combine: impl FnMut(&MulticenterBondForm, &MulticenterBondForm) -> Option<MulticenterBondForm>,
-    ) -> Option<RelationPushout<Self>> {
-        self.0
-            .pushout(&right.0, combine)
-            .map(|pushout| RelationPushout {
-                object: Self(Arc::new(pushout.object)),
-                left: pushout.left,
-                right: pushout.right,
-            })
-    }
-
-    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding entries meet,
-    /// non-coinciding entries are carried. `None` when a coincident meet is bottom.
-    pub fn glue(
-        &self,
-        right: &Self,
-        remapping: &Remapping,
-    ) -> Option<Vec<(Vec<AtomId>, MulticenterBondForm)>> {
-        let merged = self.pushout(&right.remap(remapping), |a, b| a.meet(b))?;
-        Some(
-            merged
-                .object
-                .relation_ids()
-                .map(|id| {
-                    (
-                        merged
-                            .object
-                            .participants(id)
-                            .iter()
-                            .map(|&n| AtomId::from(n))
-                            .collect(),
-                        merged.object.data(id).clone(),
-                    )
+    pub fn new(entries: Vec<(Vec<AtomId>, MulticenterBondForm)>) -> Self {
+        Self(Arc::new(VarRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(atoms, attributes)| {
+                    (atoms.into_iter().map(NodeId::from).collect(), attributes)
                 })
                 .collect(),
-        )
+        )))
     }
 
     pub fn count(&self) -> usize {
         self.0.count()
     }
 
-    pub fn contains(&self, id: RelationId) -> bool {
-        self.0.contains(id)
+    pub fn contains(&self, id: MulticenterBondId) -> bool {
+        self.0.contains(RelationId::from(id))
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
-        self.0.relation_ids()
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = MulticenterBondId> {
+        self.0.relation_ids().map(MulticenterBondId::from)
     }
 
-    pub fn data(&self, id: RelationId) -> &MulticenterBondForm {
-        self.0.data(id)
+    /// The atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: MulticenterBondId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
     }
 
-    pub fn data_mut(&mut self, id: RelationId) -> &mut MulticenterBondForm {
-        Arc::make_mut(&mut self.0).data_mut(id)
+    pub fn attributes(&self, id: MulticenterBondId) -> &MulticenterBondForm {
+        self.0.data(RelationId::from(id))
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut MulticenterBondForm> {
-        Arc::make_mut(&mut self.0).data_iter_mut()
+    pub fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.0.incident(node)
+    /// Ids of the multicenter bonds `atom` belongs to. Unlike aromatic systems these may overlap,
+    /// so an atom can belong to several; integrity rejects only identical atom sets.
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = MulticenterBondId> + '_ {
+        self.0
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&id| MulticenterBondId::from(id))
     }
 
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.0.incident_edge(edge)
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.0.has_incident(node)
-    }
-
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.0.has_incident_edge(edge)
-    }
-
-    pub fn into_entries(self) -> Vec<(Vec<NodeId>, MulticenterBondForm)> {
+    pub fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
+            .collect()
     }
 
-    pub fn remap(&self, remapping: &Remapping) -> Self {
+    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::atoms`].
+    pub(crate) fn atom_nodes(&self, id: MulticenterBondId) -> &[NodeId] {
+        self.0.participants(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut MulticenterBondForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
+    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> {
+        self.0
     }
 
-    pub fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> {
+    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
+    /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
+    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
+            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .map(|merged| Self(Arc::new(merged.object)))
+    }
+
+    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
+    /// a multicenter bond is its atom set.
+    pub(crate) fn find_by_participants(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .find_by_participants(&query)
+            .map(MulticenterBondId::from)
+    }
+
+    /// Removed by S4e, which moves frame alignment onto `reframe_to`.
+    pub(crate) fn participant_permutation(
+        &self,
+        id: MulticenterBondId,
+        atoms: &[AtomId],
+    ) -> Option<Vec<ParticipantPosition>> {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.participant_permutation(RelationId::from(id), &query)
+    }
+}
+
+impl From<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> for MulticenterBonds {
+    fn from(set: VarRelationSet<NodeId, Unordered, MulticenterBondForm>) -> Self {
+        Self(Arc::new(set))
+    }
+}
+
+impl From<Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>> for MulticenterBonds {
+    fn from(set: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>) -> Self {
+        Self(set)
     }
 }
 

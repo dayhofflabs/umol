@@ -107,31 +107,10 @@ impl AromaticSystems {
 
     /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
     /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
-    pub(crate) fn glue(
-        &self,
-        right: &Self,
-        remapping: &Remapping,
-    ) -> Option<Vec<(Vec<AtomId>, AromaticSystemForm)>> {
-        let merged = self
-            .0
-            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))?;
-        Some(
-            merged
-                .object
-                .relation_ids()
-                .map(|id| {
-                    (
-                        merged
-                            .object
-                            .participants(id)
-                            .iter()
-                            .map(|&atom| AtomId::from(atom))
-                            .collect(),
-                        merged.object.data(id).clone(),
-                    )
-                })
-                .collect(),
-        )
+    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+        self.0
+            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .map(|merged| Self(Arc::new(merged.object)))
     }
 
     /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for

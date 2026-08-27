@@ -100,10 +100,12 @@ impl Molecule {
 
         let aromatic = self
             .aromatic_systems
-            .glue(&other.aromatic_systems, &participant_remapping)?;
+            .glue(&other.aromatic_systems, &participant_remapping)?
+            .into_entries();
         let multicenter = self
             .multicenter_bonds
-            .glue(&other.multicenter_bonds, &participant_remapping)?;
+            .glue(&other.multicenter_bonds, &participant_remapping)?
+            .into_entries();
 
         let dative_merged = self
             .dative_bonds

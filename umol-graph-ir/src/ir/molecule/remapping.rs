@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use umol_graph_core::{
-    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Remapping, VarRelationSet,
-};
+use umol_graph_core::{EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Remapping};
 
 use super::super::aromatic::AromaticSystems;
 use super::super::dative::DativeBonds;
+use super::super::multicenter::MulticenterBonds;
 use super::Molecule;
 use crate::ir::{Constraints, MoleculeCorrespondence};
 
@@ -149,7 +148,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let multicenter_bonds = VarRelationSet::new(reorder(
+        let multicenter_bonds = MulticenterBonds::new(reorder(
             self.multicenter_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -202,7 +201,7 @@ impl Molecule {
             Arc::new(bonds),
             dative_bonds,
             aromatic_systems,
-            Arc::new(multicenter_bonds).into(),
+            multicenter_bonds,
             Arc::new(noncovalent_bonds).into(),
             Arc::new(stereo_atoms).into(),
             Arc::new(stereo_bonds).into(),

@@ -504,12 +504,12 @@ impl Molecule {
                 return false;
             }
         }
-        for id in self.multicenter_bonds.relation_ids() {
-            if self.multicenter_bonds.participants(id) != other.multicenter_bonds.participants(id)
+        for id in self.multicenter_bonds.ids() {
+            if self.multicenter_bonds.atom_nodes(id) != other.multicenter_bonds.atom_nodes(id)
                 || !self
                     .multicenter_bonds
-                    .data(id)
-                    .equiv(other.multicenter_bonds.data(id))
+                    .attributes(id)
+                    .equiv(other.multicenter_bonds.attributes(id))
             {
                 return false;
             }
@@ -723,30 +723,24 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
+            let _left_id = RelationId::from(left);
+            let _right_id = RelationId::from(right);
+            let mapped: Option<Vec<AtomId>> = self
                 .multicenter_bonds
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
+                .atoms(left)
+                .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|participants| {
+            let Some(order) = mapped.and_then(|atoms| {
                 other
                     .multicenter_bonds
-                    .participant_permutation(right_id, &participants)
+                    .participant_permutation(right, &atoms)
             }) else {
                 return false;
             };
             if !self
                 .multicenter_bonds
-                .data(left_id)
-                .equiv_under(other.multicenter_bonds.data(right_id), &order)
+                .attributes(left)
+                .equiv_under(other.multicenter_bonds.attributes(right), &order)
             {
                 return false;
             }
@@ -1206,8 +1200,8 @@ impl Molecule {
                 .all(|id| self.aromatic_systems.attributes(id).is_concrete())
             && self
                 .multicenter_bonds
-                .relation_ids()
-                .all(|id| self.multicenter_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.multicenter_bonds.attributes(id).is_concrete())
             && self
                 .noncovalent_bonds
                 .relation_ids()
@@ -1298,14 +1292,8 @@ impl Molecule {
     }
 
     pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let atoms = self
-            .multicenter_bonds
-            .participants(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = self.multicenter_bonds.data_mut(rid);
+        let atoms = self.multicenter_bonds.atoms(id).collect();
+        let attributes = self.multicenter_bonds.attributes_mut(id);
         MulticenterBondViewMut {
             id,
             atoms,
@@ -1318,7 +1306,7 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
     ) {
-        for multicenter_bond in self.multicenter_bonds.data_iter_mut() {
+        for multicenter_bond in self.multicenter_bonds.attributes_iter_mut() {
             *multicenter_bond = f(mem::take(multicenter_bond));
         }
     }
@@ -1413,8 +1401,8 @@ impl Molecule {
                 .any(|id| !self.aromatic_systems.attributes(id).constraints.is_empty())
             || self
                 .multicenter_bonds
-                .relation_ids()
-                .any(|id| !self.multicenter_bonds.data(id).constraints.is_empty())
+                .ids()
+                .any(|id| !self.multicenter_bonds.attributes(id).constraints.is_empty())
             || self
                 .noncovalent_bonds
                 .relation_ids()
