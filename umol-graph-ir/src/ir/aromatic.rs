@@ -122,7 +122,7 @@ impl AromaticSystems {
             .map(AromaticSystemId::from)
     }
 
-    /// Removed by S4e, which moves frame alignment onto `reframe_to`.
+    /// Superseded once frame alignment moves onto `reframe_to`.
     pub(crate) fn participant_permutation(
         &self,
         id: AromaticSystemId,

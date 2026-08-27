@@ -538,10 +538,10 @@ the family type does without consulting the payload:
 | noncovalent, dative | family type sorts participants | `reframe_to(from, to)` — returns `self`; payload is frame-invariant |
 | stereo atom, bond | the form, via `CosetSpace::normalizer` under the asserted kind | `select_frame(current)` and `reframe_by(Permutation)` |
 
-The four frame-invariant families keep a method that does nothing, deliberately, and it must
+The two frame-invariant families keep a method that does nothing, deliberately, and it must
 destructure exhaustively so that adding a position-indexed field fails to compile here rather than
 being silently left unframed. Today's equivalent — `DativeBondForm`'s empty `on_permutation` — has
-no such guard, which is why the ceremony is worth its four bodies:
+no such guard, which is why the ceremony is worth its two bodies:
 
 ```rust
 impl DativeBondForm {
@@ -614,7 +614,7 @@ under it. Callers that must consider every admissible alternative use `Permutati
 with `reframe_by`. Resolving the ambiguity by selecting a normalizing action is `reframe` itself,
 through `CosetSpace::normalizer` and generator-based residual-invariance checking.
 
-Every form keeps a `reframe_to` method, including the four whose payload is frame-invariant, and
+Every form keeps a `reframe_to` method, including the two whose payload is frame-invariant, and
 each body destructures exhaustively. That is what forces an explicit decision when a
 position-sensitive field is added — not a trait, which would only force one when a new form *type*
 appeared. It is the one property of `RelationData` worth carrying forward, and today's
@@ -904,7 +904,7 @@ into a relation removal.
 `Vec<RelationId>`, so the twelve `transact.rs` call sites and the six editor removal primitives lost
 the `.into()` down-conversion they previously needed. `Compaction::new` performs the sort and dedup
 that `normalize_removed` did. The `Compaction<RelationId>` to `Compaction<..Id>` map is not added
-here: nothing produces a `Compaction<RelationId>` until S4c returns one from relation-set `compact`,
+here: nothing produces a `Compaction<RelationId>` until S4b returns one from relation-set `compact`,
 so the typed conversion currently happens at the editor's removal site instead. `Compaction<Id>`
 required `Add<usize>` and `Sub<usize>` on the eight entity ids, added to `define_id!`.
 
@@ -953,7 +953,7 @@ type.
 `relation_ids` is `ids`, and `participants_1`/`participants_2` are gone. Two methods remain
 crate-visible and carry a removal note naming the subitem that retires them:
 `find_by_participants`, which the lookup relocation replaces with `of_id` keyed on the family's
-uniqueness key, and `participant_permutation`, which S4e replaces with `reframe_to`. Neither stereo
+uniqueness key, and `participant_permutation`, which S4d replaces with `reframe_to`. Neither stereo
 family carries `participant_permutation`: `equiv_under` enumerates ligand frames through
 `Permutation::between_all` instead, so the mechanical translation left it dead and it was dropped.
 `compact` is likewise absent from all six: molecule compaction runs through the editor's storage
@@ -978,7 +978,7 @@ unreachable on the only construction path that mattered.
 
 **Dependencies:** [dep: S2a]
 
-#### S3b — Add the form-level reframe methods
+#### S3b — Add the form-level reframe methods **Done**
 
 **Module:** `umol-graph-ir/src/ir/aromatic.rs`, `multicenter.rs`, `noncovalent.rs`, `dative.rs`,
 `stereo.rs`, `electrons.rs`, and their unit tests.
@@ -999,7 +999,114 @@ where the change is ambiguous. Do not use uniform payloads as the only evidence.
 
 **Dependencies:** [dep: none]
 
-#### S3c — Add `EntitySpan::try_map`
+**Settled surface.** Every form takes `self` by value and returns `Option<Self>`, so the
+reconstruction is consuming and the exhaustive destructure is the compile-time guard doc
+[210](210-relation-frame-storage-2026-08-25.md) asked for:
+
+```rust
+impl AromaticSystemForm  { pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> }
+impl MulticenterBondForm { pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> }
+impl NoncovalentBondForm { pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> }
+impl DativeBondForm      { pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> }
+impl StereoAtomForm      { pub fn reframe_to(self, from: &[StereoLigand], to: &[StereoLigand]) -> Option<Self> }
+impl StereoBondForm      { pub fn reframe_to(self, from: &[StereoLigand], to: &[StereoLigand]) -> Option<Self> }
+impl StereoAtomForm      { pub fn reframe_by(self, permutation: Permutation) -> Option<Self> }
+impl StereoBondForm      { pub fn reframe_by(self, permutation: Permutation) -> Option<Self> }
+impl ElectronCountsForm  { pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> }
+```
+
+The two electron-bearing forms delegate their one position-indexed field to
+`ElectronCountsForm::reframe_to`, which derives the reordering itself rather than through
+`umol_perm::Permutation`: an aromatic system may exceed the fixed permutation degree, as doc 210
+recorded. Stereo keeps `Permutation::between`, whose fixed degree is right for its kinds. Both
+derivations decline on a repeated participant, on a length disagreement, and when `to` is not a
+reordering of `from`.
+
+Stereo's `transform_frame` is `reframe_to` under its settled name, and `transform_frame_by` is
+`reframe_by`. Both changed from `&self` to `self`; the borrowing call sites clone explicitly, which
+is what the old signature did internally anyway.
+
+None of the four non-stereo families' inline constraint forms are position-indexed —
+`AromaticSystemConstraintForm::ElectronCount`, `MulticenterBondConstraintForm::ElectronCount`,
+`NoncovalentBondConstraintForm::Intramolecular`, `DativeBondConstraintForm::{Aromatic,
+RingMembership}` — so `constraints` carries unchanged in all four bodies. Only stereo's
+frame-relative constraints move with the frame.
+
+**`select_frame`.** `select_frame(&self, current: &[StereoLigand]) -> Option<Permutation>` returns
+one action: the admissible permutation that presents the frame sorted and, among those, presents
+this form least.
+
+```rust
+let sorted = match self.configuration.kind() {
+    Some(kind) => kind.class_key().space().normalizer(current)?.act(current),
+    None => /* plain sort, the full symmetric group */,
+};
+Permutation::between_all(current, &sorted)
+    .into_iter()
+    .filter_map(|action| Some((self.clone().reframe_by(action)?, action)))
+    .min()
+    .map(|(_, action)| action)
+```
+
+An unkinded configuration has no parent group, so the admissible group is the full symmetric group
+and the frame is sorted outright — the intersection table's "none kinded" row.
+
+Ligands that compare equal leave a residual stabilizer, so several admissible actions present the
+frame sorted. The selected one is the **orbit representative** under that stabilizer: the action
+whose reframed form is least. This is the same shape as `SymmetryCarrier::is_stereogenic`
+(`symmetry.rs:394`), which identifies cosets a local symmetry cannot distinguish through
+`CosetSpace::orbit_reps`. Minimizing over the whole form rather than the coset alone carries the
+frame-relative constraints into the same representative; `orbit_reps` canonicalizes the coset index
+only and would leave a `LigandSymmetry` or `Topicity` constraint in whichever presentation the
+normalizer happened to pick.
+
+`reframe_by` already rejects actions outside the parent group, so admissibility needs no separate
+filter. The result is total: there is always at least one candidate, and no decline path.
+
+A repeated ligand frame is **not** an error state. Doc
+[103](103-stereochemistry-overlay-and-ports-2026-05-28.md) settles it: the element is an arrangement
+record, ordered ligands plus coset, with distinctness "neither required nor asserted", and a stored
+coset is a faithful labeled-arrangement fact, never vacuous. Stereogenicity is a derived predicate
+plus an assertable constraint, not a storage policy. Selection must therefore accept such a frame
+rather than decline on it, which is what the orbit representative delivers.
+
+**Evidence.** `repeated_ligand_stereo_atom_strategy` generates a form whose frame repeats a virtual
+ligand by construction, together with a parent-group action restating it, and asserts the repeat
+before asserting anything else. Its law is that the canonical value does not depend on which
+presentation of the arrangement selection started from, plus convergence. Unit tables cover a
+tetrahedral site with two implicit hydrogens, with three lone pairs, and with all four ligands
+equal; the restricted `Axial` parent; and a 1,1-disubstituted alkene under the partitioned cis/trans
+parent, which is the common non-stereogenic bond case.
+
+**Found while testing, and fixed: a reachable panic on the coset action.** `StereoKind::act`
+`expect`ed `CosetSpace::reindex`, whose `None` covers both an inadmissible permutation and an
+out-of-range coset index. `reframe_by`'s guard tested only the former, and through a hardcoded index
+`0` rather than the configuration's own. Form constructors are permissive, so
+`StereoAtomForm::new(StereoKind::Tetrahedral, 2u32)` builds a form whose coset is outside its kind's
+two-element coset space, and any frame action on it panicked.
+
+The validation belongs in the first operation that requires the property to hold, which is `act` —
+it is what needs the index to be in range. So `act` returns `Option<u32>` and the chain above it
+propagates:
+
+```rust
+StereoKind::act(self, index: u32, permutation: Permutation) -> Option<u32>
+StereoCoset::{apply, swap, mirror}      -> Option<Self>   // via map_index over literal indices
+StereoConfigurationForm::{apply, swap, mirror} -> Option<Self>   // via map_kinded
+StereoAtomForm/StereoBondForm::{apply, swap, mirror} -> Option<Self>
+```
+
+`reframe_by` then propagates with `?` and its own guard keeps only what *it* requires — that the
+permutation match the kind's degree and lie in the parent group, which the constraint transport
+needs whether or not a coset is present. The guard now says so directly through `CosetSpace::allows`
+instead of `reindex(0, ..)`; `canonicalize::stereo_frame_permutations` used the same fake-index idiom
+and was changed with it.
+
+Callers: `canonicalize` maps the decline to `Contradiction` — a coset index outside its kind's space
+denotes no arrangement, which is bottom — and reaction application maps it to
+`ApplyError::StereoFrameMismatch`, already the local idiom for an inapplicable frame action.
+
+#### S3c — Add `EntitySpan::try_map` **Done**
 
 **Module:** `umol-graph-ir/src/ir/delta.rs` and its unit tests.
 
@@ -1013,39 +1120,7 @@ on one side only.
 
 **Dependencies:** [dep: none]
 
-#### S3d — Add the family-level reframe operations
-
-**Module:** the six family modules and their unit tests.
-
-Implement `reframe`, `reframe_with_action`, and `framed_eq` on each family type. Reduce first, then
-select: the four frame-invariant and electron-bearing families sort their frame-bearing factor
-without consulting the payload; the two stereo families ask the form under the intersection rule.
-Return one action per entry, keyed by the family's own id type; only the stereo families carry a
-meaningful action.
-
-Apply the selected order **in place** — `permute_with` for participants, the form's own method for
-the payload — rather than through `into_entries` and `new`. The reconstruction route costs one heap
-allocation per entity out of a flat CSR, plus a CSR rebuild and an incidence rebuild that reframing
-cannot invalidate.
-
-The span-bearing families reuse the same implementations with `EntitySpan<Form>` as the payload,
-applying one action to every carried side through S3c's combinator and declining if any side
-declines. That path depends on doc [209](209-normalization-canonical-semantics-2026-08-25.md) S1c and
-S1d: without them a `Modified` span can carry sides asserting different stereo kinds and the
-intersection rule has no unambiguous answer.
-
-**Tests and evidence:** Assert idempotence, that `framed_eq` agrees with comparing `reframe` results,
-that the returned action carries the reduced value into the selected frame, and the inverse
-roundtrip. Cover a `Modified` span whose two sides need the same nonidentity action, and one where a
-frame-relative constraint on a single side forces the whole span to decline.
-
-**Change class:** additive (green).
-
-**Dependencies:** [dep: S3a, S3b, S3c, doc 209 S1d]
-
-### S4 — Move entry comparison and composition onto the new surface
-
-#### S4a — Add in-place participant permutation
+#### S3d — Add in-place participant permutation **Done**
 
 **Module:** `umol-graph-core/src/relation.rs` and its unit tests.
 
@@ -1062,7 +1137,122 @@ and that a non-permutation order is rejected. Cover both factors independently o
 
 **Dependencies:** [dep: S2a]
 
-#### S4b — Add `iter` and `iter_mut` to the five relation shapes
+#### S3e — Add the family-level reframe operations
+
+**Module:** the six family modules and their unit tests.
+
+Implement `reframe`, `reframe_with_action`, and `framed_eq` on each family type. Reduce first, then
+select: the four frame-invariant and electron-bearing families sort their frame-bearing factor
+without consulting the payload; the two stereo families ask the form under the intersection rule.
+Return one action per entry, keyed by the family's own id type; only the stereo families carry a
+meaningful action.
+
+Apply the selected order **in place** — `permute_with` for participants, the form's own method for
+the payload — rather than through `into_entries` and `new`. The reconstruction route costs one heap
+allocation per entity out of a flat CSR, plus a CSR rebuild and an incidence rebuild that reframing
+cannot invalidate.
+
+**Tests and evidence:** Assert idempotence, that `framed_eq` agrees with comparing `reframe` results,
+that the returned action carries the reduced value into the selected frame, and the inverse
+roundtrip. Include a stereo frame with repeated ligands, where the action is the orbit
+representative rather than a unique reordering.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: S3a, S3b, S3d]
+
+#### S3f — Require a stereo kind admissible for its site type
+
+**Module:** `umol-graph-ir/src/ir/molecule/integrity.rs`, its public error type, and construction
+tests.
+
+Integrity validates a stereo entry's ligand arity (`check_stereo_frame_arity`) and its coset index,
+but never that the asserted `StereoKind` is admissible for the site it sits on. `Tetrahedral`,
+`CisTrans`, `Axial`, and `SquarePlanar` all have degree 4, so the arity check passes for a stereo
+bond asserting `Tetrahedral`. Add the check with a new `MoleculeIntegrityError` variant naming the
+entity, the asserted kind, and the site type.
+
+The admissible table is:
+
+| site | kinds |
+| --- | --- |
+| stereo atom | `Tetrahedral`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral`, `Axial` |
+| stereo bond | `CisTrans`, `Axial` |
+
+`Axial` is admissible on both, since axial chirality arises at an allene's central atom and about an
+atropisomeric biaryl bond. `CisTrans` is bond-only and the other four are atom-only.
+
+This rule is a property of a single molecule, so it propagates without further code:
+`ReactionSpanIntegrityError::{Lhs, Rhs}` wrap `MoleculeIntegrityError` per side, and
+`Reaction::check_integrity` calls `self.lhs.check_integrity()` first.
+
+**Tests and evidence:** Cover every kind on both site types, asserting the exact error variant for
+each inadmissible pairing and success for each admissible one. Include a degree-4 inadmissible case
+so the new check is shown to catch what the arity check cannot. Retain all existing integrity cases.
+
+**Change class:** strengthened representation-integrity contract (green).
+
+**Dependencies:** [dep: none] — its prerequisite, stereo-site incidence integrity, is complete
+
+#### S3g — Prohibit a stereo kind change within one entity
+
+**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `umol-graph-ir/src/ir/reaction/integrity.rs`,
+their public error types, and construction tests.
+
+Unlike S3f this is a property of a *pair*, so each side can be individually valid while the pairing
+is not, and it needs a check at both entry points rather than riding the per-side delegation:
+
+- `ReactionSpan::check_integrity` — reject an `EntitySpan::Modified { lhs, rhs }` whose two sides
+  assert different `StereoKind` values. A new `ReactionSpanIntegrityError` variant.
+- `Reaction::check_integrity`, inside `ReactionIntegrityCheck` — reject a `ModifyField` delta that
+  replaces `StereoConfigurationForm::Kinded(k1, _)` with `Kinded(k2, _)` for `k1 != k2`. A new
+  `ReactionIntegrityError` variant.
+
+`StereoConfigurationForm::Undetermined` on either side remains admissible and contributes no
+restriction. A genuine kind change is expressed as removal plus addition, which is representable:
+the two entities carry different ids and neither side ends with a duplicate site.
+
+**This is an opinionated restriction on what a reaction can express** and is recorded as such.
+Converting a stereocenter's geometry class — an sp3 center becoming an allene axial center — must be
+written as removal plus addition rather than modification. That matches the chemistry, since the
+stereogenic unit itself changes rather than its configuration.
+
+Together with S3f this makes frame selection unambiguous at every carrier under the intersection
+rule above: the only ambiguous case is two carried sides asserting different kinds, which these two
+rules exclude.
+
+**Tests and evidence:** Cover a modified span whose sides differ in kind, one whose sides share a
+kind, one with an undetermined side, and the equivalent delta cases. Assert the exact error
+variants, and assert that the removal-plus-addition encoding of a kind change is accepted.
+
+**Change class:** strengthened representation-integrity contract; breaking for any caller that
+expressed a kind change as a modification (green).
+
+**Dependencies:** [dep: S3f]
+
+#### S3h — Extend the family-level reframe to the span-bearing families
+
+**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, the six family modules, and their unit tests.
+
+The span-bearing families reuse S3e's implementations with `EntitySpan<Form>` as the payload,
+applying one action to every carried side through S3c's combinator and declining if any side
+declines.
+
+Split from S3e because only this path needs the intersection rule. A `Modified` span carries two
+forms against a single participant list, so without S3f and S3g its two sides can assert different
+stereo kinds and the rule has no unambiguous answer. S3e carries one side per entry and degenerates
+to that side's own group, so it does not need them.
+
+**Tests and evidence:** Cover a `Modified` span whose two sides need the same nonidentity action, and
+one where a frame-relative constraint on a single side forces the whole span to decline.
+
+**Change class:** additive (green).
+
+**Dependencies:** [dep: S3c, S3e, S3f, S3g]
+
+### S4 — Move entry comparison and composition onto the new surface
+
+#### S4a — Add `iter` and `iter_mut` to the five relation shapes
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and `umol-graph-ir/src/ir/molecule.rs`.
 
@@ -1076,7 +1266,7 @@ payload. Migrate the six `Molecule::modify_*` callers.
 
 **Dependencies:** [dep: S2a]
 
-#### S4c — Return the relation compaction from `compact`
+#### S4b — Return the relation compaction from `compact`
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
 `umol-graph-ir/src/ir/molecule/editor.rs`.
@@ -1090,9 +1280,9 @@ participant was removed, and an empty compaction leaving ids unchanged.
 
 **Change class:** breaking return-type change with caller migration (green within the stage).
 
-**Dependencies:** [dep: S4a]
+**Dependencies:** [dep: S2a]
 
-#### S4d — Pass entries to `pushout` and `pullback`
+#### S4c — Pass entries to `pushout` and `pullback`
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
 `umol-graph-ir/src/ir/molecule/pushout.rs`.
@@ -1108,9 +1298,9 @@ aromatic case with nonuniform electron counts supplied in different frames on th
 
 **Change class:** breaking signature change with caller migration (green within the stage).
 
-**Dependencies:** [dep: S3b, S3c, S4b]
+**Dependencies:** [dep: S3b, S3c, S4a]
 
-#### S4e — Move `Molecule::equiv_under` and the editor onto `Reframe`
+#### S4d — Move `Molecule::equiv_under` and the editor onto `Reframe`
 
 **Module:** `umol-graph-ir/src/ir/molecule.rs`, `molecule/editor.rs`,
 `umol-graph-core/src/relation.rs`, and their unit tests.
@@ -1135,9 +1325,9 @@ characterise that difference, not to prove there is none.
 
 **Change class:** breaking removal with caller migration (green within the stage).
 
-**Dependencies:** [dep: S4d]
+**Dependencies:** [dep: S3e, S4c]
 
-#### S4f — Add explicit transport to superposition, difference, and matching
+#### S4e — Add explicit transport to superposition, difference, and matching
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `molecule.rs`, `substructure.rs`, and their
 unit tests.
@@ -1152,9 +1342,9 @@ frame transport in matching.
 
 **Change class:** correctness change with caller migration (green).
 
-**Dependencies:** [dep: S4e]
+**Dependencies:** [dep: S3h, S4d]
 
-#### S4g — Collapse the editor's storage wrappers
+#### S4f — Collapse the editor's storage wrappers
 
 **Module:** `umol-graph-ir/src/ir/molecule/editor.rs` and its unit tests.
 
@@ -1183,7 +1373,7 @@ pushes materialises once rather than per operation.
 
 **Change class:** simplification with caller migration (green).
 
-**Dependencies:** [dep: S4e]
+**Dependencies:** [dep: S4d]
 
 ### S5 — Make storage frame-preserving
 
@@ -1219,7 +1409,7 @@ ligand frame with repeated virtual ligands where equal occurrences keep their in
 
 **Change class:** semantics-preserving migration (green).
 
-**Dependencies:** [dep: S4f]
+**Dependencies:** [dep: S4e]
 
 #### S5b — Remove the ordering markers and the payload callback
 
@@ -1265,12 +1455,25 @@ describe another current API. Run `git diff --check`.
 ### Dependency summary
 
 The critical path is
-`S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S4a -> S4b -> S4c -> S4d -> S4e -> S4f -> S4g -> S5a ->
-S5b -> S6a`.
-S3b and S3c are additive and may be built at any point before S3d, which consumes them. S3a
-introduces the family types and gates S3d. S3d additionally depends on doc 209 S1d for its span
-path. S5b is the only subitem that ends red, and doc 209 S2 onward closes it. Every stage is
-required; nothing here is deferrable.
+`S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S3e -> S4d -> S4e -> S5a -> S5b -> S6a`.
+
+`S2a -> S4a -> S4c -> S4d` is a parallel branch of comparable length, and `S3f -> S3g -> S3h` gates
+`S4e` alongside `S4d`. `S4b` hangs off `S2a` and joins nothing until S5.
+
+S3b and S3c are additive and were built at any point before their consumers. S3a introduces the
+family types and gates S3e. S3d supplies the in-place `permute_with` that S3e applies, which is why
+it precedes S3e rather than sitting in S4 with the rest of the graph-core work: grouping graph-core
+subitems by theme put a consumer before its foundation.
+
+**No subitem depends on another document.** S3f and S3g are the two stereo-integrity rules that make
+the intersection rule unambiguous; they were specified in doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) and moved here, because S3h cannot be
+built without them and this plan has to be executable as one list. Doc 209's S2a depends on them at
+their new labels.
+
+S5b is the only subitem that ends red. That is an exit state, not a dependency: it deliberately
+leaves the thirteen enumerated canonicalization and hash tests failing, and doc 209 S2 resumes from
+there. Every stage is required; nothing here is deferrable.
 
 S0 is a prerequisite for the whole sequence and not only for this document: the same laws guard doc
 209's normalization and its completion of the `Canonicalize` quotient. It is deliberately expected

@@ -148,7 +148,7 @@ impl DativeBonds {
             .map(DativeBondId::from)
     }
 
-    /// Removed by S4e, which moves frame alignment onto `reframe_to`.
+    /// Superseded once frame alignment moves onto `reframe_to`.
     #[allow(clippy::type_complexity)]
     pub(crate) fn participant_permutation(
         &self,

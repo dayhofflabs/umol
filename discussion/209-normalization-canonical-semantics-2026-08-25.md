@@ -455,74 +455,6 @@ existing integrity cases.
 
 **Dependencies:** [dep: S0c]
 
-#### S1c — Require a stereo kind admissible for its site type
-
-**Module:** `umol-graph-ir/src/ir/molecule/integrity.rs`, its public error type, and construction
-tests.
-
-Integrity validates a stereo entry's ligand arity (`check_stereo_frame_arity`) and its coset index,
-but never that the asserted `StereoKind` is admissible for the site it sits on. `Tetrahedral`,
-`CisTrans`, `Axial`, and `SquarePlanar` all have degree 4, so the arity check passes for a stereo
-bond asserting `Tetrahedral`. Add the check with a new `MoleculeIntegrityError` variant naming the
-entity, the asserted kind, and the site type.
-
-The admissible table is:
-
-| site | kinds |
-| --- | --- |
-| stereo atom | `Tetrahedral`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral`, `Axial` |
-| stereo bond | `CisTrans`, `Axial` |
-
-`Axial` is admissible on both, since axial chirality arises at an allene's central atom and about an
-atropisomeric biaryl bond. `CisTrans` is bond-only and the other four are atom-only.
-
-This rule is a property of a single molecule, so it propagates without further code:
-`ReactionSpanIntegrityError::{Lhs, Rhs}` wrap `MoleculeIntegrityError` per side, and
-`Reaction::check_integrity` calls `self.lhs.check_integrity()` first.
-
-**Tests and evidence:** Cover every kind on both site types, asserting the exact error variant for
-each inadmissible pairing and success for each admissible one. Include a degree-4 inadmissible case
-so the new check is shown to catch what the arity check cannot. Retain all existing integrity cases.
-
-**Change class:** strengthened representation-integrity contract (green).
-
-**Dependencies:** [dep: S1b]
-
-#### S1d — Prohibit a stereo kind change within one entity
-
-**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `umol-graph-ir/src/ir/reaction/integrity.rs`,
-their public error types, and construction tests.
-
-Unlike S1c this is a property of a *pair*, so each side can be individually valid while the pairing
-is not, and it needs a check at both entry points rather than riding the per-side delegation:
-
-- `ReactionSpan::check_integrity` — reject an `EntitySpan::Modified { lhs, rhs }` whose two sides
-  assert different `StereoKind` values. A new `ReactionSpanIntegrityError` variant.
-- `Reaction::check_integrity`, inside `ReactionIntegrityCheck` — reject a `ModifyField` delta that
-  replaces `StereoConfigurationForm::Kinded(k1, _)` with `Kinded(k2, _)` for `k1 != k2`. A new
-  `ReactionIntegrityError` variant.
-
-`StereoConfigurationForm::Undetermined` on either side remains admissible and contributes no
-restriction. A genuine kind change is expressed as removal plus addition, which is representable:
-the two entities carry different ids and neither side ends with a duplicate site.
-
-**This is an opinionated restriction on what a reaction can express** and is recorded as such.
-Converting a stereocenter's geometry class — an sp3 center becoming an allene axial center — must be
-written as removal plus addition rather than modification. That matches the chemistry, since the
-stereogenic unit itself changes rather than its configuration.
-
-Together with S1c this makes frame selection unambiguous at every carrier under the intersection
-rule in doc [211](211-relation-frames-and-api-2026-08-26.md): the only ambiguous case is two carried
-sides asserting different kinds, which these two rules exclude.
-
-**Tests and evidence:** Cover a modified span whose sides differ in kind, one whose sides share a
-kind, one with an undetermined side, and the equivalent delta cases. Assert the exact error
-variants, and assert that the removal-plus-addition encoding of a kind change is accepted.
-
-**Change class:** strengthened representation-integrity contract; breaking for any caller that
-expressed a kind change as a modification (green).
-
-**Dependencies:** [dep: S1c]
 
 ### S2 — Implement complete molecule normalization
 
@@ -568,7 +500,7 @@ to S2b's aggregate constraint handling.
 
 **Change class:** dependency resolution; no implementation in this subitem.
 
-**Dependencies:** [dep: S1a, S1b, S1c, S1d, doc 211 S5b]
+**Dependencies:** [dep: S1a, S1b, doc 211 S3g, doc 211 S5b]
 
 #### S2b — Implement complete molecule normalization
 
@@ -886,9 +818,10 @@ private and public surfaces, and `git diff --check` passes.
 
 ### Dependency summary
 
-S0 is complete, as are S1a and S1b. S1c and S1d are new stereo-integrity subitems that make frame
-selection unambiguous and are prerequisites for S2b. S2a is settled and depends on doc 211 S5b,
-which must land before S2b begins. After S2c, S3a and S3b branch and join at S3c. The critical path from S2b is
+S0 is complete, as are S1a and S1b, which completes S1. The two stereo-integrity rules that make
+frame selection unambiguous moved to doc [211](211-relation-frames-and-api-2026-08-26.md) as its S3f
+and S3g, so that document is implementable end to end without returning here; S2a depends on them
+there. S2a also depends on doc 211 S5b, which must land before S2b begins. After S2c, S3a and S3b branch and join at S3c. The critical path from S2b is
 `S2b -> S2c -> S3a/S3b -> S3c -> S4a -> S4b -> S4c -> S4d -> S5a -> S5b -> S5c`.
 Canonical-hash allocation, key allocation, orbit pruning, and prefix pruning remain in doc 208 and
 are not completion conditions here.

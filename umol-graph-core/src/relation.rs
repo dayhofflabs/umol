@@ -98,6 +98,35 @@ impl ParticipantPosition {
     }
 }
 
+/// Reorder `participants` in place so that `new[i] = old[order[i]]`.
+///
+/// Panics unless `order` is a permutation of `0..participants.len()`. Under that condition the
+/// participant multiset is unchanged, so an incidence index built over these participants stays
+/// valid and is left untouched.
+fn permute_participants<P: Copy>(participants: &mut [P], order: &[ParticipantPosition]) {
+    assert_eq!(
+        order.len(),
+        participants.len(),
+        "permute: order length must equal the relation's arity"
+    );
+    let mut seen = vec![false; participants.len()];
+    for position in order {
+        let index = position.index();
+        assert!(
+            index < participants.len(),
+            "permute: position {index} is outside 0..{}",
+            participants.len()
+        );
+        assert!(!seen[index], "permute: position {index} is repeated");
+        seen[index] = true;
+    }
+    let permuted: Vec<P> = order
+        .iter()
+        .map(|position| participants[position.index()])
+        .collect();
+    participants.copy_from_slice(&permuted);
+}
+
 /// Canonicalization of a relation factor's participants, applied on
 /// construction and after a remap relabels them. `Unordered` sorts (membership
 /// is the datum); `Ordered` preserves input order (position is the datum).
@@ -451,6 +480,15 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         &self.participants[id.index()]
     }
 
+    /// Reorder relation `id`'s participants so that `new[i] = old[order[i]]`, leaving the payload
+    /// untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        permute_participants(self.participants[id.index()].as_mut_slice(), order);
+    }
+
     /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
     /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
     /// [`find_by_participants`](Self::find_by_participants): the structural half of a relation compare,
@@ -758,6 +796,17 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         &self.participants[start..end]
     }
 
+    /// Reorder relation `id`'s participants so that `new[i] = old[order[i]]`, leaving the payload
+    /// untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        let start = self.offsets[id.index()] as usize;
+        let end = self.offsets[id.index() + 1] as usize;
+        permute_participants(&mut self.participants[start..end], order);
+    }
+
     /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
     /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
     /// [`find_by_participants`](Self::find_by_participants).
@@ -1055,6 +1104,24 @@ where
 
     pub fn participants_2(&self, id: RelationId) -> &[L2; N2] {
         &self.participants_2[id.index()]
+    }
+
+    /// Reorder relation `id`'s first-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the second factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_1_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        permute_participants(self.participants_1[id.index()].as_mut_slice(), order);
+    }
+
+    /// Reorder relation `id`'s second-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the first factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_2_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        permute_participants(self.participants_2[id.index()].as_mut_slice(), order);
     }
 
     /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
@@ -1427,10 +1494,30 @@ where
         &self.participants_1[id.index()]
     }
 
+    /// Reorder relation `id`'s first-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the second factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_1_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        permute_participants(self.participants_1[id.index()].as_mut_slice(), order);
+    }
+
     pub fn participants_2(&self, id: RelationId) -> &[L2] {
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// Reorder relation `id`'s second-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the first factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_2_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        let start = self.f2_offsets[id.index()] as usize;
+        let end = self.f2_offsets[id.index() + 1] as usize;
+        permute_participants(&mut self.participants_2[start..end], order);
     }
 
     /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
@@ -1805,10 +1892,32 @@ where
         &self.participants_1[start..end]
     }
 
+    /// Reorder relation `id`'s first-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the second factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_1_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        let start = self.f1_offsets[id.index()] as usize;
+        let end = self.f1_offsets[id.index() + 1] as usize;
+        permute_participants(&mut self.participants_1[start..end], order);
+    }
+
     pub fn participants_2(&self, id: RelationId) -> &[L2] {
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         &self.participants_2[start..end]
+    }
+
+    /// Reorder relation `id`'s second-factor participants so that `new[i] = old[order[i]]`,
+    /// leaving the first factor and the payload untouched.
+    ///
+    /// The multiset is unchanged, so incidence answers identically and is not rebuilt. Panics
+    /// unless `order` is a permutation of `0..arity`.
+    pub fn permute_2_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
+        let start = self.f2_offsets[id.index()] as usize;
+        let end = self.f2_offsets[id.index() + 1] as usize;
+        permute_participants(&mut self.participants_2[start..end], order);
     }
 
     /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
@@ -2307,6 +2416,64 @@ mod tests {
     }
 
     #[rstest]
+    #[case::rotation(vec![ParticipantPosition(2), ParticipantPosition(0), ParticipantPosition(1)], [n(2), n(0), n(1)])]
+    #[case::transposition(vec![ParticipantPosition(1), ParticipantPosition(0), ParticipantPosition(2)], [n(1), n(0), n(2)])]
+    #[case::reversal(vec![ParticipantPosition(2), ParticipantPosition(1), ParticipantPosition(0)], [n(2), n(1), n(0)])]
+    fn test_fixed_relation_set_permute_with(
+        #[case] order: Vec<ParticipantPosition>,
+        #[case] expected: [NodeId; 3],
+    ) {
+        let mut rs: FixedRelationSet<NodeId, Ordered, &str, 3> =
+            FixedRelationSet::new(vec![([n(0), n(1), n(2)], "a"), ([n(3), n(4), n(5)], "b")]);
+        let incidence_before: Vec<Vec<RelationId>> =
+            (0..6).map(|i| rs.incident(n(i)).to_vec()).collect();
+
+        rs.permute_with(RelationId(0), &order);
+
+        assert_eq!(rs.participants(RelationId(0)), &expected);
+        assert_eq!(rs.participants(RelationId(1)), &[n(3), n(4), n(5)]);
+        assert_eq!(rs.data(RelationId(0)), &"a");
+        assert_eq!(rs.data(RelationId(1)), &"b");
+        let incidence_after: Vec<Vec<RelationId>> =
+            (0..6).map(|i| rs.incident(n(i)).to_vec()).collect();
+        assert_eq!(incidence_after, incidence_before);
+    }
+
+    #[rstest]
+    #[case::ordered_factor(FixedRelationSet::<NodeId, Ordered, &str, 3>::new(vec![
+        ([n(2), n(0), n(1)], "a"),
+    ]))]
+    #[case::unordered_factor(FixedRelationSet::<NodeId, Unordered, &str, 3>::new(vec![
+        ([n(2), n(0), n(1)], "a"),
+    ]))]
+    fn test_fixed_relation_set_permute_with_identity<O: FactorOrdering + Clone + Debug>(
+        #[case] input: FixedRelationSet<NodeId, O, &'static str, 3>,
+    ) {
+        let mut permuted = input.clone();
+        permuted.permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+                ParticipantPosition(2),
+            ],
+        );
+        assert_eq!(permuted, input);
+    }
+
+    #[rstest]
+    #[case::order_too_short(vec![ParticipantPosition(0), ParticipantPosition(1)])]
+    #[case::order_too_long(vec![ParticipantPosition(0), ParticipantPosition(1), ParticipantPosition(2), ParticipantPosition(0)])]
+    #[case::position_out_of_range(vec![ParticipantPosition(0), ParticipantPosition(1), ParticipantPosition(3)])]
+    #[case::position_repeated(vec![ParticipantPosition(0), ParticipantPosition(0), ParticipantPosition(1)])]
+    #[should_panic(expected = "permute")]
+    fn test_fixed_relation_set_permute_with_error(#[case] order: Vec<ParticipantPosition>) {
+        let mut rs: FixedRelationSet<NodeId, Ordered, &str, 3> =
+            FixedRelationSet::new(vec![([n(0), n(1), n(2)], "a")]);
+        rs.permute_with(RelationId(0), &order);
+    }
+
+    #[rstest]
     fn test_fixed_relation_set_incidence() {
         let rs: FixedRelationSet<NodeId, Unordered, (), 2> = FixedRelationSet::new(vec![
             ([n(0), n(1)], ()),
@@ -2481,6 +2648,66 @@ mod tests {
     }
 
     #[rstest]
+    #[case::second_relation(RelationId(1), vec![ParticipantPosition(2), ParticipantPosition(0), ParticipantPosition(1)],
+        vec![n(4), n(2), n(3)])]
+    #[case::last_relation(RelationId(2), vec![ParticipantPosition(1), ParticipantPosition(0)], vec![n(6), n(5)])]
+    fn test_var_relation_set_permute_with(
+        #[case] id: RelationId,
+        #[case] order: Vec<ParticipantPosition>,
+        #[case] expected: Vec<NodeId>,
+    ) {
+        let mut rs: VarRelationSet<NodeId, Ordered, &str> = VarRelationSet::new(vec![
+            (vec![n(0), n(1)], "a"),
+            (vec![n(2), n(3), n(4)], "b"),
+            (vec![n(5), n(6)], "c"),
+        ]);
+        let incidence_before: Vec<Vec<RelationId>> =
+            (0..7).map(|i| rs.incident(n(i)).to_vec()).collect();
+
+        rs.permute_with(id, &order);
+
+        assert_eq!(rs.participants(id), expected.as_slice());
+        assert_eq!(rs.data(id), &["a", "b", "c"][id.index()]);
+        for other in [RelationId(0), RelationId(1), RelationId(2)] {
+            if other != id {
+                let stored: Vec<Vec<NodeId>> =
+                    vec![vec![n(0), n(1)], vec![n(2), n(3), n(4)], vec![n(5), n(6)]];
+                assert_eq!(rs.participants(other), stored[other.index()].as_slice());
+            }
+        }
+        let incidence_after: Vec<Vec<RelationId>> =
+            (0..7).map(|i| rs.incident(n(i)).to_vec()).collect();
+        assert_eq!(incidence_after, incidence_before);
+    }
+
+    #[rstest]
+    fn test_var_relation_set_permute_with_identity() {
+        let input: VarRelationSet<NodeId, Ordered, &str> =
+            VarRelationSet::new(vec![(vec![n(2), n(0), n(1)], "a"), (vec![n(4), n(3)], "b")]);
+        let mut permuted = input.clone();
+        permuted.permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+                ParticipantPosition(2),
+            ],
+        );
+        assert_eq!(permuted, input);
+    }
+
+    #[rstest]
+    #[case::order_too_short(vec![ParticipantPosition(0), ParticipantPosition(1)])]
+    #[case::position_out_of_range(vec![ParticipantPosition(0), ParticipantPosition(1), ParticipantPosition(9)])]
+    #[case::position_repeated(vec![ParticipantPosition(1), ParticipantPosition(1), ParticipantPosition(0)])]
+    #[should_panic(expected = "permute")]
+    fn test_var_relation_set_permute_with_error(#[case] order: Vec<ParticipantPosition>) {
+        let mut rs: VarRelationSet<NodeId, Ordered, &str> =
+            VarRelationSet::new(vec![(vec![n(0), n(1)], "a"), (vec![n(2), n(3), n(4)], "b")]);
+        rs.permute_with(RelationId(1), &order);
+    }
+
+    #[rstest]
     fn test_var_relation_set_incidence() {
         let rs: VarRelationSet<NodeId, Unordered, ()> = VarRelationSet::new(vec![
             (vec![n(0), n(1), n(2)], ()),
@@ -2624,6 +2851,36 @@ mod tests {
         assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_permute_1_with() {
+        let mut rs: FixedFixedBirelationSet<NodeId, Ordered, 3, EdgeId, Ordered, 2, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0), n(1), n(2)], [EdgeId(7), EdgeId(8)], "a")]);
+        rs.permute_1_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        assert_eq!(rs.participants_1(RelationId(0)), &[n(2), n(0), n(1)]);
+        assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(7), EdgeId(8)]);
+        assert_eq!(rs.data(RelationId(0)), &"a");
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_permute_2_with() {
+        let mut rs: FixedFixedBirelationSet<NodeId, Ordered, 3, EdgeId, Ordered, 2, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0), n(1), n(2)], [EdgeId(7), EdgeId(8)], "a")]);
+        rs.permute_2_with(
+            RelationId(0),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        assert_eq!(rs.participants_1(RelationId(0)), &[n(0), n(1), n(2)]);
+        assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(8), EdgeId(7)]);
+        assert_eq!(rs.data(RelationId(0)), &"a");
     }
 
     #[rstest]
@@ -2812,6 +3069,82 @@ mod tests {
     }
 
     #[rstest]
+    fn test_fixed_var_birelation_set_permute_1_with() {
+        let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Ordered, &str> =
+            FixedVarBirelationSet::new(vec![
+                ([EdgeId(4), EdgeId(5)], vec![n(0), n(1), n(2)], "a"),
+                ([EdgeId(6), EdgeId(7)], vec![n(3), n(4)], "b"),
+            ]);
+        rs.permute_1_with(
+            RelationId(1),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(4), EdgeId(5)]);
+        assert_eq!(rs.participants_1(RelationId(1)), &[EdgeId(7), EdgeId(6)]);
+        assert_eq!(rs.participants_2(RelationId(1)), &[n(3), n(4)]);
+        assert_eq!(rs.data(RelationId(1)), &"b");
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_permute_2_with() {
+        let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Ordered, &str> =
+            FixedVarBirelationSet::new(vec![
+                ([EdgeId(4), EdgeId(5)], vec![n(0), n(1), n(2)], "a"),
+                ([EdgeId(6), EdgeId(7)], vec![n(3), n(4)], "b"),
+            ]);
+        let incidence_before: Vec<Vec<RelationId>> =
+            (0..5).map(|i| rs.incident(n(i)).to_vec()).collect();
+
+        rs.permute_2_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+
+        assert_eq!(rs.participants_2(RelationId(0)), &[n(2), n(0), n(1)]);
+        assert_eq!(rs.participants_2(RelationId(1)), &[n(3), n(4)]);
+        assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(4), EdgeId(5)]);
+        assert_eq!(rs.data(RelationId(0)), &"a");
+        let incidence_after: Vec<Vec<RelationId>> =
+            (0..5).map(|i| rs.incident(n(i)).to_vec()).collect();
+        assert_eq!(incidence_after, incidence_before);
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_permute_with_identity() {
+        let input: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Ordered, &str> =
+            FixedVarBirelationSet::new(vec![([EdgeId(5), EdgeId(4)], vec![n(2), n(0), n(1)], "a")]);
+        let mut permuted = input.clone();
+        permuted.permute_1_with(
+            RelationId(0),
+            &[ParticipantPosition(0), ParticipantPosition(1)],
+        );
+        permuted.permute_2_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+                ParticipantPosition(2),
+            ],
+        );
+        assert_eq!(permuted, input);
+    }
+
+    #[rstest]
+    #[case::order_too_short(vec![ParticipantPosition(0), ParticipantPosition(1)])]
+    #[case::position_out_of_range(vec![ParticipantPosition(0), ParticipantPosition(1), ParticipantPosition(3)])]
+    #[case::position_repeated(vec![ParticipantPosition(2), ParticipantPosition(2), ParticipantPosition(0)])]
+    #[should_panic(expected = "permute")]
+    fn test_fixed_var_birelation_set_permute_2_with_error(#[case] order: Vec<ParticipantPosition>) {
+        let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Ordered, &str> =
+            FixedVarBirelationSet::new(vec![([EdgeId(4), EdgeId(5)], vec![n(0), n(1), n(2)], "a")]);
+        rs.permute_2_with(RelationId(0), &order);
+    }
+
+    #[rstest]
     fn test_fixed_var_birelation_set_incidence() {
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2)], "ct")]);
@@ -2971,6 +3304,44 @@ mod tests {
         assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_permute_1_with() {
+        let mut rs: VarVarBirelationSet<NodeId, Ordered, EdgeId, Ordered, &str> =
+            VarVarBirelationSet::new(vec![
+                (vec![n(0), n(1)], vec![EdgeId(9)], "a"),
+                (vec![n(2), n(3), n(4)], vec![EdgeId(7), EdgeId(8)], "b"),
+            ]);
+        rs.permute_1_with(
+            RelationId(1),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        assert_eq!(rs.participants_1(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(rs.participants_1(RelationId(1)), &[n(4), n(2), n(3)]);
+        assert_eq!(rs.participants_2(RelationId(1)), &[EdgeId(7), EdgeId(8)]);
+        assert_eq!(rs.data(RelationId(1)), &"b");
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_permute_2_with() {
+        let mut rs: VarVarBirelationSet<NodeId, Ordered, EdgeId, Ordered, &str> =
+            VarVarBirelationSet::new(vec![
+                (vec![n(0), n(1)], vec![EdgeId(9)], "a"),
+                (vec![n(2), n(3), n(4)], vec![EdgeId(7), EdgeId(8)], "b"),
+            ]);
+        rs.permute_2_with(
+            RelationId(1),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(9)]);
+        assert_eq!(rs.participants_2(RelationId(1)), &[EdgeId(8), EdgeId(7)]);
+        assert_eq!(rs.participants_1(RelationId(1)), &[n(2), n(3), n(4)]);
+        assert_eq!(rs.data(RelationId(1)), &"b");
     }
 
     #[rstest]
