@@ -241,6 +241,191 @@ impl MoleculeCorrespondence {
         self.is_total_on_left() && self.is_total_on_right()
     }
 
+    /// Whether this correspondence actually relates `lhs` to `rhs`: every family's declared counts
+    /// match the molecules, and every matched pair's participants map onto its counterpart's under
+    /// the atom correspondence.
+    ///
+    /// A structural property of the correspondence, asked once. It is not a value comparison — no
+    /// payload is read — so an operation that compares values under a correspondence establishes
+    /// this first and then only compares values.
+    pub fn is_compatible(&self, lhs: &Molecule, rhs: &Molecule) -> bool {
+        let correspondence = self;
+        let counts = [
+            (
+                correspondence.atoms().left_count(),
+                lhs.atoms().count(),
+                correspondence.atoms().right_count(),
+                rhs.atoms().count(),
+            ),
+            (
+                correspondence.bonds().left_count(),
+                lhs.bonds().count(),
+                correspondence.bonds().right_count(),
+                rhs.bonds().count(),
+            ),
+            (
+                correspondence.dative_bonds().left_count(),
+                lhs.dative_bonds().count(),
+                correspondence.dative_bonds().right_count(),
+                rhs.dative_bonds().count(),
+            ),
+            (
+                correspondence.aromatic_systems().left_count(),
+                lhs.aromatic_systems().count(),
+                correspondence.aromatic_systems().right_count(),
+                rhs.aromatic_systems().count(),
+            ),
+            (
+                correspondence.multicenter_bonds().left_count(),
+                lhs.multicenter_bonds().count(),
+                correspondence.multicenter_bonds().right_count(),
+                rhs.multicenter_bonds().count(),
+            ),
+            (
+                correspondence.noncovalent_bonds().left_count(),
+                lhs.noncovalent_bonds().count(),
+                correspondence.noncovalent_bonds().right_count(),
+                rhs.noncovalent_bonds().count(),
+            ),
+            (
+                correspondence.stereo_atoms().left_count(),
+                lhs.stereo_atoms().count(),
+                correspondence.stereo_atoms().right_count(),
+                rhs.stereo_atoms().count(),
+            ),
+            (
+                correspondence.stereo_bonds().left_count(),
+                lhs.stereo_bonds().count(),
+                correspondence.stereo_bonds().right_count(),
+                rhs.stereo_bonds().count(),
+            ),
+        ];
+        if counts.into_iter().any(
+            |(declared_left, actual_left, declared_right, actual_right)| {
+                declared_left != actual_left || declared_right != actual_right
+            },
+        ) {
+            return false;
+        }
+
+        let atoms = correspondence.atoms();
+        let same_atom_set = |left: Vec<AtomId>, mut right: Vec<AtomId>| {
+            let Some(mut mapped): Option<Vec<_>> =
+                left.into_iter().map(|atom| atoms.right_of(atom)).collect()
+            else {
+                return false;
+            };
+            mapped.sort_unstable();
+            right.sort_unstable();
+            mapped == right
+        };
+        let same_ligand_set = |left: Vec<StereoLigand>, mut right: Vec<StereoLigand>| {
+            let Some(mut mapped): Option<Vec<_>> = left
+                .into_iter()
+                .map(|ligand| {
+                    atoms
+                        .right_of(ligand.atom_id)
+                        .map(|atom| StereoLigand::new(atom, ligand.kind))
+                })
+                .collect()
+            else {
+                return false;
+            };
+            mapped.sort_unstable();
+            right.sort_unstable();
+            mapped == right
+        };
+
+        if !correspondence
+            .bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.bond(left).atom_ids().to_vec(),
+                    rhs.bond(right).atom_ids().to_vec(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .dative_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.dative_bond(left);
+                let rhs = rhs.dative_bond(right);
+                atoms.right_of(lhs.acceptor_id()) == Some(rhs.acceptor_id())
+                    && same_atom_set(lhs.donor_ids().collect(), rhs.donor_ids().collect())
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .aromatic_systems()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.aromatic_system(left).atom_ids().collect(),
+                    rhs.aromatic_system(right).atom_ids().collect(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .multicenter_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.multicenter_bond(left).atom_ids().collect(),
+                    rhs.multicenter_bond(right).atom_ids().collect(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .noncovalent_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.noncovalent_bond(left).atom_ids().to_vec(),
+                    rhs.noncovalent_bond(right).atom_ids().to_vec(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .stereo_atoms()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.stereo_atom(left);
+                let rhs = rhs.stereo_atom(right);
+                atoms.right_of(lhs.site_id()) == Some(rhs.site_id())
+                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+            })
+        {
+            return false;
+        }
+        correspondence
+            .stereo_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.stereo_bond(left);
+                let rhs = rhs.stereo_bond(right);
+                correspondence.bonds().right_of(lhs.site_id()) == Some(rhs.site_id())
+                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+            })
+    }
+
     /// This correspondence as an [`IdRemapping`], or `None` unless every entity family is total on
     /// the left. Each left id then maps to its matched right id.
     pub fn to_remapping(&self) -> Option<IdRemapping> {

@@ -1493,6 +1493,58 @@ it does. The divergence is expected, not hypothetical.
 Once the six call sites are migrated, `RelationEquiv` and `BiRelationEquiv` lose their last consumer
 and are deleted with their re-exports.
 
+**Found by the harness, before any migration.** `participant_permutation` did two jobs: derive the
+alignment *and* establish participant identity, since it returned `None` when the participants
+differed. `reframe_to` does only the first, and for `NoncovalentBondForm` and `DativeBondForm` it
+does neither — their bodies read neither frame and always return `Some`, because the payload is
+frame-invariant. Aromatic and multicenter keep the check by accident, through
+`ElectronCountsForm::reframe_to` validating the multiset in order to derive its reordering.
+
+S4d had already shipped that hole into `Molecule::equiv_under` for those two families: a
+correspondence pairing entities whose participants disagree compared equivalent. No existing test
+covered it. Both sites now check identity explicitly through `same_participants`, and
+`test_molecule_equiv_under_rejects_mismatched_participants` covers the case that was missing.
+
+The lesson for the remaining migration: **`reframe_to` is not a replacement for
+`participant_permutation`** — it replaces the alignment half only, and every call site must be
+checked for whether it was also relying on the identity half.
+
+**And the non-uniformity is per value, not per family.** The first reading of this was that aromatic
+and multicenter keep the identity check because `ElectronCountsForm::reframe_to` must match the
+multiset to derive its reordering. That holds only for `Lit`: the `Undetermined` arm returns
+`Some(Undetermined)` without reading either frame, exactly as the frame-invariant forms do. So the
+same defect was live for those two families whenever the electron vector was undetermined, and was
+found by testing the claim rather than by reasoning about it.
+
+Identity is therefore asked for at **every** site, in all four families, through `is_coincident`.
+Transport never establishes it reliably, so no caller may infer it from a `Some`. Pinned at three
+levels: `test_*_form_reframe_to_does_not_establish_identity` states it at the form, where a
+determinate vector rejects a non-reordering and an undetermined one accepts even disjoint frames;
+`test_molecule_editor_*_equiv_undetermined_electrons` and
+`test_molecule_equiv_under_rejects_mismatched_overlay_participants` cover the two consumers.
+
+This is the answer to whether `reframe_to`'s contract should be made uniform by validating in every
+impl. It should not: validation there would be per-value anyway — the `Undetermined` arm has nothing
+to reorder and no reason to read the frames — so the honest split is transport in `reframe_to`,
+identity in `is_coincident`, and callers asking for both.
+
+**Recorded divergence.** The stereo differential pins both readings side by side:
+
+| offered frame | coset | current | derived |
+| --- | --- | --- | --- |
+| stored | 0 | true | true |
+| stored | 1 | false | false |
+| transposed | 0 | **true** | **false** |
+| transposed | 1 | **false** | **true** |
+| multiset differs | 0 | false | false |
+
+The two middle rows are inverted, which is what a transposition does to a tetrahedral coset. The
+derived column is correct. `test_molecule_editor_stereo_atom_equiv_reordered_frame` asserts the
+first of them directly and is `#[ignore]`d until the migration lands.
+
+The differential covers input classes rather than generated inputs: the `*_equiv` methods are
+crate-visible and the property target cannot reach them.
+
 **Tests and evidence:** An editor comparison against a reordered frame for each storage wrapper, and
 the differential above over generated participant lists including repeated stereo ligands. Retain
 every editor and transaction assertion.

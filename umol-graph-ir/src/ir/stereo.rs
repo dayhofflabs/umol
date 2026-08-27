@@ -141,6 +141,13 @@ impl StereoAtoms {
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
+    /// Whether stereo atom `id` is the one on `site` over `ligands` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: StereoAtomId, site: AtomId, ligands: &[StereoLigand]) -> bool {
+        self.0
+            .is_coincident(RelationId::from(id), &[NodeId::from(site)], ligands)
+    }
+
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
@@ -322,6 +329,13 @@ impl StereoBonds {
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))
+    }
+
+    /// Whether stereo bond `id` is the one on `site` over `ligands` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: StereoBondId, site: BondId, ligands: &[StereoLigand]) -> bool {
+        self.0
+            .is_coincident(RelationId::from(id), &[EdgeId::from(site)], ligands)
     }
 
     /// Id of the entity coinciding with these participants — the one whose participants equal

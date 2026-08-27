@@ -585,6 +585,30 @@ degeneracy. Whether the name survives is settled here too and not before: `Molec
 from the blanket impl over `Normalize` in S2b, so the inherent `Molecule::equiv` must go, and only
 then is it clear what the witness-taking operation should be called beside it.
 
+**A pre-existing narrowing to resolve with it.** `Molecule::equiv_under`'s stereo path short-circuits
+when the mapped ligand frame already equals the stored one and the configurations agree: it
+`continue`s, which skips pushing the entity onto `stereo_frames`. That list is what
+`constraints_equiv_under_stereo_frames` recurses over, trying every candidate permutation against the
+molecule-level constraints. An entity omitted from it has its constraints compared under the identity
+alone.
+
+Falling through instead would offer identity *plus the frame's residual stabilizer* — the further
+permutations under which the configurations still match, which exist exactly when ligands repeat. So
+the short-circuit can reject a pair the full path accepts: identical ligand frames, matching
+configurations, and molecule-level frame-relative constraints agreeing only under a non-identity
+stabilizer element.
+
+Not a regression — the branch predates doc 211 — and the failure is a false negative: it rejects a
+pair it should accept, never the reverse.
+
+**Constructed and confirmed**, rather than left as a conjecture.
+`test_molecule_equiv_under_stereo_stabilizer_constraint` builds a stereo atom with two implicit
+hydrogens at positions 0 and 1, an undetermined configuration so the swap preserves it, and molecule-
+level `Topicity` constraints on the two sides differing exactly by that swap. `equiv_under` returns
+`false`. Deleting the short-circuit and nothing else makes the same test pass, which isolates the
+mechanism to that branch. The test is `#[ignore]`d, naming this subitem; unignore it when the
+unification lands.
+
 **Tests and evidence:** Retain every `equiv_under` case. Assert that the unified operation agrees with
 both replaced paths on generated inputs, including a stereo entry with repeated virtual ligands where
 the candidate set has more than one member, and a non-stereo entry where it has exactly one.

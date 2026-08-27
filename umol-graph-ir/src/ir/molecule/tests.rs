@@ -34,7 +34,7 @@ use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
+    StereoAtomId, StereoBondId, StereoLigandPosition,
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondForm;
@@ -44,6 +44,7 @@ use super::super::noncovalent::{
 use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
+use super::super::stereo::Topicity;
 use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
     Stereogenicity,
@@ -1405,6 +1406,188 @@ fn test_molecule_equiv_under_non_identity(
     assert!(!left.equiv(&right));
     assert!(left.equiv_under(&right, &correspondence));
     assert!(right.equiv_under(&left, &correspondence.reverse()));
+}
+
+/// A correspondence must map each matched entity's participants onto its counterpart's. That is a
+/// property of the correspondence, checked once, not of any per-family payload comparison.
+///
+/// Covers all six overlay families. Each case moves one participant of its entity onto a different
+/// atom that is still legal for that family, so both sides satisfy integrity and only the
+/// correspondence is at fault.
+#[rustfmt::skip]
+#[rstest]
+#[case::aromatic(Entity::AromaticSystem(AromaticSystemId(0)))]
+#[case::multicenter(Entity::MulticenterBond(MulticenterBondId(0)))]
+#[case::noncovalent(Entity::NoncovalentBond(NoncovalentBondId(0)))]
+#[case::dative(Entity::DativeBond(DativeBondId(0)))]
+#[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)))]
+#[case::stereo_bond(Entity::StereoBond(StereoBondId(0)))]
+fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Entity) {
+    // Atom 0 is bonded to 1, 4 and 5; atom 1 to 0, 2 and 5; atom 2 to 1 and 3. That gives every
+    // family a legal participant to move to.
+    let build = |shifted: bool| {
+        let atom = |kept: u32, moved: u32| AtomId(if shifted { moved } else { kept });
+        let ligand = |kept: u32, moved: u32| StereoLigand::new(atom(kept, moved), StereoLigandKind::Atom);
+        let virtual_ligand =
+            |site: u32, kind| StereoLigand::new(AtomId(site), kind);
+        let mut entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 6],
+            bonds: [(0, 1), (1, 2), (2, 3), (0, 4), (0, 5), (1, 5)]
+                .into_iter()
+                .map(|(a, b)| (AtomId(a), AtomId(b), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        };
+        match entity {
+            Entity::AromaticSystem(_) => {
+                entries.aromatic = vec![(
+                    vec![AtomId(1), AtomId(2), atom(3, 4)],
+                    AromaticSystemForm::default(),
+                )]
+            }
+            Entity::MulticenterBond(_) => {
+                entries.multicenter = vec![(
+                    vec![AtomId(1), AtomId(2), atom(3, 4)],
+                    MulticenterBondForm::default(),
+                )]
+            }
+            Entity::NoncovalentBond(_) => {
+                entries.noncovalent =
+                    vec![(AtomId(2), atom(4, 5), NoncovalentBondForm::default())]
+            }
+            Entity::DativeBond(_) => {
+                entries.dative = vec![(
+                    vec![AtomId(1), atom(4, 5)],
+                    AtomId(2),
+                    DativeBondForm::default(),
+                )]
+            }
+            Entity::StereoAtom(_) => {
+                // Site 0, ligands drawn from its neighbours 1, 4, 5 plus two virtuals.
+                entries.stereo_atoms = vec![(
+                    AtomId(0),
+                    vec![
+                        ligand(1, 5),
+                        ligand(4, 4),
+                        virtual_ligand(0, StereoLigandKind::ImplicitHydrogen),
+                        virtual_ligand(0, StereoLigandKind::LonePair),
+                    ],
+                    StereoAtomForm::default(),
+                )]
+            }
+            Entity::StereoBond(_) => {
+                // Site is bond 1 (atoms 1-2); endpoint 1's ligands come from 0 or 5, endpoint 2's
+                // from 3.
+                entries.stereo_bonds = vec![(
+                    BondId(1),
+                    vec![
+                        ligand(0, 5),
+                        virtual_ligand(1, StereoLigandKind::LonePair),
+                        ligand(3, 3),
+                        virtual_ligand(2, StereoLigandKind::LonePair),
+                    ],
+                    StereoBondForm::default(),
+                )]
+            }
+            _ => unreachable!("test cases contain only overlay families"),
+        }
+        Molecule::try_from_entries(entries)
+    };
+
+    let (Ok(left), Ok(right)) = (build(false), build(true)) else {
+        panic!("{entity}: both molecules must satisfy integrity");
+    };
+    assert_ne!(left, right, "{entity}: the shift must actually move a participant");
+
+    fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
+        Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
+    }
+    let one = |matches: bool| usize::from(matches);
+    let correspondence = MoleculeCorrespondence::new(
+        identity(6),
+        identity(6),
+        identity(one(matches!(entity, Entity::DativeBond(_)))),
+        identity(one(matches!(entity, Entity::AromaticSystem(_)))),
+        identity(one(matches!(entity, Entity::MulticenterBond(_)))),
+        identity(one(matches!(entity, Entity::NoncovalentBond(_)))),
+        identity(one(matches!(entity, Entity::StereoAtom(_)))),
+        identity(one(matches!(entity, Entity::StereoBond(_)))),
+    );
+
+    assert!(
+        !left.equiv_under(&right, &correspondence),
+        "{entity}: participants that do not correspond must not compare equivalent",
+    );
+}
+
+/// Does `equiv_under`'s stereo short-circuit reject a pair the full path would accept?
+///
+/// It `continue`s when the mapped ligand frame already equals the stored one and the configurations
+/// agree, which skips pushing the entity onto `stereo_frames` — the list
+/// `constraints_equiv_under_stereo_frames` recurses over. An omitted entity has its molecule-level
+/// constraints compared under the identity alone, never under the frame's residual stabilizer.
+///
+/// Here the two implicit hydrogens at positions 0 and 1 are indistinguishable, so swapping them is
+/// a stabilizer element; the configuration is undetermined, so the swap preserves it. The two sides
+/// carry topicity constraints that differ exactly by that swap, and therefore describe the same
+/// arrangement.
+#[rstest]
+#[ignore = "209 S2b.1: the stereo short-circuit omits the entity from `stereo_frames`, so its \
+            molecule-level constraints are compared under the identity alone"]
+fn test_molecule_equiv_under_stereo_stabilizer_constraint() {
+    let build = |pair: StereoLigandPair| {
+        Molecule::try_from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 3],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                ],
+                StereoAtomForm::default(),
+            )],
+            constraints: Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair,
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                }),
+            )
+            .into(),
+            ..Default::default()
+        })
+    };
+    let position =
+        |a: u32, b: u32| StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b));
+    let (Ok(left), Ok(right)) = (build(position(0, 2)), build(position(1, 2))) else {
+        panic!("both molecules satisfy integrity");
+    };
+
+    fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
+        Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
+    }
+    let correspondence = MoleculeCorrespondence::new(
+        identity(3),
+        identity(2),
+        identity(0),
+        identity(0),
+        identity(0),
+        identity(0),
+        identity(1),
+        identity(0),
+    );
+
+    assert!(
+        left.equiv_under(&right, &correspondence),
+        "constraints differing by a swap of two indistinguishable ligands describe one arrangement",
+    );
 }
 
 #[rstest]

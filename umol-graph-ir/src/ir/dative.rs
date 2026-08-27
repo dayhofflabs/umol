@@ -151,6 +151,14 @@ impl DativeBonds {
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
+    /// Whether bond `id` is the one from `donors` to `acceptor` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: DativeBondId, acceptor: AtomId, donors: &[AtomId]) -> bool {
+        let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .is_coincident(RelationId::from(id), &[NodeId::from(acceptor)], &donors)
+    }
+
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {

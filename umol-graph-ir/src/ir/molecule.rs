@@ -513,61 +513,10 @@ impl Molecule {
     /// by any admissible permutation, including alternatives caused by repeated equal ligands;
     /// configuration and frame-relative inline and molecule-level constraints move together.
     pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
-        let counts_match = [
-            (
-                correspondence.atoms().left_count(),
-                self.atoms.len(),
-                correspondence.atoms().right_count(),
-                other.atoms.len(),
-            ),
-            (
-                correspondence.bonds().left_count(),
-                self.bonds.len(),
-                correspondence.bonds().right_count(),
-                other.bonds.len(),
-            ),
-            (
-                correspondence.dative_bonds().left_count(),
-                self.dative_bonds.count(),
-                correspondence.dative_bonds().right_count(),
-                other.dative_bonds.count(),
-            ),
-            (
-                correspondence.aromatic_systems().left_count(),
-                self.aromatic_systems.count(),
-                correspondence.aromatic_systems().right_count(),
-                other.aromatic_systems.count(),
-            ),
-            (
-                correspondence.multicenter_bonds().left_count(),
-                self.multicenter_bonds.count(),
-                correspondence.multicenter_bonds().right_count(),
-                other.multicenter_bonds.count(),
-            ),
-            (
-                correspondence.noncovalent_bonds().left_count(),
-                self.noncovalent_bonds.count(),
-                correspondence.noncovalent_bonds().right_count(),
-                other.noncovalent_bonds.count(),
-            ),
-            (
-                correspondence.stereo_atoms().left_count(),
-                self.stereo_atoms.count(),
-                correspondence.stereo_atoms().right_count(),
-                other.stereo_atoms.count(),
-            ),
-            (
-                correspondence.stereo_bonds().left_count(),
-                self.stereo_bonds.count(),
-                correspondence.stereo_bonds().right_count(),
-                other.stereo_bonds.count(),
-            ),
-        ]
-        .into_iter()
-        .all(|(mapped_left, actual_left, mapped_right, actual_right)| {
-            mapped_left == actual_left && mapped_right == actual_right
-        });
-        if !correspondence.is_total() || !counts_match {
+        // Whether the correspondence relates these two molecules at all — declared counts and
+        // participants mapping onto participants — is its own structural question, asked once here.
+        // What follows compares values only.
+        if !correspondence.is_total() || !correspondence.is_compatible(self, other) {
             return false;
         }
 
@@ -588,24 +537,7 @@ impl Molecule {
             else {
                 return false;
             };
-            let [first, second] = self.graph.edge_endpoints(EdgeId::from(left));
-            let (Some(mapped_first), Some(mapped_second)) = (
-                correspondence
-                    .atoms()
-                    .right_of(AtomId::from(first))
-                    .map(NodeId::from),
-                correspondence
-                    .atoms()
-                    .right_of(AtomId::from(second))
-                    .map(NodeId::from),
-            ) else {
-                return false;
-            };
-            let mut mapped_endpoints = [mapped_first, mapped_second];
-            mapped_endpoints.sort_unstable();
-            if other.graph.edge_endpoints(EdgeId::from(right)) != mapped_endpoints
-                || !left_attributes.equiv(right_attributes)
-            {
+            if !left_attributes.equiv(right_attributes) {
                 return false;
             }
         }
@@ -616,22 +548,15 @@ impl Molecule {
             {
                 return false;
             }
-            let mapped_acceptor = correspondence
-                .atoms()
-                .right_of(self.dative_bonds.acceptor(left));
             let mapped_donors: Option<Vec<AtomId>> = self
                 .dative_bonds
                 .donors(left)
                 .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let (Some(mapped_acceptor), Some(mapped_donors)) = (mapped_acceptor, mapped_donors)
-            else {
+            let Some(mapped_donors) = mapped_donors else {
                 return false;
             };
             let stored_donors: Vec<AtomId> = other.dative_bonds.donors(right).collect();
-            if mapped_acceptor != other.dative_bonds.acceptor(right) {
-                return false;
-            }
             let Some(attributes) = self
                 .dative_bonds
                 .attributes(left)
@@ -744,9 +669,6 @@ impl Molecule {
             {
                 return false;
             }
-            let mapped_site = correspondence
-                .atoms()
-                .right_of(self.stereo_atoms.site(left));
             let mapped_ligands: Option<Vec<StereoLigand>> = self
                 .stereo_atoms
                 .ligands(left)
@@ -758,12 +680,9 @@ impl Molecule {
                         .map(|atom| StereoLigand::new(atom, ligand.kind))
                 })
                 .collect();
-            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
+            let Some(mapped_ligands) = mapped_ligands else {
                 return false;
             };
-            if mapped_site != other.stereo_atoms.site(right) {
-                return false;
-            }
             if mapped_ligands == other.stereo_atoms.ligands(right)
                 && self
                     .stereo_atoms
@@ -800,9 +719,6 @@ impl Molecule {
             {
                 return false;
             }
-            let mapped_site = correspondence
-                .bonds()
-                .right_of(self.stereo_bonds.site(left));
             let mapped_ligands: Option<Vec<StereoLigand>> = self
                 .stereo_bonds
                 .ligands(left)
@@ -814,12 +730,9 @@ impl Molecule {
                         .map(|atom| StereoLigand::new(atom, ligand.kind))
                 })
                 .collect();
-            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
+            let Some(mapped_ligands) = mapped_ligands else {
                 return false;
             };
-            if mapped_site != other.stereo_bonds.site(right) {
-                return false;
-            }
             if mapped_ligands == other.stereo_bonds.ligands(right)
                 && self
                     .stereo_bonds

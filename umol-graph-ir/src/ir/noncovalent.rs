@@ -119,6 +119,15 @@ impl NoncovalentBonds {
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
+    /// Whether bond `id` is the one between `first` and `second` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: NoncovalentBondId, first: AtomId, second: AtomId) -> bool {
+        self.0.is_coincident(
+            RelationId::from(id),
+            &[NodeId::from(first), NodeId::from(second)],
+        )
+    }
+
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {

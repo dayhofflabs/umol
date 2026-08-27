@@ -131,6 +131,13 @@ impl AromaticSystems {
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
+    /// Whether system `id` is the one over `atoms` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: AromaticSystemId, atoms: &[AtomId]) -> bool {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.is_coincident(RelationId::from(id), &query)
+    }
+
     /// Id of the system coinciding with `atoms` — the one whose atoms equal them as a multiset.
     ///
     /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
@@ -890,6 +897,38 @@ mod tests {
         None,
     )]
     fn test_aromatic_system_form_reframe_to(
+        #[case] input: AromaticSystemForm,
+        #[case] from: &[AtomId],
+        #[case] to: &[AtomId],
+        #[case] expected: Option<AromaticSystemForm>,
+    ) {
+        assert_eq!(input.reframe_to(from, to), expected);
+    }
+
+    /// `reframe_to` does not establish that `to` is a reordering of `from`. It checks that only
+    /// when it has a determinate vector to reorder; an undetermined one carries through untouched,
+    /// so the frames are never read.
+    ///
+    /// A caller needing participant identity therefore cannot get it from transport, whatever the
+    /// family — the same reason the frame-invariant forms establish nothing.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::determinate_rejects_non_reordering(
+        AromaticSystemForm::from_electrons(vec![10, 20]),
+        &[AtomId(4), AtomId(7)], &[AtomId(4), AtomId(9)],
+        None,
+    )]
+    #[case::undetermined_accepts_non_reordering(
+        AromaticSystemForm::default(),
+        &[AtomId(4), AtomId(7)], &[AtomId(4), AtomId(9)],
+        Some(AromaticSystemForm::default()),
+    )]
+    #[case::undetermined_accepts_disjoint_frames(
+        AromaticSystemForm::default(),
+        &[AtomId(4), AtomId(7)], &[AtomId(1), AtomId(2)],
+        Some(AromaticSystemForm::default()),
+    )]
+    fn test_aromatic_system_form_reframe_to_does_not_establish_identity(
         #[case] input: AromaticSystemForm,
         #[case] from: &[AtomId],
         #[case] to: &[AtomId],

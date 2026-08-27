@@ -531,12 +531,14 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         self.coincident_in(self.incident_edge(edge), query)
     }
 
-    /// Whether relation `id` really does coincide with `query` — the check `pushout` and
-    /// `pullback` apply to a supplied pairing before gluing on it.
-    fn coincide(&self, id: RelationId, query: &[P]) -> bool {
-        let mut sorted_query: Vec<P> = query.to_vec();
-        sorted_query.sort_unstable();
-        participants_match(self.participants(id), &sorted_query)
+    /// Whether relation `id` coincides with `query` — the known-id sibling of
+    /// [`coincident`](Self::coincident), which searches for it instead.
+    ///
+    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
+    /// already holds the id and needs identity established — because a frame-invariant payload
+    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    pub fn is_coincident(&self, id: RelationId, query: &[P]) -> bool {
+        self.coincident_in(&[id], query).is_some()
     }
 
     fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
@@ -656,9 +658,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match coincident(self, right.participants(id))
-                .filter(|&hit| self.coincide(hit, right.participants(id)))
-            {
+            match coincident(self, right.participants(id)) {
                 Some(hit) => {
                     let merged = combine(
                         (self.participants(hit), self.data(hit)),
@@ -699,9 +699,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = coincident(right, self.participants(id))
-                .filter(|&hit| right.coincide(hit, self.participants(id)))
-            {
+            if let Some(hit) = coincident(right, self.participants(id)) {
                 let merged = combine(
                     (self.participants(id), self.data(id)),
                     (right.participants(hit), right.data(hit)),
@@ -899,12 +897,14 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         self.coincident_in(self.incident_edge(edge), query)
     }
 
-    /// Whether relation `id` really does coincide with `query` — the check `pushout` and
-    /// `pullback` apply to a supplied pairing before gluing on it.
-    fn coincide(&self, id: RelationId, query: &[P]) -> bool {
-        let mut sorted_query: Vec<P> = query.to_vec();
-        sorted_query.sort_unstable();
-        participants_match(self.participants(id), &sorted_query)
+    /// Whether relation `id` coincides with these participants — the known-id sibling of
+    /// [`coincident`](Self::coincident), which searches for it instead.
+    ///
+    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
+    /// already holds the id and needs identity established — because a frame-invariant payload
+    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    pub fn is_coincident(&self, id: RelationId, query: &[P]) -> bool {
+        self.coincident_in(&[id], query).is_some()
     }
 
     fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
@@ -1018,9 +1018,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match coincident(self, right.participants(id))
-                .filter(|&hit| self.coincide(hit, right.participants(id)))
-            {
+            match coincident(self, right.participants(id)) {
                 Some(hit) => {
                     let merged = combine(
                         (self.participants(hit), self.data(hit)),
@@ -1058,9 +1056,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = coincident(right, self.participants(id))
-                .filter(|&hit| right.coincide(hit, self.participants(id)))
-            {
+            if let Some(hit) = coincident(right, self.participants(id)) {
                 let merged = combine(
                     (self.participants(id), self.data(id)),
                     (right.participants(hit), right.data(hit)),
@@ -1277,15 +1273,14 @@ where
         self.coincident_in(self.incident_edge(edge), query_1, query_2)
     }
 
-    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
-    /// and `pullback` apply to a supplied pairing before gluing on it.
-    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
-        let mut sorted_1: Vec<L1> = query_1.to_vec();
-        sorted_1.sort_unstable();
-        let mut sorted_2: Vec<L2> = query_2.to_vec();
-        sorted_2.sort_unstable();
-        participants_match(self.participants_1(id), &sorted_1)
-            && participants_match(self.participants_2(id), &sorted_2)
+    /// Whether relation `id` coincides with `query_1` / `query_2` — the known-id sibling of
+    /// [`coincident`](Self::coincident), which searches for it instead.
+    ///
+    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
+    /// already holds the id and needs identity established — because a frame-invariant payload
+    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    pub fn is_coincident(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
+        self.coincident_in(&[id], query_1, query_2).is_some()
     }
 
     fn coincident_in(
@@ -1427,9 +1422,7 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
-                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
-            ) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -1479,11 +1472,7 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
-                .filter(|&hit| {
-                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
-                })
-            {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id)) {
                 let merged = combine(
                     (
                         self.participants_1(id),
@@ -1745,15 +1734,14 @@ where
         self.coincident_in(self.incident_edge(edge), query_1, query_2)
     }
 
-    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
-    /// and `pullback` apply to a supplied pairing before gluing on it.
-    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
-        let mut sorted_1: Vec<L1> = query_1.to_vec();
-        sorted_1.sort_unstable();
-        let mut sorted_2: Vec<L2> = query_2.to_vec();
-        sorted_2.sort_unstable();
-        participants_match(self.participants_1(id), &sorted_1)
-            && participants_match(self.participants_2(id), &sorted_2)
+    /// Whether relation `id` coincides with these participants — the known-id sibling of
+    /// [`coincident`](Self::coincident), which searches for it instead.
+    ///
+    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
+    /// already holds the id and needs identity established — because a frame-invariant payload
+    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    pub fn is_coincident(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
+        self.coincident_in(&[id], query_1, query_2).is_some()
     }
 
     fn coincident_in(
@@ -1895,9 +1883,7 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
-                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
-            ) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -1947,11 +1933,7 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
-                .filter(|&hit| {
-                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
-                })
-            {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id)) {
                 let merged = combine(
                     (
                         self.participants_1(id),
@@ -2219,15 +2201,14 @@ where
         self.coincident_in(self.incident_edge(edge), query_1, query_2)
     }
 
-    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
-    /// and `pullback` apply to a supplied pairing before gluing on it.
-    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
-        let mut sorted_1: Vec<L1> = query_1.to_vec();
-        sorted_1.sort_unstable();
-        let mut sorted_2: Vec<L2> = query_2.to_vec();
-        sorted_2.sort_unstable();
-        participants_match(self.participants_1(id), &sorted_1)
-            && participants_match(self.participants_2(id), &sorted_2)
+    /// Whether relation `id` coincides with these participants — the known-id sibling of
+    /// [`coincident`](Self::coincident), which searches for it instead.
+    ///
+    /// `pushout` and `pullback` apply this to a supplied pairing before gluing on it. A caller that
+    /// already holds the id and needs identity established — because a frame-invariant payload
+    /// carries without reading either frame — asks here rather than deriving the comparison again.
+    pub fn is_coincident(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
+        self.coincident_in(&[id], query_1, query_2).is_some()
     }
 
     fn coincident_in(
@@ -2365,9 +2346,7 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
-                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
-            ) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -2417,11 +2396,7 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
-                .filter(|&hit| {
-                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
-                })
-            {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id)) {
                 let merged = combine(
                     (
                         self.participants_1(id),
