@@ -15,12 +15,12 @@ use umol_graph_core::{
     RelationId, Remapping, Unordered, VarRelationSet,
 };
 
-use super::aromatic::AromaticSystemForm;
+use super::aromatic::{AromaticSystemForm, AromaticSystemSpans};
 use super::atom::AtomForm;
 use super::bond::BondForm;
 use super::constraint::Constraint;
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::DativeBondForm;
+use super::dative::{DativeBondForm, DativeBondSpans};
 use super::delta::{
     apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
     apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
@@ -38,11 +38,11 @@ use super::ligand::StereoLigand;
 use super::molecule::{
     validate_constraint_references, Molecule, MoleculeEntries, MoleculeIntegrityError,
 };
-use super::multicenter::MulticenterBondForm;
-use super::noncovalent::NoncovalentBondForm;
+use super::multicenter::{MulticenterBondForm, MulticenterBondSpans};
+use super::noncovalent::{NoncovalentBondForm, NoncovalentBondSpans};
 use super::reaction::Reaction;
 use super::remap::IdRemapping;
-use super::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
+use super::stereo::{StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind};
 use super::traits::{EntityPatch, Equiv, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
@@ -53,27 +53,12 @@ pub struct ReactionSpan {
     graph: Graph,
     atoms: Vec<EntitySpan<AtomForm>>,
     bonds: Vec<EntitySpan<BondForm>>,
-    dative_bonds:
-        FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>,
-    aromatic_systems: VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>>,
-    multicenter_bonds: VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>>,
-    noncovalent_bonds: FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2>,
-    stereo_atoms: FixedVarBirelationSet<
-        NodeId,
-        Ordered,
-        1,
-        StereoLigand,
-        Ordered,
-        EntitySpan<StereoAtomForm>,
-    >,
-    stereo_bonds: FixedVarBirelationSet<
-        EdgeId,
-        Ordered,
-        1,
-        StereoLigand,
-        Ordered,
-        EntitySpan<StereoBondForm>,
-    >,
+    dative_bonds: DativeBondSpans,
+    aromatic_systems: AromaticSystemSpans,
+    multicenter_bonds: MulticenterBondSpans,
+    noncovalent_bonds: NoncovalentBondSpans,
+    stereo_atoms: StereoAtomSpans,
+    stereo_bonds: StereoBondSpans,
     constraints: Vec<ConstraintSpan>,
 }
 
@@ -166,48 +151,12 @@ impl ReactionSpan {
             .map(|(first, second, _)| [first.0, second.0])
             .collect();
         let bond_values = bonds.into_iter().map(|(_, _, span)| span).collect();
-        let dative_bonds = FixedVarBirelationSet::new(
-            dative
-                .into_iter()
-                .map(|(donors, acceptor, span)| {
-                    (
-                        [NodeId::from(acceptor)],
-                        donors.into_iter().map(NodeId::from).collect(),
-                        span,
-                    )
-                })
-                .collect(),
-        );
-        let aromatic_systems = VarRelationSet::new(
-            aromatic
-                .into_iter()
-                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
-                .collect(),
-        );
-        let multicenter_bonds = VarRelationSet::new(
-            multicenter
-                .into_iter()
-                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
-                .collect(),
-        );
-        let noncovalent_bonds = FixedRelationSet::new(
-            noncovalent
-                .into_iter()
-                .map(|(first, second, span)| ([NodeId::from(first), NodeId::from(second)], span))
-                .collect(),
-        );
-        let stereo_atoms = FixedVarBirelationSet::new(
-            stereo_atoms
-                .into_iter()
-                .map(|(site, ligands, span)| ([NodeId::from(site)], ligands, span))
-                .collect(),
-        );
-        let stereo_bonds = FixedVarBirelationSet::new(
-            stereo_bonds
-                .into_iter()
-                .map(|(site, ligands, span)| ([EdgeId::from(site)], ligands, span))
-                .collect(),
-        );
+        let dative_bonds = DativeBondSpans::new(dative);
+        let aromatic_systems = AromaticSystemSpans::new(aromatic);
+        let multicenter_bonds = MulticenterBondSpans::new(multicenter);
+        let noncovalent_bonds = NoncovalentBondSpans::new(noncovalent);
+        let stereo_atoms = StereoAtomSpans::new(stereo_atoms);
+        let stereo_bonds = StereoBondSpans::new(stereo_bonds);
 
         let span = Self {
             graph: Graph::new(atoms.len(), &edges),
@@ -246,19 +195,19 @@ impl ReactionSpan {
     /// different ids. Each side can be individually valid, so this cannot ride the per-side
     /// projection above.
     fn check_stereo_kind_unchanged(&self) -> Result<(), ReactionSpanIntegrityError> {
-        for id in self.stereo_atoms.relation_ids() {
-            if let EntitySpan::Modified { lhs, rhs } = self.stereo_atoms.data(id) {
+        for id in self.stereo_atoms.ids() {
+            if let EntitySpan::Modified { lhs, rhs } = self.stereo_atoms.attributes(id) {
                 check_span_stereo_kind(
-                    Entity::StereoAtom(StereoAtomId::from(id)),
+                    Entity::StereoAtom(id),
                     lhs.configuration.kind(),
                     rhs.configuration.kind(),
                 )?;
             }
         }
-        for id in self.stereo_bonds.relation_ids() {
-            if let EntitySpan::Modified { lhs, rhs } = self.stereo_bonds.data(id) {
+        for id in self.stereo_bonds.ids() {
+            if let EntitySpan::Modified { lhs, rhs } = self.stereo_bonds.attributes(id) {
                 check_span_stereo_kind(
-                    Entity::StereoBond(StereoBondId::from(id)),
+                    Entity::StereoBond(id),
                     lhs.configuration.kind(),
                     rhs.configuration.kind(),
                 )?;
@@ -385,7 +334,7 @@ impl ReactionSpan {
                 .map(|&(left, right)| (left.index(), right.index())),
         )?;
 
-        let dative_bonds = FixedVarBirelationSet::new(reorder_dense(
+        let dative_bonds = DativeBondSpans::new(reorder_dense(
             self.dative_bonds.remap(&graph_remapping).into_entries(),
             correspondence.dative_bonds().right_count(),
             correspondence
@@ -394,7 +343,7 @@ impl ReactionSpan {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let aromatic_systems = VarRelationSet::new(reorder_dense(
+        let aromatic_systems = AromaticSystemSpans::new(reorder_dense(
             self.aromatic_systems.remap(&graph_remapping).into_entries(),
             correspondence.aromatic_systems().right_count(),
             correspondence
@@ -403,7 +352,7 @@ impl ReactionSpan {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let multicenter_bonds = VarRelationSet::new(reorder_dense(
+        let multicenter_bonds = MulticenterBondSpans::new(reorder_dense(
             self.multicenter_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -414,7 +363,7 @@ impl ReactionSpan {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let noncovalent_bonds = FixedRelationSet::new(reorder_dense(
+        let noncovalent_bonds = NoncovalentBondSpans::new(reorder_dense(
             self.noncovalent_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -425,7 +374,7 @@ impl ReactionSpan {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_atoms = FixedVarBirelationSet::new(reorder_dense(
+        let stereo_atoms = StereoAtomSpans::new(reorder_dense(
             self.stereo_atoms.remap(&graph_remapping).into_entries(),
             correspondence.stereo_atoms().right_count(),
             correspondence
@@ -434,7 +383,7 @@ impl ReactionSpan {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_bonds = FixedVarBirelationSet::new(reorder_dense(
+        let stereo_bonds = StereoBondSpans::new(reorder_dense(
             self.stereo_bonds.remap(&graph_remapping).into_entries(),
             correspondence.stereo_bonds().right_count(),
             correspondence
@@ -1290,33 +1239,33 @@ impl ReactionSpan {
             recover_correspondence(self.bonds.iter()),
             recover_correspondence(
                 self.dative_bonds
-                    .relation_ids()
-                    .map(|r| self.dative_bonds.data(r)),
+                    .ids()
+                    .map(|r| self.dative_bonds.attributes(r)),
             ),
             recover_correspondence(
                 self.aromatic_systems
-                    .relation_ids()
-                    .map(|r| self.aromatic_systems.data(r)),
+                    .ids()
+                    .map(|r| self.aromatic_systems.attributes(r)),
             ),
             recover_correspondence(
                 self.multicenter_bonds
-                    .relation_ids()
-                    .map(|r| self.multicenter_bonds.data(r)),
+                    .ids()
+                    .map(|r| self.multicenter_bonds.attributes(r)),
             ),
             recover_correspondence(
                 self.noncovalent_bonds
-                    .relation_ids()
-                    .map(|r| self.noncovalent_bonds.data(r)),
+                    .ids()
+                    .map(|r| self.noncovalent_bonds.attributes(r)),
             ),
             recover_correspondence(
                 self.stereo_atoms
-                    .relation_ids()
-                    .map(|r| self.stereo_atoms.data(r)),
+                    .ids()
+                    .map(|r| self.stereo_atoms.attributes(r)),
             ),
             recover_correspondence(
                 self.stereo_bonds
-                    .relation_ids()
-                    .map(|r| self.stereo_bonds.data(r)),
+                    .ids()
+                    .map(|r| self.stereo_bonds.attributes(r)),
             ),
         )
     }
@@ -1334,47 +1283,32 @@ impl ReactionSpan {
     }
 
     /// Dative-bond entities in union-frame id order.
-    pub fn dative_bonds(
-        &self,
-    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>
-    {
+    pub fn dative_bonds(&self) -> &DativeBondSpans {
         &self.dative_bonds
     }
 
     /// Aromatic-system entities in union-frame id order.
-    pub fn aromatic_systems(
-        &self,
-    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>> {
+    pub fn aromatic_systems(&self) -> &AromaticSystemSpans {
         &self.aromatic_systems
     }
 
     /// Multicenter-bond entities in union-frame id order.
-    pub fn multicenter_bonds(
-        &self,
-    ) -> &VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>> {
+    pub fn multicenter_bonds(&self) -> &MulticenterBondSpans {
         &self.multicenter_bonds
     }
 
     /// Noncovalent-bond entities in union-frame id order.
-    pub fn noncovalent_bonds(
-        &self,
-    ) -> &FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2> {
+    pub fn noncovalent_bonds(&self) -> &NoncovalentBondSpans {
         &self.noncovalent_bonds
     }
 
     /// Stereo-atom entities in union-frame id order.
-    pub fn stereo_atoms(
-        &self,
-    ) -> &FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomForm>>
-    {
+    pub fn stereo_atoms(&self) -> &StereoAtomSpans {
         &self.stereo_atoms
     }
 
     /// Stereo-bond entities in union-frame id order.
-    pub fn stereo_bonds(
-        &self,
-    ) -> &FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondForm>>
-    {
+    pub fn stereo_bonds(&self) -> &StereoBondSpans {
         &self.stereo_bonds
     }
 
@@ -1400,81 +1334,62 @@ impl ReactionSpan {
                 .collect(),
             dative: self
                 .dative_bonds
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        self.dative_bonds
-                            .participants_2(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        AtomId::from(self.dative_bonds.participants_1(id)[0]),
-                        self.dative_bonds.data(id).clone(),
+                        self.dative_bonds.donors(id).collect(),
+                        self.dative_bonds.acceptor(id),
+                        self.dative_bonds.attributes(id).clone(),
                     )
                 })
                 .collect(),
             aromatic: self
                 .aromatic_systems
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        self.aromatic_systems
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        self.aromatic_systems.data(id).clone(),
+                        self.aromatic_systems.atoms(id).collect(),
+                        self.aromatic_systems.attributes(id).clone(),
                     )
                 })
                 .collect(),
             multicenter: self
                 .multicenter_bonds
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        self.multicenter_bonds
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        self.multicenter_bonds.data(id).clone(),
+                        self.multicenter_bonds.atoms(id).collect(),
+                        self.multicenter_bonds.attributes(id).clone(),
                     )
                 })
                 .collect(),
             noncovalent: self
                 .noncovalent_bonds
-                .relation_ids()
+                .ids()
                 .map(|id| {
-                    let [first, second] = self.noncovalent_bonds.participants(id);
-                    (
-                        AtomId::from(*first),
-                        AtomId::from(*second),
-                        self.noncovalent_bonds.data(id).clone(),
-                    )
+                    let [first, second] = self.noncovalent_bonds.atoms(id);
+                    (first, second, self.noncovalent_bonds.attributes(id).clone())
                 })
                 .collect(),
             stereo_atoms: self
                 .stereo_atoms
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        AtomId::from(self.stereo_atoms.participants_1(id)[0]),
-                        self.stereo_atoms.participants_2(id).to_vec(),
-                        self.stereo_atoms.data(id).clone(),
+                        self.stereo_atoms.site(id),
+                        self.stereo_atoms.ligands(id).to_vec(),
+                        self.stereo_atoms.attributes(id).clone(),
                     )
                 })
                 .collect(),
             stereo_bonds: self
                 .stereo_bonds
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        BondId::from(self.stereo_bonds.participants_1(id)[0]),
-                        self.stereo_bonds.participants_2(id).to_vec(),
-                        self.stereo_bonds.data(id).clone(),
+                        self.stereo_bonds.site(id),
+                        self.stereo_bonds.ligands(id).to_vec(),
+                        self.stereo_bonds.attributes(id).clone(),
                     )
                 })
                 .collect(),
@@ -1512,42 +1427,42 @@ impl ReactionSpan {
         let dative_ids: HashMap<DativeBondId, DativeBondId> =
             projected_ids((0..self.dative_bonds.count()).map(|index| {
                 self.dative_bonds
-                    .data(RelationId(index as u32))
+                    .attributes(DativeBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
         let aromatic_ids: HashMap<AromaticSystemId, AromaticSystemId> =
             projected_ids((0..self.aromatic_systems.count()).map(|index| {
                 self.aromatic_systems
-                    .data(RelationId(index as u32))
+                    .attributes(AromaticSystemId(index as u32))
                     .lhs()
                     .is_some()
             }));
         let multicenter_ids: HashMap<MulticenterBondId, MulticenterBondId> =
             projected_ids((0..self.multicenter_bonds.count()).map(|index| {
                 self.multicenter_bonds
-                    .data(RelationId(index as u32))
+                    .attributes(MulticenterBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
         let noncovalent_ids: HashMap<NoncovalentBondId, NoncovalentBondId> =
             projected_ids((0..self.noncovalent_bonds.count()).map(|index| {
                 self.noncovalent_bonds
-                    .data(RelationId(index as u32))
+                    .attributes(NoncovalentBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
         let stereo_atom_ids: HashMap<StereoAtomId, StereoAtomId> =
             projected_ids((0..self.stereo_atoms.count()).map(|index| {
                 self.stereo_atoms
-                    .data(RelationId(index as u32))
+                    .attributes(StereoAtomId(index as u32))
                     .lhs()
                     .is_some()
             }));
         let stereo_bond_ids: HashMap<StereoBondId, StereoBondId> =
             projected_ids((0..self.stereo_bonds.count()).map(|index| {
                 self.stereo_bonds
-                    .data(RelationId(index as u32))
+                    .attributes(StereoBondId(index as u32))
                     .lhs()
                     .is_some()
             }));
@@ -1579,68 +1494,77 @@ impl ReactionSpan {
             &mut deltas,
         );
         let dative_states: Vec<EntitySpan<DativeBondForm>> = (0..self.dative_bonds.count())
-            .map(|i| self.dative_bonds.data(RelationId(i as u32)).clone())
+            .map(|i| self.dative_bonds.attributes(DativeBondId(i as u32)).clone())
             .collect();
         DativeBondDelta::append_deltas_from_states(
             &dative_states,
             |index| dative_ids[&DativeBondId::from(index)],
             |index| {
-                let rid = RelationId(index as u32);
+                let id = DativeBondId(index as u32);
                 (
                     self.dative_bonds
-                        .participants_2(rid)
-                        .iter()
-                        .map(|&n| atom_ids[&AtomId::from(n)])
+                        .donors(id)
+                        .map(|donor| atom_ids[&donor])
                         .collect(),
-                    atom_ids[&AtomId::from(self.dative_bonds.participants_1(rid)[0])],
+                    atom_ids[&self.dative_bonds.acceptor(id)],
                 )
             },
             &mut deltas,
         );
         let aromatic_states: Vec<EntitySpan<AromaticSystemForm>> =
             (0..self.aromatic_systems.count())
-                .map(|i| self.aromatic_systems.data(RelationId(i as u32)).clone())
+                .map(|i| {
+                    self.aromatic_systems
+                        .attributes(AromaticSystemId(i as u32))
+                        .clone()
+                })
                 .collect();
         AromaticSystemDelta::append_deltas_from_states(
             &aromatic_states,
             |index| aromatic_ids[&AromaticSystemId::from(index)],
             |index| {
                 self.aromatic_systems
-                    .participants(RelationId(index as u32))
-                    .iter()
-                    .map(|&n| atom_ids[&AtomId::from(n)])
+                    .atoms(AromaticSystemId(index as u32))
+                    .map(|atom| atom_ids[&atom])
                     .collect()
             },
             &mut deltas,
         );
         let multicenter_states: Vec<EntitySpan<MulticenterBondForm>> =
             (0..self.multicenter_bonds.count())
-                .map(|i| self.multicenter_bonds.data(RelationId(i as u32)).clone())
+                .map(|i| {
+                    self.multicenter_bonds
+                        .attributes(MulticenterBondId(i as u32))
+                        .clone()
+                })
                 .collect();
         MulticenterBondDelta::append_deltas_from_states(
             &multicenter_states,
             |index| multicenter_ids[&MulticenterBondId::from(index)],
             |index| {
                 self.multicenter_bonds
-                    .participants(RelationId(index as u32))
-                    .iter()
-                    .map(|&n| atom_ids[&AtomId::from(n)])
+                    .atoms(MulticenterBondId(index as u32))
+                    .map(|atom| atom_ids[&atom])
                     .collect()
             },
             &mut deltas,
         );
         let noncovalent_states: Vec<EntitySpan<NoncovalentBondForm>> =
             (0..self.noncovalent_bonds.count())
-                .map(|i| self.noncovalent_bonds.data(RelationId(i as u32)).clone())
+                .map(|i| {
+                    self.noncovalent_bonds
+                        .attributes(NoncovalentBondId(i as u32))
+                        .clone()
+                })
                 .collect();
         NoncovalentBondDelta::append_deltas_from_states(
             &noncovalent_states,
             |index| noncovalent_ids[&NoncovalentBondId::from(index)],
             |index| {
-                let [a, b] = *self
+                let [a, b] = self
                     .noncovalent_bonds
-                    .participants(RelationId(index as u32));
-                [atom_ids[&AtomId::from(a)], atom_ids[&AtomId::from(b)]]
+                    .atoms(NoncovalentBondId(index as u32));
+                [atom_ids[&a], atom_ids[&b]]
             },
             &mut deltas,
         );
@@ -1648,16 +1572,16 @@ impl ReactionSpan {
         // the relation's site + ligand frame; `Modified` is the field/constraint diff. Site/ligand
         // ids are transported from the union frame into the LHS-anchored reaction frame.
         for i in 0..self.stereo_atoms.count() {
-            let rid = RelationId(i as u32);
-            let id = stereo_atom_ids[&StereoAtomId::from(rid)];
-            let site = atom_ids[&AtomId::from(self.stereo_atoms.participants_1(rid)[0])];
+            let rid = StereoAtomId(i as u32);
+            let id = stereo_atom_ids[&rid];
+            let site = atom_ids[&self.stereo_atoms.site(rid)];
             let ligands = self
                 .stereo_atoms
-                .participants_2(rid)
+                .ligands(rid)
                 .iter()
                 .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
                 .collect();
-            match self.stereo_atoms.data(rid) {
+            match self.stereo_atoms.attributes(rid) {
                 EntitySpan::Unchanged(_) => {}
                 EntitySpan::Added(attributes) => {
                     deltas.push(Delta::StereoAtom(StereoAtomDelta::Add {
@@ -1686,16 +1610,16 @@ impl ReactionSpan {
             }
         }
         for i in 0..self.stereo_bonds.count() {
-            let rid = RelationId(i as u32);
-            let id = stereo_bond_ids[&StereoBondId::from(rid)];
-            let site = bond_ids[&BondId::from(self.stereo_bonds.participants_1(rid)[0])];
+            let rid = StereoBondId(i as u32);
+            let id = stereo_bond_ids[&rid];
+            let site = bond_ids[&self.stereo_bonds.site(rid)];
             let ligands = self
                 .stereo_bonds
-                .participants_2(rid)
+                .ligands(rid)
                 .iter()
                 .map(|ligand| StereoLigand::new(atom_ids[&ligand.atom_id], ligand.kind))
                 .collect();
-            match self.stereo_bonds.data(rid) {
+            match self.stereo_bonds.attributes(rid) {
                 EntitySpan::Unchanged(_) => {}
                 EntitySpan::Added(attributes) => {
                     deltas.push(Delta::StereoBond(StereoBondDelta::Add {
@@ -1753,27 +1677,41 @@ impl ReactionSpan {
         );
         let dative_ids: HashMap<DativeBondId, DativeBondId> =
             projected_ids((0..self.dative_bonds.count()).map(|i| {
-                entity_side(self.dative_bonds.data(RelationId(i as u32)), side).is_some()
+                entity_side(self.dative_bonds.attributes(DativeBondId(i as u32)), side).is_some()
             }));
         let aromatic_ids: HashMap<AromaticSystemId, AromaticSystemId> =
             projected_ids((0..self.aromatic_systems.count()).map(|i| {
-                entity_side(self.aromatic_systems.data(RelationId(i as u32)), side).is_some()
+                entity_side(
+                    self.aromatic_systems.attributes(AromaticSystemId(i as u32)),
+                    side,
+                )
+                .is_some()
             }));
         let multicenter_ids: HashMap<MulticenterBondId, MulticenterBondId> =
             projected_ids((0..self.multicenter_bonds.count()).map(|i| {
-                entity_side(self.multicenter_bonds.data(RelationId(i as u32)), side).is_some()
+                entity_side(
+                    self.multicenter_bonds
+                        .attributes(MulticenterBondId(i as u32)),
+                    side,
+                )
+                .is_some()
             }));
         let noncovalent_ids: HashMap<NoncovalentBondId, NoncovalentBondId> =
             projected_ids((0..self.noncovalent_bonds.count()).map(|i| {
-                entity_side(self.noncovalent_bonds.data(RelationId(i as u32)), side).is_some()
+                entity_side(
+                    self.noncovalent_bonds
+                        .attributes(NoncovalentBondId(i as u32)),
+                    side,
+                )
+                .is_some()
             }));
         let stereo_atom_ids: HashMap<StereoAtomId, StereoAtomId> =
             projected_ids((0..self.stereo_atoms.count()).map(|i| {
-                entity_side(self.stereo_atoms.data(RelationId(i as u32)), side).is_some()
+                entity_side(self.stereo_atoms.attributes(StereoAtomId(i as u32)), side).is_some()
             }));
         let stereo_bond_ids: HashMap<StereoBondId, StereoBondId> =
             projected_ids((0..self.stereo_bonds.count()).map(|i| {
-                entity_side(self.stereo_bonds.data(RelationId(i as u32)), side).is_some()
+                entity_side(self.stereo_bonds.attributes(StereoBondId(i as u32)), side).is_some()
             }));
 
         let atoms = self
@@ -1797,54 +1735,47 @@ impl ReactionSpan {
             .collect();
         let dative = (0..self.dative_bonds.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.dative_bonds.data(id), side)?;
+                let id = DativeBondId(index as u32);
+                let attributes = entity_side(self.dative_bonds.attributes(id), side)?;
                 let donors = self
                     .dative_bonds
-                    .participants_2(id)
-                    .iter()
-                    .map(|&atom| atom_ids[&AtomId::from(atom)])
+                    .donors(id)
+                    .map(|atom| atom_ids[&atom])
                     .collect();
-                let acceptor = atom_ids[&AtomId::from(self.dative_bonds.participants_1(id)[0])];
+                let acceptor = atom_ids[&self.dative_bonds.acceptor(id)];
                 Some((donors, acceptor, attributes.clone()))
             })
             .collect();
         let aromatic = (0..self.aromatic_systems.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.aromatic_systems.data(id), side)?;
+                let id = AromaticSystemId(index as u32);
+                let attributes = entity_side(self.aromatic_systems.attributes(id), side)?;
                 let atoms = self
                     .aromatic_systems
-                    .participants(id)
-                    .iter()
-                    .map(|&atom| atom_ids[&AtomId::from(atom)])
+                    .atoms(id)
+                    .map(|atom| atom_ids[&atom])
                     .collect();
                 Some((atoms, attributes.clone()))
             })
             .collect();
         let multicenter = (0..self.multicenter_bonds.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.multicenter_bonds.data(id), side)?;
+                let id = MulticenterBondId(index as u32);
+                let attributes = entity_side(self.multicenter_bonds.attributes(id), side)?;
                 let atoms = self
                     .multicenter_bonds
-                    .participants(id)
-                    .iter()
-                    .map(|&atom| atom_ids[&AtomId::from(atom)])
+                    .atoms(id)
+                    .map(|atom| atom_ids[&atom])
                     .collect();
                 Some((atoms, attributes.clone()))
             })
             .collect();
         let noncovalent = (0..self.noncovalent_bonds.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.noncovalent_bonds.data(id), side)?;
-                let [first, second] = *self.noncovalent_bonds.participants(id);
-                Some((
-                    atom_ids[&AtomId::from(first)],
-                    atom_ids[&AtomId::from(second)],
-                    attributes.clone(),
-                ))
+                let id = NoncovalentBondId(index as u32);
+                let attributes = entity_side(self.noncovalent_bonds.attributes(id), side)?;
+                let [first, second] = self.noncovalent_bonds.atoms(id);
+                Some((atom_ids[&first], atom_ids[&second], attributes.clone()))
             })
             .collect();
         let remap_ligands = |ligands: &[StereoLigand]| {
@@ -1855,24 +1786,24 @@ impl ReactionSpan {
         };
         let stereo_atoms = (0..self.stereo_atoms.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.stereo_atoms.data(id), side)?;
-                let site = atom_ids[&AtomId::from(self.stereo_atoms.participants_1(id)[0])];
+                let id = StereoAtomId(index as u32);
+                let attributes = entity_side(self.stereo_atoms.attributes(id), side)?;
+                let site = atom_ids[&self.stereo_atoms.site(id)];
                 Some((
                     site,
-                    remap_ligands(self.stereo_atoms.participants_2(id)),
+                    remap_ligands(self.stereo_atoms.ligands(id)),
                     attributes.clone(),
                 ))
             })
             .collect();
         let stereo_bonds = (0..self.stereo_bonds.count())
             .filter_map(|index| {
-                let id = RelationId(index as u32);
-                let attributes = entity_side(self.stereo_bonds.data(id), side)?;
-                let site = bond_ids[&BondId::from(self.stereo_bonds.participants_1(id)[0])];
+                let id = StereoBondId(index as u32);
+                let attributes = entity_side(self.stereo_bonds.attributes(id), side)?;
+                let site = bond_ids[&self.stereo_bonds.site(id)];
                 Some((
                     site,
-                    remap_ligands(self.stereo_bonds.participants_2(id)),
+                    remap_ligands(self.stereo_bonds.ligands(id)),
                     attributes.clone(),
                 ))
             })
@@ -2922,27 +2853,27 @@ mod tests {
         assert_eq!(span.atoms()[0], EntitySpan::Unchanged(lhs_atom));
         assert_eq!(span.bonds()[0], EntitySpan::Unchanged(BondForm::default()));
         assert_eq!(
-            span.dative_bonds().data(RelationId(0)),
+            span.dative_bonds().attributes(DativeBondId(0)),
             &EntitySpan::Unchanged(DativeBondForm::default())
         );
         assert_eq!(
-            span.aromatic_systems().data(RelationId(0)),
+            span.aromatic_systems().attributes(AromaticSystemId(0)),
             &EntitySpan::Unchanged(AromaticSystemForm::default())
         );
         assert_eq!(
-            span.multicenter_bonds().data(RelationId(0)),
+            span.multicenter_bonds().attributes(MulticenterBondId(0)),
             &EntitySpan::Unchanged(MulticenterBondForm::default())
         );
         assert_eq!(
-            span.noncovalent_bonds().data(RelationId(0)),
+            span.noncovalent_bonds().attributes(NoncovalentBondId(0)),
             &EntitySpan::Unchanged(NoncovalentBondForm::default())
         );
         assert_eq!(
-            span.stereo_atoms().data(RelationId(0)),
+            span.stereo_atoms().attributes(StereoAtomId(0)),
             &EntitySpan::Unchanged(StereoAtomForm::default())
         );
         assert_eq!(
-            span.stereo_bonds().data(RelationId(0)),
+            span.stereo_bonds().attributes(StereoBondId(0)),
             &EntitySpan::Unchanged(StereoBondForm::default())
         );
     }
@@ -5235,8 +5166,8 @@ mod tests {
 
         assert_eq!(
             span.stereo_atoms()
-                .relation_ids()
-                .map(|id| span.stereo_atoms().data(id).clone())
+                .ids()
+                .map(|id| span.stereo_atoms().attributes(id).clone())
                 .collect::<Vec<_>>(),
             vec![
                 EntitySpan::Removed(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),

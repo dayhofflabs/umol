@@ -1055,7 +1055,7 @@ macro_rules! fold_field_ops {
 
 /// One entity's span across a reaction — its slice of the superimposed `L`∪`K`∪`R`. A *state*, not
 /// an operation (unlike `Edit` / `Delta`). `lhs()` / `rhs()` read the side values.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EntitySpan<T> {
     /// In the interface `K` — present and identical on both sides.
     Unchanged(T),

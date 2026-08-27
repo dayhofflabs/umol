@@ -7,7 +7,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use thiserror::Error;
 use umol_graph_core::{
     AutomorphismAlgorithm, AutomorphismOutput, Correspondence, FactorOrdering, Graph, NodeId,
-    ParticipantPosition, RelationId, SubdivisionNodeSource, Unordered,
+    ParticipantPosition, SubdivisionNodeSource, Unordered,
 };
 use umol_perm::{Orientation, Permutation};
 
@@ -266,44 +266,44 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.dative_bonds().relation_ids() {
+    for id in span.dative_bonds().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.dative_bonds().data(id),
+            span.dative_bonds().attributes(id),
             CanonicalizeLevel::Constitution,
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.aromatic_systems().relation_ids() {
+    for id in span.aromatic_systems().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.aromatic_systems().data(id),
+            span.aromatic_systems().attributes(id),
             CanonicalizeLevel::Constitution,
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.multicenter_bonds().relation_ids() {
+    for id in span.multicenter_bonds().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.multicenter_bonds().data(id),
+            span.multicenter_bonds().attributes(id),
             CanonicalizeLevel::Constitution,
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.noncovalent_bonds().relation_ids() {
+    for id in span.noncovalent_bonds().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.noncovalent_bonds().data(id),
+            span.noncovalent_bonds().attributes(id),
             CanonicalizeLevel::Constitution,
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.stereo_atoms().relation_ids() {
+    for id in span.stereo_atoms().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.stereo_atoms().data(id),
+            span.stereo_atoms().attributes(id),
             CanonicalizeLevel::Structure,
             |attributes| !attributes.constraints.is_empty(),
         ));
     }
-    for id in span.stereo_bonds().relation_ids() {
+    for id in span.stereo_bonds().ids() {
         level = level.max(entity_span_canonicalize_level(
-            span.stereo_bonds().data(id),
+            span.stereo_bonds().attributes(id),
             CanonicalizeLevel::Structure,
             |attributes| !attributes.constraints.is_empty(),
         ));
@@ -2793,85 +2793,67 @@ fn reaction_span_entity_class_key(
         ),
         Entity::DativeBond(id) => (
             EntityBlockPosition::DATIVE_BOND,
-            normalized_entity_span_key(
-                span.dative_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        num_form_key(attributes.order.normalized()?.as_ref()),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.dative_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    num_form_key(attributes.order.normalized()?.as_ref()),
+                )]))
+            })?,
         ),
         Entity::AromaticSystem(id) => (
             EntityBlockPosition::AROMATIC_SYSTEM,
-            normalized_entity_span_key(
-                span.aromatic_systems().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([
-                        (2, num_form_key(attributes.charge.normalized()?.as_ref())),
-                        (
-                            3,
-                            unpaired_electrons_form_key(
-                                attributes.unpaired_electrons.normalized()?.as_ref(),
-                            ),
+            normalized_entity_span_key(span.aromatic_systems().attributes(id), |attributes| {
+                Ok(positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
                         ),
-                    ]))
-                },
-            )?,
+                    ),
+                ]))
+            })?,
         ),
         Entity::MulticenterBond(id) => (
             EntityBlockPosition::MULTICENTER_BOND,
-            normalized_entity_span_key(
-                span.multicenter_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([
-                        (2, num_form_key(attributes.charge.normalized()?.as_ref())),
-                        (
-                            3,
-                            unpaired_electrons_form_key(
-                                attributes.unpaired_electrons.normalized()?.as_ref(),
-                            ),
+            normalized_entity_span_key(span.multicenter_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
                         ),
-                    ]))
-                },
-            )?,
+                    ),
+                ]))
+            })?,
         ),
         Entity::NoncovalentBond(id) => (
             EntityBlockPosition::NONCOVALENT_BOND,
-            normalized_entity_span_key(
-                span.noncovalent_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        1,
-                        noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.noncovalent_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    1,
+                    noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                )]))
+            })?,
         ),
         Entity::StereoAtom(id) => (
             EntityBlockPosition::STEREO_ATOM,
-            normalized_entity_span_key(
-                span.stereo_atoms().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        option(attributes.configuration.kind().map(stereo_kind_key)),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.stereo_atoms().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]))
+            })?,
         ),
         Entity::StereoBond(id) => (
             EntityBlockPosition::STEREO_BOND,
-            normalized_entity_span_key(
-                span.stereo_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        option(attributes.configuration.kind().map(stereo_kind_key)),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.stereo_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]))
+            })?,
         ),
     };
     Ok(InitialClassKey::Entity { position, value })
@@ -3439,50 +3421,32 @@ fn lhs_anchored_correspondence_from_order(
             Entity::DativeBond(id) => (
                 2,
                 id.index(),
-                span.dative_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.dative_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::AromaticSystem(id) => (
                 3,
                 id.index(),
-                span.aromatic_systems()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.aromatic_systems().attributes(id).lhs().is_some(),
             ),
             Entity::MulticenterBond(id) => (
                 4,
                 id.index(),
-                span.multicenter_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.multicenter_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::NoncovalentBond(id) => (
                 5,
                 id.index(),
-                span.noncovalent_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.noncovalent_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::StereoAtom(id) => (
                 6,
                 id.index(),
-                span.stereo_atoms()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.stereo_atoms().attributes(id).lhs().is_some(),
             ),
             Entity::StereoBond(id) => (
                 7,
                 id.index(),
-                span.stereo_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.stereo_bonds().attributes(id).lhs().is_some(),
             ),
         };
         if lhs_present {
@@ -3527,32 +3491,32 @@ fn reaction_span_lhs_present(span: &ReactionSpan, family: usize, source: usize) 
         1 => span.bonds()[source].lhs().is_some(),
         2 => span
             .dative_bonds()
-            .data(RelationId(source as u32))
+            .attributes(DativeBondId(source as u32))
             .lhs()
             .is_some(),
         3 => span
             .aromatic_systems()
-            .data(RelationId(source as u32))
+            .attributes(AromaticSystemId(source as u32))
             .lhs()
             .is_some(),
         4 => span
             .multicenter_bonds()
-            .data(RelationId(source as u32))
+            .attributes(MulticenterBondId(source as u32))
             .lhs()
             .is_some(),
         5 => span
             .noncovalent_bonds()
-            .data(RelationId(source as u32))
+            .attributes(NoncovalentBondId(source as u32))
             .lhs()
             .is_some(),
         6 => span
             .stereo_atoms()
-            .data(RelationId(source as u32))
+            .attributes(StereoAtomId(source as u32))
             .lhs()
             .is_some(),
         7 => span
             .stereo_bonds()
-            .data(RelationId(source as u32))
+            .attributes(StereoBondId(source as u32))
             .lhs()
             .is_some(),
         _ => unreachable!("reaction-span entity family index is in range"),
@@ -3931,17 +3895,16 @@ fn canonicalize_reaction_span_stereo_frames(
 ) -> Result<ReactionSpan, Contradiction> {
     for index in 0..span.stereo_atoms().count() {
         let id = StereoAtomId(index as u32);
-        let relation = RelationId(index as u32);
-        let ligands = span.stereo_atoms().participants_2(relation).to_vec();
+        let ligands = span.stereo_atoms().ligands(id).to_vec();
         let mut best = None;
         for permutation in all_span_frame_permutations(
             &ligands,
             span.stereo_atoms()
-                .data(relation)
+                .attributes(id)
                 .lhs()
                 .map(|form| &form.configuration),
             span.stereo_atoms()
-                .data(relation)
+                .attributes(id)
                 .rhs()
                 .map(|form| &form.configuration),
         )? {
@@ -3959,17 +3922,16 @@ fn canonicalize_reaction_span_stereo_frames(
     }
     for index in 0..span.stereo_bonds().count() {
         let id = StereoBondId(index as u32);
-        let relation = RelationId(index as u32);
-        let ligands = span.stereo_bonds().participants_2(relation).to_vec();
+        let ligands = span.stereo_bonds().ligands(id).to_vec();
         let mut best = None;
         for permutation in all_span_frame_permutations(
             &ligands,
             span.stereo_bonds()
-                .data(relation)
+                .attributes(id)
                 .lhs()
                 .map(|form| &form.configuration),
             span.stereo_bonds()
-                .data(relation)
+                .attributes(id)
                 .rhs()
                 .map(|form| &form.configuration),
         )? {
@@ -4027,15 +3989,14 @@ fn stereo_atom_span_frame_key(
     span: &ReactionSpan,
     id: StereoAtomId,
 ) -> Result<CanonicalKeyValue, Contradiction> {
-    let relation = RelationId::from(id);
     Ok(product([
         sequence(
             span.stereo_atoms()
-                .participants_2(relation)
+                .ligands(id)
                 .iter()
                 .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
         ),
-        normalized_entity_span_key(span.stereo_atoms().data(relation), |form| {
+        normalized_entity_span_key(span.stereo_atoms().attributes(id), |form| {
             Ok(stereo_configuration_form_key(
                 form.configuration.normalized()?.as_ref(),
             ))
@@ -4047,15 +4008,14 @@ fn stereo_bond_span_frame_key(
     span: &ReactionSpan,
     id: StereoBondId,
 ) -> Result<CanonicalKeyValue, Contradiction> {
-    let relation = RelationId::from(id);
     Ok(product([
         sequence(
             span.stereo_bonds()
-                .participants_2(relation)
+                .ligands(id)
                 .iter()
                 .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
         ),
-        normalized_entity_span_key(span.stereo_bonds().data(relation), |form| {
+        normalized_entity_span_key(span.stereo_bonds().attributes(id), |form| {
             Ok(stereo_configuration_form_key(
                 form.configuration.normalized()?.as_ref(),
             ))

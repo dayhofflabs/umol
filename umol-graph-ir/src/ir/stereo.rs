@@ -23,6 +23,7 @@ use super::constraint::{
     StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
     StereoBondConstraintsForm, StereoLigandPair, TopicityForm,
 };
+use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
@@ -380,6 +381,222 @@ impl From<Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, S
         set: Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
     ) -> Self {
         Self(set)
+    }
+}
+
+/// The reaction span's stereo atoms, one [`EntitySpan`] per entity against a single ligand frame.
+/// The `Molecule` peer is [`StereoAtoms`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct StereoAtomSpans(
+    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomForm>>,
+);
+
+impl StereoAtomSpans {
+    pub fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, span)| (AtomId::from(site[0]), ligands, span))
+            .collect()
+    }
+
+    pub fn new(entries: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)>) -> Self {
+        Self(FixedVarBirelationSet::new(
+            entries
+                .into_iter()
+                .map(|(site, ligands, span)| ([NodeId::from(site)], ligands, span))
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: StereoAtomId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoAtomId> {
+        self.0.relation_ids().map(StereoAtomId::from)
+    }
+
+    /// The atom `id` is borne by.
+    pub fn site(&self, id: StereoAtomId) -> AtomId {
+        AtomId::from(self.0.participants_1(RelationId::from(id))[0])
+    }
+
+    /// The ligands of `id`, in the frame both carried sides are read against.
+    pub fn ligands(&self, id: StereoAtomId) -> &[StereoLigand] {
+        self.0.participants_2(RelationId::from(id))
+    }
+
+    pub fn attributes(&self, id: StereoAtomId) -> &EntitySpan<StereoAtomForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Reframe for StereoAtomSpans {
+    type Action = (StereoAtomId, Permutation);
+
+    /// Selection is form-dependent here, and a `Modified` span carries two forms against one frame,
+    /// so one action must serve both sides.
+    ///
+    /// The two sides assert the same stereo kind — molecule integrity requires an admissible kind
+    /// per site type, and span integrity rejects a kind change within one entity — so they share a
+    /// parent group and the candidate actions are the same set for both. Where that set holds more
+    /// than one element, because equal ligands leave a residual stabilizer, the sides can each
+    /// prefer a different member. The selected action is the one minimising the reframed span as a
+    /// whole, which is the orbit representative of the pair rather than of either side.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = self.0.clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored = reframed.participants_2(id).to_vec();
+            let reduced = reframed
+                .data(id)
+                .clone()
+                .try_map(|form| form.normalize().ok())
+                .ok_or(Contradiction)?;
+
+            let sorted = reduced
+                .lhs()
+                .or_else(|| reduced.rhs())
+                .expect("every span variant carries at least one side")
+                .select_frame(&stored)
+                .ok_or(Contradiction)?
+                .act(&stored);
+            let (selected, action) = Permutation::between_all(&stored, &sorted)
+                .into_iter()
+                .filter_map(|candidate| {
+                    Some((
+                        reduced.clone().try_map(|form| form.reframe_by(candidate))?,
+                        candidate,
+                    ))
+                })
+                .min()
+                .ok_or(Contradiction)?;
+
+            *reframed.data_mut(id) = selected;
+            let order: Vec<ParticipantPosition> = (0..action.degree())
+                .map(|position| ParticipantPosition(action.apply(position) as u32))
+                .collect();
+            reframed.permute_2_with(id, &order);
+            actions.push((StereoAtomId::from(id), action));
+        }
+        Ok((Self(reframed), actions))
+    }
+}
+
+/// The reaction span's stereo bonds, one [`EntitySpan`] per entity against a single ligand frame.
+/// The `Molecule` peer is [`StereoBonds`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct StereoBondSpans(
+    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondForm>>,
+);
+
+impl StereoBondSpans {
+    pub fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, span)| (BondId::from(site[0]), ligands, span))
+            .collect()
+    }
+
+    pub fn new(entries: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)>) -> Self {
+        Self(FixedVarBirelationSet::new(
+            entries
+                .into_iter()
+                .map(|(site, ligands, span)| ([EdgeId::from(site)], ligands, span))
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: StereoBondId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoBondId> {
+        self.0.relation_ids().map(StereoBondId::from)
+    }
+
+    /// The bond `id` is borne by.
+    pub fn site(&self, id: StereoBondId) -> BondId {
+        BondId::from(self.0.participants_1(RelationId::from(id))[0])
+    }
+
+    /// The ligands of `id`, in the frame both carried sides are read against.
+    pub fn ligands(&self, id: StereoBondId) -> &[StereoLigand] {
+        self.0.participants_2(RelationId::from(id))
+    }
+
+    pub fn attributes(&self, id: StereoBondId) -> &EntitySpan<StereoBondForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Reframe for StereoBondSpans {
+    type Action = (StereoBondId, Permutation);
+
+    /// Selection is form-dependent here, and a `Modified` span carries two forms against one frame,
+    /// so one action must serve both sides.
+    ///
+    /// The two sides assert the same stereo kind — molecule integrity requires an admissible kind
+    /// per site type, and span integrity rejects a kind change within one entity — so they share a
+    /// parent group and the candidate actions are the same set for both. Where that set holds more
+    /// than one element, because equal ligands leave a residual stabilizer, the sides can each
+    /// prefer a different member. The selected action is the one minimising the reframed span as a
+    /// whole, which is the orbit representative of the pair rather than of either side.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = self.0.clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored = reframed.participants_2(id).to_vec();
+            let reduced = reframed
+                .data(id)
+                .clone()
+                .try_map(|form| form.normalize().ok())
+                .ok_or(Contradiction)?;
+
+            let sorted = reduced
+                .lhs()
+                .or_else(|| reduced.rhs())
+                .expect("every span variant carries at least one side")
+                .select_frame(&stored)
+                .ok_or(Contradiction)?
+                .act(&stored);
+            let (selected, action) = Permutation::between_all(&stored, &sorted)
+                .into_iter()
+                .filter_map(|candidate| {
+                    Some((
+                        reduced.clone().try_map(|form| form.reframe_by(candidate))?,
+                        candidate,
+                    ))
+                })
+                .min()
+                .ok_or(Contradiction)?;
+
+            *reframed.data_mut(id) = selected;
+            let order: Vec<ParticipantPosition> = (0..action.degree())
+                .map(|position| ParticipantPosition(action.apply(position) as u32))
+                .collect();
+            reframed.permute_2_with(id, &order);
+            actions.push((StereoBondId::from(id), action));
+        }
+        Ok((Self(reframed), actions))
     }
 }
 
@@ -2498,6 +2715,119 @@ mod tests {
         );
     }
 
+    /// A `Modified` span holds two configurations against one ligand frame, so one action carries
+    /// both. Integrity guarantees the sides share a kind, hence a parent group, hence one candidate
+    /// set.
+    #[rstest]
+    fn test_stereo_atom_spans_reframe() {
+        let frame: Vec<StereoLigand> = [2, 1, 3, 4]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let spans = StereoAtomSpans::new(vec![(
+            AtomId(0),
+            frame.clone(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )]);
+
+        let (reframed, actions) = spans
+            .reframe_with_action()
+            .expect("the forms are satisfiable");
+        let (_, action) = actions[0];
+
+        assert_eq!(
+            reframed.ligands(StereoAtomId(0)),
+            [1, 2, 3, 4]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect::<Vec<_>>(),
+        );
+        // The same action carried both sides: neither was reframed independently.
+        assert_eq!(
+            reframed.attributes(StereoAtomId(0)),
+            &EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)
+                    .reframe_by(action)
+                    .expect("a parent-group action"),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
+                    .reframe_by(action)
+                    .expect("a parent-group action"),
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_spans_reframe_identity() {
+        let spans = StereoAtomSpans::new(vec![(
+            AtomId(0),
+            [4, 2, 3, 1]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    /// Repeated ligands leave a residual stabilizer, so more than one action presents the frame
+    /// sorted and the two sides can each prefer a different one. The selected action minimises the
+    /// span as a whole, which makes the canonical value independent of the starting presentation
+    /// for the pair rather than for either side alone.
+    #[rstest]
+    fn test_stereo_atom_spans_reframe_repeated_ligands() {
+        let frame: Vec<StereoLigand> = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        ];
+        let span = EntitySpan::Modified {
+            lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        };
+        let stored = StereoAtomSpans::new(vec![(AtomId(0), frame.clone(), span.clone())]);
+
+        let presentation = Permutation::from_image(&[2, 3, 0, 1]);
+        let restated = StereoAtomSpans::new(vec![(
+            AtomId(0),
+            presentation.act(&frame),
+            span.try_map(|form| form.reframe_by(presentation))
+                .expect("a parent-group action"),
+        )]);
+
+        assert_eq!(
+            stored.reframe().expect("the forms are satisfiable"),
+            restated.reframe().expect("the forms are satisfiable"),
+        );
+        assert!(stored.framed_eq(&restated));
+    }
+
+    /// One side declining takes the whole span: a single action serves both, so there is no partial
+    /// result to keep. Here the rhs asserts a coset outside its kind's coset space.
+    #[rstest]
+    fn test_stereo_atom_spans_reframe_error() {
+        let spans = StereoAtomSpans::new(vec![(
+            AtomId(0),
+            [1, 2, 3, 4]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 5u32),
+            },
+        )]);
+        assert_eq!(spans.reframe(), Err(Contradiction));
+    }
+
     /// The ligands are an `Ordered` factor, so the supplied frame is the stored frame and no
     /// fixture surgery is needed to obtain an unselected one.
     #[rstest]
@@ -2611,6 +2941,66 @@ mod tests {
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         )]);
         assert_eq!(!stored.framed_eq(&other_coset), cosets_distinguishable);
+    }
+
+    /// A cis/trans span keeps each endpoint's ligands in its own block, so the partitioned parent
+    /// group sorts within blocks; one action still carries both sides.
+    #[rstest]
+    fn test_stereo_bond_spans_reframe() {
+        let frame: Vec<StereoLigand> = [4, 2, 5, 3]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let spans = StereoBondSpans::new(vec![(
+            BondId(0),
+            frame,
+            EntitySpan::Modified {
+                lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32),
+            },
+        )]);
+
+        let (reframed, actions) = spans
+            .reframe_with_action()
+            .expect("the forms are satisfiable");
+        let (_, action) = actions[0];
+
+        assert_eq!(
+            reframed.ligands(StereoBondId(0)),
+            [2, 4, 3, 5]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            reframed.attributes(StereoBondId(0)),
+            &EntitySpan::Modified {
+                lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32)
+                    .reframe_by(action)
+                    .expect("a parent-group action"),
+                rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32)
+                    .reframe_by(action)
+                    .expect("a parent-group action"),
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_spans_reframe_identity() {
+        let spans = StereoBondSpans::new(vec![(
+            BondId(0),
+            [4, 2, 5, 3]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            EntitySpan::Modified {
+                lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
     }
 
     /// A cis/trans frame keeps each endpoint's two ligands in its own block, so the partitioned

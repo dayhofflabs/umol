@@ -1257,13 +1257,33 @@ encoded a kind change as a modification rather than as removal plus addition (gr
 
 **Dependencies:** [dep: S3f]
 
-#### S3h — Extend the family-level reframe to the span-bearing families
+#### S3h — Extend the family-level reframe to the span-bearing families **Done**
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs`, the six family modules, and their unit tests.
 
-The span-bearing families reuse S3e's implementations with `EntitySpan<Form>` as the payload,
-applying one action to every carried side through S3c's combinator and declining if any side
-declines.
+Six span types — `AromaticSystemSpans`, `MulticenterBondSpans`, `NoncovalentBondSpans`,
+`DativeBondSpans`, `StereoAtomSpans`, `StereoBondSpans` — each wrapping the storage shape its
+`Molecule` peer wraps, with `EntitySpan<Form>` as the payload, and each implementing `Reframe`.
+`ReactionSpan`'s six fields become them. One action carries every carried side through S3c's
+combinator, and the span declines whole if any side declines.
+
+**The surface is duplicated, not shared.** A payload parameter on the six `Molecule` families would
+have let the implementations be reused literally, but it complicates the primary carrier to serve a
+downstream one. Each span type lives beside its peer so an entity family's frame structure is stated
+in one file.
+
+**The `Modified` representative.** The four distinct-participant families select by sorting without
+consulting the payload, so two carried sides cannot disagree. The two stereo families ask the form:
+S3f and S3g guarantee both sides assert the same kind, hence the same parent group, hence one
+candidate set — but where equal ligands leave a residual stabilizer the set holds more than one
+element and the sides can each prefer a different member. The selected action minimises the reframed
+span as a whole, so the representative is the pair's, not either side's. This required `EntitySpan`
+to derive `PartialOrd, Ord`, which its sibling `ConstraintSpan` already did.
+
+Retyping `ReactionSpan`'s accessors moved `canonicalize.rs`, `incidence.rs`, and
+`dsl/reaction_span.rs` off the storage vocabulary as well: they now read `ids`, `attributes`,
+`atoms`, `site`, `ligands`, `donors`, and `acceptor` against typed family ids instead of
+`RelationId`.
 
 Split from S3e because only this path needs the intersection rule. A `Modified` span carries two
 forms against a single participant list, so without S3f and S3g its two sides can assert different
@@ -1349,6 +1369,16 @@ for the duration of the subitem and assert on generated inputs that the derived 
 it, or record precisely where it does not. The editor's first-position search is known to differ:
 it can reuse a query position and need not return a permutation, so the differential is there to
 characterise that difference, not to prove there is none.
+
+`Molecule::equiv_under` must be renamed here. Once the four distinct-participant families compare
+through `framed_eq` rather than through `equiv` plus a hand-derived alignment, the name no longer
+describes what the operation does: it verifies complete equivalence under a supplied
+`MoleculeCorrespondence`, which is a different question from the frame quotient the `Reframe` members
+answer. Doc [210](210-relation-frame-storage-2026-08-25.md) recorded the collision with the
+relation-payload `equiv_under` and left the rename open on the grounds that removing the payload
+protocol dissolves it; that reasoning no longer holds, because the conflict is now with `framed_eq`
+on the same carrier rather than with a protocol that is going away. The replacement name is subject
+to the nomenclature guide and is not proposed here.
 
 **Change class:** breaking removal with caller migration (green within the stage).
 

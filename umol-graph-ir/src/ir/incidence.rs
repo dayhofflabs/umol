@@ -400,25 +400,24 @@ impl ReactionSpan {
         }
 
         if constitution {
-            for id in self.dative_bonds().relation_ids() {
-                for &donor in self.dative_bonds().participants_2(id) {
+            for id in self.dative_bonds().ids() {
+                for donor in self.dative_bonds().donors(id) {
                     push(node, donor.0, Incidence::DativeDonor);
                 }
                 push(
                     node,
-                    self.dative_bonds().participants_1(id)[0].0,
+                    self.dative_bonds().acceptor(id).0,
                     Incidence::DativeAcceptor,
                 );
                 node += 1;
             }
-            for id in self.aromatic_systems().relation_ids() {
-                for (position, &atom) in self.aromatic_systems().participants(id).iter().enumerate()
-                {
+            for id in self.aromatic_systems().ids() {
+                for (position, atom) in self.aromatic_systems().atoms(id).enumerate() {
                     push(
                         node,
                         atom.0,
                         Incidence::AromaticParticipantSpan(electron_span(
-                            self.aromatic_systems().data(id),
+                            self.aromatic_systems().attributes(id),
                             position,
                             |value| &value.electrons,
                         )),
@@ -426,15 +425,13 @@ impl ReactionSpan {
                 }
                 node += 1;
             }
-            for id in self.multicenter_bonds().relation_ids() {
-                for (position, &atom) in
-                    self.multicenter_bonds().participants(id).iter().enumerate()
-                {
+            for id in self.multicenter_bonds().ids() {
+                for (position, atom) in self.multicenter_bonds().atoms(id).enumerate() {
                     push(
                         node,
                         atom.0,
                         Incidence::MulticenterParticipantSpan(electron_span(
-                            self.multicenter_bonds().data(id),
+                            self.multicenter_bonds().attributes(id),
                             position,
                             |value| &value.electrons,
                         )),
@@ -442,8 +439,8 @@ impl ReactionSpan {
                 }
                 node += 1;
             }
-            for id in self.noncovalent_bonds().relation_ids() {
-                for &atom in self.noncovalent_bonds().participants(id) {
+            for id in self.noncovalent_bonds().ids() {
+                for atom in self.noncovalent_bonds().atoms(id) {
                     push(node, atom.0, Incidence::NoncovalentEndpoint);
                 }
                 node += 1;
@@ -451,24 +448,20 @@ impl ReactionSpan {
         }
 
         if stereo {
-            for id in self.stereo_atoms().relation_ids() {
-                push(
-                    node,
-                    self.stereo_atoms().participants_1(id)[0].0,
-                    Incidence::StereoSite,
-                );
-                for ligand in self.stereo_atoms().participants_2(id) {
+            for id in self.stereo_atoms().ids() {
+                push(node, self.stereo_atoms().site(id).0, Incidence::StereoSite);
+                for ligand in self.stereo_atoms().ligands(id) {
                     push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
                 }
                 node += 1;
             }
-            for id in self.stereo_bonds().relation_ids() {
+            for id in self.stereo_bonds().ids() {
                 push(
                     node,
-                    atom_count as u32 + self.stereo_bonds().participants_1(id)[0].0,
+                    atom_count as u32 + self.stereo_bonds().site(id).0,
                     Incidence::StereoSite,
                 );
-                for ligand in self.stereo_bonds().participants_2(id) {
+                for ligand in self.stereo_bonds().ligands(id) {
                     push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
                 }
                 node += 1;

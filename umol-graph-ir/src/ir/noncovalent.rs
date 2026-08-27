@@ -9,6 +9,7 @@ use umol_graph_core::{
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
+use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
 use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
@@ -176,6 +177,94 @@ impl Reframe for NoncovalentBonds {
             actions.push((NoncovalentBondId::from(id), order));
         }
         Ok((Self(Arc::new(reframed)), actions))
+    }
+}
+
+/// The reaction span's noncovalent bonds, one [`EntitySpan`] per entity against a single
+/// participant frame. The `Molecule` peer is [`NoncovalentBonds`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct NoncovalentBondSpans(
+    FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2>,
+);
+
+impl NoncovalentBondSpans {
+    pub fn into_entries(self) -> Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|([first, second], span)| (AtomId::from(first), AtomId::from(second), span))
+            .collect()
+    }
+
+    pub fn new(entries: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>) -> Self {
+        Self(FixedRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(first, second, span)| ([NodeId::from(first), NodeId::from(second)], span))
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: NoncovalentBondId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
+        self.0.relation_ids().map(NoncovalentBondId::from)
+    }
+
+    /// The two atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: NoncovalentBondId) -> [AtomId; 2] {
+        self.0.participants(RelationId::from(id)).map(AtomId::from)
+    }
+
+    pub fn attributes(&self, id: NoncovalentBondId) -> &EntitySpan<NoncovalentBondForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Reframe for NoncovalentBondSpans {
+    type Action = (NoncovalentBondId, Vec<ParticipantPosition>);
+
+    /// The payload is frame-invariant and selection sorts the pair, so a `Modified` span needs no
+    /// arbitration between its sides.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = self.0.clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let span = reframed.data(id).clone();
+            let reduced = span
+                .try_map(|form| form.normalize().ok())
+                .ok_or(Contradiction)?;
+            *reframed.data_mut(id) = reduced
+                .try_map(|form| form.reframe_to(&stored, &selected))
+                .ok_or(Contradiction)?;
+            reframed.permute_with(id, &order);
+            actions.push((NoncovalentBondId::from(id), order));
+        }
+        Ok((Self(reframed), actions))
     }
 }
 
@@ -405,6 +494,47 @@ mod tests {
     use crate::ir::boolean::BooleanForm;
 
     #[rustfmt::skip]
+    /// The payload is frame-invariant, so a `Modified` span's two sides carry unchanged through the
+    /// selected action while the pair itself sorts.
+    #[rstest]
+    fn test_noncovalent_bond_spans_reframe() {
+        let span = EntitySpan::Modified {
+            lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+        };
+        let mut spans = NoncovalentBondSpans::new(vec![(AtomId(2), AtomId(5), span.clone())]);
+        spans
+            .0
+            .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
+
+        let (reframed, actions) = spans.reframe_with_action().expect("the forms are satisfiable");
+
+        assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
+        assert_eq!(reframed.attributes(NoncovalentBondId(0)), &span);
+        assert_eq!(
+            actions,
+            vec![(
+                NoncovalentBondId(0),
+                vec![ParticipantPosition(1), ParticipantPosition(0)],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_spans_reframe_identity() {
+        let spans = NoncovalentBondSpans::new(vec![(
+            AtomId(2),
+            AtomId(5),
+            EntitySpan::Modified {
+                lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+                rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
+    }
+
     /// Storage sorts an `Unordered` factor on construction, so the stored pair is permuted first to
     /// model the frame-preserving storage S5 introduces.
     #[fixture]

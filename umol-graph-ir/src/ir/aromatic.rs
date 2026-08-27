@@ -8,6 +8,7 @@ use umol_graph_core::{
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
+use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
 use super::id::{AromaticSystemId, AtomId};
@@ -179,6 +180,99 @@ impl Reframe for AromaticSystems {
             actions.push((AromaticSystemId::from(id), order));
         }
         Ok((Self(Arc::new(reframed)), actions))
+    }
+}
+
+/// The reaction span's aromatic systems, one [`EntitySpan`] per entity against a single participant frame.
+///
+/// The `Molecule` peer is [`AromaticSystems`]. The surface is deliberately duplicated rather than shared
+/// through a payload parameter: a type parameter on the molecule-level families would complicate
+/// the primary carrier to serve this one.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AromaticSystemSpans(VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>>);
+
+impl AromaticSystemSpans {
+    pub fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, span)| (atoms.into_iter().map(AtomId::from).collect(), span))
+            .collect()
+    }
+
+    pub fn new(entries: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)>) -> Self {
+        Self(VarRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: AromaticSystemId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
+        self.0.relation_ids().map(AromaticSystemId::from)
+    }
+
+    /// The atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: AromaticSystemId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+    }
+
+    pub fn attributes(&self, id: AromaticSystemId) -> &EntitySpan<AromaticSystemForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Reframe for AromaticSystemSpans {
+    type Action = (AromaticSystemId, Vec<ParticipantPosition>);
+
+    /// Selection never consults the payload here — the atoms sort — so a `Modified` span needs no
+    /// arbitration between its sides. One action carries every side through [`EntitySpan::try_map`],
+    /// and the span declines whole if any side declines.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = self.0.clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let span = reframed.data(id).clone();
+            let reduced = span
+                .try_map(|form| form.normalize().ok())
+                .ok_or(Contradiction)?;
+            *reframed.data_mut(id) = reduced
+                .try_map(|form| form.reframe_to(&stored, &selected))
+                .ok_or(Contradiction)?;
+            reframed.permute_with(id, &order);
+            actions.push((AromaticSystemId::from(id), order));
+        }
+        Ok((Self(reframed), actions))
     }
 }
 
@@ -368,6 +462,110 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    /// Both sides of a `Modified` span are read against one participant list, so one action carries
+    /// both. Selection never consults the payload here, so the two sides cannot disagree about it.
+    #[rstest]
+    fn test_aromatic_system_spans_reframe() {
+        let mut spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21, 31]),
+            },
+        )]);
+        spans.0.permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+
+        let (reframed, actions) = spans
+            .reframe_with_action()
+            .expect("the forms are satisfiable");
+
+        assert_eq!(
+            reframed.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(
+            reframed.attributes(AromaticSystemId(0)),
+            &EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+                rhs: AromaticSystemForm::from_electrons(vec![21, 31, 11]),
+            },
+        );
+        assert_eq!(
+            actions,
+            vec![(
+                AromaticSystemId(0),
+                vec![
+                    ParticipantPosition(1),
+                    ParticipantPosition(2),
+                    ParticipantPosition(0),
+                ],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_spans_reframe_identity() {
+        let spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    /// A side that declines the frame change takes the whole span with it: one action serves both,
+    /// so there is no partial result to keep. Here the rhs electron vector disagrees in length with
+    /// the participant frame.
+    #[rstest]
+    fn test_aromatic_system_spans_reframe_error() {
+        let spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        assert_eq!(spans.reframe(), Err(Contradiction));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_spans_framed_eq() {
+        let mut unsorted = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        unsorted.0.permute_with(
+            RelationId(0),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        // The permute leaves the payload where it was, so the stored frame now reads
+        // atom 4 -> 10, atom 1 -> 20; the selected presentation states the same fact sorted.
+        let selected = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![20, 10]),
+                rhs: AromaticSystemForm::from_electrons(vec![21, 11]),
+            },
+        )]);
+
+        assert!(unsorted.framed_eq(&selected));
+        assert!(unsorted != selected);
+    }
 
     /// Storage sorts an `Unordered` factor on construction, so the stored frame is permuted first
     /// to model the frame-preserving storage S5 introduces.

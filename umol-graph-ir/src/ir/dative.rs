@@ -9,6 +9,7 @@ use umol_graph_core::{
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
+use super::delta::EntitySpan;
 use super::error::Contradiction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
@@ -220,6 +221,114 @@ impl Reframe for DativeBonds {
     }
 }
 
+/// The reaction span's dative bonds, one [`EntitySpan`] per entity against a single donor frame.
+/// The `Molecule` peer is [`DativeBonds`].
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct DativeBondSpans(
+    FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>,
+);
+
+impl DativeBondSpans {
+    pub fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|(acceptor, donors, span)| {
+                (
+                    donors.into_iter().map(AtomId::from).collect(),
+                    AtomId::from(acceptor[0]),
+                    span,
+                )
+            })
+            .collect()
+    }
+
+    pub fn new(entries: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)>) -> Self {
+        Self(FixedVarBirelationSet::new(
+            entries
+                .into_iter()
+                .map(|(donors, acceptor, span)| {
+                    (
+                        [NodeId::from(acceptor)],
+                        donors.into_iter().map(NodeId::from).collect(),
+                        span,
+                    )
+                })
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: DativeBondId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
+        self.0.relation_ids().map(DativeBondId::from)
+    }
+
+    /// The atom accepting the donated pairs. Not frame-bearing.
+    pub fn acceptor(&self, id: DativeBondId) -> AtomId {
+        AtomId::from(self.0.participants_1(RelationId::from(id))[0])
+    }
+
+    /// The donors of `id`, in their stored frame.
+    pub fn donors(&self, id: DativeBondId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants_2(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+    }
+
+    pub fn attributes(&self, id: DativeBondId) -> &EntitySpan<DativeBondForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Reframe for DativeBondSpans {
+    type Action = (DativeBondId, Vec<ParticipantPosition>);
+
+    /// The payload is frame-invariant and selection sorts the donors, so a `Modified` span needs no
+    /// arbitration between its sides.
+    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+        let mut reframed = self.0.clone();
+        let mut actions = Vec::with_capacity(reframed.count());
+        for id in reframed.relation_ids().collect::<Vec<_>>() {
+            let stored: Vec<AtomId> = reframed
+                .participants_2(id)
+                .iter()
+                .map(|&atom| AtomId::from(atom))
+                .collect();
+            let mut order: Vec<ParticipantPosition> = (0..stored.len())
+                .map(|position| ParticipantPosition(position as u32))
+                .collect();
+            order.sort_by_key(|position| stored[position.index()]);
+            let selected: Vec<AtomId> = order
+                .iter()
+                .map(|position| stored[position.index()])
+                .collect();
+
+            let span = reframed.data(id).clone();
+            let reduced = span
+                .try_map(|form| form.normalize().ok())
+                .ok_or(Contradiction)?;
+            *reframed.data_mut(id) = reduced
+                .try_map(|form| form.reframe_to(&stored, &selected))
+                .ok_or(Contradiction)?;
+            reframed.permute_2_with(id, &order);
+            actions.push((DativeBondId::from(id), order));
+        }
+        Ok((Self(reframed), actions))
+    }
+}
+
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
@@ -367,6 +476,64 @@ mod tests {
     use crate::ir::traits::{Lattice, Normalize};
 
     #[rustfmt::skip]
+    /// The payload is frame-invariant, so a `Modified` span's two sides carry unchanged through the
+    /// selected action while the donors sort. The acceptor bears no frame and does not move.
+    #[rstest]
+    fn test_dative_bond_spans_reframe() {
+        let span = EntitySpan::Modified {
+            lhs: DativeBondForm::from_order(1),
+            rhs: DativeBondForm::from_order(2),
+        };
+        let mut spans = DativeBondSpans::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AtomId(0),
+            span.clone(),
+        )]);
+        spans.0.permute_2_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+
+        let (reframed, actions) = spans.reframe_with_action().expect("the forms are satisfiable");
+
+        assert_eq!(
+            reframed.donors(DativeBondId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(reframed.acceptor(DativeBondId(0)), AtomId(0));
+        assert_eq!(reframed.attributes(DativeBondId(0)), &span);
+        assert_eq!(
+            actions,
+            vec![(
+                DativeBondId(0),
+                vec![
+                    ParticipantPosition(1),
+                    ParticipantPosition(2),
+                    ParticipantPosition(0),
+                ],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_spans_reframe_identity() {
+        let spans = DativeBondSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            AtomId(0),
+            EntitySpan::Modified {
+                lhs: DativeBondForm::from_order(1),
+                rhs: DativeBondForm::from_order(2),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
+    }
+
     /// The donors are an `Unordered` factor, so storage sorts them on construction; the stored
     /// frame is permuted first to model the frame-preserving storage S5 introduces.
     #[fixture]
