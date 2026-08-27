@@ -10,10 +10,12 @@ use super::super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
+use super::super::edit::{StereoAtomFieldChange, StereoBondFieldChange};
 use super::super::entity::Entity;
 use super::super::id::AtomId;
 use super::super::ligand::StereoLigand;
 use super::super::molecule::{Molecule, MoleculeIntegrityError};
+use super::super::stereo::StereoKind;
 use super::Reaction;
 
 /// Internal implementation of reaction integrity checking.
@@ -32,6 +34,31 @@ pub enum ReactionIntegrityError {
     /// A removal records incidence that disagrees with the referenced lhs entity.
     #[error("reaction incidence does not match lhs entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
+    /// A configuration change replaces one stereo kind with another within a single entity.
+    #[error("{entity:?}: configuration change replaces stereo kind {old:?} with {new:?}")]
+    StereoKindModified {
+        entity: Entity,
+        old: StereoKind,
+        new: StereoKind,
+    },
+}
+
+/// A stereo entity keeps its kind across a configuration change: the kind names the coordination
+/// geometry, so replacing it replaces the stereogenic unit rather than its configuration. That is
+/// expressed as removal plus addition, where the two entities carry different ids.
+///
+/// An undetermined side asserts no geometry and so restricts nothing.
+fn check_delta_stereo_kind(
+    entity: Entity,
+    old: Option<StereoKind>,
+    new: Option<StereoKind>,
+) -> Result<(), ReactionIntegrityError> {
+    match (old, new) {
+        (Some(old), Some(new)) if old != new => {
+            Err(ReactionIntegrityError::StereoKindModified { entity, old, new })
+        }
+        _ => Ok(()),
+    }
 }
 
 impl ReactionIntegrityCheck {
@@ -329,8 +356,13 @@ impl ReactionIntegrityCheck {
                     Err(Self::incidence_mismatch(entity))
                 }
             }
-            StereoAtomDelta::ModifyField { id, .. }
-            | StereoAtomDelta::ModifyConstraint { id, .. } => {
+            StereoAtomDelta::ModifyField { id, change } => {
+                let entity = Entity::StereoAtom(*id);
+                self.require_available(lhs, created, entity)?;
+                let StereoAtomFieldChange::Configuration { old, new } = change;
+                check_delta_stereo_kind(entity, old.kind(), new.kind())
+            }
+            StereoAtomDelta::ModifyConstraint { id, .. } => {
                 self.require_available(lhs, created, Entity::StereoAtom(*id))
             }
         }
@@ -370,8 +402,13 @@ impl ReactionIntegrityCheck {
                     Err(Self::incidence_mismatch(entity))
                 }
             }
-            StereoBondDelta::ModifyField { id, .. }
-            | StereoBondDelta::ModifyConstraint { id, .. } => {
+            StereoBondDelta::ModifyField { id, change } => {
+                let entity = Entity::StereoBond(*id);
+                self.require_available(lhs, created, entity)?;
+                let StereoBondFieldChange::Configuration { old, new } = change;
+                check_delta_stereo_kind(entity, old.kind(), new.kind())
+            }
+            StereoBondDelta::ModifyConstraint { id, .. } => {
                 self.require_available(lhs, created, Entity::StereoBond(*id))
             }
         }

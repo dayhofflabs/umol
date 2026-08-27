@@ -1481,7 +1481,9 @@ impl Reaction {
             ReactionIntegrityError::IncidenceMismatch { entity } => {
                 ApplyPreconditionError::ReactionIncidenceMismatch { entity }
             }
-            ReactionIntegrityError::Lhs(_) => ApplyPreconditionError::InconsistentReaction,
+            ReactionIntegrityError::Lhs(_) | ReactionIntegrityError::StereoKindModified { .. } => {
+                ApplyPreconditionError::InconsistentReaction
+            }
         })?;
 
         check_reaction_dpo(&self.lhs, &deltas).map_err(ApplyPreconditionError::ReactionDpo)?;
@@ -1994,6 +1996,67 @@ mod tests {
         #[case] expected: ReactionIntegrityError,
     ) {
         assert_eq!(reaction.check_integrity(), Err(expected));
+    }
+
+    /// A stereo entity keeps its kind across a configuration change. An undetermined side asserts
+    /// no geometry and restricts nothing, and the same-kind change is an ordinary modification.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_change(
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0)),
+        Err(ReactionIntegrityError::StereoKindModified {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            old: StereoKind::Tetrahedral,
+            new: StereoKind::Axial,
+        }),
+    )]
+    #[case::same_kind(
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+        Ok(()),
+    )]
+    #[case::old_undetermined(
+        StereoConfigurationForm::Undetermined,
+        StereoConfigurationForm::kinded(StereoKind::Axial, StereoCoset::Lit(0)),
+        Ok(()),
+    )]
+    #[case::new_undetermined(
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+        StereoConfigurationForm::Undetermined,
+        Ok(()),
+    )]
+    fn test_reaction_check_integrity_stereo_kind(
+        #[case] old: StereoConfigurationForm,
+        #[case] new: StereoConfigurationForm,
+        #[case] expected: Result<(), ReactionIntegrityError>,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: (1..=4)
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(
+            lhs,
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration { old, new },
+            })]),
+        );
+
+        assert_eq!(reaction.check_integrity(), expected);
     }
 
     #[rstest]

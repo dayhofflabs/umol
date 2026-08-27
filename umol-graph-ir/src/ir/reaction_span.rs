@@ -42,7 +42,7 @@ use super::multicenter::MulticenterBondForm;
 use super::noncovalent::NoncovalentBondForm;
 use super::reaction::Reaction;
 use super::remap::IdRemapping;
-use super::stereo::{StereoAtomForm, StereoBondForm};
+use super::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
 use super::traits::{EntityPatch, Equiv, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
@@ -92,6 +92,21 @@ pub struct ReactionSpanEntries {
     pub constraints: Vec<ConstraintSpan>,
 }
 
+/// One entity, one participant list, one frame: two kinded sides must agree on the kind. An
+/// undetermined side asserts no geometry and so restricts nothing.
+fn check_span_stereo_kind(
+    entity: Entity,
+    lhs: Option<StereoKind>,
+    rhs: Option<StereoKind>,
+) -> Result<(), ReactionSpanIntegrityError> {
+    match (lhs, rhs) {
+        (Some(lhs), Some(rhs)) if lhs != rhs => {
+            Err(ReactionSpanIntegrityError::StereoKindModified { entity, lhs, rhs })
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Failure to construct a reaction span from structurally inconsistent entries.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionSpanIntegrityError {
@@ -101,6 +116,12 @@ pub enum ReactionSpanIntegrityError {
     Lhs(MoleculeIntegrityError),
     #[error("reaction span rhs is not a valid molecule representation: {0}")]
     Rhs(MoleculeIntegrityError),
+    #[error("{entity}: modified sides assert different stereo kinds, {lhs:?} and {rhs:?}")]
+    StereoKindModified {
+        entity: Entity,
+        lhs: StereoKind,
+        rhs: StereoKind,
+    },
 }
 
 impl ReactionSpan {
@@ -213,6 +234,36 @@ impl ReactionSpan {
             .map_err(ReactionSpanIntegrityError::Lhs)?;
         Molecule::try_from_entries(self.project_entries(Side::Right))
             .map_err(ReactionSpanIntegrityError::Rhs)?;
+        self.check_stereo_kind_unchanged()?;
+        Ok(())
+    }
+
+    /// A modified stereo entity keeps its stereo kind: the two sides of one span are read against a
+    /// single participant list, so sides asserting different kinds have no common admissible group
+    /// and no frame action can serve both.
+    ///
+    /// A kind change is representable as removal plus addition, where the two entities carry
+    /// different ids. Each side can be individually valid, so this cannot ride the per-side
+    /// projection above.
+    fn check_stereo_kind_unchanged(&self) -> Result<(), ReactionSpanIntegrityError> {
+        for id in self.stereo_atoms.relation_ids() {
+            if let EntitySpan::Modified { lhs, rhs } = self.stereo_atoms.data(id) {
+                check_span_stereo_kind(
+                    Entity::StereoAtom(StereoAtomId::from(id)),
+                    lhs.configuration.kind(),
+                    rhs.configuration.kind(),
+                )?;
+            }
+        }
+        for id in self.stereo_bonds.relation_ids() {
+            if let EntitySpan::Modified { lhs, rhs } = self.stereo_bonds.data(id) {
+                check_span_stereo_kind(
+                    Entity::StereoBond(StereoBondId::from(id)),
+                    lhs.configuration.kind(),
+                    rhs.configuration.kind(),
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -835,8 +886,10 @@ impl ReactionSpan {
     /// right-unmatched entities appended, rhs participants and constraints remapped into that union
     /// frame. Returns `None` when any correspondence family declares counts different from the
     /// supplied molecules or a matched bond, overlay, or stereo entity has incompatible incidence
-    /// under the atom correspondence. A compatible correspondence may leave otherwise matchable
-    /// entities unmatched; they are represented as removals and additions.
+    /// under the atom correspondence, and when the resulting span fails its
+    /// representation-integrity contract — a matched pair of stereo entities asserting different
+    /// stereo kinds, which each side satisfies alone. A compatible correspondence may leave
+    /// otherwise matchable entities unmatched; they are represented as removals and additions.
     ///
     /// # Semantic properties
     ///
@@ -1212,7 +1265,7 @@ impl ReactionSpan {
             }
         }
 
-        Some(ReactionSpan::from_entries(ReactionSpanEntries {
+        ReactionSpan::try_from_entries(ReactionSpanEntries {
             atoms,
             bonds,
             dative,
@@ -1222,7 +1275,8 @@ impl ReactionSpan {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        }))
+        })
+        .ok()
     }
 
     /// Recover the per-family correspondence between the two normalized side projections,
@@ -5123,6 +5177,137 @@ mod tests {
     ) {
         assert_eq!(ReactionSpan::superimpose(&lhs, &rhs, &correspondence), None,);
         assert_eq!(lhs.difference_to(&rhs, &correspondence), None);
+    }
+
+    /// A dense identity correspondence over `count` entities of one family.
+    fn identity_pairs<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
+        Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
+    }
+
+    /// One stereocenter over four distinct ligands, tetrahedral on the left and axial on the right.
+    /// Each side is a valid molecule on its own: both kinds are admissible on an atom at degree 4,
+    /// so nothing separates them until the two are paired.
+    #[fixture]
+    fn stereo_kind_change_sides() -> (Molecule, Molecule) {
+        let side = |kind: StereoKind| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                    .into_iter()
+                    .map(AtomForm::from_element)
+                    .collect(),
+                bonds: (1..=4)
+                    .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                    .collect(),
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    (1..=4)
+                        .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                        .collect(),
+                    StereoAtomForm::new(kind, 0u32),
+                )],
+                ..Default::default()
+            })
+        };
+        (side(StereoKind::Tetrahedral), side(StereoKind::Axial))
+    }
+
+    /// Leaving the stereo-atom family unmatched says the two stereocenters are different entities,
+    /// which is the encoding the pair rule directs. Superposition then succeeds on the same two
+    /// molecules, representing the change as a removal and an addition.
+    #[rstest]
+    fn test_reaction_span_superimpose_stereo_kind_change(
+        stereo_kind_change_sides: (Molecule, Molecule),
+    ) {
+        let (lhs, rhs) = stereo_kind_change_sides;
+        let unmatched = MoleculeCorrespondence::new(
+            identity_pairs(5),
+            identity_pairs(4),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            Correspondence::new(vec![], 1, 1).expect("an empty correspondence over one entity"),
+            identity_pairs(0),
+        );
+
+        let span = ReactionSpan::superimpose(&lhs, &rhs, &unmatched)
+            .expect("unmatched stereo atoms superimpose as a removal and an addition");
+
+        assert_eq!(
+            span.stereo_atoms()
+                .relation_ids()
+                .map(|id| span.stereo_atoms().data(id).clone())
+                .collect::<Vec<_>>(),
+            vec![
+                EntitySpan::Removed(StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)),
+                EntitySpan::Added(StereoAtomForm::new(StereoKind::Axial, 0u32)),
+            ],
+        );
+        assert_eq!(span.check_integrity(), Ok(()));
+    }
+
+    /// Matching the two stereocenters says they are one entity that changed geometry, which no
+    /// single ligand frame can carry. Both from-sides constructors decline; neither side is at
+    /// fault, so the rejection belongs to the correspondence.
+    #[rstest]
+    fn test_reaction_span_superimpose_stereo_kind_change_error(
+        stereo_kind_change_sides: (Molecule, Molecule),
+    ) {
+        let (lhs, rhs) = stereo_kind_change_sides;
+        let matched = MoleculeCorrespondence::new(
+            identity_pairs(5),
+            identity_pairs(4),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(1),
+            identity_pairs(0),
+        );
+
+        assert_eq!(ReactionSpan::superimpose(&lhs, &rhs, &matched), None);
+        assert_eq!(lhs.difference_to(&rhs, &matched), None);
+    }
+
+    /// The same pairing built directly, so the rejection is visible as its own error rather than
+    /// as a `None` from a constructor that has other reasons to decline.
+    #[rstest]
+    fn test_reaction_span_try_from_entries_stereo_kind_error() {
+        let entries = ReactionSpanEntries {
+            atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                .into_iter()
+                .map(|element| EntitySpan::Unchanged(AtomForm::from_element(element)))
+                .collect(),
+            bonds: (1..=4)
+                .map(|ligand| {
+                    (
+                        AtomId(0),
+                        AtomId(ligand),
+                        EntitySpan::Unchanged(BondForm::from_order(1)),
+                    )
+                })
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    rhs: StereoAtomForm::new(StereoKind::Axial, 0u32),
+                },
+            )],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            ReactionSpan::try_from_entries(entries),
+            Err(ReactionSpanIntegrityError::StereoKindModified {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                lhs: StereoKind::Tetrahedral,
+                rhs: StereoKind::Axial,
+            }),
+        );
     }
 
     #[rstest]

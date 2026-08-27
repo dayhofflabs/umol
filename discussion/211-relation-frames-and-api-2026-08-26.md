@@ -1208,7 +1208,7 @@ a second `Tetrahedral` coset instead. The sites stay pairwise distinguishable an
 
 **Dependencies:** [dep: none] — its prerequisite, stereo-site incidence integrity, is complete
 
-#### S3g — Prohibit a stereo kind change within one entity
+#### S3g — Prohibit a stereo kind change within one entity **Done**
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `umol-graph-ir/src/ir/reaction/integrity.rs`,
 their public error types, and construction tests.
@@ -1223,13 +1223,14 @@ is not, and it needs a check at both entry points rather than riding the per-sid
   `ReactionIntegrityError` variant.
 
 `StereoConfigurationForm::Undetermined` on either side remains admissible and contributes no
-restriction. A genuine kind change is expressed as removal plus addition, which is representable:
-the two entities carry different ids and neither side ends with a duplicate site.
+restriction.
 
-**This is an opinionated restriction on what a reaction can express** and is recorded as such.
-Converting a stereocenter's geometry class — an sp3 center becoming an allene axial center — must be
-written as removal plus addition rather than modification. That matches the chemistry, since the
-stereogenic unit itself changes rather than its configuration.
+**Nothing becomes inexpressible.** Converting a stereocenter's geometry class — an sp3 center
+becoming an allene axial center — is written as removal plus addition instead of as a modification.
+The rule constrains the encoding within one entity, not the set of reactions the representation can
+state. That encoding also matches the chemistry: the stereogenic unit itself changes rather than its
+configuration, and the two entities carry different ids with neither side ending on a duplicate
+site.
 
 Together with S3f this makes frame selection unambiguous at every carrier under the intersection
 rule above: the only ambiguous case is two carried sides asserting different kinds, which these two
@@ -1239,8 +1240,20 @@ rules exclude.
 kind, one with an undetermined side, and the equivalent delta cases. Assert the exact error
 variants, and assert that the removal-plus-addition encoding of a kind change is accepted.
 
+Cover the from-sides route explicitly, since that is where the rule is observable. Two molecules
+differing only in the stereo kind of one site are each valid alone, so the outcome turns entirely on
+the supplied correspondence: matching the two sites 1:1 asserts one entity changed geometry and
+`ReactionSpan::superimpose` and `Molecule::difference_to` both decline; leaving that family
+unmatched asserts two entities and superposition yields the removal and the addition. The two cases
+share one fixture so the molecules are provably the same in both.
+
+`ReactionSpan::superimpose` built its result with `from_entries`, which panics on an integrity
+failure, so the rejection escaped as a panic rather than the `None` its signature promises. It now
+uses `try_from_entries(..).ok()`, matching how it already declines an incompatible correspondence.
+Its doc comment names the new `None` case.
+
 **Change class:** strengthened representation-integrity contract; breaking for any caller that
-expressed a kind change as a modification (green).
+encoded a kind change as a modification rather than as removal plus addition (green).
 
 **Dependencies:** [dep: S3f]
 
