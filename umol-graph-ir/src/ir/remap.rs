@@ -1,14 +1,14 @@
 //! Graph-IR id mappings between `Molecule` id spaces.
 //!
 //! [`IdCompaction`] is the removal compaction produced by
-//! `MoleculeEditor::remove` (wraps `umol_graph_core::Compaction` for atom/bond
+//! `MoleculeEditor::remove` (wraps `umol_graph_core::GraphCompaction` for atom/bond
 //! and carries sorted removed-id lists for the six relation kinds; lookups are
 //! binary search + partition-point shift). [`IdRemapping`] is the general total
 //! relabeling used to move `Delta`s between id spaces (`reverse`, `compose`).
 
 use std::collections::HashMap;
 
-use umol_graph_core::{Compaction, EdgeId, NodeId, RelationId};
+use umol_graph_core::{EdgeId, GraphCompaction, NodeId, RelationId};
 
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -21,7 +21,7 @@ use super::id::{
 /// id references against the new `Molecule` layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdCompaction {
-    graph: Compaction,
+    graph: GraphCompaction,
     removed_dative_bonds: Vec<RelationId>,
     removed_aromatic_systems: Vec<RelationId>,
     removed_multicenter_bonds: Vec<RelationId>,
@@ -41,7 +41,7 @@ pub struct UndoCompaction {
 impl IdCompaction {
     pub fn empty() -> Self {
         Self::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -61,7 +61,7 @@ impl IdCompaction {
         removed_stereo_bonds: Vec<RelationId>,
     ) -> Self {
         Self::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             removed_dative_bonds,
             removed_aromatic_systems,
             removed_multicenter_bonds,
@@ -73,7 +73,7 @@ impl IdCompaction {
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        graph: Compaction,
+        graph: GraphCompaction,
         mut removed_dative_bonds: Vec<RelationId>,
         mut removed_aromatic_systems: Vec<RelationId>,
         mut removed_multicenter_bonds: Vec<RelationId>,
@@ -130,7 +130,7 @@ impl IdCompaction {
         compact_relation(&self.removed_stereo_bonds, id.into()).map(StereoBondId::from)
     }
 
-    pub fn graph(&self) -> &Compaction {
+    pub fn graph(&self) -> &GraphCompaction {
         &self.graph
     }
 
@@ -305,14 +305,14 @@ mod tests {
     use std::fmt::Debug;
 
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::GraphCompaction;
 
     use super::*;
 
     #[fixture]
     fn compaction() -> IdCompaction {
         IdCompaction::new(
-            Compaction::new(vec![1, 3], vec![0, 2]),
+            GraphCompaction::new(vec![NodeId(1), NodeId(3)], vec![EdgeId(0), EdgeId(2)]),
             vec![RelationId(2), RelationId(0), RelationId(2)],
             vec![RelationId(1)],
             vec![RelationId(3), RelationId(0)],

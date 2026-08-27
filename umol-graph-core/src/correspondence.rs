@@ -10,7 +10,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
 
-use crate::graph::{EdgeId, Graph, NodeId, Remapping};
+use crate::graph::{EdgeId, Graph, NodeId};
+use crate::remapping::Remapping;
 
 /// Failure to construct a correspondence whose pairs form a partial bijection over its declared id
 /// spaces.

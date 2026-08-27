@@ -11,8 +11,8 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
-    FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, ParticipantPosition,
+    compact_edge_vec, compact_node_vec, BiRelationData, EdgeId, FactorOrdering, FixedRelationSet,
+    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered, ParticipantPosition,
     RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
@@ -135,7 +135,7 @@ where
             .collect()
     }
 
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
                 FixedSetStorage::Shared(Arc::new(arc.compact(compaction)))
@@ -275,7 +275,7 @@ where
             .collect()
     }
 
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> Self {
         match self {
             VarSetStorage::Shared(arc) => VarSetStorage::Shared(Arc::new(arc.compact(compaction))),
             VarSetStorage::Mutable(vec) => {
@@ -438,7 +438,7 @@ where
         Some((sigma_1, sigma_2))
     }
 
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> Self {
         match self {
             FixedVarSetStorage::Shared(arc) => {
                 FixedVarSetStorage::Shared(Arc::new(arc.compact(compaction)))
@@ -515,7 +515,7 @@ where
 /// `compaction` (i.e. dropped by the structural removal).
 fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
     storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    compaction: &Compaction,
+    compaction: &GraphCompaction,
 ) -> Vec<RelationId>
 where
     L1: RelationParticipant,
@@ -564,7 +564,7 @@ where
 
 fn fixed_relation_removed<P, O, D, const N: usize>(
     storage: &FixedSetStorage<P, O, D, N>,
-    compaction: &Compaction,
+    compaction: &GraphCompaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -586,7 +586,7 @@ where
 
 fn var_relation_removed<P, O, D>(
     storage: &VarSetStorage<P, O, D>,
-    compaction: &Compaction,
+    compaction: &GraphCompaction,
 ) -> Vec<RelationId>
 where
     P: RelationParticipant,
@@ -1149,7 +1149,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
             Vec::new(),
@@ -1168,7 +1168,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
             Vec::new(),
@@ -1187,7 +1187,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             raw,
@@ -1206,7 +1206,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1225,7 +1225,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1244,7 +1244,7 @@ impl MoleculeEditor {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
         let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),

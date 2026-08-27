@@ -695,7 +695,7 @@ impl Normalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Compaction, RelationId};
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId, RelationId};
 
     use super::*;
     use crate::ir::num::NumForm;
@@ -713,7 +713,10 @@ mod tests {
     ) -> IdCompaction {
         let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
         IdCompaction::new(
-            Compaction::new(removed_nodes, removed_edges),
+            GraphCompaction::new(
+                removed_nodes.into_iter().map(NodeId).collect(),
+                removed_edges.into_iter().map(EdgeId).collect(),
+            ),
             rel(removed_dative),
             rel(removed_aromatic),
             rel(removed_multicenter),

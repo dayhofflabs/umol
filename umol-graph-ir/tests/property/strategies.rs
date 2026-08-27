@@ -2279,8 +2279,8 @@ pub(crate) fn molecule_with_constraints_strategy() -> impl Strategy<Value = Mole
 /// The two members therefore denote the same stereochemistry and differ only in stored participant
 /// frame. The action is guaranteed nonidentity and the ligands are distinguishable by element, so a
 /// property that cannot distinguish the two members is not exercising the frame domain at all.
-pub(crate) fn stereo_reframed_molecule_pair_strategy(
-) -> impl Strategy<Value = (Molecule, Molecule)> {
+pub(crate) fn stereo_reframed_molecule_pair_strategy() -> impl Strategy<Value = (Molecule, Molecule)>
+{
     let kind = StereoKind::Tetrahedral;
     (
         0..kind.count() as u32,

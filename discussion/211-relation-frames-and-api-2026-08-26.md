@@ -1,6 +1,6 @@
 # 211 — Relation frames and the relation API
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-26
 Relates: [168](168-api-hygiene-2026-07-27.md),
 [204](204-reaction-application-redesign-2026-08-19.md),
@@ -765,7 +765,7 @@ kind's parent group. Its consumers are `stereo/semantics.rs`, `molecule/meet_pus
 multicenter frame-variation strategy exists at all, because eager sorting makes one unwritable
 until S5b.
 
-#### S0a — Reach comparison and canonicalization with reframed pairs
+#### S0a — Reach comparison and canonicalization with reframed pairs **Done**
 
 **Module:** `umol-graph-ir/tests/property/strategies.rs`,
 `tests/property/molecule/comparison.rs`, and `tests/property/molecule/canonicalize.rs`.
@@ -799,7 +799,7 @@ condition for this subitem).
 
 **Dependencies:** [dep: none]
 
-#### S0b — Classify and record the resulting failures
+#### S0b — Classify and record the resulting failures **Done**
 
 **Module:** this document.
 
@@ -848,7 +848,7 @@ unwritable until S5b removes eager sorting, and S5b's evidence requirements stat
 
 ### S1 — Extract the single-id-space compaction layer
 
-#### S1a — Add `Compaction<Id>` and re-express the graph compaction
+#### S1a — Add `Compaction<Id>` and re-express the graph compaction **Done**
 
 **Module:** `umol-graph-core/src/graph.rs` and its unit tests.
 
@@ -862,11 +862,17 @@ Re-express the existing two-space type as `GraphCompaction` holding `Compaction<
 end, a removed id, an id beyond the range, empty removals, and the forward-then-reverse roundtrip.
 Retain every existing graph compaction assertion against `GraphCompaction`.
 
+`Compaction<Id>` bounds `Id: Copy + Ord + Add<usize, Output = Id> + Sub<usize, Output = Id>` and
+stores `Vec<Id>`, so no new trait is introduced: the shift arithmetic uses `std::ops`, and `NodeId`
+and `EdgeId` gained those two impls. `GraphCompaction::new` now takes typed id vectors rather than
+`Vec<u32>`. That widens the id types' public surface — `NodeId + 5` becomes legal — which is the
+arithmetic `compact_node` performed by hand before.
+
 **Change class:** breaking rename with an additive generic (red until S1b).
 
 **Dependencies:** [dep: S0b]
 
-#### S1b — Migrate graph-IR to `GraphCompaction`
+#### S1b — Migrate graph-IR to `GraphCompaction` **Done**
 
 **Module:** `umol-graph-ir/src/ir/remap.rs`, `molecule/editor.rs`, `ligand.rs`, and the six
 constraint modules.

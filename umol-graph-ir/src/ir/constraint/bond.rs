@@ -465,7 +465,7 @@ impl From<Vec<BondConstraintForm>> for BondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::stereo::{StereoCoset, StereoTerm};
@@ -759,7 +759,10 @@ mod tests {
             BondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
         let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1, 2], vec![0, 1]),
+            GraphCompaction::new(
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1)],
+            ),
             Vec::new(),
             Vec::new(),
             Vec::new(),

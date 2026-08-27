@@ -383,7 +383,7 @@ impl From<Vec<AromaticSystemConstraintForm>> for AromaticSystemConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
 
@@ -646,7 +646,7 @@ mod tests {
         let cs =
             AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
         let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1], vec![0]),
+            GraphCompaction::new(vec![NodeId(0), NodeId(1)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

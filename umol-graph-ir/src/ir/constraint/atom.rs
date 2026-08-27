@@ -1065,7 +1065,7 @@ impl AsLit for MulticenterValenceForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::num::ArithExpr;
@@ -1796,7 +1796,7 @@ mod tests {
             AtomConstraintForm::degree(3),
         ]);
         let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1, 2], vec![0]),
+            GraphCompaction::new(vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

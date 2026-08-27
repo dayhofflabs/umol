@@ -430,7 +430,7 @@ impl From<Vec<DativeBondConstraintForm>> for DativeBondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     #[rustfmt::skip]
@@ -724,7 +724,7 @@ mod tests {
             DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
         let compaction = IdCompaction::new(
-            Compaction::new(vec![1], vec![1]),
+            GraphCompaction::new(vec![NodeId(1)], vec![EdgeId(1)]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

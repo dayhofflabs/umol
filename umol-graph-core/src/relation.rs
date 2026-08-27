@@ -13,8 +13,10 @@
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 
+use crate::compaction::GraphCompaction;
 use crate::correspondence::Correspondence;
-use crate::graph::{Compaction, EdgeId, NodeId, Remapping};
+use crate::graph::{EdgeId, NodeId};
+use crate::remapping::Remapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -189,13 +191,13 @@ pub enum ParticipantAnchor {
     Edge(EdgeId),
 }
 
-/// A value that can occupy a relation factor: routes through a `Compaction`
+/// A value that can occupy a relation factor: routes through a `GraphCompaction`
 /// (removal/compaction, both directions) and a `Remapping` (general relabel,
 /// forward), and exposes its node/edge refs for incidence. One impl per concrete
 /// id type — dispatch is static, since a factor is homogeneous.
 pub trait RelationParticipant: Copy + Ord + Hash {
-    fn compact(self, compaction: &Compaction) -> Option<Self>;
-    fn uncompact(self, compaction: &Compaction) -> Self;
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self>;
+    fn uncompact(self, compaction: &GraphCompaction) -> Self;
 
     /// Relabel this participant through `remapping`.
     ///
@@ -212,11 +214,11 @@ pub trait RelationParticipant: Copy + Ord + Hash {
 }
 
 impl RelationParticipant for NodeId {
-    fn compact(self, compaction: &Compaction) -> Option<Self> {
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_node(self)
     }
 
-    fn uncompact(self, compaction: &Compaction) -> Self {
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
         compaction.uncompact_node(self)
     }
 
@@ -237,11 +239,11 @@ impl RelationParticipant for NodeId {
 }
 
 impl RelationParticipant for EdgeId {
-    fn compact(self, compaction: &Compaction) -> Option<Self> {
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         compaction.compact_edge(self)
     }
 
-    fn uncompact(self, compaction: &Compaction) -> Self {
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
         compaction.uncompact_edge(self)
     }
 
@@ -507,7 +509,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     }
 
     /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &Compaction) -> Self
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: RelationData + Clone,
     {
@@ -813,7 +815,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     }
 
     /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &Compaction) -> Self
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: RelationData + Clone,
     {
@@ -1127,7 +1129,7 @@ where
     }
 
     /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &Compaction) -> Self
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1503,7 +1505,7 @@ where
     }
 
     /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &Compaction) -> Self
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -1881,7 +1883,7 @@ where
     }
 
     /// Compact participant ids, dropping every relation that contains a removed participant.
-    pub fn compact(&self, compaction: &Compaction) -> Self
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self
     where
         D: BiRelationData + Clone,
     {
@@ -2181,7 +2183,7 @@ mod tests {
     #[case::removed(NodeId(1), None)]
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
     fn test_node_id_compact(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         assert_eq!(id.compact(&compaction), expected);
     }
 
@@ -2189,7 +2191,7 @@ mod tests {
     #[case::before_gap(NodeId(0), NodeId(0))]
     #[case::after_gap(NodeId(1), NodeId(2))]
     fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         assert_eq!(id.uncompact(&compaction), expected);
     }
 
@@ -2208,7 +2210,7 @@ mod tests {
     #[case::removed(EdgeId(0), None)]
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_compact(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let compaction = Compaction::new(vec![], vec![0]);
+        let compaction = GraphCompaction::new(vec![], vec![EdgeId(0)]);
         assert_eq!(id.compact(&compaction), expected);
     }
 
@@ -2216,7 +2218,7 @@ mod tests {
     #[case::before_gap(EdgeId(0), EdgeId(0))]
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let compaction = Compaction::new(vec![], vec![1]);
+        let compaction = GraphCompaction::new(vec![], vec![EdgeId(1)]);
         assert_eq!(id.uncompact(&compaction), expected);
     }
 
@@ -2344,7 +2346,7 @@ mod tests {
     fn test_fixed_relation_set_compact() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
@@ -2531,7 +2533,7 @@ mod tests {
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
         ]);
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
@@ -2664,7 +2666,7 @@ mod tests {
                 ([n(0)], [n(2), n(4)], "keep"),
                 ([n(1)], [n(5), n(6)], "drop"),
             ]);
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
@@ -2852,7 +2854,7 @@ mod tests {
                 ([n(0)], vec![n(2), n(4)], "keep"),
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
@@ -3014,7 +3016,7 @@ mod tests {
                 (vec![n(0), n(2)], vec![n(4)], "keep"),
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
-        let compaction = Compaction::new(vec![1], vec![]);
+        let compaction = GraphCompaction::new(vec![NodeId(1)], vec![]);
         let out = rs.compact(&compaction);
         assert_eq!(out.count(), 1);
         assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
