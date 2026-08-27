@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::TetrahedralStereoForm;
 use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
 
@@ -132,7 +132,7 @@ impl AtomConstraintForm {
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -545,7 +545,7 @@ impl AtomConstraintsForm {
     }
 
     /// No-op: no `AtomConstraintForm` variant carries an entity index.
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -1795,7 +1795,7 @@ mod tests {
             AtomConstraintForm::valence(4),
             AtomConstraintForm::degree(3),
         ]);
-        let compaction = IdCompaction::new(
+        let compaction = MoleculeCompaction::new(
             GraphCompaction::new(vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),

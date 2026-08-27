@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondForm` via
@@ -38,7 +38,7 @@ impl MulticenterBondConstraintForm {
         }
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         // Value-only: no indices to compact.
         Some(self)
     }
@@ -229,7 +229,7 @@ impl MulticenterBondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -645,7 +645,7 @@ mod tests {
     fn test_multicenter_bond_constraints_form_compact() {
         let cs =
             MulticenterBondConstraintsForm::from(MulticenterBondConstraintForm::electron_count(6));
-        let compaction = IdCompaction::new(
+        let compaction = MoleculeCompaction::new(
             GraphCompaction::new(vec![NodeId(0), NodeId(1)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),

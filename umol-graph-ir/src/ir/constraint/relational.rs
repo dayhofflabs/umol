@@ -24,7 +24,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::Normalize;
 use super::atom::AtomConstraintForm;
 
@@ -207,7 +207,7 @@ pub enum RelationalConstraint {
 impl RelationalConstraint {
     /// Remap all indices this constraint carries. Returns `None` if any
     /// referenced entity has been removed by the remapping.
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         Some(match self {
             Self::DativeBondDonors { bond, atoms } => {
                 let bond = compaction.compact_dative_bond(bond)?;
@@ -695,7 +695,7 @@ impl Normalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId, RelationId};
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::num::NumForm;
@@ -710,19 +710,24 @@ mod tests {
         removed_noncovalent: Vec<u32>,
         removed_stereo_atom: Vec<u32>,
         removed_stereo_bond: Vec<u32>,
-    ) -> IdCompaction {
-        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
-        IdCompaction::new(
+    ) -> MoleculeCompaction {
+        MoleculeCompaction::new(
             GraphCompaction::new(
                 removed_nodes.into_iter().map(NodeId).collect(),
                 removed_edges.into_iter().map(EdgeId).collect(),
             ),
-            rel(removed_dative),
-            rel(removed_aromatic),
-            rel(removed_multicenter),
-            rel(removed_noncovalent),
-            rel(removed_stereo_atom),
-            rel(removed_stereo_bond),
+            removed_dative.into_iter().map(DativeBondId).collect(),
+            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            removed_multicenter
+                .into_iter()
+                .map(MulticenterBondId)
+                .collect(),
+            removed_noncovalent
+                .into_iter()
+                .map(NoncovalentBondId)
+                .collect(),
+            removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
+            removed_stereo_bond.into_iter().map(StereoBondId).collect(),
         )
     }
 
@@ -732,7 +737,7 @@ mod tests {
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
     /// the removed position shift down by one.
-    fn one_atom_one_dative() -> IdCompaction {
+    fn one_atom_one_dative() -> MoleculeCompaction {
         remapping(
             vec![1],
             vec![],
@@ -746,7 +751,7 @@ mod tests {
     }
 
     /// Drop bond 0; preserve other entities.
-    fn drop_bond0() -> IdCompaction {
+    fn drop_bond0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![0],
@@ -760,7 +765,7 @@ mod tests {
     }
 
     /// Drop aromatic system 0.
-    fn drop_aromatic0() -> IdCompaction {
+    fn drop_aromatic0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -774,7 +779,7 @@ mod tests {
     }
 
     /// Drop multicenter bond 0.
-    fn drop_multicenter0() -> IdCompaction {
+    fn drop_multicenter0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -788,7 +793,7 @@ mod tests {
     }
 
     /// Drop noncovalent bond 0.
-    fn drop_noncovalent0() -> IdCompaction {
+    fn drop_noncovalent0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -913,7 +918,7 @@ mod tests {
         Some(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: val_pred() }))]
     fn test_relational_constraint_compact(
         #[case] input: RelationalConstraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<RelationalConstraint>,
     ) {
         assert_eq!(input.compact(&compaction), expected);

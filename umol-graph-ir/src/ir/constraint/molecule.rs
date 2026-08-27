@@ -12,7 +12,7 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
 use super::super::traits::{Lattice, Normalize};
@@ -76,7 +76,7 @@ impl Constraint {
         }
     }
 
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         match self {
             Constraint::Atom(id, c) => {
                 let i = compaction.compact_atom(id)?;
@@ -290,7 +290,7 @@ impl Constraints {
 
     /// Remap entity indices. Entries that reference a removed entity (directly
     /// or via a combinator subtree) are dropped.
-    pub fn compact(&mut self, compaction: &IdCompaction) {
+    pub fn compact(&mut self, compaction: &MoleculeCompaction) {
         self.0 = mem::take(&mut self.0)
             .into_iter()
             .filter_map(|c| c.compact(compaction))
@@ -299,7 +299,7 @@ impl Constraints {
 
     /// Remap entity indices and return the patch needed to restore or inspect
     /// constraints that were dropped or rewritten by the compaction.
-    pub fn compact_with_update(&mut self, compaction: &IdCompaction) -> CascadedConstraints {
+    pub fn compact_with_update(&mut self, compaction: &MoleculeCompaction) -> CascadedConstraints {
         let mut update = CascadedConstraints::default();
         let mut next = Vec::new();
         for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
@@ -395,7 +395,7 @@ impl MoleculeConstraint {
         }
     }
 
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => {
                 let atoms = compact_atom_subset(atoms, compaction)?;
@@ -483,7 +483,7 @@ impl Normalize for MoleculeConstraint {
 /// constraint is dropped (returns outer `None`).
 fn compact_atom_subset(
     atoms: Option<Vec<AtomId>>,
-    compaction: &IdCompaction,
+    compaction: &MoleculeCompaction,
 ) -> Option<Option<Vec<AtomId>>> {
     match atoms {
         None => Some(None),
@@ -498,7 +498,7 @@ fn compact_atom_subset(
 /// Remap an `Option<Vec<BondId>>`. Same semantics as `compact_atom_subset`.
 fn compact_bond_subset(
     bonds: Option<Vec<BondId>>,
-    compaction: &IdCompaction,
+    compaction: &MoleculeCompaction,
 ) -> Option<Option<Vec<BondId>>> {
     match bonds {
         None => Some(None),
@@ -527,7 +527,7 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{EdgeId, GraphCompaction, NodeId, RelationId};
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::constraint::RingScope;
@@ -538,8 +538,8 @@ mod tests {
     use crate::ir::spin::UnpairedElectronsForm;
     use crate::ir::BooleanForm;
 
-    fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdCompaction {
-        IdCompaction::new(
+    fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> MoleculeCompaction {
+        MoleculeCompaction::new(
             GraphCompaction::new(
                 removed_nodes.into_iter().map(NodeId).collect(),
                 removed_edges.into_iter().map(EdgeId).collect(),
@@ -560,16 +560,21 @@ mod tests {
         removed_noncovalent: Vec<u32>,
         removed_stereo_atoms: Vec<u32>,
         removed_stereo_bonds: Vec<u32>,
-    ) -> IdCompaction {
-        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
-        IdCompaction::new(
+    ) -> MoleculeCompaction {
+        MoleculeCompaction::new(
             GraphCompaction::new(Vec::new(), Vec::new()),
-            rel(removed_dative),
-            rel(removed_aromatic),
-            rel(removed_multicenter),
-            rel(removed_noncovalent),
-            rel(removed_stereo_atoms),
-            rel(removed_stereo_bonds),
+            removed_dative.into_iter().map(DativeBondId).collect(),
+            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            removed_multicenter
+                .into_iter()
+                .map(MulticenterBondId)
+                .collect(),
+            removed_noncovalent
+                .into_iter()
+                .map(NoncovalentBondId)
+                .collect(),
+            removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
+            removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
         )
     }
 
@@ -815,7 +820,7 @@ mod tests {
     )]
     fn test_constraint_compact(
         #[case] c: Constraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<Constraint>,
     ) {
         assert_eq!(c.compact(&compaction), expected);
@@ -1024,7 +1029,7 @@ mod tests {
     )]
     fn test_constraints_compact(
         #[case] items: Vec<Constraint>,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Vec<Constraint>,
     ) {
         let mut cs = Constraints::new();
@@ -1258,7 +1263,7 @@ mod tests {
     )]
     fn test_molecule_constraint_compact(
         #[case] c: MoleculeConstraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<MoleculeConstraint>,
     ) {
         assert_eq!(c.compact(&compaction), expected);

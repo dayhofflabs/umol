@@ -35,7 +35,7 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::remap::{IdCompaction, UndoCompaction};
+use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::traits::Equiv;
 use super::MoleculeEditor;
 
@@ -347,7 +347,7 @@ impl ApplicationState {
         )
     }
 
-    fn compact(&mut self, compaction: &IdCompaction) {
+    fn compact(&mut self, compaction: &MoleculeCompaction) {
         self.atoms.compact(|id| compaction.compact_atom(id));
         self.bonds.compact(|id| compaction.compact_bond(id));
         self.dative_bonds
@@ -520,8 +520,8 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = IdCompaction::relations(
-                    ids.iter().map(|&id| id.into()).collect(),
+                let forward = MoleculeCompaction::relations(
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -559,9 +559,9 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -598,10 +598,10 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -633,11 +633,11 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                 );
@@ -672,12 +672,12 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                 );
                 self.remove_stereo_atoms(&ids);
@@ -711,13 +711,13 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                 );
                 self.remove_stereo_bonds(&ids);
                 state.compact(&forward);
@@ -856,7 +856,7 @@ impl MoleculeEditor {
                 let compaction = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
-                    IdCompaction::empty()
+                    MoleculeCompaction::empty()
                 };
                 state.compact(&compaction);
                 let mut constraints = pre_constraints;
@@ -937,8 +937,8 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = IdCompaction::relations(
-                    ids.iter().map(|&i| i.into()).collect(),
+                let forward = MoleculeCompaction::relations(
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1000,9 +1000,9 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1063,10 +1063,10 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1121,11 +1121,11 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                 );
@@ -1184,12 +1184,12 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                 );
                 let mut pre_constraints = self.constraints().clone();
@@ -1247,13 +1247,13 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_stereo_bonds(&ids);
@@ -5173,7 +5173,7 @@ mod tests {
                     atoms: Vec::new(),
                     attributes: AromaticSystemForm::default(),
                 }],
-                undo_compaction: IdCompaction::empty().undo_compaction(),
+                undo_compaction: MoleculeCompaction::empty().undo_compaction(),
                 cascade: CascadedConstraints::default(),
             }],
         };
@@ -5186,7 +5186,7 @@ mod tests {
 
     #[rstest]
     fn test_transaction_rollback_compaction_dimension(mut one_atom: MoleculeEditor) {
-        let compaction = IdCompaction::empty();
+        let compaction = MoleculeCompaction::empty();
         let transaction = Transaction {
             undo: vec![Undo::RestoreRemovedTopology {
                 atoms: vec![RemovedAtom {

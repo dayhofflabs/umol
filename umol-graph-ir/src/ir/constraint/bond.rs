@@ -8,7 +8,7 @@ use super::super::boolean::BooleanForm;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::CisTransStereoForm;
 use super::super::traits::{Equiv, Lattice, Normalize};
 
@@ -55,7 +55,7 @@ impl BondConstraintForm {
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -298,7 +298,7 @@ impl BondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -758,7 +758,7 @@ mod tests {
             BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             BondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
-        let compaction = IdCompaction::new(
+        let compaction = MoleculeCompaction::new(
             GraphCompaction::new(
                 vec![NodeId(0), NodeId(1), NodeId(2)],
                 vec![EdgeId(0), EdgeId(1)],

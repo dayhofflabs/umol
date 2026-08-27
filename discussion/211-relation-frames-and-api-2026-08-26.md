@@ -887,7 +887,7 @@ Rename every `Compaction` reference to `GraphCompaction`. No semantic change.
 
 ### S2 — Type the molecule-level compaction
 
-#### S2a — Replace `IdCompaction` with `MoleculeCompaction`
+#### S2a — Replace `IdCompaction` with `MoleculeCompaction` **Done**
 
 **Module:** `umol-graph-ir/src/ir/remap.rs`, `molecule/editor.rs`, and their unit tests.
 
@@ -899,6 +899,14 @@ map used at the six family boundaries.
 **Tests and evidence:** Retain every existing compaction and rollback assertion. Add cases where a
 removed entity of one family does not shift another family's ids, and where graph removal cascades
 into a relation removal.
+
+`MoleculeCompaction::new` and `relations` take typed per-family `Vec<..Id>` rather than
+`Vec<RelationId>`, so the twelve `transact.rs` call sites and the six editor removal primitives lost
+the `.into()` down-conversion they previously needed. `Compaction::new` performs the sort and dedup
+that `normalize_removed` did. The `Compaction<RelationId>` to `Compaction<..Id>` map is not added
+here: nothing produces a `Compaction<RelationId>` until S4c returns one from relation-set `compact`,
+so the typed conversion currently happens at the editor's removal site instead. `Compaction<Id>`
+required `Add<usize>` and `Sub<usize>` on the eight entity ids, added to `define_id!`.
 
 **Change class:** breaking type replacement with caller migration (red then green within the stage).
 

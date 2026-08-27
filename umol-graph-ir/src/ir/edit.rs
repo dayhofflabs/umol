@@ -34,7 +34,7 @@ use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBondUpdate};
 use super::num::NumForm;
-use super::remap::{IdCompaction, IdRemapping, UndoCompaction};
+use super::remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
@@ -1779,7 +1779,7 @@ pub enum Undo {
         atoms: Vec<RemovedAtom>,
         bonds: Vec<RemovedBond>,
         overlays: RemovedOverlays,
-        compaction: IdCompaction,
+        compaction: MoleculeCompaction,
         undo_compaction: UndoCompaction,
         cascade: CascadedConstraints,
     },
@@ -1856,7 +1856,7 @@ pub enum Undo {
 }
 
 impl Undo {
-    pub fn id_compaction(&self) -> Option<&IdCompaction> {
+    pub fn id_compaction(&self) -> Option<&MoleculeCompaction> {
         match self {
             Self::RestoreRemovedTopology { compaction, .. } => Some(compaction),
             _ => None,

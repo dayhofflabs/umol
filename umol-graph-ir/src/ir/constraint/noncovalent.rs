@@ -7,7 +7,7 @@ use std::vec::IntoIter;
 
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
@@ -39,7 +39,7 @@ impl NoncovalentBondConstraintForm {
     }
 
     /// Value-only: no indices to compact.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -233,7 +233,7 @@ impl NoncovalentBondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -660,7 +660,7 @@ mod tests {
         let cs = NoncovalentBondConstraintsForm::from(
             NoncovalentBondConstraintForm::intramolecular(true),
         );
-        let compaction = IdCompaction::new(
+        let compaction = MoleculeCompaction::new(
             GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),

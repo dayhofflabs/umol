@@ -14,7 +14,7 @@ use umol_perm::{Orientation, Permutation};
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
 
@@ -71,7 +71,7 @@ macro_rules! stereo_constraint {
             }
 
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
-            pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+            pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
                 Some(self)
             }
 
@@ -348,7 +348,7 @@ macro_rules! stereo_constraint {
             }
 
             /// No-op: frame-relative ligand positions carry no entity index.
-            pub fn compact(self, _compaction: &IdCompaction) -> Self {
+            pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
                 self
             }
         }

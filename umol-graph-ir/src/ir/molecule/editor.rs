@@ -34,7 +34,7 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondForm;
 use super::super::noncovalent::NoncovalentBondForm;
-use super::super::remap::{IdCompaction, UndoCompaction};
+use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::super::traits::{BiRelationEquiv, RelationEquiv};
 use super::super::view::{
@@ -1148,16 +1148,15 @@ impl MoleculeEditor {
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
-            raw,
+        let compaction = MoleculeCompaction::relations(
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove aromatic-system overlays directly from the editor.
@@ -1167,16 +1166,15 @@ impl MoleculeEditor {
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove multicenter-bond overlays directly from the editor.
@@ -1186,16 +1184,15 @@ impl MoleculeEditor {
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove noncovalent-bond overlays directly from the editor.
@@ -1205,16 +1202,15 @@ impl MoleculeEditor {
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove stereo-atom overlays directly from the editor.
@@ -1224,16 +1220,15 @@ impl MoleculeEditor {
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove stereo-bond overlays directly from the editor.
@@ -1243,16 +1238,15 @@ impl MoleculeEditor {
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            GraphCompaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     // -- Topological removal --------------------------------------------------
@@ -1262,10 +1256,10 @@ impl MoleculeEditor {
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
     /// removed, compacts molecule-level constraints, and returns the forward
-    /// `IdCompaction` for downstream id holders. It does not build rollback
+    /// `MoleculeCompaction` for downstream id holders. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdCompaction {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let compaction = self.graph.remove_cascading(&nodes, &edges);
@@ -1308,7 +1302,7 @@ impl MoleculeEditor {
 
         // Forward-compact stereo overlays: a stereo element whose site or any
         // ligand atom/bond was removed drops out (cascade). The dropped ids
-        // (computed above) feed `IdCompaction` so rollback (`restore_topology`)
+        // (computed above) feed `MoleculeCompaction` so rollback (`restore_topology`)
         // can reinsert them.
         let stereo_atoms = mem::replace(
             &mut self.stereo_atoms,
@@ -1321,14 +1315,29 @@ impl MoleculeEditor {
         );
         self.stereo_bonds = stereo_bonds.compact(&compaction);
 
-        let id_compaction = IdCompaction::new(
+        let id_compaction = MoleculeCompaction::new(
             compaction,
-            removed_dative,
-            removed_aromatic,
-            removed_multicenter,
-            removed_noncovalent,
-            removed_stereo_atoms,
-            removed_stereo_bonds,
+            removed_dative.into_iter().map(DativeBondId::from).collect(),
+            removed_aromatic
+                .into_iter()
+                .map(AromaticSystemId::from)
+                .collect(),
+            removed_multicenter
+                .into_iter()
+                .map(MulticenterBondId::from)
+                .collect(),
+            removed_noncovalent
+                .into_iter()
+                .map(NoncovalentBondId::from)
+                .collect(),
+            removed_stereo_atoms
+                .into_iter()
+                .map(StereoAtomId::from)
+                .collect(),
+            removed_stereo_bonds
+                .into_iter()
+                .map(StereoBondId::from)
+                .collect(),
         );
         self.constraints.compact(&id_compaction);
         id_compaction
@@ -1786,8 +1795,8 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = IdCompaction::relations(
-            vec![removed.id.into()],
+        let undo = MoleculeCompaction::relations(
+            vec![removed.id],
             Vec::new(),
             Vec::new(),
             Vec::new(),

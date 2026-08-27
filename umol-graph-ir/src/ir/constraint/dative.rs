@@ -9,7 +9,7 @@ use super::super::boolean::BooleanForm;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::traits::{Equiv, Lattice, Normalize};
 
 /// Dative-bond constraint.
@@ -49,7 +49,7 @@ impl DativeBondConstraintForm {
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -270,7 +270,7 @@ impl DativeBondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -723,7 +723,7 @@ mod tests {
             DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             DativeBondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
-        let compaction = IdCompaction::new(
+        let compaction = MoleculeCompaction::new(
             GraphCompaction::new(vec![NodeId(1)], vec![EdgeId(1)]),
             Vec::new(),
             Vec::new(),
