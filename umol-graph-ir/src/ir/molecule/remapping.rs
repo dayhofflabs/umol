@@ -5,6 +5,7 @@ use umol_graph_core::{
 };
 
 use super::super::aromatic::AromaticSystems;
+use super::super::dative::DativeBonds;
 use super::Molecule;
 use crate::ir::{Constraints, MoleculeCorrespondence};
 
@@ -130,7 +131,7 @@ impl Molecule {
         )?;
         let graph = Graph::new(atoms.len(), &edges);
 
-        let dative_bonds = FixedVarBirelationSet::new(reorder(
+        let dative_bonds = DativeBonds::new(reorder(
             self.dative_bonds.remap(&graph_remapping).into_entries(),
             correspondence.dative_bonds().right_count(),
             correspondence
@@ -199,7 +200,7 @@ impl Molecule {
             graph,
             Arc::new(atoms),
             Arc::new(bonds),
-            Arc::new(dative_bonds).into(),
+            dative_bonds,
             aromatic_systems,
             Arc::new(multicenter_bonds).into(),
             Arc::new(noncovalent_bonds).into(),

@@ -9,7 +9,6 @@ use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
-use super::super::dative::DativeBondForm;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
 use super::super::noncovalent::NoncovalentBondForm;
@@ -106,23 +105,10 @@ impl Molecule {
             .multicenter_bonds
             .glue(&other.multicenter_bonds, &participant_remapping)?;
 
-        let dative_glue = other.dative_bonds.remap(&participant_remapping);
-        let dative_merged = self.dative_bonds.pushout(&dative_glue, |a, b| a.meet(b))?;
-        let dative_object = &dative_merged.object;
-        let dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)> = dative_object
-            .relation_ids()
-            .map(|id| {
-                (
-                    dative_object
-                        .participants_2(id)
-                        .iter()
-                        .map(|&n| AtomId::from(n))
-                        .collect(),
-                    AtomId::from(dative_object.participants_1(id)[0]),
-                    dative_object.data(id).clone(),
-                )
-            })
-            .collect();
+        let dative_merged = self
+            .dative_bonds
+            .glue(&other.dative_bonds, &participant_remapping)?;
+        let dative = dative_merged.into_entries();
 
         let noncovalent_glue = other.noncovalent_bonds.remap(&participant_remapping);
         let noncovalent_merged = self

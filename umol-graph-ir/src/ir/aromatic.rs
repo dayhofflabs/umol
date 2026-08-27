@@ -3,8 +3,7 @@
 use std::sync::Arc;
 
 use umol_graph_core::{
-    EdgeId, GraphCompaction, NodeId, ParticipantPosition, RelationData, RelationId,
-    RelationPushout, Remapping, Unordered, VarRelationSet,
+    NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered, VarRelationSet,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 
@@ -82,9 +81,7 @@ impl AromaticSystems {
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
             .into_iter()
-            .map(|(atoms, attributes)| {
-                (atoms.into_iter().map(AtomId::from).collect(), attributes)
-            })
+            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
             .collect()
     }
 
@@ -102,10 +99,6 @@ impl AromaticSystems {
 
     pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
-    }
-
-    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
     }
 
     pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> {
@@ -157,8 +150,7 @@ impl AromaticSystems {
         atoms: &[AtomId],
     ) -> Option<Vec<ParticipantPosition>> {
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0
-            .participant_permutation(RelationId::from(id), &query)
+        self.0.participant_permutation(RelationId::from(id), &query)
     }
 }
 

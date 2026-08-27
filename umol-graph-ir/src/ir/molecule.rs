@@ -403,7 +403,7 @@ impl Molecule {
             atoms: Arc::new(atoms),
             bonds: Arc::new(bond_data),
             dative_bonds: Arc::new(dative_bonds).into(),
-            aromatic_systems: aromatic_systems.into(),
+            aromatic_systems,
             multicenter_bonds: Arc::new(multicenter_bonds).into(),
             noncovalent_bonds: Arc::new(noncovalent_bonds).into(),
             stereo_atoms: Arc::new(stereo_atoms).into(),
@@ -483,13 +483,13 @@ impl Molecule {
         {
             return false;
         }
-        for id in self.dative_bonds.relation_ids() {
-            if self.dative_bonds.participants_1(id) != other.dative_bonds.participants_1(id)
-                || self.dative_bonds.participants_2(id) != other.dative_bonds.participants_2(id)
+        for id in self.dative_bonds.ids() {
+            if self.dative_bonds.acceptor_node(id) != other.dative_bonds.acceptor_node(id)
+                || self.dative_bonds.donor_nodes(id) != other.dative_bonds.donor_nodes(id)
                 || !self
                     .dative_bonds
-                    .data(id)
-                    .equiv(other.dative_bonds.data(id))
+                    .attributes(id)
+                    .equiv(other.dative_bonds.attributes(id))
             {
                 return false;
             }
@@ -660,43 +660,27 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_acceptor: Option<Vec<NodeId>> = self
+            let mapped_acceptor = correspondence
+                .atoms()
+                .right_of(self.dative_bonds.acceptor(left));
+            let mapped_donors: Option<Vec<AtomId>> = self
                 .dative_bonds
-                .participants_1(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let mapped_donors: Option<Vec<NodeId>> = self
-                .dative_bonds
-                .participants_2(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
+                .donors(left)
+                .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
             let (Some(mapped_acceptor), Some(mapped_donors)) = (mapped_acceptor, mapped_donors)
             else {
                 return false;
             };
             let Some((acceptor_order, donor_order)) = other.dative_bonds.participant_permutation(
-                right_id,
-                &mapped_acceptor,
+                right,
+                &[mapped_acceptor],
                 &mapped_donors,
             ) else {
                 return false;
             };
-            if !self.dative_bonds.data(left_id).equiv_under(
-                other.dative_bonds.data(right_id),
+            if !self.dative_bonds.attributes(left).equiv_under(
+                other.dative_bonds.attributes(right),
                 &acceptor_order,
                 &donor_order,
             ) {
@@ -710,8 +694,8 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
+            let _left_id = RelationId::from(left);
+            let _right_id = RelationId::from(right);
             let mapped: Option<Vec<AtomId>> = self
                 .aromatic_systems
                 .atoms(left)
@@ -1214,8 +1198,8 @@ impl Molecule {
             && self.bonds.iter().all(|bond| bond.is_concrete())
             && self
                 .dative_bonds
-                .relation_ids()
-                .all(|id| self.dative_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.dative_bonds.attributes(id).is_concrete())
             && self
                 .aromatic_systems
                 .ids()
@@ -1275,15 +1259,9 @@ impl Molecule {
     }
 
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let acceptor = AtomId::from(self.dative_bonds.participants_1(rid)[0]);
-        let donors = self
-            .dative_bonds
-            .participants_2(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = self.dative_bonds.data_mut(rid);
+        let acceptor = self.dative_bonds.acceptor(id);
+        let donors = self.dative_bonds.donors(id).collect();
+        let attributes = self.dative_bonds.attributes_mut(id);
         DativeBondViewMut {
             id,
             donors,
@@ -1294,7 +1272,7 @@ impl Molecule {
 
     /// Replace every dative bond with `f(bond)` in place.
     pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
-        for dative_bond in self.dative_bonds.data_iter_mut() {
+        for dative_bond in self.dative_bonds.attributes_iter_mut() {
             *dative_bond = f(mem::take(dative_bond));
         }
     }
@@ -1427,8 +1405,8 @@ impl Molecule {
             || self.bonds.iter().any(|bond| !bond.constraints.is_empty())
             || self
                 .dative_bonds
-                .relation_ids()
-                .any(|id| !self.dative_bonds.data(id).constraints.is_empty())
+                .ids()
+                .any(|id| !self.dative_bonds.attributes(id).constraints.is_empty())
             || self
                 .aromatic_systems
                 .ids()

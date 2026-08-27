@@ -1,6 +1,7 @@
 //! Dative bond views.
 
 use std::collections::HashSet;
+use std::iter;
 
 use umol_graph_core::{NodeId, RelationId};
 
@@ -35,50 +36,47 @@ impl<'a> DativeBondViews<'a> {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
-        self.dative_bonds.relation_ids().map(DativeBondId::from)
+        self.dative_bonds.ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
         let set = self.dative_bonds;
-        set.relation_ids().map(move |rid| DativeBondView {
-            id: DativeBondId::from(rid),
-            attributes: set.data(rid),
-            acceptor_id: set.participants_1(rid)[0],
-            donors: set.participants_2(rid),
+        set.ids().map(move |id| DativeBondView {
+            id,
+            attributes: set.attributes(id),
+            acceptor_id: set.acceptor_node(id),
+            donors: set.donor_nodes(id),
             molecule,
         })
     }
 
     pub fn contains(&self, id: DativeBondId) -> bool {
-        self.dative_bonds.contains(RelationId::from(id))
+        self.dative_bonds.contains(id)
     }
 
     pub fn get(&self, id: DativeBondId) -> Option<DativeBondView<'a>> {
         if !self.contains(id) {
             return None;
         }
-        let rid = RelationId::from(id);
+        let _rid = RelationId::from(id);
         Some(DativeBondView {
             id,
-            attributes: self.dative_bonds.data(rid),
-            acceptor_id: self.dative_bonds.participants_1(rid)[0],
-            donors: self.dative_bonds.participants_2(rid),
+            attributes: self.dative_bonds.attributes(id),
+            acceptor_id: self.dative_bonds.acceptor_node(id),
+            donors: self.dative_bonds.donor_nodes(id),
             molecule: self.molecule,
         })
     }
 
     /// Ids of dative bonds incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = DativeBondId> + 'a {
-        self.dative_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| DativeBondId::from(rid))
+        self.dative_bonds.incident_ids(atom)
     }
 
     /// Whether any dative bond is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.dative_bonds.has_incident(NodeId::from(atom))
+        self.dative_bonds.has_incident(atom)
     }
 
     /// Views of dative bonds incident on `atom`.
@@ -86,12 +84,12 @@ impl<'a> DativeBondViews<'a> {
         let molecule = self.molecule;
         let set = self.dative_bonds;
         self.incident_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
+            let _rid = RelationId::from(id);
             DativeBondView {
                 id,
-                attributes: set.data(rid),
-                acceptor_id: set.participants_1(rid)[0],
-                donors: set.participants_2(rid),
+                attributes: set.attributes(id),
+                acceptor_id: set.acceptor_node(id),
+                donors: set.donor_nodes(id),
                 molecule,
             }
         })
@@ -100,10 +98,7 @@ impl<'a> DativeBondViews<'a> {
     /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
     /// donor/acceptor roles are matched, not the merged atom set.
     pub fn of_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
-        let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
-        self.dative_bonds
-            .find_by_participants(&[NodeId::from(acceptor)], &donor_nodes)
-            .map(DativeBondId::from)
+        self.dative_bonds.find_by_participants(acceptor, donors)
     }
 
     /// View of the dative bond with exactly this acceptor and donor set, if any.
@@ -119,15 +114,12 @@ impl<'a> DativeBondViews<'a> {
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
-            .relation_ids()
-            .filter(|&rid| {
-                self.dative_bonds
-                    .participants_1(rid)
-                    .iter()
-                    .chain(self.dative_bonds.participants_2(rid))
+            .ids()
+            .filter(|&id| {
+                iter::once(&self.dative_bonds.acceptor_node(id))
+                    .chain(self.dative_bonds.donor_nodes(id))
                     .all(|p| set.contains(p))
             })
-            .map(DativeBondId::from)
             .collect()
     }
 

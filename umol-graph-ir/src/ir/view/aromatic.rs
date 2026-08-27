@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{NodeId, RelationId};
+use umol_graph_core::NodeId;
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::constraint::{
@@ -123,7 +123,6 @@ impl<'a> AromaticSystemViews<'a> {
                     .iter()
                     .all(|p| set.contains(p))
             })
-            .map(AromaticSystemId::from)
             .collect()
     }
 
