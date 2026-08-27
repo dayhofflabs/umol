@@ -142,16 +142,6 @@ impl MulticenterBonds {
             .coincident(anchor, &query)
             .map(MulticenterBondId::from)
     }
-
-    /// Superseded once frame alignment moves onto `reframe_to`.
-    pub(crate) fn participant_permutation(
-        &self,
-        id: MulticenterBondId,
-        atoms: &[AtomId],
-    ) -> Option<Vec<ParticipantPosition>> {
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.participant_permutation(RelationId::from(id), &query)
-    }
 }
 
 impl From<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> for MulticenterBonds {

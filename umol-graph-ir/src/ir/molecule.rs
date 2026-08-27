@@ -34,7 +34,7 @@ use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
+use super::traits::{Equiv, Lattice};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -628,18 +628,19 @@ impl Molecule {
             else {
                 return false;
             };
-            let Some((acceptor_order, donor_order)) = other.dative_bonds.participant_permutation(
-                right,
-                &[mapped_acceptor],
-                &mapped_donors,
-            ) else {
+            let stored_donors: Vec<AtomId> = other.dative_bonds.donors(right).collect();
+            if mapped_acceptor != other.dative_bonds.acceptor(right) {
+                return false;
+            }
+            let Some(attributes) = self
+                .dative_bonds
+                .attributes(left)
+                .clone()
+                .reframe_to(&mapped_donors, &stored_donors)
+            else {
                 return false;
             };
-            if !self.dative_bonds.attributes(left).equiv_under(
-                other.dative_bonds.attributes(right),
-                &acceptor_order,
-                &donor_order,
-            ) {
+            if !attributes.equiv(other.dative_bonds.attributes(right)) {
                 return false;
             }
         }
@@ -657,18 +658,19 @@ impl Molecule {
                 .atoms(left)
                 .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|atoms| {
-                other
-                    .aromatic_systems
-                    .participant_permutation(right, &atoms)
-            }) else {
+            let Some(mapped) = mapped else {
                 return false;
             };
-            if !self
+            let stored: Vec<AtomId> = other.aromatic_systems.atoms(right).collect();
+            let Some(attributes) = self
                 .aromatic_systems
                 .attributes(left)
-                .equiv_under(other.aromatic_systems.attributes(right), &order)
-            {
+                .clone()
+                .reframe_to(&mapped, &stored)
+            else {
+                return false;
+            };
+            if !attributes.equiv(other.aromatic_systems.attributes(right)) {
                 return false;
             }
         }
@@ -686,18 +688,19 @@ impl Molecule {
                 .atoms(left)
                 .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|atoms| {
-                other
-                    .multicenter_bonds
-                    .participant_permutation(right, &atoms)
-            }) else {
+            let Some(mapped) = mapped else {
                 return false;
             };
-            if !self
+            let stored: Vec<AtomId> = other.multicenter_bonds.atoms(right).collect();
+            let Some(attributes) = self
                 .multicenter_bonds
                 .attributes(left)
-                .equiv_under(other.multicenter_bonds.attributes(right), &order)
-            {
+                .clone()
+                .reframe_to(&mapped, &stored)
+            else {
+                return false;
+            };
+            if !attributes.equiv(other.multicenter_bonds.attributes(right)) {
                 return false;
             }
         }
@@ -714,18 +717,19 @@ impl Molecule {
                 .into_iter()
                 .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|atoms| {
-                other
-                    .noncovalent_bonds
-                    .participant_permutation(right, &atoms)
-            }) else {
+            let Some(mapped) = mapped else {
                 return false;
             };
-            if !self
+            let stored: Vec<AtomId> = other.noncovalent_bonds.atoms(right).into();
+            let Some(attributes) = self
                 .noncovalent_bonds
                 .attributes(left)
-                .equiv_under(other.noncovalent_bonds.attributes(right), &order)
-            {
+                .clone()
+                .reframe_to(&mapped, &stored)
+            else {
+                return false;
+            };
+            if !attributes.equiv(other.noncovalent_bonds.attributes(right)) {
                 return false;
             }
         }

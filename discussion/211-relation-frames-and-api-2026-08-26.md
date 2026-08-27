@@ -1415,43 +1415,91 @@ adversarial review to surface rather than pre-empted here:
 
 **Dependencies:** [dep: S3b, S3c, S4a]
 
-#### S4d — Move `Molecule::equiv_under` and the editor onto `Reframe`
+#### S4d — Move `Molecule::equiv_under` onto `Reframe` **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule.rs`, `molecule/editor.rs`,
 `umol-graph-core/src/relation.rs`, and their unit tests.
 
 Replace `participant_permutation` with the bare act member `reframe_to` in `Molecule::equiv_under`
-for the four distinct-participant families, retaining the stereo enumerate-and-filter path. Replace both private
-editor copies with the same operation. Delete `participant_permutation` from all five graph-core
-shapes, delete `RelationEquiv` and `BiRelationEquiv`, and delete `ParticipantAnchor` and
-`RelationParticipant::anchor`. Lookup moves to the entity-family types keyed by their uniqueness
-keys; coincidence stays in graph-core as `coincident` and is exposed by the families as
-`coincident_id`, both landed with S4c.
+for the four distinct-participant families, retaining the stereo enumerate-and-filter path. Delete
+`participant_permutation` from all five graph-core shapes and the four family wrappers.
+`ParticipantAnchor` and `RelationParticipant::anchor` were deleted with S4c, where the
+`coincident` / `coincident_edge` split replaced them. Lookup moves to the entity-family types keyed
+by their uniqueness keys; coincidence stays in graph-core as `coincident` and is exposed by the
+families as `coincident_id`, both landed with S4c.
+
+`RelationEquiv` and `BiRelationEquiv` cannot be deleted here: the editor is their only remaining
+consumer, and it moves in S4d.1.
 
 **Tests and evidence:** Retain every `equiv_under` case. Add a correspondence under which the mapped
-left frame differs from the stored right frame for each of the four families, and an editor
-comparison against a reordered frame. Assert family lookup for all six families, including that a
-stereo site bearing one entity is found without reference to its ligands, and that a ligand atom
-shared by two adjacent stereocentres does not confuse either lookup. Because this subitem replaces three hand-written
-alignment rules with one derived operation, keep each replaced implementation as a private function
-for the duration of the subitem and assert on generated inputs that the derived result agrees with
-it, or record precisely where it does not. The editor's first-position search is known to differ:
-it can reuse a query position and need not return a permutation, so the differential is there to
-characterise that difference, not to prove there is none.
+left frame differs from the stored right frame for each of the four families. Assert family lookup
+for all six families, including that a stereo site bearing one entity is found without reference to
+its ligands, and that a ligand atom shared by two adjacent stereocentres does not confuse either
+lookup.
 
-`Molecule::equiv_under` must be renamed here. Once the four distinct-participant families compare
-through `framed_eq` rather than through `equiv` plus a hand-derived alignment, the name no longer
-describes what the operation does: it verifies complete equivalence under a supplied
-`MoleculeCorrespondence`, which is a different question from the frame quotient the `Reframe` members
-answer. Doc [210](210-relation-frame-storage-2026-08-25.md) recorded the collision with the
-relation-payload `equiv_under` and left the rename open on the grounds that removing the payload
-protocol dissolves it; that reasoning no longer holds, because the conflict is now with `framed_eq`
-on the same carrier rather than with a protocol that is going away. The replacement name is subject
-to the nomenclature guide and is not proposed here.
+The four families' replacement is behaviour-preserving and was checked as such rather than assumed.
+`participant_permutation` canonicalized the mapped query and required it to equal the stored
+sequence, returning the sort's σ; for these four factors canonicalization is a sort, so the
+precondition is multiset equality — the same one `reframe_to` derives its bijection from. The
+`is_permutation_invariant` fast path agrees with `ElectronCountsForm::Undetermined` passing through
+`reframe_to` unchanged. Repeated participants would separate them, and molecule integrity forbids
+those for all four.
+
+**The rename is not decided here, and doc 210's reasoning about it stands.** `equiv_under` names
+three operations on two levels: `RelationEquiv::equiv_under` and `BiRelationEquiv::equiv_under`,
+blanket over every form, which reindex a payload by a position order and then compare normal forms;
+and `Molecule::equiv_under`, inherent, which verifies complete equivalence under a supplied
+`MoleculeCorrespondence`. The first two are frame transport composed with `equiv` — `reframe_to` plus
+`equiv` replaces them exactly — and deleting them leaves one `equiv_under` in the tree.
+
+`framed_eq` does not compete for the name: it takes no witness, where `Molecule::equiv_under` takes
+one and verifies it. So the collision doc [210](210-relation-frame-storage-2026-08-25.md) recorded
+does dissolve when the payload protocol goes, as 210 said.
+
+What is left open is a different question, and it is not S4d's. `Molecule` implements neither
+`Normalize` nor `Equiv`, so `Molecule::equiv` is an inherent method shadowing a trait the type does
+not implement. Doc [209](209-normalization-canonical-semantics-2026-08-25.md) S2b repairs that by
+implementing `Normalize` for `Molecule`, at which point the blanket impl supplies `equiv` and the
+inherent one must go. Only then is it clear what the witness-taking operation should be called
+relative to what `equiv` means on the same receiver. S4d proceeds without renaming.
 
 **Change class:** breaking removal with caller migration (green within the stage).
 
 **Dependencies:** [dep: S3e, S4c]
+
+#### S4d.1 — Move the editor's participant alignment onto `reframe_to`
+
+**Module:** `umol-graph-ir/src/ir/molecule/editor.rs`, `umol-graph-ir/src/ir/traits.rs`, and their
+unit tests.
+
+Split from S4d because it is not a mechanical replacement. The editor defines its own
+`participant_permutation` on each of the three storage wrappers and it is a **different function**:
+
+```rust
+stored.iter().map(|s| query.iter().position(|q| q == s).map(ParticipantPosition)).collect()
+```
+
+It takes the first `query` position matching each stored participant with no used-tracking, so two
+stored positions can map to the same query position and the result need not be a permutation at all.
+`Permutation::between`, which `reframe_to` uses, marks positions used and declines. The two agree
+exactly on distinct participants and diverge on a repeated frame — which for the editor means stereo
+ligands, the one place repeats are legal, reached through two of the six call sites.
+
+So the migration carries a semantic decision: whether accepting a non-permutation there was ever
+correct. Keep the editor's implementation as a private function for the duration, assert on generated
+inputs that the derived result agrees, and record precisely where it does not, rather than assuming
+it does. The divergence is expected, not hypothetical.
+
+Once the six call sites are migrated, `RelationEquiv` and `BiRelationEquiv` lose their last consumer
+and are deleted with their re-exports.
+
+**Tests and evidence:** An editor comparison against a reordered frame for each storage wrapper, and
+the differential above over generated participant lists including repeated stereo ligands. Retain
+every editor and transaction assertion.
+
+**Change class:** breaking removal with caller migration, carrying a semantics decision (green).
+
+**Dependencies:** [dep: S4d]
 
 #### S4e — Add explicit transport to superposition, difference, and matching
 

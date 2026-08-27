@@ -196,8 +196,8 @@ impl FactorOrdering for Ordered {
 /// *structural* (position) coupling; value equivalence is a separate concern (in the consuming
 /// crate, `on_permutation` composes with a canonical value equality to give the full framed compare).
 pub trait RelationData {
-    /// Reindex a position-indexed payload by `order` (the σ from `canonicalize_positions` /
-    /// [`participant_permutation`](FixedRelationSet::participant_permutation)). A payload with no
+    /// Reindex a position-indexed payload by `order` (the σ from `canonicalize_positions`). A
+    /// payload with no
     /// positional content is a no-op — but the impl is required, so the decision is explicit at every
     /// payload type.
     fn on_permutation(&mut self, order: &[ParticipantPosition]);
@@ -503,20 +503,6 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     /// unless `order` is a permutation of `0..arity`.
     pub fn permute_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
         permute_participants(self.participants[id.index()].as_mut_slice(), order);
-    }
-
-    /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
-    /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
-    /// [`find_by_participants`](Self::find_by_participants): the structural half of a relation compare,
-    /// which the caller completes by reindexing the payload with σ and comparing values.
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query: &[P],
-    ) -> Option<Vec<ParticipantPosition>> {
-        let mut canonical = query.to_vec();
-        let sigma = O::canonicalize_positions(&mut canonical);
-        (self.participants(id).as_slice() == canonical.as_slice()).then_some(sigma)
     }
 
     /// Id of the relation coinciding with `query` — the one whose participants equal it as a
@@ -885,19 +871,6 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants[start..end], order);
-    }
-
-    /// The permutation σ reindexing `query` into relation `id`'s stored participant frame, or `None`
-    /// if their participants differ (up to this factor's ordering). The σ-keeping, known-id sibling of
-    /// [`find_by_participants`](Self::find_by_participants).
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query: &[P],
-    ) -> Option<Vec<ParticipantPosition>> {
-        let mut canonical = query.to_vec();
-        let sigma = O::canonicalize_positions(&mut canonical);
-        (self.participants(id) == canonical.as_slice()).then_some(sigma)
     }
 
     /// Id of the relation coinciding with `query` — the one whose participants equal it as a
@@ -1279,25 +1252,6 @@ where
     /// unless `order` is a permutation of `0..arity`.
     pub fn permute_2_with(&mut self, id: RelationId, order: &[ParticipantPosition]) {
         permute_participants(self.participants_2[id.index()].as_mut_slice(), order);
-    }
-
-    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
-    /// stored participant frame, or `None` if either factor's participants differ (up to its
-    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
-    #[allow(clippy::type_complexity)]
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query_1: &[L1],
-        query_2: &[L2],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let mut canonical_1 = query_1.to_vec();
-        let s1 = O1::canonicalize_positions(&mut canonical_1);
-        let mut canonical_2 = query_2.to_vec();
-        let s2 = O2::canonicalize_positions(&mut canonical_2);
-        (self.participants_1(id).as_slice() == canonical_1.as_slice()
-            && self.participants_2(id).as_slice() == canonical_2.as_slice())
-        .then_some((s1, s2))
     }
 
     /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them
@@ -1766,25 +1720,6 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants_2[start..end], order);
-    }
-
-    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
-    /// stored participant frame, or `None` if either factor's participants differ (up to its
-    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
-    #[allow(clippy::type_complexity)]
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query_1: &[L1],
-        query_2: &[L2],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let mut canonical_1 = query_1.to_vec();
-        let s1 = O1::canonicalize_positions(&mut canonical_1);
-        let mut canonical_2 = query_2.to_vec();
-        let s2 = O2::canonicalize_positions(&mut canonical_2);
-        (self.participants_1(id).as_slice() == canonical_1.as_slice()
-            && self.participants_2(id) == canonical_2.as_slice())
-        .then_some((s1, s2))
     }
 
     /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them
@@ -2259,25 +2194,6 @@ where
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
         permute_participants(&mut self.participants_2[start..end], order);
-    }
-
-    /// The per-factor permutations (σ₁, σ₂) reindexing `query_1` / `query_2` into relation `id`'s
-    /// stored participant frame, or `None` if either factor's participants differ (up to its
-    /// ordering). The σ-keeping, known-id sibling of [`find_by_participants`](Self::find_by_participants).
-    #[allow(clippy::type_complexity)]
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query_1: &[L1],
-        query_2: &[L2],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let mut canonical_1 = query_1.to_vec();
-        let s1 = O1::canonicalize_positions(&mut canonical_1);
-        let mut canonical_2 = query_2.to_vec();
-        let s2 = O2::canonicalize_positions(&mut canonical_2);
-        (self.participants_1(id) == canonical_1.as_slice()
-            && self.participants_2(id) == canonical_2.as_slice())
-        .then_some((s1, s2))
     }
 
     /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them

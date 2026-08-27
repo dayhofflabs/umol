@@ -131,16 +131,6 @@ impl NoncovalentBonds {
             )
             .map(NoncovalentBondId::from)
     }
-
-    /// Superseded once frame alignment moves onto `reframe_to`.
-    pub(crate) fn participant_permutation(
-        &self,
-        id: NoncovalentBondId,
-        atoms: &[AtomId],
-    ) -> Option<Vec<ParticipantPosition>> {
-        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.participant_permutation(RelationId::from(id), &query)
-    }
 }
 
 impl From<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> for NoncovalentBonds {

@@ -548,6 +548,51 @@ focused benchmarks for already-normal and non-normal owned molecules.
 
 **Dependencies:** [dep: S1a, S1b, S2a]
 
+#### S2b.1 — Unify `Molecule::equiv_under` across entity kinds
+
+**Module:** `umol-graph-ir/src/ir/molecule.rs` and its unit tests.
+
+`Molecule::equiv_under` implements frame transport twice, by hand, with different shapes per entity
+kind. Doc [211](211-relation-frames-and-api-2026-08-26.md) S4d replaces the machinery underneath
+both but does not unify them, because the aggregate has no frame members to unify them onto until
+S2b supplies `Reframe for Molecule`.
+
+What the two paths are today:
+
+- **The four distinct-participant families.** Map the participants through the correspondence, derive
+  the single order from mapped-to-stored, restate, compare normal forms. After 211 S4d this reads as
+  `reframe_to` composed with `equiv`. One target, one action.
+- **The two stereo families.** `Permutation::between_all(mapped_ligands, stored_ligands)` enumerates
+  every bijection, keeps those under which the configurations agree, and carries the surviving *set*
+  forward in `stereo_frames` so `constraints_equiv_under_stereo_frames` can check molecule-level
+  constraints against the candidates consistently across entities.
+
+The difference is not arbitrary. The mapped-to-stored bijection is unique exactly when the
+participants are distinct, which molecule integrity guarantees for the four; repeated ligands leave a
+residual stabilizer, so for stereo it is a set. And only stereo carries frame-relative constraints —
+the other four families' inline constraint forms are not position-indexed — so only stereo needs the
+candidate set to reach the constraint store.
+
+So the two shapes are both correct and neither generalizes the other by accident: the unique
+bijection is the degenerate case of the candidate set. What is wrong is that they are two hand-written
+transports rather than one operation with a degenerate case, which is the same defect 211 removed
+everywhere else.
+
+**The work.** Once `Reframe for Molecule` exists, express `equiv_under` as the aggregate's
+supplied-target member — the `_to` reading of the frame quotient, where `reframe_with_action` is the
+selected-target reading — with the candidate set as the general case and the unique bijection as its
+degeneracy. Whether the name survives is settled here too and not before: `Molecule` gains `equiv`
+from the blanket impl over `Normalize` in S2b, so the inherent `Molecule::equiv` must go, and only
+then is it clear what the witness-taking operation should be called beside it.
+
+**Tests and evidence:** Retain every `equiv_under` case. Assert that the unified operation agrees with
+both replaced paths on generated inputs, including a stereo entry with repeated virtual ligands where
+the candidate set has more than one member, and a non-stereo entry where it has exactly one.
+
+**Change class:** simplification with caller migration (green).
+
+**Dependencies:** [dep: S2b, doc 211 S4d]
+
 #### S2c — Integrate and verify molecule normalization
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs`, molecule property tests, and normalization

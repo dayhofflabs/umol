@@ -160,20 +160,6 @@ impl DativeBonds {
             .coincident(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
             .map(DativeBondId::from)
     }
-
-    /// Superseded once frame alignment moves onto `reframe_to`.
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn participant_permutation(
-        &self,
-        id: DativeBondId,
-        acceptor: &[AtomId],
-        donors: &[AtomId],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let acceptor: Vec<NodeId> = acceptor.iter().map(|&a| NodeId::from(a)).collect();
-        let donors: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
-        self.0
-            .participant_permutation(RelationId::from(id), &acceptor, &donors)
-    }
 }
 
 impl From<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>
