@@ -3,10 +3,7 @@
 //! attribute layer over graph-core's structural `pushout`. A child of `molecule` so it reaches the
 //! private overlay relation-sets directly, without exposing raw accessors.
 
-use umol_graph_core::{
-    Correspondence, EdgeId, FixedVarBirelationSet, GraphCorrespondence, NodeId, Ordered,
-    RelationData, RelationParticipant, Remapping, Unordered, VarRelationSet,
-};
+use umol_graph_core::{Correspondence, EdgeId, GraphCorrespondence, NodeId, Remapping};
 
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
@@ -17,7 +14,7 @@ use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
 use super::super::noncovalent::NoncovalentBondForm;
 use super::super::remap::IdRemapping;
-use super::super::stereo::{StereoAtomForm, StereoBondForm};
+use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::Lattice;
 use super::{Molecule, MoleculeEntries};
 
@@ -102,16 +99,12 @@ impl Molecule {
                 .collect(),
         );
 
-        let aromatic = glue_var_overlays(
-            &self.aromatic_systems,
-            &other.aromatic_systems,
-            &participant_remapping,
-        )?;
-        let multicenter = glue_var_overlays(
-            &self.multicenter_bonds,
-            &other.multicenter_bonds,
-            &participant_remapping,
-        )?;
+        let aromatic = self
+            .aromatic_systems
+            .glue(&other.aromatic_systems, &participant_remapping)?;
+        let multicenter = self
+            .multicenter_bonds
+            .glue(&other.multicenter_bonds, &participant_remapping)?;
 
         let dative_glue = other.dative_bonds.remap(&participant_remapping);
         let dative_merged = self.dative_bonds.pushout(&dative_glue, |a, b| a.meet(b))?;
@@ -157,11 +150,12 @@ impl Molecule {
         // collision leaves two overlays on one site, which checked molecule publication rejects.
         let remapped_stereo_atoms = other.stereo_atoms.remap(&participant_remapping);
 
-        let stereo_atom_right = FixedVarBirelationSet::new(stereo_glue_entries(
-            &self.stereo_atoms,
-            &remapped_stereo_atoms,
-            |d, before, after| d.transform_frame(before, after),
-        )?);
+        let stereo_atom_right = StereoAtoms::new(
+            self.stereo_atoms
+                .glue_entries(&remapped_stereo_atoms, |d, before, after| {
+                    d.transform_frame(before, after)
+                })?,
+        );
         let stereo_atom_merged = self
             .stereo_atoms
             .pushout(&stereo_atom_right, |a, b| a.meet(b))?;
@@ -178,11 +172,12 @@ impl Molecule {
             .collect();
 
         let remapped_stereo_bonds = other.stereo_bonds.remap(&participant_remapping);
-        let stereo_bond_right = FixedVarBirelationSet::new(stereo_glue_entries(
-            &self.stereo_bonds,
-            &remapped_stereo_bonds,
-            |d, before, after| d.transform_frame(before, after),
-        )?);
+        let stereo_bond_right = StereoBonds::new(
+            self.stereo_bonds
+                .glue_entries(&remapped_stereo_bonds, |d, before, after| {
+                    d.transform_frame(before, after)
+                })?,
+        );
         let stereo_bond_merged = self
             .stereo_bonds
             .pushout(&stereo_bond_right, |a, b| a.meet(b))?;
@@ -285,66 +280,6 @@ impl Molecule {
             right,
         })
     }
-}
-
-/// Glue two `VarRelationSet` overlay families after relabeling `right` into the glue id space.
-/// Coinciding overlays merge by `meet`; non-coinciding overlays are appended as context. `None` if
-/// any coincident meet is `⊥`.
-fn glue_var_overlays<D: Lattice + RelationData>(
-    left: &VarRelationSet<NodeId, Unordered, D>,
-    right: &VarRelationSet<NodeId, Unordered, D>,
-    remapping: &Remapping,
-) -> Option<Vec<(Vec<AtomId>, D)>> {
-    let right_glue = right.remap(remapping);
-    let merged = left.pushout(&right_glue, |a, b| a.meet(b))?;
-    Some(
-        merged
-            .object
-            .relation_ids()
-            .map(|id| {
-                (
-                    merged
-                        .object
-                        .participants(id)
-                        .iter()
-                        .map(|&n| AtomId::from(n))
-                        .collect(),
-                    merged.object.data(id).clone(),
-                )
-            })
-            .collect(),
-    )
-}
-
-/// Align already-remapped right-side stereo entries to coincident left-side ligand frames, carrying
-/// each coset through `transform_frame`. Right-only entries retain their remapped frame. A right
-/// entry whose site collides with a left entry under a different ligand set remains distinct;
-/// `meet_pushout` rejects the resulting over-coordination when publishing the molecule.
-#[allow(clippy::type_complexity)]
-fn stereo_glue_entries<S, D>(
-    left: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
-    right: &FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>,
-    transform: impl Fn(&D, &[StereoLigand], &[StereoLigand]) -> Option<D>,
-) -> Option<Vec<([S; 1], Vec<StereoLigand>, D)>>
-where
-    S: RelationParticipant,
-    D: Clone,
-{
-    right
-        .relation_ids()
-        .map(|id| {
-            let site = right.participants_1(id)[0];
-            let remapped_frame = right.participants_2(id).to_vec();
-            match left.find_by_participants(&[site], &remapped_frame) {
-                Some(hit) => {
-                    let target = left.participants_2(hit).to_vec();
-                    let data = transform(right.data(id), &remapped_frame, &target)?;
-                    Some(([site], target, data))
-                }
-                None => Some(([site], remapped_frame, right.data(id).clone())),
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]

@@ -36,7 +36,7 @@ pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod view;
 
-pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
+pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystems};
 pub use atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
@@ -61,7 +61,7 @@ pub use constraint::{
     TopicityRelationForm,
 };
 pub use correspondence::MoleculeCorrespondence;
-pub use dative::{DativeBondForm, DativeBondUpdate};
+pub use dative::{DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
@@ -95,9 +95,10 @@ pub use molecule::{
     spec, AtomArg, DescriptionLevel, Fragment, Molecule, MoleculeBuilder, MoleculeEditor,
     MoleculeEntries, MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
-pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
+pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{
     NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
+    NoncovalentBonds,
 };
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
@@ -113,9 +114,9 @@ pub use ring::{
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
     CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
-    StereoBondForm, StereoBondUpdate, StereoConfiguration, StereoConfigurationForm,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
-    TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
+    StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
+    Stereogenicity, TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,

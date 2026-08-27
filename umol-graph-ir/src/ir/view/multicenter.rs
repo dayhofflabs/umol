@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
+use umol_graph_core::{NodeId, RelationId};
 
 use super::super::constraint::{
     MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
@@ -10,7 +10,7 @@ use super::super::constraint::{
 use super::super::electrons::ElectronCountsForm;
 use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::Molecule;
-use super::super::multicenter::MulticenterBondForm;
+use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::num::NumForm;
 use super::super::spin::UnpairedElectronsForm;
 use super::super::traits::Lattice;
@@ -21,14 +21,11 @@ use super::constraints::MulticenterBondConstraintsView;
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
     molecule: &'a Molecule,
-    multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondForm>,
+    multicenter_bonds: &'a MulticenterBonds,
 }
 
 impl<'a> MulticenterBondViews<'a> {
-    pub(crate) fn new(
-        molecule: &'a Molecule,
-        multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondForm>,
-    ) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, multicenter_bonds: &'a MulticenterBonds) -> Self {
         Self {
             molecule,
             multicenter_bonds,

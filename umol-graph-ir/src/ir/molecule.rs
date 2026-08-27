@@ -11,17 +11,17 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, RelationId,
+    RelationParticipant, Remapping, UnionFind, VarRelationSet,
 };
 use umol_perm::Permutation;
 
-use super::aromatic::AromaticSystemForm;
+use super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
 use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::DativeBondForm;
+use super::dative::{DativeBondForm, DativeBonds};
 use super::edit::{AtomHandle, BondHandle, Edits};
 use super::entity::Entity;
 use super::error::{Contradiction, MoleculeApplyError};
@@ -30,11 +30,11 @@ use super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::multicenter::MulticenterBondForm;
-use super::noncovalent::NoncovalentBondForm;
+use super::multicenter::{MulticenterBondForm, MulticenterBonds};
+use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{StereoAtomForm, StereoBondForm};
+use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
@@ -63,14 +63,12 @@ pub struct Molecule {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
-    aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-    multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-    noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-    stereo_atoms:
-        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
-    stereo_bonds:
-        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
+    dative_bonds: DativeBonds,
+    aromatic_systems: AromaticSystems,
+    multicenter_bonds: MulticenterBonds,
+    noncovalent_bonds: NoncovalentBonds,
+    stereo_atoms: StereoAtoms,
+    stereo_bonds: StereoBonds,
     constraints: Constraints,
 }
 
@@ -370,12 +368,7 @@ impl Molecule {
                 .collect(),
         );
 
-        let aromatic_systems = VarRelationSet::new(
-            aromatic
-                .into_iter()
-                .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
-                .collect(),
-        );
+        let aromatic_systems = AromaticSystems::new(aromatic);
 
         let multicenter_bonds = VarRelationSet::new(
             multicenter
@@ -409,12 +402,12 @@ impl Molecule {
             graph,
             atoms: Arc::new(atoms),
             bonds: Arc::new(bond_data),
-            dative_bonds: Arc::new(dative_bonds),
-            aromatic_systems: Arc::new(aromatic_systems),
-            multicenter_bonds: Arc::new(multicenter_bonds),
-            noncovalent_bonds: Arc::new(noncovalent_bonds),
-            stereo_atoms: Arc::new(stereo_atoms),
-            stereo_bonds: Arc::new(stereo_bonds),
+            dative_bonds: Arc::new(dative_bonds).into(),
+            aromatic_systems: aromatic_systems.into(),
+            multicenter_bonds: Arc::new(multicenter_bonds).into(),
+            noncovalent_bonds: Arc::new(noncovalent_bonds).into(),
+            stereo_atoms: Arc::new(stereo_atoms).into(),
+            stereo_bonds: Arc::new(stereo_bonds).into(),
             constraints,
         };
         molecule.check_integrity()?;
@@ -426,18 +419,12 @@ impl Molecule {
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
-        dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-        >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-        stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-        >,
-        stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
-        >,
+        dative_bonds: DativeBonds,
+        aromatic_systems: AromaticSystems,
+        multicenter_bonds: MulticenterBonds,
+        noncovalent_bonds: NoncovalentBonds,
+        stereo_atoms: StereoAtoms,
+        stereo_bonds: StereoBonds,
         constraints: Constraints,
     ) -> Self {
         Self {
@@ -507,12 +494,12 @@ impl Molecule {
                 return false;
             }
         }
-        for id in self.aromatic_systems.relation_ids() {
-            if self.aromatic_systems.participants(id) != other.aromatic_systems.participants(id)
+        for id in self.aromatic_systems.ids() {
+            if self.aromatic_systems.atom_nodes(id) != other.aromatic_systems.atom_nodes(id)
                 || !self
                     .aromatic_systems
-                    .data(id)
-                    .equiv(other.aromatic_systems.data(id))
+                    .attributes(id)
+                    .equiv(other.aromatic_systems.attributes(id))
             {
                 return false;
             }
@@ -725,28 +712,22 @@ impl Molecule {
             }
             let left_id = RelationId::from(left);
             let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
+            let mapped: Option<Vec<AtomId>> = self
                 .aromatic_systems
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
+                .atoms(left)
+                .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|participants| {
+            let Some(order) = mapped.and_then(|atoms| {
                 other
                     .aromatic_systems
-                    .participant_permutation(right_id, &participants)
+                    .participant_permutation(right, &atoms)
             }) else {
                 return false;
             };
             if !self
                 .aromatic_systems
-                .data(left_id)
-                .equiv_under(other.aromatic_systems.data(right_id), &order)
+                .attributes(left)
+                .equiv_under(other.aromatic_systems.attributes(right), &order)
             {
                 return false;
             }
@@ -1237,8 +1218,8 @@ impl Molecule {
                 .all(|id| self.dative_bonds.data(id).is_concrete())
             && self
                 .aromatic_systems
-                .relation_ids()
-                .all(|id| self.aromatic_systems.data(id).is_concrete())
+                .ids()
+                .all(|id| self.aromatic_systems.attributes(id).is_concrete())
             && self
                 .multicenter_bonds
                 .relation_ids()
@@ -1295,14 +1276,14 @@ impl Molecule {
 
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
         let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.dative_bonds);
-        let acceptor = AtomId::from(set.participants_1(rid)[0]);
-        let donors = set
+        let acceptor = AtomId::from(self.dative_bonds.participants_1(rid)[0]);
+        let donors = self
+            .dative_bonds
             .participants_2(rid)
             .iter()
             .map(|&n| AtomId::from(n))
             .collect();
-        let attributes = set.data_mut(rid);
+        let attributes = self.dative_bonds.data_mut(rid);
         DativeBondViewMut {
             id,
             donors,
@@ -1313,20 +1294,14 @@ impl Molecule {
 
     /// Replace every dative bond with `f(bond)` in place.
     pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
-        for dative_bond in Arc::make_mut(&mut self.dative_bonds).data_iter_mut() {
+        for dative_bond in self.dative_bonds.data_iter_mut() {
             *dative_bond = f(mem::take(dative_bond));
         }
     }
 
     pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.aromatic_systems);
-        let atoms = set
-            .participants(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = set.data_mut(rid);
+        let atoms = self.aromatic_systems.atoms(id).collect();
+        let attributes = self.aromatic_systems.attributes_mut(id);
         AromaticSystemViewMut {
             id,
             atoms,
@@ -1339,20 +1314,20 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
     ) {
-        for aromatic_system in Arc::make_mut(&mut self.aromatic_systems).data_iter_mut() {
+        for aromatic_system in self.aromatic_systems.attributes_iter_mut() {
             *aromatic_system = f(mem::take(aromatic_system));
         }
     }
 
     pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
         let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.multicenter_bonds);
-        let atoms = set
+        let atoms = self
+            .multicenter_bonds
             .participants(rid)
             .iter()
             .map(|&n| AtomId::from(n))
             .collect();
-        let attributes = set.data_mut(rid);
+        let attributes = self.multicenter_bonds.data_mut(rid);
         MulticenterBondViewMut {
             id,
             atoms,
@@ -1365,16 +1340,15 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
     ) {
-        for multicenter_bond in Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut() {
+        for multicenter_bond in self.multicenter_bonds.data_iter_mut() {
             *multicenter_bond = f(mem::take(multicenter_bond));
         }
     }
 
     pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
         let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.noncovalent_bonds);
-        let atoms = (*set.participants(rid)).map(AtomId::from);
-        let attributes = set.data_mut(rid);
+        let atoms = (*self.noncovalent_bonds.participants(rid)).map(AtomId::from);
+        let attributes = self.noncovalent_bonds.data_mut(rid);
         NoncovalentBondViewMut {
             id,
             atoms,
@@ -1387,17 +1361,16 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
     ) {
-        for noncovalent_bond in Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut() {
+        for noncovalent_bond in self.noncovalent_bonds.data_iter_mut() {
             *noncovalent_bond = f(mem::take(noncovalent_bond));
         }
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
         let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.stereo_atoms);
-        let site = AtomId::from(set.participants_1(rid)[0]);
-        let ligands = set.participants_2(rid).to_vec();
-        let attributes = set.data_mut(rid);
+        let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+        let ligands = self.stereo_atoms.participants_2(rid).to_vec();
+        let attributes = self.stereo_atoms.data_mut(rid);
         StereoAtomViewMut {
             id,
             site,
@@ -1408,17 +1381,16 @@ impl Molecule {
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
     pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm) {
-        for stereo_atom in Arc::make_mut(&mut self.stereo_atoms).data_iter_mut() {
+        for stereo_atom in self.stereo_atoms.data_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
     }
 
     pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
         let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.stereo_bonds);
-        let site = BondId::from(set.participants_1(rid)[0]);
-        let ligands = set.participants_2(rid).to_vec();
-        let attributes = set.data_mut(rid);
+        let site = BondId::from(self.stereo_bonds.participants_1(rid)[0]);
+        let ligands = self.stereo_bonds.participants_2(rid).to_vec();
+        let attributes = self.stereo_bonds.data_mut(rid);
         StereoBondViewMut {
             id,
             site,
@@ -1429,7 +1401,7 @@ impl Molecule {
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
     pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondForm) -> StereoBondForm) {
-        for stereo_bond in Arc::make_mut(&mut self.stereo_bonds).data_iter_mut() {
+        for stereo_bond in self.stereo_bonds.data_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }
     }
@@ -1459,8 +1431,8 @@ impl Molecule {
                 .any(|id| !self.dative_bonds.data(id).constraints.is_empty())
             || self
                 .aromatic_systems
-                .relation_ids()
-                .any(|id| !self.aromatic_systems.data(id).constraints.is_empty())
+                .ids()
+                .any(|id| !self.aromatic_systems.attributes(id).constraints.is_empty())
             || self
                 .multicenter_bonds
                 .relation_ids()
@@ -1767,12 +1739,12 @@ impl Molecule {
             self.graph.clone(),
             Arc::clone(&self.atoms),
             Arc::clone(&self.bonds),
-            Arc::clone(&self.dative_bonds),
-            Arc::clone(&self.aromatic_systems),
-            Arc::clone(&self.multicenter_bonds),
-            Arc::clone(&self.noncovalent_bonds),
-            Arc::clone(&self.stereo_atoms),
-            Arc::clone(&self.stereo_bonds),
+            self.dative_bonds.clone(),
+            self.aromatic_systems.clone(),
+            self.multicenter_bonds.clone(),
+            self.noncovalent_bonds.clone(),
+            self.stereo_atoms.clone(),
+            self.stereo_bonds.clone(),
             self.constraints.clone(),
         )
     }

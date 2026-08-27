@@ -1,11 +1,148 @@
 //! Dative bond form.
 
-use umol_graph_core::{BiRelationData, ParticipantPosition};
+use std::sync::Arc;
+
+use umol_graph_core::{
+    BiRelationData, EdgeId, FixedVarBirelationSet, GraphCompaction, NodeId, Ordered,
+    ParticipantPosition, RelationId, RelationPushout, Remapping, Unordered,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::num::NumForm;
 use super::traits::{Equiv, Lattice};
+
+/// The site this entry is borne by.
+/// The molecule's dative bonds. The donors bear the frame; the acceptor is the site. The payload
+/// is frame-invariant.
+///
+/// Owns the frame structure its storage shape cannot state: which factor bears the participant
+/// frame, and which is a site.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct DativeBonds(
+    Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
+);
+
+impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>>
+    for DativeBonds
+{
+    fn from(
+        set: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
+    ) -> Self {
+        Self(set)
+    }
+}
+
+impl DativeBonds {
+    pub fn new(entries: Vec<([NodeId; 1], Vec<NodeId>, DativeBondForm)>) -> Self {
+        Self(Arc::new(FixedVarBirelationSet::new(entries)))
+    }
+
+    /// The site this entry is borne by.
+    pub fn site(&self, id: RelationId) -> NodeId {
+        self.0.participants_1(id)[0]
+    }
+
+    /// The frame-bearing factor.
+    pub fn members(&self, id: RelationId) -> &[NodeId] {
+        self.0.participants_2(id)
+    }
+
+    pub fn participants_1(&self, id: RelationId) -> &[NodeId; 1] {
+        self.0.participants_1(id)
+    }
+
+    pub fn participants_2(&self, id: RelationId) -> &[NodeId] {
+        self.0.participants_2(id)
+    }
+
+    pub fn find_by_participants(&self, site: &[NodeId], members: &[NodeId]) -> Option<RelationId> {
+        self.0.find_by_participants(site, members)
+    }
+
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[NodeId],
+        query_2: &[NodeId],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        self.0.participant_permutation(id, query_1, query_2)
+    }
+
+    pub fn pushout(
+        &self,
+        right: &Self,
+        combine: impl FnMut(&DativeBondForm, &DativeBondForm) -> Option<DativeBondForm>,
+    ) -> Option<RelationPushout<Self>> {
+        self.0
+            .pushout(&right.0, combine)
+            .map(|pushout| RelationPushout {
+                object: Self(Arc::new(pushout.object)),
+                left: pushout.left,
+                right: pushout.right,
+            })
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        self.0.contains(id)
+    }
+
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+        self.0.relation_ids()
+    }
+
+    pub fn data(&self, id: RelationId) -> &DativeBondForm {
+        self.0.data(id)
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut DativeBondForm {
+        Arc::make_mut(&mut self.0).data_mut(id)
+    }
+
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut DativeBondForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.0.incident(node)
+    }
+
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.0.incident_edge(edge)
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.0.has_incident(node)
+    }
+
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.0.has_incident_edge(edge)
+    }
+
+    pub fn into_entries(self) -> Vec<([NodeId; 1], Vec<NodeId>, DativeBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+    }
+
+    pub fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub fn into_arc(
+        self,
+    ) -> Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>> {
+        self.0
+    }
+}
 
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the

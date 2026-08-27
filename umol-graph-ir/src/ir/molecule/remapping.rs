@@ -4,6 +4,7 @@ use umol_graph_core::{
     EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Remapping, VarRelationSet,
 };
 
+use super::super::aromatic::AromaticSystems;
 use super::Molecule;
 use crate::ir::{Constraints, MoleculeCorrespondence};
 
@@ -138,7 +139,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let aromatic_systems = VarRelationSet::new(reorder(
+        let aromatic_systems = AromaticSystems::new(reorder(
             self.aromatic_systems.remap(&graph_remapping).into_entries(),
             correspondence.aromatic_systems().right_count(),
             correspondence
@@ -198,12 +199,12 @@ impl Molecule {
             graph,
             Arc::new(atoms),
             Arc::new(bonds),
-            Arc::new(dative_bonds),
-            Arc::new(aromatic_systems),
-            Arc::new(multicenter_bonds),
-            Arc::new(noncovalent_bonds),
-            Arc::new(stereo_atoms),
-            Arc::new(stereo_bonds),
+            Arc::new(dative_bonds).into(),
+            aromatic_systems,
+            Arc::new(multicenter_bonds).into(),
+            Arc::new(noncovalent_bonds).into(),
+            Arc::new(stereo_atoms).into(),
+            Arc::new(stereo_bonds).into(),
             constraints,
         ))
     }

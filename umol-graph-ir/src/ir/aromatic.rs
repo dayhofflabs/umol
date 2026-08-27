@@ -1,13 +1,178 @@
-//! Aromatic system form.
+//! Aromatic systems: the molecule's collection and one system's attribute form.
 
-use umol_graph_core::{ParticipantPosition, RelationData};
+use std::sync::Arc;
+
+use umol_graph_core::{
+    EdgeId, GraphCompaction, NodeId, ParticipantPosition, RelationData, RelationId,
+    RelationPushout, Remapping, Unordered, VarRelationSet,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
 use super::electrons::ElectronCountsForm;
+use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 use super::traits::{Equiv, Lattice};
+
+/// The molecule's aromatic systems.
+///
+/// The atoms bear the participant frame: the per-member electron counts of
+/// [`AromaticSystemForm`] are read against it, position by position.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AromaticSystems(Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>);
+
+impl AromaticSystems {
+    pub fn new(entries: Vec<(Vec<AtomId>, AromaticSystemForm)>) -> Self {
+        Self(Arc::new(VarRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(atoms, attributes)| {
+                    (atoms.into_iter().map(NodeId::from).collect(), attributes)
+                })
+                .collect(),
+        )))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: AromaticSystemId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
+        self.0.relation_ids().map(AromaticSystemId::from)
+    }
+
+    /// The atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: AromaticSystemId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+    }
+
+    pub fn attributes(&self, id: AromaticSystemId) -> &AromaticSystemForm {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    /// Ids of the systems `atom` belongs to. Systems are atom-disjoint, so there is at most one.
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + '_ {
+        self.0
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&id| AromaticSystemId::from(id))
+    }
+
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.0.has_incident(NodeId::from(atom))
+    }
+
+    pub fn into_entries(self) -> Vec<(Vec<AtomId>, AromaticSystemForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| {
+                (atoms.into_iter().map(AtomId::from).collect(), attributes)
+            })
+            .collect()
+    }
+
+    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::atoms`].
+    pub(crate) fn atom_nodes(&self, id: AromaticSystemId) -> &[NodeId] {
+        self.0.participants(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut AromaticSystemForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub(crate) fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> {
+        self.0
+    }
+
+    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
+    /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
+    pub(crate) fn glue(
+        &self,
+        right: &Self,
+        remapping: &Remapping,
+    ) -> Option<Vec<(Vec<AtomId>, AromaticSystemForm)>> {
+        let merged = self
+            .0
+            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))?;
+        Some(
+            merged
+                .object
+                .relation_ids()
+                .map(|id| {
+                    (
+                        merged
+                            .object
+                            .participants(id)
+                            .iter()
+                            .map(|&atom| AtomId::from(atom))
+                            .collect(),
+                        merged.object.data(id).clone(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
+    /// an aromatic system is any member atom.
+    pub(crate) fn find_by_participants(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .find_by_participants(&query)
+            .map(AromaticSystemId::from)
+    }
+
+    /// Removed by S4e, which moves frame alignment onto `reframe_to`.
+    pub(crate) fn participant_permutation(
+        &self,
+        id: AromaticSystemId,
+        atoms: &[AtomId],
+    ) -> Option<Vec<ParticipantPosition>> {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0
+            .participant_permutation(RelationId::from(id), &query)
+    }
+}
+
+impl From<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> for AromaticSystems {
+    fn from(set: VarRelationSet<NodeId, Unordered, AromaticSystemForm>) -> Self {
+        Self(Arc::new(set))
+    }
+}
+
+impl From<Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>> for AromaticSystems {
+    fn from(set: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>) -> Self {
+        Self(set)
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct AromaticSystemForm {

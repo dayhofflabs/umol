@@ -2,14 +2,14 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
+use umol_graph_core::{NodeId, RelationId};
 
 use super::super::constraint::{
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm,
 };
 use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::Molecule;
-use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm};
+use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKindForm, NoncovalentBonds};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::constraints::NoncovalentBondConstraintsView;
@@ -18,14 +18,11 @@ use super::constraints::NoncovalentBondConstraintsView;
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
     molecule: &'a Molecule,
-    noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
+    noncovalent_bonds: &'a NoncovalentBonds,
 }
 
 impl<'a> NoncovalentBondViews<'a> {
-    pub(crate) fn new(
-        molecule: &'a Molecule,
-        noncovalent_bonds: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>,
-    ) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, noncovalent_bonds: &'a NoncovalentBonds) -> Self {
         Self {
             molecule,
             noncovalent_bonds,

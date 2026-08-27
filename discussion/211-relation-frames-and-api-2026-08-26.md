@@ -914,7 +914,7 @@ required `Add<usize>` and `Sub<usize>` on the eight entity ids, added to `define
 
 ### S3 — Establish the entity families and the reframe operations
 
-#### S3a — Introduce the six entity-family types
+#### S3a — Introduce the six entity-family types **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule.rs`, the six family modules, and their unit tests.
 
@@ -924,6 +924,24 @@ and which, if any, is a site. No behaviour changes here; the accessors delegate.
 
 **Tests and evidence:** Assert delegation for count, indexed access, incidence, and lookup on every
 family, and that `Molecule`'s existing entity-family behaviour is unchanged.
+
+Named by the plurality rule in the nomenclature guide: a bare trailing `s` marks the container, and
+the guide already forbids replacing it with `Store`, `Set`, or another suffix. The six types are
+added to that entry as its example.
+
+The delegating surface is exactly what consumers use, established by removing every escape hatch and
+letting the compiler name what was missing: `count`, `contains`, `relation_ids`, `participants` (or
+`site` and `members` on the site-bearing families), `data`, `data_mut`, `data_iter_mut`, `incident`,
+`incident_edge`, `has_incident`, `has_incident_edge`, `find_by_participants`, `participant_permutation`,
+`remap`, `compact`, `into_entries`, `pushout`. No `set()` or `Deref` remains, so nothing reaches the
+storage shape through the family type.
+
+Two operations moved onto the family types rather than staying generic over storage, because their
+genericity no longer typechecks across six distinct newtypes: `glue_var_overlays` became
+`AromaticSystems::glue` and `MulticenterBonds::glue`, and `stereo_glue_entries` became
+`StereoAtoms::glue_entries` and `StereoBonds::glue_entries`. Both free functions are deleted from
+`pushout.rs`. This is the consolidation S4 was expected to perform, arriving early because the type
+change forced it.
 
 **Change class:** additive types with a field-type change on `Molecule` (green).
 
@@ -1105,6 +1123,37 @@ frame transport in matching.
 
 **Dependencies:** [dep: S4e]
 
+#### S4g — Collapse the editor's storage wrappers
+
+**Module:** `umol-graph-ir/src/ir/molecule/editor.rs` and its unit tests.
+
+`FixedSetStorage`, `VarSetStorage`, and `FixedVarSetStorage` are three copy-on-write wrappers over
+420 lines carrying 42 methods between them. Two facts shrink that to almost nothing once the entity
+families own their surface:
+
+- most of the 42 methods duplicate reads the family types now own — `count`, `participants`, `data`,
+  `participant_permutation`, `compact`, `entries`. What is genuinely editor-specific is `push`,
+  `remove_relations`, `materialize`, `into_arc`, and the rollback `entries`;
+- the three exist only because they are generic over the *storage shape*. A wrapper parameterised by
+  the family type and its entry type needs no shape genericity, so one generic type covers all six
+  families.
+
+Replace them with a single copy-on-write wrapper over `(family type, entry type)`, delegating every
+read to the family type.
+
+**Do not fold the shared and mutable states into the family type itself.** The shared state is a real
+copy-on-write win — an edit touching one atom republishes the other five families' handles with no
+work — and a mutable variant on `Molecule`'s field would give the published type a state it must
+never hold. The accumulating state belongs to the editor.
+
+**Tests and evidence:** Retain every editor and transaction assertion, including rollback. Assert
+that publishing an unmodified family returns the same handle without rebuilding, and that a batch of
+pushes materialises once rather than per operation.
+
+**Change class:** simplification with caller migration (green).
+
+**Dependencies:** [dep: S4e]
+
 ### S5 — Make storage frame-preserving
 
 #### S5a — Move the graph-IR frame-order utility sites off the storage protocol
@@ -1185,7 +1234,8 @@ describe another current API. Run `git diff --check`.
 ### Dependency summary
 
 The critical path is
-`S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S4a -> S4b -> S4c -> S4d -> S4e -> S4f -> S5a -> S5b -> S6a`.
+`S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S4a -> S4b -> S4c -> S4d -> S4e -> S4f -> S4g -> S5a ->
+S5b -> S6a`.
 S3b and S3c are additive and may be built at any point before S3d, which consumes them. S3a
 introduces the family types and gates S3d. S3d additionally depends on doc 209 S1d for its span
 path. S5b is the only subitem that ends red, and doc 209 S2 onward closes it. Every stage is

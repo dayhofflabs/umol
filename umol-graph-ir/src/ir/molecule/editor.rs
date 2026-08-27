@@ -16,11 +16,11 @@ use umol_graph_core::{
     RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
-use super::super::aromatic::AromaticSystemForm;
+use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::{Constraint, Constraints};
-use super::super::dative::DativeBondForm;
+use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, RemovedAromaticSystem, RemovedAtom,
@@ -32,10 +32,10 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::multicenter::MulticenterBondForm;
-use super::super::noncovalent::NoncovalentBondForm;
+use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
+use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
-use super::super::stereo::{StereoAtomForm, StereoBondForm};
+use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::{BiRelationEquiv, RelationEquiv};
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
@@ -646,30 +646,24 @@ impl MoleculeEditor {
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
-        dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-        >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-        stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-        >,
-        stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
-        >,
+        dative_bonds: DativeBonds,
+        aromatic_systems: AromaticSystems,
+        multicenter_bonds: MulticenterBonds,
+        noncovalent_bonds: NoncovalentBonds,
+        stereo_atoms: StereoAtoms,
+        stereo_bonds: StereoBonds,
         constraints: Constraints,
     ) -> Self {
         Self {
             graph,
             atoms,
             bonds,
-            dative_bonds: FixedVarSetStorage::Shared(dative_bonds),
-            aromatic_systems: VarSetStorage::Shared(aromatic_systems),
-            multicenter_bonds: VarSetStorage::Shared(multicenter_bonds),
-            noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds),
-            stereo_atoms: FixedVarSetStorage::Shared(stereo_atoms),
-            stereo_bonds: FixedVarSetStorage::Shared(stereo_bonds),
+            dative_bonds: FixedVarSetStorage::Shared(dative_bonds.into_arc()),
+            aromatic_systems: VarSetStorage::Shared(aromatic_systems.into_arc()),
+            multicenter_bonds: VarSetStorage::Shared(multicenter_bonds.into_arc()),
+            noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds.into_arc()),
+            stereo_atoms: FixedVarSetStorage::Shared(stereo_atoms.into_arc()),
+            stereo_bonds: FixedVarSetStorage::Shared(stereo_bonds.into_arc()),
             constraints,
         }
     }
@@ -1595,12 +1589,12 @@ impl MoleculeEditor {
             self.graph,
             self.atoms,
             self.bonds,
-            self.dative_bonds.into_arc(),
-            self.aromatic_systems.into_arc(),
-            self.multicenter_bonds.into_arc(),
-            self.noncovalent_bonds.into_arc(),
-            self.stereo_atoms.into_arc(),
-            self.stereo_bonds.into_arc(),
+            self.dative_bonds.into_arc().into(),
+            self.aromatic_systems.into_arc().into(),
+            self.multicenter_bonds.into_arc().into(),
+            self.noncovalent_bonds.into_arc().into(),
+            self.stereo_atoms.into_arc().into(),
+            self.stereo_bonds.into_arc().into(),
             self.constraints,
         );
         molecule.check_integrity()?;

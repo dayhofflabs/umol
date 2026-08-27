@@ -8,9 +8,13 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use strum::VariantArray;
-use umol_graph_core::{BiRelationData, ParticipantPosition};
+use umol_graph_core::{
+    BiRelationData, EdgeId, FixedVarBirelationSet, GraphCompaction, NodeId, Ordered,
+    ParticipantPosition, RelationId, RelationPushout, Remapping,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
 
@@ -22,6 +26,328 @@ use super::constraint::{
 use super::error::{Contradiction, NoJoin};
 use super::ligand::StereoLigand;
 use super::traits::{AsLit, Equiv, Lattice, Normalize};
+
+/// The molecule's stereo atoms. The ligands bear the frame the configuration is read against; the
+/// site is an atom.
+///
+/// Owns the frame structure its storage shape cannot state: which factor bears the participant
+/// frame, and which is a site.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct StereoAtoms(
+    Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
+);
+
+impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>>
+    for StereoAtoms
+{
+    fn from(
+        set: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
+    ) -> Self {
+        Self(set)
+    }
+}
+
+impl StereoAtoms {
+    pub fn new(entries: Vec<([NodeId; 1], Vec<StereoLigand>, StereoAtomForm)>) -> Self {
+        Self(Arc::new(FixedVarBirelationSet::new(entries)))
+    }
+
+    /// The site this entry is borne by.
+    pub fn site(&self, id: RelationId) -> NodeId {
+        self.0.participants_1(id)[0]
+    }
+
+    /// The frame-bearing factor.
+    pub fn members(&self, id: RelationId) -> &[StereoLigand] {
+        self.0.participants_2(id)
+    }
+
+    pub fn participants_1(&self, id: RelationId) -> &[NodeId; 1] {
+        self.0.participants_1(id)
+    }
+
+    pub fn participants_2(&self, id: RelationId) -> &[StereoLigand] {
+        self.0.participants_2(id)
+    }
+
+    pub fn find_by_participants(
+        &self,
+        site: &[NodeId],
+        members: &[StereoLigand],
+    ) -> Option<RelationId> {
+        self.0.find_by_participants(site, members)
+    }
+
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[NodeId],
+        query_2: &[StereoLigand],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        self.0.participant_permutation(id, query_1, query_2)
+    }
+
+    pub fn pushout(
+        &self,
+        right: &Self,
+        combine: impl FnMut(&StereoAtomForm, &StereoAtomForm) -> Option<StereoAtomForm>,
+    ) -> Option<RelationPushout<Self>> {
+        self.0
+            .pushout(&right.0, combine)
+            .map(|pushout| RelationPushout {
+                object: Self(Arc::new(pushout.object)),
+                left: pushout.left,
+                right: pushout.right,
+            })
+    }
+
+    /// Align `right`'s entries to coincident ligand frames in `self`, carrying each configuration
+    /// through `transform`. Right-only entries keep their own frame. `None` when a coincident
+    /// transform is inadmissible.
+    #[allow(clippy::type_complexity)]
+    pub fn glue_entries(
+        &self,
+        right: &Self,
+        transform: impl Fn(&StereoAtomForm, &[StereoLigand], &[StereoLigand]) -> Option<StereoAtomForm>,
+    ) -> Option<Vec<([NodeId; 1], Vec<StereoLigand>, StereoAtomForm)>> {
+        right
+            .relation_ids()
+            .map(|id| {
+                let site = right.site(id);
+                let frame = right.members(id).to_vec();
+                match self.find_by_participants(&[site], &frame) {
+                    Some(hit) => {
+                        let target = self.members(hit).to_vec();
+                        let data = transform(right.data(id), &frame, &target)?;
+                        Some(([site], target, data))
+                    }
+                    None => Some(([site], frame, right.data(id).clone())),
+                }
+            })
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        self.0.contains(id)
+    }
+
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+        self.0.relation_ids()
+    }
+
+    pub fn data(&self, id: RelationId) -> &StereoAtomForm {
+        self.0.data(id)
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut StereoAtomForm {
+        Arc::make_mut(&mut self.0).data_mut(id)
+    }
+
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut StereoAtomForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.0.incident(node)
+    }
+
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.0.incident_edge(edge)
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.0.has_incident(node)
+    }
+
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.0.has_incident_edge(edge)
+    }
+
+    pub fn into_entries(self) -> Vec<([NodeId; 1], Vec<StereoLigand>, StereoAtomForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+    }
+
+    pub fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub fn into_arc(
+        self,
+    ) -> Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>> {
+        self.0
+    }
+}
+
+/// The molecule's stereo bonds. The ligands bear the frame the configuration is read against; the
+/// site is a bond.
+///
+/// Owns the frame structure its storage shape cannot state: which factor bears the participant
+/// frame, and which is a site.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct StereoBonds(
+    Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
+);
+
+impl From<Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>>
+    for StereoBonds
+{
+    fn from(
+        set: Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
+    ) -> Self {
+        Self(set)
+    }
+}
+
+impl StereoBonds {
+    pub fn new(entries: Vec<([EdgeId; 1], Vec<StereoLigand>, StereoBondForm)>) -> Self {
+        Self(Arc::new(FixedVarBirelationSet::new(entries)))
+    }
+
+    /// The site this entry is borne by.
+    pub fn site(&self, id: RelationId) -> EdgeId {
+        self.0.participants_1(id)[0]
+    }
+
+    /// The frame-bearing factor.
+    pub fn members(&self, id: RelationId) -> &[StereoLigand] {
+        self.0.participants_2(id)
+    }
+
+    pub fn participants_1(&self, id: RelationId) -> &[EdgeId; 1] {
+        self.0.participants_1(id)
+    }
+
+    pub fn participants_2(&self, id: RelationId) -> &[StereoLigand] {
+        self.0.participants_2(id)
+    }
+
+    pub fn find_by_participants(
+        &self,
+        site: &[EdgeId],
+        members: &[StereoLigand],
+    ) -> Option<RelationId> {
+        self.0.find_by_participants(site, members)
+    }
+
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query_1: &[EdgeId],
+        query_2: &[StereoLigand],
+    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
+        self.0.participant_permutation(id, query_1, query_2)
+    }
+
+    pub fn pushout(
+        &self,
+        right: &Self,
+        combine: impl FnMut(&StereoBondForm, &StereoBondForm) -> Option<StereoBondForm>,
+    ) -> Option<RelationPushout<Self>> {
+        self.0
+            .pushout(&right.0, combine)
+            .map(|pushout| RelationPushout {
+                object: Self(Arc::new(pushout.object)),
+                left: pushout.left,
+                right: pushout.right,
+            })
+    }
+
+    /// Align `right`'s entries to coincident ligand frames in `self`, carrying each configuration
+    /// through `transform`. Right-only entries keep their own frame. `None` when a coincident
+    /// transform is inadmissible.
+    #[allow(clippy::type_complexity)]
+    pub fn glue_entries(
+        &self,
+        right: &Self,
+        transform: impl Fn(&StereoBondForm, &[StereoLigand], &[StereoLigand]) -> Option<StereoBondForm>,
+    ) -> Option<Vec<([EdgeId; 1], Vec<StereoLigand>, StereoBondForm)>> {
+        right
+            .relation_ids()
+            .map(|id| {
+                let site = right.site(id);
+                let frame = right.members(id).to_vec();
+                match self.find_by_participants(&[site], &frame) {
+                    Some(hit) => {
+                        let target = self.members(hit).to_vec();
+                        let data = transform(right.data(id), &frame, &target)?;
+                        Some(([site], target, data))
+                    }
+                    None => Some(([site], frame, right.data(id).clone())),
+                }
+            })
+            .collect()
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        self.0.contains(id)
+    }
+
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+        self.0.relation_ids()
+    }
+
+    pub fn data(&self, id: RelationId) -> &StereoBondForm {
+        self.0.data(id)
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut StereoBondForm {
+        Arc::make_mut(&mut self.0).data_mut(id)
+    }
+
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut StereoBondForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.0.incident(node)
+    }
+
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.0.incident_edge(edge)
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.0.has_incident(node)
+    }
+
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.0.has_incident_edge(edge)
+    }
+
+    pub fn into_entries(self) -> Vec<([EdgeId; 1], Vec<StereoLigand>, StereoBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+    }
+
+    pub fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub fn into_arc(
+        self,
+    ) -> Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>> {
+        self.0
+    }
+}
 
 /// Defines the stereo entity forms.
 macro_rules! stereo_element {

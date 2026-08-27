@@ -2,12 +2,12 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
+use umol_graph_core::{NodeId, RelationId};
 
 use super::super::constraint::{
     DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm,
 };
-use super::super::dative::DativeBondForm;
+use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::Molecule;
 use super::super::num::NumForm;
@@ -19,21 +19,11 @@ use super::constraints::DativeBondConstraintsView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a Molecule,
-    dative_bonds: &'a FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
+    dative_bonds: &'a DativeBonds,
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(crate) fn new(
-        molecule: &'a Molecule,
-        dative_bonds: &'a FixedVarBirelationSet<
-            NodeId,
-            Ordered,
-            1,
-            NodeId,
-            Unordered,
-            DativeBondForm,
-        >,
-    ) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, dative_bonds: &'a DativeBonds) -> Self {
         Self {
             molecule,
             dative_bonds,

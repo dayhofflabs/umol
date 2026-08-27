@@ -3,14 +3,15 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
+use umol_graph_core::{EdgeId, NodeId, RelationId};
 use umol_perm::{OrientedPermutationGroup, Permutation};
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
 use super::super::stereo::{
-    coset_apply_permutation, StereoAtomForm, StereoBondForm, StereoKind, Stereogenicity, Topicity,
+    coset_apply_permutation, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind,
+    Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
@@ -23,10 +24,8 @@ use crate::ir::{
     StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset,
 };
 
-type StereoAtomSet =
-    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>;
-type StereoBondSet =
-    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>;
+type StereoAtomSet = StereoAtoms;
+type StereoBondSet = StereoBonds;
 
 /// Namespace accessor for stereo-atom views on a `Molecule`.
 #[derive(Clone, Copy)]

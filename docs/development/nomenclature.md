@@ -123,6 +123,12 @@ a different question:
 is itself lattice-shaped and so carries `Form` by the same rule every other lattice type does. A new
 type should be assembled in this order rather than by analogy with the nearest neighbour.
 
+The entity-family storage types are the plurality marker with no role and no representation:
+`AromaticSystems`, `MulticenterBonds`, `NoncovalentBonds`, `DativeBonds`, `StereoAtoms`, and
+`StereoBonds` each name the container of one entity kind. They own what their storage shape cannot
+state — which factor bears the participant frame, which is a site, and the family's uniqueness key —
+so they take a bare plural rather than a fourth position, exactly as the rule below requires.
+
 **Two known tensions, neither to be "fixed".** The plural is the least visible marker in the stack —
 a single trailing `s` against three CamelCase words. It is not to be replaced with `Store`, `Set` or
 another suffix: the names are already long, and a fourth CamelCase position costs more legibility

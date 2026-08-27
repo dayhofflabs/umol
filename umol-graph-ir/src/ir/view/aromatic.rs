@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
+use umol_graph_core::{NodeId, RelationId};
 
-use super::super::aromatic::AromaticSystemForm;
+use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::constraint::{
     AromaticSystemConstraintForm, AromaticSystemConstraintKey, AromaticSystemConstraintsForm,
 };
@@ -23,14 +23,11 @@ use super::constraints::AromaticSystemConstraintsView;
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     molecule: &'a Molecule,
-    aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
+    aromatic_systems: &'a AromaticSystems,
 }
 
 impl<'a> AromaticSystemViews<'a> {
-    pub(crate) fn new(
-        molecule: &'a Molecule,
-        aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemForm>,
-    ) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, aromatic_systems: &'a AromaticSystems) -> Self {
         Self {
             molecule,
             aromatic_systems,
@@ -42,35 +39,32 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
-        self.aromatic_systems
-            .relation_ids()
-            .map(AromaticSystemId::from)
+        self.aromatic_systems.ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> {
         let molecule = self.molecule;
         let set = self.aromatic_systems;
-        set.relation_ids().map(move |rid| AromaticSystemView {
-            id: AromaticSystemId::from(rid),
-            attributes: set.data(rid),
-            atoms: set.participants(rid),
+        set.ids().map(move |id| AromaticSystemView {
+            id,
+            attributes: set.attributes(id),
+            atoms: set.atom_nodes(id),
             molecule,
         })
     }
 
     pub fn contains(&self, id: AromaticSystemId) -> bool {
-        self.aromatic_systems.contains(RelationId::from(id))
+        self.aromatic_systems.contains(id)
     }
 
     pub fn get(&self, id: AromaticSystemId) -> Option<AromaticSystemView<'a>> {
         if !self.contains(id) {
             return None;
         }
-        let rid = RelationId::from(id);
         Some(AromaticSystemView {
             id,
-            attributes: self.aromatic_systems.data(rid),
-            atoms: self.aromatic_systems.participants(rid),
+            attributes: self.aromatic_systems.attributes(id),
+            atoms: self.aromatic_systems.atom_nodes(id),
             molecule: self.molecule,
         })
     }
@@ -80,15 +74,12 @@ impl<'a> AromaticSystemViews<'a> {
         &self,
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = AromaticSystemId> + 'a {
-        self.aromatic_systems
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| AromaticSystemId::from(rid))
+        self.aromatic_systems.incident_ids(atom)
     }
 
     /// Whether any aromatic system is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.aromatic_systems.has_incident(NodeId::from(atom))
+        self.aromatic_systems.has_incident(atom)
     }
 
     /// Views of aromatic systems incident on `atom`.
@@ -98,23 +89,18 @@ impl<'a> AromaticSystemViews<'a> {
     ) -> impl ExactSizeIterator<Item = AromaticSystemView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.aromatic_systems;
-        self.incident_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            AromaticSystemView {
-                id,
-                attributes: set.data(rid),
-                atoms: set.participants(rid),
-                molecule,
-            }
+        self.incident_ids(atom).map(move |id| AromaticSystemView {
+            id,
+            attributes: set.attributes(id),
+            atoms: set.atom_nodes(id),
+            molecule,
         })
     }
 
     /// Id of the aromatic system whose atom set equals `atoms`, if any.
     pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<AromaticSystemId> {
-        let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
-        self.aromatic_systems
-            .find_by_participants(&nodes)
-            .map(AromaticSystemId::from)
+        let atoms: Vec<AtomId> = atoms.into_iter().collect();
+        self.aromatic_systems.find_by_participants(&atoms)
     }
 
     /// View of the aromatic system whose atom set equals `atoms`, if any.
@@ -130,10 +116,10 @@ impl<'a> AromaticSystemViews<'a> {
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.aromatic_systems
-            .relation_ids()
-            .filter(|&rid| {
+            .ids()
+            .filter(|&id| {
                 self.aromatic_systems
-                    .participants(rid)
+                    .atom_nodes(id)
                     .iter()
                     .all(|p| set.contains(p))
             })

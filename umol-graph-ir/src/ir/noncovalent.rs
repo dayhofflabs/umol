@@ -1,13 +1,124 @@
 //! Noncovalent bond form.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
-use umol_graph_core::{ParticipantPosition, RelationData};
+use umol_graph_core::{
+    EdgeId, FixedRelationSet, GraphCompaction, NodeId, ParticipantPosition, RelationData,
+    RelationId, RelationPushout, Remapping, Unordered,
+};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::error::{Contradiction, NoJoin};
 use super::traits::{AsLit, Equiv, Lattice, Normalize};
+
+/// The molecule's noncovalent bonds. The atom pair bears the frame; the payload is frame-invariant. There is no site.
+///
+/// Owns the frame structure its storage shape cannot state: which factor bears the participant
+/// frame, and which, if any, is a site.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>);
+
+impl From<Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>> for NoncovalentBonds {
+    fn from(set: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>) -> Self {
+        Self(set)
+    }
+}
+
+impl NoncovalentBonds {
+    pub fn new(entries: Vec<([NodeId; 2], NoncovalentBondForm)>) -> Self {
+        Self(Arc::new(FixedRelationSet::new(entries)))
+    }
+
+    pub fn participants(&self, id: RelationId) -> &[NodeId; 2] {
+        self.0.participants(id)
+    }
+
+    pub fn find_by_participants(&self, query: &[NodeId]) -> Option<RelationId> {
+        self.0.find_by_participants(query)
+    }
+
+    pub fn participant_permutation(
+        &self,
+        id: RelationId,
+        query: &[NodeId],
+    ) -> Option<Vec<ParticipantPosition>> {
+        self.0.participant_permutation(id, query)
+    }
+
+    pub fn pushout(
+        &self,
+        right: &Self,
+        combine: impl FnMut(&NoncovalentBondForm, &NoncovalentBondForm) -> Option<NoncovalentBondForm>,
+    ) -> Option<RelationPushout<Self>> {
+        self.0
+            .pushout(&right.0, combine)
+            .map(|pushout| RelationPushout {
+                object: Self(Arc::new(pushout.object)),
+                left: pushout.left,
+                right: pushout.right,
+            })
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        self.0.contains(id)
+    }
+
+    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+        self.0.relation_ids()
+    }
+
+    pub fn data(&self, id: RelationId) -> &NoncovalentBondForm {
+        self.0.data(id)
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut NoncovalentBondForm {
+        Arc::make_mut(&mut self.0).data_mut(id)
+    }
+
+    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.0.incident(node)
+    }
+
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.0.incident_edge(edge)
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.0.has_incident(node)
+    }
+
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.0.has_incident_edge(edge)
+    }
+
+    pub fn into_entries(self) -> Vec<([NodeId; 2], NoncovalentBondForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+    }
+
+    pub fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
+        Self(Arc::new(self.0.compact(compaction)))
+    }
+
+    pub fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> {
+        self.0
+    }
+}
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
