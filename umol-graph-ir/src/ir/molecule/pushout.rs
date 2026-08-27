@@ -10,10 +10,8 @@ use super::super::bond::BondForm;
 use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::{AtomId, BondId};
-use super::super::ligand::StereoLigand;
-use super::super::noncovalent::NoncovalentBondForm;
+
 use super::super::remap::IdRemapping;
-use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::Lattice;
 use super::{Molecule, MoleculeEntries};
 
@@ -107,79 +105,30 @@ impl Molecule {
             .glue(&other.multicenter_bonds, &participant_remapping)?
             .into_entries();
 
-        let dative_merged = self
+        let dative = self
             .dative_bonds
-            .glue(&other.dative_bonds, &participant_remapping)?;
-        let dative = dative_merged.into_entries();
+            .glue(&other.dative_bonds, &participant_remapping)?
+            .into_entries();
 
-        let noncovalent_glue = other.noncovalent_bonds.remap(&participant_remapping);
-        let noncovalent_merged = self
+        let noncovalent = self
             .noncovalent_bonds
-            .pushout(&noncovalent_glue, |a, b| a.meet(b))?;
-        let noncovalent_object = &noncovalent_merged.object;
-        let noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)> = noncovalent_object
-            .relation_ids()
-            .map(|id| {
-                let &[u, v] = noncovalent_object.participants(id);
-                (
-                    AtomId::from(u),
-                    AtomId::from(v),
-                    noncovalent_object.data(id).clone(),
-                )
-            })
-            .collect();
+            .glue(&other.noncovalent_bonds, &participant_remapping)?
+            .into_entries();
 
-        // Stereo overlays differ: ligand order is meaningful (the coset is frame-relative), but a pure
-        // id-remap preserves the sequence and leaves the coset untouched. So the glue keeps `self`'s
-        // ligand frame as-is; `other`'s overlays are relabeled into the glue space and, where one
-        // coincides with a `self` site (same site + ligand multiset), its coset is aligned to `self`'s
-        // frame (`transform_frame`) before the full-participant relation `pushout` `meet`s the two
-        // (`⊥ → None`). `other`-only sites keep their own (relabeled) frame. A same-site/different-ligand
-        // collision leaves two overlays on one site, which checked molecule publication rejects.
-        let remapped_stereo_atoms = other.stereo_atoms.remap(&participant_remapping);
-
-        let stereo_atom_right = StereoAtoms::new(
-            self.stereo_atoms
-                .glue_entries(&remapped_stereo_atoms, |d, before, after| {
-                    d.transform_frame(before, after)
-                })?,
-        );
-        let stereo_atom_merged = self
+        // Stereo overlays differ: ligand order is meaningful (the coset is frame-relative), but a
+        // pure id-remap preserves the sequence and leaves the coset untouched. So the glue keeps
+        // `self`'s ligand frame as-is; where a relabelled `other` overlay coincides with a `self`
+        // site (same site + ligand multiset), its coset is reframed onto `self`'s frame before the
+        // two meet. A same-site/different-ligand collision leaves two overlays on one site, which
+        // checked molecule publication rejects.
+        let stereo_atoms = self
             .stereo_atoms
-            .pushout(&stereo_atom_right, |a, b| a.meet(b))?;
-        let sa_object = &stereo_atom_merged.object;
-        let stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> = sa_object
-            .relation_ids()
-            .map(|id| {
-                (
-                    AtomId::from(sa_object.participants_1(id)[0]),
-                    sa_object.participants_2(id).to_vec(),
-                    sa_object.data(id).clone(),
-                )
-            })
-            .collect();
-
-        let remapped_stereo_bonds = other.stereo_bonds.remap(&participant_remapping);
-        let stereo_bond_right = StereoBonds::new(
-            self.stereo_bonds
-                .glue_entries(&remapped_stereo_bonds, |d, before, after| {
-                    d.transform_frame(before, after)
-                })?,
-        );
-        let stereo_bond_merged = self
+            .glue(&other.stereo_atoms, &participant_remapping)?
+            .into_entries();
+        let stereo_bonds = self
             .stereo_bonds
-            .pushout(&stereo_bond_right, |a, b| a.meet(b))?;
-        let sb_object = &stereo_bond_merged.object;
-        let stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> = sb_object
-            .relation_ids()
-            .map(|id| {
-                (
-                    BondId::from(sb_object.participants_1(id)[0]),
-                    sb_object.participants_2(id).to_vec(),
-                    sb_object.data(id).clone(),
-                )
-            })
-            .collect();
+            .glue(&other.stereo_bonds, &participant_remapping)?
+            .into_entries();
 
         let mut object = Molecule::try_from_entries(MoleculeEntries {
             atoms,
@@ -278,9 +227,9 @@ mod tests {
 
     use super::super::super::aromatic::AromaticSystemForm;
     use super::super::super::constraint::{AtomConstraintForm, Constraint};
-    use super::super::super::ligand::StereoLigandKind;
+    use super::super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::super::multicenter::MulticenterBondForm;
-    use super::super::super::stereo::StereoKind;
+    use super::super::super::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
     use super::*;
 
     // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one unmatched atom.

@@ -920,7 +920,7 @@ required `Add<usize>` and `Sub<usize>` on the eight entity ids, added to `define
 
 Add one type per entity family, each wrapping its storage shape as `Graph` wraps `Arc<Csr>`, and
 replace `Molecule`'s six `Arc<..>` fields with them. Each type states which factor bears the frame
-and which, if any, is a site. No behaviour changes here; the accessors delegate.
+and which, if any, is a site, and speaks only graph-IR ids.
 
 **Tests and evidence:** Assert delegation for count, indexed access, incidence, and lookup on every
 family, and that `Molecule`'s existing entity-family behaviour is unchanged.
@@ -929,19 +929,50 @@ Named by the plurality rule in the nomenclature guide: a bare trailing `s` marks
 the guide already forbids replacing it with `Store`, `Set`, or another suffix. The six types are
 added to that entry as its example.
 
-The delegating surface is exactly what consumers use, established by removing every escape hatch and
-letting the compiler name what was missing: `count`, `contains`, `relation_ids`, `participants` (or
-`site` and `members` on the site-bearing families), `data`, `data_mut`, `data_iter_mut`, `incident`,
-`incident_edge`, `has_incident`, `has_incident_edge`, `find_by_participants`, `participant_permutation`,
-`remap`, `compact`, `into_entries`, `pushout`. No `set()` or `Deref` remains, so nothing reaches the
-storage shape through the family type.
+The surface is uniform across the six and carries no storage vocabulary. Every family has `new`,
+`count`, `contains`, `ids`, `attributes`, `attributes_mut`, `incident_ids`, `has_incident`, and
+`into_entries` public, and `attributes_iter_mut`, `remap`, `into_arc`, and `glue` crate-visible.
+The factor accessors are per-family and match the DSL vocabulary rather than a shared invented one:
+
+| family | factor accessors |
+| --- | --- |
+| `AromaticSystems` | `atoms` |
+| `MulticenterBonds` | `atoms` |
+| `NoncovalentBonds` | `atoms`, returning `[AtomId; 2]` by value |
+| `DativeBonds` | `acceptor`, `donors` |
+| `StereoAtoms` | `site`, `ligands` |
+| `StereoBonds` | `site`, `ligands`, plus `incident_bond_ids` and `has_incident_bond` for the edge site |
+
+Three families keep one crate-visible escape hatch — `AromaticSystems::atom_nodes`,
+`MulticenterBonds::atom_nodes`, `DativeBonds::acceptor_node` and `donor_nodes` — so a borrowed view
+field stays a borrow rather than becoming an owned conversion. `NoncovalentBonds` and the two stereo
+families need none: the first returns its pair by value, and `StereoLigand` is already a graph-IR
+type.
+
+`RelationId`, `NodeId`, and `EdgeId` do not appear in any signature. `data` is `attributes`,
+`relation_ids` is `ids`, and `participants_1`/`participants_2` are gone. Two methods remain
+crate-visible and carry a removal note naming the subitem that retires them:
+`find_by_participants`, which the lookup relocation replaces with `of_id` keyed on the family's
+uniqueness key, and `participant_permutation`, which S4e replaces with `reframe_to`. Neither stereo
+family carries `participant_permutation`: `equiv_under` enumerates ligand frames through
+`Permutation::between_all` instead, so the mechanical translation left it dead and it was dropped.
+`compact` is likewise absent from all six: molecule compaction runs through the editor's storage
+enums, not the family types.
 
 Two operations moved onto the family types rather than staying generic over storage, because their
-genericity no longer typechecks across six distinct newtypes: `glue_var_overlays` became
-`AromaticSystems::glue` and `MulticenterBonds::glue`, and `stereo_glue_entries` became
-`StereoAtoms::glue_entries` and `StereoBonds::glue_entries`. Both free functions are deleted from
-`pushout.rs`. This is the consolidation S4 was expected to perform, arriving early because the type
-change forced it.
+genericity no longer typechecks across six distinct newtypes. `glue_var_overlays` and
+`stereo_glue_entries` are deleted from `pushout.rs`, and all six families now carry the same
+`glue(&self, right, remapping) -> Option<Self>`: relabel `right` into this molecule's id space, then
+meet coinciding entries and carry the rest. The stereo implementations do one thing more — reframe a
+coinciding right configuration onto the retained left ligand frame before the meet — which is
+family-owned knowledge that the shared signature does not have to express. `Molecule::pushout`
+therefore reads as six identical `glue(..)?.into_entries()` calls, replacing about thirty lines of
+stereo-specific inline reconstruction. This is the consolidation S4 was expected to perform,
+arriving early because the type change forced it.
+
+`Molecule::try_from_entries` now routes all six families through their own constructors. It
+previously reimplemented five of the six conversions inline, so the family constructors were
+unreachable on the only construction path that mattered.
 
 **Change class:** additive types with a field-type change on `Molecule` (green).
 

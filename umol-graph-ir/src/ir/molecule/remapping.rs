@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use umol_graph_core::{EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Remapping};
+use umol_graph_core::{EdgeId, Graph, NodeId, Remapping};
 
 use super::super::aromatic::AromaticSystems;
 use super::super::dative::DativeBonds;
 use super::super::multicenter::MulticenterBonds;
+use super::super::noncovalent::NoncovalentBonds;
+use super::super::stereo::{StereoAtoms, StereoBonds};
 use super::Molecule;
 use crate::ir::{Constraints, MoleculeCorrespondence};
 
@@ -159,7 +161,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let noncovalent_bonds = FixedRelationSet::new(reorder(
+        let noncovalent_bonds = NoncovalentBonds::new(reorder(
             self.noncovalent_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -170,7 +172,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_atoms = FixedVarBirelationSet::new(reorder(
+        let stereo_atoms = StereoAtoms::new(reorder(
             self.stereo_atoms.remap(&graph_remapping).into_entries(),
             correspondence.stereo_atoms().right_count(),
             correspondence
@@ -179,7 +181,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_bonds = FixedVarBirelationSet::new(reorder(
+        let stereo_bonds = StereoBonds::new(reorder(
             self.stereo_bonds.remap(&graph_remapping).into_entries(),
             correspondence.stereo_bonds().right_count(),
             correspondence
@@ -202,9 +204,9 @@ impl Molecule {
             dative_bonds,
             aromatic_systems,
             multicenter_bonds,
-            Arc::new(noncovalent_bonds).into(),
-            Arc::new(stereo_atoms).into(),
-            Arc::new(stereo_bonds).into(),
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
             constraints,
         ))
     }

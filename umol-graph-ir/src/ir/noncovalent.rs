@@ -4,119 +4,142 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, GraphCompaction, NodeId, ParticipantPosition, RelationData,
-    RelationId, RelationPushout, Remapping, Unordered,
+    FixedRelationSet, NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::error::{Contradiction, NoJoin};
+use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, Equiv, Lattice, Normalize};
 
-/// The molecule's noncovalent bonds. The atom pair bears the frame; the payload is frame-invariant. There is no site.
+/// The molecule's noncovalent bonds.
 ///
-/// Owns the frame structure its storage shape cannot state: which factor bears the participant
-/// frame, and which, if any, is a site.
+/// The atom pair bears the participant frame, but [`NoncovalentBondForm`] carries no
+/// position-sensitive field, so a reordering of the pair leaves the attributes unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>);
 
-impl From<Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>> for NoncovalentBonds {
-    fn from(set: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>) -> Self {
-        Self(set)
-    }
-}
-
 impl NoncovalentBonds {
-    pub fn new(entries: Vec<([NodeId; 2], NoncovalentBondForm)>) -> Self {
-        Self(Arc::new(FixedRelationSet::new(entries)))
-    }
-
-    pub fn participants(&self, id: RelationId) -> &[NodeId; 2] {
-        self.0.participants(id)
-    }
-
-    pub fn find_by_participants(&self, query: &[NodeId]) -> Option<RelationId> {
-        self.0.find_by_participants(query)
-    }
-
-    pub fn participant_permutation(
-        &self,
-        id: RelationId,
-        query: &[NodeId],
-    ) -> Option<Vec<ParticipantPosition>> {
-        self.0.participant_permutation(id, query)
-    }
-
-    pub fn pushout(
-        &self,
-        right: &Self,
-        combine: impl FnMut(&NoncovalentBondForm, &NoncovalentBondForm) -> Option<NoncovalentBondForm>,
-    ) -> Option<RelationPushout<Self>> {
-        self.0
-            .pushout(&right.0, combine)
-            .map(|pushout| RelationPushout {
-                object: Self(Arc::new(pushout.object)),
-                left: pushout.left,
-                right: pushout.right,
-            })
+    pub fn new(entries: Vec<(AtomId, AtomId, NoncovalentBondForm)>) -> Self {
+        Self(Arc::new(FixedRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(first, second, attributes)| {
+                    ([NodeId::from(first), NodeId::from(second)], attributes)
+                })
+                .collect(),
+        )))
     }
 
     pub fn count(&self) -> usize {
         self.0.count()
     }
 
-    pub fn contains(&self, id: RelationId) -> bool {
-        self.0.contains(id)
+    pub fn contains(&self, id: NoncovalentBondId) -> bool {
+        self.0.contains(RelationId::from(id))
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
-        self.0.relation_ids()
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
+        self.0.relation_ids().map(NoncovalentBondId::from)
     }
 
-    pub fn data(&self, id: RelationId) -> &NoncovalentBondForm {
-        self.0.data(id)
+    /// The bonded pair of `id`, in its stored frame.
+    pub fn atoms(&self, id: NoncovalentBondId) -> [AtomId; 2] {
+        self.0.participants(RelationId::from(id)).map(AtomId::from)
     }
 
-    pub fn data_mut(&mut self, id: RelationId) -> &mut NoncovalentBondForm {
-        Arc::make_mut(&mut self.0).data_mut(id)
+    pub fn attributes(&self, id: NoncovalentBondId) -> &NoncovalentBondForm {
+        self.0.data(RelationId::from(id))
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
-        Arc::make_mut(&mut self.0).data_iter_mut()
+    pub fn attributes_mut(&mut self, id: NoncovalentBondId) -> &mut NoncovalentBondForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.0.incident(node)
+    /// Ids of the noncovalent bonds `atom` takes part in. Integrity rejects a parallel pair, so an
+    /// atom pairs at most once with any given partner but may bond several partners.
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + '_ {
+        self.0
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&id| NoncovalentBondId::from(id))
     }
 
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.0.incident_edge(edge)
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.0.has_incident(node)
-    }
-
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.0.has_incident_edge(edge)
-    }
-
-    pub fn into_entries(self) -> Vec<([NodeId; 2], NoncovalentBondForm)> {
+    pub fn into_entries(self) -> Vec<(AtomId, AtomId, NoncovalentBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
+            .into_iter()
+            .map(|([first, second], attributes)| {
+                (AtomId::from(first), AtomId::from(second), attributes)
+            })
+            .collect()
     }
 
-    pub fn remap(&self, remapping: &Remapping) -> Self {
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut NoncovalentBondForm> {
+        Arc::make_mut(&mut self.0).data_iter_mut()
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub fn compact(&self, compaction: &GraphCompaction) -> Self {
-        Self(Arc::new(self.0.compact(compaction)))
+    pub(crate) fn into_arc(
+        self,
+    ) -> Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> {
+        self.0
     }
 
-    pub fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> {
+    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding bonds meet,
+    /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
+    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
+            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .map(|merged| Self(Arc::new(merged.object)))
+    }
+
+    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
+    /// a noncovalent bond is its unordered atom pair.
+    pub(crate) fn find_by_participants(
+        &self,
+        first: AtomId,
+        second: AtomId,
+    ) -> Option<NoncovalentBondId> {
+        self.0
+            .find_by_participants(&[NodeId::from(first), NodeId::from(second)])
+            .map(NoncovalentBondId::from)
+    }
+
+    /// Removed by S4e, which moves frame alignment onto `reframe_to`.
+    pub(crate) fn participant_permutation(
+        &self,
+        id: NoncovalentBondId,
+        atoms: &[AtomId],
+    ) -> Option<Vec<ParticipantPosition>> {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.participant_permutation(RelationId::from(id), &query)
+    }
+}
+
+impl From<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> for NoncovalentBonds {
+    fn from(set: FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>) -> Self {
+        Self(Arc::new(set))
+    }
+}
+
+impl From<Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>> for NoncovalentBonds {
+    fn from(set: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>) -> Self {
+        Self(set)
     }
 }
 

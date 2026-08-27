@@ -2,8 +2,6 @@
 
 use std::collections::HashSet;
 
-use umol_graph_core::{NodeId, RelationId};
-
 use super::super::constraint::{
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, NoncovalentBondConstraintsForm,
 };
@@ -34,19 +32,17 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
-        self.noncovalent_bonds
-            .relation_ids()
-            .map(NoncovalentBondId::from)
+        self.noncovalent_bonds.ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = NoncovalentBondView<'a>> {
         let molecule = self.molecule;
         let set = self.noncovalent_bonds;
-        set.relation_ids().map(move |rid| NoncovalentBondView {
-            id: NoncovalentBondId::from(rid),
-            attributes: set.data(rid),
+        set.ids().map(move |id| NoncovalentBondView {
+            id,
+            attributes: set.attributes(id),
             atoms: {
-                let parts = set.participants(rid);
+                let parts = set.atoms(id);
                 [parts[0], parts[1]]
             },
             molecule,
@@ -54,18 +50,17 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     pub fn contains(&self, id: NoncovalentBondId) -> bool {
-        self.noncovalent_bonds.contains(RelationId::from(id))
+        self.noncovalent_bonds.contains(id)
     }
 
     pub fn get(&self, id: NoncovalentBondId) -> Option<NoncovalentBondView<'a>> {
         if !self.contains(id) {
             return None;
         }
-        let rid = RelationId::from(id);
-        let parts = self.noncovalent_bonds.participants(rid);
+        let parts = self.noncovalent_bonds.atoms(id);
         Some(NoncovalentBondView {
             id,
-            attributes: self.noncovalent_bonds.data(rid),
+            attributes: self.noncovalent_bonds.attributes(id),
             atoms: [parts[0], parts[1]],
             molecule: self.molecule,
         })
@@ -76,15 +71,12 @@ impl<'a> NoncovalentBondViews<'a> {
         &self,
         atom: AtomId,
     ) -> impl ExactSizeIterator<Item = NoncovalentBondId> + 'a {
-        self.noncovalent_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| NoncovalentBondId::from(rid))
+        self.noncovalent_bonds.incident_ids(atom)
     }
 
     /// Whether any noncovalent bond is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.noncovalent_bonds.has_incident(NodeId::from(atom))
+        self.noncovalent_bonds.has_incident(atom)
     }
 
     /// Views of noncovalent bonds incident on `atom`.
@@ -95,11 +87,10 @@ impl<'a> NoncovalentBondViews<'a> {
         let molecule = self.molecule;
         let set = self.noncovalent_bonds;
         self.incident_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            let parts = set.participants(rid);
+            let parts = set.atoms(id);
             NoncovalentBondView {
                 id,
-                attributes: set.data(rid),
+                attributes: set.attributes(id),
                 atoms: [parts[0], parts[1]],
                 molecule,
             }
@@ -108,9 +99,7 @@ impl<'a> NoncovalentBondViews<'a> {
 
     /// Id of the noncovalent bond between `a` and `b`, if any.
     pub fn of_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
-        self.noncovalent_bonds
-            .find_by_participants(&[NodeId::from(first), NodeId::from(second)])
-            .map(NoncovalentBondId::from)
+        self.noncovalent_bonds.find_by_participants(first, second)
     }
 
     /// View of the noncovalent bond between `first` and `second`, if any.
@@ -124,16 +113,15 @@ impl<'a> NoncovalentBondViews<'a> {
 
     /// Ids of noncovalent bonds whose endpoints both lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<NoncovalentBondId> {
-        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        let set: HashSet<AtomId> = atoms.iter().copied().collect();
         self.noncovalent_bonds
-            .relation_ids()
-            .filter(|&rid| {
+            .ids()
+            .filter(|&id| {
                 self.noncovalent_bonds
-                    .participants(rid)
+                    .atoms(id)
                     .iter()
-                    .all(|p| set.contains(p))
+                    .all(|atom| set.contains(atom))
             })
-            .map(NoncovalentBondId::from)
             .collect()
     }
 
@@ -154,7 +142,7 @@ impl<'a> NoncovalentBondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct NoncovalentBondView<'a> {
     pub id: NoncovalentBondId,
-    atoms: [NodeId; 2],
+    atoms: [AtomId; 2],
     pub attributes: &'a NoncovalentBondForm,
     molecule: &'a Molecule,
 }
@@ -175,7 +163,7 @@ impl<'a> NoncovalentBondView<'a> {
 
     /// The two atom ids in this noncovalent interaction.
     pub fn atom_ids(&self) -> [AtomId; 2] {
-        self.atoms.map(AtomId::from)
+        self.atoms
     }
 
     /// Views of the two atoms in this noncovalent interaction.

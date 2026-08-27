@@ -11,8 +11,7 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, RelationId,
-    RelationParticipant, Remapping, UnionFind, VarRelationSet,
+    Correspondence, EdgeId, Graph, NodeId, RelationId, RelationParticipant, Remapping, UnionFind,
 };
 use umol_perm::Permutation;
 
@@ -355,59 +354,16 @@ impl Molecule {
         let bond_data: Vec<BondForm> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
-        let dative_bonds = FixedVarBirelationSet::new(
-            dative
-                .into_iter()
-                .map(|(donors, acceptor, d)| {
-                    (
-                        [NodeId::from(acceptor)],
-                        donors.into_iter().map(NodeId::from).collect(),
-                        d,
-                    )
-                })
-                .collect(),
-        );
-
-        let aromatic_systems = AromaticSystems::new(aromatic);
-
-        let multicenter_bonds = VarRelationSet::new(
-            multicenter
-                .into_iter()
-                .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
-                .collect(),
-        );
-
-        let noncovalent_bonds = FixedRelationSet::new(
-            noncovalent
-                .into_iter()
-                .map(|(a, b, d)| ([NodeId::from(a), NodeId::from(b)], d))
-                .collect(),
-        );
-
-        let stereo_atoms = FixedVarBirelationSet::new(
-            stereo_atoms
-                .into_iter()
-                .map(|(site, ligands, d)| ([NodeId::from(site)], ligands, d))
-                .collect(),
-        );
-
-        let stereo_bonds = FixedVarBirelationSet::new(
-            stereo_bonds
-                .into_iter()
-                .map(|(site, ligands, d)| ([EdgeId::from(site)], ligands, d))
-                .collect(),
-        );
-
         let molecule = Self {
             graph,
             atoms: Arc::new(atoms),
             bonds: Arc::new(bond_data),
-            dative_bonds: Arc::new(dative_bonds).into(),
-            aromatic_systems,
-            multicenter_bonds: Arc::new(multicenter_bonds).into(),
-            noncovalent_bonds: Arc::new(noncovalent_bonds).into(),
-            stereo_atoms: Arc::new(stereo_atoms).into(),
-            stereo_bonds: Arc::new(stereo_bonds).into(),
+            dative_bonds: DativeBonds::new(dative),
+            aromatic_systems: AromaticSystems::new(aromatic),
+            multicenter_bonds: MulticenterBonds::new(multicenter),
+            noncovalent_bonds: NoncovalentBonds::new(noncovalent),
+            stereo_atoms: StereoAtoms::new(stereo_atoms),
+            stereo_bonds: StereoBonds::new(stereo_bonds),
             constraints,
         };
         molecule.check_integrity()?;
@@ -514,34 +470,34 @@ impl Molecule {
                 return false;
             }
         }
-        for id in self.noncovalent_bonds.relation_ids() {
-            if self.noncovalent_bonds.participants(id) != other.noncovalent_bonds.participants(id)
+        for id in self.noncovalent_bonds.ids() {
+            if self.noncovalent_bonds.atoms(id) != other.noncovalent_bonds.atoms(id)
                 || !self
                     .noncovalent_bonds
-                    .data(id)
-                    .equiv(other.noncovalent_bonds.data(id))
+                    .attributes(id)
+                    .equiv(other.noncovalent_bonds.attributes(id))
             {
                 return false;
             }
         }
-        for id in self.stereo_atoms.relation_ids() {
-            if self.stereo_atoms.participants_1(id) != other.stereo_atoms.participants_1(id)
-                || self.stereo_atoms.participants_2(id) != other.stereo_atoms.participants_2(id)
+        for id in self.stereo_atoms.ids() {
+            if self.stereo_atoms.site(id) != other.stereo_atoms.site(id)
+                || self.stereo_atoms.ligands(id) != other.stereo_atoms.ligands(id)
                 || !self
                     .stereo_atoms
-                    .data(id)
-                    .equiv(other.stereo_atoms.data(id))
+                    .attributes(id)
+                    .equiv(other.stereo_atoms.attributes(id))
             {
                 return false;
             }
         }
-        for id in self.stereo_bonds.relation_ids() {
-            if self.stereo_bonds.participants_1(id) != other.stereo_bonds.participants_1(id)
-                || self.stereo_bonds.participants_2(id) != other.stereo_bonds.participants_2(id)
+        for id in self.stereo_bonds.ids() {
+            if self.stereo_bonds.site(id) != other.stereo_bonds.site(id)
+                || self.stereo_bonds.ligands(id) != other.stereo_bonds.ligands(id)
                 || !self
                     .stereo_bonds
-                    .data(id)
-                    .equiv(other.stereo_bonds.data(id))
+                    .attributes(id)
+                    .equiv(other.stereo_bonds.attributes(id))
             {
                 return false;
             }
@@ -752,30 +708,23 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
+            let mapped: Option<Vec<AtomId>> = self
                 .noncovalent_bonds
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
+                .atoms(left)
+                .into_iter()
+                .map(|atom| correspondence.atoms().right_of(atom))
                 .collect();
-            let Some(order) = mapped.and_then(|participants| {
+            let Some(order) = mapped.and_then(|atoms| {
                 other
                     .noncovalent_bonds
-                    .participant_permutation(right_id, &participants)
+                    .participant_permutation(right, &atoms)
             }) else {
                 return false;
             };
             if !self
                 .noncovalent_bonds
-                .data(left_id)
-                .equiv_under(other.noncovalent_bonds.data(right_id), &order)
+                .attributes(left)
+                .equiv_under(other.noncovalent_bonds.attributes(right), &order)
             {
                 return false;
             }
@@ -791,22 +740,12 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_site: Option<Vec<NodeId>> = self
-                .stereo_atoms
-                .participants_1(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
+            let mapped_site = correspondence
+                .atoms()
+                .right_of(self.stereo_atoms.site(left));
             let mapped_ligands: Option<Vec<StereoLigand>> = self
                 .stereo_atoms
-                .participants_2(left_id)
+                .ligands(left)
                 .iter()
                 .map(|ligand| {
                     correspondence
@@ -818,32 +757,32 @@ impl Molecule {
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
                 return false;
             };
-            if mapped_site != other.stereo_atoms.participants_1(right_id) {
+            if mapped_site != other.stereo_atoms.site(right) {
                 return false;
             }
-            if mapped_ligands == other.stereo_atoms.participants_2(right_id)
+            if mapped_ligands == other.stereo_atoms.ligands(right)
                 && self
                     .stereo_atoms
-                    .data(left_id)
-                    .equiv(other.stereo_atoms.data(right_id))
+                    .attributes(left)
+                    .equiv(other.stereo_atoms.attributes(right))
             {
                 continue;
             }
             if mapped_ligands.len() > 6 {
                 return false;
             }
-            let frames = Permutation::between_all(
-                &mapped_ligands,
-                other.stereo_atoms.participants_2(right_id),
-            )
-            .into_iter()
-            .filter(|&permutation| {
-                self.stereo_atoms
-                    .data(left_id)
-                    .transform_frame_by(permutation)
-                    .is_some_and(|attributes| attributes.equiv(other.stereo_atoms.data(right_id)))
-            })
-            .collect::<Vec<_>>();
+            let frames =
+                Permutation::between_all(&mapped_ligands, other.stereo_atoms.ligands(right))
+                    .into_iter()
+                    .filter(|&permutation| {
+                        self.stereo_atoms
+                            .attributes(left)
+                            .transform_frame_by(permutation)
+                            .is_some_and(|attributes| {
+                                attributes.equiv(other.stereo_atoms.attributes(right))
+                            })
+                    })
+                    .collect::<Vec<_>>();
             if frames.is_empty() {
                 return false;
             }
@@ -856,22 +795,12 @@ impl Molecule {
             {
                 return false;
             }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_site: Option<Vec<EdgeId>> = self
-                .stereo_bonds
-                .participants_1(left_id)
-                .iter()
-                .map(|&bond| {
-                    correspondence
-                        .bonds()
-                        .right_of(BondId::from(bond))
-                        .map(EdgeId::from)
-                })
-                .collect();
+            let mapped_site = correspondence
+                .bonds()
+                .right_of(self.stereo_bonds.site(left));
             let mapped_ligands: Option<Vec<StereoLigand>> = self
                 .stereo_bonds
-                .participants_2(left_id)
+                .ligands(left)
                 .iter()
                 .map(|ligand| {
                     correspondence
@@ -883,32 +812,32 @@ impl Molecule {
             let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
                 return false;
             };
-            if mapped_site != other.stereo_bonds.participants_1(right_id) {
+            if mapped_site != other.stereo_bonds.site(right) {
                 return false;
             }
-            if mapped_ligands == other.stereo_bonds.participants_2(right_id)
+            if mapped_ligands == other.stereo_bonds.ligands(right)
                 && self
                     .stereo_bonds
-                    .data(left_id)
-                    .equiv(other.stereo_bonds.data(right_id))
+                    .attributes(left)
+                    .equiv(other.stereo_bonds.attributes(right))
             {
                 continue;
             }
             if mapped_ligands.len() > 6 {
                 return false;
             }
-            let frames = Permutation::between_all(
-                &mapped_ligands,
-                other.stereo_bonds.participants_2(right_id),
-            )
-            .into_iter()
-            .filter(|&permutation| {
-                self.stereo_bonds
-                    .data(left_id)
-                    .transform_frame_by(permutation)
-                    .is_some_and(|attributes| attributes.equiv(other.stereo_bonds.data(right_id)))
-            })
-            .collect::<Vec<_>>();
+            let frames =
+                Permutation::between_all(&mapped_ligands, other.stereo_bonds.ligands(right))
+                    .into_iter()
+                    .filter(|&permutation| {
+                        self.stereo_bonds
+                            .attributes(left)
+                            .transform_frame_by(permutation)
+                            .is_some_and(|attributes| {
+                                attributes.equiv(other.stereo_bonds.attributes(right))
+                            })
+                    })
+                    .collect::<Vec<_>>();
             if frames.is_empty() {
                 return false;
             }
@@ -1204,16 +1133,16 @@ impl Molecule {
                 .all(|id| self.multicenter_bonds.attributes(id).is_concrete())
             && self
                 .noncovalent_bonds
-                .relation_ids()
-                .all(|id| self.noncovalent_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.noncovalent_bonds.attributes(id).is_concrete())
             && self
                 .stereo_atoms
-                .relation_ids()
-                .all(|id| self.stereo_atoms.data(id).is_concrete())
+                .ids()
+                .all(|id| self.stereo_atoms.attributes(id).is_concrete())
             && self
                 .stereo_bonds
-                .relation_ids()
-                .all(|id| self.stereo_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.stereo_bonds.attributes(id).is_concrete())
     }
 
     /// Rings selected by `model` and computed using `config`.
@@ -1312,9 +1241,8 @@ impl Molecule {
     }
 
     pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let atoms = (*self.noncovalent_bonds.participants(rid)).map(AtomId::from);
-        let attributes = self.noncovalent_bonds.data_mut(rid);
+        let atoms = self.noncovalent_bonds.atoms(id);
+        let attributes = self.noncovalent_bonds.attributes_mut(id);
         NoncovalentBondViewMut {
             id,
             atoms,
@@ -1327,16 +1255,15 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
     ) {
-        for noncovalent_bond in self.noncovalent_bonds.data_iter_mut() {
+        for noncovalent_bond in self.noncovalent_bonds.attributes_iter_mut() {
             *noncovalent_bond = f(mem::take(noncovalent_bond));
         }
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
-        let rid = RelationId::from(id);
-        let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
-        let ligands = self.stereo_atoms.participants_2(rid).to_vec();
-        let attributes = self.stereo_atoms.data_mut(rid);
+        let site = self.stereo_atoms.site(id);
+        let ligands = self.stereo_atoms.ligands(id).to_vec();
+        let attributes = self.stereo_atoms.attributes_mut(id);
         StereoAtomViewMut {
             id,
             site,
@@ -1347,16 +1274,15 @@ impl Molecule {
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
     pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm) {
-        for stereo_atom in self.stereo_atoms.data_iter_mut() {
+        for stereo_atom in self.stereo_atoms.attributes_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
     }
 
     pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let site = BondId::from(self.stereo_bonds.participants_1(rid)[0]);
-        let ligands = self.stereo_bonds.participants_2(rid).to_vec();
-        let attributes = self.stereo_bonds.data_mut(rid);
+        let site = self.stereo_bonds.site(id);
+        let ligands = self.stereo_bonds.ligands(id).to_vec();
+        let attributes = self.stereo_bonds.attributes_mut(id);
         StereoBondViewMut {
             id,
             site,
@@ -1367,7 +1293,7 @@ impl Molecule {
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
     pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondForm) -> StereoBondForm) {
-        for stereo_bond in self.stereo_bonds.data_iter_mut() {
+        for stereo_bond in self.stereo_bonds.attributes_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }
     }
@@ -1405,16 +1331,16 @@ impl Molecule {
                 .any(|id| !self.multicenter_bonds.attributes(id).constraints.is_empty())
             || self
                 .noncovalent_bonds
-                .relation_ids()
-                .any(|id| !self.noncovalent_bonds.data(id).constraints.is_empty())
+                .ids()
+                .any(|id| !self.noncovalent_bonds.attributes(id).constraints.is_empty())
             || self
                 .stereo_atoms
-                .relation_ids()
-                .any(|id| !self.stereo_atoms.data(id).constraints.is_empty())
+                .ids()
+                .any(|id| !self.stereo_atoms.attributes(id).constraints.is_empty())
             || self
                 .stereo_bonds
-                .relation_ids()
-                .any(|id| !self.stereo_bonds.data(id).constraints.is_empty());
+                .ids()
+                .any(|id| !self.stereo_bonds.attributes(id).constraints.is_empty());
 
         if has_inline_constraints || !self.constraints.is_empty() {
             DescriptionLevel::Full
@@ -1833,30 +1759,33 @@ impl Molecule {
                         bond.attributes.clone(),
                     )
                 }));
-            for id in molecule.stereo_atoms.relation_ids() {
-                let site = shift_atom(AtomId::from(molecule.stereo_atoms.participants_1(id)[0]));
+            for id in molecule.stereo_atoms.ids() {
+                let site = shift_atom(molecule.stereo_atoms.site(id));
                 let ligands = molecule
                     .stereo_atoms
-                    .participants_2(id)
+                    .ligands(id)
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                entries
-                    .stereo_atoms
-                    .push((site, ligands, molecule.stereo_atoms.data(id).clone()));
+                entries.stereo_atoms.push((
+                    site,
+                    ligands,
+                    molecule.stereo_atoms.attributes(id).clone(),
+                ));
             }
-            for id in molecule.stereo_bonds.relation_ids() {
-                let site =
-                    BondId(molecule.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+            for id in molecule.stereo_bonds.ids() {
+                let site = BondId(molecule.stereo_bonds.site(id).0 + bond_offset as u32);
                 let ligands = molecule
                     .stereo_bonds
-                    .participants_2(id)
+                    .ligands(id)
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                entries
-                    .stereo_bonds
-                    .push((site, ligands, molecule.stereo_bonds.data(id).clone()));
+                entries.stereo_bonds.push((
+                    site,
+                    ligands,
+                    molecule.stereo_bonds.attributes(id).clone(),
+                ));
             }
 
             if !molecule.constraints.is_empty() {
@@ -2011,25 +1940,25 @@ impl Molecule {
                 .map(|index| EdgeId((bond_offset + index) as u32))
                 .collect(),
         );
-        for id in other.stereo_atoms.relation_ids() {
-            let site = shift_atom(AtomId::from(other.stereo_atoms.participants_1(id)[0]));
+        for id in other.stereo_atoms.ids() {
+            let site = shift_atom(other.stereo_atoms.site(id));
             let ligands = other
                 .stereo_atoms
-                .participants_2(id)
+                .ligands(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_atom(site, ligands, other.stereo_atoms.data(id).clone());
+            editor.add_stereo_atom(site, ligands, other.stereo_atoms.attributes(id).clone());
         }
-        for id in other.stereo_bonds.relation_ids() {
-            let site = BondId(other.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+        for id in other.stereo_bonds.ids() {
+            let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
             let ligands = other
                 .stereo_bonds
-                .participants_2(id)
+                .ligands(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_bond(site, ligands, other.stereo_bonds.data(id).clone());
+            editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
         }
 
         if !other.constraints.is_empty() {
@@ -2120,18 +2049,16 @@ impl Molecule {
             let [a, b] = bond.atom_ids();
             uf.union(a.index(), b.index());
         }
-        for rid in self.stereo_atoms.relation_ids() {
-            let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
-            for ligand in self.stereo_atoms.participants_2(rid) {
+        for rid in self.stereo_atoms.ids() {
+            let site = self.stereo_atoms.site(rid);
+            for ligand in self.stereo_atoms.ligands(rid) {
                 uf.union(site.index(), ligand.atom_id.index());
             }
         }
-        for rid in self.stereo_bonds.relation_ids() {
-            let [a, b] = self
-                .bond(BondId(self.stereo_bonds.participants_1(rid)[0].0))
-                .atom_ids();
+        for rid in self.stereo_bonds.ids() {
+            let [a, b] = self.bond(BondId(self.stereo_bonds.site(rid).0)).atom_ids();
             uf.union(a.index(), b.index());
-            for ligand in self.stereo_bonds.participants_2(rid) {
+            for ligand in self.stereo_bonds.ligands(rid) {
                 uf.union(a.index(), ligand.atom_id.index());
             }
         }
@@ -2233,40 +2160,40 @@ impl Molecule {
                     }
                 }
                 let mut stereo_atom_pairs = Vec::new();
-                for rid in self.stereo_atoms.relation_ids() {
-                    let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+                for rid in self.stereo_atoms.ids() {
+                    let site = self.stereo_atoms.site(rid);
                     if component_of(site) == component {
                         let ligands: Vec<StereoLigand> = self
                             .stereo_atoms
-                            .participants_2(rid)
+                            .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.remap(&compaction))
                             .collect();
                         let added = editor.add_stereo_atom(
                             compact(site),
                             ligands,
-                            self.stereo_atoms.data(rid).clone(),
+                            self.stereo_atoms.attributes(rid).clone(),
                         );
-                        stereo_atom_pairs.push((added, StereoAtomId::from(rid)));
+                        stereo_atom_pairs.push((added, rid));
                     }
                 }
                 let mut stereo_bond_pairs = Vec::new();
-                for rid in self.stereo_bonds.relation_ids() {
-                    let bond = BondId(self.stereo_bonds.participants_1(rid)[0].0);
+                for rid in self.stereo_bonds.ids() {
+                    let bond = BondId(self.stereo_bonds.site(rid).0);
                     let [a, _] = self.bond(bond).atom_ids();
                     if component_of(a) == component {
                         let ligands: Vec<StereoLigand> = self
                             .stereo_bonds
-                            .participants_2(rid)
+                            .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.remap(&compaction))
                             .collect();
                         let added = editor.add_stereo_bond(
                             bond_compact[&bond],
                             ligands,
-                            self.stereo_bonds.data(rid).clone(),
+                            self.stereo_bonds.attributes(rid).clone(),
                         );
-                        stereo_bond_pairs.push((added, StereoBondId::from(rid)));
+                        stereo_bond_pairs.push((added, rid));
                     }
                 }
                 let entities = editor.build();
