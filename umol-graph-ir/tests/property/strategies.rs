@@ -2271,6 +2271,63 @@ pub(crate) fn molecule_with_constraints_strategy() -> impl Strategy<Value = Mole
     molecule_entries_with_constraints_strategy().prop_map(Molecule::from_entries)
 }
 
+/// A molecule bearing one tetrahedral stereo atom over four distinguishable ligands, paired with an
+/// admissible reframing of itself: the ligand frame is permuted by a nonidentity action of the
+/// kind's parent group, and the configuration and every frame-relative constraint are transported
+/// through that same action.
+///
+/// The two members therefore denote the same stereochemistry and differ only in stored participant
+/// frame. The action is guaranteed nonidentity and the ligands are distinguishable by element, so a
+/// property that cannot distinguish the two members is not exercising the frame domain at all.
+pub(crate) fn stereo_reframed_molecule_pair_strategy(
+) -> impl Strategy<Value = (Molecule, Molecule)> {
+    let kind = StereoKind::Tetrahedral;
+    (
+        0..kind.count() as u32,
+        stereo_atom_constraints_strategy(kind),
+        stereo_frame_permutation_strategy(kind)
+            .prop_filter("nonidentity frame action", move |permutation| {
+                *permutation != Permutation::identity(kind.degree())
+            }),
+    )
+        .prop_map(move |(coset, constraints, permutation)| {
+            let atoms = vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+                AtomForm::from_element(Element::I),
+            ];
+            let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                .collect();
+            let frame: Vec<StereoLigand> = (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect();
+            let form = StereoAtomForm {
+                configuration: StereoConfigurationForm::kinded(kind, coset),
+                constraints,
+            };
+            let reframed = form
+                .transform_frame_by(permutation)
+                .expect("a parent-group action of the kind's degree is admissible");
+
+            let left = Molecule::from_entries(MoleculeEntries {
+                atoms: atoms.clone(),
+                bonds: bonds.clone(),
+                stereo_atoms: vec![(AtomId(0), frame.clone(), form)],
+                ..Default::default()
+            });
+            let right = Molecule::from_entries(MoleculeEntries {
+                atoms,
+                bonds,
+                stereo_atoms: vec![(AtomId(0), permutation.act(&frame), reframed)],
+                ..Default::default()
+            });
+            (left, right)
+        })
+}
+
 pub(crate) fn molecule_dense_renumbering_strategy(
 ) -> impl Strategy<Value = (Molecule, MoleculeCorrespondence)> {
     molecule_with_constraints_strategy().prop_flat_map(|molecule| {

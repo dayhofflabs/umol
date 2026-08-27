@@ -141,6 +141,18 @@ proptest! {
     }
 
     #[test]
+    fn test_molecule_equiv_under_reframed(
+        (left, right) in stereo_reframed_molecule_pair_strategy(),
+    ) {
+        let correspondence = identity_correspondence(&left);
+
+        prop_assert_eq!(
+            left.equiv_under(&right, &correspondence),
+            left.equiv(&right),
+        );
+    }
+
+    #[test]
     fn test_molecule_equiv_under_symmetric_under_reverse(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
         change_mapped_atom in any::<bool>(),

@@ -99,6 +99,20 @@ proptest! {
     }
 
     #[test]
+    fn test_molecule_canonicalize_reframed(
+        (left, right) in stereo_reframed_molecule_pair_strategy(),
+    ) {
+        let context = context();
+
+        prop_assert_eq!(
+            right.clone().canonicalize(&context),
+            left.clone().canonicalize(&context),
+        );
+        prop_assert!(left.canonical_eq(&right, &context));
+        prop_assert_eq!(right.canonical_hash(&context), left.canonical_hash(&context));
+    }
+
+    #[test]
     fn test_molecule_canonical_eq(
         (molecule, renumbering) in molecule_dense_renumbering_strategy(),
     ) {
