@@ -100,7 +100,7 @@ impl<'a> AromaticSystemViews<'a> {
     /// Id of the aromatic system whose atom set equals `atoms`, if any.
     pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<AromaticSystemId> {
         let atoms: Vec<AtomId> = atoms.into_iter().collect();
-        self.aromatic_systems.find_by_participants(&atoms)
+        self.aromatic_systems.coincident_id(&atoms)
     }
 
     /// View of the aromatic system whose atom set equals `atoms`, if any.

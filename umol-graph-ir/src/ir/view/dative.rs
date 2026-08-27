@@ -98,7 +98,7 @@ impl<'a> DativeBondViews<'a> {
     /// Id of the dative bond with exactly this acceptor and donor set, if any. Per-factor: the
     /// donor/acceptor roles are matched, not the merged atom set.
     pub fn of_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
-        self.dative_bonds.find_by_participants(acceptor, donors)
+        self.dative_bonds.coincident_id(acceptor, donors)
     }
 
     /// View of the dative bond with exactly this acceptor and donor set, if any.

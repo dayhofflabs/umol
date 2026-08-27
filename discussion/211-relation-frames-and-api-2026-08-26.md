@@ -80,12 +80,22 @@ Both layers keep exactly one member, and they keep the same one.
 entity views and atom-constraint evaluation, and they are a `binary_search` where `incident` is two
 `partition_point` calls.
 
-`find_by_participants` and `participants_match` are **removed**. They conflate two operations whose
-keys differ: lookup, which names an entity by its constituents, and coincidence, which decides
-whether two entries from two sides denote the same relation. Neither key is derivable from a storage
-shape, for the same reason frame structure is not. Both move to the entity-family types, and
-graph-core keeps only the mechanical parts — `participants`, `incident`, `incident_edge`,
-`has_incident`, `has_incident_edge`.
+`find_by_participants` is **removed as a name**. It conflates two operations whose keys differ:
+lookup, which names an entity by its constituents, and coincidence, which decides whether two entries
+from two sides denote the same relation. They part on derivability.
+
+**Coincidence stays in graph-core**, as `coincident`. Its key is the full participant multiset, which
+every relation set already holds, so nothing family-specific enters. It is also required there:
+`pushout` and `pullback` join on it, and an operation those two are defined in terms of cannot be an
+implementation detail of a caller. `participants_match` is its mechanism and is retained. The six
+entity families expose it as `coincident_id`, in each one's own vocabulary, so a family-level caller
+reaches it without going through storage.
+
+**Lookup moves to the entity families.** Its key is the family's uniqueness key — any member atom for
+an aromatic system, the site for a stereo entity — which no storage shape can state, for the same
+reason frame structure is not derivable from one.
+
+Also renamed: `relation_ids` is `ids`. On a relation set the qualifier repeats the type.
 
 Aromatic and multicenter pushout is correct today only because construction sorted both sides into
 the same frame. Removing eager ordering without explicit transport would let `combine` meet
@@ -259,7 +269,7 @@ impl<P: RelationParticipant, D> VarRelationSet<P, D> {
 
     pub fn count(&self) -> usize;
     pub fn contains(&self, id: RelationId) -> bool;
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId>;
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId>;
     pub fn participants(&self, id: RelationId) -> &[P];
     pub fn data(&self, id: RelationId) -> &D;
     pub fn data_mut(&mut self, id: RelationId) -> &mut D;
@@ -317,7 +327,7 @@ source range and preserves them. `RelationParticipant::compact`, `uncompact`, an
 remain three distinct graph-id operations: `uncompact` exists for editor rollback and is not the
 inverse surface of relation-set `compact`.
 
-`count`, `contains`, `relation_ids`, `participants`, and `data` answer different direct collection
+`count`, `contains`, `ids`, `participants`, and `data` answer different direct collection
 questions and are not redundant. No public relation-view layer is introduced to combine them, and no
 entry-view wrapper is introduced for the entry iterators; either would add indirection without
 resolving a semantic problem.
@@ -333,7 +343,7 @@ Removed, each because the redesign removes its referent:
 | `FactorOrdering`, `Ordered`, `Unordered` | encode a distinction that is false in both directions |
 | `RelationData`, `BiRelationData` | exist only to repair construction-time sorting |
 | `RelationEquiv`, `BiRelationEquiv` | subsumed by the form's `reframe_to` composed with `normalized_eq` |
-| `find_by_participants`, `participants_match` | conflate lookup with coincidence; neither key is derivable from a storage shape |
+| `find_by_participants` | conflates lookup with coincidence; the lookup key is not derivable from a storage shape, the coincidence key is and stays as `coincident` |
 | `FixedRelationSet::participant_permutation` and the two `MoleculeEditor` copies | three incompatible implementations of one concept |
 | `ParticipantAnchor`, `RelationParticipant::anchor` | a second routing protocol beside `refs`, which already carries the information |
 | `data_iter_mut` | becomes `iter_mut`, which also carries the id and participants |
@@ -1350,19 +1360,56 @@ retires the separate traversal.
 
 **Dependencies:** [dep: S2a]
 
-#### S4c — Pass entries to `pushout` and `pullback`
+#### S4c — Pass entries to `pushout` and `pullback` **Done**
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and
 `umol-graph-ir/src/ir/molecule/pushout.rs`.
 
-Change `combine` to receive both entries. Collapse `glue_var_overlays` and `stereo_glue_entries`
-into one per-family call that reframes the right entry into the retained left frame inside
-`combine`, using the bare act member `reframe_to`; the entries are already reduced, so the prefix
-member must not be used here. Document the retained-left-frame precondition.
+`combine` receives both entries as a tuple per side — `(&[P], &D)` on the single-factor shapes,
+`(&[L1], &[L2], &D)` on the birelations. No new types: the alternative was a named borrowed view per
+shape, which would have had to carry `participants_1` / `participants_2` as public field names,
+putting storage vocabulary into a public type.
+
+Each of the six family `glue` methods is now one `pushout` call that reframes the right entry into
+the retained left frame inside `combine`, using the bare act member `reframe_to`; the entries are
+already reduced, so the prefix member is not used here. The two stereo methods lose their pre-pass
+entirely — they had been finding the coincidence with `coincident_id`, reframing, rebuilding an
+entry vector, and then calling `pushout`, which looked the same coincidence up a second time.
+
+The retained-left-frame precondition is documented: the object keeps the left entry's participants,
+so `combine` must return a payload in the left frame. graph-core cannot enforce it without knowing
+what a frame is, which is the thing it must not know.
+
+The earlier text here named `glue_var_overlays` and `stereo_glue_entries`. Both were already deleted
+in S3a; what S4c collapses is the double lookup inside the six `glue` methods that replaced them.
 
 **Tests and evidence:** Cover a coincidence whose two sides carry different frames, a right-only
 entry, an inadmissible meet, and the existing pushout and pullback correspondence laws. Add an
 aromatic case with nonuniform electron counts supplied in different frames on the two sides.
+
+**Settled by measurement, not argument.** Three facts were recorded as graph-core tests rather than
+reasoned about, after several rounds of my asserting them wrongly:
+
+- An `Ordered` factor's two sides reach `combine` in **different frames today**, with no dependence
+  on S5b: `new` preserves the supplied order, so a coincidence found by multiset can hold two
+  presentations. This is why stereo `glue` already reframes by hand outside `pushout`. An
+  `Unordered` factor's sides arrive in one frame because `new` sorts them, so the same defect is
+  latent for the other four families until S5b.
+- Two right entries coinciding with one left entry is **rejected**, not merged: the right
+  coprojection must be injective and `Correspondence` asserts it.
+- Consequently `pushout` reading its output buffer and `pullback` reading the source were
+  indistinguishable. Both now read the source, so the two operations agree.
+
+**Deferred to measurement.** Two allocation costs, both with no semantic content, left for
+adversarial review to surface rather than pre-empted here:
+
+- `pushout` clones every payload of `self` to seed its output vector and then rebuilds the CSR and
+  incidence index through `new`, for an operation that changes no participant. The same
+  reconstruction cost as S3e's.
+- `glue`'s combine reframes into an owned value and then calls `meet`, which builds a third. The
+  `Lattice` in-place member is `narrow_from`, which cannot serve: its default calls `meet` anyway,
+  and its `bool` return collapses ⊥ into "unchanged", which `glue` must distinguish. Saving the
+  allocation would need a new member consuming an owned receiver and yielding `Option<Self>`.
 
 **Change class:** breaking signature change with caller migration (green within the stage).
 
@@ -1377,8 +1424,9 @@ Replace `participant_permutation` with the bare act member `reframe_to` in `Mole
 for the four distinct-participant families, retaining the stereo enumerate-and-filter path. Replace both private
 editor copies with the same operation. Delete `participant_permutation` from all five graph-core
 shapes, delete `RelationEquiv` and `BiRelationEquiv`, and delete `ParticipantAnchor` and
-`RelationParticipant::anchor`, and remove `find_by_participants` and `participants_match`, moving
-lookup and coincidence to the entity-family types keyed by their uniqueness keys.
+`RelationParticipant::anchor`. Lookup moves to the entity-family types keyed by their uniqueness
+keys; coincidence stays in graph-core as `coincident` and is exposed by the families as
+`coincident_id`, both landed with S4c.
 
 **Tests and evidence:** Retain every `equiv_under` case. Add a correspondence under which the mapped
 left frame differs from the stored right frame for each of the four families, and an editor

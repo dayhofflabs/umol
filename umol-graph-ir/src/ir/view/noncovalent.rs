@@ -99,7 +99,7 @@ impl<'a> NoncovalentBondViews<'a> {
 
     /// Id of the noncovalent bond between `a` and `b`, if any.
     pub fn of_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
-        self.noncovalent_bonds.find_by_participants(first, second)
+        self.noncovalent_bonds.coincident_id(first, second)
     }
 
     /// View of the noncovalent bond between `first` and `second`, if any.

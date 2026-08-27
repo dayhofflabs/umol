@@ -58,7 +58,7 @@ impl StereoAtoms {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoAtomId> {
-        self.0.relation_ids().map(StereoAtomId::from)
+        self.0.ids().map(StereoAtomId::from)
     }
 
     /// The atom `id` is borne by.
@@ -123,35 +123,24 @@ impl StereoAtoms {
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
-        let entries: Option<Vec<_>> = right
-            .remap(remapping)
-            .into_entries()
-            .into_iter()
-            .map(
-                |(site, frame, attributes)| match self.find_by_participants(site, &frame) {
-                    Some(hit) => {
-                        let target = self.ligands(hit).to_vec();
-                        let attributes = attributes.reframe_to(&frame, &target)?;
-                        Some((site, target, attributes))
-                    }
-                    None => Some((site, frame, attributes)),
+        self.0
+            .pushout(
+                &right.remap(remapping).0,
+                |(_, left_ligands, left), (_, right_ligands, right)| {
+                    right
+                        .clone()
+                        .reframe_to(right_ligands, left_ligands)?
+                        .meet(left)
                 },
             )
-            .collect();
-        self.0
-            .pushout(&Self::new(entries?).0, |a, b| a.meet(b))
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// a stereo atom is its site.
-    pub(crate) fn find_by_participants(
-        &self,
-        site: AtomId,
-        ligands: &[StereoLigand],
-    ) -> Option<StereoAtomId> {
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
         self.0
-            .find_by_participants(&[NodeId::from(site)], ligands)
+            .coincident(&[NodeId::from(site)], ligands)
             .map(StereoAtomId::from)
     }
 }
@@ -166,7 +155,7 @@ impl Reframe for StereoAtoms {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let attributes = reframed.data(id).clone().normalize()?;
             let action = attributes.select_frame(&stored).ok_or(Contradiction)?;
@@ -230,7 +219,7 @@ impl StereoBonds {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoBondId> {
-        self.0.relation_ids().map(StereoBondId::from)
+        self.0.ids().map(StereoBondId::from)
     }
 
     /// The bond `id` is borne by.
@@ -310,35 +299,24 @@ impl StereoBonds {
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
-        let entries: Option<Vec<_>> = right
-            .remap(remapping)
-            .into_entries()
-            .into_iter()
-            .map(
-                |(site, frame, attributes)| match self.find_by_participants(site, &frame) {
-                    Some(hit) => {
-                        let target = self.ligands(hit).to_vec();
-                        let attributes = attributes.reframe_to(&frame, &target)?;
-                        Some((site, target, attributes))
-                    }
-                    None => Some((site, frame, attributes)),
+        self.0
+            .pushout(
+                &right.remap(remapping).0,
+                |(_, left_ligands, left), (_, right_ligands, right)| {
+                    right
+                        .clone()
+                        .reframe_to(right_ligands, left_ligands)?
+                        .meet(left)
                 },
             )
-            .collect();
-        self.0
-            .pushout(&Self::new(entries?).0, |a, b| a.meet(b))
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// a stereo bond is its site.
-    pub(crate) fn find_by_participants(
-        &self,
-        site: BondId,
-        ligands: &[StereoLigand],
-    ) -> Option<StereoBondId> {
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
         self.0
-            .find_by_participants(&[EdgeId::from(site)], ligands)
+            .coincident(&[EdgeId::from(site)], ligands)
             .map(StereoBondId::from)
     }
 }
@@ -353,7 +331,7 @@ impl Reframe for StereoBonds {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let attributes = reframed.data(id).clone().normalize()?;
             let action = attributes.select_frame(&stored).ok_or(Contradiction)?;
@@ -422,7 +400,7 @@ impl StereoAtomSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoAtomId> {
-        self.0.relation_ids().map(StereoAtomId::from)
+        self.0.ids().map(StereoAtomId::from)
     }
 
     /// The atom `id` is borne by.
@@ -459,7 +437,7 @@ impl Reframe for StereoAtomSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let reduced = reframed
                 .data(id)
@@ -530,7 +508,7 @@ impl StereoBondSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoBondId> {
-        self.0.relation_ids().map(StereoBondId::from)
+        self.0.ids().map(StereoBondId::from)
     }
 
     /// The bond `id` is borne by.
@@ -567,7 +545,7 @@ impl Reframe for StereoBondSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let reduced = reframed
                 .data(id)
@@ -3156,7 +3134,7 @@ mod tests {
     #[case::axial_restricted_parent(StereoKind::Axial, 1u32,
         [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
         Permutation::from_image(&[2, 3, 0, 1]))]
-    fn test_stereo_atom_form_select_frame_repeated(
+    fn test_stereo_atom_form_select_frame_repeated_ligands(
         #[case] kind: StereoKind,
         #[case] coset: u32,
         #[case] frame: [StereoLigand; 4],
@@ -3189,7 +3167,7 @@ mod tests {
     #[case::one_on_each_endpoint(
         [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
         Permutation::from_image(&[1, 0, 2, 3]))]
-    fn test_stereo_bond_form_select_frame_repeated(
+    fn test_stereo_bond_form_select_frame_repeated_ligands(
         #[case] frame: [StereoLigand; 4],
         #[case] presentation: Permutation,
     ) {

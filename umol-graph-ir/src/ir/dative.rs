@@ -50,7 +50,7 @@ impl DativeBonds {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
-        self.0.relation_ids().map(DativeBondId::from)
+        self.0.ids().map(DativeBondId::from)
     }
 
     /// The atom accepting the donated pairs.
@@ -135,20 +135,19 @@ impl DativeBonds {
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .pushout(&right.remap(remapping).0, |(_, _, left), (_, _, right)| {
+                // The payload is frame-invariant, so the donor presentation cannot affect it.
+                right.clone().meet(left)
+            })
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// a dative bond is its acceptor and donor set.
-    pub(crate) fn find_by_participants(
-        &self,
-        acceptor: AtomId,
-        donors: &[AtomId],
-    ) -> Option<DativeBondId> {
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
         let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
         self.0
-            .find_by_participants(&[NodeId::from(acceptor)], &donors)
+            .coincident(&[NodeId::from(acceptor)], &donors)
             .map(DativeBondId::from)
     }
 
@@ -197,7 +196,7 @@ impl Reframe for DativeBonds {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants_2(id)
                 .iter()
@@ -269,7 +268,7 @@ impl DativeBondSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = DativeBondId> {
-        self.0.relation_ids().map(DativeBondId::from)
+        self.0.ids().map(DativeBondId::from)
     }
 
     /// The atom accepting the donated pairs. Not frame-bearing.
@@ -302,7 +301,7 @@ impl Reframe for DativeBondSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants_2(id)
                 .iter()

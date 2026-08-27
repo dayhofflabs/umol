@@ -44,7 +44,7 @@ impl AromaticSystems {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
-        self.0.relation_ids().map(AromaticSystemId::from)
+        self.0.ids().map(AromaticSystemId::from)
     }
 
     /// The atoms of `id`, in their stored frame.
@@ -113,17 +113,29 @@ impl AromaticSystems {
     /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .pushout(
+                &right.remap(remapping).0,
+                |(left_atoms, left), (right_atoms, right)| {
+                    let left_atoms: Vec<AtomId> =
+                        left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    let right_atoms: Vec<AtomId> =
+                        right_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    right
+                        .clone()
+                        .reframe_to(&right_atoms, &left_atoms)?
+                        .meet(left)
+                },
+            )
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// an aromatic system is any member atom.
-    pub(crate) fn find_by_participants(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+    /// Id of the system coinciding with `atoms` — the one whose atoms equal them as a multiset.
+    ///
+    /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
+    /// member atom, which names it from a part; this names it from the whole.
+    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0
-            .find_by_participants(&query)
-            .map(AromaticSystemId::from)
+        self.0.coincident(&query).map(AromaticSystemId::from)
     }
 
     /// Superseded once frame alignment moves onto `reframe_to`.
@@ -159,7 +171,7 @@ impl Reframe for AromaticSystems {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()
@@ -220,7 +232,7 @@ impl AromaticSystemSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
-        self.0.relation_ids().map(AromaticSystemId::from)
+        self.0.ids().map(AromaticSystemId::from)
     }
 
     /// The atoms of `id`, in their stored frame.
@@ -249,7 +261,7 @@ impl Reframe for AromaticSystemSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()
@@ -464,6 +476,65 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    /// A coincidence whose two sides hold the same atoms in different frames, with nonuniform
+    /// electron counts stating the same per-atom fact. The glue must carry the right vector into
+    /// the left frame before meeting; meeting the two vectors position-by-position without that
+    /// compares different atoms' counts and yields bottom.
+    ///
+    /// Both sides state 1 -> 20, 4 -> 30, 7 -> 10. The left frame is permuted apart from sorted
+    /// order, as the frame-preserving storage S5b introduces would leave it; the right stays sorted
+    /// because `remap` reconstructs it through `new`, which still sorts an `Unordered` factor.
+    #[rstest]
+    fn test_aromatic_systems_glue_differing_frames() {
+        let mut left = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        Arc::make_mut(&mut left.0).permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        // The permute moves participants and leaves the payload, so the left frame now reads
+        // 7 -> 20, 1 -> 30, 4 -> 10 positionally — which is a different fact from the right's.
+        Arc::make_mut(&mut left.0)
+            .iter_mut()
+            .for_each(|(_, _, attributes)| {
+                *attributes = AromaticSystemForm::from_electrons(vec![10, 20, 30])
+            });
+        assert_eq!(
+            left.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+            "left states 7 -> 10, 1 -> 20, 4 -> 30",
+        );
+
+        let right = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        assert_eq!(
+            right.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            "right states the same fact in sorted order",
+        );
+
+        let glued = left
+            .glue(
+                &right,
+                &Remapping::new((0..8).map(NodeId).collect(), vec![]),
+            )
+            .expect("the sides agree once the right vector is carried into the left frame");
+
+        assert_eq!(glued.count(), 1);
+        assert_eq!(
+            glued.attributes(AromaticSystemId(0)),
+            &AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        );
+    }
 
     /// Both sides of a `Modified` span are read against one participant list, so one action carries
     /// both. Selection never consults the payload here, so the two sides cannot disagree about it.

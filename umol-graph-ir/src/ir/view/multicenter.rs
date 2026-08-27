@@ -98,7 +98,7 @@ impl<'a> MulticenterBondViews<'a> {
     /// ID of the multicenter bond whose participant set equals `atoms`, if any.
     pub fn of_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<MulticenterBondId> {
         let atoms: Vec<AtomId> = atoms.into_iter().collect();
-        self.multicenter_bonds.find_by_participants(&atoms)
+        self.multicenter_bonds.coincident_id(&atoms)
     }
 
     /// View of the multicenter bond whose participant set equals `atoms`, if any.

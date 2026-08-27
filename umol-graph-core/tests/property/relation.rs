@@ -86,7 +86,7 @@ proptest! {
         let mut relations = FixedRelationSet::<NodeId, Unordered, TestData, 2>::new(entries);
         let prefix = prefix.min(count);
 
-        assert_relation_ids(relations.relation_ids(), count, prefix)?;
+        assert_relation_ids(relations.ids(), count, prefix)?;
         assert_data_iter_mut(
             relations.iter_mut().map(|(_, _, data)| data),
             count,
@@ -116,7 +116,7 @@ proptest! {
         let mut relations = VarRelationSet::<NodeId, Unordered, TestData>::new(entries);
         let prefix = prefix.min(count);
 
-        assert_relation_ids(relations.relation_ids(), count, prefix)?;
+        assert_relation_ids(relations.ids(), count, prefix)?;
         assert_data_iter_mut(
             relations.iter_mut().map(|(_, _, data)| data),
             count,
@@ -155,7 +155,7 @@ proptest! {
         >::new(entries);
         let prefix = prefix.min(count);
 
-        assert_relation_ids(relations.relation_ids(), count, prefix)?;
+        assert_relation_ids(relations.ids(), count, prefix)?;
         assert_data_iter_mut(
             relations.iter_mut().map(|(_, _, _, data)| data),
             count,
@@ -193,7 +193,7 @@ proptest! {
         >::new(entries);
         let prefix = prefix.min(count);
 
-        assert_relation_ids(relations.relation_ids(), count, prefix)?;
+        assert_relation_ids(relations.ids(), count, prefix)?;
         assert_data_iter_mut(
             relations.iter_mut().map(|(_, _, _, data)| data),
             count,
@@ -230,7 +230,7 @@ proptest! {
         >::new(entries);
         let prefix = prefix.min(count);
 
-        assert_relation_ids(relations.relation_ids(), count, prefix)?;
+        assert_relation_ids(relations.ids(), count, prefix)?;
         assert_data_iter_mut(
             relations.iter_mut().map(|(_, _, _, data)| data),
             count,

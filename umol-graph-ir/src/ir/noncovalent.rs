@@ -42,7 +42,7 @@ impl NoncovalentBonds {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
-        self.0.relation_ids().map(NoncovalentBondId::from)
+        self.0.ids().map(NoncovalentBondId::from)
     }
 
     /// The bonded pair of `id`, in its stored frame.
@@ -107,19 +107,18 @@ impl NoncovalentBonds {
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .pushout(&right.remap(remapping).0, |(_, left), (_, right)| {
+                // The payload is frame-invariant, so the pair's presentation cannot affect it.
+                right.clone().meet(left)
+            })
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// a noncovalent bond is its unordered atom pair.
-    pub(crate) fn find_by_participants(
-        &self,
-        first: AtomId,
-        second: AtomId,
-    ) -> Option<NoncovalentBondId> {
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
         self.0
-            .find_by_participants(&[NodeId::from(first), NodeId::from(second)])
+            .coincident(&[NodeId::from(first), NodeId::from(second)])
             .map(NoncovalentBondId::from)
     }
 
@@ -156,7 +155,7 @@ impl Reframe for NoncovalentBonds {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()
@@ -216,7 +215,7 @@ impl NoncovalentBondSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = NoncovalentBondId> {
-        self.0.relation_ids().map(NoncovalentBondId::from)
+        self.0.ids().map(NoncovalentBondId::from)
     }
 
     /// The two atoms of `id`, in their stored frame.
@@ -241,7 +240,7 @@ impl Reframe for NoncovalentBondSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()

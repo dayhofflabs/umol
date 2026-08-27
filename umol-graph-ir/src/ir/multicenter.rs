@@ -44,7 +44,7 @@ impl MulticenterBonds {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = MulticenterBondId> {
-        self.0.relation_ids().map(MulticenterBondId::from)
+        self.0.ids().map(MulticenterBondId::from)
     }
 
     /// The atoms of `id`, in their stored frame.
@@ -114,17 +114,27 @@ impl MulticenterBonds {
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |a, b| a.meet(b))
+            .pushout(
+                &right.remap(remapping).0,
+                |(left_atoms, left), (right_atoms, right)| {
+                    let left_atoms: Vec<AtomId> =
+                        left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    let right_atoms: Vec<AtomId> =
+                        right_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    right
+                        .clone()
+                        .reframe_to(&right_atoms, &left_atoms)?
+                        .meet(left)
+                },
+            )
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
-    /// Removed by the lookup relocation: replaced by `of_id` keyed on the uniqueness key, which for
-    /// a multicenter bond is its atom set.
-    pub(crate) fn find_by_participants(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
+    /// Id of the entity coinciding with these participants — the one whose participants equal
+    /// them as a multiset. The identity question, distinct from lookup.
+    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0
-            .find_by_participants(&query)
-            .map(MulticenterBondId::from)
+        self.0.coincident(&query).map(MulticenterBondId::from)
     }
 
     /// Superseded once frame alignment moves onto `reframe_to`.
@@ -160,7 +170,7 @@ impl Reframe for MulticenterBonds {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()
@@ -221,7 +231,7 @@ impl MulticenterBondSpans {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = MulticenterBondId> {
-        self.0.relation_ids().map(MulticenterBondId::from)
+        self.0.ids().map(MulticenterBondId::from)
     }
 
     /// The atoms of `id`, in their stored frame.
@@ -250,7 +260,7 @@ impl Reframe for MulticenterBondSpans {
     fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.relation_ids().collect::<Vec<_>>() {
+        for id in reframed.ids().collect::<Vec<_>>() {
             let stored: Vec<AtomId> = reframed
                 .participants(id)
                 .iter()

@@ -83,7 +83,7 @@ impl<'a> StereoAtomViews<'a> {
     /// Id of the stereo atom on `site` with exactly this ligand multiset, if any. Ligands are a
     /// multiset (virtual ligands repeat); their frame order is not matched.
     pub fn of_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
-        self.stereo_atoms.find_by_participants(site, ligands)
+        self.stereo_atoms.coincident_id(site, ligands)
     }
 
     /// Any stereo atom is incident on `atom` (site or ligand).
@@ -337,7 +337,7 @@ impl<'a> StereoBondViews<'a> {
     /// Id of the stereo bond on `site` with exactly this ligand multiset, if any. Ligands are a
     /// multiset (virtual ligands repeat); their frame order is not matched.
     pub fn of_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
-        self.stereo_bonds.find_by_participants(site, ligands)
+        self.stereo_bonds.coincident_id(site, ligands)
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = StereoBondView<'a>> {

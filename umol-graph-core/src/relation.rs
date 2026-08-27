@@ -420,7 +420,9 @@ where
     participants.iter().map(|&p| p.remap(remapping)).collect()
 }
 
-fn participants_are_covered_by<P>(participants: &[P], remapping: &Remapping) -> bool
+/// Whether every graph id these participants reference has an image under `remapping` — the
+/// precondition [`FixedRelationSet::try_remap`] and its peers check before relabelling.
+fn remappable_under<P>(participants: &[P], remapping: &Remapping) -> bool
 where
     P: RelationParticipant,
 {
@@ -434,16 +436,17 @@ where
     })
 }
 
-/// Multiset equality of a stored factor slice against a pre-sorted query — sort a copy of
-/// `stored` and compare (the stored `Ordered` frame is left intact). Matches on identity (the
-/// participant multiset), independent of the factor's ordering marker.
-fn participants_match<P: RelationParticipant>(stored: &[P], sorted_query: &[P]) -> bool {
-    if stored.len() != sorted_query.len() {
+/// Multiset equality of a relation's stored participants against `query`, which the caller has
+/// already sorted (hoisted out of its candidate scan). The stored frame is left intact.
+///
+/// Matches on identity — the participant multiset — independent of the factor's ordering marker.
+fn participants_match<P: RelationParticipant>(participants: &[P], query: &[P]) -> bool {
+    if participants.len() != query.len() {
         return false;
     }
-    let mut sorted_stored: Vec<P> = stored.to_vec();
-    sorted_stored.sort_unstable();
-    sorted_stored.as_slice() == sorted_query
+    let mut sorted: Vec<P> = participants.to_vec();
+    sorted.sort_unstable();
+    sorted == query
 }
 
 impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelationSet<P, O, D, N> {
@@ -537,9 +540,16 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         (self.participants(id).as_slice() == canonical.as_slice()).then_some(sigma)
     }
 
-    /// Id of the relation whose participants equal `query` as a multiset (order-independent),
-    /// if any. §4.1 uniqueness ⇒ at most one hit.
-    pub fn find_by_participants(&self, query: &[P]) -> Option<RelationId> {
+    /// Id of the relation coinciding with `query` — the one whose participants equal it as a
+    /// multiset, in any order.
+    ///
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    pub fn coincident(&self, query: &[P]) -> Option<RelationId> {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
         let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
@@ -552,7 +562,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
                 .iter()
                 .copied()
                 .find(|&id| matches(id)),
-            None => self.relation_ids().find(|&id| matches(id)),
+            None => self.ids().find(|&id| matches(id)),
         }
     }
 
@@ -576,7 +586,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -637,8 +647,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     where
         D: RelationData + Clone,
     {
-        self.relation_ids()
-            .all(|id| participants_are_covered_by(self.participants(id), remapping))
+        self.ids()
+            .all(|id| remappable_under(self.participants(id), remapping))
             .then(|| self.remap(remapping))
     }
 
@@ -651,21 +661,24 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     pub fn pushout(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
         D: RelationData + Clone,
     {
         let mut entries: Vec<([P; N], D)> = self
-            .relation_ids()
+            .ids()
             .map(|id| (*self.participants(id), self.data(id).clone()))
             .collect();
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
-        for id in right.relation_ids() {
-            match self.find_by_participants(right.participants(id)) {
+        for id in right.ids() {
+            match self.coincident(right.participants(id)) {
                 Some(hit) => {
-                    let merged = combine(&entries[hit.index()].1, right.data(id))?;
+                    let merged = combine(
+                        (self.participants(hit), self.data(hit)),
+                        (right.participants(id), right.data(id)),
+                    )?;
                     entries[hit.index()].1 = merged;
                     right_map.push(hit);
                 }
@@ -691,7 +704,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     pub fn pullback(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
         D: RelationData + Clone,
@@ -699,9 +712,12 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         let mut entries: Vec<([P; N], D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
-        for id in self.relation_ids() {
-            if let Some(hit) = right.find_by_participants(self.participants(id)) {
-                let merged = combine(self.data(id), right.data(hit))?;
+        for id in self.ids() {
+            if let Some(hit) = right.coincident(self.participants(id)) {
+                let merged = combine(
+                    (self.participants(id), self.data(id)),
+                    (right.participants(hit), right.data(hit)),
+                )?;
                 entries.push((*self.participants(id), merged));
                 left_images.push(id);
                 right_images.push(hit);
@@ -882,9 +898,16 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         (self.participants(id) == canonical.as_slice()).then_some(sigma)
     }
 
-    /// Id of the relation whose participants equal `query` as a multiset (order-independent),
-    /// if any. §4.1 uniqueness ⇒ at most one hit.
-    pub fn find_by_participants(&self, query: &[P]) -> Option<RelationId> {
+    /// Id of the relation coinciding with `query` — the one whose participants equal it as a
+    /// multiset, in any order.
+    ///
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    pub fn coincident(&self, query: &[P]) -> Option<RelationId> {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
         let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
@@ -897,7 +920,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
                 .iter()
                 .copied()
                 .find(|&id| matches(id)),
-            None => self.relation_ids().find(|&id| matches(id)),
+            None => self.ids().find(|&id| matches(id)),
         }
     }
 
@@ -921,7 +944,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -981,8 +1004,8 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     where
         D: RelationData + Clone,
     {
-        self.relation_ids()
-            .all(|id| participants_are_covered_by(self.participants(id), remapping))
+        self.ids()
+            .all(|id| remappable_under(self.participants(id), remapping))
             .then(|| self.remap(remapping))
     }
 
@@ -990,21 +1013,24 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     pub fn pushout(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
         D: RelationData + Clone,
     {
         let mut entries: Vec<(Vec<P>, D)> = self
-            .relation_ids()
+            .ids()
             .map(|id| (self.participants(id).to_vec(), self.data(id).clone()))
             .collect();
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
-        for id in right.relation_ids() {
-            match self.find_by_participants(right.participants(id)) {
+        for id in right.ids() {
+            match self.coincident(right.participants(id)) {
                 Some(hit) => {
-                    let merged = combine(&entries[hit.index()].1, right.data(id))?;
+                    let merged = combine(
+                        (self.participants(hit), self.data(hit)),
+                        (right.participants(id), right.data(id)),
+                    )?;
                     entries[hit.index()].1 = merged;
                     right_map.push(hit);
                 }
@@ -1027,7 +1053,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     pub fn pullback(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
         D: RelationData + Clone,
@@ -1035,9 +1061,12 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let mut entries: Vec<(Vec<P>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
-        for id in self.relation_ids() {
-            if let Some(hit) = right.find_by_participants(self.participants(id)) {
-                let merged = combine(self.data(id), right.data(hit))?;
+        for id in self.ids() {
+            if let Some(hit) = right.coincident(self.participants(id)) {
+                let merged = combine(
+                    (self.participants(id), self.data(id)),
+                    (right.participants(hit), right.data(hit)),
+                )?;
                 entries.push((self.participants(id).to_vec(), merged));
                 left_images.push(id);
                 right_images.push(hit);
@@ -1246,9 +1275,16 @@ where
         .then_some((s1, s2))
     }
 
-    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
-    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
-    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them
+    /// as multisets, in any order.
+    ///
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
@@ -1270,7 +1306,7 @@ where
                 .iter()
                 .copied()
                 .find(|&id| matches(id)),
-            None => self.relation_ids().find(|&id| matches(id)),
+            None => self.ids().find(|&id| matches(id)),
         }
     }
 
@@ -1294,7 +1330,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -1365,10 +1401,10 @@ where
     where
         D: BiRelationData + Clone,
     {
-        self.relation_ids()
+        self.ids()
             .all(|id| {
-                participants_are_covered_by(self.participants_1(id), remapping)
-                    && participants_are_covered_by(self.participants_2(id), remapping)
+                remappable_under(self.participants_1(id), remapping)
+                    && remappable_under(self.participants_2(id), remapping)
             })
             .then(|| self.remap(remapping))
     }
@@ -1378,13 +1414,13 @@ where
     pub fn pushout(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
         D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], [L2; N2], D)> = self
-            .relation_ids()
+            .ids()
             .map(|id| {
                 (
                     *self.participants_1(id),
@@ -1395,10 +1431,21 @@ where
             .collect();
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
-        for id in right.relation_ids() {
-            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+        for id in right.ids() {
+            match self.coincident(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
-                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    let merged = combine(
+                        (
+                            self.participants_1(hit),
+                            self.participants_2(hit),
+                            self.data(hit),
+                        ),
+                        (
+                            right.participants_1(id),
+                            right.participants_2(id),
+                            right.data(id),
+                        ),
+                    )?;
                     entries[hit.index()].2 = merged;
                     right_map.push(hit);
                 }
@@ -1425,7 +1472,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
         D: BiRelationData + Clone,
@@ -1433,11 +1480,20 @@ where
         let mut entries: Vec<([L1; N1], [L2; N2], D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
-        for id in self.relation_ids() {
-            if let Some(hit) =
-                right.find_by_participants(self.participants_1(id), self.participants_2(id))
-            {
-                let merged = combine(self.data(id), right.data(hit))?;
+        for id in self.ids() {
+            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+                let merged = combine(
+                    (
+                        self.participants_1(id),
+                        self.participants_2(id),
+                        self.data(id),
+                    ),
+                    (
+                        right.participants_1(hit),
+                        right.participants_2(hit),
+                        right.data(hit),
+                    ),
+                )?;
                 entries.push((*self.participants_1(id), *self.participants_2(id), merged));
                 left_images.push(id);
                 right_images.push(hit);
@@ -1683,9 +1739,16 @@ where
         .then_some((s1, s2))
     }
 
-    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
-    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
-    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them
+    /// as multisets, in any order.
+    ///
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
@@ -1707,7 +1770,7 @@ where
                 .iter()
                 .copied()
                 .find(|&id| matches(id)),
-            None => self.relation_ids().find(|&id| matches(id)),
+            None => self.ids().find(|&id| matches(id)),
         }
     }
 
@@ -1731,7 +1794,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -1802,10 +1865,10 @@ where
     where
         D: BiRelationData + Clone,
     {
-        self.relation_ids()
+        self.ids()
             .all(|id| {
-                participants_are_covered_by(self.participants_1(id), remapping)
-                    && participants_are_covered_by(self.participants_2(id), remapping)
+                remappable_under(self.participants_1(id), remapping)
+                    && remappable_under(self.participants_2(id), remapping)
             })
             .then(|| self.remap(remapping))
     }
@@ -1815,13 +1878,13 @@ where
     pub fn pushout(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
         D: BiRelationData + Clone,
     {
         let mut entries: Vec<([L1; N1], Vec<L2>, D)> = self
-            .relation_ids()
+            .ids()
             .map(|id| {
                 (
                     *self.participants_1(id),
@@ -1832,10 +1895,21 @@ where
             .collect();
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
-        for id in right.relation_ids() {
-            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+        for id in right.ids() {
+            match self.coincident(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
-                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    let merged = combine(
+                        (
+                            self.participants_1(hit),
+                            self.participants_2(hit),
+                            self.data(hit),
+                        ),
+                        (
+                            right.participants_1(id),
+                            right.participants_2(id),
+                            right.data(id),
+                        ),
+                    )?;
                     entries[hit.index()].2 = merged;
                     right_map.push(hit);
                 }
@@ -1862,7 +1936,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
         D: BiRelationData + Clone,
@@ -1870,11 +1944,20 @@ where
         let mut entries: Vec<([L1; N1], Vec<L2>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
-        for id in self.relation_ids() {
-            if let Some(hit) =
-                right.find_by_participants(self.participants_1(id), self.participants_2(id))
-            {
-                let merged = combine(self.data(id), right.data(hit))?;
+        for id in self.ids() {
+            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+                let merged = combine(
+                    (
+                        self.participants_1(id),
+                        self.participants_2(id),
+                        self.data(id),
+                    ),
+                    (
+                        right.participants_1(hit),
+                        right.participants_2(hit),
+                        right.data(hit),
+                    ),
+                )?;
                 entries.push((
                     *self.participants_1(id),
                     self.participants_2(id).to_vec(),
@@ -2126,9 +2209,16 @@ where
         .then_some((s1, s2))
     }
 
-    /// Id of the relation whose two factors equal `query_1` / `query_2` as multisets
-    /// (order-independent per factor), if any. §4.1 uniqueness ⇒ at most one hit.
-    pub fn find_by_participants(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    /// Id of the relation coinciding with `query_1` / `query_2` — the one whose factors equal them
+    /// as multisets, in any order.
+    ///
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
@@ -2150,7 +2240,7 @@ where
                 .iter()
                 .copied()
                 .find(|&id| matches(id)),
-            None => self.relation_ids().find(|&id| matches(id)),
+            None => self.ids().find(|&id| matches(id)),
         }
     }
 
@@ -2174,7 +2264,7 @@ where
         id.index() < self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
 
@@ -2241,10 +2331,10 @@ where
     where
         D: BiRelationData + Clone,
     {
-        self.relation_ids()
+        self.ids()
             .all(|id| {
-                participants_are_covered_by(self.participants_1(id), remapping)
-                    && participants_are_covered_by(self.participants_2(id), remapping)
+                remappable_under(self.participants_1(id), remapping)
+                    && remappable_under(self.participants_2(id), remapping)
             })
             .then(|| self.remap(remapping))
     }
@@ -2254,13 +2344,13 @@ where
     pub fn pushout(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
         D: BiRelationData + Clone,
     {
         let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = self
-            .relation_ids()
+            .ids()
             .map(|id| {
                 (
                     self.participants_1(id).to_vec(),
@@ -2271,10 +2361,21 @@ where
             .collect();
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
-        for id in right.relation_ids() {
-            match self.find_by_participants(right.participants_1(id), right.participants_2(id)) {
+        for id in right.ids() {
+            match self.coincident(right.participants_1(id), right.participants_2(id)) {
                 Some(hit) => {
-                    let merged = combine(&entries[hit.index()].2, right.data(id))?;
+                    let merged = combine(
+                        (
+                            self.participants_1(hit),
+                            self.participants_2(hit),
+                            self.data(hit),
+                        ),
+                        (
+                            right.participants_1(id),
+                            right.participants_2(id),
+                            right.data(id),
+                        ),
+                    )?;
                     entries[hit.index()].2 = merged;
                     right_map.push(hit);
                 }
@@ -2301,7 +2402,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
-        mut combine: impl FnMut(&D, &D) -> Option<D>,
+        mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
         D: BiRelationData + Clone,
@@ -2309,11 +2410,20 @@ where
         let mut entries: Vec<(Vec<L1>, Vec<L2>, D)> = Vec::new();
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
-        for id in self.relation_ids() {
-            if let Some(hit) =
-                right.find_by_participants(self.participants_1(id), self.participants_2(id))
-            {
-                let merged = combine(self.data(id), right.data(hit))?;
+        for id in self.ids() {
+            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+                let merged = combine(
+                    (
+                        self.participants_1(id),
+                        self.participants_2(id),
+                        self.data(id),
+                    ),
+                    (
+                        right.participants_1(hit),
+                        right.participants_2(hit),
+                        right.data(hit),
+                    ),
+                )?;
                 entries.push((
                     self.participants_1(id).to_vec(),
                     self.participants_2(id).to_vec(),
@@ -2557,6 +2667,82 @@ mod tests {
         assert_eq!(rs.data(RelationId(0)), &99);
     }
 
+    /// What frame a pushout coincidence comes out in, and whether the two sides reaching `combine`
+    /// are in the same frame. Recorded so the answer is read off a run rather than argued.
+    ///
+    /// Both sides carry the same two participants in opposite order with a position-labelled
+    /// payload. `combine` records what it was handed and returns the left payload untouched, so the
+    /// test observes the inputs rather than any realignment.
+    #[rstest]
+    #[case::unordered_factor_sorts_both_sides(
+        VarRelationSet::<NodeId, Unordered, PositionLabels>::new(
+            vec![(vec![n(7), n(3)], PositionLabels(vec![70, 30]))]),
+        VarRelationSet::<NodeId, Unordered, PositionLabels>::new(
+            vec![(vec![n(3), n(7)], PositionLabels(vec![30, 70]))]),
+        [n(3), n(7)],
+        PositionLabels(vec![30, 70]),
+        PositionLabels(vec![30, 70]),
+    )]
+    #[case::ordered_factor_keeps_both_frames(
+        VarRelationSet::<NodeId, Ordered, PositionLabels>::new(
+            vec![(vec![n(7), n(3)], PositionLabels(vec![70, 30]))]),
+        VarRelationSet::<NodeId, Ordered, PositionLabels>::new(
+            vec![(vec![n(3), n(7)], PositionLabels(vec![30, 70]))]),
+        [n(7), n(3)],
+        PositionLabels(vec![70, 30]),
+        PositionLabels(vec![30, 70]),
+    )]
+    fn test_var_relation_set_pushout_coincidence_frame<O: FactorOrdering>(
+        #[case] left: VarRelationSet<NodeId, O, PositionLabels>,
+        #[case] right: VarRelationSet<NodeId, O, PositionLabels>,
+        #[case] expected_frame: [NodeId; 2],
+        #[case] expected_left_seen: PositionLabels,
+        #[case] expected_right_seen: PositionLabels,
+    ) {
+        let mut seen = None;
+        let merged = left
+            .pushout(&right, |(_, a), (_, b)| {
+                seen = Some((a.clone(), b.clone()));
+                Some(a.clone())
+            })
+            .expect("combine never rejects here");
+        let object = merged.object;
+
+        assert_eq!(object.count(), 1, "the two entries coincide");
+        assert_eq!(
+            object.participants(RelationId(0)),
+            expected_frame.as_slice()
+        );
+        assert_eq!(
+            seen,
+            Some((expected_left_seen, expected_right_seen)),
+            "the two payloads as `combine` received them"
+        );
+    }
+
+    /// Two right entries coinciding with one left entry is rejected, not merged: the right
+    /// coprojection must be injective, and `Correspondence` asserts that.
+    ///
+    /// This is why `pushout` may read the left payload out of its own output buffer — the slot can
+    /// never be merged into twice. `pullback` reads the same payload from the source instead, and
+    /// the two agree because the case that would separate them cannot be constructed.
+    #[rstest]
+    #[should_panic(expected = "correspondence images must be unique")]
+    fn test_var_relation_set_pushout_repeated_coincidence() {
+        let left: VarRelationSet<NodeId, Unordered, PositionLabels> =
+            VarRelationSet::new(vec![(vec![n(0), n(1)], PositionLabels(vec![1, 1]))]);
+        let right: VarRelationSet<NodeId, Unordered, PositionLabels> = VarRelationSet::new(vec![
+            (vec![n(0), n(1)], PositionLabels(vec![2, 2])),
+            (vec![n(0), n(1)], PositionLabels(vec![4, 4])),
+        ]);
+
+        left.pushout(&right, |(_, a), (_, b)| {
+            Some(PositionLabels(
+                a.0.iter().zip(&b.0).map(|(x, y)| x + y).collect(),
+            ))
+        });
+    }
+
     #[rstest]
     fn test_fixed_relation_set_iter() {
         let empty = FixedRelationSet::<NodeId, Unordered, i32, 2>::default();
@@ -2696,12 +2882,12 @@ mod tests {
     #[rstest]
     fn test_fixed_relation_set_relation_ids() {
         assert_exact_size(
-            FixedRelationSet::<NodeId, Unordered, (), 2>::default().relation_ids(),
+            FixedRelationSet::<NodeId, Unordered, (), 2>::default().ids(),
             vec![],
         );
         let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(1), n(2)], ())]);
-        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -2974,12 +3160,12 @@ mod tests {
     #[rstest]
     fn test_var_relation_set_relation_ids() {
         assert_exact_size(
-            VarRelationSet::<NodeId, Unordered, ()>::default().relation_ids(),
+            VarRelationSet::<NodeId, Unordered, ()>::default().ids(),
             vec![],
         );
         let rs: VarRelationSet<NodeId, Unordered, ()> =
             VarRelationSet::new(vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())]);
-        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -3161,12 +3347,12 @@ mod tests {
     fn test_fixed_fixed_birelation_set_relation_ids() {
         assert_exact_size(
             FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, &str>::default()
-                .relation_ids(),
+                .ids(),
             vec![],
         );
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "a"), ([n(2)], [n(3)], "b")]);
-        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -3400,7 +3586,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_permute_with_identity() {
+    fn test_fixed_var_birelation_set_permute_1_with_identity() {
         let input: FixedVarBirelationSet<EdgeId, Ordered, 2, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![([EdgeId(5), EdgeId(4)], vec![n(2), n(0), n(1)], "a")]);
         let mut permuted = input.clone();
@@ -3454,8 +3640,7 @@ mod tests {
     #[rstest]
     fn test_fixed_var_birelation_set_relation_ids() {
         assert_exact_size(
-            FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, &str>::default()
-                .relation_ids(),
+            FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, &str>::default().ids(),
             vec![],
         );
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
@@ -3463,7 +3648,7 @@ mod tests {
                 ([EdgeId(0)], vec![n(1)], "a"),
                 ([EdgeId(1)], vec![n(2)], "b"),
             ]);
-        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -3690,8 +3875,7 @@ mod tests {
     #[rstest]
     fn test_var_var_birelation_set_relation_ids() {
         assert_exact_size(
-            VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, &str>::default()
-                .relation_ids(),
+            VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, &str>::default().ids(),
             vec![],
         );
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
@@ -3699,7 +3883,7 @@ mod tests {
                 (vec![n(0)], vec![EdgeId(1)], "a"),
                 (vec![n(2)], vec![EdgeId(3)], "b"),
             ]);
-        assert_exact_size(rs.relation_ids(), vec![RelationId(0), RelationId(1)]);
+        assert_exact_size(rs.ids(), vec![RelationId(0), RelationId(1)]);
     }
 
     #[rstest]
@@ -3796,7 +3980,7 @@ mod tests {
     ) {
         let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(2), n(3)], ())]);
-        assert_eq!(rs.find_by_participants(&query), expected);
+        assert_eq!(rs.coincident(&query), expected);
     }
 
     #[rstest]
@@ -3811,7 +3995,7 @@ mod tests {
     ) {
         let rs: VarRelationSet<NodeId, Unordered, ()> =
             VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], ()), (vec![n(3), n(4)], ())]);
-        assert_eq!(rs.find_by_participants(&query), expected);
+        assert_eq!(rs.coincident(&query), expected);
     }
 
     #[rstest]
@@ -3829,7 +4013,7 @@ mod tests {
                 ([n(0), n(1)], [n(2)], ()),
                 ([n(3), n(4)], [n(5)], ()),
             ]);
-        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+        assert_eq!(rs.coincident(&query_1, &query_2), expected);
     }
 
     #[rstest]
@@ -3850,7 +4034,7 @@ mod tests {
                 ([n(0)], vec![n(1)], ()),
                 ([n(3)], vec![n(4), n(4), n(5)], ()),
             ]);
-        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+        assert_eq!(rs.coincident(&query_1, &query_2), expected);
     }
 
     #[rstest]
@@ -3864,7 +4048,7 @@ mod tests {
         // Stereo-bond-like: factor1 is an `EdgeId` site, so the anchor routes through `incident_edge`.
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, ()> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2)], ())]);
-        assert_eq!(rs.find_by_participants(&[EdgeId(0)], &ligands), expected);
+        assert_eq!(rs.coincident(&[EdgeId(0)], &ligands), expected);
     }
 
     #[rstest]
@@ -3882,7 +4066,7 @@ mod tests {
                 (vec![n(0), n(1)], vec![n(2), n(3)], ()),
                 (vec![n(4)], vec![n(5)], ()),
             ]);
-        assert_eq!(rs.find_by_participants(&query_1, &query_2), expected);
+        assert_eq!(rs.coincident(&query_1, &query_2), expected);
     }
 
     #[rstest]
@@ -3896,13 +4080,11 @@ mod tests {
             ([n(0), n(1)], 5),
             ([n(4), n(5)], 30),
         ]);
-        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let glue = left
+            .pushout(&right, |(_, a), (_, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(glue.object.count(), 3);
-        let value = |q: [NodeId; 2]| {
-            glue.object
-                .find_by_participants(&q)
-                .map(|id| *glue.object.data(id))
-        };
+        let value = |q: [NodeId; 2]| glue.object.coincident(&q).map(|id| *glue.object.data(id));
         assert_eq!(value([n(0), n(1)]), Some(15)); // coincidence combined
         assert_eq!(value([n(2), n(3)]), Some(20)); // self-only carried
         assert_eq!(value([n(4), n(5)]), Some(30)); // right-only appended
@@ -3927,11 +4109,13 @@ mod tests {
             (vec![n(0), n(1), n(2)], 5),
             (vec![n(3), n(4)], 20),
         ]);
-        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let glue = left
+            .pushout(&right, |(_, a), (_, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .find_by_participants(&[n(0), n(1), n(2)])
+                .coincident(&[n(0), n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -3951,11 +4135,13 @@ mod tests {
             ([n(0)], vec![n(1), n(2)], 5),
             ([n(3)], vec![n(4), n(5)], 20),
         ]);
-        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let glue = left
+            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .find_by_participants(&[n(0)], &[n(1), n(2)])
+                .coincident(&[n(0)], &[n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -3972,11 +4158,13 @@ mod tests {
                 ([n(0)], [n(1), n(2)], 5),
                 ([n(3)], [n(4), n(5)], 20),
             ]);
-        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let glue = left
+            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .find_by_participants(&[n(0)], &[n(1), n(2)])
+                .coincident(&[n(0)], &[n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -3994,11 +4182,13 @@ mod tests {
             (vec![n(0), n(1)], vec![n(2), n(3)], 5),
             (vec![n(4)], vec![n(5)], 20),
         ]);
-        let glue = left.pushout(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let glue = left
+            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .find_by_participants(&[n(0), n(1)], &[n(2), n(3)])
+                .coincident(&[n(0), n(1)], &[n(2), n(3)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -4016,7 +4206,9 @@ mod tests {
             ([n(0), n(1)], 5),
             ([n(4), n(5)], 30),
         ]);
-        let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let pb = left
+            .pullback(&right, |(_, a), (_, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(pb.object.count(), 1); // self-only and right-only dropped
         assert_eq!(*pb.object.data(RelationId(0)), 15);
         assert_eq!(pb.left.right_of(RelationId(0)), Some(RelationId(0))); // → self {01}
@@ -4042,7 +4234,9 @@ mod tests {
                 vec![n(1), n(2)],
                 5,
             )]);
-        let pb = left.pullback(&right, |a, b| Some(a + b)).expect("no ⊥");
+        let pb = left
+            .pullback(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .expect("no ⊥");
         assert_eq!(pb.object.count(), 1); // only the shared ([0],[1,2])
         assert_eq!(*pb.object.data(RelationId(0)), 15);
     }
