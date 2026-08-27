@@ -135,19 +135,29 @@ impl DativeBonds {
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |(_, _, left), (_, _, right)| {
-                // The payload is frame-invariant, so the donor presentation cannot affect it.
-                right.clone().meet(left)
-            })
+            .pushout(
+                &right.remap(remapping).0,
+                // The acceptor is one atom, the sharpest node anchor a dative bond has.
+                |set, acceptor, donors| {
+                    acceptor
+                        .first()
+                        .and_then(|&node| set.coincident(node, acceptor, donors))
+                },
+                |(_, _, left), (_, _, right)| {
+                    // The payload is frame-invariant, so the donor presentation cannot affect it.
+                    right.clone().meet(left)
+                },
+            )
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, acceptor: AtomId, donors: &[AtomId]) -> Option<DativeBondId> {
+        // The acceptor is a single atom, so it is the sharpest node anchor available.
         let donors: Vec<NodeId> = donors.iter().map(|&atom| NodeId::from(atom)).collect();
         self.0
-            .coincident(&[NodeId::from(acceptor)], &donors)
+            .coincident(NodeId::from(acceptor), &[NodeId::from(acceptor)], &donors)
             .map(DativeBondId::from)
     }
 

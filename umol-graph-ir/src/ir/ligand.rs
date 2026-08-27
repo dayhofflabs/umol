@@ -1,8 +1,6 @@
 //! Stereo ligand representation: a ligand occupying a coordination position of a stereo site.
 
-use umol_graph_core::{
-    GraphCompaction, NodeId, ParticipantAnchor, ParticipantRefs, RelationParticipant, Remapping,
-};
+use umol_graph_core::{GraphCompaction, NodeId, ParticipantRefs, RelationParticipant, Remapping};
 
 use super::id::AtomId;
 
@@ -54,10 +52,6 @@ impl RelationParticipant for StereoLigand {
             node: Some(NodeId::from(self.atom_id)),
             edge: None,
         }
-    }
-
-    fn anchor(self) -> Option<ParticipantAnchor> {
-        Some(ParticipantAnchor::Node(NodeId::from(self.atom_id)))
     }
 }
 

@@ -126,6 +126,11 @@ impl StereoAtoms {
         self.0
             .pushout(
                 &right.remap(remapping).0,
+                // A stereo atom's site is an atom, unique by integrity: the sharpest node anchor.
+                |set, site, ligands| {
+                    site.first()
+                        .and_then(|&node| set.coincident(node, site, ligands))
+                },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
                     right
                         .clone()
@@ -139,8 +144,10 @@ impl StereoAtoms {
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
+        // A stereo atom's site is an atom, and integrity makes it unique, so it is the sharpest
+        // node anchor available.
         self.0
-            .coincident(&[NodeId::from(site)], ligands)
+            .coincident(NodeId::from(site), &[NodeId::from(site)], ligands)
             .map(StereoAtomId::from)
     }
 }
@@ -302,6 +309,11 @@ impl StereoBonds {
         self.0
             .pushout(
                 &right.remap(remapping).0,
+                // A stereo bond's site is a bond: the one family scanning the edge index.
+                |set, site, ligands| {
+                    site.first()
+                        .and_then(|&edge| set.coincident_edge(edge, site, ligands))
+                },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
                     right
                         .clone()
@@ -315,8 +327,9 @@ impl StereoBonds {
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
+        // A stereo bond's site is a bond, so this is the one family that scans the edge index.
         self.0
-            .coincident(&[EdgeId::from(site)], ligands)
+            .coincident_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
             .map(StereoBondId::from)
     }
 }

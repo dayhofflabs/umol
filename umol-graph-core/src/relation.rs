@@ -228,15 +228,6 @@ pub struct ParticipantRefs {
     pub node: Option<NodeId>,
     pub edge: Option<EdgeId>,
 }
-
-/// A single node or edge to route a participant through the incidence index — the resolved,
-/// exactly-one form of `ParticipantRefs`, used to narrow `find_by_participants` candidates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ParticipantAnchor {
-    Node(NodeId),
-    Edge(EdgeId),
-}
-
 /// A value that can occupy a relation factor: routes through a `GraphCompaction`
 /// (removal/compaction, both directions) and a `Remapping` (general relabel,
 /// forward), and exposes its node/edge refs for incidence. One impl per concrete
@@ -253,10 +244,6 @@ pub trait RelationParticipant: Copy + Ord + Hash {
 
     /// Return every graph id used to represent this participant.
     fn refs(self) -> ParticipantRefs;
-
-    /// The node or edge to route this participant through the incidence index, if any — narrows
-    /// `find_by_participants` candidates (`None` falls back to a linear scan).
-    fn anchor(self) -> Option<ParticipantAnchor>;
 }
 
 impl RelationParticipant for NodeId {
@@ -278,10 +265,6 @@ impl RelationParticipant for NodeId {
             edge: None,
         }
     }
-
-    fn anchor(self) -> Option<ParticipantAnchor> {
-        Some(ParticipantAnchor::Node(self))
-    }
 }
 
 impl RelationParticipant for EdgeId {
@@ -302,10 +285,6 @@ impl RelationParticipant for EdgeId {
             node: None,
             edge: Some(self),
         }
-    }
-
-    fn anchor(self) -> Option<ParticipantAnchor> {
-        Some(ParticipantAnchor::Edge(self))
     }
 }
 
@@ -549,21 +528,38 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
     /// subset of its constituents is a different question with a different key, and belongs to the
     /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
-    pub fn coincident(&self, query: &[P]) -> Option<RelationId> {
+    pub fn coincident(&self, node: NodeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_in(self.incident(node), query)
+    }
+
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    ///
+    /// `edge` narrows the scan to the edge incidence index. The node-indexed peer is
+    /// [`coincident`](Self::coincident).
+    pub fn coincident_edge(&self, edge: EdgeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_in(self.incident_edge(edge), query)
+    }
+
+    /// Whether relation `id` really does coincide with `query` — the check `pushout` and
+    /// `pullback` apply to a supplied pairing before gluing on it.
+    fn coincide(&self, id: RelationId, query: &[P]) -> bool {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
-        let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
-        match query.iter().find_map(|p| p.anchor()) {
-            Some(ParticipantAnchor::Node(node)) => {
-                self.incident(node).iter().copied().find(|&id| matches(id))
-            }
-            Some(ParticipantAnchor::Edge(edge)) => self
-                .incident_edge(edge)
-                .iter()
-                .copied()
-                .find(|&id| matches(id)),
-            None => self.ids().find(|&id| matches(id)),
-        }
+        participants_match(self.participants(id), &sorted_query)
+    }
+
+    fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
+        let mut sorted_query: Vec<P> = query.to_vec();
+        sorted_query.sort_unstable();
+        candidates
+            .iter()
+            .copied()
+            .find(|&id| participants_match(self.participants(id), &sorted_query))
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -661,6 +657,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     pub fn pushout(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
@@ -673,7 +670,9 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match self.coincident(right.participants(id)) {
+            match coincident(self, right.participants(id))
+                .filter(|&hit| self.coincide(hit, right.participants(id)))
+            {
                 Some(hit) => {
                     let merged = combine(
                         (self.participants(hit), self.data(hit)),
@@ -704,6 +703,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
     pub fn pullback(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
@@ -713,7 +713,9 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = right.coincident(self.participants(id)) {
+            if let Some(hit) = coincident(right, self.participants(id))
+                .filter(|&hit| right.coincide(hit, self.participants(id)))
+            {
                 let merged = combine(
                     (self.participants(id), self.data(id)),
                     (right.participants(hit), right.data(hit)),
@@ -907,21 +909,38 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
     /// subset of its constituents is a different question with a different key, and belongs to the
     /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
-    pub fn coincident(&self, query: &[P]) -> Option<RelationId> {
+    pub fn coincident(&self, node: NodeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_in(self.incident(node), query)
+    }
+
+    /// This is the identity question, not a lookup: the participant multiset is the relation's
+    /// identity and the stored sequence is only the frame its payload is expressed in, so two
+    /// entries presenting the same participants differently coincide. It is what
+    /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
+    /// subset of its constituents is a different question with a different key, and belongs to the
+    /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
+    ///
+    /// `edge` narrows the scan to the edge incidence index. The node-indexed peer is
+    /// [`coincident`](Self::coincident).
+    pub fn coincident_edge(&self, edge: EdgeId, query: &[P]) -> Option<RelationId> {
+        self.coincident_in(self.incident_edge(edge), query)
+    }
+
+    /// Whether relation `id` really does coincide with `query` — the check `pushout` and
+    /// `pullback` apply to a supplied pairing before gluing on it.
+    fn coincide(&self, id: RelationId, query: &[P]) -> bool {
         let mut sorted_query: Vec<P> = query.to_vec();
         sorted_query.sort_unstable();
-        let matches = |id: RelationId| participants_match(self.participants(id), &sorted_query);
-        match query.iter().find_map(|p| p.anchor()) {
-            Some(ParticipantAnchor::Node(node)) => {
-                self.incident(node).iter().copied().find(|&id| matches(id))
-            }
-            Some(ParticipantAnchor::Edge(edge)) => self
-                .incident_edge(edge)
-                .iter()
-                .copied()
-                .find(|&id| matches(id)),
-            None => self.ids().find(|&id| matches(id)),
-        }
+        participants_match(self.participants(id), &sorted_query)
+    }
+
+    fn coincident_in(&self, candidates: &[RelationId], query: &[P]) -> Option<RelationId> {
+        let mut sorted_query: Vec<P> = query.to_vec();
+        sorted_query.sort_unstable();
+        candidates
+            .iter()
+            .copied()
+            .find(|&id| participants_match(self.participants(id), &sorted_query))
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -1013,6 +1032,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     pub fn pushout(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
@@ -1025,7 +1045,9 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match self.coincident(right.participants(id)) {
+            match coincident(self, right.participants(id))
+                .filter(|&hit| self.coincide(hit, right.participants(id)))
+            {
                 Some(hit) => {
                     let merged = combine(
                         (self.participants(hit), self.data(hit)),
@@ -1053,6 +1075,7 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
     pub fn pullback(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[P]) -> Option<RelationId>,
         mut combine: impl FnMut((&[P], &D), (&[P], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
@@ -1062,7 +1085,9 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = right.coincident(self.participants(id)) {
+            if let Some(hit) = coincident(right, self.participants(id))
+                .filter(|&hit| right.coincide(hit, self.participants(id)))
+            {
                 let merged = combine(
                     (self.participants(id), self.data(id)),
                     (right.participants(hit), right.data(hit)),
@@ -1284,30 +1309,45 @@ where
     /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
     /// subset of its constituents is a different question with a different key, and belongs to the
     /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
-    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    pub fn coincident(&self, node: NodeId, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        self.coincident_in(self.incident(node), query_1, query_2)
+    }
+
+    /// Edge-indexed peer of [`coincident`](Self::coincident).
+    pub fn coincident_edge(
+        &self,
+        edge: EdgeId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        self.coincident_in(self.incident_edge(edge), query_1, query_2)
+    }
+
+    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
+    /// and `pullback` apply to a supplied pairing before gluing on it.
+    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
         sorted_2.sort_unstable();
-        let matches = |id: RelationId| {
+        participants_match(self.participants_1(id), &sorted_1)
+            && participants_match(self.participants_2(id), &sorted_2)
+    }
+
+    fn coincident_in(
+        &self,
+        candidates: &[RelationId],
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        candidates.iter().copied().find(|&id| {
             participants_match(self.participants_1(id), &sorted_1)
                 && participants_match(self.participants_2(id), &sorted_2)
-        };
-        match query_1
-            .iter()
-            .find_map(|p| p.anchor())
-            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
-        {
-            Some(ParticipantAnchor::Node(node)) => {
-                self.incident(node).iter().copied().find(|&id| matches(id))
-            }
-            Some(ParticipantAnchor::Edge(edge)) => self
-                .incident_edge(edge)
-                .iter()
-                .copied()
-                .find(|&id| matches(id)),
-            None => self.ids().find(|&id| matches(id)),
-        }
+        })
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -1414,6 +1454,7 @@ where
     pub fn pushout(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
@@ -1432,7 +1473,9 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match self.coincident(right.participants_1(id), right.participants_2(id)) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
+                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
+            ) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -1472,6 +1515,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
@@ -1481,7 +1525,11 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
+                .filter(|&hit| {
+                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
+                })
+            {
                 let merged = combine(
                     (
                         self.participants_1(id),
@@ -1748,30 +1796,45 @@ where
     /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
     /// subset of its constituents is a different question with a different key, and belongs to the
     /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
-    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    pub fn coincident(&self, node: NodeId, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        self.coincident_in(self.incident(node), query_1, query_2)
+    }
+
+    /// Edge-indexed peer of [`coincident`](Self::coincident).
+    pub fn coincident_edge(
+        &self,
+        edge: EdgeId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        self.coincident_in(self.incident_edge(edge), query_1, query_2)
+    }
+
+    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
+    /// and `pullback` apply to a supplied pairing before gluing on it.
+    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
         sorted_2.sort_unstable();
-        let matches = |id: RelationId| {
+        participants_match(self.participants_1(id), &sorted_1)
+            && participants_match(self.participants_2(id), &sorted_2)
+    }
+
+    fn coincident_in(
+        &self,
+        candidates: &[RelationId],
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        candidates.iter().copied().find(|&id| {
             participants_match(self.participants_1(id), &sorted_1)
                 && participants_match(self.participants_2(id), &sorted_2)
-        };
-        match query_1
-            .iter()
-            .find_map(|p| p.anchor())
-            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
-        {
-            Some(ParticipantAnchor::Node(node)) => {
-                self.incident(node).iter().copied().find(|&id| matches(id))
-            }
-            Some(ParticipantAnchor::Edge(edge)) => self
-                .incident_edge(edge)
-                .iter()
-                .copied()
-                .find(|&id| matches(id)),
-            None => self.ids().find(|&id| matches(id)),
-        }
+        })
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -1878,6 +1941,7 @@ where
     pub fn pushout(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
@@ -1896,7 +1960,9 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match self.coincident(right.participants_1(id), right.participants_2(id)) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
+                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
+            ) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -1936,6 +2002,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
@@ -1945,7 +2012,11 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
+                .filter(|&hit| {
+                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
+                })
+            {
                 let merged = combine(
                     (
                         self.participants_1(id),
@@ -2218,30 +2289,45 @@ where
     /// [`pushout`](Self::pushout) and [`pullback`](Self::pullback) join on. Naming an entity by a
     /// subset of its constituents is a different question with a different key, and belongs to the
     /// caller that knows the key. §4.1 uniqueness ⇒ at most one hit.
-    pub fn coincident(&self, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+    pub fn coincident(&self, node: NodeId, query_1: &[L1], query_2: &[L2]) -> Option<RelationId> {
+        self.coincident_in(self.incident(node), query_1, query_2)
+    }
+
+    /// Edge-indexed peer of [`coincident`](Self::coincident).
+    pub fn coincident_edge(
+        &self,
+        edge: EdgeId,
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        self.coincident_in(self.incident_edge(edge), query_1, query_2)
+    }
+
+    /// Whether relation `id` really does coincide with `query_1` / `query_2` — the check `pushout`
+    /// and `pullback` apply to a supplied pairing before gluing on it.
+    fn coincide(&self, id: RelationId, query_1: &[L1], query_2: &[L2]) -> bool {
         let mut sorted_1: Vec<L1> = query_1.to_vec();
         sorted_1.sort_unstable();
         let mut sorted_2: Vec<L2> = query_2.to_vec();
         sorted_2.sort_unstable();
-        let matches = |id: RelationId| {
+        participants_match(self.participants_1(id), &sorted_1)
+            && participants_match(self.participants_2(id), &sorted_2)
+    }
+
+    fn coincident_in(
+        &self,
+        candidates: &[RelationId],
+        query_1: &[L1],
+        query_2: &[L2],
+    ) -> Option<RelationId> {
+        let mut sorted_1: Vec<L1> = query_1.to_vec();
+        sorted_1.sort_unstable();
+        let mut sorted_2: Vec<L2> = query_2.to_vec();
+        sorted_2.sort_unstable();
+        candidates.iter().copied().find(|&id| {
             participants_match(self.participants_1(id), &sorted_1)
                 && participants_match(self.participants_2(id), &sorted_2)
-        };
-        match query_1
-            .iter()
-            .find_map(|p| p.anchor())
-            .or_else(|| query_2.iter().find_map(|p| p.anchor()))
-        {
-            Some(ParticipantAnchor::Node(node)) => {
-                self.incident(node).iter().copied().find(|&id| matches(id))
-            }
-            Some(ParticipantAnchor::Edge(edge)) => self
-                .incident_edge(edge)
-                .iter()
-                .copied()
-                .find(|&id| matches(id)),
-            None => self.ids().find(|&id| matches(id)),
-        }
+        })
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -2344,6 +2430,7 @@ where
     pub fn pushout(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPushout<Self>>
     where
@@ -2362,7 +2449,9 @@ where
         let self_count = entries.len();
         let mut right_map: Vec<RelationId> = Vec::with_capacity(right.count());
         for id in right.ids() {
-            match self.coincident(right.participants_1(id), right.participants_2(id)) {
+            match coincident(self, right.participants_1(id), right.participants_2(id)).filter(
+                |&hit| self.coincide(hit, right.participants_1(id), right.participants_2(id)),
+            ) {
                 Some(hit) => {
                     let merged = combine(
                         (
@@ -2402,6 +2491,7 @@ where
     pub fn pullback(
         &self,
         right: &Self,
+        coincident: impl Fn(&Self, &[L1], &[L2]) -> Option<RelationId>,
         mut combine: impl FnMut((&[L1], &[L2], &D), (&[L1], &[L2], &D)) -> Option<D>,
     ) -> Option<RelationPullback<Self>>
     where
@@ -2411,7 +2501,11 @@ where
         let mut left_images: Vec<RelationId> = Vec::new();
         let mut right_images: Vec<RelationId> = Vec::new();
         for id in self.ids() {
-            if let Some(hit) = right.coincident(self.participants_1(id), self.participants_2(id)) {
+            if let Some(hit) = coincident(right, self.participants_1(id), self.participants_2(id))
+                .filter(|&hit| {
+                    right.coincide(hit, self.participants_1(id), self.participants_2(id))
+                })
+            {
                 let merged = combine(
                     (
                         self.participants_1(id),
@@ -2701,10 +2795,14 @@ mod tests {
     ) {
         let mut seen = None;
         let merged = left
-            .pushout(&right, |(_, a), (_, b)| {
-                seen = Some((a.clone(), b.clone()));
-                Some(a.clone())
-            })
+            .pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| {
+                    seen = Some((a.clone(), b.clone()));
+                    Some(a.clone())
+                },
+            )
             .expect("combine never rejects here");
         let object = merged.object;
 
@@ -2736,11 +2834,15 @@ mod tests {
             (vec![n(0), n(1)], PositionLabels(vec![4, 4])),
         ]);
 
-        left.pushout(&right, |(_, a), (_, b)| {
-            Some(PositionLabels(
-                a.0.iter().zip(&b.0).map(|(x, y)| x + y).collect(),
-            ))
-        });
+        left.pushout(
+            &right,
+            |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+            |(_, a), (_, b)| {
+                Some(PositionLabels(
+                    a.0.iter().zip(&b.0).map(|(x, y)| x + y).collect(),
+                ))
+            },
+        );
     }
 
     #[rstest]
@@ -3974,13 +4076,18 @@ mod tests {
     #[case::second(vec![n(2), n(3)], Some(RelationId(1)))]
     #[case::absent(vec![n(0), n(3)], None)]
     #[case::wrong_arity(vec![n(0)], None)]
-    fn test_fixed_relation_set_find_by_participants(
+    fn test_fixed_relation_set_coincident(
         #[case] query: Vec<NodeId>,
         #[case] expected: Option<RelationId>,
     ) {
         let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(2), n(3)], ())]);
-        assert_eq!(rs.coincident(&query), expected);
+        assert_eq!(
+            query
+                .first()
+                .and_then(|&anchor| rs.coincident(anchor, &query)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -3989,13 +4096,18 @@ mod tests {
     #[case::second(vec![n(3), n(4)], Some(RelationId(1)))]
     #[case::subset(vec![n(0), n(1)], None)]
     #[case::superset(vec![n(0), n(1), n(2), n(3)], None)]
-    fn test_var_relation_set_find_by_participants(
+    fn test_var_relation_set_coincident(
         #[case] query: Vec<NodeId>,
         #[case] expected: Option<RelationId>,
     ) {
         let rs: VarRelationSet<NodeId, Unordered, ()> =
             VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], ()), (vec![n(3), n(4)], ())]);
-        assert_eq!(rs.coincident(&query), expected);
+        assert_eq!(
+            query
+                .first()
+                .and_then(|&anchor| rs.coincident(anchor, &query)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -4003,7 +4115,7 @@ mod tests {
     #[case::reordered_factor(vec![n(1), n(0)], vec![n(2)], Some(RelationId(0)))]
     #[case::second(vec![n(3), n(4)], vec![n(5)], Some(RelationId(1)))]
     #[case::absent(vec![n(0), n(1)], vec![n(9)], None)]
-    fn test_fixed_fixed_birelation_set_find_by_participants(
+    fn test_fixed_fixed_birelation_set_coincident(
         #[case] query_1: Vec<NodeId>,
         #[case] query_2: Vec<NodeId>,
         #[case] expected: Option<RelationId>,
@@ -4013,7 +4125,12 @@ mod tests {
                 ([n(0), n(1)], [n(2)], ()),
                 ([n(3), n(4)], [n(5)], ()),
             ]);
-        assert_eq!(rs.coincident(&query_1, &query_2), expected);
+        assert_eq!(
+            query_1
+                .first()
+                .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -4022,7 +4139,7 @@ mod tests {
     #[case::multiset_reordered(vec![n(3)], vec![n(5), n(4), n(4)], Some(RelationId(1)))]
     #[case::wrong_multiplicity(vec![n(3)], vec![n(4), n(5)], None)]
     #[case::absent(vec![n(0)], vec![n(2)], None)]
-    fn test_fixed_var_birelation_set_find_by_participants(
+    fn test_fixed_var_birelation_set_coincident(
         #[case] query_1: Vec<NodeId>,
         #[case] query_2: Vec<NodeId>,
         #[case] expected: Option<RelationId>,
@@ -4034,7 +4151,12 @@ mod tests {
                 ([n(0)], vec![n(1)], ()),
                 ([n(3)], vec![n(4), n(4), n(5)], ()),
             ]);
-        assert_eq!(rs.coincident(&query_1, &query_2), expected);
+        assert_eq!(
+            query_1
+                .first()
+                .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -4048,7 +4170,10 @@ mod tests {
         // Stereo-bond-like: factor1 is an `EdgeId` site, so the anchor routes through `incident_edge`.
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, ()> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2)], ())]);
-        assert_eq!(rs.coincident(&[EdgeId(0)], &ligands), expected);
+        assert_eq!(
+            rs.coincident_edge(EdgeId(0), &[EdgeId(0)], &ligands),
+            expected,
+        );
     }
 
     #[rstest]
@@ -4056,7 +4181,7 @@ mod tests {
     #[case::reordered(vec![n(1), n(0)], vec![n(3), n(2)], Some(RelationId(0)))]
     #[case::role_swap(vec![n(2), n(3)], vec![n(0), n(1)], None)]
     #[case::absent(vec![n(0), n(1)], vec![n(2), n(9)], None)]
-    fn test_var_var_birelation_set_find_by_participants(
+    fn test_var_var_birelation_set_coincident(
         #[case] query_1: Vec<NodeId>,
         #[case] query_2: Vec<NodeId>,
         #[case] expected: Option<RelationId>,
@@ -4066,7 +4191,12 @@ mod tests {
                 (vec![n(0), n(1)], vec![n(2), n(3)], ()),
                 (vec![n(4)], vec![n(5)], ()),
             ]);
-        assert_eq!(rs.coincident(&query_1, &query_2), expected);
+        assert_eq!(
+            query_1
+                .first()
+                .and_then(|&anchor| rs.coincident(anchor, &query_1, &query_2)),
+            expected,
+        );
     }
 
     #[rstest]
@@ -4081,10 +4211,18 @@ mod tests {
             ([n(4), n(5)], 30),
         ]);
         let glue = left
-            .pushout(&right, |(_, a), (_, b)| Some(a + b))
+            .pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(glue.object.count(), 3);
-        let value = |q: [NodeId; 2]| glue.object.coincident(&q).map(|id| *glue.object.data(id));
+        let value = |q: [NodeId; 2]| {
+            glue.object
+                .coincident(q[0], &q)
+                .map(|id| *glue.object.data(id))
+        };
         assert_eq!(value([n(0), n(1)]), Some(15)); // coincidence combined
         assert_eq!(value([n(2), n(3)]), Some(20)); // self-only carried
         assert_eq!(value([n(4), n(5)]), Some(30)); // right-only appended
@@ -4098,7 +4236,14 @@ mod tests {
         // combine returns ⊥ on the coincidence → the whole glue is inadmissible.
         let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 10)]);
         let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 5)]);
-        assert_eq!(left.pushout(&right, |_, _| None), None);
+        assert_eq!(
+            left.pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None
+            ),
+            None
+        );
     }
 
     #[rstest]
@@ -4110,12 +4255,16 @@ mod tests {
             (vec![n(3), n(4)], 20),
         ]);
         let glue = left
-            .pushout(&right, |(_, a), (_, b)| Some(a + b))
+            .pushout(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .coincident(&[n(0), n(1), n(2)])
+                .coincident(n(0), &[n(0), n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -4136,12 +4285,18 @@ mod tests {
             ([n(3)], vec![n(4), n(5)], 20),
         ]);
         let glue = left
-            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .coincident(&[n(0)], &[n(1), n(2)])
+                .coincident(n(0), &[n(0)], &[n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -4159,12 +4314,18 @@ mod tests {
                 ([n(3)], [n(4), n(5)], 20),
             ]);
         let glue = left
-            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .coincident(&[n(0)], &[n(1), n(2)])
+                .coincident(n(0), &[n(0)], &[n(1), n(2)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -4183,12 +4344,18 @@ mod tests {
             (vec![n(4)], vec![n(5)], 20),
         ]);
         let glue = left
-            .pushout(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .pushout(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(glue.object.count(), 2);
         assert_eq!(
             glue.object
-                .coincident(&[n(0), n(1)], &[n(2), n(3)])
+                .coincident(n(0), &[n(0), n(1)], &[n(2), n(3)])
                 .map(|id| *glue.object.data(id)),
             Some(15),
         );
@@ -4207,7 +4374,11 @@ mod tests {
             ([n(4), n(5)], 30),
         ]);
         let pb = left
-            .pullback(&right, |(_, a), (_, b)| Some(a + b))
+            .pullback(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |(_, a), (_, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(pb.object.count(), 1); // self-only and right-only dropped
         assert_eq!(*pb.object.data(RelationId(0)), 15);
@@ -4219,7 +4390,14 @@ mod tests {
     fn test_fixed_relation_set_pullback_bottom() {
         let left = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 10)]);
         let right = FixedRelationSet::<NodeId, Unordered, i32, 2>::new(vec![([n(0), n(1)], 5)]);
-        assert_eq!(left.pullback(&right, |_, _| None), None);
+        assert_eq!(
+            left.pullback(
+                &right,
+                |set: &_, q: &[NodeId]| q.first().and_then(|&n| set.coincident(n, q)),
+                |_, _| None
+            ),
+            None
+        );
     }
 
     #[rstest]
@@ -4235,7 +4413,13 @@ mod tests {
                 5,
             )]);
         let pb = left
-            .pullback(&right, |(_, _, a), (_, _, b)| Some(a + b))
+            .pullback(
+                &right,
+                |set: &_, q1: &[NodeId], q2: &_| {
+                    q1.first().and_then(|&n| set.coincident(n, q1, q2))
+                },
+                |(_, _, a), (_, _, b)| Some(a + b),
+            )
             .expect("no ⊥");
         assert_eq!(pb.object.count(), 1); // only the shared ([0],[1,2])
         assert_eq!(*pb.object.data(RelationId(0)), 15);

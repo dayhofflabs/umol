@@ -52,9 +52,9 @@ pub use digraph::DiGraph;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
 pub use relation::{
     BiRelationData, FactorOrdering, FixedFixedBirelationSet, FixedRelationSet,
-    FixedVarBirelationSet, Ordered, ParticipantAnchor, ParticipantPosition, ParticipantRefs,
-    RelationData, RelationId, RelationParticipant, RelationPullback, RelationPushout, Unordered,
-    VarRelationSet, VarVarBirelationSet,
+    FixedVarBirelationSet, Ordered, ParticipantPosition, ParticipantRefs, RelationData, RelationId,
+    RelationParticipant, RelationPullback, RelationPushout, Unordered, VarRelationSet,
+    VarVarBirelationSet,
 };
 pub use remapping::Remapping;
 pub use rewriting::{Pullback, Pushout, PushoutComplement};

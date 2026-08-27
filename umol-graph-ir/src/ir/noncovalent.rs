@@ -107,18 +107,28 @@ impl NoncovalentBonds {
     /// non-coinciding bonds are carried. `None` when a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
         self.0
-            .pushout(&right.remap(remapping).0, |(_, left), (_, right)| {
-                // The payload is frame-invariant, so the pair's presentation cannot affect it.
-                right.clone().meet(left)
-            })
+            .pushout(
+                &right.remap(remapping).0,
+                // Either endpoint anchors a noncovalent bond: the node index.
+                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
+                |(_, left), (_, right)| {
+                    // The payload is frame-invariant, so the pair's presentation cannot affect it.
+                    right.clone().meet(left)
+                },
+            )
             .map(|merged| Self(Arc::new(merged.object)))
     }
 
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, first: AtomId, second: AtomId) -> Option<NoncovalentBondId> {
+        // A noncovalent bond anchors on either endpoint atom; the first narrows as well as the
+        // second.
         self.0
-            .coincident(&[NodeId::from(first), NodeId::from(second)])
+            .coincident(
+                NodeId::from(first),
+                &[NodeId::from(first), NodeId::from(second)],
+            )
             .map(NoncovalentBondId::from)
     }
 

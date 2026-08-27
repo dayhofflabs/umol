@@ -115,6 +115,8 @@ impl AromaticSystems {
         self.0
             .pushout(
                 &right.remap(remapping).0,
+                // Aromatic systems anchor on their atoms: the node index.
+                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
                 |(left_atoms, left), (right_atoms, right)| {
                     let left_atoms: Vec<AtomId> =
                         left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
@@ -134,8 +136,12 @@ impl AromaticSystems {
     /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
     /// member atom, which names it from a part; this names it from the whole.
     pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+        // Aromatic systems anchor on their atoms, so the node index is the one to scan.
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.coincident(&query).map(AromaticSystemId::from)
+        let anchor = *query.first()?;
+        self.0
+            .coincident(anchor, &query)
+            .map(AromaticSystemId::from)
     }
 
     /// Superseded once frame alignment moves onto `reframe_to`.

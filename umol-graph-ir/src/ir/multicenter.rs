@@ -116,6 +116,8 @@ impl MulticenterBonds {
         self.0
             .pushout(
                 &right.remap(remapping).0,
+                // Multicenter bonds anchor on their atoms: the node index.
+                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
                 |(left_atoms, left), (right_atoms, right)| {
                     let left_atoms: Vec<AtomId> =
                         left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
@@ -133,8 +135,12 @@ impl MulticenterBonds {
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<MulticenterBondId> {
+        // Multicenter bonds anchor on their atoms, so the node index is the one to scan.
         let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
-        self.0.coincident(&query).map(MulticenterBondId::from)
+        let anchor = *query.first()?;
+        self.0
+            .coincident(anchor, &query)
+            .map(MulticenterBondId::from)
     }
 
     /// Superseded once frame alignment moves onto `reframe_to`.
