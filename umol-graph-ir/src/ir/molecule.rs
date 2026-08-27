@@ -777,7 +777,8 @@ impl Molecule {
                     .filter(|&permutation| {
                         self.stereo_atoms
                             .attributes(left)
-                            .transform_frame_by(permutation)
+                            .clone()
+                            .reframe_by(permutation)
                             .is_some_and(|attributes| {
                                 attributes.equiv(other.stereo_atoms.attributes(right))
                             })
@@ -832,7 +833,8 @@ impl Molecule {
                     .filter(|&permutation| {
                         self.stereo_bonds
                             .attributes(left)
-                            .transform_frame_by(permutation)
+                            .clone()
+                            .reframe_by(permutation)
                             .is_some_and(|attributes| {
                                 attributes.equiv(other.stereo_bonds.attributes(right))
                             })
@@ -2547,7 +2549,7 @@ fn transform_constraint_stereo_frame(
                 configuration: Default::default(),
                 constraints: constraint.into(),
             }
-            .transform_frame_by(permutation)?;
+            .reframe_by(permutation)?;
             Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
         }
         Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
@@ -2555,7 +2557,7 @@ fn transform_constraint_stereo_frame(
                 configuration: Default::default(),
                 constraints: constraint.into(),
             }
-            .transform_frame_by(permutation)?;
+            .reframe_by(permutation)?;
             Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
         }
         Constraint::And(constraints) => Constraint::And(

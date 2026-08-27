@@ -2364,7 +2364,7 @@ fn stereo_frame_permutations(kind: StereoKind) -> impl Iterator<Item = Permutati
     let count = (1..=degree).product::<usize>().max(1);
     (0..count)
         .map(move |rank| Permutation::unrank(degree, rank))
-        .filter(move |permutation| kind.class_key().space().reindex(0, *permutation).is_some())
+        .filter(move |permutation| kind.class_key().space().allows(*permutation))
 }
 
 fn stereo_refinement_descriptor(
@@ -2395,6 +2395,7 @@ fn stereo_refinement_descriptor(
             .map(|permutation| {
                 configuration
                     .apply(permutation)
+                    .ok_or(Contradiction)?
                     .normalize()
                     .map(|configuration| descriptor(permutation.act(ligand_classes), configuration))
             })
@@ -3179,7 +3180,10 @@ fn canonical_kinded_stereo_frame(
     for permutation in stereo_frame_permutations(kind) {
         let candidate = (
             permutation.act(ligands),
-            configuration.apply(permutation).normalize()?,
+            configuration
+                .apply(permutation)
+                .ok_or(Contradiction)?
+                .normalize()?,
         );
         match minimum.as_ref().map(|value| candidate.cmp(value)) {
             None | Some(Ordering::Less) => {
@@ -3618,7 +3622,7 @@ fn reframe_stereo_atom_constraint_by_order(
             configuration: StereoConfigurationForm::Undetermined,
             constraints: constraint.into(),
         }
-        .transform_frame_by(permutation)?
+        .reframe_by(permutation)?
         .constraints
         .into_iter()
         .next();
@@ -3652,7 +3656,7 @@ fn reframe_stereo_bond_constraint_by_order(
             configuration: StereoConfigurationForm::Undetermined,
             constraints: constraint.into(),
         }
-        .transform_frame_by(permutation)?
+        .reframe_by(permutation)?
         .constraints
         .into_iter()
         .next();
@@ -3682,7 +3686,7 @@ fn reframe_stereo_atom_form_by_order(
     order: &[ParticipantPosition],
 ) -> Option<StereoAtomForm> {
     if let Some(permutation) = permutation_from_position_order(order) {
-        return form.transform_frame_by(permutation);
+        return form.clone().reframe_by(permutation);
     }
     if form.configuration != StereoConfigurationForm::Undetermined {
         return None;
@@ -3703,7 +3707,7 @@ fn reframe_stereo_bond_form_by_order(
     order: &[ParticipantPosition],
 ) -> Option<StereoBondForm> {
     if let Some(permutation) = permutation_from_position_order(order) {
-        return form.transform_frame_by(permutation);
+        return form.clone().reframe_by(permutation);
     }
     if form.configuration != StereoConfigurationForm::Undetermined {
         return None;

@@ -680,7 +680,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame.clone(),
-                StereoAtomForm::new(StereoKind::Tetrahedral, old).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, old).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -690,7 +690,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame,
-                StereoAtomForm::new(StereoKind::Tetrahedral, new).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, new).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -747,7 +747,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&rule_frame),
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -818,7 +818,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame.clone(),
-                StereoBondForm::new(StereoKind::CisTrans, old).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, old).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -828,7 +828,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame,
-                StereoBondForm::new(StereoKind::CisTrans, new).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, new).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -890,7 +890,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&rule_frame),
-                StereoBondForm::new(StereoKind::CisTrans, coset).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, coset).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });

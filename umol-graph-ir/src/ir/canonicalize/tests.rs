@@ -209,7 +209,10 @@ fn minimum_kinded_stereo_frames(
         .into_iter()
         .filter(|permutation| kind.class_key().space().reindex(0, *permutation).is_some())
     {
-        let candidate = configuration.apply(permutation).normalize()?;
+        let candidate = configuration
+            .apply(permutation)
+            .ok_or(Contradiction)?
+            .normalize()?;
         match minimum.as_ref().map(|value| candidate.cmp(value)) {
             None | Some(Ordering::Less) => {
                 minimum = Some(candidate);
@@ -1547,7 +1550,10 @@ fn test_reframe_stereo_atom(#[case] kind: StereoKind) {
             AtomId(0),
             frame.act(&ligands),
             StereoAtomForm {
-                configuration: source_form.configuration.apply(frame),
+                configuration: source_form
+                    .configuration
+                    .apply(frame)
+                    .expect("the permutation is a parent-group action of the form's kind"),
                 constraints: expected_constraints.clone().into(),
             },
         )],
@@ -1671,7 +1677,10 @@ fn test_reframe_stereo_bond() {
             BondId(0),
             frame.act(&ligands),
             StereoBondForm {
-                configuration: source_form.configuration.apply(frame),
+                configuration: source_form
+                    .configuration
+                    .apply(frame)
+                    .expect("the permutation is a parent-group action of the form's kind"),
                 constraints: expected_constraints.clone().into(),
             },
         )],
@@ -1853,7 +1862,13 @@ fn test_stereo_refinement_descriptor_frame_invariant(#[case] kind: StereoKind) {
 
     assert_eq!(
         stereo_refinement_descriptor(7, &ligands, &configuration),
-        stereo_refinement_descriptor(7, &frame.act(&ligands), &configuration.apply(frame),),
+        stereo_refinement_descriptor(
+            7,
+            &frame.act(&ligands),
+            &configuration
+                .apply(frame)
+                .expect("the permutation is a parent-group action of the form's kind"),
+        ),
     );
 }
 

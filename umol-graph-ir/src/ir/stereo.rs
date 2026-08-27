@@ -120,21 +120,20 @@ impl StereoAtoms {
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
-        let remapped = right.remap(remapping);
-        let entries: Option<Vec<_>> = remapped
-            .ids()
-            .map(|id| {
-                let site = remapped.site(id);
-                let frame = remapped.ligands(id);
-                match self.find_by_participants(site, frame) {
+        let entries: Option<Vec<_>> = right
+            .remap(remapping)
+            .into_entries()
+            .into_iter()
+            .map(
+                |(site, frame, attributes)| match self.find_by_participants(site, &frame) {
                     Some(hit) => {
                         let target = self.ligands(hit).to_vec();
-                        let attributes = remapped.attributes(id).transform_frame(frame, &target)?;
+                        let attributes = attributes.reframe_to(&frame, &target)?;
                         Some((site, target, attributes))
                     }
-                    None => Some((site, frame.to_vec(), remapped.attributes(id).clone())),
-                }
-            })
+                    None => Some((site, frame, attributes)),
+                },
+            )
             .collect();
         self.0
             .pushout(&Self::new(entries?).0, |a, b| a.meet(b))
@@ -281,21 +280,20 @@ impl StereoBonds {
     /// non-coinciding entry is carried in its own frame. `None` when a reframing is inadmissible or
     /// a coincident meet is bottom.
     pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
-        let remapped = right.remap(remapping);
-        let entries: Option<Vec<_>> = remapped
-            .ids()
-            .map(|id| {
-                let site = remapped.site(id);
-                let frame = remapped.ligands(id);
-                match self.find_by_participants(site, frame) {
+        let entries: Option<Vec<_>> = right
+            .remap(remapping)
+            .into_entries()
+            .into_iter()
+            .map(
+                |(site, frame, attributes)| match self.find_by_participants(site, &frame) {
                     Some(hit) => {
                         let target = self.ligands(hit).to_vec();
-                        let attributes = remapped.attributes(id).transform_frame(frame, &target)?;
+                        let attributes = attributes.reframe_to(&frame, &target)?;
                         Some((site, target, attributes))
                     }
-                    None => Some((site, frame.to_vec(), remapped.attributes(id).clone())),
-                }
-            })
+                    None => Some((site, frame, attributes)),
+                },
+            )
             .collect();
         self.0
             .pushout(&Self::new(entries?).0, |a, b| a.meet(b))
@@ -413,42 +411,65 @@ macro_rules! stereo_element {
             }
 
             /// Apply a ligand-position permutation to the configuration in its current frame.
-            /// Frame-relative constraints are unchanged; use [`Self::transform_frame`] when the
+            /// Frame-relative constraints are unchanged; use [`Self::reframe_to`] when the
             /// stored ligand frame itself is reordered.
-            pub fn apply(&self, permutation: Permutation) -> Self {
-                Self {
-                    configuration: self.configuration.apply(permutation),
+            pub fn apply(&self, permutation: Permutation) -> Option<Self> {
+                Some(Self {
+                    configuration: self.configuration.apply(permutation)?,
                     constraints: self.constraints.clone(),
-                }
+                })
             }
 
             /// The kind involution (`~`).
-            pub fn swap(&self) -> Self {
-                Self {
-                    configuration: self.configuration.swap(),
+            pub fn swap(&self) -> Option<Self> {
+                Some(Self {
+                    configuration: self.configuration.swap()?,
                     constraints: self.constraints.clone(),
-                }
+                })
             }
 
             /// The enantiomer / mirror (`'`).
-            pub fn mirror(&self) -> Self {
-                Self {
-                    configuration: self.configuration.mirror(),
+            pub fn mirror(&self) -> Option<Self> {
+                Some(Self {
+                    configuration: self.configuration.mirror()?,
                     constraints: self.constraints.clone(),
-                }
+                })
             }
 
-            /// Restate the complete form in the `after` ligand frame given it was stated in
-            /// `before`. Configuration, permutation-valued constraints, and topicity positions
-            /// move together. `before` and `after` must be the same ligand multiset reordered, and
-            /// a kinded configuration additionally requires a frame action in the stereo kind's
-            /// parent group.
-            pub fn transform_frame(
-                &self,
-                before: &[StereoLigand],
-                after: &[StereoLigand],
-            ) -> Option<Self> {
-                self.transform_frame_by(Permutation::between(before, after)?)
+            /// Restate the complete form in the `to` ligand frame, given it is stated in the
+            /// `from` frame. Configuration, permutation-valued constraints, and topicity positions
+            /// move together. `from` and `to` must be the same ligand multiset reordered, and a
+            /// kinded configuration additionally requires a frame action in the stereo kind's
+            /// parent group. Declines when a repeated ligand leaves the reordering ambiguous.
+            pub fn reframe_to(self, from: &[StereoLigand], to: &[StereoLigand]) -> Option<Self> {
+                self.reframe_by(Permutation::between(from, to)?)
+            }
+
+            /// The frame action this form selects for the `current` ligand frame.
+            ///
+            /// The frame is presented sorted: under the configuration's parent group when it is
+            /// kinded, under the full symmetric group when it is not. Ligands that compare equal
+            /// leave several admissible actions producing that presentation, so the one selected
+            /// is the action whose reframed form is least — the orbit representative under the
+            /// frame's residual stabilizer. Selecting over the whole form rather than the coset
+            /// alone carries the frame-relative constraints into the same representative.
+            ///
+            /// `None` when the frame exceeds the permutation degree limit, when no admissible
+            /// action presents it sorted, or when every candidate reframing is inadmissible.
+            pub fn select_frame(&self, current: &[StereoLigand]) -> Option<Permutation> {
+                let sorted = match self.configuration.kind() {
+                    Some(kind) => kind.class_key().space().normalizer(current)?.act(current),
+                    None => {
+                        let mut image: Vec<usize> = (0..current.len()).collect();
+                        image.sort_by_key(|&position| current[position]);
+                        Permutation::try_from(image.as_slice()).ok()?.act(current)
+                    }
+                };
+                Permutation::between_all(current, &sorted)
+                    .into_iter()
+                    .filter_map(|action| Some((self.clone().reframe_by(action)?, action)))
+                    .min()
+                    .map(|(_, action)| action)
             }
 
             /// Restate the complete form after applying `permutation` to its ligand frame.
@@ -456,14 +477,14 @@ macro_rules! stereo_element {
             /// Configuration, permutation-valued constraints, and topicity positions move
             /// together. Returns `None` when the permutation is not an action of the configured
             /// stereo kind or its degree is incompatible with a frame-relative constraint.
-            pub fn transform_frame_by(&self, permutation: Permutation) -> Option<Self> {
-                if self.configuration.kind().is_some_and(|kind| {
+            pub fn reframe_by(self, permutation: Permutation) -> Option<Self> {
+                let Self {
+                    configuration,
+                    constraints,
+                } = self;
+                if configuration.kind().is_some_and(|kind| {
                     kind.degree() != permutation.degree()
-                        || kind
-                            .class_key()
-                            .space()
-                            .reindex(0, permutation)
-                            .is_none()
+                        || !kind.class_key().space().allows(permutation)
                 }) {
                     return None;
                 }
@@ -473,8 +494,7 @@ macro_rules! stereo_element {
                         LigandPermutation(inverse.compose(value.0).compose(permutation))
                     })
                 };
-                let constraints = self
-                    .constraints
+                let constraints = constraints
                     .iter()
                     .cloned()
                     .map(|constraint| {
@@ -517,7 +537,7 @@ macro_rules! stereo_element {
                     })
                     .collect::<Option<$constraints>>()?;
                 Some(Self {
-                    configuration: self.configuration.apply(permutation),
+                    configuration: configuration.apply(permutation)?,
                     constraints,
                 })
             }
@@ -753,11 +773,8 @@ impl StereoKind {
     }
 
     /// Act on coset index `index` by `permutation`, through the class's coset algebra.
-    pub fn act(self, index: u32, permutation: Permutation) -> u32 {
-        self.class_key()
-            .space()
-            .reindex(index, permutation)
-            .expect("act: valid coset index and permutation")
+    pub fn act(self, index: u32, permutation: Permutation) -> Option<u32> {
+        self.class_key().space().reindex(index, permutation)
     }
 
     /// The mirror (improper, μ) generator as a permutation: chiral kinds use the
@@ -861,25 +878,28 @@ impl StereoConfigurationForm {
     }
 
     /// Relabel the ligand positions (`^`); `Undetermined` is fixed.
-    pub fn apply(&self, permutation: Permutation) -> Self {
+    pub fn apply(&self, permutation: Permutation) -> Option<Self> {
         self.map_kinded(|kind, coset| coset.apply(kind, permutation))
     }
 
     /// The kind involution (`~`).
-    pub fn swap(&self) -> Self {
+    pub fn swap(&self) -> Option<Self> {
         self.map_kinded(|kind, coset| coset.swap(kind))
     }
 
     /// The enantiomer / mirror (`'`).
-    pub fn mirror(&self) -> Self {
+    pub fn mirror(&self) -> Option<Self> {
         self.map_kinded(|kind, coset| coset.mirror(kind))
     }
 
-    fn map_kinded(&self, f: impl FnOnce(StereoKind, &StereoCoset) -> StereoCoset) -> Self {
-        match self {
+    fn map_kinded(
+        &self,
+        f: impl FnOnce(StereoKind, &StereoCoset) -> Option<StereoCoset>,
+    ) -> Option<Self> {
+        Some(match self {
             Self::Undetermined => Self::Undetermined,
-            Self::Kinded(kind, coset) => Self::Kinded(*kind, f(*kind, coset)),
-        }
+            Self::Kinded(kind, coset) => Self::Kinded(*kind, f(*kind, coset)?),
+        })
     }
 
     /// Overwrite with `other`, field-wise: an `Undetermined` `other` keeps `self`; a same-kind
@@ -1232,7 +1252,7 @@ impl StereoCoset {
 
     /// Relabel the ligand positions (the `^` op): move each literal coset index through the kind's
     /// coset algebra, eager on `Lit`/`LitSet`; an open `Term` keeps the operator layer.
-    fn apply(&self, kind: StereoKind, permutation: Permutation) -> Self {
+    fn apply(&self, kind: StereoKind, permutation: Permutation) -> Option<Self> {
         self.map_index(
             |c| kind.act(c, permutation),
             |t| StereoTerm::apply(t, permutation),
@@ -1240,12 +1260,12 @@ impl StereoCoset {
     }
 
     /// The kind involution (the `~` op).
-    fn swap(&self, kind: StereoKind) -> Self {
+    fn swap(&self, kind: StereoKind) -> Option<Self> {
         self.map_index(|c| kind.act(c, kind.involution()), StereoTerm::swap)
     }
 
     /// The enantiomer / mirror (the `'` op).
-    fn mirror(&self, kind: StereoKind) -> Self {
+    fn mirror(&self, kind: StereoKind) -> Option<Self> {
         self.map_index(
             |c| kind.act(c, kind.mirror_permutation()),
             StereoTerm::mirror,
@@ -1256,15 +1276,15 @@ impl StereoCoset {
     /// an operator layer — a bare variable cannot be evaluated). `Undetermined` is fixed.
     fn map_index(
         &self,
-        lit: impl Fn(u32) -> u32,
+        lit: impl Fn(u32) -> Option<u32>,
         term: impl FnOnce(StereoTerm) -> StereoTerm,
-    ) -> Self {
-        match self {
+    ) -> Option<Self> {
+        Some(match self {
             Self::Undetermined => Self::Undetermined,
-            Self::Lit(c) => Self::Lit(lit(*c)),
-            Self::LitSet(s) => Self::LitSet(s.iter().map(|&c| lit(c)).collect()),
+            Self::Lit(c) => Self::Lit(lit(*c)?),
+            Self::LitSet(s) => Self::LitSet(s.iter().map(|&c| lit(c)).collect::<Option<_>>()?),
             Self::Term(t) => Self::term(term((**t).clone())),
-        }
+        })
     }
 }
 
@@ -2177,7 +2197,19 @@ mod tests {
         #[case] permutation: Permutation,
         #[case] expected: u32,
     ) {
-        assert_eq!(kind.act(index, permutation), expected);
+        assert_eq!(kind.act(index, permutation), Some(expected));
+    }
+
+    #[rstest]
+    #[case::coset_out_of_range(StereoKind::Tetrahedral, 2, Permutation::identity(4))]
+    #[case::outside_parent_group(StereoKind::CisTrans, 0, Permutation::from_image(&[1, 2, 0, 3]))]
+    #[case::wrong_degree(StereoKind::Tetrahedral, 0, Permutation::identity(3))]
+    fn test_stereo_kind_act_error(
+        #[case] kind: StereoKind,
+        #[case] index: u32,
+        #[case] permutation: Permutation,
+    ) {
+        assert_eq!(kind.act(index, permutation), None);
     }
 
     #[rstest]
@@ -2207,7 +2239,7 @@ mod tests {
         #[case] permutation: Permutation,
         #[case] expected: StereoCoset,
     ) {
-        assert_eq!(coset.apply(kind, permutation), expected);
+        assert_eq!(coset.apply(kind, permutation), Some(expected));
     }
 
     #[rstest]
@@ -2229,7 +2261,7 @@ mod tests {
         #[case] kind: StereoKind,
         #[case] expected: StereoCoset,
     ) {
-        assert_eq!(coset.swap(kind), expected);
+        assert_eq!(coset.swap(kind), Some(expected));
     }
 
     #[rstest]
@@ -2250,7 +2282,7 @@ mod tests {
         #[case] kind: StereoKind,
         #[case] expected: StereoCoset,
     ) {
-        assert_eq!(coset.mirror(kind), expected);
+        assert_eq!(coset.mirror(kind), Some(expected));
     }
 
     #[rstest]
@@ -2265,7 +2297,7 @@ mod tests {
         #[case] permutation: Permutation,
         #[case] expected: StereoConfigurationForm,
     ) {
-        assert_eq!(config.apply(permutation), expected);
+        assert_eq!(config.apply(permutation), Some(expected));
     }
 
     #[rstest]
@@ -2281,7 +2313,7 @@ mod tests {
         #[case] config: StereoConfigurationForm,
         #[case] expected: StereoConfigurationForm,
     ) {
-        assert_eq!(config.swap(), expected);
+        assert_eq!(config.swap(), Some(expected));
     }
 
     #[rstest]
@@ -2301,7 +2333,7 @@ mod tests {
         #[case] config: StereoConfigurationForm,
         #[case] expected: StereoConfigurationForm,
     ) {
-        assert_eq!(config.mirror(), expected);
+        assert_eq!(config.mirror(), Some(expected));
     }
 
     #[rstest]
@@ -2345,7 +2377,7 @@ mod tests {
         #[case] permutation: Permutation,
         #[case] expected: StereoAtomForm,
     ) {
-        assert_eq!(input.apply(permutation), expected);
+        assert_eq!(input.apply(permutation), Some(expected));
     }
 
     #[rstest]
@@ -2354,7 +2386,7 @@ mod tests {
         StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
     )]
     fn test_stereo_atom_form_swap(#[case] input: StereoAtomForm, #[case] expected: StereoAtomForm) {
-        assert_eq!(input.swap(), expected);
+        assert_eq!(input.swap(), Some(expected));
     }
 
     #[rstest]
@@ -2366,7 +2398,7 @@ mod tests {
         #[case] input: StereoAtomForm,
         #[case] expected: StereoAtomForm,
     ) {
-        assert_eq!(input.mirror(), expected);
+        assert_eq!(input.mirror(), Some(expected));
     }
 
     #[rstest]
@@ -2375,7 +2407,7 @@ mod tests {
         StereoBondForm::new(StereoKind::CisTrans, 1u32)
     )]
     fn test_stereo_bond_form_swap(#[case] input: StereoBondForm, #[case] expected: StereoBondForm) {
-        assert_eq!(input.swap(), expected);
+        assert_eq!(input.swap(), Some(expected));
     }
 
     #[rstest]
@@ -2399,7 +2431,7 @@ mod tests {
         [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
         1,
     )]
-    fn test_stereo_atom_form_transform_frame(
+    fn test_stereo_atom_form_reframe_to(
         #[case] before: [StereoLigand; 4],
         #[case] after: [StereoLigand; 4],
         #[case] expected_coset: u32,
@@ -2407,13 +2439,124 @@ mod tests {
         let atom = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
         let permutation = Permutation::between(&before, &after).expect("case has a unique frame");
         assert_eq!(
-            atom.transform_frame(&before, &after),
+            atom.clone().reframe_to(&before, &after),
             Some(StereoAtomForm::new(StereoKind::Tetrahedral, expected_coset,)),
         );
         assert_eq!(
-            atom.transform_frame_by(permutation),
-            atom.transform_frame(&before, &after),
+            atom.clone().reframe_by(permutation),
+            atom.reframe_to(&before, &after),
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::distinct_sorted(StereoKind::Tetrahedral,
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
+        Permutation::from_image(&[0, 1, 2, 3]))]
+    #[case::distinct_reversed(StereoKind::Tetrahedral,
+        [StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+        Permutation::from_image(&[3, 2, 1, 0]))]
+    #[case::virtual_sorts_before_atoms(StereoKind::Tetrahedral,
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)],
+        Permutation::from_image(&[1, 3, 0, 2]))]
+    fn test_stereo_atom_form_select_frame(
+        #[case] kind: StereoKind,
+        #[case] frame: [StereoLigand; 4],
+        #[case] expected: Permutation,
+    ) {
+        assert_eq!(
+            StereoAtomForm::new(kind, 0u32).select_frame(&frame),
+            Some(expected),
+        );
+    }
+
+    /// A frame that repeats a ligand is a valid arrangement record: distinctness is neither
+    /// required nor asserted, so a repeated frame carries a determinate coset and selection must
+    /// succeed. The repeat leaves a residual stabilizer, so several actions present the frame
+    /// sorted; the selected one makes the canonical value independent of the starting
+    /// presentation.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::two_implicit_hydrogens(StereoKind::Tetrahedral, 0u32,
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
+        Permutation::from_image(&[2, 3, 0, 1]))]
+    #[case::three_lone_pairs(StereoKind::Tetrahedral, 1u32,
+        [StereoLigand::new(AtomId(0), StereoLigandKind::LonePair), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)],
+        Permutation::from_image(&[1, 2, 3, 0]))]
+    #[case::all_four_equal(StereoKind::Tetrahedral, 1u32,
+        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
+        Permutation::from_image(&[1, 0, 3, 2]))]
+    #[case::axial_restricted_parent(StereoKind::Axial, 1u32,
+        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
+        Permutation::from_image(&[2, 3, 0, 1]))]
+    fn test_stereo_atom_form_select_frame_repeated(
+        #[case] kind: StereoKind,
+        #[case] coset: u32,
+        #[case] frame: [StereoLigand; 4],
+        #[case] presentation: Permutation,
+    ) {
+        let form = StereoAtomForm::new(kind, coset);
+        let selected = form
+            .select_frame(&frame)
+            .expect("a repeated ligand frame is a valid arrangement record");
+        let canonical = form.clone().reframe_by(selected);
+
+        let restated = form
+            .reframe_by(presentation)
+            .expect("the case presentation is a parent-group action");
+        let restated_frame = presentation.act(&frame);
+        let restated_selected = restated
+            .select_frame(&restated_frame)
+            .expect("a repeated ligand frame is a valid arrangement record");
+        assert_eq!(restated.reframe_by(restated_selected), canonical);
+    }
+
+    /// A 1,1-disubstituted alkene repeats a ligand on one endpoint and is not stereogenic. The
+    /// arrangement record is still valid and its coset still faithful, so selection must accept
+    /// it under the partitioned cis/trans parent group.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::both_on_first_endpoint(
+        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom)],
+        Permutation::from_image(&[1, 0, 3, 2]))]
+    #[case::one_on_each_endpoint(
+        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
+        Permutation::from_image(&[1, 0, 2, 3]))]
+    fn test_stereo_bond_form_select_frame_repeated(
+        #[case] frame: [StereoLigand; 4],
+        #[case] presentation: Permutation,
+    ) {
+        let form = StereoBondForm::new(StereoKind::CisTrans, 1u32);
+        let selected = form
+            .select_frame(&frame)
+            .expect("a repeated ligand frame is a valid arrangement record");
+        let canonical = form.clone().reframe_by(selected);
+
+        let restated = form
+            .reframe_by(presentation)
+            .expect("the case presentation is a parent-group action");
+        let restated_selected = restated
+            .select_frame(&presentation.act(&frame))
+            .expect("a repeated ligand frame is a valid arrangement record");
+        assert_eq!(restated.reframe_by(restated_selected), canonical);
+    }
+
+    /// A form's constructors are permissive, so a coset index outside its kind's coset space is
+    /// representable until molecule publication checks it. The frame action is the first operation
+    /// that requires the index to be in range, so it declines there.
+    #[rstest]
+    #[case::atom_coset_out_of_range(StereoKind::Tetrahedral, 2u32)]
+    #[case::atom_coset_far_out_of_range(StereoKind::SquarePlanar, 40u32)]
+    fn test_stereo_atom_form_reframe_by_error(#[case] kind: StereoKind, #[case] coset: u32) {
+        let frame = [
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        ];
+        let form = StereoAtomForm::new(kind, coset);
+        assert_eq!(form.clone().reframe_by(Permutation::identity(4)), None);
+        assert_eq!(form.select_frame(&frame), None);
     }
 
     #[rstest]
@@ -2421,7 +2564,7 @@ mod tests {
     #[case::outside_parent(Permutation::from_image(&[1, 2, 0, 3]))]
     fn test_stereo_bond_form_transform_frame_by_error(#[case] permutation: Permutation) {
         assert_eq!(
-            StereoBondForm::new(StereoKind::CisTrans, 0u32).transform_frame_by(permutation),
+            StereoBondForm::new(StereoKind::CisTrans, 0u32).reframe_by(permutation),
             None,
         );
     }
@@ -2444,7 +2587,7 @@ mod tests {
         #[case] after: &[StereoLigand],
     ) {
         assert_eq!(
-            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).transform_frame(before, after),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32).reframe_to(before, after),
             None,
         );
     }
@@ -2465,8 +2608,9 @@ mod tests {
         ];
         let atom = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
         assert_eq!(
-            atom.transform_frame(&before, &after)
-                .and_then(|transformed| transformed.transform_frame(&after, &before)),
+            atom.clone()
+                .reframe_to(&before, &after)
+                .and_then(|transformed| transformed.reframe_to(&after, &before)),
             Some(atom),
         );
     }
@@ -2487,13 +2631,13 @@ mod tests {
         &[StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
         None,
     )]
-    fn test_stereo_bond_form_transform_frame(
+    fn test_stereo_bond_form_reframe_to(
         #[case] before: &[StereoLigand],
         #[case] after: &[StereoLigand],
         #[case] expected: Option<StereoBondForm>,
     ) {
         assert_eq!(
-            StereoBondForm::new(StereoKind::CisTrans, 0u32).transform_frame(before, after),
+            StereoBondForm::new(StereoKind::CisTrans, 0u32).reframe_to(before, after),
             expected,
         );
     }

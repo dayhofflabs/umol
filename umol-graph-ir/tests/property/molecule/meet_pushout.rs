@@ -45,7 +45,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&left_frame),
-                left_form.apply(permutation),
+                left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -92,7 +92,7 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_atoms: vec![(AtomId(0), right_frame, left_form.apply(permutation))],
+            stereo_atoms: vec![(AtomId(0), right_frame, left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
@@ -139,7 +139,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&left_frame),
-                left_form.apply(permutation),
+                left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -192,7 +192,7 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_bonds: vec![(BondId(0), right_frame, left_form.apply(permutation))],
+            stereo_bonds: vec![(BondId(0), right_frame, left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(

@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use umol_graph_core::ParticipantPosition;
 
 use super::error::{Contradiction, NoJoin};
+use super::id::AtomId;
 use super::traits::{AsLit, Lattice, Normalize};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
@@ -26,6 +27,34 @@ impl ElectronCountsForm {
 
     pub fn lit(counts: Vec<i64>) -> Self {
         Self::Lit(counts)
+    }
+
+    /// Restate the counts in the `to` frame, given they are stated in the `from` frame
+    /// (`new[i] = old[j]` where `from[j] == to[i]`).
+    ///
+    /// `Undetermined` is frameless and unchanged. `None` when the two frames disagree in length
+    /// with each other or with the counts, when `to` is not a reordering of `from`, or when a
+    /// repeated participant leaves the reordering ambiguous.
+    pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> {
+        match self {
+            Self::Undetermined => Some(Self::Undetermined),
+            Self::Lit(counts) => {
+                if from.len() != to.len() || counts.len() != from.len() {
+                    return None;
+                }
+                let mut taken = vec![false; from.len()];
+                let mut reframed = Vec::with_capacity(counts.len());
+                for target in to {
+                    let source = from.iter().position(|atom| atom == target)?;
+                    if taken[source] {
+                        return None;
+                    }
+                    taken[source] = true;
+                    reframed.push(counts[source]);
+                }
+                Some(Self::Lit(reframed))
+            }
+        }
     }
 
     /// Reorder the positional counts by `order` (`new[i] = old[order[i]]`) to
@@ -128,6 +157,57 @@ mod tests {
         #[case] expected: ElectronCountsForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::reorder(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(7)],
+        Some(ElectronCountsForm::Lit(vec![30, 10, 20])),
+    )]
+    #[case::identity_frame(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(4), AtomId(7), AtomId(9)],
+        Some(ElectronCountsForm::Lit(vec![10, 20, 30])),
+    )]
+    #[case::undetermined(
+        ElectronCountsForm::Undetermined,
+        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)],
+        Some(ElectronCountsForm::Undetermined),
+    )]
+    #[case::undetermined_frame_length_ignored(
+        ElectronCountsForm::Undetermined,
+        &[AtomId(4), AtomId(7)], &[AtomId(7)],
+        Some(ElectronCountsForm::Undetermined),
+    )]
+    #[case::frames_differ_in_length(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4)],
+        None,
+    )]
+    #[case::counts_differ_from_frame(
+        ElectronCountsForm::Lit(vec![10, 20]),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(7)],
+        None,
+    )]
+    #[case::not_a_reordering(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(5)],
+        None,
+    )]
+    #[case::repeated_participant(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        &[AtomId(4), AtomId(4), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(4)],
+        None,
+    )]
+    fn test_electron_counts_form_reframe_to(
+        #[case] input: ElectronCountsForm,
+        #[case] from: &[AtomId],
+        #[case] to: &[AtomId],
+        #[case] expected: Option<ElectronCountsForm>,
+    ) {
+        assert_eq!(input.reframe_to(from, to), expected);
     }
 
     #[rstest]

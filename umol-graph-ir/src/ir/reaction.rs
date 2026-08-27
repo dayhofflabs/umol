@@ -1565,8 +1565,12 @@ fn reframe_stereo(
                     } => {
                         let sigma = Permutation::between(&before, &after)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
-                        *old = old.apply(sigma);
-                        *new = new.apply(sigma);
+                        *old = old
+                            .apply(sigma)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *new = new
+                            .apply(sigma)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoAtomDelta::Remove {
                         ligands,
@@ -1574,7 +1578,8 @@ fn reframe_stereo(
                         ..
                     } => {
                         *attributes = attributes
-                            .transform_frame(&before, &after)
+                            .clone()
+                            .reframe_to(&before, &after)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
@@ -1607,8 +1612,12 @@ fn reframe_stereo(
                     } => {
                         let sigma = Permutation::between(&before, &after)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
-                        *old = old.apply(sigma);
-                        *new = new.apply(sigma);
+                        *old = old
+                            .apply(sigma)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *new = new
+                            .apply(sigma)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoBondDelta::Remove {
                         ligands,
@@ -1616,7 +1625,8 @@ fn reframe_stereo(
                         ..
                     } => {
                         *attributes = attributes
-                            .transform_frame(&before, &after)
+                            .clone()
+                            .reframe_to(&before, &after)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }

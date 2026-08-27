@@ -1087,6 +1087,22 @@ impl<T> EntitySpan<T> {
             Self::Removed(_) => None,
         }
     }
+
+    /// Carry every present side through `f`, declining if any side declines.
+    ///
+    /// A `Modified` span applies the same `f` to both sides, which is what makes one selected frame
+    /// action reach both: the span holds two values against a single participant list.
+    pub fn try_map<U>(self, mut f: impl FnMut(T) -> Option<U>) -> Option<EntitySpan<U>> {
+        Some(match self {
+            Self::Unchanged(value) => EntitySpan::Unchanged(f(value)?),
+            Self::Modified { lhs, rhs } => EntitySpan::Modified {
+                lhs: f(lhs)?,
+                rhs: f(rhs)?,
+            },
+            Self::Added(value) => EntitySpan::Added(f(value)?),
+            Self::Removed(value) => EntitySpan::Removed(f(value)?),
+        })
+    }
 }
 
 /// A span stored as relation data (a `ReactionSpan` overlay) reindexes each present side's payload
@@ -3869,6 +3885,24 @@ mod tests {
     #[case::removed(EntitySpan::Removed(7), None)]
     fn test_entity_span_rhs(#[case] state: EntitySpan<i32>, #[case] expected: Option<&i32>) {
         assert_eq!(state.rhs(), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(5), Some(EntitySpan::Unchanged(10)))]
+    #[case::modified(
+        EntitySpan::Modified { lhs: 1, rhs: 2 },
+        Some(EntitySpan::Modified { lhs: 2, rhs: 4 }),
+    )]
+    #[case::added(EntitySpan::Added(9), Some(EntitySpan::Added(18)))]
+    #[case::removed(EntitySpan::Removed(7), Some(EntitySpan::Removed(14)))]
+    #[case::modified_lhs_declines(EntitySpan::Modified { lhs: 0, rhs: 2 }, None)]
+    #[case::modified_rhs_declines(EntitySpan::Modified { lhs: 1, rhs: 0 }, None)]
+    #[case::unchanged_declines(EntitySpan::Unchanged(0), None)]
+    fn test_entity_span_try_map(
+        #[case] span: EntitySpan<i32>,
+        #[case] expected: Option<EntitySpan<i32>>,
+    ) {
+        assert_eq!(span.try_map(|v| (v != 0).then_some(v * 2)), expected);
     }
 
     #[rstest]

@@ -29,7 +29,7 @@ impl Molecule {
     /// coincident bonds), meeting atom / bond / overlay data at coincident entities and combining the
     /// two molecule-constraint sets; `None` when any coincident `meet` is `⊥` (the overlap is
     /// inadmissible). Stereo overlays keep `self`'s ligand frame; `other`'s coincident cosets are
-    /// aligned to it (`transform_frame`) before the pushout, so they `meet` in a shared frame.
+    /// aligned to it (`reframe_to`) before the pushout, so they `meet` in a shared frame.
     pub fn meet_pushout(
         &self,
         other: &Molecule,
@@ -487,7 +487,7 @@ mod tests {
 
     // One tetrahedral center on atom 0 (ligands {1,2,3,4}) shared by both molecules, but `other`'s
     // ligand frame swaps 1 and 2 — a transposition, which flips the coset. `meet_pushout` canonicalizes
-    // both frames (`transform_frame`) before the meet, so `agree` (opposite coset in the swapped frame
+    // both frames (`reframe_to`) before the meet, so `agree` (opposite coset in the swapped frame
     // = same physical configuration) folds to `self`, while `contradict` (same coset = opposite
     // configuration) is `⊥`.
     #[rstest]

@@ -296,6 +296,27 @@ impl MulticenterBondForm {
         }
     }
 
+    /// Restate the form in the `to` participant frame, given it is stated in the `from` frame.
+    /// Only `electrons` is position-indexed; charge, unpaired electrons, and constraints are
+    /// positionless and carry unchanged. `None` when `electrons` declines the frame change.
+    ///
+    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
+    /// here rather than be silently left in the old frame.
+    pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> {
+        let Self {
+            electrons,
+            charge,
+            unpaired_electrons,
+            constraints,
+        } = self;
+        Some(Self {
+            electrons: electrons.reframe_to(from, to)?,
+            charge,
+            unpaired_electrons,
+            constraints,
+        })
+    }
+
     /// Reorder the positional `electrons` by `order`, tracking a participant
     /// reordering; charge / unpaired electrons / constraints are positionless and unchanged.
     pub fn permute(&mut self, order: &[ParticipantPosition]) {
@@ -468,6 +489,50 @@ mod tests {
         #[case] other: MulticenterBondForm,
     ) {
         assert_eq!(bond.difference_to(&other), MulticenterBondUpdate::default());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::reorder(
+        MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
+        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(7)],
+        Some(MulticenterBondForm::from_electrons(vec![30, 10, 20]).with_charge(-1)),
+    )]
+    #[case::undetermined_electrons(
+        MulticenterBondForm::new(ElectronCountsForm::Undetermined).with_charge(-1),
+        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)],
+        Some(MulticenterBondForm::new(ElectronCountsForm::Undetermined).with_charge(-1)),
+    )]
+    #[case::constraint_carries(
+        MulticenterBondForm::from_electrons(vec![10, 20]).with_constraint(MulticenterBondConstraintForm::electron_count(30)),
+        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)],
+        Some(MulticenterBondForm::from_electrons(vec![20, 10]).with_constraint(MulticenterBondConstraintForm::electron_count(30))),
+    )]
+    #[case::not_a_reordering(
+        MulticenterBondForm::from_electrons(vec![10, 20]),
+        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(5)],
+        None,
+    )]
+    #[case::frames_differ_in_length(
+        MulticenterBondForm::from_electrons(vec![10, 20]),
+        &[AtomId(4), AtomId(7)], &[AtomId(7)],
+        None,
+    )]
+    fn test_multicenter_bond_form_reframe_to(
+        #[case] input: MulticenterBondForm,
+        #[case] from: &[AtomId],
+        #[case] to: &[AtomId],
+        #[case] expected: Option<MulticenterBondForm>,
+    ) {
+        assert_eq!(input.reframe_to(from, to), expected);
+    }
+
+    #[rstest]
+    #[case::identity_frame(MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1))]
+    #[case::undetermined_electrons(MulticenterBondForm::new(ElectronCountsForm::Undetermined))]
+    fn test_multicenter_bond_form_reframe_to_identity(#[case] input: MulticenterBondForm) {
+        let frame = [AtomId(4), AtomId(7), AtomId(9)];
+        assert_eq!(input.clone().reframe_to(&frame, &frame), Some(input));
     }
 
     #[rstest]

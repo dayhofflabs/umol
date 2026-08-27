@@ -265,6 +265,16 @@ impl DativeBondForm {
     }
 
     /// Derive the minimal normalized attribute update carrying `self` to `other`.
+    /// Frame-invariant: no field is position-indexed, so a frame change carries the form
+    /// unchanged.
+    ///
+    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
+    /// here rather than be silently left in the old frame.
+    pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> {
+        let Self { order, constraints } = self;
+        Some(Self { order, constraints })
+    }
+
     pub fn difference_to(&self, other: &Self) -> DativeBondUpdate {
         let mut constraints = DativeBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -388,6 +398,18 @@ mod tests {
     }
 
     #[rustfmt::skip]
+    #[rstest]
+    #[case::ground(DativeBondForm::from_order(1))]
+    #[case::with_constraint(DativeBondForm::from_order(1)
+        .with_constraint(DativeBondConstraintForm::aromatic(true)))]
+    #[case::undetermined(DativeBondForm::default())]
+    fn test_dative_bond_form_reframe_to(#[case] input: DativeBondForm) {
+        assert_eq!(
+            input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
+            Some(input),
+        );
+    }
+
     #[rstest]
     #[case::fields_and_constraints(
         DativeBondForm::from_order(1).with_constraints([

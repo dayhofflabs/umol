@@ -241,6 +241,16 @@ impl NoncovalentBondForm {
     }
 
     /// Derive the minimal normalized attribute update carrying `self` to `other`.
+    /// Frame-invariant: no field is position-indexed, so a frame change carries the form
+    /// unchanged.
+    ///
+    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
+    /// here rather than be silently left in the old frame.
+    pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> {
+        let Self { kind, constraints } = self;
+        Some(Self { kind, constraints })
+    }
+
     pub fn difference_to(&self, other: &Self) -> NoncovalentBondUpdate {
         let mut constraints = NoncovalentBondConstraintsForm::new();
         for new in other.constraints.iter() {
@@ -448,6 +458,18 @@ mod tests {
     }
 
     #[rustfmt::skip]
+    #[rstest]
+    #[case::ground(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::with_constraint(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
+        .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)))]
+    #[case::undetermined(NoncovalentBondForm::default())]
+    fn test_noncovalent_bond_form_reframe_to(#[case] input: NoncovalentBondForm) {
+        assert_eq!(
+            input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
+            Some(input),
+        );
+    }
+
     #[rstest]
     #[case::kind_and_constraint(
         NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
