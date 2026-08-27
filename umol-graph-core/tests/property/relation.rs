@@ -87,7 +87,11 @@ proptest! {
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.relation_ids(), count, prefix)?;
-        assert_data_iter_mut(relations.data_iter_mut(), count, prefix)?;
+        assert_data_iter_mut(
+            relations.iter_mut().map(|(_, _, data)| data),
+            count,
+            prefix,
+        )?;
         for index in 0..count {
             prop_assert_eq!(
                 relations.data(RelationId(index as u32)),
@@ -113,7 +117,11 @@ proptest! {
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.relation_ids(), count, prefix)?;
-        assert_data_iter_mut(relations.data_iter_mut(), count, prefix)?;
+        assert_data_iter_mut(
+            relations.iter_mut().map(|(_, _, data)| data),
+            count,
+            prefix,
+        )?;
         for index in 0..count {
             prop_assert_eq!(
                 relations.data(RelationId(index as u32)),
@@ -148,7 +156,11 @@ proptest! {
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.relation_ids(), count, prefix)?;
-        assert_data_iter_mut(relations.data_iter_mut(), count, prefix)?;
+        assert_data_iter_mut(
+            relations.iter_mut().map(|(_, _, _, data)| data),
+            count,
+            prefix,
+        )?;
         for index in 0..count {
             prop_assert_eq!(
                 relations.data(RelationId(index as u32)),
@@ -182,7 +194,11 @@ proptest! {
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.relation_ids(), count, prefix)?;
-        assert_data_iter_mut(relations.data_iter_mut(), count, prefix)?;
+        assert_data_iter_mut(
+            relations.iter_mut().map(|(_, _, _, data)| data),
+            count,
+            prefix,
+        )?;
         for index in 0..count {
             prop_assert_eq!(
                 relations.data(RelationId(index as u32)),
@@ -215,7 +231,11 @@ proptest! {
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.relation_ids(), count, prefix)?;
-        assert_data_iter_mut(relations.data_iter_mut(), count, prefix)?;
+        assert_data_iter_mut(
+            relations.iter_mut().map(|(_, _, _, data)| data),
+            count,
+            prefix,
+        )?;
         for index in 0..count {
             prop_assert_eq!(
                 relations.data(RelationId(index as u32)),

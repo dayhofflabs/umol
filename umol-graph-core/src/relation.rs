@@ -472,8 +472,25 @@ impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelation
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
-        self.data.iter_mut()
+    /// Every relation as `(id, participants, payload)` in relation-id order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[P; N], &D)> {
+        self.participants
+            .iter()
+            .zip(&self.data)
+            .enumerate()
+            .map(|(index, (participants, data))| (RelationId(index as u32), participants, data))
+    }
+
+    /// Every relation as `(id, participants, payload)` in relation-id order, the payload mutable.
+    ///
+    /// Participants stay immutable: changing them would invalidate the incidence index, which
+    /// [`permute_with`](Self::permute_with) is the one operation allowed to leave intact.
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (RelationId, &[P; N], &mut D)> {
+        let participants = &self.participants;
+        self.data
+            .iter_mut()
+            .enumerate()
+            .map(move |(index, data)| (RelationId(index as u32), &participants[index], data))
     }
 
     pub fn participants(&self, id: RelationId) -> &[P; N] {
@@ -786,8 +803,29 @@ impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
-        self.data.iter_mut()
+    /// Every relation as `(id, participants, payload)` in relation-id order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[P], &D)> {
+        let offsets = &self.offsets;
+        let participants = &self.participants;
+        self.data.iter().enumerate().map(move |(index, data)| {
+            let start = offsets[index] as usize;
+            let end = offsets[index + 1] as usize;
+            (RelationId(index as u32), &participants[start..end], data)
+        })
+    }
+
+    /// Every relation as `(id, participants, payload)` in relation-id order, the payload mutable.
+    ///
+    /// Participants stay immutable: changing them would invalidate the incidence index, which
+    /// [`permute_with`](Self::permute_with) is the one operation allowed to leave intact.
+    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item = (RelationId, &[P], &mut D)> {
+        let offsets = &self.offsets;
+        let participants = &self.participants;
+        self.data.iter_mut().enumerate().map(move |(index, data)| {
+            let start = offsets[index] as usize;
+            let end = offsets[index + 1] as usize;
+            (RelationId(index as u32), &participants[start..end], data)
+        })
     }
 
     pub fn participants(&self, id: RelationId) -> &[P] {
@@ -1094,8 +1132,42 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
-        self.data.iter_mut()
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[L1; N1], &[L2; N2], &D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+
+        self.data.iter().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[index],
+                &participants_2[index],
+                data,
+            )
+        })
+    }
+
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order, the payload mutable.
+    ///
+    /// Participants stay immutable: changing them would invalidate the incidence index, which
+    /// [`permute_1_with`](Self::permute_1_with) and [`permute_2_with`](Self::permute_2_with) are
+    /// the operations allowed to leave intact.
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = (RelationId, &[L1; N1], &[L2; N2], &mut D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+
+        self.data.iter_mut().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[index],
+                &participants_2[index],
+                data,
+            )
+        })
     }
 
     pub fn participants_1(&self, id: RelationId) -> &[L1; N1] {
@@ -1486,8 +1558,42 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
-        self.data.iter_mut()
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[L1; N1], &[L2], &D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+        let f2_offsets = &self.f2_offsets;
+        self.data.iter().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[index],
+                &participants_2[f2_offsets[index] as usize..f2_offsets[index + 1] as usize],
+                data,
+            )
+        })
+    }
+
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order, the payload mutable.
+    ///
+    /// Participants stay immutable: changing them would invalidate the incidence index, which
+    /// [`permute_1_with`](Self::permute_1_with) and [`permute_2_with`](Self::permute_2_with) are
+    /// the operations allowed to leave intact.
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = (RelationId, &[L1; N1], &[L2], &mut D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+        let f2_offsets = &self.f2_offsets;
+        self.data.iter_mut().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[index],
+                &participants_2[f2_offsets[index] as usize..f2_offsets[index + 1] as usize],
+                data,
+            )
+        })
     }
 
     pub fn participants_1(&self, id: RelationId) -> &[L1; N1] {
@@ -1882,8 +1988,44 @@ where
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl ExactSizeIterator<Item = &mut D> {
-        self.data.iter_mut()
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order.
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (RelationId, &[L1], &[L2], &D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+        let f1_offsets = &self.f1_offsets;
+        let f2_offsets = &self.f2_offsets;
+        self.data.iter().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[f1_offsets[index] as usize..f1_offsets[index + 1] as usize],
+                &participants_2[f2_offsets[index] as usize..f2_offsets[index + 1] as usize],
+                data,
+            )
+        })
+    }
+
+    /// Every relation as `(id, first-factor participants, second-factor participants, payload)` in
+    /// relation-id order, the payload mutable.
+    ///
+    /// Participants stay immutable: changing them would invalidate the incidence index, which
+    /// [`permute_1_with`](Self::permute_1_with) and [`permute_2_with`](Self::permute_2_with) are
+    /// the operations allowed to leave intact.
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = (RelationId, &[L1], &[L2], &mut D)> {
+        let participants_1 = &self.participants_1;
+        let participants_2 = &self.participants_2;
+        let f1_offsets = &self.f1_offsets;
+        let f2_offsets = &self.f2_offsets;
+        self.data.iter_mut().enumerate().map(move |(index, data)| {
+            (
+                RelationId(index as u32),
+                &participants_1[f1_offsets[index] as usize..f1_offsets[index + 1] as usize],
+                &participants_2[f2_offsets[index] as usize..f2_offsets[index + 1] as usize],
+                data,
+            )
+        })
     }
 
     pub fn participants_1(&self, id: RelationId) -> &[L1] {
@@ -2248,26 +2390,6 @@ mod tests {
         assert_eq!(iterator.size_hint(), (0, Some(0)));
     }
 
-    fn assert_data_iter_mut<'a>(
-        mut iterator: impl ExactSizeIterator<Item = &'a mut i32>,
-        expected: &[i32],
-    ) {
-        assert_eq!(iterator.len(), expected.len());
-        assert_eq!(iterator.size_hint(), (expected.len(), Some(expected.len())));
-        for expected_item in expected {
-            let previous = iterator.len();
-            let item = iterator.next().expect("expected another data item");
-            assert_eq!(*item, *expected_item);
-            *item *= 10;
-            let remaining = iterator.len();
-            assert_eq!(remaining, previous - 1);
-            assert_eq!(iterator.size_hint(), (remaining, Some(remaining)));
-        }
-        assert_eq!(iterator.next(), None);
-        assert_eq!(iterator.len(), 0);
-        assert_eq!(iterator.size_hint(), (0, Some(0)));
-    }
-
     #[rstest]
     #[case::already_sorted(vec![0, 1, 2], vec![0, 1, 2])]
     #[case::reversed(vec![2, 1, 0], vec![0, 1, 2])]
@@ -2384,16 +2506,37 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_relation_set_data_iter_mut() {
+    fn test_fixed_relation_set_iter() {
+        let empty = FixedRelationSet::<NodeId, Unordered, i32, 2>::default();
+        assert_eq!(empty.iter().collect::<Vec<_>>(), vec![]);
+
+        let rs: FixedRelationSet<NodeId, Unordered, i32, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], 1), ([n(1), n(2)], 2)]);
+        assert_eq!(rs.iter().len(), 2);
+        assert_eq!(
+            rs.iter().collect::<Vec<_>>(),
+            vec![
+                (RelationId(0), &[n(0), n(1)], &1),
+                (RelationId(1), &[n(1), n(2)], &2),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_fixed_relation_set_iter_mut() {
         let mut empty = FixedRelationSet::<NodeId, Unordered, i32, 2>::default();
-        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+        assert_eq!(empty.iter_mut().len(), 0);
 
         let mut rs: FixedRelationSet<NodeId, Unordered, i32, 2> = FixedRelationSet::new(vec![
             ([n(0), n(1)], 1),
             ([n(1), n(2)], 2),
             ([n(2), n(3)], 3),
         ]);
-        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2, 3]);
+        assert_eq!(rs.iter_mut().len(), 3);
+        for (id, participants, data) in rs.iter_mut() {
+            assert_eq!(participants[0], n(id.index() as u32));
+            *data *= 10;
+        }
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
         assert_eq!(rs.data(RelationId(2)), &30);
@@ -2600,16 +2743,44 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_relation_set_data_iter_mut() {
+    fn test_var_relation_set_iter() {
+        let empty = VarRelationSet::<NodeId, Unordered, i32>::default();
+        assert_eq!(empty.iter().collect::<Vec<_>>(), vec![]);
+
+        let rs: VarRelationSet<NodeId, Unordered, i32> = VarRelationSet::new(vec![
+            (vec![n(0), n(1)], 1),
+            (vec![n(2), n(3), n(4)], 2),
+            (vec![n(5)], 3),
+        ]);
+        assert_eq!(rs.iter().len(), 3);
+        assert_eq!(
+            rs.iter().collect::<Vec<_>>(),
+            vec![
+                (RelationId(0), [n(0), n(1)].as_slice(), &1),
+                (RelationId(1), [n(2), n(3), n(4)].as_slice(), &2),
+                (RelationId(2), [n(5)].as_slice(), &3),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_var_relation_set_iter_mut() {
         let mut empty = VarRelationSet::<NodeId, Unordered, i32>::default();
-        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+        assert_eq!(empty.iter_mut().len(), 0);
 
         let mut rs: VarRelationSet<NodeId, Unordered, i32> = VarRelationSet::new(vec![
             (vec![n(0), n(1)], 1),
             (vec![n(2), n(3), n(4)], 2),
             (vec![n(5)], 3),
         ]);
-        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2, 3]);
+        let arities: Vec<usize> = rs
+            .iter_mut()
+            .map(|(_, participants, data)| {
+                *data *= 10;
+                participants.len()
+            })
+            .collect();
+        assert_eq!(arities, vec![2, 3, 1]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
         assert_eq!(rs.data(RelationId(2)), &30);
@@ -2841,14 +3012,35 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_fixed_birelation_set_data_iter_mut() {
+    fn test_fixed_fixed_birelation_set_iter() {
+        let empty =
+            FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, i32>::default();
+        assert_eq!(empty.iter().collect::<Vec<_>>(), vec![]);
+
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1), ([n(2)], [n(3)], 2)]);
+        assert_eq!(rs.iter().len(), 2);
+        assert_eq!(
+            rs.iter().collect::<Vec<_>>(),
+            vec![
+                (RelationId(0), &[n(0)], &[n(1)], &1),
+                (RelationId(1), &[n(2)], &[n(3)], &2),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_iter_mut() {
         let mut empty =
             FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, i32>::default();
-        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+        assert_eq!(empty.iter_mut().len(), 0);
 
         let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1), ([n(2)], [n(3)], 2)]);
-        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
+        for (_, first, second, data) in rs.iter_mut() {
+            assert_eq!(second[0].0, first[0].0 + 1);
+            *data *= 10;
+        }
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }
@@ -3053,17 +3245,44 @@ mod tests {
     }
 
     #[rstest]
-    fn test_fixed_var_birelation_set_data_iter_mut() {
+    fn test_fixed_var_birelation_set_iter() {
+        let empty = FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, i32>::default();
+        assert_eq!(empty.iter().collect::<Vec<_>>(), vec![]);
+
+        let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, i32> =
+            FixedVarBirelationSet::new(vec![
+                ([EdgeId(0)], vec![n(1), n(3)], 1),
+                ([EdgeId(1)], vec![n(2)], 2),
+            ]);
+        assert_eq!(rs.iter().len(), 2);
+        assert_eq!(
+            rs.iter().collect::<Vec<_>>(),
+            vec![
+                (RelationId(0), &[EdgeId(0)], [n(1), n(3)].as_slice(), &1),
+                (RelationId(1), &[EdgeId(1)], [n(2)].as_slice(), &2),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_fixed_var_birelation_set_iter_mut() {
         let mut empty =
             FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, i32>::default();
-        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+        assert_eq!(empty.iter_mut().len(), 0);
 
         let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, i32> =
             FixedVarBirelationSet::new(vec![
-                ([EdgeId(0)], vec![n(1)], 1),
+                ([EdgeId(0)], vec![n(1), n(3)], 1),
                 ([EdgeId(1)], vec![n(2)], 2),
             ]);
-        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
+        let arities: Vec<usize> = rs
+            .iter_mut()
+            .map(|(_, _, ligands, data)| {
+                *data *= 10;
+                ligands.len()
+            })
+            .collect();
+        assert_eq!(arities, vec![2, 1]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }
@@ -3292,16 +3511,48 @@ mod tests {
     }
 
     #[rstest]
-    fn test_var_var_birelation_set_data_iter_mut() {
+    fn test_var_var_birelation_set_iter() {
+        let empty = VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, i32>::default();
+        assert_eq!(empty.iter().collect::<Vec<_>>(), vec![]);
+
+        let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, i32> =
+            VarVarBirelationSet::new(vec![
+                (vec![n(0), n(4)], vec![EdgeId(1)], 1),
+                (vec![n(2)], vec![EdgeId(3)], 2),
+            ]);
+        assert_eq!(rs.iter().len(), 2);
+        assert_eq!(
+            rs.iter().collect::<Vec<_>>(),
+            vec![
+                (
+                    RelationId(0),
+                    [n(0), n(4)].as_slice(),
+                    [EdgeId(1)].as_slice(),
+                    &1,
+                ),
+                (RelationId(1), [n(2)].as_slice(), [EdgeId(3)].as_slice(), &2),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_var_var_birelation_set_iter_mut() {
         let mut empty = VarVarBirelationSet::<NodeId, Unordered, EdgeId, Unordered, i32>::default();
-        assert_data_iter_mut(empty.data_iter_mut(), &[]);
+        assert_eq!(empty.iter_mut().len(), 0);
 
         let mut rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, i32> =
             VarVarBirelationSet::new(vec![
-                (vec![n(0)], vec![EdgeId(1)], 1),
+                (vec![n(0), n(4)], vec![EdgeId(1)], 1),
                 (vec![n(2)], vec![EdgeId(3)], 2),
             ]);
-        assert_data_iter_mut(rs.data_iter_mut(), &[1, 2]);
+        let arities: Vec<(usize, usize)> = rs
+            .iter_mut()
+            .map(|(_, first, second, data)| {
+                *data *= 10;
+                (first.len(), second.len())
+            })
+            .collect();
+        assert_eq!(arities, vec![(2, 1), (1, 1)]);
         assert_eq!(rs.data(RelationId(0)), &10);
         assert_eq!(rs.data(RelationId(1)), &20);
     }

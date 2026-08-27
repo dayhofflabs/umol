@@ -1299,7 +1299,7 @@ one where a frame-relative constraint on a single side forces the whole span to 
 
 ### S4 — Move entry comparison and composition onto the new surface
 
-#### S4a — Add `iter` and `iter_mut` to the five relation shapes
+#### S4a — Add `iter` and `iter_mut` to the five relation shapes **Done**
 
 **Module:** `umol-graph-core/src/relation.rs`, its unit tests, and `umol-graph-ir/src/ir/molecule.rs`.
 
@@ -1308,6 +1308,15 @@ payload. Migrate the six `Molecule::modify_*` callers.
 
 **Tests and evidence:** Assert exact yielded tuples in relation-id order for all five shapes, the
 `ExactSizeIterator` length, and the empty set. Retain the existing `modify_*` assertions.
+
+`iter_mut` yields the participants immutably beside a mutable payload — the two live in different
+fields, so the borrows are disjoint. Keeping participants immutable is the point: changing them
+would invalidate the incidence index, and `permute_with` is the one operation allowed to leave it
+intact.
+
+The six family types keep `attributes_iter_mut` and now build it by dropping the id and participants
+from `iter_mut`, so `Molecule::modify_*` is unchanged. The relation property suite's
+`assert_data_iter_mut` keeps its assertions and takes the mapped payload iterator.
 
 **Change class:** breaking replacement with caller migration (green within the stage).
 

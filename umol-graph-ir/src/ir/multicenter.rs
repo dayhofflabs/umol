@@ -97,7 +97,9 @@ impl MulticenterBonds {
     pub(crate) fn attributes_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = &mut MulticenterBondForm> {
-        Arc::make_mut(&mut self.0).data_iter_mut()
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
     }
 
     pub(crate) fn remap(&self, remapping: &Remapping) -> Self {

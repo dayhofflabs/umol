@@ -103,7 +103,9 @@ impl StereoAtoms {
     pub(crate) fn attributes_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = &mut StereoAtomForm> {
-        Arc::make_mut(&mut self.0).data_iter_mut()
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, _, attributes)| attributes)
     }
 
     pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
@@ -288,7 +290,9 @@ impl StereoBonds {
     pub(crate) fn attributes_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = &mut StereoBondForm> {
-        Arc::make_mut(&mut self.0).data_iter_mut()
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, _, attributes)| attributes)
     }
 
     pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
