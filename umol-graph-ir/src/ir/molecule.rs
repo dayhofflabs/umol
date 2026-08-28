@@ -40,8 +40,7 @@ use super::view::{
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
     NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
-    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
-    StereoBondViews,
+    StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews,
 };
 
 mod build;
@@ -1179,50 +1178,151 @@ impl Molecule {
         }
     }
 
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
-        let site = self.stereo_atoms.site(id);
-        let ligands = self.stereo_atoms.ligands(id).to_vec();
-        let attributes = self.stereo_atoms.attributes_mut(id);
-        StereoAtomViewMut {
-            id,
-            site,
-            ligands,
-            attributes,
-        }
+    pub(crate) fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
+        self.stereo_atoms.attributes_mut(id)
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm) {
+    pub(crate) fn modify_stereo_atoms(
+        &mut self,
+        mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm,
+    ) {
         for stereo_atom in self.stereo_atoms.attributes_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
     }
 
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
-        let site = self.stereo_bonds.site(id);
-        let ligands = self.stereo_bonds.ligands(id).to_vec();
-        let attributes = self.stereo_bonds.attributes_mut(id);
-        StereoBondViewMut {
-            id,
-            site,
-            ligands,
-            attributes,
+    /// Transactionally modify one stereo-atom form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_stereo_atom(
+        &mut self,
+        id: StereoAtomId,
+        f: impl FnOnce(&mut StereoAtomForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.stereo_atoms.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::StereoAtom(id),
+            });
         }
+        self.try_modify_checked(|candidate| f(candidate.stereo_atoms.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every stereo-atom form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_stereo_atoms(
+        &mut self,
+        mut f: impl FnMut(&mut StereoAtomForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for stereo_atom in candidate.stereo_atoms.attributes_iter_mut() {
+                f(stereo_atom);
+            }
+        })
+    }
+
+    pub(crate) fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
+        self.stereo_bonds.attributes_mut(id)
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondForm) -> StereoBondForm) {
+    pub(crate) fn modify_stereo_bonds(
+        &mut self,
+        mut f: impl FnMut(StereoBondForm) -> StereoBondForm,
+    ) {
         for stereo_bond in self.stereo_bonds.attributes_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }
+    }
+
+    /// Transactionally modify one stereo-bond form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_stereo_bond(
+        &mut self,
+        id: StereoBondId,
+        f: impl FnOnce(&mut StereoBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.stereo_bonds.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::StereoBond(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.stereo_bonds.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every stereo-bond form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_stereo_bonds(
+        &mut self,
+        mut f: impl FnMut(&mut StereoBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for stereo_bond in candidate.stereo_bonds.attributes_iter_mut() {
+                f(stereo_bond);
+            }
+        })
     }
 
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
 
-    pub fn constraints_mut(&mut self) -> &mut Constraints {
+    pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    /// Transactionally modify the molecule-level constraint tree.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// all constraint references and stereo wrapper domains remain valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_constraints(
+        &mut self,
+        f: impl FnOnce(&mut Constraints),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| f(&mut candidate.constraints))
+    }
+
+    fn try_modify_checked(
+        &mut self,
+        f: impl FnOnce(&mut Self),
+    ) -> Result<(), MoleculeIntegrityError> {
+        let mut candidate = self.clone();
+        f(&mut candidate);
+        candidate.check_integrity()?;
+        *self = candidate;
+        Ok(())
     }
 
     /// Returns the lowest [`DescriptionLevel`] containing every populated part of this molecule.
@@ -1366,11 +1466,10 @@ impl Molecule {
             let id = StereoAtomId::from(i);
             let kind = self
                 .stereo_atom_mut(id)
-                .attributes
                 .configuration
                 .kind()
                 .expect("molecule stereo atom has a concrete kind");
-            for c in self.stereo_atom_mut(id).attributes.constraints.take() {
+            for c in self.stereo_atom_mut(id).constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
@@ -1378,11 +1477,10 @@ impl Molecule {
             let id = StereoBondId::from(i);
             let kind = self
                 .stereo_bond_mut(id)
-                .attributes
                 .configuration
                 .kind()
                 .expect("molecule stereo bond has a concrete kind");
-            for c in self.stereo_bond_mut(id).attributes.constraints.take() {
+            for c in self.stereo_bond_mut(id).constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
@@ -1530,10 +1628,10 @@ impl Molecule {
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).attributes.constraints.set(inner);
+                    self.stereo_atom_mut(id).constraints.set(inner);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).attributes.constraints.set(inner);
+                    self.stereo_bond_mut(id).constraints.set(inner);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)

@@ -5,7 +5,7 @@ use std::iter;
 
 use thiserror::Error;
 use umol_graph_core::NodeId;
-use umol_perm::Permutation;
+use umol_perm::{Permutation, MAX_DEGREE};
 
 use super::super::constraint::{
     Constraint, StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair,
@@ -57,6 +57,19 @@ pub enum MoleculeIntegrityError {
     StereoAtomSitesDuplicate { atom: AtomId },
     #[error("stereo bond: duplicate site {bond:?}")]
     StereoBondSitesDuplicate { bond: BondId },
+    #[error("{entity}: stereo ligand {ligand:?} is duplicated in the frame")]
+    DuplicateStereoLigand {
+        entity: Entity,
+        ligand: StereoLigand,
+    },
+    #[error(
+        "{entity}: stereo frame has degree {degree}, exceeding the supported maximum {maximum}"
+    )]
+    StereoFrameDegreeTooLarge {
+        entity: Entity,
+        degree: usize,
+        maximum: usize,
+    },
     #[error("{entity}: ligand frame does not match stereo-site incidence")]
     StereoLigandIncidenceMismatch { entity: Entity },
     #[error("{entity}: stereo kind {kind:?} is not admissible for this site type")]
@@ -212,6 +225,7 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
+            check_stereo_frame(entity, &ligand_frame)?;
             check_unique_participants(
                 entity,
                 iter::once(site).chain(
@@ -245,6 +259,7 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
+            check_stereo_frame(entity, &ligand_frame)?;
             check_unique_participants(
                 entity,
                 ligand_frame
@@ -332,6 +347,27 @@ fn check_unique_participants(
     Ok(())
 }
 
+pub(crate) fn check_stereo_frame(
+    entity: Entity,
+    ligand_frame: &[StereoLigand],
+) -> Result<(), MoleculeIntegrityError> {
+    if ligand_frame.len() > MAX_DEGREE {
+        return Err(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity,
+            degree: ligand_frame.len(),
+            maximum: MAX_DEGREE,
+        });
+    }
+
+    let mut seen = HashSet::new();
+    for &ligand in ligand_frame {
+        if !seen.insert(ligand) {
+            return Err(MoleculeIntegrityError::DuplicateStereoLigand { entity, ligand });
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn require_reference(
     contains: &dyn Fn(Entity) -> bool,
     entity: Entity,
@@ -375,7 +411,7 @@ fn check_stereo_atom(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    check_stereo_site_kind(entity, &attributes.configuration, StereoSite::Atom)?;
+    check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Atom)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_atom_constraint(entity, ligand_count, constraint)?;
@@ -388,7 +424,7 @@ fn check_stereo_bond(
     ligand_count: usize,
     attributes: &super::super::stereo::StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
-    check_stereo_site_kind(entity, &attributes.configuration, StereoSite::Bond)?;
+    check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Bond)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;
     for constraint in attributes.constraints.iter() {
         check_stereo_bond_constraint(entity, ligand_count, constraint)?;
@@ -404,12 +440,14 @@ fn check_molecule_constraint(
         Constraint::StereoAtom(id, kind, constraint) => {
             let entity = Entity::StereoAtom(*id);
             let ligand_count = molecule.stereo_atom(*id).ligand_count();
+            check_stereo_site_kind(entity, *kind, StereoSite::Atom)?;
             check_stereo_frame_arity(entity, ligand_count, *kind)?;
             check_stereo_atom_constraint(entity, ligand_count, constraint)
         }
         Constraint::StereoBond(id, kind, constraint) => {
             let entity = Entity::StereoBond(*id);
             let ligand_count = molecule.stereo_bond(*id).ligand_count();
+            check_stereo_site_kind(entity, *kind, StereoSite::Bond)?;
             check_stereo_frame_arity(entity, ligand_count, *kind)?;
             check_stereo_bond_constraint(entity, ligand_count, constraint)
         }
@@ -438,7 +476,7 @@ enum StereoSite {
 /// atom and about an atropisomeric biaryl bond.
 ///
 /// Matched exhaustively so that a new stereo kind must decide its site here.
-fn check_stereo_site_kind(
+fn check_configuration_site_kind(
     entity: Entity,
     configuration: &StereoConfigurationForm,
     site: StereoSite,
@@ -446,6 +484,14 @@ fn check_stereo_site_kind(
     let Some(kind) = configuration.kind() else {
         return Ok(());
     };
+    check_stereo_site_kind(entity, kind, site)
+}
+
+fn check_stereo_site_kind(
+    entity: Entity,
+    kind: StereoKind,
+    site: StereoSite,
+) -> Result<(), MoleculeIntegrityError> {
     let admissible = match (site, kind) {
         (
             StereoSite::Atom,

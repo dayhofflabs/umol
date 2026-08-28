@@ -548,10 +548,7 @@ mod tests {
                 ),
                 GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::LonePair),
                 GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
-                GraphIrStereoLigand::new(
-                    GraphIrAtomId(0),
-                    GraphIrStereoLigandKind::ImplicitHydrogen,
-                ),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ];
             let stereo_bond_ligands = vec![
                 GraphIrStereoLigand::new(
@@ -597,21 +594,31 @@ mod tests {
                     ),
                     (
                         Some(Py::new(py, AtomForm::from_rust(removed_atom.clone())).unwrap()),
-                        None,
+                        Some(Py::new(py, AtomForm::from_rust(removed_atom.clone())).unwrap()),
                     ),
                     (
                         None,
                         Some(Py::new(py, AtomForm::from_rust(added_atom.clone())).unwrap()),
                     ),
                 ],
-                vec![(
-                    0,
-                    1,
+                vec![
                     (
-                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
-                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        0,
+                        1,
+                        (
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        ),
                     ),
-                )],
+                    (
+                        0,
+                        2,
+                        (
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        ),
+                    ),
+                ],
                 vec![(
                     vec![1],
                     0,
@@ -761,14 +768,21 @@ mod tests {
                             lhs: modified_lhs,
                             rhs: modified_rhs,
                         },
-                        GraphIrEntitySpan::Removed(removed_atom),
+                        GraphIrEntitySpan::Unchanged(removed_atom),
                         GraphIrEntitySpan::Added(added_atom),
                     ],
-                    bonds: vec![(
-                        GraphIrAtomId(0),
-                        GraphIrAtomId(1),
-                        GraphIrEntitySpan::Unchanged(unchanged_bond),
-                    )],
+                    bonds: vec![
+                        (
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(1),
+                            GraphIrEntitySpan::Unchanged(unchanged_bond.clone()),
+                        ),
+                        (
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(2),
+                            GraphIrEntitySpan::Unchanged(unchanged_bond),
+                        ),
+                    ],
                     dative: vec![(
                         vec![GraphIrAtomId(1)],
                         GraphIrAtomId(0),

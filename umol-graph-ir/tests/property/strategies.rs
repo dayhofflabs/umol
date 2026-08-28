@@ -1467,35 +1467,31 @@ pub(crate) fn stereo_atom_entries_strategy(
             entries
                 .into_iter()
                 .enumerate()
-                .map(|(i, (ligand_specs, attributes))| {
+                .filter_map(|(i, (ligand_specs, attributes))| {
                     let site = AtomId(i as u32);
-                    let neighbors: Vec<_> = edges
+                    let mut pool: Vec<_> = edges
                         .iter()
                         .filter_map(|&[a, b]| match (a as usize == i, b as usize == i) {
-                            (true, _) => Some(AtomId(b)),
-                            (_, true) => Some(AtomId(a)),
+                            (true, _) => Some(StereoLigand::new(AtomId(b), StereoLigandKind::Atom)),
+                            (_, true) => Some(StereoLigand::new(AtomId(a), StereoLigandKind::Atom)),
                             _ => None,
                         })
+                        .chain([
+                            StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(site, StereoLigandKind::LonePair),
+                        ])
                         .collect();
-                    let mut actual_atoms = HashSet::new();
+                    if pool.len() < ligand_specs.len() {
+                        return None;
+                    }
                     let ligands = ligand_specs
                         .into_iter()
-                        .map(|(kind, selector)| match kind {
-                            StereoLigandKind::Atom => neighbors
-                                .iter()
-                                .cycle()
-                                .skip(selector as usize % neighbors.len().max(1))
-                                .take(neighbors.len())
-                                .find(|&&atom| actual_atoms.insert(atom))
-                                .copied()
-                                .map(|atom| StereoLigand::new(atom, kind))
-                                .unwrap_or_else(|| {
-                                    StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen)
-                                }),
-                            _ => StereoLigand::new(site, kind),
+                        .map(|(_, selector)| {
+                            let index = selector as usize % pool.len();
+                            pool.remove(index)
                         })
                         .collect();
-                    (site, ligands, attributes)
+                    Some((site, ligands, attributes))
                 })
                 .collect()
         })
@@ -1550,36 +1546,39 @@ pub(crate) fn stereo_bond_entries_strategy(
                             } else {
                                 endpoints[0]
                             };
-                            let neighbors: Vec<_> = edges
+                            let mut pool: Vec<_> = edges
                                 .iter()
                                 .filter_map(|&[x, y]| {
                                     let x = AtomId(x);
                                     let y = AtomId(y);
                                     match (x == endpoint, y == endpoint) {
-                                        (true, _) if y != opposite => Some(y),
-                                        (_, true) if x != opposite => Some(x),
+                                        (true, _)
+                                            if y != opposite && !actual_atoms.contains(&y) =>
+                                        {
+                                            Some(StereoLigand::new(y, StereoLigandKind::Atom))
+                                        }
+                                        (_, true)
+                                            if x != opposite && !actual_atoms.contains(&x) =>
+                                        {
+                                            Some(StereoLigand::new(x, StereoLigandKind::Atom))
+                                        }
                                         _ => None,
                                     }
                                 })
+                                .chain([
+                                    StereoLigand::new(endpoint, StereoLigandKind::ImplicitHydrogen),
+                                    StereoLigand::new(endpoint, StereoLigandKind::LonePair),
+                                ])
                                 .collect();
                             specs
                                 .iter()
-                                .map(|&(kind, selector)| match kind {
-                                    StereoLigandKind::Atom => neighbors
-                                        .iter()
-                                        .cycle()
-                                        .skip(selector as usize % neighbors.len().max(1))
-                                        .take(neighbors.len())
-                                        .find(|&&atom| actual_atoms.insert(atom))
-                                        .copied()
-                                        .map(|atom| StereoLigand::new(atom, kind))
-                                        .unwrap_or_else(|| {
-                                            StereoLigand::new(
-                                                endpoint,
-                                                StereoLigandKind::ImplicitHydrogen,
-                                            )
-                                        }),
-                                    _ => StereoLigand::new(endpoint, kind),
+                                .map(|&(_, selector)| {
+                                    let index = selector as usize % pool.len();
+                                    let ligand = pool.remove(index);
+                                    if ligand.kind == StereoLigandKind::Atom {
+                                        actual_atoms.insert(ligand.atom_id);
+                                    }
+                                    ligand
                                 })
                                 .collect()
                         })
@@ -3139,9 +3138,8 @@ impl InvalidTransactionBatch {
                         StereoLigand::new(other, StereoLigandKind::Atom),
                         StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
                         StereoLigand::new(site, StereoLigandKind::LonePair),
-                        StereoLigand::new(site, StereoLigandKind::ImplicitHydrogen),
                     ],
-                    StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                    StereoAtomForm::default(),
                 )
             })
             .collect();
@@ -3290,9 +3288,8 @@ impl InvalidTransactionBatch {
                                 (AtomHandle::Id(other), StereoLigandKind::Atom),
                                 (AtomHandle::Id(site), StereoLigandKind::ImplicitHydrogen),
                                 (AtomHandle::Id(site), StereoLigandKind::LonePair),
-                                (AtomHandle::Id(site), StereoLigandKind::ImplicitHydrogen),
                             ],
-                            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                            StereoAtomForm::default(),
                         )
                     })
                     .collect(),
@@ -3980,7 +3977,7 @@ pub(crate) fn complete_transaction_strategy() -> impl Strategy<Value = (Molecule
 }
 
 fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
-    let atoms = (0..6).map(|_| AtomForm::from_element(Element::C)).collect();
+    let atoms = (0..9).map(|_| AtomForm::from_element(Element::C)).collect();
     let bonds = (0..3)
         .map(|index| {
             (
@@ -3989,6 +3986,13 @@ fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
                 BondForm::from_order(1),
             )
         })
+        .chain((0..3).map(|index| {
+            (
+                AtomId(index * 2),
+                AtomId(index + 6),
+                BondForm::from_order(1),
+            )
+        }))
         .collect();
     let pairs = [[0_u32, 1_u32], [2, 3], [4, 5]];
     let dative = pairs
@@ -4015,14 +4019,15 @@ fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
         .collect();
     let stereo_atoms = pairs
         .iter()
-        .map(|[a, b]| {
+        .enumerate()
+        .map(|(index, [a, b])| {
             (
                 AtomId(*a),
                 vec![
                     StereoLigand::new(AtomId(*b), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(index as u32 + 6), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(*a), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(*a), StereoLigandKind::LonePair),
-                    StereoLigand::new(AtomId(*a), StereoLigandKind::ImplicitHydrogen),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             )
@@ -4157,15 +4162,12 @@ impl ConstraintCompactionCase {
                     AtomHandle::Id(AtomId(0)),
                     vec![
                         (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                        (AtomHandle::Id(AtomId(6)), StereoLigandKind::Atom),
                         (
                             AtomHandle::Id(AtomId(0)),
                             StereoLigandKind::ImplicitHydrogen,
                         ),
                         (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                        (
-                            AtomHandle::Id(AtomId(0)),
-                            StereoLigandKind::ImplicitHydrogen,
-                        ),
                     ],
                     StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
                 )],

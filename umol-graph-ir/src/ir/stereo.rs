@@ -73,7 +73,7 @@ impl StereoAtoms {
         self.0.data(RelationId::from(id))
     }
 
-    pub fn attributes_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
+    pub(crate) fn attributes_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 
@@ -240,7 +240,7 @@ impl StereoBonds {
         self.0.data(RelationId::from(id))
     }
 
-    pub fn attributes_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
+    pub(crate) fn attributes_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 

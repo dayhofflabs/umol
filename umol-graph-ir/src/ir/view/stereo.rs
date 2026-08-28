@@ -768,26 +768,6 @@ pub(crate) fn stereo_bond_derived_constraint(
     None
 }
 
-/// Mutable borrowed view of a stereo atom: its id, site atom + ligand frame
-/// (owned) and mutable data. Molecule-scope peer of `StereoAtomView`.
-#[derive(Debug)]
-pub struct StereoAtomViewMut<'a> {
-    pub id: StereoAtomId,
-    pub site: AtomId,
-    pub ligands: Vec<StereoLigand>,
-    pub attributes: &'a mut StereoAtomForm,
-}
-
-/// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
-/// (owned) and mutable data. Molecule-scope peer of `StereoBondView`.
-#[derive(Debug)]
-pub struct StereoBondViewMut<'a> {
-    pub id: StereoBondId,
-    pub site: BondId,
-    pub ligands: Vec<StereoLigand>,
-    pub attributes: &'a mut StereoBondForm,
-}
-
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
 // builder storage so old-state checks compare without cloning; callers clone
 // only what they keep (the `attributes`).

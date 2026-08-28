@@ -3832,9 +3832,8 @@ mod tests {
                     StereoLigand::new(second, StereoLigandKind::Atom),
                     StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(first, StereoLigandKind::LonePair),
-                    StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::default(),
             );
             editor.add_stereo_bond(
                 bond,
@@ -3981,12 +3980,8 @@ mod tests {
                                     AtomHandle::Id(AtomId(index * 2)),
                                     StereoLigandKind::LonePair,
                                 ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2)),
-                                    StereoLigandKind::ImplicitHydrogen,
-                                ),
                             ],
-                            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                            StereoAtomForm::default(),
                         )
                     })
                     .collect(),
@@ -4133,12 +4128,8 @@ mod tests {
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
                         ],
-                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                        StereoAtomForm::default(),
                     ),
                     (
                         StereoAtomHandle::Id(StereoAtomId(0)),
@@ -4150,12 +4141,8 @@ mod tests {
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(0)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
                         ],
-                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                        StereoAtomForm::default(),
                     ),
                 ],
             },

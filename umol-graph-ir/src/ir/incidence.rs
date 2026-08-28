@@ -758,7 +758,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::repeated_virtual_ligand_anchor(
+    #[case::mixed_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -775,7 +775,7 @@ mod tests {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
@@ -801,7 +801,7 @@ mod tests {
             ),
             (
                 [NodeId(0), NodeId(5)],
-                Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+                Incidence::StereoLigand(StereoLigandKind::LonePair),
             ),
         ],
     )]

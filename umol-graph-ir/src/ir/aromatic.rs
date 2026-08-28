@@ -57,7 +57,7 @@ impl AromaticSystems {
         self.0.data(RelationId::from(id))
     }
 
-    pub fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
+    pub(crate) fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 

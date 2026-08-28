@@ -65,7 +65,7 @@ impl DativeBonds {
         self.0.data(RelationId::from(id))
     }
 
-    pub fn attributes_mut(&mut self, id: DativeBondId) -> &mut DativeBondForm {
+    pub(crate) fn attributes_mut(&mut self, id: DativeBondId) -> &mut DativeBondForm {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 

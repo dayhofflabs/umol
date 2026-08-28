@@ -2540,9 +2540,27 @@ mod tests {
                     id: AtomId(1),
                     attributes: AtomForm::from_element(Element::N),
                 }),
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(2),
+                    attributes: AtomForm::from_element(Element::H),
+                }),
+                Delta::Atom(AtomDelta::Add {
+                    id: AtomId(3),
+                    attributes: AtomForm::from_element(Element::H),
+                }),
                 Delta::Bond(BondDelta::Add {
                     id: BondId(0),
                     atoms: [AtomId(0), AtomId(1)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(1),
+                    atoms: [AtomId(0), AtomId(2)],
+                    attributes: BondForm::from_order(1),
+                }),
+                Delta::Bond(BondDelta::Add {
+                    id: BondId(2),
+                    atoms: [AtomId(0), AtomId(3)],
                     attributes: BondForm::from_order(1),
                 }),
                 Delta::DativeBond(DativeBondDelta::Add {
@@ -2571,8 +2589,8 @@ mod tests {
                     site: AtomId(0),
                     ligands: vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                     ],
                     attributes: StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
@@ -3160,13 +3178,12 @@ mod tests {
     }
 
     #[fixture]
-    fn prochiral_removal() -> Reaction {
-        // Remove the stereo atom on a prochiral C(0) bearing F, Cl and two implicit hydrogens.
+    fn explicit_hydrogen_removal() -> Reaction {
         let ligands = vec![
             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
         ];
         let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
         Reaction::new(
@@ -3175,10 +3192,14 @@ mod tests {
                     AtomForm::from_element(Element::C),
                     AtomForm::from_element(Element::F),
                     AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::H),
+                    AtomForm::from_element(Element::H),
                 ],
                 bonds: vec![
                     (AtomId(0), AtomId(1), BondForm::from_order(1)),
                     (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(4), BondForm::from_order(1)),
                 ],
                 stereo_atoms: vec![(AtomId(0), ligands.clone(), attributes.clone())],
                 constraints: Constraints::new(),
@@ -3193,18 +3214,11 @@ mod tests {
         )
     }
 
-    // Removing a stereo entity whose ligand frame repeats a virtual ligand. The two implicit
-    // hydrogens are equal values, so the frame has a residual stabilizer and the removal form has to
-    // be restated into the host frame under whichever admissible action agrees with what the host
-    // holds. `same_frame` needs no reordering at all and still exercises it, because a repeat leaves
-    // the identity ambiguous; `exchanged_coset` and `reordered_frame` state the same arrangement the
-    // other way round.
     #[rstest]
     #[case::same_frame([0, 1, 2, 3], 0)]
-    #[case::exchanged_coset([0, 1, 2, 3], 1)]
     #[case::reordered_frame([1, 0, 2, 3], 1)]
-    fn test_reaction_apply_stereo_atom_removal_repeated_ligands(
-        prochiral_removal: Reaction,
+    fn test_reaction_apply_stereo_atom_removal_distinct_ligands(
+        explicit_hydrogen_removal: Reaction,
         #[case] host_order: [usize; 4],
         #[case] host_coset: u32,
     ) {
@@ -3212,10 +3226,14 @@ mod tests {
             AtomForm::from_element(Element::C),
             AtomForm::from_element(Element::F),
             AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::H),
         ];
         let bonds = vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
         ];
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
@@ -3228,8 +3246,8 @@ mod tests {
                         [
                             StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                         ][position]
                     })
                     .collect(),
@@ -3244,7 +3262,7 @@ mod tests {
             constraints: Constraints::new(),
             ..Default::default()
         });
-        let rhs = prochiral_removal
+        let rhs = explicit_hydrogen_removal
             .apply(&host, MATCH_CONFIG)
             .unwrap()
             .next()
@@ -3256,27 +3274,28 @@ mod tests {
     }
 
     #[fixture]
-    fn prochiral_square_planar_modification() -> Reaction {
-        // A square-planar Pt(0) bearing F, Cl and two implicit hydrides, whose frame repeats the
-        // hydride at positions 1 and 2. The rule carries coset 0 to coset 2; the transposition of
-        // the two hydrides exchanges cosets 0 and 1 and fixes coset 2.
+    fn square_planar_modification() -> Reaction {
         Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::Pt),
                     AtomForm::from_element(Element::F),
                     AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::H),
+                    AtomForm::from_element(Element::Br),
                 ],
                 bonds: vec![
                     (AtomId(0), AtomId(1), BondForm::from_order(1)),
                     (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(4), BondForm::from_order(1)),
                 ],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     ],
                     StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
@@ -3300,17 +3319,12 @@ mod tests {
         )
     }
 
-    // Modifying a configuration whose ligand frame repeats a virtual ligand. `old` and `new` must
-    // move under one action, and searching supplies it: the action is the one under which `old`
-    // agrees with the host. Cosets 0 and 1 are one orbit, so both are the arrangement the rule
-    // names and both reach the same determinate product, coset 2 being stabilizer-fixed. Coset 2 is
-    // its own orbit, so the rule does not apply there at all.
     #[rstest]
-    #[case::first_representative(0, Some(2))]
-    #[case::other_representative(1, Some(2))]
-    #[case::distinct_orbit(2, None)]
-    fn test_reaction_apply_stereo_atom_modification_repeated_ligands(
-        prochiral_square_planar_modification: Reaction,
+    #[case::matching_configuration(0, Some(2))]
+    #[case::different_configuration(1, None)]
+    #[case::product_configuration(2, None)]
+    fn test_reaction_apply_stereo_atom_modification_distinct_ligands(
+        square_planar_modification: Reaction,
         #[case] host_coset: u32,
         #[case] product_coset: Option<u32>,
     ) {
@@ -3320,17 +3334,21 @@ mod tests {
                     AtomForm::from_element(Element::Pt),
                     AtomForm::from_element(Element::F),
                     AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::H),
+                    AtomForm::from_element(Element::Br),
                 ],
                 bonds: vec![
                     (AtomId(0), AtomId(1), BondForm::from_order(1)),
                     (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(4), BondForm::from_order(1)),
                 ],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
                         StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     ],
                     StereoAtomForm::new(StereoKind::SquarePlanar, coset),
@@ -3339,7 +3357,7 @@ mod tests {
                 ..Default::default()
             })
         };
-        let mut applications = prochiral_square_planar_modification
+        let mut applications = square_planar_modification
             .apply(&molecule(host_coset), MATCH_CONFIG)
             .unwrap();
         match product_coset {

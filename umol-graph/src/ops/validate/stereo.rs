@@ -338,9 +338,11 @@ mod tests {
     #[case::matching_stereogenicity(
         CFCLBRI,
         (|molecule: &mut Molecule| {
-            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
-                .constraints
-                .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)));
+            molecule.try_modify_stereo_atom(StereoAtomId(0), |attributes| {
+                attributes.constraints.set(StereoAtomConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Stereogenic),
+                ));
+            }).expect("the test constraint is valid for the stereo atom");
         }) as fn(&mut Molecule)
     )]
     fn test_stereo_conformance_validator_validate(
@@ -473,9 +475,11 @@ mod tests {
     #[case::improper_on_achiral(
         BUTENE,
         (|molecule: &mut Molecule| {
-            molecule.stereo_bond_mut(StereoBondId(0)).attributes
-                .constraints
-                .set(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)));
+            molecule.try_modify_stereo_bond(StereoBondId(0), |attributes| {
+                attributes.constraints.set(StereoBondConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Prochiral),
+                ));
+            }).expect("the test constraint is valid for the stereo bond");
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::StereogenicityMismatch {
             asserted: StereogenicityForm::Lit(Stereogenicity::Prochiral),
@@ -485,9 +489,11 @@ mod tests {
     #[case::stereogenicity_mismatch(
         CFCLBRI,
         (|molecule: &mut Molecule| {
-            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
-                .constraints
-                .set(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Symmetric)));
+            molecule.try_modify_stereo_atom(StereoAtomId(0), |attributes| {
+                attributes.constraints.set(StereoAtomConstraintForm::Stereogenicity(
+                    StereogenicityForm::Lit(Stereogenicity::Symmetric),
+                ));
+            }).expect("the test constraint is valid for the stereo atom");
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::StereogenicityMismatch {
             asserted: StereogenicityForm::Lit(Stereogenicity::Symmetric),
@@ -497,12 +503,12 @@ mod tests {
     #[case::topicity_mismatch(
         CFCLBRI,
         (|molecule: &mut Molecule| {
-            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
-                .constraints
-                .set(StereoAtomConstraintForm::Topicity(TopicityForm {
+            molecule.try_modify_stereo_atom(StereoAtomId(0), |attributes| {
+                attributes.constraints.set(StereoAtomConstraintForm::Topicity(TopicityForm {
                     pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
                     relation: TopicityRelationForm::Lit(Topicity::Homotopic),
                 }));
+            }).expect("the test constraint is valid for the stereo atom");
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::TopicityMismatch {
             pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
@@ -513,15 +519,15 @@ mod tests {
     #[case::ligand_symmetry_violation(
         CFCLBRI,
         (|molecule: &mut Molecule| {
-            molecule.stereo_atom_mut(StereoAtomId(0)).attributes
-                .constraints
-                .set(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            molecule.try_modify_stereo_atom(StereoAtomId(0), |attributes| {
+                attributes.constraints.set(StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
                     permutation: OrientedLigandPermutation {
                         permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
                     invariant: BooleanForm::Lit(true),
                 }));
+            }).expect("the test constraint is valid for the stereo atom");
         }) as fn(&mut Molecule),
         StereoConformanceContradiction::LigandSymmetryViolation {
             asserted: LigandSymmetryForm {

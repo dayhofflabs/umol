@@ -57,7 +57,7 @@ impl MulticenterBonds {
         self.0.data(RelationId::from(id))
     }
 
-    pub fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
+    pub(crate) fn attributes_mut(&mut self, id: MulticenterBondId) -> &mut MulticenterBondForm {
         Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
     }
 

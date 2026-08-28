@@ -107,6 +107,7 @@ def test_description_level(level, expected_repr):
         (
             Molecule.parse(
                 '{:atoms ["C" "F" "Cl" "Br" "I"] '
+                ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
                 ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}'
             ),
             DescriptionLevel.Structure,
@@ -301,7 +302,13 @@ def test_molecule_str():
 def test_molecule_from_entries():
     molecule = Molecule.from_entries(
         [AtomForm(Element("C")) for _ in range(5)],
-        bonds=[(0, 1, BondForm(2))],
+        bonds=[
+            (0, 1, BondForm(2)),
+            (0, 2, BondForm(1)),
+            (0, 3, BondForm(1)),
+            (0, 4, BondForm(1)),
+            (1, 3, BondForm(1)),
+        ],
         dative_bonds=[([2], 1, DativeBondForm(1))],
         aromatic_systems=[([0, 1, 2], AromaticSystemForm([1, 1, 1]))],
         multicenter_bonds=[([0, 1, 2], MulticenterBondForm([1, 1, 1]))],
@@ -333,7 +340,7 @@ def test_molecule_from_entries():
     )
 
     assert len(molecule.atoms) == 5
-    assert len(molecule.bonds) == 1
+    assert len(molecule.bonds) == 5
     assert len(molecule.dative_bonds) == 1
     assert len(molecule.aromatic_systems) == 1
     assert len(molecule.multicenter_bonds) == 1
@@ -468,22 +475,26 @@ def test_molecule_canonicalize_error():
         molecule.canonicalize_with_correspondence()
 
 
-def test_molecule_canonicalize_integrity_error():
+def test_molecule_stereo_mutation_integrity_error():
     molecule = Molecule.parse(
         '{:atoms ["C" "F" "Cl" "Br" "I"] '
+        ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
         ':stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}'
     )
-    molecule.stereo_atoms[0].configuration = (
-        StereoConfigurationForm.Kinded(
-            StereoKind.Octahedral,
-            StereoCoset.Lit(0),
+    with pytest.raises(InvalidStructureError, match="ligands"):
+        molecule.stereo_atoms[0].configuration = (
+            StereoConfigurationForm.Kinded(
+                StereoKind.Octahedral,
+                StereoCoset.Lit(0),
+            )
         )
-    )
 
-    with pytest.raises(InvalidStructureError, match="ligands"):
-        molecule.canonicalize()
-    with pytest.raises(InvalidStructureError, match="ligands"):
-        molecule.canonicalize_with_correspondence()
+    assert molecule.stereo_atoms[0].configuration == StereoConfigurationForm.Kinded(
+        StereoKind.Tetrahedral,
+        StereoCoset.Lit(0),
+    )
+    molecule.canonicalize()
+    molecule.canonicalize_with_correspondence()
 
 
 def test_molecule_from_smiles():

@@ -21,6 +21,7 @@ use umol_graph_ir::ir::{
 
 use crate::boolean::{BooleanForm, BooleanLike};
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
+use crate::error::molecule_integrity_error;
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 use crate::stereo::{
@@ -977,7 +978,7 @@ macro_rules! stereo_constraints {
 
         /// A live handle onto one stereo entity's constraints, backed by either a
         /// molecule-embedded entity or a standalone value. Reads borrow the entity and read
-        /// only what they need; mutators write through in place, without a clone-and-writeback.
+        /// only what they need; molecule-backed mutators use the checked molecule boundary.
         #[pyclass]
         pub struct $view {
             pub(crate) backing: $backing,
@@ -1014,12 +1015,20 @@ macro_rules! stereo_constraints {
                 f: impl FnOnce(&mut $rust_constraints) -> R,
             ) -> PyResult<R> {
                 match &self.backing {
-                    $backing::Molecule { owner, id } => Ok(f(&mut owner
-                        .borrow_mut(py)
-                        .to_rust_mut()
-                        .$entity_mut(*id)
-                        .attributes
-                        .constraints)),
+                    $backing::Molecule { owner, id } => {
+                        let mut molecule = owner.borrow_mut(py);
+                        if !molecule.to_rust().$namespace().contains(*id) {
+                            return Err(PyIndexError::new_err($id_error));
+                        }
+                        let mut result = None;
+                        molecule
+                            .to_rust_mut()
+                            .$entity_mut(*id, |attributes| {
+                                result = Some(f(&mut attributes.constraints));
+                            })
+                            .map_err(molecule_integrity_error)?;
+                        Ok(result.expect("the checked mutation callback always runs"))
+                    }
                     $backing::Value(entity) => {
                         Ok(f(&mut entity.borrow_mut(py).to_rust_mut()?.constraints))
                     }
@@ -1249,7 +1258,7 @@ stereo_constraints! {
     StereoAtomConstraintKeyIter, StereoAtomConstraintIter, StereoAtomConstraintItemsIter,
     GraphIrStereoAtomConstraintKey, GraphIrStereoAtomConstraintForm, GraphIrStereoAtomConstraintsForm,
     StereoAtomForm, StereoAtomConstraintsView, StereoAtomConstraintsBacking,
-    GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut, "stereo atom id out of range",
+    GraphIrStereoAtomId, stereo_atoms, try_modify_stereo_atom, "stereo atom id out of range",
 }
 
 stereo_constraints! {
@@ -1258,5 +1267,5 @@ stereo_constraints! {
     StereoBondConstraintKeyIter, StereoBondConstraintIter, StereoBondConstraintItemsIter,
     GraphIrStereoBondConstraintKey, GraphIrStereoBondConstraintForm, GraphIrStereoBondConstraintsForm,
     StereoBondForm, StereoBondConstraintsView, StereoBondConstraintsBacking,
-    GraphIrStereoBondId, stereo_bonds, stereo_bond_mut, "stereo bond id out of range",
+    GraphIrStereoBondId, stereo_bonds, try_modify_stereo_bond, "stereo bond id out of range",
 }

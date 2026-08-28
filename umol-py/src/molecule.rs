@@ -29,8 +29,8 @@ use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
-    InvalidStructureError,
+    fingerprint_error, metadata_error, molecule_apply_error, molecule_integrity_error, parse_error,
+    smiles_input_error, InvalidStructureError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -565,8 +565,10 @@ impl Molecule {
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
         let constraints = value.to_rust(py)?;
-        *slf.borrow_mut(py).to_rust_mut().constraints_mut() = constraints;
-        Ok(())
+        slf.borrow_mut(py)
+            .to_rust_mut()
+            .try_modify_constraints(|current| *current = constraints)
+            .map_err(molecule_integrity_error)
     }
 
     pub(crate) fn __repr__(&self) -> String {
@@ -634,7 +636,8 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemForm as GraphIrAromaticSystemForm,
-        AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
+        AromaticSystemId as GraphIrAromaticSystemId,
+        AtomConstraintForm as GraphIrAtomConstraintForm, AtomFieldChange as GraphIrAtomFieldChange,
         AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
         AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
         Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
@@ -1583,7 +1586,8 @@ mod tests {
             let view = Molecule::constraints(molecule.clone_ref(py));
             let constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            view.with_mut(py, |constraints| constraints.push(constraint.clone()));
+            view.with_mut(py, |constraints| constraints.push(constraint.clone()))
+                .unwrap();
 
             assert_eq!(
                 molecule
@@ -1626,6 +1630,35 @@ mod tests {
                     .as_slice(),
                 &[constraint]
             );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_set_constraints_integrity_error() {
+        Python::attach(|py| {
+            let molecule = Py::new(py, Molecule::new()).unwrap();
+            let invalid =
+                GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
+            let constraints = Py::new(
+                py,
+                Constraints::from_rust(GraphIrConstraints::from(vec![invalid])),
+            )
+            .unwrap();
+
+            let error = Molecule::set_constraints(
+                molecule.clone_ref(py),
+                py,
+                ConstraintsLike::Container(constraints),
+            )
+            .unwrap_err();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert!(molecule
+                .bind(py)
+                .borrow()
+                .to_rust()
+                .constraints()
+                .is_empty());
         });
     }
 

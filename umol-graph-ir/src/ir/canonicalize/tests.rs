@@ -255,6 +255,7 @@ fn initial_class_molecule() -> Molecule {
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(1), AtomId(2), BondForm::new(normalized_one.clone())),
             (AtomId(2), AtomId(3), BondForm::from_order(2)),
+            (AtomId(0), AtomId(5), BondForm::from_order(1)),
         ],
         dative: vec![
             (vec![AtomId(0)], AtomId(4), DativeBondForm::from_order(1)),
@@ -313,7 +314,7 @@ fn initial_class_molecule() -> Molecule {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
@@ -500,16 +501,18 @@ fn meso_canonicalization_molecule() -> Molecule {
 }
 
 #[fixture]
-fn repeated_ligand_canonicalization_molecule() -> Molecule {
+fn stereo_constraint_canonicalization_molecule() -> Molecule {
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
             AtomForm::from_element(Element::N),
             AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::H),
         ],
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
         ],
         stereo_atoms: vec![(
             AtomId(0),
@@ -517,7 +520,7 @@ fn repeated_ligand_canonicalization_molecule() -> Molecule {
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         )],
@@ -2278,14 +2281,14 @@ fn test_molecule_canonicalize_retained(
 
 #[rstest]
 fn test_molecule_canonicalize_stereo_frame(
-    repeated_ligand_canonicalization_molecule: Molecule,
+    stereo_constraint_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
     let constraint = StereoAtomConstraintForm::Topicity(TopicityForm {
         pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
         relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
     });
-    let mut entries = molecule_entries(&repeated_ligand_canonicalization_molecule);
+    let mut entries = molecule_entries(&stereo_constraint_canonicalization_molecule);
     entries.stereo_atoms[0].2.constraints = constraint.clone().into();
     entries.constraints =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
@@ -2331,10 +2334,8 @@ fn test_molecule_canonicalize_integrity_error(
     canonicalize_context: CanonicalizeContext,
 ) {
     let mut malformed = stereo_atom_canonicalization_molecule;
-    malformed
-        .stereo_atom_mut(StereoAtomId(0))
-        .attributes
-        .configuration = StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
+    malformed.stereo_atom_mut(StereoAtomId(0)).configuration =
+        StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
 
     assert_eq!(
         malformed.canonicalize(&canonicalize_context),
@@ -2419,12 +2420,10 @@ fn test_molecule_canonical_eq_integrity_error(
     let mut malformed_left = stereo_atom_canonicalization_molecule.clone();
     malformed_left
         .stereo_atom_mut(StereoAtomId(0))
-        .attributes
         .configuration = StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
     let mut malformed_right = stereo_atom_canonicalization_molecule;
     malformed_right
         .stereo_atom_mut(StereoAtomId(0))
-        .attributes
         .configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0u32);
 
     assert!(malformed_left.canonical_eq(&malformed_left, &canonicalize_context));
@@ -2953,12 +2952,12 @@ fn test_canonicalize_structure_meso(
 #[rstest]
 #[case::kinded(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32))]
 #[case::undetermined(StereoConfigurationForm::Undetermined)]
-fn test_canonicalize_structure_repeated_ligands(
-    repeated_ligand_canonicalization_molecule: Molecule,
+fn test_canonicalize_structure_stereo_frame(
+    stereo_constraint_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
     #[case] configuration: StereoConfigurationForm,
 ) {
-    let mut entries = molecule_entries(&repeated_ligand_canonicalization_molecule);
+    let mut entries = molecule_entries(&stereo_constraint_canonicalization_molecule);
     entries.stereo_atoms[0].2.configuration = configuration;
     let source = Molecule::from_entries(entries);
     let reframed = reframe_stereo_atom(
@@ -3144,12 +3143,12 @@ fn encoding_entries() -> MoleculeEntries {
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
-            AtomId(0),
+            AtomId(1),
             vec![
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )],
@@ -3747,7 +3746,7 @@ fn test_correspondence_from_order(initial_class_molecule: Molecule, #[case] excl
         vec![Incidence::BondEndpoint, Incidence::BondEndpoint],
         0,
     )]
-#[case::repeated_virtual_ligand_anchor(
+#[case::mixed_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
@@ -3764,7 +3763,7 @@ fn test_correspondence_from_order(initial_class_molecule: Molecule, #[case] excl
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
@@ -3779,7 +3778,7 @@ fn test_correspondence_from_order(initial_class_molecule: Molecule, #[case] excl
             Incidence::StereoLigand(StereoLigandKind::Atom),
             Incidence::StereoLigand(StereoLigandKind::Atom),
             Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
-            Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+            Incidence::StereoLigand(StereoLigandKind::LonePair),
         ],
         5,
     )]
@@ -4480,6 +4479,8 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(1)),
             (AtomId(2), AtomId(3), BondForm::from_order(2)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
         ],
         dative: vec![
             (
@@ -4531,7 +4532,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             ),
@@ -4541,7 +4542,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
             ),
@@ -4572,7 +4573,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
     });
     let expected_correspondence = molecule_correspondence(&[
         vec![3, 1, 2, 0, 4, 5],
-        vec![1, 0],
+        vec![1, 0, 3, 2],
         vec![1, 0],
         vec![1, 0],
         vec![1, 0],
@@ -4603,15 +4604,21 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
             AtomForm::from_element(Element::C)
                 .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(3))),
             AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::H),
         ],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+        ],
         stereo_atoms: vec![(
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )],
@@ -4622,15 +4629,21 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
             AtomForm::from_element(Element::C),
             AtomForm::from_element(Element::C)
                 .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(3))),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::H),
         ],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+        ],
         stereo_atoms: vec![(
-            AtomId(1),
+            AtomId(0),
             vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
         )],
@@ -5004,15 +5017,22 @@ fn test_canonicalize_constitution_contradiction(canonicalize_context: Canonicali
         ..Default::default()
     });
     let excluded_stereo = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        ],
         stereo_atoms: vec![(
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
                 StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([])),
         )],

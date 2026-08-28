@@ -13,7 +13,7 @@ use umol_graph_core::{
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
-use umol_perm::Permutation;
+use umol_perm::{Permutation, MAX_DEGREE};
 
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
@@ -755,9 +755,9 @@ fn test_molecule_try_from_entries_error(
 #[case::stereo_atom_ligand_duplicate(
     |entries: &mut MoleculeEntries| entries.stereo_atoms[0].1[1] =
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateStereoLigand {
         entity: Entity::StereoAtom(StereoAtomId(0)),
-        atom: AtomId(0),
+        ligand: StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
     },
 )]
 #[case::stereo_atom_sites_duplicate(
@@ -770,9 +770,9 @@ fn test_molecule_try_from_entries_error(
 #[case::stereo_bond_ligand_duplicate(
     |entries: &mut MoleculeEntries| entries.stereo_bonds[0].1[1] =
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-    MoleculeIntegrityError::DuplicateParticipant {
+    MoleculeIntegrityError::DuplicateStereoLigand {
         entity: Entity::StereoBond(StereoBondId(0)),
-        atom: AtomId(0),
+        ligand: StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
     },
 )]
 #[case::stereo_bond_sites_duplicate(
@@ -896,12 +896,6 @@ fn test_molecule_try_from_entries_integrity_error(
     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
     StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
 ])]
-#[case::repeated_virtual_ligand_anchors(vec![
-    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-])]
 fn test_molecule_try_from_entries_stereo_atom(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ligands: Vec<StereoLigand>,
@@ -928,6 +922,12 @@ fn test_molecule_try_from_entries_stereo_atom(
     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
 ])]
+#[case::same_virtual_kind_on_opposite_endpoints(vec![
+    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+])]
 fn test_molecule_try_from_entries_stereo_bond(
     #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
     #[case] ligands: Vec<StereoLigand>,
@@ -942,6 +942,134 @@ fn test_molecule_try_from_entries_stereo_bond(
 }
 
 #[rstest]
+#[case::atom_implicit_hydrogen(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].1[3] = entries.stereo_atoms[0].1[2];
+    },
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+)]
+#[case::atom_lone_pair(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].1[2] = entries.stereo_atoms[0].1[3];
+    },
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+)]
+#[case::bond_implicit_hydrogen(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_bonds[0].1[0] = entries.stereo_bonds[0].1[1];
+    },
+    Entity::StereoBond(StereoBondId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+)]
+#[case::bond_lone_pair(
+    |entries: &mut MoleculeEntries| {
+        let ligand = StereoLigand::new(AtomId(1), StereoLigandKind::LonePair);
+        entries.stereo_bonds[0].1[0] = ligand;
+        entries.stereo_bonds[0].1[1] = ligand;
+    },
+    Entity::StereoBond(StereoBondId(0)),
+    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+)]
+fn test_molecule_try_from_entries_duplicate_stereo_ligand(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] entity: Entity,
+    #[case] ligand: StereoLigand,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::DuplicateStereoLigand { entity, ligand }),
+    );
+}
+
+#[rstest]
+#[case::atom(|entries: &mut MoleculeEntries| {
+    entries.stereo_atoms[0].1 = vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+    ];
+    entries.stereo_atoms[0].2.configuration = StereoConfigurationForm::default();
+}, Entity::StereoAtom(StereoAtomId(0)))]
+#[case::bond(|entries: &mut MoleculeEntries| {
+    entries.stereo_bonds[0].1 = vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
+    ];
+    entries.stereo_bonds[0].2.configuration = StereoConfigurationForm::default();
+}, Entity::StereoBond(StereoBondId(0)))]
+fn test_molecule_try_from_entries_stereo_frame_degree_too_large(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] entity: Entity,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity,
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    );
+}
+
+#[rstest]
+#[case::reference_before_maximum_and_duplicate(
+    |entries: &mut MoleculeEntries| {
+        let invalid = StereoLigand::new(AtomId(4), StereoLigandKind::ImplicitHydrogen);
+        entries.stereo_atoms[0].1.resize(MAX_DEGREE + 1, invalid);
+    },
+    MoleculeIntegrityError::InvalidReference {
+        entity: Entity::Atom(AtomId(4)),
+    },
+)]
+#[case::maximum_before_duplicate_and_arity(
+    |entries: &mut MoleculeEntries| {
+        let duplicate = entries.stereo_atoms[0].1[0];
+        entries.stereo_atoms[0].1.resize(MAX_DEGREE + 1, duplicate);
+    },
+    MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        degree: MAX_DEGREE + 1,
+        maximum: MAX_DEGREE,
+    },
+)]
+#[case::duplicate_before_arity(
+    |entries: &mut MoleculeEntries| {
+        entries.stereo_atoms[0].1.pop();
+        entries.stereo_atoms[0].1[1] = entries.stereo_atoms[0].1[0];
+    },
+    MoleculeIntegrityError::DuplicateStereoLigand {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        ligand: StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    },
+)]
+fn test_molecule_try_from_entries_stereo_frame_error_precedence(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] invalidate: fn(&mut MoleculeEntries),
+    #[case] expected: MoleculeIntegrityError,
+) {
+    invalidate(&mut entries);
+
+    assert_eq!(Molecule::try_from_entries(entries), Err(expected));
+}
+
+#[rstest]
 #[case::tetrahedral_atom(StereoKind::Tetrahedral, 4)]
 #[case::square_planar_atom(StereoKind::SquarePlanar, 4)]
 #[case::axial_atom(StereoKind::Axial, 4)]
@@ -952,15 +1080,23 @@ fn test_molecule_try_from_entries_stereo_atom_kind(
     #[case] kind: StereoKind,
     #[case] degree: usize,
 ) {
+    entries.atoms.extend([
+        AtomForm::from_element(Element::C),
+        AtomForm::from_element(Element::C),
+    ]);
+    entries.bonds.extend([
+        (AtomId(1), AtomId(4), BondForm::from_order(1)),
+        (AtomId(1), AtomId(5), BondForm::from_order(1)),
+    ]);
     let mut ligands = vec![
         StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
         StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
-    ];
-    ligands.resize(
-        degree,
         StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-    );
+    ];
+    ligands.truncate(degree);
     entries.stereo_atoms[0].1 = ligands;
     entries.stereo_atoms[0].2.configuration =
         StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0));
@@ -1013,6 +1149,39 @@ fn test_molecule_try_from_entries_stereo_kind_error(
         }
         _ => unreachable!("test cases contain only stereo entities"),
     }
+
+    assert_eq!(
+        Molecule::try_from_entries(entries),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind }),
+    );
+}
+
+#[rstest]
+#[case::cis_trans_on_atom(
+    Constraint::StereoAtom(
+        StereoAtomId(0),
+        StereoKind::CisTrans,
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+    ),
+    Entity::StereoAtom(StereoAtomId(0)),
+    StereoKind::CisTrans
+)]
+#[case::tetrahedral_on_bond(
+    Constraint::StereoBond(
+        StereoBondId(0),
+        StereoKind::Tetrahedral,
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+    ),
+    Entity::StereoBond(StereoBondId(0)),
+    StereoKind::Tetrahedral
+)]
+fn test_molecule_try_from_entries_stereo_wrapper_kind_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] constraint: Constraint,
+    #[case] entity: Entity,
+    #[case] kind: StereoKind,
+) {
+    entries.constraints = constraint.into();
 
     assert_eq!(
         Molecule::try_from_entries(entries),
@@ -1313,8 +1482,7 @@ fn test_molecule_equiv_relation_frames(#[from(equiv_molecule_entries)] entries: 
     differences.push(Molecule::from_entries(stereo_atom_site));
 
     let mut stereo_atom_ligand = entries.clone();
-    stereo_atom_ligand.stereo_atoms[0].1[2] =
-        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair);
+    stereo_atom_ligand.stereo_atoms[0].1.swap(2, 3);
     differences.push(Molecule::from_entries(stereo_atom_ligand));
 
     let mut stereo_bond_site = entries.clone();
@@ -3748,6 +3916,152 @@ fn test_molecule_noncovalent_bond_mut(#[from(rich_molecule)] mut molecule: Molec
             .kind,
         NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic)
     );
+}
+
+#[rstest]
+fn test_molecule_try_modify_stereo_atom(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let mut molecule = Molecule::from_entries(entries);
+    molecule
+        .try_modify_stereo_atom(StereoAtomId(0), |form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        })
+        .expect("tetrahedral configuration satisfies atom-site integrity");
+    assert_eq!(
+        molecule
+            .stereo_atom(StereoAtomId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+    );
+
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_stereo_atom(StereoAtomId(0), |form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
+        }),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            kind: StereoKind::CisTrans,
+        }),
+    );
+    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule.try_modify_stereo_atom(StereoAtomId(1), |_| {}),
+        Err(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::StereoAtom(StereoAtomId(1)),
+        }),
+    );
+}
+
+#[rstest]
+fn test_molecule_try_modify_stereo_atoms(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let mut molecule = Molecule::from_entries(entries);
+    molecule
+        .try_modify_stereo_atoms(|form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        })
+        .expect("tetrahedral configurations satisfy atom-site integrity");
+
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_stereo_atoms(|form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
+        }),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            kind: StereoKind::CisTrans,
+        }),
+    );
+    assert_eq!(molecule, before);
+}
+
+#[rstest]
+fn test_molecule_try_modify_stereo_bond(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let mut molecule = Molecule::from_entries(entries);
+    molecule
+        .try_modify_stereo_bond(StereoBondId(0), |form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
+        })
+        .expect("cis/trans configuration satisfies bond-site integrity");
+    assert_eq!(
+        molecule
+            .stereo_bond(StereoBondId(0))
+            .attributes
+            .configuration,
+        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
+    );
+
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_stereo_bond(StereoBondId(0), |form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        }),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            kind: StereoKind::Tetrahedral,
+        }),
+    );
+    assert_eq!(molecule, before);
+    assert_eq!(
+        molecule.try_modify_stereo_bond(StereoBondId(1), |_| {}),
+        Err(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::StereoBond(StereoBondId(1)),
+        }),
+    );
+}
+
+#[rstest]
+fn test_molecule_try_modify_stereo_bonds(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let mut molecule = Molecule::from_entries(entries);
+    molecule
+        .try_modify_stereo_bonds(|form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0));
+        })
+        .expect("cis/trans configurations satisfy bond-site integrity");
+
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_stereo_bonds(|form| {
+            form.configuration =
+                StereoConfigurationForm::kinded(StereoKind::Tetrahedral, StereoCoset::Lit(0));
+        }),
+        Err(MoleculeIntegrityError::StereoKindSiteMismatch {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            kind: StereoKind::Tetrahedral,
+        }),
+    );
+    assert_eq!(molecule, before);
+}
+
+#[rstest]
+fn test_molecule_try_modify_constraints(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+    let mut molecule = Molecule::from_entries(entries);
+    let valid = Constraint::Atom(AtomId(0), AtomConstraintForm::degree(NumForm::Lit(4)));
+    molecule
+        .try_modify_constraints(|constraints| constraints.push(valid.clone()))
+        .expect("constraint references an available atom");
+    assert!(molecule.constraints().iter().any(|entry| entry == &valid));
+
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_constraints(|constraints| {
+            constraints.push(Constraint::Atom(
+                AtomId(4),
+                AtomConstraintForm::degree(NumForm::Lit(4)),
+            ));
+        }),
+        Err(MoleculeIntegrityError::InvalidReference {
+            entity: Entity::Atom(AtomId(4)),
+        }),
+    );
+    assert_eq!(molecule, before);
 }
 
 // -- lift_constraints / inline_constraints ---------------------

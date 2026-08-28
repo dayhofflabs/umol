@@ -600,7 +600,32 @@ graph-IR normal and feature-gated property suites green.
   committing. Add exact atom, bond, kindless, opposite-endpoint, mixed-virtual, mutation rollback,
   and error-precedence tables plus generator laws that every published molecule satisfies the two
   frame invariants. **Breaking; accepted-domain, mutation-surface, and public-error changes, with the
-  inherited red ledger unchanged after caller and fixture migration.** [dep: S0a]
+  inherited red ledger unchanged after caller and fixture migration.** [dep: S0a] **Done.**
+  `Molecule::check_integrity` now rejects frames longer than `MAX_DEGREE` before duplicate, arity,
+  kind, or permutation checks, rejects the first repeated complete `StereoLigand`, and applies the
+  atom/bond site-admissibility table to molecule-level stereo constraint wrappers. Reference
+  validation remains earlier than both frame checks. Exact constructor tables cover atom and bond
+  repeats of each virtual kind, mixed virtual kinds, the same virtual kind at opposite bond
+  endpoints, kindless oversized frames, wrapper kinds, and diagnostic precedence.
+
+  The raw stereo-form, family-attribute, and molecule-constraint mutation surfaces are now internal
+  to graph IR. Public callers use five checked, rollback-safe molecule operations for one or all
+  stereo atoms, one or all stereo bonds, and the molecule constraint tree; each operation has a
+  dedicated success, failure, and rollback regression. The Python live views and setters use those
+  same gates and preserve their published exception mapping. Graph, Python, reaction, transaction,
+  incidence, canonicalization, and pushout fixtures were migrated to valid distinct frames; tests
+  whose sole contract was the abandoned repeated-ligand orbit semantics were removed. The molecule
+  generators now sample ligand frames without replacement, and a dedicated property checks both
+  invariants on every generated stereo atom and bond.
+
+  `cargo test -p umol-graph-ir --lib --no-fail-fast` ran 6,367 tests and retained exactly the four
+  inherited library failures (`test_aromatic_systems_glue_differing_frames`, the two constitution
+  canonicalization regressions, and `test_molecule_meet_pushout_overlays`). The focused molecule
+  structure and edit property modules passed 9 and 17 tests. The full canonicalization integration
+  target retained its one inherited failure, and the full feature-gated property target passed 322,
+  failed exactly its ten inherited cases, and ignored one in 117.52 seconds. Graph-IR doctests, all
+  974 graph library tests, 1,635 Python-binding Rust tests, and 1,324 Python tests passed. Workspace
+  all-target compilation and strict clippy for graph IR, graph, and Python also passed.
 - **S0c — reaction integrity and construction** (`umol-graph-ir/src/ir/reaction.rs`,
   `ir/reaction/integrity.rs`): add `Reaction::try_new`, make `Reaction::new` asserted, privatize
   `lhs`/`deltas` behind direct read and `into_parts` accessors, and apply the shared local stereo-entry
