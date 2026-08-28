@@ -132,10 +132,12 @@ impl StereoAtoms {
                         .and_then(|&node| set.coincident(node, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
-                    right
-                        .clone()
-                        .reframe_to(right_ligands, left_ligands)?
-                        .meet(left)
+                    // Equal virtual ligands leave several restatements of the right entry in the
+                    // retained left frame. They lie in one coset of that frame's stabilizer, so the
+                    // values they meet to denote one arrangement and the first success stands.
+                    Permutation::between_all(right_ligands, left_ligands)
+                        .into_iter()
+                        .find_map(|action| right.clone().reframe_by(action)?.meet(left))
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))
@@ -322,10 +324,12 @@ impl StereoBonds {
                         .and_then(|&edge| set.coincident_edge(edge, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
-                    right
-                        .clone()
-                        .reframe_to(right_ligands, left_ligands)?
-                        .meet(left)
+                    // Equal virtual ligands leave several restatements of the right entry in the
+                    // retained left frame. They lie in one coset of that frame's stabilizer, so the
+                    // values they meet to denote one arrangement and the first success stands.
+                    Permutation::between_all(right_ligands, left_ligands)
+                        .into_iter()
+                        .find_map(|action| right.clone().reframe_by(action)?.meet(left))
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))

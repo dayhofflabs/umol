@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use std::mem;
 use std::sync::Arc;
 
+use umol_perm::Permutation;
+
 use umol_graph_core::{
     compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
     FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered,
@@ -36,7 +38,7 @@ use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::super::traits::{BiRelationEquiv, Equiv};
+use super::super::traits::Equiv;
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
     BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
@@ -1033,15 +1035,19 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: &StereoAtomForm,
     ) -> bool {
-        // The coset is read against the ligand frame, so the offered configuration is restated
-        // into the stored frame before comparison. `reframe_to` establishes identity as it derives
-        // the reordering, so no separate check is needed here.
-        let stored = self.stereo_atoms.participants_2(id.index()).to_vec();
+        // Equal virtual ligands leave the reordering ambiguous, so every admissible reframing is
+        // tried. An empty candidate set is the ligand multisets disagreeing, which is the identity
+        // half of the question.
+        let stored = self.stereo_atoms.participants_2(id.index());
         AtomId::from(self.stereo_atoms.participants_1(id.index())[0]) == site
-            && attributes
-                .clone()
-                .reframe_to(ligands, &stored)
-                .is_some_and(|restated| restated.equiv(&self.stereo_atoms.data(id.index())))
+            && Permutation::between_all(ligands, &stored)
+                .into_iter()
+                .any(|action| {
+                    attributes
+                        .clone()
+                        .reframe_by(action)
+                        .is_some_and(|restated| restated.equiv(&self.stereo_atoms.data(id.index())))
+                })
     }
 
     /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
@@ -1052,13 +1058,17 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: &StereoBondForm,
     ) -> bool {
-        // As for stereo atoms: restate the offered configuration into the stored ligand frame.
-        let stored = self.stereo_bonds.participants_2(id.index()).to_vec();
+        // As for stereo atoms: every admissible reframing of the offered ligand frame is tried.
+        let stored = self.stereo_bonds.participants_2(id.index());
         BondId::from(self.stereo_bonds.participants_1(id.index())[0]) == site
-            && attributes
-                .clone()
-                .reframe_to(ligands, &stored)
-                .is_some_and(|restated| restated.equiv(&self.stereo_bonds.data(id.index())))
+            && Permutation::between_all(ligands, &stored)
+                .into_iter()
+                .any(|action| {
+                    attributes
+                        .clone()
+                        .reframe_by(action)
+                        .is_some_and(|restated| restated.equiv(&self.stereo_bonds.data(id.index())))
+                })
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {

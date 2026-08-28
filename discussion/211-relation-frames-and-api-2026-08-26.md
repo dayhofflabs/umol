@@ -617,23 +617,148 @@ stereo-atom span could carry sides wanting different normalizers. Doc
 #### The ambiguity boundary
 
 Where participants are distinct — every family except stereo — integrity makes the frame change
-unique and `reframe_to` is total on multiset-equal inputs. Where participants repeat, `reframe_to`
-**declines** rather than choosing a representative, because an exchange of equal virtual ligands
-preserves meaning only when the configuration and every frame-relative constraint are invariant
-under it. Callers that must consider every admissible alternative use `Permutation::between_all`
-with `reframe_by`. Resolving the ambiguity by selecting a normalizing action is `reframe` itself,
-through `CosetSpace::normalizer` and generator-based residual-invariance checking.
+unique and `reframe_to` is total on multiset-equal inputs.
 
-Every form keeps a `reframe_to` method, including the two whose payload is frame-invariant, and
-each body destructures exhaustively. That is what forces an explicit decision when a
-position-sensitive field is added — not a trait, which would only force one when a new form *type*
-appeared. It is the one property of `RelationData` worth carrying forward, and today's
-`DativeBondForm::on_permutation` does not have it.
+Where participants repeat there is no single restatement, so the two stereo forms do not carry
+`reframe_to` at all. `reframe_by` is the whole of their frame action, and every stereo caller
+derives its own candidates through `Permutation::between_all`. Resolving the ambiguity by selecting
+a normalizing action is `reframe` itself, through `CosetSpace::normalizer` and generator-based
+residual-invariance checking. Resolving it by search is the following section.
+
+The four non-stereo forms keep a `reframe_to` method, including the two whose payload is
+frame-invariant, and each body destructures exhaustively. That is what forces an explicit decision
+when a position-sensitive field is added — not a trait, which would only force one when a new form
+*type* appeared. For stereo the same guard is `reframe_by`, which destructures
+`Self { configuration, constraints }`. It is the one property of `RelationData` worth carrying
+forward, and today's `DativeBondForm::on_permutation` does not have it.
 
 The family-level members are retained even where one has no current consumer, because the members of
 an algebraically closed set constrain one another through laws; omitting one leaves a hole in the law
 set. That is not the situation of a speculative feature, which has no logical connection to the rest
 of the surface.
+
+#### A stored coset denotes its orbit
+
+A frame's repeated ligands generate its residual stabilizer. The participants determine that
+stabilizer, and the stabilizer together with one coset index determines the whole orbit, so a stored
+`Lit` is a representative and storing only it loses nothing. The storage shape is unchanged.
+
+> A stereo entry's configuration denotes the orbit of the stored coset under the residual stabilizer
+> of its stored frame.
+
+Orbits partition the coset space, so for determinate cosets the meet of two entries has two
+outcomes: the same orbit, where either representative may be kept, or different orbits, which is
+bottom. No set-valued result is required, and which representative survives does not matter. With no
+repeated ligand the stabilizer is trivial, every orbit is a singleton, and this is today's
+comparison exactly.
+
+**The case it describes.** A tetrahedral site bearing F, Cl and two implicit hydrogens. The two
+hydrogens are equal `StereoLigand` values, so the transposition of their frame positions lies in the
+stabilizer. The tetrahedral coset space has index two and an odd permutation exchanges its cosets,
+so that one stabilizer element carries `Lit(0)` to `Lit(1)`. Both records describe the same achiral
+molecule. The site is prochiral and its hydrogens are enantiotopic: R/S cannot be stated without
+choosing which hydrogen is which, and the ligand labels do not carry that choice.
+
+A frame repeat is narrower than prochirality. The two methyls of an isopropyl group are also
+enantiotopic, but they are distinct atoms and therefore distinct `StereoLigand` values. Repeats
+arise only for `ImplicitHydrogen` and `LonePair`, which carry the site's own atom id, so two of one
+kind on one site are literally equal.
+
+**Two defects this closes, both reachable on legal data.**
+
+`Permutation::between` declines whenever a frame repeats a ligand, including when the two frames are
+identical, so the stereo `reframe_to` declines there too. Two stereo entries that coincide and agree
+are then rejected: `glue`'s combine returns `None` and `pushout` fails the whole molecule glue
+rather than that one entry, and the reaction application arms return
+`ApplyError::StereoFrameMismatch`.
+
+Behind it, and masked by it, the meet is itself wrong. `coset_meet(Lit(0), Lit(1), kind)` intersects
+`{0}` with `{1}`, and `canon_coset` returns `Contradiction` on the empty set. Two records related by
+a stabilizer element are bottom to each other. This becomes observable the moment transport is made
+total by picking one witness, which is why making transport total is not the repair.
+
+**Two approaches not taken.**
+
+Forbidding repeated virtual ligands by integrity — at most one `ImplicitHydrogen` and at most one
+`LonePair` per stereo atom, and per endpoint for a stereo bond — would be exactly sufficient, since
+atom-kind ligands are already required to be distinct and virtual ligands carry the site's own atom
+id. It reverses a settled decision rather than adding a rule. Doc
+[103](103-stereochemistry-overlay-and-ports-2026-05-28.md) has distinctness "neither required nor
+asserted", and the frame-selection section above states that a repeated ligand frame is not an error
+state. It would also leave `select_frame`'s orbit-representative machinery without a purpose, since
+a trivial stabilizer reduces selection to a sort, and it would require an explicit hydrogen before
+any prochiral stereo assertion.
+
+Canonicalizing each side to its orbit representative and comparing the representatives is not a
+quotient. On an `[F, Cl, H, H]` frame `Lit(0)` minimizes to `Lit(0)`, while `LitSet({0, 1})` is
+already stabilizer-invariant and minimizes to itself. The two values denote the same fact and the
+representative does not identify them. Least-representative and orbit-closure agree on singletons
+and part company on sets.
+
+**The uniform shape.** Every entry-level stereo operation searches the candidate actions and keeps
+the first that satisfies its own relation:
+
+```rust
+Permutation::between_all(source_frame, target_frame)
+    .into_iter()
+    .find_map(|action| /* restate under `action`, then the site's relation */)
+```
+
+Taking the first success is sound because the successful actions are a subset of one coset of the
+stabilizer. Any two of them therefore differ by a stabilizer element, and so do the results they
+produce, which under the rule above denote the same arrangement. That independence comes from the
+orbit reading of a stored value rather than from the relation, so it holds for whichever relation a
+site asks.
+
+Searching with `equiv` supplies orbit equality without introducing a second relation. A host holding
+`Lit(1)` against a delta asserting `Lit(0)` over a frame with two equal hydrogens fails under the
+identity and succeeds under the transposition, which is the answer the rule requires. `equiv` is
+already what every delta old-state check in `transact.rs` and every `difference_to` field comparison
+uses, so no site changes the relation it asks.
+
+| site | relation searched | what rides on the winning action |
+| --- | --- | --- |
+| `StereoAtoms::glue`, `StereoBonds::glue` | `meet` returns `Some` | the met value |
+| `StereoAtomDelta::Remove` and its bond twin | `equiv` against the host entry | the restated attributes |
+| `StereoAtomDelta::ModifyField` and its bond twin | `equiv` of `old` against the host entry | `new.apply(action)` |
+| `Molecule::difference_to`, `ReactionSpan::superimpose` | `equiv` of the rhs against the lhs entry | the transported rhs form |
+
+`Molecule::equiv_under` and the editor's `stereo_atom_equiv` and `stereo_bond_equiv` already have
+this shape. The `ModifyField` arms need one action shared by `old` and `new`, and searching supplies
+it: the action is the one under which `old` agreed.
+
+`ModifyField` is the one site where the action itself escapes the search rather than only its
+result, because a second value rides on it. Returning it together with the restated `old` keeps that
+value from being recomputed:
+
+```rust
+let (action, reframed_old) = Permutation::between_all(&before, &after)
+    .into_iter()
+    .find_map(|action| {
+        let restated = old.apply(action)?;
+        restated.equiv(host_configuration).then_some((action, restated))
+    })
+    .ok_or(/* .. */)?;
+*old = reframed_old;
+*new = new.apply(action).ok_or(/* .. */)?;
+```
+
+Searching also moves what a failure means. `ApplyError::StereoFrameMismatch` currently reports that
+two frames could not be aligned; after the change an exhausted candidate set reports that the rule's
+old state is not the one the host holds, which is what `TransactionError::OldStateMismatch` already
+names one phase later. Whether the two become one error, and in which phase it is raised, is settled
+in S4d.2 rather than here.
+
+**Where the closure cannot reach.** The constraint-side meets, `TetrahedralStereo` in
+`constraint/atom.rs` and `CisTransStereo` in `constraint/bond.rs`, hold no participants. They cannot
+compute the stabilizer and cannot close under it. A frame-blind `meet` on a form remains the finer
+relation, consistent with `==` ⊆ `normalized_eq` ⊆ `framed_eq` being a nesting rather than three
+spellings of one thing.
+
+A `Permutation::between_one` returning a single witness was written and then removed: one witness is
+precisely what the search must not take, since the result would depend on which one the scan
+reached. `Permutation::between` is retained, for the sites where a unique relabelling is the question
+rather than an incidental requirement.
 
 #### Laws
 
@@ -688,6 +813,7 @@ relation entries must make the frame relationship explicit.
 | editor removal | `birelation_removed`, `var_relation_removed`, `fixed_relation_removed` rediscover removed ids in a second traversal | consume `Compaction<RelationId>` returned by `compact` |
 | `ReactionSpan::superimpose`, `Molecule::difference_to` | remaps rhs participant ids but places matched rhs forms in the lhs frame without transforming them | explicit `Reframe` of the rhs entry into the lhs frame |
 | substructure matching | maps the pattern ligand frame and asks the host for the coset in that frame | retain the explicit overlay alignment without a payload callback |
+| reaction application of stereo configuration transport | `Permutation::between` in the two `ModifyField` arms and `reframe_to` in the two `Remove` arms, both declining on a repeated ligand frame | search the candidate actions and keep the first satisfying `equiv` against the host entry |
 | reaction application of frame-relative constraint changes | not covered for every constraint kind | out of scope here; flagged for doc [204](204-reaction-application-redesign-2026-08-19.md) |
 | molecule-level stereo constraints under pushout | id-remapped only, not frame-transported | doc 209, which owns aggregate constraint transport |
 
@@ -1437,7 +1563,7 @@ for all six families, including that a stereo site bearing one entity is found w
 its ligands, and that a ligand atom shared by two adjacent stereocentres does not confuse either
 lookup.
 
-The four families' replacement is behaviour-preserving and was checked as such rather than assumed.
+The four families' replacement is behavior-preserving and was checked as such rather than assumed.
 `participant_permutation` canonicalized the mapped query and required it to equal the stored
 sequence, returning the sort's σ; for these four factors canonicalization is a sort, so the
 precondition is multiset equality — the same one `reframe_to` derives its bijection from. The
@@ -1467,7 +1593,7 @@ relative to what `equiv` means on the same receiver. S4d proceeds without renami
 
 **Dependencies:** [dep: S3e, S4c]
 
-#### S4d.1 — Move the editor's participant alignment onto `reframe_to`
+#### S4d.1 — Move the editor's participant alignment onto the frame surface
 
 **Module:** `umol-graph-ir/src/ir/molecule/editor.rs`, `umol-graph-ir/src/ir/traits.rs`, and their
 unit tests.
@@ -1508,6 +1634,11 @@ covered it. Both sites now check identity explicitly through `same_participants`
 The lesson for the remaining migration: **`reframe_to` is not a replacement for
 `participant_permutation`** — it replaces the alignment half only, and every call site must be
 checked for whether it was also relying on the identity half.
+
+**The two stereo sites do not use `reframe_to`.** They take the search shape of the section above —
+`Permutation::between_all` filtered by `reframe_by` and `equiv` — because the editor's two stereo
+call sites are exactly where a repeated ligand frame is legal, and `reframe_to` declines there. The
+four distinct-participant sites use `reframe_to` as described.
 
 **And the non-uniformity is per value, not per family.** The first reading of this was that aromatic
 and multicenter keep the identity check because `ElectronCountsForm::reframe_to` must match the
@@ -1553,14 +1684,38 @@ every editor and transaction assertion.
 
 **Dependencies:** [dep: S4d]
 
+#### S4d.2 — Put the six remaining stereo transport sites on the search shape
+
+**Module:** `umol-graph-ir/src/ir/stereo.rs`, `reaction.rs`, `umol-perm/src/permutation.rs`, and
+their unit tests.
+
+Six sites transport a stereo form between two frames and decline when the frame repeats a ligand.
+`StereoAtoms::glue` and `StereoBonds::glue` reach it through `reframe_to`; the two `Remove` arms of
+`reframe_stereo` through `reframe_to`; its two `ModifyField` arms through `Permutation::between`
+directly. Replace each with the search shape, per the relations tabulated above. Delete `reframe_to`
+from the two stereo forms once the four sites holding it are migrated.
+
+**Tests and evidence:** Glue two coincident stereo atoms over a frame with two implicit hydrogens
+whose stored cosets differ by the stabilizer transposition, and assert the glue succeeds rather than
+failing the whole molecule. The same for a stereo bond over a 1,1-disubstituted alkene. Apply a
+reaction whose rule removes, and one whose rule modifies, a prochiral stereo centre against a host
+storing the other representative. Assert that a genuinely different orbit still fails, separating
+the two outcomes that `None` conflates today. Retain every existing application and pushout
+assertion: with no repeated ligand the candidate set holds one action and behaviour is unchanged.
+
+**Change class:** correctness change with caller migration (green).
+
+**Dependencies:** [dep: S4d.1]
+
 #### S4e — Add explicit transport to superposition, difference, and matching
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `molecule.rs`, `substructure.rs`, and their
 unit tests.
 
-Apply `reframe_to` to carry the rhs entry into the lhs frame in `ReactionSpan::superimpose` and
-`Molecule::difference_to` instead of relying on reconstruction. Retain the explicit overlay
-alignment in substructure matching without a payload callback.
+Carry the rhs entry into the lhs frame in `ReactionSpan::superimpose` and `Molecule::difference_to`
+instead of relying on reconstruction: `reframe_to` for the four distinct-participant families, and
+the search shape for the two stereo families, which have no `reframe_to`. Retain the explicit
+overlay alignment in substructure matching without a payload callback.
 
 **Tests and evidence:** Cover independently framed sides with nonuniform position-sensitive payloads
 for superposition and difference, the existing span and reaction conversion laws, and pattern-to-host
@@ -1693,7 +1848,8 @@ The critical path is
 `S0a -> S0b -> S1a -> S1b -> S2a -> S3d -> S3e -> S4d -> S4e -> S5a -> S5b -> S6a`.
 
 `S2a -> S4a -> S4c -> S4d` is a parallel branch of comparable length, and `S3f -> S3g -> S3h` gates
-`S4e` alongside `S4d`. `S4b` hangs off `S2a` and joins nothing until S5.
+`S4e` alongside `S4d`. `S4d.1 -> S4d.2` extends the critical path between `S4d`
+and `S4e`: S4e's stereo half uses the search shape that S4d.2 establishes. `S4b` hangs off `S2a` and joins nothing until S5.
 
 S3b and S3c are additive and were built at any point before their consumers. S3a introduces the
 family types and gates S3e. S3d supplies the in-place `permute_with` that S3e applies, which is why

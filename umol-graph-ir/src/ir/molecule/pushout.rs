@@ -226,10 +226,14 @@ mod tests {
     use umol_graph_core::Correspondence;
 
     use super::super::super::aromatic::AromaticSystemForm;
-    use super::super::super::constraint::{AtomConstraintForm, Constraint};
+    use super::super::super::constraint::{
+        AtomConstraintForm, Constraint, StereoAtomConstraintForm, StereoLigandPair, TopicityForm,
+        TopicityRelationForm,
+    };
+    use super::super::super::id::StereoLigandPosition;
     use super::super::super::ligand::{StereoLigand, StereoLigandKind};
     use super::super::super::multicenter::MulticenterBondForm;
-    use super::super::super::stereo::{StereoAtomForm, StereoBondForm, StereoKind};
+    use super::super::super::stereo::{StereoAtomForm, StereoBondForm, StereoKind, Topicity};
     use super::*;
 
     // A single shared atom (node 0 ↔ node 0), no shared bond; each side has one unmatched atom.
@@ -642,6 +646,407 @@ mod tests {
                 .meet_pushout(&other_mol, &overlap)
                 .map(|po| po.object),
             expected,
+        );
+    }
+
+    // A site mixing explicit and virtual ligands, none of them repeated: one implicit hydrogen and
+    // one lone pair are distinct values, so the frame change stays unique. `other` transposes the two
+    // explicit ligands, which flips the coset.
+    #[rstest]
+    #[case::agree(
+        [
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        ],
+        1,
+        true,
+    )]
+    #[case::contradict(
+        [
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        ],
+        0,
+        false,
+    )]
+    #[case::ligand_set(
+        [
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+        1,
+        false,
+    )]
+    fn test_molecule_meet_pushout_stereo_atom_virtual_ligands(
+        #[case] other_ligands: [StereoLigand; 4],
+        #[case] other_coset: u32,
+        #[case] admissible: bool,
+    ) {
+        let molecule = |ligands: Vec<StereoLigand>, coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::Br),
+                ],
+                bonds: (1..=3)
+                    .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                    .collect(),
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    ligands,
+                    StereoAtomForm::new(StereoKind::Tetrahedral, coset),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let self_mol = molecule(
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            ],
+            0,
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..4u32).map(|i| (NodeId(i), NodeId(i))).collect(), 4, 4)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new((0..3u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 3, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+        let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(
+            self_mol
+                .meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
+                .map(|po| po.object),
+            expected,
+        );
+    }
+
+    // A stereo bond whose frame is entirely explicit ligands, two per endpoint. `other` transposes
+    // the two borne by the first endpoint, which is a within-endpoint swap and flips the coset.
+    #[rstest]
+    #[case::agree(
+        [
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+        ],
+        1,
+        true,
+    )]
+    #[case::contradict(
+        [
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+        ],
+        0,
+        false,
+    )]
+    #[case::ligand_set(
+        [
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        ],
+        1,
+        false,
+    )]
+    fn test_molecule_meet_pushout_stereo_bond_explicit_ligands(
+        #[case] other_ligands: [StereoLigand; 4],
+        #[case] other_coset: u32,
+        #[case] admissible: bool,
+    ) {
+        let molecule = |ligands: Vec<StereoLigand>, coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                    AtomForm::from_element(Element::Br),
+                    AtomForm::from_element(Element::I),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                ],
+                stereo_bonds: vec![(
+                    BondId(0),
+                    ligands,
+                    StereoBondForm::new(StereoKind::CisTrans, coset),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let self_mol = molecule(
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            ],
+            0,
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..6u32).map(|i| (NodeId(i), NodeId(i))).collect(), 6, 6)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new((0..5u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 5, 5)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+        let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(
+            self_mol
+                .meet_pushout(&molecule(other_ligands.to_vec(), other_coset), &overlap)
+                .map(|po| po.object),
+            expected,
+        );
+    }
+
+    // A site whose frame repeats a virtual ligand. The two implicit hydrogens are equal values, so
+    // transposing their positions is a symmetry of the frame and the cosets it relates describe one
+    // arrangement. Tetrahedral has two cosets and the transposition exchanges them, so every pair
+    // agrees. Square planar has three and the transposition fixes one while exchanging the other
+    // two, so `Lit(1)` stays distinct from both `Lit(0)` and `Lit(2)`.
+    #[rstest]
+    #[case::tetrahedral_same(StereoKind::Tetrahedral, Element::C, [0, 1, 2, 3], 0, 0, true)]
+    #[case::tetrahedral_exchanged(StereoKind::Tetrahedral, Element::C, [0, 1, 2, 3], 0, 1, true)]
+    #[case::tetrahedral_reordered(StereoKind::Tetrahedral, Element::C, [1, 0, 2, 3], 0, 0, true)]
+    #[case::tetrahedral_reordered_exchanged(
+        StereoKind::Tetrahedral, Element::C, [1, 0, 2, 3], 0, 1, true
+    )]
+    #[case::square_planar_same(StereoKind::SquarePlanar, Element::Pt, [0, 1, 2, 3], 0, 0, true)]
+    #[case::square_planar_exchanged(
+        StereoKind::SquarePlanar, Element::Pt, [0, 1, 2, 3], 0, 2, true
+    )]
+    #[case::square_planar_distinct(
+        StereoKind::SquarePlanar, Element::Pt, [0, 1, 2, 3], 0, 1, false
+    )]
+    #[case::square_planar_fixed(StereoKind::SquarePlanar, Element::Pt, [0, 1, 2, 3], 1, 1, true)]
+    #[case::square_planar_fixed_distinct(
+        StereoKind::SquarePlanar, Element::Pt, [0, 1, 2, 3], 1, 2, false
+    )]
+    #[case::square_planar_reordered(
+        StereoKind::SquarePlanar, Element::Pt, [1, 0, 2, 3], 0, 0, true
+    )]
+    #[case::square_planar_reordered_exchanged(
+        StereoKind::SquarePlanar, Element::Pt, [1, 0, 2, 3], 0, 2, true
+    )]
+    #[case::square_planar_reordered_distinct(
+        StereoKind::SquarePlanar, Element::Pt, [1, 0, 2, 3], 0, 1, false
+    )]
+    fn test_molecule_meet_pushout_stereo_atom_repeated_ligands(
+        #[case] kind: StereoKind,
+        #[case] site_element: Element,
+        #[case] other_order: [usize; 4],
+        #[case] self_coset: u32,
+        #[case] other_coset: u32,
+        #[case] admissible: bool,
+    ) {
+        let molecule = |order: [usize; 4], coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(site_element),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                ],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    order
+                        .into_iter()
+                        .map(|position| {
+                            [
+                                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                            ][position]
+                        })
+                        .collect(),
+                    StereoAtomForm::new(kind, coset),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let self_mol = molecule([0, 1, 2, 3], self_coset);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..3u32).map(|i| (NodeId(i), NodeId(i))).collect(), 3, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new((0..2u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+        let expected = admissible.then(|| self_mol.clone());
+        assert_eq!(
+            self_mol
+                .meet_pushout(&molecule(other_order, other_coset), &overlap)
+                .map(|po| po.object),
+            expected,
+        );
+    }
+
+    // A frame-relative constraint has to be carried into agreement by the *same* action as the
+    // configuration. The repeat sits at positions 1 and 2, and the square-planar transposition of
+    // those positions fixes coset 2, so the configuration agrees under both candidate actions and
+    // only the topicity constraint can decide between them. `constraint_selects_action` succeeds
+    // solely because the transposition moves the right pair off the left one; under the identity
+    // the two relations meet on the same pair and contradict.
+    #[rstest]
+    #[case::constraint_selects_action(
+        2,
+        StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+        true
+    )]
+    #[case::constraint_agrees_under_identity(
+        2,
+        StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+        true
+    )]
+    #[case::distinct_orbit(
+        1,
+        StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+        false
+    )]
+    fn test_molecule_meet_pushout_stereo_atom_repeated_ligand_constraints(
+        #[case] other_coset: u32,
+        #[case] other_pair: StereoLigandPair,
+        #[case] admissible: bool,
+    ) {
+        let molecule = |attributes: StereoAtomForm| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::Pt),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                ],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    ],
+                    attributes,
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let enantiotopic = TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            relation: TopicityRelationForm::lit(Topicity::Enantiotopic),
+        };
+        let homotopic = TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::lit(Topicity::Homotopic),
+        };
+        let self_mol = molecule(
+            StereoAtomForm::new(StereoKind::SquarePlanar, 2u32)
+                .with_constraint(StereoAtomConstraintForm::Topicity(enantiotopic.clone())),
+        );
+        let other_mol = molecule(
+            StereoAtomForm::new(StereoKind::SquarePlanar, other_coset).with_constraint(
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: other_pair,
+                    relation: TopicityRelationForm::lit(Topicity::Homotopic),
+                }),
+            ),
+        );
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..3u32).map(|i| (NodeId(i), NodeId(i))).collect(), 3, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new((0..2u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 2, 2)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+        let expected = admissible.then(|| {
+            molecule(
+                StereoAtomForm::new(StereoKind::SquarePlanar, 2u32).with_constraints([
+                    StereoAtomConstraintForm::Topicity(enantiotopic),
+                    StereoAtomConstraintForm::Topicity(homotopic),
+                ]),
+            )
+        });
+        assert_eq!(
+            self_mol
+                .meet_pushout(&other_mol, &overlap)
+                .map(|po| po.object),
+            expected,
+        );
+    }
+
+    // A 1,1-disubstituted alkene: the first endpoint bears two implicit hydrogens, so transposing
+    // their positions is a symmetry of the frame and it exchanges the two cis/trans cosets. The bond
+    // is not stereogenic and the two records describe one arrangement. Only a within-endpoint repeat
+    // arises, because the two endpoints carry different atom ids.
+    #[rstest]
+    #[case::same_coset(0)]
+    #[case::exchanged_coset(1)]
+    fn test_molecule_meet_pushout_stereo_bond_repeated_ligands(#[case] other_coset: u32) {
+        let molecule = |coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(3), BondForm::from_order(1)),
+                ],
+                stereo_bonds: vec![(
+                    BondId(0),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    ],
+                    StereoBondForm::new(StereoKind::CisTrans, coset),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let self_mol = molecule(0);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new((0..4u32).map(|i| (NodeId(i), NodeId(i))).collect(), 4, 4)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+            Correspondence::new((0..3u32).map(|i| (EdgeId(i), EdgeId(i))).collect(), 3, 3)
+                .expect("correspondence producer preserves partial-bijection invariants"),
+        );
+        assert_eq!(
+            self_mol
+                .meet_pushout(&molecule(other_coset), &overlap)
+                .map(|po| po.object),
+            Some(self_mol.clone()),
         );
     }
 }
