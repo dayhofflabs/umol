@@ -1600,7 +1600,7 @@ relative to what `equiv` means on the same receiver. S4d proceeds without renami
 
 **Dependencies:** [dep: S3e, S4c]
 
-#### S4d.1 — Move the editor's participant alignment onto the frame surface
+#### S4d.1 — Move the editor's participant alignment onto the frame surface **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule/editor.rs`, `umol-graph-ir/src/ir/traits.rs`, and their
 unit tests.
@@ -1691,16 +1691,53 @@ every editor and transaction assertion.
 
 **Dependencies:** [dep: S4d]
 
-#### S4d.2 — Put the six remaining stereo transport sites on the search shape
+#### S4d.2 — Put the remaining stereo transport sites on the search shape **Done**
 
 **Module:** `umol-graph-ir/src/ir/stereo.rs`, `reaction.rs`, `umol-perm/src/permutation.rs`, and
 their unit tests.
 
-Six sites transport a stereo form between two frames and decline when the frame repeats a ligand.
-`StereoAtoms::glue` and `StereoBonds::glue` reach it through `reframe_to`; the two `Remove` arms of
-`reframe_stereo` through `reframe_to`; its two `ModifyField` arms through `Permutation::between`
-directly. Replace each with the search shape, per the relations tabulated above. Delete `reframe_to`
-from the two stereo forms once the four sites holding it are migrated.
+**Module:** also `umol-graph-ir/src/ir/substructure.rs`, `view/stereo.rs`, `traits.rs`,
+`ir/reframe.rs`, and `umol-perm/src/permutation.rs`.
+
+A workspace sweep found **fourteen** sites, not six. Beyond the six scoped here —
+`StereoAtoms::glue` and `StereoBonds::glue` through `reframe_to`, the two `Remove` arms of
+`reframe_stereo` through `reframe_to`, and its two `ModifyField` arms through
+`Permutation::between` — the same shape sits in `Molecule::equiv_under` (already searching), the two
+stereo arms of the matcher's `verify_overlays`, the editor's two `*_equiv`, and
+`StereoAtomView::coset_for` with its bond twin.
+
+They differed only in the relation and in what the caller took. That is now one operation:
+`FrameAction` and `find_reframed` in `ir/reframe.rs`, over `Permutation::visit_between`. Each site
+is one closure — `meet` for `glue`, `matches` for the matcher, `equiv` for the editor and the
+reaction arms, and the coset projection for `coset_for`. `Molecule::equiv_under` keeps its own
+enumeration, because it hands the actions to a molecule-level constraint check rather than selecting
+one.
+
+`Permutation::between_all` is renamed `enumerate_between` and joined by `visit_between`, the
+`ControlFlow` primitive it now collects, on the `Graph::visit_paths` / `enumerate_paths` precedent.
+Nothing collects a candidate vector any more, which resolves S4c's third deferred allocation.
+`reframe_to` is deleted from the two stereo forms; the four distinct-participant families keep
+theirs.
+
+**The matcher was silently dropping stereo constraints.** Its two arms compared `kind` and then a
+coset through `coset_for` and `coset_matches`, so a pattern asserting `Topicity`, `LigandSymmetry`,
+`Fluxionality` or `Stereogenicity` matched a host that contradicted it — against the module's own
+rule that an unevaluated construct fails loudly, which is what a molecule-scope constraint does.
+Comparing whole forms closes it, and the explicit kind guard goes with it, since
+`StereoConfigurationForm::meet` already rejects a kind mismatch. `coset_matches` keeps one caller,
+`matches_value` on the kinded constraint types, where the kind is a macro constant and there is no
+configuration to hand to `Lattice::matches`.
+
+`permutation_for` and `permutation_for_ligands` are deleted. `coset_for` is retained: its consumer
+is `umol-graph`'s stereo perception, comparing an entity's coset against a `#T` / `#C` constraint,
+which carries no frame of its own and so has no form to compare against.
+
+Two sites are left untraced. `umol-io/src/table_ir/raise.rs:290` and `:383` call
+`Permutation::between(..).expect("validated .. frames contain the same ligands")`, so a repeated
+frame panics there rather than declining. Whether one can reach them depends on what that upstream
+validation checks. `symmetry.rs:561` also uses `between`, but is guarded: `all_distinct` at line 190
+excludes a repeated frame before the branch that calls it, so the symmetry machinery declines to
+reason about a prochiral centre rather than being wrong about it.
 
 **Tests and evidence:** Glue two coincident stereo atoms over a frame with two implicit hydrogens
 whose stored cosets differ by the stabilizer transposition, and assert the glue succeeds rather than
@@ -1714,19 +1751,29 @@ assertion: with no repeated ligand the candidate set holds one action and behavi
 
 **Dependencies:** [dep: S4d.1]
 
-#### S4e — Add explicit transport to superposition, difference, and matching
+#### S4e — Add explicit transport to superposition, difference, and matching **Done**
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `molecule.rs`, `substructure.rs`, and their
 unit tests.
 
-Carry the rhs entry into the lhs frame in `ReactionSpan::superimpose` and `Molecule::difference_to`
-instead of relying on reconstruction: `reframe_to` for the four distinct-participant families, and
-the search shape for the two stereo families, which have no `reframe_to`. Retain the explicit
-overlay alignment in substructure matching without a payload callback.
+`Molecule::difference_to` delegates to `ReactionSpan::superimpose`, so there is one site. A
+`Modified` span carries two forms against a single participant list — the lhs one — and the rhs form
+arrived from the remapped rhs set still in its own frame, ids relabelled and sequence preserved.
+Each of the four matched-pair loops now restates it into the lhs frame first: `reframe_to` for the
+four distinct-participant families, `find_reframed` for the two stereo families. A frame that admits
+no restatement declines the superposition rather than silently comparing across frames.
 
-**Tests and evidence:** Cover independently framed sides with nonuniform position-sensitive payloads
-for superposition and difference, the existing span and reaction conversion laws, and pattern-to-host
-frame transport in matching.
+The matching clause was satisfied by S4d.2, which put both stereo arms of `verify_overlays` on the
+same search.
+
+**Tests and evidence:** `test_reaction_span_superimpose_stereo_reframed` states one stereocentre on
+the two sides in transposed ligand orders with the correspondingly flipped coset — the same
+arrangement — and asserts the span is `Unchanged` and the difference empty. Before the change it
+recorded `Modified { Lit(0), Lit(1) }`, a stereo inversion that is not there.
+`test_reaction_span_superimpose_aromatic_reframed` is its aromatic counterpart. That one passes
+today, because construction still sorts an `Unordered` factor and transports the payload with it, so
+both sides reach the span in one frame; it is the guard for S5b, after which only the explicit
+restatement keeps them aligned.
 
 **Change class:** correctness change with caller migration (green).
 

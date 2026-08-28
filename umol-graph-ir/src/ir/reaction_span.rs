@@ -42,7 +42,9 @@ use super::multicenter::{MulticenterBondForm, MulticenterBondSpans};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondSpans};
 use super::reaction::Reaction;
 use super::remap::IdRemapping;
-use super::stereo::{StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind};
+use super::stereo::{
+    find_reframed, StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
+};
 use super::traits::{EntityPatch, Equiv, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
@@ -835,9 +837,26 @@ impl ReactionSpan {
         let mut aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> = Vec::new();
         for view in lhs.aromatic_systems().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_attributes = aromatic_corr
-                .right_of(view.id)
-                .map(|id| remapped_rhs_aromatic.data(id.into()).clone());
+            // The span carries one participant frame per entity, the lhs one, so the rhs form is
+            // restated into it before the two sides are compared.
+            let rhs_attributes = match aromatic_corr.right_of(view.id) {
+                Some(id) => {
+                    let relation_id = RelationId::from(id);
+                    let rhs_frame: Vec<AtomId> = remapped_rhs_aromatic
+                        .participants(relation_id)
+                        .iter()
+                        .copied()
+                        .map(AtomId::from)
+                        .collect();
+                    Some(
+                        remapped_rhs_aromatic
+                            .data(relation_id)
+                            .clone()
+                            .reframe_to(&rhs_frame, &participants)?,
+                    )
+                }
+                None => None,
+            };
             aromatic.push((
                 participants,
                 EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
@@ -862,9 +881,26 @@ impl ReactionSpan {
         let mut multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> = Vec::new();
         for view in lhs.multicenter_bonds().iter() {
             let participants: Vec<AtomId> = view.atom_ids().collect();
-            let rhs_attributes = multicenter_corr
-                .right_of(view.id)
-                .map(|id| remapped_rhs_multicenter.data(id.into()).clone());
+            // The span carries one participant frame per entity, the lhs one, so the rhs form is
+            // restated into it before the two sides are compared.
+            let rhs_attributes = match multicenter_corr.right_of(view.id) {
+                Some(id) => {
+                    let relation_id = RelationId::from(id);
+                    let rhs_frame: Vec<AtomId> = remapped_rhs_multicenter
+                        .participants(relation_id)
+                        .iter()
+                        .copied()
+                        .map(AtomId::from)
+                        .collect();
+                    Some(
+                        remapped_rhs_multicenter
+                            .data(relation_id)
+                            .clone()
+                            .reframe_to(&rhs_frame, &participants)?,
+                    )
+                }
+                None => None,
+            };
             multicenter.push((
                 participants,
                 EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
@@ -944,9 +980,21 @@ impl ReactionSpan {
         let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> =
             Vec::new();
         for view in lhs.stereo_atoms().iter() {
-            let rhs_attributes = stereo_atom_corr
-                .right_of(view.id)
-                .map(|id| remapped_rhs_stereo_atoms.data(id.into()).clone());
+            // As for the other families, but equal virtual ligands leave several admissible
+            // restatements and any of them denotes the same arrangement in the lhs frame.
+            let lhs_frame = view.ligand_frame();
+            let rhs_attributes = match stereo_atom_corr.right_of(view.id) {
+                Some(id) => {
+                    let relation_id = RelationId::from(id);
+                    Some(find_reframed(
+                        remapped_rhs_stereo_atoms.data(relation_id),
+                        remapped_rhs_stereo_atoms.participants_2(relation_id),
+                        &lhs_frame,
+                        |_, restated| Some(restated),
+                    )?)
+                }
+                None => None,
+            };
             stereo_atoms.push((
                 view.site_id(),
                 view.ligand_frame(),
@@ -971,9 +1019,21 @@ impl ReactionSpan {
         let mut stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> =
             Vec::new();
         for view in lhs.stereo_bonds().iter() {
-            let rhs_attributes = stereo_bond_corr
-                .right_of(view.id)
-                .map(|id| remapped_rhs_stereo_bonds.data(id.into()).clone());
+            // As for the other families, but equal virtual ligands leave several admissible
+            // restatements and any of them denotes the same arrangement in the lhs frame.
+            let lhs_frame = view.ligand_frame();
+            let rhs_attributes = match stereo_bond_corr.right_of(view.id) {
+                Some(id) => {
+                    let relation_id = RelationId::from(id);
+                    Some(find_reframed(
+                        remapped_rhs_stereo_bonds.data(relation_id),
+                        remapped_rhs_stereo_bonds.participants_2(relation_id),
+                        &lhs_frame,
+                        |_, restated| Some(restated),
+                    )?)
+                }
+                None => None,
+            };
             stereo_bonds.push((
                 view.site_id(),
                 view.ligand_frame(),
@@ -4994,6 +5054,115 @@ mod tests {
             ],
         );
         assert_eq!(span.check_integrity(), Ok(()));
+    }
+
+    /// The two sides state one aromatic system with its members supplied in different orders,
+    /// carrying their electron counts along. Nothing changed, and the span must say so.
+    ///
+    /// This passes while construction still sorts an `Unordered` factor and transports the payload
+    /// with it, so both sides arrive in one frame. It is the guard for S5b, after which the two
+    /// frames reach the span as supplied and only the explicit restatement keeps them aligned.
+    #[rstest]
+    fn test_reaction_span_superimpose_aromatic_reframed() {
+        let side = |members: [u32; 3], electrons: [i64; 3]| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: (0..3).map(|_| AtomForm::from_element(Element::C)).collect(),
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(2), BondForm::from_order(1)),
+                ],
+                aromatic: vec![(
+                    members.into_iter().map(AtomId).collect(),
+                    AromaticSystemForm::from_electrons(electrons.to_vec()),
+                )],
+                ..Default::default()
+            })
+        };
+        let lhs = side([0, 1, 2], [10, 20, 30]);
+        let rhs = side([2, 0, 1], [30, 10, 20]);
+        let matched = MoleculeCorrespondence::new(
+            identity_pairs(3),
+            identity_pairs(2),
+            identity_pairs(0),
+            identity_pairs(1),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+        );
+
+        let span = ReactionSpan::superimpose(&lhs, &rhs, &matched)
+            .expect("the two sides state one aromatic system");
+        assert_eq!(
+            span.aromatic_systems()
+                .ids()
+                .map(|id| span.aromatic_systems().attributes(id).clone())
+                .collect::<Vec<_>>(),
+            vec![EntitySpan::Unchanged(AromaticSystemForm::from_electrons(
+                vec![10, 20, 30]
+            ))],
+        );
+        assert!(lhs
+            .difference_to(&rhs, &matched)
+            .expect("the two sides superimpose")
+            .is_empty());
+    }
+
+    /// The two sides state one stereocenter in different ligand orders. A transposition is odd, so
+    /// the flipped coset in the transposed frame is the same arrangement, and nothing changed. The
+    /// span carries one frame per entity — the lhs one — so the rhs form has to be restated into it
+    /// before the two are compared.
+    #[rstest]
+    fn test_reaction_span_superimpose_stereo_reframed() {
+        let side = |ligands: [u32; 4], coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+                    .into_iter()
+                    .map(AtomForm::from_element)
+                    .collect(),
+                bonds: (1..=4)
+                    .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                    .collect(),
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    ligands
+                        .into_iter()
+                        .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                        .collect(),
+                    StereoAtomForm::new(StereoKind::Tetrahedral, coset),
+                )],
+                ..Default::default()
+            })
+        };
+        let lhs = side([1, 2, 3, 4], 0);
+        let rhs = side([2, 1, 3, 4], 1);
+        let matched = MoleculeCorrespondence::new(
+            identity_pairs(5),
+            identity_pairs(4),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(0),
+            identity_pairs(1),
+            identity_pairs(0),
+        );
+
+        let span = ReactionSpan::superimpose(&lhs, &rhs, &matched)
+            .expect("the two sides state one stereocenter");
+        assert_eq!(
+            span.stereo_atoms()
+                .ids()
+                .map(|id| span.stereo_atoms().attributes(id).clone())
+                .collect::<Vec<_>>(),
+            vec![EntitySpan::Unchanged(StereoAtomForm::new(
+                StereoKind::Tetrahedral,
+                0u32
+            ))],
+        );
+        assert!(lhs
+            .difference_to(&rhs, &matched)
+            .expect("the two sides superimpose")
+            .is_empty());
     }
 
     /// Matching the two stereocenters says they are one entity that changed geometry, which no

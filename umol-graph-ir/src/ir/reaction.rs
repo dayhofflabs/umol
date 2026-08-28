@@ -46,8 +46,7 @@ use super::molecule::MoleculeEntries;
 use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
-use super::reframe::find_reframed;
-use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
+use super::stereo::{find_reframed, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
 use super::traits::{Equiv, Normalize};
 

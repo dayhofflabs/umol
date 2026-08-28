@@ -26,8 +26,8 @@ use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
-use super::reframe::find_reframed;
 use super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
+use super::stereo::find_reframed;
 use super::traits::Lattice;
 
 /// Strategy for `substructure_matches`, each composing over a

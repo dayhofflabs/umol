@@ -31,10 +31,9 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
-use super::reframe::FrameAction;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
+use super::stereo::{FrameAction, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::traits::{Equiv, Lattice};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,

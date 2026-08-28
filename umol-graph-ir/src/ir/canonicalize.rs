@@ -43,11 +43,10 @@ use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
 use super::reaction::{Reaction, ReactionIntegrityError};
 use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
-use super::reframe::FrameAction;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
-    CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
+    CisTransStereoForm, FrameAction, StereoAtomForm, StereoBondForm, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
 };
 use super::traits::Normalize;
 

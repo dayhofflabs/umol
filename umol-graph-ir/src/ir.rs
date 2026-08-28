@@ -27,7 +27,6 @@ pub(crate) mod num;
 pub(crate) mod operators;
 pub(crate) mod reaction;
 pub(crate) mod reaction_span;
-pub(crate) mod reframe;
 pub(crate) mod remap;
 pub(crate) mod ring;
 pub(crate) mod spin;
@@ -108,17 +107,17 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
-pub use reframe::{find_reframed, FrameAction};
 pub use remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
-    StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration,
-    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
-    Stereogenicity, TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
+    find_reframed, CisTransConfiguration, CisTransStereo, CisTransStereoForm, FrameAction,
+    StereoAtomForm, StereoAtomUpdate, StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds,
+    StereoConfiguration, StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset,
+    StereoKind, StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereo,
+    TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,

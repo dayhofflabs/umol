@@ -34,9 +34,10 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
-use super::super::reframe::find_reframed;
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
-use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
+use super::super::stereo::{
+    find_reframed, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds,
+};
 use super::super::traits::Equiv;
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,

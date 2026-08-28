@@ -8,9 +8,9 @@ use umol_perm::OrientedPermutationGroup;
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
-use super::super::reframe::find_reframed;
 use super::super::stereo::{
-    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
+    find_reframed, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind,
+    Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
