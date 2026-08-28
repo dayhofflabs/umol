@@ -1,6 +1,6 @@
 # 214 — Aggregate frame semantics
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-28
 Relates: [103](103-stereochemistry-overlay-and-ports-2026-05-28.md),
 [104](104-stereochemistry-implementation-plan-2026-05-31.md),
@@ -573,7 +573,23 @@ graph-IR normal and feature-gated property suites green.
   focused suites, existing benchmarks): retain the exact pre-change test ledger above, record the
   pre-change benchmark baseline, and make the existing `MAX_DEGREE` a documented `pub const` rather
   than duplicating `6` in graph IR. Cover the constant through the checked permutation constructors.
-  **Additive; inherited red ledger unchanged.** [dep: none]
+  **Additive; inherited red ledger unchanged.** [dep: none] **Done.** `MAX_DEGREE` is public and
+  documented as a representation limit. A downstream integration test imports it and checks that
+  `Permutation::try_from` accepts degree `MAX_DEGREE` and returns the exact `ImageTooLong` error for
+  `MAX_DEGREE + 1`.
+
+  The first benchmark attempt exposed a stale `para_stereo_cascade` fixture that predated stereo-site
+  incidence and kind-admissibility integrity. Its intended covalent incidence was restored and its
+  atom-inadmissible `CisTrans` labels were replaced by distinct tetrahedral configurations. The full
+  command
+  `cargo bench -p umol-graph-ir --bench canonicalize -- --save-baseline doc214-s0a` then passed and
+  saved the S0a baseline. Across the corpus, incidence construction spans approximately
+  0.18-2.46 µs, remapping 2.00-13.48 µs, topology and constitution canonicalization 18-224 µs,
+  structure and para-stereo structure canonicalization 71 µs-10.4 ms, and full canonicalization
+  102 µs-15.7 ms. `cargo test -p umol-perm --all-features` passed 181 unit tests, the dedicated
+  integration test, and 26 property tests; strict clippy passed for all `umol-perm` targets and the
+  graph-IR canonicalization benchmark. The inherited fifteen-test semantic ledger remains the S0
+  starting point.
 - **S0b — molecule stereo-frame integrity and mutation gates**
   (`umol-graph-ir/src/ir/{molecule,molecule/integrity,view/stereo}.rs`, family modules): add
   `DuplicateStereoLigand` and `StereoFrameDegreeTooLarge`; check maximum then pairwise distinctness

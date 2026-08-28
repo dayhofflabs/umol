@@ -355,6 +355,21 @@ fn para_stereo_cascade() -> Molecule {
         .into_iter()
         .map(atom)
         .collect(),
+        bonds: [
+            (0, [2, 3, 4, 5]),
+            (1, [6, 8, 7, 9]),
+            (2, [10, 11, 12, 13]),
+            (3, [10, 11, 12, 13]),
+            (4, [10, 11, 12, 13]),
+            (5, [10, 11, 12, 13]),
+            (6, [10, 11, 12, 13]),
+            (7, [10, 11, 12, 13]),
+            (8, [10, 11, 12, 13]),
+            (9, [10, 11, 12, 13]),
+        ]
+        .into_iter()
+        .flat_map(|(site, ligands)| ligands.into_iter().map(move |ligand| bond(site, ligand, 1)))
+        .collect(),
         stereo_atoms: vec![
             (
                 AtomId(0),
@@ -374,7 +389,7 @@ fn para_stereo_cascade() -> Molecule {
             (
                 AtomId(3),
                 outer_ligands.clone(),
-                StereoAtomForm::new(StereoKind::CisTrans, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
             ),
             (
                 AtomId(4),
@@ -394,7 +409,7 @@ fn para_stereo_cascade() -> Molecule {
             (
                 AtomId(7),
                 outer_ligands.clone(),
-                StereoAtomForm::new(StereoKind::CisTrans, 0u32),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
             ),
             (
                 AtomId(8),

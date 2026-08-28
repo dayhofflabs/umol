@@ -13,10 +13,11 @@ use std::ops::ControlFlow;
 
 use crate::error::PermutationError;
 
-/// Largest supported permutation degree (and the backing array width). The current
-/// ceiling is the octahedral coordination (6); raising it to support 7/8-coordinate
-/// geometries is a one-line change here.
-pub(crate) const MAX_DEGREE: usize = 6;
+/// Maximum degree supported by [`Permutation`] and permutation-backed class keys.
+///
+/// Checked constructors reject inputs above this representation limit; asserted constructors
+/// panic. The limit is not a chemistry-model restriction.
+pub const MAX_DEGREE: usize = 6;
 
 /// A permutation of `0..degree` (`degree <= MAX_DEGREE`) in one-line notation.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]

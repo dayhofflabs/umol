@@ -15,4 +15,4 @@ pub use coset::CosetSpace;
 pub use error::{ParseClassKeyError, PermutationError};
 pub use group::PermutationGroup;
 pub use oriented::{Orientation, OrientedPermutation, OrientedPermutationGroup};
-pub use permutation::Permutation;
+pub use permutation::{Permutation, MAX_DEGREE};
