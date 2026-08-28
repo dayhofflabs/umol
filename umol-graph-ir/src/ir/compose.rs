@@ -36,7 +36,7 @@ fn compose_overlap(
     b: &Reaction,
     overlap: &GraphCorrespondence,
 ) -> Option<Reaction> {
-    let glue = a_inverse.lhs.meet_pushout(&b.lhs, overlap)?;
+    let glue = a_inverse.lhs().meet_pushout(b.lhs(), overlap)?;
     let derivation_a = a_inverse.apply_at(&glue.object, &glue.left).ok()?;
     let derivation_b = b.apply_at(&glue.object, &glue.right).ok()?;
     let correspondence = derivation_a
@@ -48,10 +48,8 @@ fn compose_overlap(
         derivation_b.rhs().clone(),
         correspondence,
     )?;
-    Some(Reaction::new(
-        composite.lhs,
-        composite.deltas.normalize().ok()?,
-    ))
+    let (lhs, deltas) = composite.into_parts();
+    Some(Reaction::new(lhs, deltas.normalize().ok()?))
 }
 
 fn compose_all(
@@ -61,7 +59,7 @@ fn compose_all(
 ) -> Option<Vec<Reaction>> {
     let span_a = a.to_reaction_span().ok()?;
     let r_a = span_a.rhs();
-    let l_b = &b.lhs;
+    let l_b = b.lhs();
 
     let mut node_match = |ra: NodeId, lb: NodeId| {
         r_a.atom(AtomId::from(ra))
@@ -850,7 +848,7 @@ mod tests {
         let composite = compose_overlap(&a_inverse, &b, &overlap).expect("admissible composite");
 
         let alg = SubgraphIsomorphismAlgorithm::Vf2;
-        let host = a.lhs.clone();
+        let host = a.lhs().clone();
         let intermediate = a
             .apply(
                 &host,
@@ -994,7 +992,7 @@ mod tests {
         // Invert-then-invert is a net stereo no-op; whatever ligand frame B states its center in, the
         // reframe carries B's delta into the glue frame so the composite folds to A's reactant with no
         // deltas — a frame-invariant result.
-        let expected = Reaction::new(a.lhs.clone(), Deltas::new());
+        let expected = Reaction::new(a.lhs().clone(), Deltas::new());
         assert!(a
             .compose(
                 &b,

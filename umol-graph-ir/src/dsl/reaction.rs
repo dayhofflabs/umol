@@ -84,14 +84,14 @@ impl ReactionDsl {
     pub fn new(reaction: Reaction, metadata: ReactionMetadata) -> Result<Self, MetadataError> {
         for (entity, _) in metadata.lhs().iter_keywords() {
             let contains = match entity {
-                Entity::Atom(id) => reaction.lhs.atoms().contains(id),
-                Entity::Bond(id) => reaction.lhs.bonds().contains(id),
-                Entity::DativeBond(id) => reaction.lhs.dative_bonds().contains(id),
-                Entity::AromaticSystem(id) => reaction.lhs.aromatic_systems().contains(id),
-                Entity::MulticenterBond(id) => reaction.lhs.multicenter_bonds().contains(id),
-                Entity::NoncovalentBond(id) => reaction.lhs.noncovalent_bonds().contains(id),
-                Entity::StereoAtom(id) => reaction.lhs.stereo_atoms().contains(id),
-                Entity::StereoBond(id) => reaction.lhs.stereo_bonds().contains(id),
+                Entity::Atom(id) => reaction.lhs().atoms().contains(id),
+                Entity::Bond(id) => reaction.lhs().bonds().contains(id),
+                Entity::DativeBond(id) => reaction.lhs().dative_bonds().contains(id),
+                Entity::AromaticSystem(id) => reaction.lhs().aromatic_systems().contains(id),
+                Entity::MulticenterBond(id) => reaction.lhs().multicenter_bonds().contains(id),
+                Entity::NoncovalentBond(id) => reaction.lhs().noncovalent_bonds().contains(id),
+                Entity::StereoAtom(id) => reaction.lhs().stereo_atoms().contains(id),
+                Entity::StereoBond(id) => reaction.lhs().stereo_bonds().contains(id),
             };
             if !contains {
                 return Err(MetadataError::EntityOutOfRange(entity));
@@ -99,7 +99,7 @@ impl ReactionDsl {
         }
 
         for (entity, _) in metadata.iter_delta_keywords() {
-            let added = reaction.deltas.iter().any(|delta| match (delta, entity) {
+            let added = reaction.deltas().iter().any(|delta| match (delta, entity) {
                 (Delta::Atom(AtomDelta::Add { id, .. }), Entity::Atom(expected)) => *id == expected,
                 (Delta::Bond(BondDelta::Add { id, .. }), Entity::Bond(expected)) => *id == expected,
                 (
@@ -157,16 +157,16 @@ impl FromIr<Reaction> for ReactionDsl {
     type Context = ReactionDefaults;
 
     fn from_ir(reaction: &Reaction, context: &Self::Context) -> Self {
-        let lhs = MoleculeDsl::from_ir(&reaction.lhs, &context.molecule_defaults())
+        let lhs = MoleculeDsl::from_ir(reaction.lhs(), &context.molecule_defaults())
             .into_parts()
             .0;
         let delta_cfg = context.delta_defaults();
-        let mut deltas = reaction.deltas.clone();
+        let mut deltas = reaction.deltas().clone();
         for delta in deltas.iter_mut() {
             lower_delta(delta, &delta_cfg);
         }
         ReactionDsl {
-            reaction: Reaction { lhs, deltas },
+            reaction: Reaction::new(lhs, deltas),
             metadata: ReactionMetadata::default(),
         }
     }
@@ -176,7 +176,7 @@ impl IntoIr<Reaction> for ReactionDsl {
     type Context = ReactionDefaults;
 
     fn into_ir(self, context: &Self::Context) -> Reaction {
-        let Reaction { lhs, mut deltas } = self.reaction;
+        let (lhs, mut deltas) = self.reaction.into_parts();
         let lhs = MoleculeDsl::new(lhs, MoleculeMetadata::default())
             .expect("empty metadata is coherent")
             .into_ir(&context.molecule_defaults());
@@ -184,7 +184,7 @@ impl IntoIr<Reaction> for ReactionDsl {
         for delta in deltas.iter_mut() {
             raise_delta(delta, &delta_cfg);
         }
-        Reaction { lhs, deltas }
+        Reaction::new(lhs, deltas)
     }
 }
 
@@ -290,8 +290,8 @@ impl ReactionContext {
     /// reproduces the per-kind delta ids). Refs resolve against it as they did at parse time.
     pub fn from_ir(reaction: &Reaction) -> Self {
         let free = "anonymous delta entity registration never collides";
-        let mut context = Self::new(MoleculeContext::from_ir(&reaction.lhs));
-        for delta in reaction.deltas.iter() {
+        let mut context = Self::new(MoleculeContext::from_ir(reaction.lhs()));
+        for delta in reaction.deltas().iter() {
             match delta {
                 Delta::Atom(AtomDelta::Add { .. }) => {
                     context.register_atom(None).expect(free);
@@ -1055,10 +1055,7 @@ impl ReactionInput {
             }
         }
         let metadata = context.into_metadata();
-        let reaction = Reaction {
-            lhs,
-            deltas: resolved,
-        };
+        let reaction = Reaction::new(lhs, resolved);
         reaction
             .check_integrity()
             .map_err(|error| ParseError::RaisingError(error.to_string()))?;
@@ -1734,11 +1731,11 @@ fn render_reaction_edn(reaction: &Reaction, meta: &ReactionMetadata) -> Edn<'sta
     let mut map = EdnMap::with_capacity(3);
     map.insert(
         Edn::keyword("lhs"),
-        render_molecule_edn(&reaction.lhs, meta.lhs()),
+        render_molecule_edn(reaction.lhs(), meta.lhs()),
     );
     map.insert(
         Edn::keyword("deltas"),
-        Edn::Vector(render_deltas(&reaction.deltas, meta).into()),
+        Edn::Vector(render_deltas(reaction.deltas(), meta).into()),
     );
     let aliases = meta.iter_reaction_atom_aliases();
     if aliases.len() != 0 {
@@ -2543,7 +2540,7 @@ mod tests {
                 {:multicenter-bond {:add {:id :new-multicenter :atoms [0 1] :attrs "*#e2"}}}
                 {:noncovalent-bond {:add {:id :new-noncovalent :atoms [0 1] :attrs "Hbd"}}}
                 {:stereo-atom {:add {:id :new-stereo-atom :site 0 :ligands [1 2 3 4] :attrs "Th1"}}}
-                {:stereo-bond {:add {:id :new-stereo-bond :site :double :ligands [2 3] :attrs "Ct1"}}}
+                {:stereo-bond {:add {:id :new-stereo-bond :site :double :ligands [2 3 4 :new-atom] :attrs "Ct1"}}}
             ]
         }"#
         .parse()
@@ -3112,8 +3109,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([
+            reaction.deltas(),
+            &Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     attributes: {
@@ -3150,8 +3147,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([
+            reaction.deltas(),
+            &Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     attributes: AtomForm::from_element(Element::N),
@@ -3201,8 +3198,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::from_element(Element::Br),
             })]),
@@ -3276,8 +3273,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge {
                     old: NumForm::Lit(0),
@@ -3301,8 +3298,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::UnpairedElectrons {
                     old: UnpairedElectronsForm::from((2_u8, 3_u8)),
@@ -3321,8 +3318,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Atom(AtomDelta::ModifyConstraint {
                 id: AtomId(0),
                 old: Some(AtomConstraintForm::valence(4)),
                 new: None,
@@ -3339,8 +3336,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([
+            reaction.deltas(),
+            &Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     attributes: AtomForm::from_element(Element::O),
@@ -3362,8 +3359,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(1)],
                 attributes: BondForm::from_order(1),
@@ -3405,8 +3402,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::Order {
                     old: NumForm::Lit(1),
@@ -3424,8 +3421,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
                 id: BondId(0),
                 change: BondFieldChange::UnpairedElectrons {
                     old: UnpairedElectronsForm::from((2_u8, 3_u8)),
@@ -3443,8 +3440,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Bond(BondDelta::ModifyConstraint {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Bond(BondDelta::ModifyConstraint {
                 id: BondId(0),
                 old: Some(BondConstraintForm::ring_membership(
                     RingScope::Size(6),
@@ -3470,8 +3467,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyField {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyField {
                 id: DativeBondId(0),
                 change: DativeBondFieldChange::Order {
                     old: NumForm::Lit(1),
@@ -3495,8 +3492,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyConstraint {
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::DativeBond(DativeBondDelta::ModifyConstraint {
                 id: DativeBondId(0),
                 old: Some(old),
                 new: None,
@@ -3530,7 +3527,7 @@ mod tests {
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas(), &Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3559,7 +3556,7 @@ mod tests {
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas(), &Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3580,7 +3577,7 @@ mod tests {
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas(), &Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3605,7 +3602,7 @@ mod tests {
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas(), &Deltas::from_iter(expected));
     }
 
     #[rustfmt::skip]
@@ -3630,7 +3627,7 @@ mod tests {
             .unwrap()
             .into_ir()
             .unwrap();
-        assert_eq!(reaction.deltas, Deltas::from_iter(expected));
+        assert_eq!(reaction.deltas(), &Deltas::from_iter(expected));
     }
 
     #[rstest]
@@ -3641,8 +3638,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
             ))]),
         );
@@ -3656,8 +3653,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(
                 Constraint::Molecule(MoleculeConstraint::Connected { atoms: None },)
             ))]),
         );
@@ -3673,8 +3670,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([
+            reaction.deltas(),
+            &Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     attributes: AtomForm::from_element(Element::O),
@@ -3697,8 +3694,8 @@ mod tests {
             .into_ir()
             .unwrap();
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
+            reaction.deltas(),
+            &Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(Constraint::Bond(
                 BondId(0),
                 BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             )))]),
@@ -3708,19 +3705,19 @@ mod tests {
     #[rstest]
     #[case::atom_modify(
         r##"{:lhs {:atoms [[:br "Br#c0"]]} :deltas [{:atom {:modify [:br "#c-1"]}}]}"##,
-        Reaction {
-            lhs: Molecule::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
-            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
+        Reaction::new(
+            Molecule::from_edn_str(r##"{:atoms [[:br "Br#c0"]]}"##).unwrap(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::ModifyField {
                 id: AtomId(0),
                 change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(-1) },
             })]),
-        }
+        )
     )]
     #[case::atom_add_bond_add(
         r##"{:lhs {:atoms ["C"]} :deltas [{:atom {:add [:o "O"]}} {:bond {:add [0 :o "1"]}}]}"##,
-        Reaction {
-            lhs: Molecule::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
-            deltas: Deltas::from_iter([
+        Reaction::new(
+            Molecule::from_edn_str(r##"{:atoms ["C"]}"##).unwrap(),
+            Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(1),
                     attributes: AtomForm::from_element(Element::O),
@@ -3731,7 +3728,7 @@ mod tests {
                     attributes: BondForm::from_order(1),
                 }),
             ]),
-        }
+        )
     )]
     fn test_reaction_dsl_from_edn(#[case] input: &str, #[case] expected: Reaction) {
         let dsl = ReactionDsl::from_edn(&read_string(input).unwrap()).unwrap();

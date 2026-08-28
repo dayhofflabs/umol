@@ -2715,7 +2715,7 @@ pub(crate) fn molecule_metadata_with_atom_subset_strategy(
 
 fn added_entities(reaction: &Reaction) -> Vec<Entity> {
     reaction
-        .deltas
+        .deltas()
         .iter()
         .filter_map(|delta| match delta {
             Delta::Atom(AtomDelta::Add { id, .. }) => Some(Entity::Atom(*id)),
@@ -2753,7 +2753,7 @@ fn delta_keyword(entity: Entity) -> String {
 
 pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
     comprehensive_reaction_strategy().prop_flat_map(|reaction| {
-        metadata_for(ConstraintCounts::from_ir(&reaction.lhs)).prop_map(move |lhs| {
+        metadata_for(ConstraintCounts::from_ir(reaction.lhs())).prop_map(move |lhs| {
             let mut metadata = ReactionMetadata::from(lhs);
             for entity in added_entities(&reaction) {
                 metadata
@@ -2773,7 +2773,7 @@ pub(crate) fn invalid_reaction_dsl_parts_strategy(
 ) -> impl Strategy<Value = (Reaction, ReactionMetadata, MetadataError)> {
     prop_oneof![
         comprehensive_reaction_strategy().prop_flat_map(|reaction| {
-            invalid_metadata_for(ConstraintCounts::from_ir(&reaction.lhs)).prop_map(
+            invalid_metadata_for(ConstraintCounts::from_ir(reaction.lhs())).prop_map(
                 move |(lhs, entity)| {
                     (
                         reaction.clone(),
@@ -4580,7 +4580,7 @@ pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
 pub(crate) fn reaction_application_strategy(
 ) -> impl Strategy<Value = (Reaction, Molecule, MoleculeCorrespondence)> {
     (materializable_reaction_strategy(), molecule_strategy()).prop_map(|(reaction, extra)| {
-        let (host, correspondences) = Molecule::combine_all([&reaction.lhs, &extra]);
+        let (host, correspondences) = Molecule::combine_all([reaction.lhs(), &extra]);
         let correspondence = correspondences
             .into_iter()
             .next()

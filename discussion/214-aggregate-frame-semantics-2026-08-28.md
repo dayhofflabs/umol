@@ -637,7 +637,31 @@ graph-IR normal and feature-gated property suites green.
   trusted producers in the same subitem. Exact cases cover invalid lhs, invalid additions, wrapper
   kinds on existing and added entities, all six existing and created overlay removal families,
   diagnostic precedence, and valid explicit-H prochiral inputs. **Breaking; inherited red ledger
-  unchanged after caller migration.** [dep: S0b]
+  unchanged after caller migration.** [dep: S0b] **Done.** `Reaction` now has private `lhs` and
+  `deltas` fields, direct `lhs` / `deltas` borrows and `into_parts`, a checked `try_new`, and an
+  asserted `new`. Reaction integrity reuses the molecule stereo-entry and site-kind checks for
+  stereo additions, inline constraint changes, and molecule-level stereo constraint wrappers;
+  these failures are reported as
+  `ReactionIntegrityError::StereoIntegrityError(MoleculeIntegrityError)`. Exact addition tests cover
+  repeated and oversized atom and bond frames, including maximum-degree rejection, while a valid
+  explicit-H prochiral case confirms that distinct hydrogen atom ids remain admissible.
+
+  Integrity records one private source frame for each lhs overlay and each unique raw overlay
+  `Add`. Every overlay removal first checks references, then unordered incidence including stereo
+  site and complete ligand values, then exact participant order. Equal incidence in another order
+  is `ParticipantFrameMismatch`; changed incidence remains `IncidenceMismatch`. The exact table
+  covers all six overlay families for both lhs-owned and `Add`-owned frames, and a separate table
+  fixes reference/incidence/frame diagnostic precedence. Struct literals and trusted consumers were
+  migrated to the accessors and checked/asserted construction pair; obsolete properties that
+  depended on publicly constructing a malformed `Reaction` now exercise `try_new` directly.
+
+  `cargo test -p umol-graph-ir --lib --no-fail-fast` ran 6,398 tests and retained exactly the four
+  inherited library failures, with 6,390 passing and four ignored. The full feature-gated property
+  target ran 332 tests and retained exactly the ten inherited failures, with 321 passing and one
+  ignored. Graph-IR doctests passed, all 974 graph library tests, all 3,294 IO library tests, and
+  1,635 Python-binding Rust tests passed with two ignored. The nightly graph-IR fuzz build, the
+  Python-3.13 workspace all-target check, and strict clippy for graph IR, graph, IO, and Python all
+  passed.
 - **S0d — reaction-span and low-level carrier audit** (`umol-graph-ir/src/ir/stereo.rs`, family
   modules, `ir/reaction_span.rs`): restrict raw frame-bearing collection construction, conversions,
   and mutation to their actual graph-IR assembly role, and verify that checked/asserted span

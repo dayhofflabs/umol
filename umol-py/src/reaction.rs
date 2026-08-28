@@ -474,9 +474,10 @@ impl Reaction {
 impl Reaction {
     /// Wrap a Rust reaction in fresh Python-owned components.
     pub(crate) fn from_rust(py: Python<'_>, reaction: GraphIrReaction) -> PyResult<Self> {
+        let (lhs, deltas) = reaction.into_parts();
         Ok(Self {
-            lhs: Py::new(py, Molecule::from_rust(reaction.lhs))?,
-            deltas: Py::new(py, Deltas::from_rust(reaction.deltas))?,
+            lhs: Py::new(py, Molecule::from_rust(lhs))?,
+            deltas: Py::new(py, Deltas::from_rust(deltas))?,
         })
     }
 
@@ -1025,8 +1026,8 @@ mod tests {
         Python::attach(|py| {
             let reaction = Reaction::parse(py, text, None).unwrap().to_rust(py);
 
-            assert_eq!(reaction.lhs.atoms().count(), atom_count);
-            assert_eq!(reaction.deltas.as_slice(), expected_deltas.as_slice());
+            assert_eq!(reaction.lhs().atoms().count(), atom_count);
+            assert_eq!(reaction.deltas().as_slice(), expected_deltas.as_slice());
         });
     }
 
@@ -1510,7 +1511,7 @@ mod tests {
                 &Correspondence::new(vec![(GraphIrAtomId(0), GraphIrAtomId(0))], 2, 2)
                     .expect("correspondence producer preserves partial-bijection invariants"),
             );
-            let reaction = Reaction::from_sides(
+            let mut reaction = Reaction::from_sides(
                 py,
                 lhs.clone_ref(py),
                 rhs.clone_ref(py),
@@ -1530,36 +1531,31 @@ mod tests {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
                 });
-            let delta = into_py_variant(
+            reaction.deltas = Py::new(
                 py,
-                Delta::from_rust(
-                    py,
-                    &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                        id: GraphIrAtomId(3),
+                Deltas::from_rust(
+                    [GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                        id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::Cl),
-                    }),
-                )
-                .unwrap(),
+                    })]
+                    .into_iter()
+                    .collect(),
+                ),
             )
             .unwrap();
-            reaction
-                .deltas
-                .bind(py)
-                .call_method1("append", (delta,))
-                .unwrap();
             let changed = reaction.to_rust(py);
 
             assert_eq!(
-                changed.lhs,
-                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                changed.lhs(),
+                &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                     ..Default::default()
                 })
             );
             assert_eq!(
-                changed.deltas.as_slice().last(),
+                changed.deltas().as_slice().last(),
                 Some(&GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                    id: GraphIrAtomId(3),
+                    id: GraphIrAtomId(1),
                     attributes: GraphIrAtomForm::from_element(ChemElement::Cl),
                 }))
             );
@@ -1777,15 +1773,15 @@ mod tests {
             )
             .unwrap();
             let before = source.to_rust(py);
-            let expected_deltas = before.deltas.clone().normalize().unwrap();
+            let expected_deltas = before.deltas().clone().normalize().unwrap();
 
             let reversed = source.reverse(py).unwrap();
             let roundtrip = reversed.reverse(py).unwrap();
             let roundtrip = roundtrip.to_rust(py);
 
             assert_eq!(
-                reversed.to_rust(py).lhs,
-                GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                reversed.to_rust(py).lhs(),
+                &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                     atoms: vec![
                         GraphIrAtomForm::from_element(ChemElement::C),
                         GraphIrAtomForm::from_element(ChemElement::N),
@@ -1793,8 +1789,11 @@ mod tests {
                     ..Default::default()
                 })
             );
-            assert_eq!(roundtrip.lhs, before.lhs);
-            assert_eq!(roundtrip.deltas.normalize().unwrap(), expected_deltas);
+            assert_eq!(roundtrip.lhs(), before.lhs());
+            assert_eq!(
+                roundtrip.deltas().clone().normalize().unwrap(),
+                expected_deltas
+            );
             assert_eq!(source.to_rust(py), before);
             assert_ne!(reversed.lhs.as_ptr(), source.lhs.as_ptr());
             assert_ne!(reversed.deltas.as_ptr(), source.deltas.as_ptr());
@@ -1982,7 +1981,7 @@ mod tests {
             let second_before = second.to_rust(py);
 
             let _self_composites = first.compose(py, &first, None).unwrap();
-            let composites = first.compose(py, &second, None).unwrap();
+            let mut composites = first.compose(py, &second, None).unwrap();
 
             assert_eq!(first.to_rust(py), first_before);
             assert_eq!(second.to_rust(py), second_before);
@@ -1994,41 +1993,36 @@ mod tests {
             assert_ne!(composites[0].lhs.as_ptr(), composites[1].lhs.as_ptr());
             assert_ne!(composites[0].deltas.as_ptr(), composites[1].deltas.as_ptr());
 
-            for composite in &composites {
+            for composite in &mut composites {
                 *composite.lhs.bind(py).borrow_mut().to_rust_mut() =
                     GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                         ..Default::default()
                     });
-                let delta = into_py_variant(
+                composite.deltas = Py::new(
                     py,
-                    Delta::from_rust(
-                        py,
-                        &GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                            id: GraphIrAtomId(8),
+                    Deltas::from_rust(
+                        [GraphIrDelta::Atom(GraphIrAtomDelta::Add {
+                            id: GraphIrAtomId(1),
                             attributes: GraphIrAtomForm::from_element(ChemElement::Cl),
-                        }),
-                    )
-                    .unwrap(),
+                        })]
+                        .into_iter()
+                        .collect(),
+                    ),
                 )
                 .unwrap();
-                composite
-                    .deltas
-                    .bind(py)
-                    .call_method1("append", (delta,))
-                    .unwrap();
 
                 assert_eq!(
-                    composite.to_rust(py).lhs,
-                    GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                    composite.to_rust(py).lhs(),
+                    &GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
                         atoms: vec![GraphIrAtomForm::from_element(ChemElement::F)],
                         ..Default::default()
                     })
                 );
                 assert_eq!(
-                    composite.to_rust(py).deltas.as_slice().last(),
+                    composite.to_rust(py).deltas().as_slice().last(),
                     Some(&GraphIrDelta::Atom(GraphIrAtomDelta::Add {
-                        id: GraphIrAtomId(8),
+                        id: GraphIrAtomId(1),
                         attributes: GraphIrAtomForm::from_element(ChemElement::Cl),
                     }))
                 );
@@ -2210,7 +2204,18 @@ mod tests {
             let reaction = Reaction::from_rust(
                 py,
                 GraphIrReaction::new(
-                    GraphIrMolecule::default(),
+                    GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+                        atoms: vec![
+                            GraphIrAtomForm::from_element(ChemElement::C),
+                            GraphIrAtomForm::from_element(ChemElement::O),
+                        ],
+                        bonds: vec![(
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(1),
+                            GraphIrBondForm::from_order(1),
+                        )],
+                        ..Default::default()
+                    }),
                     [GraphIrDelta::Atom(GraphIrAtomDelta::Remove {
                         id: GraphIrAtomId(0),
                         attributes: GraphIrAtomForm::from_element(ChemElement::C),
@@ -2227,7 +2232,7 @@ mod tests {
             assert!(error.is_instance_of::<InvalidStructureError>(py));
             assert_eq!(
                 error.value(py).str().unwrap().extract::<String>().unwrap(),
-                "reaction references unavailable entity Atom(AtomId(0))"
+                "invalid reaction: deleted atom AtomId(0) leaves dangling bond BondId(0)"
             );
         });
     }
@@ -2832,10 +2837,14 @@ mod tests {
             );
             let reaction = Reaction::from_rust(py, expected.clone()).unwrap();
 
-            let mut snapshot = reaction.to_rust(py);
-            snapshot.lhs = GraphIrMolecule::new();
-            snapshot.deltas = GraphIrDeltas::new();
+            let (mut lhs, mut deltas) = reaction.to_rust(py).into_parts();
+            assert_eq!(&lhs, expected.lhs());
+            assert_eq!(&deltas, expected.deltas());
+            lhs = GraphIrMolecule::new();
+            deltas = GraphIrDeltas::new();
 
+            assert_eq!(lhs, GraphIrMolecule::new());
+            assert_eq!(deltas, GraphIrDeltas::new());
             assert_eq!(reaction.to_rust(py), expected);
         });
     }

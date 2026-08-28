@@ -270,7 +270,7 @@ proptest! {
 
     #[test]
     fn test_delta_inverse(reaction in comprehensive_reaction_strategy()) {
-        for delta in reaction.deltas.iter() {
+        for delta in reaction.deltas().iter() {
             prop_assert_eq!(delta.clone().inverse().inverse(), delta.clone());
         }
     }

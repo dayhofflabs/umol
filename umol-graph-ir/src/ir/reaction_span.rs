@@ -509,7 +509,8 @@ impl Molecule {
         Some(
             ReactionSpan::superimpose(self, rhs, correspondence)?
                 .to_reaction()
-                .deltas,
+                .into_parts()
+                .1,
         )
     }
 }
@@ -1753,8 +1754,8 @@ impl Reaction {
     /// exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the span/reaction
     /// conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
-        let deltas = self.deltas.clone().normalize()?;
-        let lhs = &self.lhs;
+        let deltas = self.deltas().clone().normalize()?;
+        let lhs = self.lhs();
         let atom_count = lhs.atoms().count();
         let bond_count = lhs.bonds().count();
 
@@ -2296,10 +2297,10 @@ impl Reaction {
     /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
     pub fn reverse(&self) -> Result<Reaction, Contradiction> {
-        let deltas = self.deltas.clone().normalize()?;
+        let deltas = self.deltas().clone().normalize()?;
         let new_lhs = self.to_reaction_span()?.rhs();
-        let atom_count = self.lhs.atoms().count();
-        let bond_count = self.lhs.bonds().count();
+        let atom_count = self.lhs().atoms().count();
+        let bond_count = self.lhs().bonds().count();
 
         let mut removed_atoms: Vec<AtomId> = Vec::new();
         let mut created_atoms: Vec<AtomId> = Vec::new();
@@ -2362,32 +2363,32 @@ impl Reaction {
             reversed_remapping(atom_count, &removed_atoms, &created_atoms),
             reversed_remapping(bond_count, &removed_bonds, &created_bonds),
             reversed_remapping(
-                self.lhs.dative_bonds().count(),
+                self.lhs().dative_bonds().count(),
                 &removed_dative,
                 &created_dative,
             ),
             reversed_remapping(
-                self.lhs.aromatic_systems().count(),
+                self.lhs().aromatic_systems().count(),
                 &removed_aromatic,
                 &created_aromatic,
             ),
             reversed_remapping(
-                self.lhs.multicenter_bonds().count(),
+                self.lhs().multicenter_bonds().count(),
                 &removed_multicenter,
                 &created_multicenter,
             ),
             reversed_remapping(
-                self.lhs.noncovalent_bonds().count(),
+                self.lhs().noncovalent_bonds().count(),
                 &removed_noncovalent,
                 &created_noncovalent,
             ),
             reversed_remapping(
-                self.lhs.stereo_atoms().count(),
+                self.lhs().stereo_atoms().count(),
                 &removed_stereo_atom,
                 &created_stereo_atom,
             ),
             reversed_remapping(
-                self.lhs.stereo_bonds().count(),
+                self.lhs().stereo_bonds().count(),
                 &removed_stereo_bond,
                 &created_stereo_bond,
             ),
@@ -4402,8 +4403,8 @@ mod tests {
         let reaction = span.to_reaction();
 
         assert_eq!(
-            reaction.lhs,
-            Molecule::from_entries(MoleculeEntries {
+            reaction.lhs(),
+            &Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
                     AtomForm::from_element(Element::O),
@@ -4413,8 +4414,8 @@ mod tests {
             }),
         );
         assert_eq!(
-            reaction.deltas,
-            Deltas::from_iter([
+            reaction.deltas(),
+            &Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add {
                     id: AtomId(2),
                     attributes: AtomForm::from_element(Element::N),

@@ -524,7 +524,7 @@ proptest! {
     ) {
         let mut expected = Vec::new();
         for correspondence in reaction
-            .lhs
+            .lhs()
             .substructure_matches(&host, MATCH_CONFIG)
             .expect("generated patterns carry no molecule-scope constraints")
         {
@@ -578,7 +578,7 @@ proptest! {
         reaction in materializable_reaction_strategy(),
         extra in molecule_strategy(),
     ) {
-        let reactants = vec![reaction.lhs.clone(), extra];
+        let reactants = vec![reaction.lhs().clone(), extra];
         let (host, _) = Molecule::combine_all(&reactants);
         let expected = reaction
             .apply(&host, MATCH_CONFIG)
@@ -612,7 +612,7 @@ proptest! {
         let right = span.rhs();
         prop_assert!(reaction
             .apply(
-                &reaction.lhs,
+                reaction.lhs(),
                 MATCH_CONFIG,
             )
             .unwrap()
@@ -629,7 +629,7 @@ proptest! {
         let right = span.rhs();
         prop_assert!(reaction
             .apply(
-                &reaction.lhs,
+                reaction.lhs(),
                 MATCH_CONFIG,
             )
             .unwrap()

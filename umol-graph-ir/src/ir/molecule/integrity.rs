@@ -225,20 +225,10 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
-            check_stereo_frame(entity, &ligand_frame)?;
-            check_unique_participants(
-                entity,
-                iter::once(site).chain(
-                    ligand_frame
-                        .iter()
-                        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
-                        .map(|ligand| ligand.atom_id),
-                ),
-            )?;
+            check_stereo_atom_entry(entity, site, &ligand_frame, view.attributes)?;
             if !stereo_atom_sites.insert(site) {
                 return Err(MoleculeIntegrityError::StereoAtomSitesDuplicate { atom: site });
             }
-            check_stereo_atom(entity, view.ligands().count(), view.attributes)?;
             if ligand_frame
                 .iter()
                 .any(|&ligand| !ligand_matches_site(self, ligand, site, None))
@@ -259,18 +249,10 @@ impl Molecule {
                     .iter()
                     .map(|ligand| Entity::Atom(ligand.atom_id)),
             )?;
-            check_stereo_frame(entity, &ligand_frame)?;
-            check_unique_participants(
-                entity,
-                ligand_frame
-                    .iter()
-                    .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
-                    .map(|ligand| ligand.atom_id),
-            )?;
+            check_stereo_bond_entry(entity, &ligand_frame, view.attributes)?;
             if !stereo_bond_sites.insert(site) {
                 return Err(MoleculeIntegrityError::StereoBondSitesDuplicate { bond: site });
             }
-            check_stereo_bond(entity, view.ligands().count(), view.attributes)?;
             let [first, second] = view.site().atom_ids();
             let matches_endpoint_order = |first, second| {
                 ligand_frame.len() == 4
@@ -366,6 +348,55 @@ pub(crate) fn check_stereo_frame(
         }
     }
     Ok(())
+}
+
+pub(crate) fn check_stereo_atom_entry(
+    entity: Entity,
+    site: AtomId,
+    ligand_frame: &[StereoLigand],
+    attributes: &super::super::stereo::StereoAtomForm,
+) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_frame(entity, ligand_frame)?;
+    check_unique_participants(
+        entity,
+        iter::once(site).chain(
+            ligand_frame
+                .iter()
+                .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+                .map(|ligand| ligand.atom_id),
+        ),
+    )?;
+    check_stereo_atom(entity, ligand_frame.len(), attributes)
+}
+
+pub(crate) fn check_stereo_bond_entry(
+    entity: Entity,
+    ligand_frame: &[StereoLigand],
+    attributes: &super::super::stereo::StereoBondForm,
+) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_frame(entity, ligand_frame)?;
+    check_unique_participants(
+        entity,
+        ligand_frame
+            .iter()
+            .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+            .map(|ligand| ligand.atom_id),
+    )?;
+    check_stereo_bond(entity, ligand_frame.len(), attributes)
+}
+
+pub(crate) fn check_stereo_atom_kind(
+    entity: Entity,
+    kind: StereoKind,
+) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_site_kind(entity, kind, StereoSite::Atom)
+}
+
+pub(crate) fn check_stereo_bond_kind(
+    entity: Entity,
+    kind: StereoKind,
+) -> Result<(), MoleculeIntegrityError> {
+    check_stereo_site_kind(entity, kind, StereoSite::Bond)
 }
 
 pub(super) fn require_reference(

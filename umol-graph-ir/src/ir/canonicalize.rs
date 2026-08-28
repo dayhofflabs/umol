@@ -240,8 +240,8 @@ fn molecule_canonicalize_level(molecule: &Molecule) -> CanonicalizeLevel {
 }
 
 fn reaction_canonicalize_level(reaction: &Reaction) -> CanonicalizeLevel {
-    reaction.deltas.iter().fold(
-        molecule_canonicalize_level(&reaction.lhs),
+    reaction.deltas().iter().fold(
+        molecule_canonicalize_level(reaction.lhs()),
         |level, delta| level.max(delta_canonicalize_level(delta)),
     )
 }
@@ -5517,12 +5517,12 @@ fn reaction_delta_is_selected(delta: &Delta, level: DescriptionLevel) -> bool {
 
 fn project_reaction(reaction: &Reaction, level: DescriptionLevel) -> Reaction {
     let deltas = reaction
-        .deltas
+        .deltas()
         .iter()
         .filter(|delta| reaction_delta_is_selected(delta, level))
         .cloned()
         .collect::<Deltas>();
-    Reaction::new(reaction.lhs.clone(), deltas)
+    Reaction::new(reaction.lhs().clone(), deltas)
 }
 
 fn canonicalize_reaction_by(

@@ -2595,24 +2595,6 @@ fn test_reaction_canonicalize_by(
 }
 
 #[rstest]
-#[case::integrity(
-        Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![AtomForm::from_element(Element::C)],
-                ..Default::default()
-            }),
-            [Delta::Atom(AtomDelta::ModifyField {
-                id: AtomId(1),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(0),
-                    new: NumForm::Lit(1),
-                },
-            })].into_iter().collect(),
-        ),
-        ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-    )]
 #[case::contradiction(
         Reaction::new(
             Molecule::from_entries(MoleculeEntries {
@@ -2707,7 +2689,7 @@ fn test_reaction_canonical_hash_by(
 }
 
 #[rstest]
-fn test_reaction_canonical_eq_error(canonicalize_context: CanonicalizeContext) {
+fn test_reaction_canonical_eq_contradiction(canonicalize_context: CanonicalizeContext) {
     let lhs = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C).with_charge(0_i64)],
         ..Default::default()
@@ -2728,26 +2710,8 @@ fn test_reaction_canonical_eq_error(canonicalize_context: CanonicalizeContext) {
     };
     let left_contradiction = contradiction(2);
     let right_contradiction = contradiction(3);
-    let malformed = Reaction::new(
-        lhs,
-        [Delta::Atom(AtomDelta::ModifyField {
-            id: AtomId(1),
-            change: AtomFieldChange::Charge {
-                old: NumForm::Lit(0),
-                new: NumForm::Lit(1),
-            },
-        })]
-        .into_iter()
-        .collect(),
-    );
 
     assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
-    assert!(malformed.canonical_eq(&malformed, &canonicalize_context));
-    assert!(!malformed.canonical_eq_by(
-        &left_contradiction,
-        DescriptionLevel::Topology,
-        &canonicalize_context,
-    ));
 }
 
 #[rstest]

@@ -46,7 +46,7 @@ use super::view::{
 mod build;
 mod editor;
 mod fragment;
-mod integrity;
+pub(super) mod integrity;
 mod pushout;
 mod remapping;
 pub mod spec;

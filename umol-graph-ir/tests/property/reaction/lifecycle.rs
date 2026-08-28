@@ -24,20 +24,20 @@ proptest! {
 
     #[test]
     fn test_reaction_apply_at(reaction in reaction_strategy()) {
-        let atom_count = reaction.lhs.atoms().count();
+        let atom_count = reaction.lhs().atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(
-            &reaction.lhs,
-            &reaction.lhs,
+            reaction.lhs(),
+            reaction.lhs(),
             Correspondence::from_images(&atom_images, atom_count),
         )
         .expect("identity atom correspondence induces a molecule correspondence");
-        let direct = reaction.apply_at(&reaction.lhs, &correspondence).map_err(|error| {
+        let direct = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
         })?;
         let mut applications = reaction
             .apply(
-                &reaction.lhs,
+                reaction.lhs(),
                 SubstructureMatchConfig {
                     match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
                     subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
@@ -60,15 +60,15 @@ proptest! {
 
     #[test]
     fn test_reaction_derivation_roundtrip(reaction in reaction_strategy()) {
-        let atom_count = reaction.lhs.atoms().count();
+        let atom_count = reaction.lhs().atoms().count();
         let atom_images = (0..atom_count).map(AtomId::from).collect::<Vec<_>>();
         let correspondence = MoleculeCorrespondence::induce(
-            &reaction.lhs,
-            &reaction.lhs,
+            reaction.lhs(),
+            reaction.lhs(),
             Correspondence::from_images(&atom_images, atom_count),
         )
         .expect("identity atom correspondence induces a molecule correspondence");
-        let derivation = reaction.apply_at(&reaction.lhs, &correspondence).map_err(|error| {
+        let derivation = reaction.apply_at(reaction.lhs(), &correspondence).map_err(|error| {
             TestCaseError::fail(format!("identity application failed: {error}"))
         })?;
 

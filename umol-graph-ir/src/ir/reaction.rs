@@ -53,8 +53,8 @@ use super::traits::{Equiv, Normalize};
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Reaction {
-    pub lhs: Molecule,
-    pub deltas: Deltas,
+    lhs: Molecule,
+    deltas: Deltas,
 }
 
 /// One-shot reaction applications over an eagerly enumerated correspondence set.
@@ -356,13 +356,45 @@ fn stereo_delta_domains_are_valid(lhs: &Molecule, deltas: &Deltas) -> bool {
 }
 
 impl Reaction {
-    /// Construct a reaction from an lhs and deltas without checking representation integrity or
-    /// reaction semantics.
+    /// Construct a reaction from an lhs and deltas, asserting representation integrity.
     ///
-    /// Call [`Self::check_integrity`] before contextual use when the parts come from an untrusted
-    /// source.
+    /// # Panics
+    ///
+    /// Panics if the lhs or deltas violate reaction representation integrity. Use
+    /// [`Self::try_new`] for independently assembled input.
     pub fn new(lhs: Molecule, deltas: Deltas) -> Self {
-        Self { lhs, deltas }
+        Self::try_new(lhs, deltas).unwrap_or_else(|error| panic!("invalid reaction: {error}"))
+    }
+
+    /// Construct a reaction after checking its representation integrity.
+    ///
+    /// The check covers lhs integrity, delta references, added stereo entries, stereo constraint
+    /// site kinds, and the exact participant frame repeated by every overlay removal. It does not
+    /// require the deltas to materialize a reaction span or impose DPO or chemistry semantics.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ReactionIntegrityError`] when the supplied parts do not form an interpretable
+    /// reaction representation.
+    pub fn try_new(lhs: Molecule, deltas: Deltas) -> Result<Self, ReactionIntegrityError> {
+        let reaction = Self { lhs, deltas };
+        reaction.check_integrity()?;
+        Ok(reaction)
+    }
+
+    /// Borrow the left-hand-side molecule.
+    pub fn lhs(&self) -> &Molecule {
+        &self.lhs
+    }
+
+    /// Borrow the resolved delta collection.
+    pub fn deltas(&self) -> &Deltas {
+        &self.deltas
+    }
+
+    /// Consume the reaction and return its left-hand side and deltas.
+    pub fn into_parts(self) -> (Molecule, Deltas) {
+        (self.lhs, self.deltas)
     }
 
     /// The reaction transforming `lhs` into `rhs` under `atom_correspondence`: induce the full
@@ -1481,7 +1513,12 @@ impl Reaction {
             ReactionIntegrityError::IncidenceMismatch { entity } => {
                 ApplyPreconditionError::ReactionIncidenceMismatch { entity }
             }
-            ReactionIntegrityError::Lhs(_) | ReactionIntegrityError::StereoKindModified { .. } => {
+            ReactionIntegrityError::ParticipantFrameMismatch { entity } => {
+                ApplyPreconditionError::ReactionIncidenceMismatch { entity }
+            }
+            ReactionIntegrityError::Lhs(_)
+            | ReactionIntegrityError::StereoIntegrityError(_)
+            | ReactionIntegrityError::StereoKindModified { .. } => {
                 ApplyPreconditionError::InconsistentReaction
             }
         })?;
@@ -1668,6 +1705,7 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm};
+    use umol_perm::MAX_DEGREE;
 
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
@@ -1690,6 +1728,22 @@ mod tests {
         subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
+
+    #[derive(Clone, Copy)]
+    enum OverlayFamily {
+        Dative,
+        Aromatic,
+        Multicenter,
+        Noncovalent,
+        StereoAtom,
+        StereoBond,
+    }
+
+    #[derive(Clone, Copy)]
+    enum StereoSiteFamily {
+        Atom,
+        Bond,
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -1762,13 +1816,13 @@ mod tests {
 
     #[rstest]
     #[case::invalid_reference(
-        Reaction::new(
-            Molecule::default(),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+        Reaction {
+            lhs: Molecule::default(),
+            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::default(),
             })]),
-        ),
+        },
         Molecule::default(),
         ApplyPreconditionError::InvalidReactionReference {
             entity: Entity::Atom(AtomId(0)),
@@ -1961,13 +2015,13 @@ mod tests {
 
     #[rstest]
     fn test_react_react_error() {
-        let reaction = Reaction::new(
-            Molecule::default(),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+        let reaction = Reaction {
+            lhs: Molecule::default(),
+            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::default(),
             })]),
-        );
+        };
 
         assert_eq!(
             Molecule::default()
@@ -1988,6 +2042,590 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_new() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let deltas = Deltas::new();
+
+        let reaction = Reaction::new(lhs.clone(), deltas.clone());
+
+        assert_eq!(reaction, Reaction { lhs, deltas });
+    }
+
+    #[rstest]
+    #[should_panic(expected = "invalid reaction: reaction references unavailable entity Atom")]
+    fn test_reaction_new_error() {
+        Reaction::new(
+            Molecule::default(),
+            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+                id: AtomId(0),
+                attributes: AtomForm::default(),
+            })]),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_try_new() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: [Element::C, Element::F, Element::Cl, Element::H, Element::H]
+                .into_iter()
+                .map(AtomForm::from_element)
+                .collect(),
+            bonds: (1..=4)
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        });
+        let deltas = Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: (1..=4)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        })]);
+
+        let reaction = Reaction::try_new(lhs.clone(), deltas.clone()).unwrap();
+
+        assert_eq!(reaction, Reaction { lhs, deltas });
+    }
+
+    #[rstest]
+    fn test_reaction_try_new_invalid_lhs_error() {
+        let ligands = (1..=4)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let mut lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 5],
+            bonds: (1..=4)
+                .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+                .collect(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                ligands,
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            ..Default::default()
+        });
+        lhs.stereo_atom_mut(StereoAtomId(0)).configuration =
+            StereoConfigurationForm::kinded(StereoKind::CisTrans, 0u32);
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::new()),
+            Err(ReactionIntegrityError::Lhs(
+                MoleculeIntegrityError::StereoKindSiteMismatch {
+                    entity: Entity::StereoAtom(StereoAtomId(0)),
+                    kind: StereoKind::CisTrans,
+                },
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(
+        Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            ],
+            attributes: StereoAtomForm::default(),
+        }),
+        MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        },
+    )]
+    #[case::bond(
+        Delta::StereoBond(StereoBondDelta::Add {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+            ],
+            attributes: StereoBondForm::default(),
+        }),
+        MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+        },
+    )]
+    #[case::atom_oversized(
+        Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: (1..=(MAX_DEGREE as u32 + 1))
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::default(),
+        }),
+        MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        },
+    )]
+    #[case::bond_oversized(
+        Delta::StereoBond(StereoBondDelta::Add {
+            id: StereoBondId(0),
+            site: BondId(0),
+            ligands: (0..=(MAX_DEGREE as u32))
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoBondForm::default(),
+        }),
+        MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        },
+    )]
+    fn test_reaction_try_new_stereo_add_error(
+        #[case] delta: Delta,
+        #[case] expected: MoleculeIntegrityError,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); MAX_DEGREE + 2],
+            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::from_iter([delta])),
+            Err(ReactionIntegrityError::StereoIntegrityError(expected)),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+            id: StereoAtomId(0),
+            kind: Some(StereoKind::CisTrans),
+            old: None,
+            new: Some(StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        }),
+        Entity::StereoAtom(StereoAtomId(0)),
+        StereoKind::CisTrans,
+    )]
+    #[case::bond(
+        Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(0),
+            kind: Some(StereoKind::Tetrahedral),
+            old: None,
+            new: Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined)),
+        }),
+        Entity::StereoBond(StereoBondId(0)),
+        StereoKind::Tetrahedral,
+    )]
+    fn test_reaction_try_new_stereo_modify_constraint_error(
+        #[case] delta: Delta,
+        #[case] entity: Entity,
+        #[case] kind: StereoKind,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (1..=4)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::default(),
+            )],
+            stereo_bonds: vec![(
+                BondId(4),
+                (0..=3)
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                StereoBondForm::default(),
+            )],
+            ..Default::default()
+        });
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::from_iter([delta])),
+            Err(ReactionIntegrityError::StereoIntegrityError(
+                MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind },
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::atom_existing(StereoSiteFamily::Atom, true)]
+    #[case::atom_added(StereoSiteFamily::Atom, false)]
+    #[case::bond_existing(StereoSiteFamily::Bond, true)]
+    #[case::bond_added(StereoSiteFamily::Bond, false)]
+    fn test_reaction_try_new_stereo_constraint_wrapper_error(
+        #[case] family: StereoSiteFamily,
+        #[case] existing: bool,
+    ) {
+        let atom_ligands: Vec<StereoLigand> = (1..=4)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let bond_ligands: Vec<StereoLigand> = (0..=3)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let mut entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        };
+        let (entity, kind, addition, constraint) = match family {
+            StereoSiteFamily::Atom => {
+                if existing {
+                    entries.stereo_atoms.push((
+                        AtomId(0),
+                        atom_ligands.clone(),
+                        StereoAtomForm::default(),
+                    ));
+                }
+                (
+                    Entity::StereoAtom(StereoAtomId(0)),
+                    StereoKind::CisTrans,
+                    Delta::StereoAtom(StereoAtomDelta::Add {
+                        id: StereoAtomId(0),
+                        site: AtomId(0),
+                        ligands: atom_ligands,
+                        attributes: StereoAtomForm::default(),
+                    }),
+                    Constraint::StereoAtom(
+                        StereoAtomId(0),
+                        StereoKind::CisTrans,
+                        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                    ),
+                )
+            }
+            StereoSiteFamily::Bond => {
+                if existing {
+                    entries.stereo_bonds.push((
+                        BondId(4),
+                        bond_ligands.clone(),
+                        StereoBondForm::default(),
+                    ));
+                }
+                (
+                    Entity::StereoBond(StereoBondId(0)),
+                    StereoKind::Tetrahedral,
+                    Delta::StereoBond(StereoBondDelta::Add {
+                        id: StereoBondId(0),
+                        site: BondId(4),
+                        ligands: bond_ligands,
+                        attributes: StereoBondForm::default(),
+                    }),
+                    Constraint::StereoBond(
+                        StereoBondId(0),
+                        StereoKind::Tetrahedral,
+                        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+                    ),
+                )
+            }
+        };
+        let lhs = Molecule::from_entries(entries);
+        let mut deltas = Vec::new();
+        if !existing {
+            deltas.push(addition);
+        }
+        deltas.push(Delta::Constraint(ConstraintDelta::Add(constraint)));
+
+        assert_eq!(
+            Reaction::try_new(lhs, Deltas::from_iter(deltas)),
+            Err(ReactionIntegrityError::StereoIntegrityError(
+                MoleculeIntegrityError::StereoKindSiteMismatch { entity, kind },
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::dative_existing(OverlayFamily::Dative, true)]
+    #[case::dative_created(OverlayFamily::Dative, false)]
+    #[case::aromatic_existing(OverlayFamily::Aromatic, true)]
+    #[case::aromatic_created(OverlayFamily::Aromatic, false)]
+    #[case::multicenter_existing(OverlayFamily::Multicenter, true)]
+    #[case::multicenter_created(OverlayFamily::Multicenter, false)]
+    #[case::noncovalent_existing(OverlayFamily::Noncovalent, true)]
+    #[case::noncovalent_created(OverlayFamily::Noncovalent, false)]
+    #[case::stereo_atom_existing(OverlayFamily::StereoAtom, true)]
+    #[case::stereo_atom_created(OverlayFamily::StereoAtom, false)]
+    #[case::stereo_bond_existing(OverlayFamily::StereoBond, true)]
+    #[case::stereo_bond_created(OverlayFamily::StereoBond, false)]
+    fn test_reaction_try_new_participant_frame_error(
+        #[case] family: OverlayFamily,
+        #[case] existing: bool,
+    ) {
+        let atom_ligands: Vec<StereoLigand> = (1..=4)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let bond_ligands: Vec<StereoLigand> = (0..=3)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let mut entries = MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            ..Default::default()
+        };
+        let (entity, addition, removal) = match family {
+            OverlayFamily::Dative => {
+                if existing {
+                    entries.dative.push((
+                        vec![AtomId(0), AtomId(1)],
+                        AtomId(2),
+                        DativeBondForm::default(),
+                    ));
+                }
+                (
+                    Entity::DativeBond(DativeBondId(0)),
+                    Delta::DativeBond(DativeBondDelta::Add {
+                        id: DativeBondId(0),
+                        donors: vec![AtomId(0), AtomId(1)],
+                        acceptor: AtomId(2),
+                        attributes: DativeBondForm::default(),
+                    }),
+                    Delta::DativeBond(DativeBondDelta::Remove {
+                        id: DativeBondId(0),
+                        donors: vec![AtomId(1), AtomId(0)],
+                        acceptor: AtomId(2),
+                        attributes: DativeBondForm::default(),
+                    }),
+                )
+            }
+            OverlayFamily::Aromatic => {
+                if existing {
+                    entries
+                        .aromatic
+                        .push((vec![AtomId(0), AtomId(1)], AromaticSystemForm::default()));
+                }
+                (
+                    Entity::AromaticSystem(AromaticSystemId(0)),
+                    Delta::AromaticSystem(AromaticSystemDelta::Add {
+                        id: AromaticSystemId(0),
+                        atoms: vec![AtomId(0), AtomId(1)],
+                        attributes: AromaticSystemForm::default(),
+                    }),
+                    Delta::AromaticSystem(AromaticSystemDelta::Remove {
+                        id: AromaticSystemId(0),
+                        atoms: vec![AtomId(1), AtomId(0)],
+                        attributes: AromaticSystemForm::default(),
+                    }),
+                )
+            }
+            OverlayFamily::Multicenter => {
+                if existing {
+                    entries
+                        .multicenter
+                        .push((vec![AtomId(0), AtomId(1)], MulticenterBondForm::default()));
+                }
+                (
+                    Entity::MulticenterBond(MulticenterBondId(0)),
+                    Delta::MulticenterBond(MulticenterBondDelta::Add {
+                        id: MulticenterBondId(0),
+                        atoms: vec![AtomId(0), AtomId(1)],
+                        attributes: MulticenterBondForm::default(),
+                    }),
+                    Delta::MulticenterBond(MulticenterBondDelta::Remove {
+                        id: MulticenterBondId(0),
+                        atoms: vec![AtomId(1), AtomId(0)],
+                        attributes: MulticenterBondForm::default(),
+                    }),
+                )
+            }
+            OverlayFamily::Noncovalent => {
+                if existing {
+                    entries.noncovalent.push((
+                        AtomId(0),
+                        AtomId(1),
+                        NoncovalentBondForm::default(),
+                    ));
+                }
+                (
+                    Entity::NoncovalentBond(NoncovalentBondId(0)),
+                    Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+                        id: NoncovalentBondId(0),
+                        atoms: [AtomId(0), AtomId(1)],
+                        attributes: NoncovalentBondForm::default(),
+                    }),
+                    Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
+                        id: NoncovalentBondId(0),
+                        atoms: [AtomId(1), AtomId(0)],
+                        attributes: NoncovalentBondForm::default(),
+                    }),
+                )
+            }
+            OverlayFamily::StereoAtom => {
+                if existing {
+                    entries.stereo_atoms.push((
+                        AtomId(0),
+                        atom_ligands.clone(),
+                        StereoAtomForm::default(),
+                    ));
+                }
+                let mut removed_ligands = atom_ligands.clone();
+                removed_ligands.swap(0, 1);
+                (
+                    Entity::StereoAtom(StereoAtomId(0)),
+                    Delta::StereoAtom(StereoAtomDelta::Add {
+                        id: StereoAtomId(0),
+                        site: AtomId(0),
+                        ligands: atom_ligands,
+                        attributes: StereoAtomForm::default(),
+                    }),
+                    Delta::StereoAtom(StereoAtomDelta::Remove {
+                        id: StereoAtomId(0),
+                        site: AtomId(0),
+                        ligands: removed_ligands,
+                        attributes: StereoAtomForm::default(),
+                    }),
+                )
+            }
+            OverlayFamily::StereoBond => {
+                if existing {
+                    entries.stereo_bonds.push((
+                        BondId(4),
+                        bond_ligands.clone(),
+                        StereoBondForm::default(),
+                    ));
+                }
+                let mut removed_ligands = bond_ligands.clone();
+                removed_ligands.swap(0, 1);
+                (
+                    Entity::StereoBond(StereoBondId(0)),
+                    Delta::StereoBond(StereoBondDelta::Add {
+                        id: StereoBondId(0),
+                        site: BondId(4),
+                        ligands: bond_ligands,
+                        attributes: StereoBondForm::default(),
+                    }),
+                    Delta::StereoBond(StereoBondDelta::Remove {
+                        id: StereoBondId(0),
+                        site: BondId(4),
+                        ligands: removed_ligands,
+                        attributes: StereoBondForm::default(),
+                    }),
+                )
+            }
+        };
+        let lhs = Molecule::from_entries(entries);
+        let deltas = if existing {
+            Deltas::from_iter([removal])
+        } else {
+            Deltas::from_iter([addition, removal])
+        };
+
+        assert_eq!(
+            Reaction::try_new(lhs, deltas),
+            Err(ReactionIntegrityError::ParticipantFrameMismatch { entity }),
+        );
+    }
+
+    #[rstest]
+    #[case::invalid_reference(
+        vec![AtomId(1), AtomId(7)],
+        ReactionIntegrityError::InvalidReference { entity: Entity::Atom(AtomId(7)) },
+    )]
+    #[case::incidence(
+        vec![AtomId(0), AtomId(3)],
+        ReactionIntegrityError::IncidenceMismatch {
+            entity: Entity::DativeBond(DativeBondId(0)),
+        },
+    )]
+    #[case::frame(
+        vec![AtomId(1), AtomId(0)],
+        ReactionIntegrityError::ParticipantFrameMismatch {
+            entity: Entity::DativeBond(DativeBondId(0)),
+        },
+    )]
+    fn test_reaction_try_new_removal_error_precedence(
+        #[case] donors: Vec<AtomId>,
+        #[case] expected: ReactionIntegrityError,
+    ) {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 4],
+            dative: vec![(
+                vec![AtomId(0), AtomId(1)],
+                AtomId(2),
+                DativeBondForm::default(),
+            )],
+            ..Default::default()
+        });
+        let deltas = Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
+            id: DativeBondId(0),
+            donors,
+            acceptor: AtomId(2),
+            attributes: DativeBondForm::default(),
+        })]);
+
+        assert_eq!(Reaction::try_new(lhs, deltas), Err(expected));
+    }
+
+    #[rstest]
+    fn test_reaction_lhs() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(lhs.clone(), Deltas::new());
+
+        assert_eq!(reaction.lhs(), &lhs);
+    }
+
+    #[rstest]
+    fn test_reaction_deltas() {
+        let deltas = Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+            id: AtomId(0),
+            attributes: AtomForm::from_element(Element::C),
+        })]);
+        let reaction = Reaction::new(Molecule::default(), deltas.clone());
+
+        assert_eq!(reaction.deltas(), &deltas);
+    }
+
+    #[rstest]
+    fn test_reaction_into_parts() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        });
+        let deltas = Deltas::new();
+        let reaction = Reaction::new(lhs.clone(), deltas.clone());
+
+        assert_eq!(reaction.into_parts(), (lhs, deltas));
+    }
+
+    #[rstest]
     #[case::empty(Reaction::default())]
     #[case::identity(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
@@ -2002,13 +2640,13 @@ mod tests {
 
     #[rstest]
     #[case::unavailable_atom(
-        Reaction::new(
-            Molecule::default(),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
+        Reaction {
+            lhs: Molecule::default(),
+            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                 id: AtomId(0),
                 attributes: AtomForm::default(),
             })]),
-        ),
+        },
         ReactionIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(0)),
         },
@@ -2070,13 +2708,13 @@ mod tests {
             )],
             ..Default::default()
         });
-        let reaction = Reaction::new(
+        let reaction = Reaction {
             lhs,
-            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+            deltas: Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
                 id: StereoAtomId(0),
                 change: StereoAtomFieldChange::Configuration { old, new },
             })]),
-        );
+        };
 
         assert_eq!(reaction.check_integrity(), expected);
     }
@@ -2659,13 +3297,13 @@ mod tests {
 
     #[rstest]
     #[case::inconsistent_reaction(
-        Reaction::new(
-            Molecule::default(),
-            Deltas::from_iter([
+        Reaction {
+            lhs: Molecule::default(),
+            deltas: Deltas::from_iter([
                 Delta::Atom(AtomDelta::Add { id: AtomId(0), attributes: AtomForm::from_element(Element::C) }),
                 Delta::Atom(AtomDelta::Add { id: AtomId(0), attributes: AtomForm::from_element(Element::O) }),
             ]),
-        ),
+        },
         ApplyPreconditionError::InconsistentReaction,
     )]
     #[case::reaction_dpo(
@@ -2723,7 +3361,10 @@ mod tests {
         #[case] delta: Delta,
         #[case] entity: Entity,
     ) {
-        let reaction = Reaction::new(Molecule::default(), Deltas::from_iter([delta]));
+        let reaction = Reaction {
+            lhs: Molecule::default(),
+            deltas: Deltas::from_iter([delta]),
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InvalidReactionReference { entity }),
@@ -2736,13 +3377,13 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::Atom(AtomDelta::Add {
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::Atom(AtomDelta::Add {
                 id: AtomId(0),
                 attributes: AtomForm::from_element(Element::O),
             })]),
-        );
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InvalidReactionReference {
@@ -2795,7 +3436,10 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
-        let reaction = Reaction::new(lhs.clone(), Deltas::from_iter([delta]));
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([delta]),
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InvalidReactionReference {
@@ -2810,15 +3454,15 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C)],
             ..Default::default()
         });
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
                 id: StereoBondId(0),
                 site: BondId(0),
                 ligands: vec![],
                 attributes: StereoBondForm::default(),
             })]),
-        );
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InvalidReactionReference {
@@ -2838,14 +3482,14 @@ mod tests {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         });
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::Bond(BondDelta::Remove {
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                 id: BondId(0),
                 atoms: [AtomId(0), AtomId(2)],
                 attributes: BondForm::from_order(1),
             })]),
-        );
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::ReactionIncidenceMismatch {
@@ -2865,15 +3509,15 @@ mod tests {
             dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default())],
             ..Default::default()
         });
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
                 id: DativeBondId(0),
                 donors: vec![AtomId(2)],
                 acceptor: AtomId(1),
                 attributes: DativeBondForm::default(),
             })]),
-        );
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::ReactionIncidenceMismatch {
@@ -2910,15 +3554,15 @@ mod tests {
         });
         let mut removed_ligands = stored_ligands;
         removed_ligands.swap(0, 1);
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
                 id: StereoAtomId(0),
                 site: AtomId(0),
                 ligands: removed_ligands,
                 attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
             })]),
-        );
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::ReactionIncidenceMismatch {
@@ -2938,10 +3582,10 @@ mod tests {
                 atoms: Some(vec![AtomId(0), AtomId(1)]),
             },
         )])));
-        let reaction = Reaction::new(
-            lhs.clone(),
-            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(constraint))]),
-        );
+        let reaction = Reaction {
+            lhs: lhs.clone(),
+            deltas: Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(constraint))]),
+        };
         assert_eq!(
             reaction.check_preconditions(),
             Err(ApplyPreconditionError::InvalidReactionReference {

@@ -485,7 +485,7 @@ proptest! {
             .expect("reaction derived from a constructed span materializes");
         let normalized_twice = normalized_span.to_reaction();
 
-        prop_assert_eq!(&normalized.lhs, &reaction.lhs);
+        prop_assert_eq!(normalized.lhs(), reaction.lhs());
         prop_assert_eq!(normalized_span, span);
         prop_assert_eq!(normalized_twice, normalized);
     }

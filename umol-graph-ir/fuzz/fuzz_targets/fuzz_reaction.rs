@@ -22,7 +22,7 @@ fuzz_target!(|data: &str| {
         let reaction = dsl.into_ir(&ReactionDefaults::default());
         let _ = reaction.check_preconditions();
         if let Ok(applications) = reaction.apply(
-            &reaction.lhs,
+            reaction.lhs(),
             SubstructureMatchConfig {
                 match_algorithm: SubstructureMatchAlgorithm::GraphAndOverlays,
                 subgraph_isomorphism_algorithm: SubgraphIsomorphismAlgorithm::Vf2,

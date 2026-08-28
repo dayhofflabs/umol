@@ -44,12 +44,12 @@ pub fn featurize_reaction(
         .rhs();
     Ok(match combinator {
         ReactionCombinator::Difference => {
-            let reactants = featurizer.featurize_counted(&reaction.lhs)?;
+            let reactants = featurizer.featurize_counted(reaction.lhs())?;
             let products = featurizer.featurize_counted(&product)?;
             ReactionFingerprint::Difference(SignedFeatureSet::difference(&products, &reactants))
         }
         ReactionCombinator::DisjointUnion => {
-            let reactants = featurizer.featurize(&reaction.lhs)?;
+            let reactants = featurizer.featurize(reaction.lhs())?;
             let products = featurizer.featurize(&product)?;
             let tagged = reactants
                 .ids()

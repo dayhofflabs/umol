@@ -13,9 +13,9 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::{
-    AtomDelta, Canonicalize, CanonicalizeContext, Contradiction, Delta, Deltas, DescriptionLevel,
-    Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
-    ReactionCanonicalizeError, ReactionDerivation, ReactionIntegrityError, ReactionSpan,
+    Canonicalize, CanonicalizeContext, Contradiction, Deltas, DescriptionLevel, EntitySpan,
+    Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
+    ReactionCanonicalizeError, ReactionDerivation, ReactionSpan,
 };
 
 use super::span::reaction_span_scenario_strategy;
@@ -173,22 +173,6 @@ fn product_correspondence(
 fn canonicalization_error_strategy() -> impl Strategy<Value = (Reaction, ReactionCanonicalizeError)>
 {
     prop_oneof![
-        (0u32..64).prop_map(|id| {
-            (
-                Reaction::new(
-                    Molecule::default(),
-                    [Delta::Atom(AtomDelta::Remove {
-                        id: AtomId(id),
-                        attributes: AtomForm::default(),
-                    })]
-                    .into_iter()
-                    .collect(),
-                ),
-                ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
-                    entity: Entity::Atom(AtomId(id)),
-                }),
-            )
-        }),
         discontinuous_atom_update_reaction_strategy().prop_map(|reaction| {
             (
                 reaction,
@@ -384,8 +368,9 @@ proptest! {
             .to_reaction_span()
             .expect("canonical reaction materializes");
         let lhs_atoms = projected_atom_correspondence(&source_span, union.atoms(), Side::Left);
-        let lhs_action = MoleculeCorrespondence::induce(&reaction.lhs, &canonical.lhs, lhs_atoms)
-            .expect("canonical union action induces its lhs action");
+        let lhs_action =
+            MoleculeCorrespondence::induce(reaction.lhs(), canonical.lhs(), lhs_atoms)
+                .expect("canonical union action induces its lhs action");
         let canonical_match = lhs_action.reverse().compose(&correspondence);
         let source_application = reaction.apply_at(&host, &correspondence);
         let canonical_application = canonical.apply_at(&host, &canonical_match);
