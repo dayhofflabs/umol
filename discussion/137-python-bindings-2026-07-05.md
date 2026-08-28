@@ -6,6 +6,14 @@ design axis (an owned facade over a borrowed/generic core), and the open decisio
 Documentation strategy is folded in here because the wrapper is the first artifact
 written for external consumption and the two efforts share a surface.
 
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only the Python lookup rationale
+that a ligand sequence must preserve repeated virtual-ligand multiplicity. A sequence remains the
+right input because stereo ligand order is a frame, but a published frame may not repeat the same
+`StereoLigand` value and must not exceed `umol_perm::MAX_DEGREE`. The broader binding strategy below
+is unchanged.
+
 ## Scope
 
 Two coupled deliverables:

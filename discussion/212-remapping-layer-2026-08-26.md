@@ -3,6 +3,7 @@
 Status: Proposed
 Date: 2026-08-26
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
 ## Purpose

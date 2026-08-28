@@ -1,14 +1,72 @@
 # 209 — Normalization and canonical semantics
 
-Status: In Progress
+Status: Superseded
 Date: 2026-08-25
 Relates: [168](168-api-hygiene-2026-07-27.md),
 [186](186-molecule-canonicalization-2026-08-05.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
 [210](210-relation-frame-storage-2026-08-25.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
+
+## Superseded
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) replaces the unfinished scope of this
+document. S0 and S1 were implemented, and S2a's dependency on doc 211 was resolved, but review before
+S2b found that the remaining plan did not have a coherent aggregate-frame contract. This document is
+therefore not `Completed`: the implemented work remains recorded below, while open work and corrected
+semantics move to the successor. Doc 214 now settles the blocking domain by prohibiting repeated
+`StereoLigand` values and frames above `umol_perm::MAX_DEGREE`; residual-occurrence orbit statements
+in the preserved text below are not current design.
+
+### Retained completed work
+
+- S0a–S0c: private canonicalization levels, aggregate level inspection, and complete-operation
+  dispatch.
+- S1a–S1b: stereo-kind frame operations and stereo-site incidence integrity.
+- S2a: the relation-surface dependency was settled by completed doc
+  [211](211-relation-frames-and-api-2026-08-26.md); the subitem itself contained no implementation.
+
+### Moved to doc 214
+
+| Item here | Disposition |
+| --- | --- |
+| Starting point 1–2 | The diagnosed rule-pattern versus concrete-host frame mismatch, realized-host lowering, and missing transport of frame-relative constraint deltas move to doc 214's reaction-consumer boundary. |
+| Starting point 3 | The inherited failing-test inventory moves only as evidence; doc 214 requires a fresh baseline rather than preserving the old count as current. |
+| Starting point 4, S2b.2 | Post-remap stereo-frame selection and complete constraint transport move to doc 214; its prohibition of frames above `MAX_DEGREE` abandons the general position-order fallback. |
+| S2b | Aggregate `Normalize` and `Reframe` for `Molecule`, ordinary relation payload transport, stereo constraint transport, ownership behavior, and benchmarks move under doc 214's unique-action contract. |
+| S2b.1 | Mapped equality moves under doc 214's unique-action contract; candidate occurrence-action search is abandoned. |
+| S2c | Molecule integration, equality laws, properties, and benchmarks move after the aggregate operations are specified. |
+| S3a | Coordinated reaction normalization, frame-relative delta transport, and frame-preserving `Delta::remap` move; remapping representation remains coordinated with doc 212. |
+| S3b | Reaction-span normalization with one action across every carried side and constraint span moves. |
+| S3c | Canonicalization integration moves without requiring every complete-action search to become an aggregate `Reframe` call. |
+| S4a, the level-removal part of S4b, S4c, S4d | The complete-only Rust and Python public surface, caller and benchmark migration, and guide alignment move as one successor work unit after the public quotient contracts are settled. |
+| S5a | Exact correspondence evidence moves with the corrected order: id transport first, then complete frame selection and reduction. |
+| S5b | The cross-language verification gate moves to the successor's eventual implementation plan. |
+
+### Abandoned rather than moved
+
+- Individual residual invariance of every frame-relative constraint is abandoned: doc 214 prohibits
+  repeated frame values, so there is no residual occurrence stabilizer under which to require it.
+- The law `reframe(x).remap(c) == canonicalize(x)` and S5a's equivalent source-frame ordering are
+  abandoned. Remapping preserves participant sequence, so frame selection must occur after id
+  transport.
+- S2c's unconditional deletion of the private complete-stereo canonicalization path is abandoned.
+  It may be removed only if the settled aggregate operation covers its kindless and complete-
+  constraint behavior.
+- S2b's promise that a borrowed operation will not clone uniquely owned copy-on-write stores is
+  abandoned as stated. Receiver ownership and the allocation guarantee are one successor decision.
+- S4b's bundled expansion of `Canonicalize` is abandoned as a selected design: absorbing `remap`,
+  deleting `try_remap`, constructing `Reaction::remap` through a normalized materialized span, and
+  deriving `equiv_under` from one selected representative are not consequences of retiring public
+  description levels.
+- S5c's instruction to close this document as `Completed` is abandoned. Doc 214 owns its own plan,
+  verification, and closeout after its design is settled.
+
+The remainder of this document is preserved as the record of the implemented work and the plan that
+was superseded. Its later “settled” statements and S2–S5 instructions are not current design.
 
 ## Purpose
 
@@ -1028,3 +1086,24 @@ are not completion conditions here.
 Doc 211 leaves the workspace red on fifteen tests across four targets, enumerated in S2a. S2 and S3
 of this document restore them. That is a deliberate red period across the two documents,
 not an unplanned regression.
+
+## 2026-08-28 correction — reaction-application diagnosis
+
+The starting-point diagnosis above incorrectly calls the minimized stereo-application update empty
+and concludes that `StereoAtomDelta::for_update` emits no delta. `StereoAtomForm::new` with a kind
+and `StereoCoset::Undetermined` constructs a kinded configuration with an open coset.
+`StereoConfigurationUpdate::Undetermined` clears that to the distinct unkinded
+`StereoConfigurationForm::Undetermined`, so `difference_to` and `for_update` do emit a
+`ModifyField` delta. The atom and bond properties therefore reach `reframe_stereo` exactly as their
+failures report.
+
+The delta's `old` is the open rule pattern. It admits the concrete host under `matches` but is not
+equivalent to that host under `equiv`. Doc [214](214-aggregate-frame-semantics-2026-08-28.md)
+therefore correctly settles rule-to-host lowering as pattern matching followed by installation of
+the concrete host value as the realized transaction pre-state. This correction does not reopen this
+superseded plan.
+
+The two references above to fifteen failures "across four targets" also contain a counting slip.
+The semantic ledger is four library tests, one canonicalization integration test, and ten property
+tests: fifteen tests across three targets. A separate malformed `React` doctest was present in
+`387650962`; doc 214 records its immediate repair and excludes it from the semantic ledger.

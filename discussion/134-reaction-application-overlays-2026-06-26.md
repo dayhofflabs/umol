@@ -1,5 +1,13 @@
 # 134 — Reaction-application: overlays
 
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only the claims below that repeated
+virtual `StereoLigand` values are valid frame data. Stereo identity and lookup remain independent of
+frame order, but every published stereo frame is now pairwise-distinct; the old multiset language no
+longer justifies duplicate implicit-hydrogen or lone-pair occurrences. The rest of this completed
+reaction-application record is unchanged.
+
 **Metadata terminology and APIs.** The implemented persistent-metadata and
 parse-time-context model, including the replacement of the concrete namespace
 names used below, is specified by [doc 169](169-dsl-metadata-context-2026-07-27.md).

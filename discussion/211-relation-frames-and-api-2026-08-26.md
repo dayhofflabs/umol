@@ -9,8 +9,18 @@ Relates: [168](168-api-hygiene-2026-07-27.md),
 [210](210-relation-frame-storage-2026-08-25.md),
 [212](212-remapping-layer-2026-08-26.md),
 [213](213-editor-overlay-storage-2026-08-27.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
+
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only this completed document's
+decision to permit repeated virtual ligands and to interpret a stored coset through their residual
+occurrence stabilizer. Current integrity requires pairwise-distinct, `MAX_DEGREE`-bounded stereo
+frames; the orbit search, virtual-block swaps, `FrameAction`, and `find_reframed` machinery are
+scheduled to be unwound. Frame-preserving relation storage, entry identity, participant transport,
+and the remainder of the completed relation API work stay in force.
 
 ## Purpose
 

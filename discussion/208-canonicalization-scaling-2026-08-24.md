@@ -6,7 +6,8 @@ Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
 [207](207-reaction-network-spike-2026-08-24.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
-[211](211-relation-frames-and-api-2026-08-26.md)
+[211](211-relation-frames-and-api-2026-08-26.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md)
 
 ## Purpose
 
@@ -22,13 +23,16 @@ canonicalization workload. That provenance is a reason to keep the work sharply 
 Canonicalization is already a central graph-IR operation and should be corrected there if the
 problem is general; the reaction-network crate must not acquire a corpus-specific identity scheme.
 
-## Semantic correction from doc 209
+## Semantic correction from docs 209 and 214
 
-Doc 209 removes description levels and level-selecting canonicalization methods from the public
-Rust and Python APIs. The completed S1 and S2 work below records how the current branch reached its
-present state; it is not the operative API direction. The nested levels remain available privately
-for exact search reduction. S3 must implement that private reduction while preserving complete
-canonicalization, equality, correspondence, and hash semantics.
+Doc 209 implemented private effective-level dispatch and proposed removing description levels and
+level-selecting canonicalization methods from the public Rust and Python APIs, but it was superseded
+before its aggregate semantics and removal stages began. Doc
+[214](214-aggregate-frame-semantics-2026-08-28.md) owns that remaining design and implementation
+scope. The completed S1 and S2 work below records how the current branch reached its present state;
+it is not the operative API direction. The nested levels remain available privately for exact search
+reduction. S3 must preserve complete canonicalization, equality, correspondence, and hash semantics
+against the contract selected there.
 
 ## Current evidence
 
@@ -473,22 +477,23 @@ over all targets with warnings denied.
 
 ### S3 — Lower empty description levels exactly
 
-#### S3a — Route aggregate operations through their effective level **Transferred to doc 209**
+#### S3a — Route aggregate operations through their effective level **Transferred to doc 214**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and aggregate canonicalization implementations.
 
-Doc 209 now owns the private `CanonicalizeLevel`, molecule, reaction, and reaction-span dispatch,
-the complete-only public API, and their exactness tests. This subitem has no independent
-implementation remaining in doc 208.
+Doc 209 implemented private `CanonicalizeLevel` inspection and aggregate dispatch. Doc
+[214](214-aggregate-frame-semantics-2026-08-28.md) owns the remaining molecule, reaction, and
+reaction-span frame semantics, complete-only public API, and exactness tests. This subitem has no
+independent implementation remaining in doc 208.
 
-**Depends on:** doc 209 completion.
+**Depends on:** doc 214 completion.
 
 #### S3b — Verify the reduction under renumbering and retained workloads
 
 **Module:** canonicalization property tests and `umol-graph-ir/benches/canonicalize.rs`.
 
 Apply the existing dense-renumbering generators to feature-free and partially featured molecules.
-After doc 209 removes the public level operations, benchmark the retained cases through
+After doc 214 removes the public level operations, benchmark the retained cases through
 `canonicalize`, `canonicalize_with_correspondence`, `canonical_hash`, and `canonical_eq` for an
 equal remapping and a structurally unequal input. The existing pre-change explicit-level results
 provide the forced-full and lower-level timing baselines without retaining a public forcing API.
@@ -501,7 +506,7 @@ levels. Record search counters and complete-operation Criterion results in this 
 assert wall-clock thresholds in tests. Use the result to decide whether a separate canonical-hash
 materialization optimization is justified.
 
-**Depends on:** doc 209 completion.
+**Depends on:** doc 214 completion.
 
 ### S4 — Restore sound orbit pruning at structure level
 
@@ -650,7 +655,7 @@ This verifies the breaking selector migration across language boundaries.
 no public selector. Any fixture or generated artifact that embeds the removed surface is either
 migrated or explicitly disposed of.
 
-**Depends on:** doc 209 completion and S6a.
+**Depends on:** doc 214 completion and S6a.
 
 #### S6c — Re-run the reaction-network workloads
 
@@ -690,7 +695,7 @@ and the status row describes completed rather than proposed scope.
 ### Dependency summary
 
 The remaining critical path is
-`doc 209 -> S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
+`doc 214 -> S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
 S5 follows S4 deliberately so benchmark deltas remain attributable even though their private
 infrastructure is largely independent. No remaining implementation stage is optional within this
 scope.

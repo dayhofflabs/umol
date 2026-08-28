@@ -168,7 +168,9 @@ impl Iterator for ReactionProductsIter {
 /// # Examples
 ///
 /// ```
-/// use umol_graph_core::{///     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm, ///};
+/// use umol_graph_core::{
+///     RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
+/// };
 /// use umol_graph_ir::ir::{
 ///     Molecule, React, Reaction, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 /// };
