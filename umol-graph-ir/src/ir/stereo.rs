@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 use strum::VariantArray;
 use umol_graph_core::{
-    BiRelationData, EdgeId, FixedVarBirelationSet, NodeId, Ordered, ParticipantPosition,
-    RelationId, Remapping,
+    EdgeId, FixedVarBirelationSet, NodeId, ParticipantPosition, RelationId, Remapping,
 };
 use umol_graph_ir_macros::{Lattice, Normalize};
 use umol_perm::{ClassKey, Permutation};
@@ -36,9 +35,7 @@ use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 /// Owns the frame structure its storage shape cannot state: which factor bears the participant
 /// frame, and which is a site.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct StereoAtoms(
-    Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
-);
+pub struct StereoAtoms(Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>);
 
 impl StereoAtoms {
     pub fn new(entries: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>) -> Self {
@@ -115,7 +112,7 @@ impl StereoAtoms {
 
     pub(crate) fn into_arc(
         self,
-    ) -> Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>> {
+    ) -> Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>> {
         self.0
     }
 
@@ -187,22 +184,14 @@ impl Reframe for StereoAtoms {
     }
 }
 
-impl From<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>
-    for StereoAtoms
-{
-    fn from(
-        set: FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-    ) -> Self {
+impl From<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>> for StereoAtoms {
+    fn from(set: FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>>
-    for StereoAtoms
-{
-    fn from(
-        set: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
-    ) -> Self {
+impl From<Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>> for StereoAtoms {
+    fn from(set: Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>) -> Self {
         Self(set)
     }
 }
@@ -213,9 +202,7 @@ impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, S
 /// Owns the frame structure its storage shape cannot state: which factor bears the participant
 /// frame, and which is a site.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct StereoBonds(
-    Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
-);
+pub struct StereoBonds(Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>);
 
 impl StereoBonds {
     pub fn new(entries: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>) -> Self {
@@ -307,7 +294,7 @@ impl StereoBonds {
 
     pub(crate) fn into_arc(
         self,
-    ) -> Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>> {
+    ) -> Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>> {
         self.0
     }
 
@@ -378,22 +365,14 @@ impl Reframe for StereoBonds {
     }
 }
 
-impl From<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>
-    for StereoBonds
-{
-    fn from(
-        set: FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
-    ) -> Self {
+impl From<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>> for StereoBonds {
+    fn from(set: FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>>
-    for StereoBonds
-{
-    fn from(
-        set: Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
-    ) -> Self {
+impl From<Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>> for StereoBonds {
+    fn from(set: Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>) -> Self {
         Self(set)
     }
 }
@@ -402,7 +381,7 @@ impl From<Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, S
 /// The `Molecule` peer is [`StereoAtoms`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoAtomSpans(
-    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoAtomForm>>,
+    FixedVarBirelationSet<NodeId, 1, StereoLigand, EntitySpan<StereoAtomForm>>,
 );
 
 impl StereoAtomSpans {
@@ -510,7 +489,7 @@ impl Reframe for StereoAtomSpans {
 /// The `Molecule` peer is [`StereoBonds`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoBondSpans(
-    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, EntitySpan<StereoBondForm>>,
+    FixedVarBirelationSet<EdgeId, 1, StereoLigand, EntitySpan<StereoBondForm>>,
 );
 
 impl StereoBondSpans {
@@ -708,21 +687,6 @@ macro_rules! stereo_element {
                 constraints,
             })
         }
-        }
-
-        impl BiRelationData for $name {
-            /// The ligands are an `Ordered` factor, so `order_2` from `canonicalize_positions` is
-            /// always the identity — the frame-relative configuration needs no reindex here.
-            fn on_permutation(
-                &mut self,
-                _order_1: &[ParticipantPosition],
-                _order_2: &[ParticipantPosition],
-            ) {
-            }
-
-            fn is_permutation_invariant(&self) -> bool {
-                true
-            }
         }
 
         impl From<&str> for $name {

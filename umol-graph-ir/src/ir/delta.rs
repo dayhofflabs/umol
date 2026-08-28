@@ -11,9 +11,7 @@ use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 use std::vec::IntoIter;
 
-use umol_graph_core::{
-    BiRelationData, FactorOrdering, ParticipantPosition, RelationData, Unordered,
-};
+use umol_graph_core::ParticipantPosition;
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
@@ -942,6 +940,19 @@ pub enum Delta {
     Constraint(ConstraintDelta),
 }
 
+/// Sort `atoms` and return the position order carrying the original frame into the sorted one.
+/// Equal values keep their input order.
+fn sort_atoms(atoms: &mut [AtomId]) -> Vec<ParticipantPosition> {
+    let mut order: Vec<usize> = (0..atoms.len()).collect();
+    order.sort_by_key(|&index| atoms[index]);
+    let sorted: Vec<AtomId> = order.iter().map(|&index| atoms[index]).collect();
+    atoms.copy_from_slice(&sorted);
+    order
+        .into_iter()
+        .map(|index| ParticipantPosition(index as u32))
+        .collect()
+}
+
 impl Delta {
     /// The inverse delta. Inversion is total and involutive.
     pub fn inverse(self) -> Self {
@@ -1102,46 +1113,6 @@ impl<T> EntitySpan<T> {
             Self::Added(value) => EntitySpan::Added(f(value)?),
             Self::Removed(value) => EntitySpan::Removed(f(value)?),
         })
-    }
-}
-
-/// A span stored as relation data (a `ReactionSpan` overlay) reindexes each present side's payload
-/// and compares side-wise, delegating to the underlying payload's [`RelationData`].
-impl<U: RelationData> RelationData for EntitySpan<U> {
-    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
-        match self {
-            Self::Unchanged(value) | Self::Added(value) | Self::Removed(value) => {
-                value.on_permutation(order)
-            }
-            Self::Modified { lhs, rhs } => {
-                lhs.on_permutation(order);
-                rhs.on_permutation(order);
-            }
-        }
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        self.lhs().is_none_or(U::is_permutation_invariant)
-            && self.rhs().is_none_or(U::is_permutation_invariant)
-    }
-}
-
-impl<U: BiRelationData> BiRelationData for EntitySpan<U> {
-    fn on_permutation(&mut self, order_1: &[ParticipantPosition], order_2: &[ParticipantPosition]) {
-        match self {
-            Self::Unchanged(value) | Self::Added(value) | Self::Removed(value) => {
-                value.on_permutation(order_1, order_2)
-            }
-            Self::Modified { lhs, rhs } => {
-                lhs.on_permutation(order_1, order_2);
-                rhs.on_permutation(order_1, order_2);
-            }
-        }
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        self.lhs().is_none_or(U::is_permutation_invariant)
-            && self.rhs().is_none_or(U::is_permutation_invariant)
     }
 }
 
@@ -2602,7 +2573,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 attributes,
             } => {
                 let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
-                Unordered::canonicalize(&mut donors);
+                donors.sort_unstable();
                 DativeBondDelta::Add {
                     id: map.map_dative(id),
                     donors,
@@ -2617,7 +2588,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 attributes,
             } => {
                 let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
-                Unordered::canonicalize(&mut donors);
+                donors.sort_unstable();
                 DativeBondDelta::Remove {
                     id: map.map_dative(id),
                     donors,
@@ -2644,7 +2615,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 mut attributes,
             } => {
                 let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = Unordered::canonicalize_positions(&mut atoms);
+                let order = sort_atoms(&mut atoms);
                 attributes.permute(&order);
                 AromaticSystemDelta::Add {
                     id: map.map_aromatic(id),
@@ -2658,7 +2629,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 mut attributes,
             } => {
                 let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = Unordered::canonicalize_positions(&mut atoms);
+                let order = sort_atoms(&mut atoms);
                 attributes.permute(&order);
                 AromaticSystemDelta::Remove {
                     id: map.map_aromatic(id),
@@ -2685,7 +2656,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 mut attributes,
             } => {
                 let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = Unordered::canonicalize_positions(&mut atoms);
+                let order = sort_atoms(&mut atoms);
                 attributes.permute(&order);
                 MulticenterBondDelta::Add {
                     id: map.map_multicenter(id),
@@ -2699,7 +2670,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 mut attributes,
             } => {
                 let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = Unordered::canonicalize_positions(&mut atoms);
+                let order = sort_atoms(&mut atoms);
                 attributes.permute(&order);
                 MulticenterBondDelta::Remove {
                     id: map.map_multicenter(id),
@@ -2728,7 +2699,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 attributes,
             } => {
                 let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
-                Unordered::canonicalize(&mut atoms);
+                atoms.sort_unstable();
                 NoncovalentBondDelta::Add {
                     id: map.map_noncovalent(id),
                     atoms,
@@ -2741,7 +2712,7 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
                 attributes,
             } => {
                 let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
-                Unordered::canonicalize(&mut atoms);
+                atoms.sort_unstable();
                 NoncovalentBondDelta::Remove {
                     id: map.map_noncovalent(id),
                     atoms,

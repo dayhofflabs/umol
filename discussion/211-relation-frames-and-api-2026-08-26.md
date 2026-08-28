@@ -1,13 +1,14 @@
 # 211 — Relation frames and the relation API
 
-Status: In Progress
-Date: 2026-08-26
+Status: Completed
+Date: 2026-08-27
 Relates: [168](168-api-hygiene-2026-07-27.md),
 [204](204-reaction-application-redesign-2026-08-19.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
 [210](210-relation-frame-storage-2026-08-25.md),
 [212](212-remapping-layer-2026-08-26.md),
+[213](213-editor-overlay-storage-2026-08-27.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
@@ -1779,81 +1780,50 @@ restatement keeps them aligned.
 
 **Dependencies:** [dep: S3h, S4d]
 
-#### S4f — Collapse the editor's storage wrappers
-
-**Module:** `umol-graph-ir/src/ir/molecule/editor.rs` and its unit tests.
-
-`FixedSetStorage`, `VarSetStorage`, and `FixedVarSetStorage` are three copy-on-write wrappers over
-420 lines carrying 42 methods between them. Two facts shrink that to almost nothing once the entity
-families own their surface:
-
-- most of the 42 methods duplicate reads the family types now own — `count`, `participants`, `data`,
-  `participant_permutation`, `compact`, `entries`. What is genuinely editor-specific is `push`,
-  `remove_relations`, `materialize`, `into_arc`, and the rollback `entries`;
-- the three exist only because they are generic over the *storage shape*. A wrapper parameterised by
-  the family type and its entry type needs no shape genericity, so one generic type covers all six
-  families.
-
-Replace them with a single copy-on-write wrapper over `(family type, entry type)`, delegating every
-read to the family type.
-
-**Do not fold the shared and mutable states into the family type itself.** The shared state is a real
-copy-on-write win — an edit touching one atom republishes the other five families' handles with no
-work — and a mutable variant on `Molecule`'s field would give the published type a state it must
-never hold. The accumulating state belongs to the editor.
-
-**Tests and evidence:** Retain every editor and transaction assertion, including rollback. Assert
-that publishing an unmodified family returns the same handle without rebuilding, and that a batch of
-pushes materialises once rather than per operation.
-
-**Change class:** simplification with caller migration (green).
-
-**Dependencies:** [dep: S4d]
-
 ### S5 — Make storage frame-preserving
 
-#### S5a — Move the graph-IR frame-order utility sites off the storage protocol
+#### S5a — Take the graph-IR sorting sites off `Unordered` **Done**
 
-**Module:** `umol-graph-ir/src/ir/delta.rs`, `canonicalize.rs`, and their unit tests.
+**Module:** `umol-graph-ir/src/ir/delta.rs`, `canonicalize.rs`.
 
-Five graph-IR sites call `Unordered::canonicalize_positions` as a general sorting utility, entirely
-outside relation storage, and would break when the protocol is deleted:
+Nine sites sort through `Unordered`, which S5b deletes:
 
-- `delta.rs:2631`, `:2645`, `:2672`, and `:2686` sort an aromatic or multicenter delta's atom list
-  in `Delta::remap` and permute the attributes through the resulting order. These are the
-  implementation behind the five `test_remap_delta` resort cases.
-- `canonicalize.rs:3606` `sort_ligand_frame` sorts a stereo ligand multiset and returns a
-  `Vec<ParticipantPosition>` order, with `permutation_from_position_order` at `:3598` converting a
-  `Permutation` into that order and `reframe_stereo_atom_constraint_by_order` consuming it.
+| site | what it sorts |
+| --- | --- |
+| `delta.rs:2605`, `:2620` | `Delta::remap`, dative donors |
+| `delta.rs:2647`, `:2661` | `Delta::remap`, aromatic atoms, payload permuted to match |
+| `delta.rs:2688`, `:2702` | `Delta::remap`, multicenter atoms, payload permuted to match |
+| `delta.rs:2731`, `:2744` | `Delta::remap`, noncovalent atoms |
+| `canonicalize.rs:3576` | `sort_ligand_frame` |
 
-Make the delta sites **frame-preserving**: `Delta::remap` relabels the atom list and leaves both the
-list and the attributes in their supplied frame, exactly as relation-set `remap` does. Do not
-replace the sort with an explicit sort plus `Reframe`; that would relocate the eager canonicalization
-into `delta.rs` rather than remove it. Frame selection for a delta is normalization and belongs to
-doc 209 S3a, which already reuses the lhs molecule's selected frame actions for existing entity
-deltas. Doc 209's statement that `Deltas::normalize` "retains its existing fixed-frame fold" holds
-only while `remap` sorts on its behalf and is corrected there.
+Replace each with `canonicalize_positions`'s body: a stable sort of indices by value, yielding the
+sorted values and the position order.
 
-Make the canonicalization sites `Permutation`-native, since a stereo ligand frame is bounded by the
-kind's degree; delete `permutation_from_position_order` and reframe the constraints through
-`reframe_by`.
+Whether `Delta::remap` should sort at all is doc
+[209](209-normalization-canonical-semantics-2026-08-25.md) S3a's.
 
-**Tests and evidence:** Retain every `Delta::remap` and canonicalization assertion. Cover an
-aromatic delta whose atom list is supplied unsorted with nonuniform electron counts, and a stereo
-ligand frame with repeated virtual ligands where equal occurrences keep their input order.
+**Tests and evidence:** No behaviour changes; every existing assertion stands.
 
-**Change class:** semantics-preserving migration (green).
+**Change class:** mechanical (green).
 
-**Dependencies:** [dep: S4e]
+**Dependencies:** none.
 
-#### S5b — Remove the ordering markers and the payload callback
+#### S5b — Remove the ordering markers and the payload callback **Done**
 
 **Module:** `umol-graph-core/src/relation.rs`, `lib.rs`, their unit and property tests, and every
 graph-IR type annotation carrying an ordering marker.
 
-Delete `FactorOrdering`, `Ordered`, `Unordered`, `RelationData`, and `BiRelationData`. Retain
-`ParticipantPosition` as `permute_with`'s position argument. Remove the `O` parameters from all five shapes, the `D: RelationData` bounds,
-and the unused `D: Clone` bound on `new`. Stop sorting in `new`. Delete `ElectronCountsForm::permute`.
+Delete `FactorOrdering` with `canonicalize` and `canonicalize_positions`, its implementors `Ordered`
+and `Unordered`, and `RelationData` / `BiRelationData` with `on_permutation` and
+`is_permutation_invariant`. In graph-IR delete the six impls and `EntitySpan`'s two forwarding impls
+at `delta.rs:1114`–`1137`. Retain `ParticipantPosition` as `permute_with`'s position argument. Remove the `O` parameters from all five shapes, the `D: RelationData` bounds,
+and the unused `D: Clone` bound on `new`. Stop sorting in `new`.
+
+`overlay_matches` (`substructure.rs:571`) calls `on_permutation` for real frame transport of the four
+non-stereo overlays during matching. Move it to `reframe_to` first.
+
+`ElectronCountsForm::permute` stays: `Delta::remap` still permutes through
+`AromaticSystemForm::permute` and `MulticenterBondForm::permute` until doc 209 S3a.
 Update the nineteen tests that assert the removed behaviour.
 
 **Tests and evidence:** Assert that `new` preserves a supplied unsorted frame for every shape, that
@@ -1879,7 +1849,7 @@ here.
 
 ### S6 — Align the guides
 
-#### S6a — Update the nomenclature and development guides
+#### S6a — Update the nomenclature and development guides **Done**
 
 **Module:** `docs/development/nomenclature.md` and `docs/development/data-types.md`.
 
@@ -1903,7 +1873,8 @@ The critical path is
 
 `S2a -> S4a -> S4c -> S4d` is a parallel branch of comparable length, and `S3f -> S3g -> S3h` gates
 `S4e` alongside `S4d`. `S4d.1 -> S4d.2` extends the critical path between `S4d`
-and `S4e`: S4e's stereo half uses the search shape that S4d.2 establishes. `S4b` hangs off `S2a` and joins nothing until S5.
+and `S4e`: S4e's stereo half uses the search shape that S4d.2 establishes. `S4b` hangs off `S2a` and
+joins nothing until S5. The editor storage collapse is doc [213](213-editor-overlay-storage-2026-08-27.md).
 
 S3b and S3c are additive and were built at any point before their consumers. S3a introduces the
 family types and gates S3e. S3d supplies the in-place `permute_with` that S3e applies, which is why

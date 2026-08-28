@@ -2,10 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{
-    BiRelationData, FixedVarBirelationSet, NodeId, Ordered, ParticipantPosition, RelationId,
-    Remapping, Unordered,
-};
+use umol_graph_core::{FixedVarBirelationSet, NodeId, ParticipantPosition, RelationId, Remapping};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
@@ -21,9 +18,7 @@ use super::traits::{Equiv, Lattice, Normalize, Reframe};
 /// The donors bear the participant frame; the acceptor is a single distinguished atom. Neither
 /// factor is position-sensitive for [`DativeBondForm`], whose order is a scalar.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct DativeBonds(
-    Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
-);
+pub struct DativeBonds(Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>);
 
 impl DativeBonds {
     pub fn new(entries: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>) -> Self {
@@ -125,9 +120,7 @@ impl DativeBonds {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub(crate) fn into_arc(
-        self,
-    ) -> Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>> {
+    pub(crate) fn into_arc(self) -> Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>> {
         self.0
     }
 
@@ -170,22 +163,14 @@ impl DativeBonds {
     }
 }
 
-impl From<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>
-    for DativeBonds
-{
-    fn from(
-        set: FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-    ) -> Self {
+impl From<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>> for DativeBonds {
+    fn from(set: FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>>
-    for DativeBonds
-{
-    fn from(
-        set: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
-    ) -> Self {
+impl From<Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>> for DativeBonds {
+    fn from(set: Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>) -> Self {
         Self(set)
     }
 }
@@ -229,9 +214,7 @@ impl Reframe for DativeBonds {
 /// The reaction span's dative bonds, one [`EntitySpan`] per entity against a single donor frame.
 /// The `Molecule` peer is [`DativeBonds`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct DativeBondSpans(
-    FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, EntitySpan<DativeBondForm>>,
-);
+pub struct DativeBondSpans(FixedVarBirelationSet<NodeId, 1, NodeId, EntitySpan<DativeBondForm>>);
 
 impl DativeBondSpans {
     pub fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> {
@@ -452,20 +435,6 @@ impl DativeBondForm {
 impl From<&str> for DativeBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid dative bond string")
-    }
-}
-
-impl BiRelationData for DativeBondForm {
-    /// `order` is a scalar; neither the acceptor nor the donor factor is position-indexed.
-    fn on_permutation(
-        &mut self,
-        _order_1: &[ParticipantPosition],
-        _order_2: &[ParticipantPosition],
-    ) {
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        true
     }
 }
 

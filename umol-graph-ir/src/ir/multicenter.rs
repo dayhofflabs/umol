@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{
-    NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered, VarRelationSet,
-};
+use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
@@ -21,7 +19,7 @@ use super::traits::{Equiv, Lattice, Normalize, Reframe};
 /// The atoms bear the participant frame: the per-member electron counts of
 /// [`MulticenterBondForm`] are read against it, position by position.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct MulticenterBonds(Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>);
+pub struct MulticenterBonds(Arc<VarRelationSet<NodeId, MulticenterBondForm>>);
 
 impl MulticenterBonds {
     pub fn new(entries: Vec<(Vec<AtomId>, MulticenterBondForm)>) -> Self {
@@ -106,7 +104,7 @@ impl MulticenterBonds {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> {
+    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, MulticenterBondForm>> {
         self.0
     }
 
@@ -151,14 +149,14 @@ impl MulticenterBonds {
     }
 }
 
-impl From<VarRelationSet<NodeId, Unordered, MulticenterBondForm>> for MulticenterBonds {
-    fn from(set: VarRelationSet<NodeId, Unordered, MulticenterBondForm>) -> Self {
+impl From<VarRelationSet<NodeId, MulticenterBondForm>> for MulticenterBonds {
+    fn from(set: VarRelationSet<NodeId, MulticenterBondForm>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>> for MulticenterBonds {
-    fn from(set: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>) -> Self {
+impl From<Arc<VarRelationSet<NodeId, MulticenterBondForm>>> for MulticenterBonds {
+    fn from(set: Arc<VarRelationSet<NodeId, MulticenterBondForm>>) -> Self {
         Self(set)
     }
 }
@@ -205,7 +203,7 @@ impl Reframe for MulticenterBonds {
 /// through a payload parameter: a type parameter on the molecule-level families would complicate
 /// the primary carrier to serve this one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct MulticenterBondSpans(VarRelationSet<NodeId, Unordered, EntitySpan<MulticenterBondForm>>);
+pub struct MulticenterBondSpans(VarRelationSet<NodeId, EntitySpan<MulticenterBondForm>>);
 
 impl MulticenterBondSpans {
     pub fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> {
@@ -314,17 +312,6 @@ pub struct MulticenterBondUpdate {
 impl From<&str> for MulticenterBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid multicenter bond string")
-    }
-}
-
-impl RelationData for MulticenterBondForm {
-    /// The per-member electron counts are positional, so they follow a participant reorder.
-    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
-        self.electrons.permute(order);
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        self.electrons.is_undetermined()
     }
 }
 

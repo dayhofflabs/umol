@@ -3,21 +3,12 @@
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseResult;
 use umol_graph_core::{
-    BiRelationData, EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet,
-    NodeId, ParticipantPosition, RelationData, RelationId, Unordered, VarRelationSet,
-    VarVarBirelationSet,
+    EdgeId, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, NodeId, RelationId,
+    VarRelationSet, VarVarBirelationSet,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TestData(usize);
-
-impl RelationData for TestData {
-    fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
-}
-
-impl BiRelationData for TestData {
-    fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
-}
 
 fn assert_relation_ids(
     mut iterator: impl ExactSizeIterator<Item = RelationId>,
@@ -83,7 +74,7 @@ proptest! {
                 )
             })
             .collect::<Vec<_>>();
-        let mut relations = FixedRelationSet::<NodeId, Unordered, TestData, 2>::new(entries);
+        let mut relations = FixedRelationSet::<NodeId, TestData, 2>::new(entries);
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.ids(), count, prefix)?;
@@ -113,7 +104,7 @@ proptest! {
                 )
             })
             .collect::<Vec<_>>();
-        let mut relations = VarRelationSet::<NodeId, Unordered, TestData>::new(entries);
+        let mut relations = VarRelationSet::<NodeId, TestData>::new(entries);
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.ids(), count, prefix)?;
@@ -144,15 +135,7 @@ proptest! {
                 )
             })
             .collect::<Vec<_>>();
-        let mut relations = FixedFixedBirelationSet::<
-            NodeId,
-            Unordered,
-            1,
-            EdgeId,
-            Unordered,
-            1,
-            TestData,
-        >::new(entries);
+        let mut relations = FixedFixedBirelationSet::<NodeId, 1, EdgeId, 1, TestData, >::new(entries);
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.ids(), count, prefix)?;
@@ -183,14 +166,7 @@ proptest! {
                 )
             })
             .collect::<Vec<_>>();
-        let mut relations = FixedVarBirelationSet::<
-            NodeId,
-            Unordered,
-            1,
-            EdgeId,
-            Unordered,
-            TestData,
-        >::new(entries);
+        let mut relations = FixedVarBirelationSet::<NodeId, 1, EdgeId, TestData, >::new(entries);
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.ids(), count, prefix)?;
@@ -221,13 +197,7 @@ proptest! {
                 )
             })
             .collect::<Vec<_>>();
-        let mut relations = VarVarBirelationSet::<
-            NodeId,
-            Unordered,
-            EdgeId,
-            Unordered,
-            TestData,
-        >::new(entries);
+        let mut relations = VarVarBirelationSet::<NodeId, EdgeId, TestData, >::new(entries);
         let prefix = prefix.min(count);
 
         assert_relation_ids(relations.ids(), count, prefix)?;

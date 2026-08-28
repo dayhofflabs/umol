@@ -287,7 +287,7 @@ ordinary conversion must not perform one as an incidental implementation step.
 
 Derived `==` compares the stored IR structure exactly, including constraints, ids, ordering, and
 non-normal value encodings. `equiv` compares normalized forms in the current frame;
-`equiv_under` performs the same comparison after an explicit entity or participant-frame mapping.
+`equiv_under` performs the same comparison under an explicitly supplied correspondence.
 Aggregate `canonical_eq` compares complete canonical IR values after selecting the canonical frame.
 All three semantic comparisons include constraints. This distinction matters for patterns, where
 constraints are not redundant with the structural description.
@@ -326,7 +326,7 @@ The equality operations form three levels:
 
 - `==` compares the exact stored representation;
 - `equiv` compares normalized values in the current frame, while `equiv_under` applies an explicitly
-  supplied correspondence or participant order before that comparison; and
+  supplied correspondence before that comparison; and
 - `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
   frame rather than receiving it from the caller.
 
@@ -676,11 +676,9 @@ instead because a removed id has no image.
 The facility has two coordinated levels:
 
 - `umol_graph_core::Remapping` maps node and edge ids used by graphs and relation participants. A
-  relation-set remapping must relabel each factor, canonicalize that factor according to its
-  `Ordered` or `Unordered` marker, and apply the induced position permutation to its `RelationData`.
-  Positional payloads therefore remain aligned with their participants. An ordered stereo ligand
-  frame retains its positions under a pure id remapping, so its induced position permutation is the
-  identity and its coset is unchanged.
+  relation-set remapping relabels each factor and leaves both the participant sequence and the
+  payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
+  stays aligned because nothing moved.
 - `IdRemapping` maps all eight molecule entity-id families. It is used for graph-IR values that contain
   entity references, including constraints and deltas; it does not duplicate graph-core participant
   canonicalization.
@@ -689,40 +687,40 @@ A higher-level operation that moves molecular data into another namespace derive
 from the same correspondence or construction result: the graph-core mapping transports topology
 and relation participants, while the IR mapping transports references to owned entity rows. Do not
 manually sort remapped relation participants or permute their payloads at individual call sites;
-that behavior belongs to relation-set remapping through `RelationData`.
+that belongs to graph IR, which owns frame selection and transport.
 
 ### Participant frames and payload equivalence
 
-`RelationData::on_permutation` and `BiRelationData::on_permutation` are the sole primitive actions
-of participant-position permutations on relation payloads. `Equiv` and `BiEquiv` derive comparison
-from that action rather than defining a second remapping protocol:
+A relation set stores the participant sequence it is given. The participant multiset is the
+relation's identity; the stored sequence is the coordinate frame its payload is expressed in. Graph
+core never interprets that frame — it relabels ids and preserves sequence — so all frame semantics
+live in graph IR.
 
-- `equiv` compares two payloads expressed in the same participant frame;
-- `equiv_under` first expresses `self` in the other payload's frame and then performs the same
-  comparison;
-- when `is_permutation_invariant` is true, the frame change is observationally irrelevant and
-  `equiv_under` reduces to `equiv`.
+Comparing two entries therefore has three independent parts, and a site chooses each:
 
-This frame action is part of normalized equivalence rather than a separate comparison relation. It
-records the dominant semantic case: most
-molecular relation payloads do not assign values to participant positions. Dative-bond order,
-noncovalent-bond kind, stereo configuration carried by an ordered ligand factor, and their
-constraints are position-independent. In the current model, the only position-sensitive payload
-fields are the per-participant electron counts of aromatic systems and multicenter bonds. Those two
-implementations permute their electron-count vectors; an undetermined electron-count value is
-itself permutation-invariant.
+- **identity** — do the two hold the same participants, each factor as a multiset. This is
+  coincidence: `coincident` and `coincident_edge` search for the entity with given participants,
+  `is_coincident` asks it of a known one, and `participants_match` is the underlying comparison.
+- **frame transport** — restating one side's payload in the other's frame. `reframe_to` for the four
+  distinct-participant entity kinds, whose frames cannot repeat a participant, so the restatement is
+  unique. For the two stereo kinds a ligand frame may repeat a virtual ligand, so `find_reframed`
+  walks the admissible restatements with `FrameAction::reframe_by` and the caller keeps the first
+  that satisfies its own relation.
+- **the value relation** — `equiv`, `matches`, or `meet`, the caller's own.
 
-The graph-core traits nevertheless use a conservative default of `false` for
-`is_permutation_invariant`, and every payload implementation must supply its position action. This
-keeps a newly introduced position-sensitive payload from silently inheriting a no-op action. A
-separate marker-trait hierarchy or a default no-op action would encode the common case with less
-boilerplate but weaker review pressure and more public machinery.
+`reframe_to` returning `Some` does not establish identity: a frame-invariant payload reads neither
+frame, and an undetermined electron-count vector has nothing to reorder. A site that needs both must
+ask for both.
 
-`Equiv` and `BiEquiv` therefore remain derived, blanket-implemented operations. Payload types do not
-override their comparison independently of `on_permutation` and normalized equality. Relation-set
-remapping applies the position action to stored data, while read-only comparisons and matching may
-apply it to a temporary value before using their own comparison relation. Graph core does not need
-a second payload-equivalence API.
+Only the per-participant electron counts of aromatic systems and multicenter bonds, and the stereo
+configuration with its frame-relative constraints, are position-sensitive. Dative-bond order,
+noncovalent-bond kind and their constraints are not, and their `reframe_to` destructures the form
+exhaustively and rebuilds it, so a new position-indexed field fails to compile rather than being
+left silently unframed.
+
+A stereo entity's configuration denotes the orbit of the stored coset under the residual stabilizer
+of its stored frame. Equal virtual ligands make several restatements admissible; they differ by a
+stabilizer element, so they denote one arrangement and the first the caller accepts stands.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public

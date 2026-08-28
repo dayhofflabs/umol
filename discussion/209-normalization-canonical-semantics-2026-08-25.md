@@ -131,9 +131,11 @@ Three existing operations must be distinguished:
 
 `Deltas::normalize` retains its existing fold and normal form, but not its fixed-frame premise. That
 premise holds today only because `Delta::remap` re-sorts an aromatic or multicenter atom list and
-permutes the attributes through the resulting order (`delta.rs:2631`, `:2645`, `:2672`, `:2686`).
-Doc [211](211-relation-frames-and-api-2026-08-26.md) S5a makes `Delta::remap` frame-preserving, so
-frame selection for a delta becomes this operation's responsibility, discharged by S3a below. The
+permutes the attributes through the resulting order (`delta.rs:2647`, `:2661`, `:2688`, `:2702`),
+and sorts dative donors and noncovalent atoms at four more (`:2605`, `:2620`, `:2731`, `:2744`). Doc
+[211](211-relation-frames-and-api-2026-08-26.md) S5a took those eight off the deleted `Unordered`
+but deliberately left the sorting, because frame selection for a delta is normalization. Making
+`Delta::remap` frame-preserving is this document's, discharged by S3a below. The
 fold itself is unchanged: it preserves input order
 within each entity's operation chain while folding that chain, then canonically orders the
 independent results. Entity `Add`/`Remove` lifecycles retain their existing cancellation and
@@ -344,6 +346,62 @@ before reducing a normalized equivalent `Modified` span to `Unchanged`.
 This work is not retroactively part of completed S0c. The revised plan begins its normalization
 scope at S1.
 
+## Starting point
+
+The tree is uncommitted work on top of `c5df52ad5`, carrying doc 211's S5a and S5b. Suites:
+graph-core 739 pass; graph-IR lib 6361 pass, 4 fail, 4 ignored; the canonicalization integration
+target 14 pass, 1 fail; the property target 321–323 pass and 8–10 fail depending on seed;
+`umol-graph`, `umol-io` and `umol-perm` green. Workspace clippy is clean.
+`umol-graph-ir/tests/property/reaction.proptest-regressions` holds seeds recorded from those failing
+runs and will replay them.
+
+Take these four in order.
+
+### 1. Diagnose the `StereoFrameMismatch` regression
+
+`reaction::application::test_reaction_apply_stereo_atom_update` and its bond twin fail with
+`ApplyError::StereoFrameMismatch { entity: StereoAtom(StereoAtomId(0)) }`, raised in
+`reaction.rs`'s `reframe_stereo`. This is a live behaviour break introduced by doc 211 S4d.2, not
+one of the frame-selection reds below, and it should be understood before anything else is built on
+that code.
+
+The minimal input contradicts the obvious reading. It has no repeated ligand, identical rule and
+host frames, and an empty update — `StereoAtomDelta::for_update` emits no delta for it, because
+`current.update(update)` equals `current` and the `equiv` guard skips, so the arms that raise the
+error should not be reached at all. The first reading, that the `ModifyField` arm's `equiv` search
+rejects a rule's `old` that is less specific than the host's configuration, does not survive that
+input. Do not adopt it without evidence.
+
+Reproduce with `cargo test -p umol-graph-ir --features proptest --test property
+reaction::application::test_reaction_apply_stereo_atom_update`, which runs in seconds.
+
+### 2. Settle `equiv` against `matches` for a delta's `old`
+
+Open with the above and probably its resolution. What is verified: `transact` compares a delta's
+`old` against stored state with `equiv` — `transact.rs:1700` for stereo configuration, and the same
+in each field check. What is not: whether a rule's `old`, which comes from an lhs *pattern* and may
+be less specific than the host it is applied against, should be held to that same relation, or to
+`matches`, under which an `Undetermined` pattern configuration admits a `Lit` host.
+
+Doc 211 S4d.2 chose `equiv` for the two `ModifyField` arms and the two `Remove` arms of
+`reframe_stereo` on the grounds that `equiv` is what every delta check uses. That reasoning was not
+checked against what a rule's `old` carries. The nomenclature guide's patch-algebra entry currently
+states only the verified half.
+
+### 3. Restore the scheduled reds
+
+Thirteen of the fifteen failures are frame selection, enumerated per target in S2a. They are the
+exit condition for S2 and S3 and need no diagnosis — they fail because the operations S2b, S2c, S3a,
+S3b and S3c specify do not exist yet. Count the property failures as a union across runs; the inputs
+are generated and one run undercounts.
+
+### 4. Decide the private stereo canonicalization path
+
+S2b.2. `canonicalize.rs` selects and applies stereo frames itself, in parallel with `Reframe for
+StereoAtoms` / `StereoBonds`. S2c assumes the private path should go; that assumption is unexamined,
+and the two do not obviously agree on unkinded frames above `MAX_DEGREE`. Settle it before S2c
+deletes anything.
+
 ## Staged implementation plan
 
 Every stage ends with a green workspace. This plan removes the accidental level surface and installs
@@ -463,37 +521,63 @@ existing integrity cases.
 **Current state:** Settled. Doc [211](211-relation-frames-and-api-2026-08-26.md) selects the
 relation contract this subitem was waiting for, and doc 210 is superseded there.
 
-The withdrawal of `permute_participants_with` is **lifted**, narrowed, and renamed. Doc
-[211](211-relation-frames-and-api-2026-08-26.md) S4a adds `permute_with`, and `permute_1_with` /
-`permute_2_with` on the birelation shapes: one entry, a validated permutation, no payload access.
-Because the multiset cannot change, incidence stays valid and is not rebuilt. The original proposal
-was a general public mutation family put forward before the relation API had been reviewed; this is
-the reviewed and much narrower form, and it is required because removing eager sorting removes the
-only path that could reorder a stored frame. Complete entry normalization therefore applies the
-selected action in place rather than through owned reconstruction, which would cost one heap
-allocation per entity out of a flat CSR plus two index rebuilds.
+Complete entry normalization applies the selected action in place through `permute_with`, or
+`permute_1_with` / `permute_2_with` on the birelation shapes: one entry, a validated permutation, no
+payload access. The multiset cannot change, so incidence stays valid and is not rebuilt. Owned
+reconstruction would instead cost one heap allocation per entity out of a flat CSR plus two index
+rebuilds.
 
-The operations this subitem depends on are:
+Doc 211 is complete. The workspace is red on fifteen tests across four targets, measured rather than
+predicted. One, the property test `molecule::comparison::test_molecule_equiv_under_reframed`,
+predates this work — doc 211 S0 recorded it as a deliberate red for S2c below. The other fourteen
+arise from S5b.
 
-- the form-level `reframe_to` methods on all six forms, inherent rather than a trait, from doc 211
-  S3b;
-- `StereoAtomForm::select_frame` and `reframe_by` for the stereo case, from doc 211 S3b; and
-- frame-preserving `new` and `into_entries`, from doc 211 S5b.
+Unit suite, four:
 
-`Reframe` declines an ambiguous frame change rather than selecting a representative. Resolving that
-ambiguity is this document's work, through `CosetSpace::normalizer` and generator-based
-residual-invariance checking; doc 211 does not do it.
+- `test_canonicalize_constitution_family_minimum`
+- `test_canonicalize_constitution_participant_order`
+- `test_aromatic_systems_glue_differing_frames`
+- `test_molecule_meet_pushout_overlays`
 
-Doc 211 S5b ends with thirteen enumerated canonicalization and hash failures which this document
-closes. They are `test_canonicalize_constitution_family_minimum`,
-`test_canonicalize_constitution_participant_order`, `test_kindless_stereo_atom_frame_order`,
-`test_kindless_stereo_bond_frame_order`, `test_minimum_kinded_stereo_frames` cases 1 to 4,
-`reaction_span::test_reaction_span_canonicalize::case_2_constitution`, and the property tests
+Canonicalization integration target, one: `reaction_span::test_reaction_span_canonicalize::case_2_constitution`.
+
+Property suite, ten: `molecule::comparison::test_molecule_equiv_under_reframed`,
+`reaction::application::test_reaction_apply_stereo_atom_update` and its bond twin,
 `reaction::canonicalize::test_reaction_canonical_eq_by`,
 `reaction::canonicalize::test_reaction_canonical_hash`,
-`reaction::span::canonicalize::test_reaction_span_canonical_hash`, and
-`reaction::span::canonicalize::test_reaction_span_canonicalize`. Restoring them green is the exit
-condition for S2 and S3 of this document.
+`reaction::canonicalize::test_reaction_canonicalize_by`,
+`reaction::canonicalize::test_reaction_canonicalize_reversal`,
+`reaction::span::canonicalize::test_reaction_span_canonical_hash`,
+`reaction::span::canonicalize::test_reaction_span_canonicalize` and its reversal.
+
+**Count the property failures as a union across runs, not from one run.** Two consecutive runs of
+the same suite gave eight and ten; the two `*_canonical_hash` tests failed only in the second. The
+inputs are generated, so whether a run reaches the defect depends on the seed, and a single run
+undercounts. The ten above are the union.
+
+Restoring all fifteen green is the exit condition for S2 and S3.
+
+**The earlier prediction missed in both directions.** Expected to fail and passing:
+`test_kindless_stereo_atom_frame_order`, its bond twin, and the four
+`test_minimum_kinded_stereo_frames` cases — they exercise frame selection, which `select_frame`
+already performs. Failing and not expected: `test_aromatic_systems_glue_differing_frames` and
+`test_molecule_meet_pushout_overlays`, which were passing only because construction sorted both
+sides into one frame — doc 211's own migration evidence names the second as exactly that — together
+with `test_reaction_canonicalize_by`, both reversal properties, and the two
+`reaction_apply_stereo_*_update` tests.
+
+**The last pair is a regression from doc 211 S4d.2, not a frame-selection gap, and its cause is not
+yet established.** Both fail with `ApplyError::StereoFrameMismatch`, raised in `reframe_stereo`. The
+minimal input has no repeated ligand and identical rule and host frames, and its update is empty —
+`StereoAtomDelta::for_update` emits no delta for it, so the arms that raise that error should not be
+reached. Diagnose before scheduling: the first reading, that the `ModifyField` arm's new `equiv`
+search is too strict for a rule's `old` where `matches` would admit, does not survive that input.
+
+Whether a delta's `old` is compared with `equiv` or `matches` is open with it. `transact` uses
+`equiv` against stored state (`transact.rs:1700` and each field check). Whether a rule's `old`,
+which comes from an lhs pattern and may be less specific than the host, should be held to the same
+relation is a question this document has to answer, and the guides currently state only the verified
+half.
 
 Molecule-level stereo constraint transport under pushout is absorbed here from doc 210 and belongs
 to S2b's aggregate constraint handling.
@@ -521,19 +605,19 @@ non-stereo entities. Preserve entity ids and topology, mutate copy-on-write stor
 `Arc::make_mut`, and drop the consumed partially normalized value if a leaf reports
 `Contradiction`; no rollback is required.
 
-Normalize ordinary entity forms in their stored frames. Under the current eager-ordering storage,
-aromatic and multicenter entries already have a selected participant frame; normalize their
-position-sensitive electron-count payload in that frame. Doc 210 later moves frame selection into
-this operation and uses the relation contract selected through S2a. For stereo entries now, select
-one admissible normalizing action and use the owned reconstruction seam selected in S2a to apply
-that action to the ligand list while transporting the configuration and inline constraints. Apply
-the same selected action to molecule-level constraints referring to the entry, then normalize the
-complete constraint store. Undetermined configurations undergo the same frame normalization.
+Normalize ordinary entity forms in their stored frames. Storage no longer sorts: an aromatic or
+multicenter entry arrives in the frame it was supplied in, so this operation selects that frame and
+transports the position-sensitive electron-count payload with `reframe_to`. For a stereo entry,
+`select_frame` supplies the action; apply it to the ligand list in place with `permute_1_with` /
+`permute_2_with` while transporting the configuration and inline constraints through `reframe_by`.
+Apply the same selected action to molecule-level constraints referring to the entry, then normalize
+the complete constraint store. Undetermined configurations undergo the same frame normalization.
 
 For stereo, compute the residual stabilizer from equal-kind virtual ligands, structural incidence,
-and every asserted kind. Check each frame-relative constraint independently with stabilizer
-generators and report `Contradiction` when it is not invariant. Do not enumerate a complete
-permutation group during normalization.
+and every asserted kind. `select_frame` already resolves the coset within that stabilizer by taking
+the orbit representative; what is left here is the constraint half — check each frame-relative
+constraint independently with stabilizer generators and report `Contradiction` when it is not
+invariant. Do not enumerate a complete permutation group during normalization.
 
 **Tests and evidence:** Cover every entity family, nonuniform aromatic and multicenter electron
 counts, already-normal inputs, and a leaf contradiction. Exercise nonidentity stereo frame changes
@@ -562,7 +646,7 @@ What the two paths are today:
 - **The four distinct-participant families.** Map the participants through the correspondence, derive
   the single order from mapped-to-stored, restate, compare normal forms. After 211 S4d this reads as
   `reframe_to` composed with `equiv`. One target, one action.
-- **The two stereo families.** `Permutation::between_all(mapped_ligands, stored_ligands)` enumerates
+- **The two stereo families.** `Permutation::enumerate_between(mapped_ligands, stored_ligands)` enumerates
   every bijection, keeps those under which the configurations agree, and carries the surviving *set*
   forward in `stereo_frames` so `constraints_equiv_under_stereo_frames` can check molecule-level
   constraints against the candidates consistently across entities.
@@ -571,7 +655,10 @@ The difference is not arbitrary. The mapped-to-stored bijection is unique exactl
 participants are distinct, which molecule integrity guarantees for the four; repeated ligands leave a
 residual stabilizer, so for stereo it is a set. And only stereo carries frame-relative constraints —
 the other four families' inline constraint forms are not position-indexed — so only stereo needs the
-candidate set to reach the constraint store.
+candidate set to reach the constraint store. Doc 211 gave the entry-level form of this its own
+operation, `find_reframed`, which keeps the first candidate its caller accepts; `equiv_under` differs
+in needing the whole surviving set, because the molecule-level constraints are checked against the
+candidates consistently across entities.
 
 So the two shapes are both correct and neither generalizes the other by accident: the unique
 bijection is the degenerate case of the candidate set. What is wrong is that they are two hand-written
@@ -617,6 +704,39 @@ the candidate set has more than one member, and a non-stereo entry where it has 
 
 **Dependencies:** [dep: S2b, doc 211 S4d]
 
+#### S2b.2 — Examine the private stereo canonicalization path
+
+**Module:** `umol-graph-ir/src/ir/canonicalize.rs`.
+
+`canonicalize.rs` selects and applies stereo frames itself, through `canonicalize_stereo_frames`
+(4076), `canonicalize_complete_stereo_frames` (4134), `sort_ligand_frame` and eleven
+`reframe_*_by_order` functions. `Reframe for StereoAtoms` and `Reframe for StereoBonds` do the same
+job with `select_frame` and `reframe_by`. Six unit tests — `test_kindless_stereo_atom_frame_order`,
+its bond twin, and the four `test_minimum_kinded_stereo_frames` cases — were predicted to fail when
+doc 211 removed eager storage sorting and did not, because the private path still performs the
+selection.
+
+**Establish whether it should exist at all before S2c deletes it.** S2c says to replace the private
+canonicalization-only normalizer with S2b's operations, which assumes the answer is no. That
+assumption is unexamined. What has to be checked:
+
+- whether the private path computes anything `Reframe` does not — the two do not obviously agree on
+  unkinded frames, where `reframe_*_by_order` carries a fallback for arities above `MAX_DEGREE` that
+  `select_frame` has no counterpart for;
+- whether canonicalization needs a frame selected under the *canonical* id order rather than the
+  stored one, which would be a reason for a separate path rather than duplication;
+- what the eleven `reframe_*_by_order` functions are for once `Reframe` covers the aggregate.
+
+The outcome is one of: delete the private path, keep it with a stated reason, or find that `Reframe`
+is missing a case it covers. Do not assume the first.
+
+**Tests and evidence:** The six tests above must keep passing under whichever path survives, and
+their coverage of unkinded and above-degree frames must be preserved or explicitly retired.
+
+**Change class:** investigation; no implementation until the outcome is known.
+
+**Dependencies:** [dep: S2b]
+
 #### S2c — Integrate and verify molecule normalization
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs`, molecule property tests, and normalization
@@ -649,6 +769,16 @@ Implement `Normalize` for `Reaction`. Reuse the lhs molecule's selected frame ac
 entity deltas, normalize added entities in their own frames, transport frame-relative constraint
 deltas, and then invoke the existing ordered `Deltas::normalize` fold. Do not change delta sequence,
 cancellation, or contradiction semantics.
+
+**`Delta::remap` still sorts, and stopping it belongs here.** Doc 211 took its eight sites off
+`Unordered` but deliberately left the sorting in place, because a delta's frame selection is
+normalization. Making `remap` relabel and preserve both the participant order and the payload is
+this subitem's, and it inverts the four resort cases in `test_remap_delta` — `dative_resort`,
+`aromatic_resort_permute`, `multicenter_resort_permute` and `noncovalent_resort`. It also retires
+`ElectronCountsForm::permute` with `AromaticSystemForm::permute` and `MulticenterBondForm::permute`,
+whose only remaining callers are those four sites and their own test modules; transport is
+`reframe_to`. `Deltas`' "existing fixed-frame normal form" above holds only while `remap` sorts on
+its behalf, and stops holding here.
 
 **Tests and evidence:** Cover existing and added stereo entities, coordinated constraint deltas,
 noncommuting entity-delta chains, repeated add/remove normalization, idempotence, and equality of
@@ -895,6 +1025,6 @@ there. S2a also depends on doc 211 S5b, which must land before S2b begins. After
 Canonical-hash allocation, key allocation, orbit pruning, and prefix pruning remain in doc 208 and
 are not completion conditions here.
 
-Doc 211 S5b leaves the workspace red on thirteen canonicalization and hash tests, enumerated in S2a.
-S2 and S3 of this document restore them. That is a deliberate red period across the two documents,
+Doc 211 leaves the workspace red on fifteen tests across four targets, enumerated in S2a. S2 and S3
+of this document restore them. That is a deliberate red period across the two documents,
 not an unplanned regression.

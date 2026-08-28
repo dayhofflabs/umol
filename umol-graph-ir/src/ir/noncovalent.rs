@@ -3,9 +3,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-use umol_graph_core::{
-    FixedRelationSet, NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered,
-};
+use umol_graph_core::{FixedRelationSet, NodeId, ParticipantPosition, RelationId, Remapping};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
@@ -19,7 +17,7 @@ use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 /// The atom pair bears the participant frame, but [`NoncovalentBondForm`] carries no
 /// position-sensitive field, so a reordering of the pair leaves the attributes unchanged.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>);
+pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>);
 
 impl NoncovalentBonds {
     pub fn new(entries: Vec<(AtomId, AtomId, NoncovalentBondForm)>) -> Self {
@@ -97,9 +95,7 @@ impl NoncovalentBonds {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub(crate) fn into_arc(
-        self,
-    ) -> Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> {
+    pub(crate) fn into_arc(self) -> Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>> {
         self.0
     }
 
@@ -142,14 +138,14 @@ impl NoncovalentBonds {
     }
 }
 
-impl From<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>> for NoncovalentBonds {
-    fn from(set: FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>) -> Self {
+impl From<FixedRelationSet<NodeId, NoncovalentBondForm, 2>> for NoncovalentBonds {
+    fn from(set: FixedRelationSet<NodeId, NoncovalentBondForm, 2>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>> for NoncovalentBonds {
-    fn from(set: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>) -> Self {
+impl From<Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>> for NoncovalentBonds {
+    fn from(set: Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>) -> Self {
         Self(set)
     }
 }
@@ -193,9 +189,7 @@ impl Reframe for NoncovalentBonds {
 /// The reaction span's noncovalent bonds, one [`EntitySpan`] per entity against a single
 /// participant frame. The `Molecule` peer is [`NoncovalentBonds`].
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct NoncovalentBondSpans(
-    FixedRelationSet<NodeId, Unordered, EntitySpan<NoncovalentBondForm>, 2>,
-);
+pub struct NoncovalentBondSpans(FixedRelationSet<NodeId, EntitySpan<NoncovalentBondForm>, 2>);
 
 impl NoncovalentBondSpans {
     pub fn into_entries(self) -> Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> {
@@ -298,15 +292,6 @@ pub struct NoncovalentBondUpdate {
 impl From<&str> for NoncovalentBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid noncovalent bond string")
-    }
-}
-
-impl RelationData for NoncovalentBondForm {
-    /// The kind is not position-indexed — reordering the two participants leaves it unchanged.
-    fn on_permutation(&mut self, _order: &[ParticipantPosition]) {}
-
-    fn is_permutation_invariant(&self) -> bool {
-        true
     }
 }
 

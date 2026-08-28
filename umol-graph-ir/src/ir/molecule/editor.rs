@@ -11,9 +11,9 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
-    FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered, RelationData,
-    RelationId, RelationParticipant, Unordered, VarRelationSet,
+    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FixedRelationSet,
+    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, RelationId, RelationParticipant,
+    VarRelationSet,
 };
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
@@ -49,16 +49,15 @@ use super::super::view::{
 use super::{Molecule, MoleculeIntegrityError};
 
 #[derive(Clone)]
-enum FixedSetStorage<P, O, D, const N: usize> {
-    Shared(Arc<FixedRelationSet<P, O, D, N>>),
+enum FixedSetStorage<P, D, const N: usize> {
+    Shared(Arc<FixedRelationSet<P, D, N>>),
     Mutable(Vec<([P; N], D)>),
 }
 
-impl<P, O, D, const N: usize> FixedSetStorage<P, O, D, N>
+impl<P, D, const N: usize> FixedSetStorage<P, D, N>
 where
     P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants: [P; N], data: D) -> u32 {
         self.materialize();
@@ -90,7 +89,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<FixedRelationSet<P, O, D, N>> {
+    fn into_arc(self) -> Arc<FixedRelationSet<P, D, N>> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
@@ -199,16 +198,15 @@ where
 }
 
 #[derive(Clone)]
-enum VarSetStorage<P, O, D> {
-    Shared(Arc<VarRelationSet<P, O, D>>),
+enum VarSetStorage<P, D> {
+    Shared(Arc<VarRelationSet<P, D>>),
     Mutable(Vec<(Vec<P>, D)>),
 }
 
-impl<P, O, D> VarSetStorage<P, O, D>
+impl<P, D> VarSetStorage<P, D>
 where
     P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants: Vec<P>, data: D) -> u32 {
         self.materialize();
@@ -239,7 +237,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<VarRelationSet<P, O, D>> {
+    fn into_arc(self) -> Arc<VarRelationSet<P, D>> {
         match self {
             VarSetStorage::Shared(arc) => arc,
             VarSetStorage::Mutable(vec) => Arc::new(VarRelationSet::new(vec)),
@@ -341,18 +339,16 @@ where
 /// Builder storage for a fixed-arity-first-factor / var-second-factor birelation:
 /// shared until first mutation, then a `Vec` of entries.
 #[derive(Clone)]
-enum FixedVarSetStorage<L1, O1, const N1: usize, L2, O2, D> {
-    Shared(Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>>),
+enum FixedVarSetStorage<L1, const N1: usize, L2, D> {
+    Shared(Arc<FixedVarBirelationSet<L1, N1, L2, D>>),
     Mutable(Vec<([L1; N1], Vec<L2>, D)>),
 }
 
-impl<L1, O1, const N1: usize, L2, O2, D> FixedVarSetStorage<L1, O1, N1, L2, O2, D>
+impl<L1, const N1: usize, L2, D> FixedVarSetStorage<L1, N1, L2, D>
 where
     L1: RelationParticipant,
-    O1: FactorOrdering,
     L2: RelationParticipant,
-    O2: FactorOrdering,
-    D: BiRelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants_1: [L1; N1], participants_2: Vec<L2>, data: D) -> u32 {
         self.materialize();
@@ -379,7 +375,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>> {
+    fn into_arc(self) -> Arc<FixedVarBirelationSet<L1, N1, L2, D>> {
         match self {
             FixedVarSetStorage::Shared(arc) => arc,
             FixedVarSetStorage::Mutable(vec) => Arc::new(FixedVarBirelationSet::new(vec)),
@@ -503,14 +499,12 @@ where
     }
 }
 
-fn arc_entries<L1, O1, const N1: usize, L2, O2, D>(
-    arc: &FixedVarBirelationSet<L1, O1, N1, L2, O2, D>,
+fn arc_entries<L1, const N1: usize, L2, D>(
+    arc: &FixedVarBirelationSet<L1, N1, L2, D>,
 ) -> Vec<([L1; N1], Vec<L2>, D)>
 where
     L1: RelationParticipant,
-    O1: FactorOrdering,
     L2: RelationParticipant,
-    O2: FactorOrdering,
     D: Clone,
 {
     (0..arc.count())
@@ -571,12 +565,12 @@ pub struct MoleculeEditor {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-    aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemForm>,
-    multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondForm>,
-    noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondForm, 2>,
-    stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-    stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
+    dative_bonds: FixedVarSetStorage<NodeId, 1, NodeId, DativeBondForm>,
+    aromatic_systems: VarSetStorage<NodeId, AromaticSystemForm>,
+    multicenter_bonds: VarSetStorage<NodeId, MulticenterBondForm>,
+    noncovalent_bonds: FixedSetStorage<NodeId, NoncovalentBondForm, 2>,
+    stereo_atoms: FixedVarSetStorage<NodeId, 1, StereoLigand, StereoAtomForm>,
+    stereo_bonds: FixedVarSetStorage<EdgeId, 1, StereoLigand, StereoBondForm>,
     constraints: Constraints,
 }
 
@@ -1609,7 +1603,6 @@ mod tests {
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
     use crate::mol_dsl;
-    use umol_graph_core::ParticipantPosition;
     use umol_perm::Permutation;
 
     #[derive(Debug)]
@@ -1626,20 +1619,12 @@ mod tests {
         }
     }
 
-    impl RelationData for CloneCounted {
-        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
-    }
-
-    impl BiRelationData for CloneCounted {
-        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
-    }
-
     #[rstest]
     #[case::unique(false, 0)]
     #[case::shared(true, 1)]
     fn test_fixed_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<FixedRelationSet<NodeId, Unordered, CloneCounted, 2>> =
+        let relation_set: Arc<FixedRelationSet<NodeId, CloneCounted, 2>> =
             Arc::new(FixedRelationSet::new(vec![(
                 [NodeId(0), NodeId(1)],
                 CloneCounted {
@@ -1659,7 +1644,7 @@ mod tests {
     #[case::shared(true, 1)]
     fn test_var_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<VarRelationSet<NodeId, Unordered, CloneCounted>> =
+        let relation_set: Arc<VarRelationSet<NodeId, CloneCounted>> =
             Arc::new(VarRelationSet::new(vec![(
                 vec![NodeId(0), NodeId(1)],
                 CloneCounted {
@@ -1682,15 +1667,14 @@ mod tests {
         #[case] expected_clones: usize,
     ) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, CloneCounted>,
-        > = Arc::new(FixedVarBirelationSet::new(vec![(
-            [NodeId(0)],
-            vec![NodeId(1), NodeId(2)],
-            CloneCounted {
-                count: Arc::clone(&count),
-            },
-        )]));
+        let relation_set: Arc<FixedVarBirelationSet<NodeId, 1, NodeId, CloneCounted>> =
+            Arc::new(FixedVarBirelationSet::new(vec![(
+                [NodeId(0)],
+                vec![NodeId(1), NodeId(2)],
+                CloneCounted {
+                    count: Arc::clone(&count),
+                },
+            )]));
         let _shared = shared.then(|| Arc::clone(&relation_set));
         let mut storage = FixedVarSetStorage::Shared(relation_set);
 

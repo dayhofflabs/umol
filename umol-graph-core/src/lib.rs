@@ -51,10 +51,9 @@ pub use correspondence::{Correspondence, CorrespondenceError, GraphCorrespondenc
 pub use digraph::DiGraph;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
 pub use relation::{
-    BiRelationData, FactorOrdering, FixedFixedBirelationSet, FixedRelationSet,
-    FixedVarBirelationSet, Ordered, ParticipantPosition, ParticipantRefs, RelationData, RelationId,
-    RelationParticipant, RelationPullback, RelationPushout, Unordered, VarRelationSet,
-    VarVarBirelationSet,
+    FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,
+    ParticipantRefs, RelationId, RelationParticipant, RelationPullback, RelationPushout,
+    VarRelationSet, VarVarBirelationSet,
 };
 pub use remapping::Remapping;
 pub use rewriting::{Pullback, Pushout, PushoutComplement};

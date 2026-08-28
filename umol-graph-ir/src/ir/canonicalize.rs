@@ -6,8 +6,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, FactorOrdering, Graph, NodeId,
-    ParticipantPosition, SubdivisionNodeSource, Unordered,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId, ParticipantPosition,
+    SubdivisionNodeSource,
 };
 use umol_perm::{Orientation, Permutation};
 
@@ -3572,9 +3572,16 @@ fn position_order_from_permutation(permutation: Permutation) -> Vec<ParticipantP
 /// into the sorted frame. Equal occurrences retain their input order; their exchange remains a
 /// structural automorphism rather than becoming an arbitrary tie-break here.
 fn sort_ligand_frame(ligands: &[StereoLigand]) -> (Vec<StereoLigand>, Vec<ParticipantPosition>) {
-    let mut sorted = ligands.to_vec();
-    let order = Unordered::canonicalize_positions(&mut sorted);
-    (sorted, order)
+    let mut order: Vec<usize> = (0..ligands.len()).collect();
+    order.sort_by_key(|&index| ligands[index]);
+    let sorted: Vec<StereoLigand> = order.iter().map(|&index| ligands[index]).collect();
+    (
+        sorted,
+        order
+            .into_iter()
+            .map(|index| ParticipantPosition(index as u32))
+            .collect(),
+    )
 }
 
 fn reframe_stereo_atom_constraint_by_order(

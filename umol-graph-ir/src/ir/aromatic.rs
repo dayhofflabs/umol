@@ -2,9 +2,7 @@
 
 use std::sync::Arc;
 
-use umol_graph_core::{
-    NodeId, ParticipantPosition, RelationData, RelationId, Remapping, Unordered, VarRelationSet,
-};
+use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
@@ -21,7 +19,7 @@ use super::traits::{Equiv, Lattice, Normalize, Reframe};
 /// The atoms bear the participant frame: the per-member electron counts of
 /// [`AromaticSystemForm`] are read against it, position by position.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AromaticSystems(Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>);
+pub struct AromaticSystems(Arc<VarRelationSet<NodeId, AromaticSystemForm>>);
 
 impl AromaticSystems {
     pub fn new(entries: Vec<(Vec<AtomId>, AromaticSystemForm)>) -> Self {
@@ -105,7 +103,7 @@ impl AromaticSystems {
         Self(Arc::new(self.0.remap(remapping)))
     }
 
-    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> {
+    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, AromaticSystemForm>> {
         self.0
     }
 
@@ -152,14 +150,14 @@ impl AromaticSystems {
     }
 }
 
-impl From<VarRelationSet<NodeId, Unordered, AromaticSystemForm>> for AromaticSystems {
-    fn from(set: VarRelationSet<NodeId, Unordered, AromaticSystemForm>) -> Self {
+impl From<VarRelationSet<NodeId, AromaticSystemForm>> for AromaticSystems {
+    fn from(set: VarRelationSet<NodeId, AromaticSystemForm>) -> Self {
         Self(Arc::new(set))
     }
 }
 
-impl From<Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>> for AromaticSystems {
-    fn from(set: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>) -> Self {
+impl From<Arc<VarRelationSet<NodeId, AromaticSystemForm>>> for AromaticSystems {
+    fn from(set: Arc<VarRelationSet<NodeId, AromaticSystemForm>>) -> Self {
         Self(set)
     }
 }
@@ -206,7 +204,7 @@ impl Reframe for AromaticSystems {
 /// through a payload parameter: a type parameter on the molecule-level families would complicate
 /// the primary carrier to serve this one.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AromaticSystemSpans(VarRelationSet<NodeId, Unordered, EntitySpan<AromaticSystemForm>>);
+pub struct AromaticSystemSpans(VarRelationSet<NodeId, EntitySpan<AromaticSystemForm>>);
 
 impl AromaticSystemSpans {
     pub fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> {
@@ -315,17 +313,6 @@ pub struct AromaticSystemUpdate {
 impl From<&str> for AromaticSystemForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid aromatic system string")
-    }
-}
-
-impl RelationData for AromaticSystemForm {
-    /// The per-member electron counts are positional, so they follow a participant reorder.
-    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
-        self.electrons.permute(order);
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        self.electrons.is_undetermined()
     }
 }
 

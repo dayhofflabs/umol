@@ -11,8 +11,8 @@ use std::hash::Hash;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, Remapping, Unordered, VarRelationSet,
+    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, RelationId,
+    Remapping, VarRelationSet,
 };
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemSpans};
@@ -695,27 +695,21 @@ impl ReactionSpan {
                 .collect(),
         );
 
-        let remapped_rhs_dative: FixedVarBirelationSet<
-            NodeId,
-            Ordered,
-            1,
-            NodeId,
-            Unordered,
-            DativeBondForm,
-        > = FixedVarBirelationSet::new(
-            rhs.dative_bonds()
-                .iter()
-                .map(|view| {
-                    (
-                        [NodeId::from(view.acceptor_id())],
-                        view.donor_ids().map(NodeId::from).collect(),
-                        view.attributes.clone(),
-                    )
-                })
-                .collect(),
-        )
-        .remap(&participant_remapping);
-        let remapped_rhs_aromatic: VarRelationSet<NodeId, Unordered, AromaticSystemForm> =
+        let remapped_rhs_dative: FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm> =
+            FixedVarBirelationSet::new(
+                rhs.dative_bonds()
+                    .iter()
+                    .map(|view| {
+                        (
+                            [NodeId::from(view.acceptor_id())],
+                            view.donor_ids().map(NodeId::from).collect(),
+                            view.attributes.clone(),
+                        )
+                    })
+                    .collect(),
+            )
+            .remap(&participant_remapping);
+        let remapped_rhs_aromatic: VarRelationSet<NodeId, AromaticSystemForm> =
             VarRelationSet::new(
                 rhs.aromatic_systems()
                     .iter()
@@ -728,7 +722,7 @@ impl ReactionSpan {
                     .collect(),
             )
             .remap(&participant_remapping);
-        let remapped_rhs_multicenter: VarRelationSet<NodeId, Unordered, MulticenterBondForm> =
+        let remapped_rhs_multicenter: VarRelationSet<NodeId, MulticenterBondForm> =
             VarRelationSet::new(
                 rhs.multicenter_bonds()
                     .iter()
@@ -741,7 +735,7 @@ impl ReactionSpan {
                     .collect(),
             )
             .remap(&participant_remapping);
-        let remapped_rhs_noncovalent: FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2> =
+        let remapped_rhs_noncovalent: FixedRelationSet<NodeId, NoncovalentBondForm, 2> =
             FixedRelationSet::new(
                 rhs.noncovalent_bonds()
                     .iter()
@@ -757,10 +751,8 @@ impl ReactionSpan {
             .remap(&participant_remapping);
         let remapped_rhs_stereo_atoms: FixedVarBirelationSet<
             NodeId,
-            Ordered,
             1,
             StereoLigand,
-            Ordered,
             StereoAtomForm,
         > = FixedVarBirelationSet::new(
             rhs.stereo_atoms()
@@ -777,10 +769,8 @@ impl ReactionSpan {
         .remap(&participant_remapping);
         let remapped_rhs_stereo_bonds: FixedVarBirelationSet<
             EdgeId,
-            Ordered,
             1,
             StereoLigand,
-            Ordered,
             StereoBondForm,
         > = FixedVarBirelationSet::new(
             rhs.stereo_bonds()

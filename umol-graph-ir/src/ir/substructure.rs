@@ -11,8 +11,7 @@ use std::ops::ControlFlow;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::atom::AtomForm;
@@ -399,14 +398,22 @@ impl Molecule {
             let p_view = pattern.aromatic_system(p);
             let h_view = host.aromatic_system(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(
-                p_view.attributes,
-                h_view.attributes,
-                &pat_atoms,
-                &host_atoms,
-                &atoms,
-            ) {
+            // The host frame named in the pattern's own atom ids, so the pattern form can be
+            // restated into it before the two are compared.
+            let host_frame: Vec<AtomId> = h_view
+                .atom_ids()
+                .map(|host_atom| {
+                    atoms
+                        .left_of(host_atom)
+                        .expect("host overlay atom is matched")
+                })
+                .collect();
+            if !p_view
+                .attributes
+                .clone()
+                .reframe_to(&pat_atoms, &host_frame)?
+                .matches(h_view.attributes)
+            {
                 return None;
             }
         }
@@ -419,14 +426,22 @@ impl Molecule {
             let p_view = pattern.multicenter_bond(p);
             let h_view = host.multicenter_bond(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(
-                p_view.attributes,
-                h_view.attributes,
-                &pat_atoms,
-                &host_atoms,
-                &atoms,
-            ) {
+            // The host frame named in the pattern's own atom ids, so the pattern form can be
+            // restated into it before the two are compared.
+            let host_frame: Vec<AtomId> = h_view
+                .atom_ids()
+                .map(|host_atom| {
+                    atoms
+                        .left_of(host_atom)
+                        .expect("host overlay atom is matched")
+                })
+                .collect();
+            if !p_view
+                .attributes
+                .clone()
+                .reframe_to(&pat_atoms, &host_frame)?
+                .matches(h_view.attributes)
+            {
                 return None;
             }
         }
@@ -543,35 +558,6 @@ fn bond_fields_match(pattern: &BondForm, host: &BondForm) -> bool {
 /// participant order and `matches` compares the count vector whole, so the pattern payload is first
 /// reindexed into the host's member order (via the atom correspondence) with
 /// [`RelationData::on_permutation`].
-fn overlay_matches<D: Lattice + RelationData>(
-    pattern_form: &D,
-    host_form: &D,
-    pattern_atoms: &[AtomId],
-    host_atoms: &[AtomId],
-    atoms: &Correspondence<AtomId>,
-) -> bool {
-    if pattern_form.is_permutation_invariant() {
-        return pattern_form.matches(host_form);
-    }
-    let order: Vec<ParticipantPosition> = host_atoms
-        .iter()
-        .map(|&host_atom| {
-            let pattern_atom = atoms
-                .left_of(host_atom)
-                .expect("host overlay atom is matched");
-            ParticipantPosition(
-                pattern_atoms
-                    .iter()
-                    .position(|&a| a == pattern_atom)
-                    .expect("host member maps to a pattern member") as u32,
-            )
-        })
-        .collect();
-    let mut probe = pattern_form.clone();
-    probe.on_permutation(&order);
-    probe.matches(host_form)
-}
-
 #[cfg(test)]
 mod tests {
     use std::ops::ControlFlow;

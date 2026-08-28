@@ -341,19 +341,21 @@ to gain analogues, so it is recorded rather than generative.
 ### Compaction
 
 A **compaction** is the partial old-to-new id mapping produced by removal. A surviving id maps to
-its position in the closed-up post-removal table; a removed id has no image. `IdCompaction` wraps
-`umol_graph_core::Compaction` for atoms and bonds and carries the removed ids for the six relation
-kinds so every stale reference can be updated or discarded consistently.
+its position in the closed-up post-removal table; a removed id has no image.
 
-**`UndoCompaction`** is the inverse view of an `IdCompaction` for rollback: it carries surviving
+It is layered on both axes, matching correspondence: `Compaction<Id>` over one id space,
+`GraphCompaction` pairing the node and edge spaces, and `MoleculeCompaction` carrying a typed
+compaction per entity kind so every stale reference can be updated or discarded consistently.
+
+**`UndoCompaction`** is the inverse view of a `MoleculeCompaction` for rollback: it carries surviving
 post-removal ids back into the pre-removal coordinate system, and removed entities are restored from
 the explicit `Undo` payloads rather than from the mapping, because a compaction has no image for
 them.
 
 **Not:** a correspondence, whose unmatched ids remain members of their respective carriers; not a
 remapping, which gives every source id an image and never expresses removal.
-**In code:** `IdCompaction`, `UndoCompaction`, `umol_graph_core::Compaction`; `compact`,
-`compact_*`, `uncompact_*`.
+**In code:** `Compaction<Id>`, `GraphCompaction`, `MoleculeCompaction`, `UndoCompaction`;
+`compact`, `compact_*`, `uncompact_*`.
 
 ### Completion
 
@@ -722,15 +724,13 @@ Three levels of equality exist on forms and molecules. `equiv_under` is the mapp
 - **`==`** — derived structural equality of the stored IR. Same structure, constraints, ids, and order.
   Deliberately *not* chemical identity, so it stays cheap on the hot path.
 - **`equiv`** — equality of normalized forms in the current id and participant frame.
-  **`equiv_under`** is the same after reindexing the receiver into the other's frame via an explicit
-  correspondence or participant order. The work is skipped when the payload is
-  permutation-invariant.
+  **`Molecule::equiv_under`** is the same under an explicitly supplied `MoleculeCorrespondence`,
+  restating each matched entry into the stored frame before comparing.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
   implementation selects the canonical frame rather than receiving one from the caller.
 
 For inputs in the canonicalization domain, `canonical_eq` holds exactly when an admissible remapping
-exists under which `equiv_under` holds. The two-factor frame-aware operation for birelation payloads
-reindexes each factor before comparing.
+exists under which `equiv_under` holds.
 
 Structural canonical labeling initially establishes automorphism orbits from inherent fields and
 incidence without constraints. Complete aggregate canonicalization then uses normalized
@@ -740,7 +740,7 @@ meaningful parts of the canonical IR assertion.
 
 **Not:** each other. Reaching for `==` when `equiv` is meant is the common error, because `==` exists
 on everything and silently answers a different question.
-**In code:** `PartialEq`, `Equiv::equiv`, the frame-aware `equiv_under` traits, and
+**In code:** `PartialEq`, `Equiv::equiv`, `Molecule::equiv_under`, and
 `Canonicalize::canonical_eq`.
 
 ### Error
@@ -856,7 +856,7 @@ The notion appears at three levels and they are the same idea:
 
 **Not:** *projection*, which is the operation that reads a value across an incidence. Incidence is
 the relationship; projection is what you do with it.
-**In code:** `incident*` methods, `ParticipantAnchor`, `IncidenceGraph`.
+**In code:** `incident*` methods, `IncidenceGraph`.
 
 ### Incidence constraint
 
@@ -1231,7 +1231,7 @@ occupying a relation factor, routed through the incidence index; in the entity m
 or bond an overlay refers to. The lower layer is the mechanism for the upper one.
 
 **Not:** member, constituent, or argument.
-**In code:** `ParticipantPosition`, `RelationParticipant`, `ParticipantAnchor`.
+**In code:** `ParticipantPosition`, `RelationParticipant`.
 
 ### Patch algebra
 
@@ -1240,7 +1240,9 @@ algebra: `apply` carries a state forward by a delta, `diff` factors two states b
 between them.
 
 The law is `apply(lhs, diff(lhs, rhs)) == rhs`. The entity update API states the same law as
-`x.update(x.difference_to(y)) == y`.
+`x.update(x.difference_to(y)) == y`. Both are read under `equiv`, not `==`: a delta's payload is
+compared up to normal form, so the law holds for values that are equivalent rather than identical.
+Applying a delta checks its `old` against the stored state the same way.
 
 **Naming split to resolve.** One law, two spellings — `apply`/`diff` on `EntityPatch`,
 `update`/`difference_to` on the entity update surface. Pick one pair before either grows further; a
@@ -1369,6 +1371,22 @@ canonical form.
 **In code:** `RefinementAlgorithm`, `CircularRefinementAlgorithm`, `RefinementRounds`,
 `Lattice::matches`.
 
+### Reframe
+
+A **reframe** restates a frame-relative value in a different participant frame. It is the middle of
+three nested quotients on a value: `normalize` reduces it, `reframe` reduces and then selects a
+frame, `canonicalize` reduces, reframes and then selects ids. Their equalities nest the same way:
+`==` refines `normalized_eq`, which refines `framed_eq`, which refines `canonical_eq`.
+
+`reframe_to(from, to)` restates a form between two given frames. `FrameAction::reframe_by` applies a
+single relabelling to a stereo form, and `find_reframed` walks the admissible ones when equal
+virtual ligands leave more than one. `select_frame` chooses the canonical relabelling for a stereo
+frame, taking the orbit representative when the frame's residual stabilizer leaves several.
+
+**Not:** a remapping, which relabels ids across id spaces and does not touch order; not
+canonicalization, which also selects ids.
+**In code:** `Reframe`, `FrameAction`, `reframe_to`, `reframe_by`, `find_reframed`, `select_frame`.
+
 ### Relation set
 
 A **relation set** stores n-ary relations over typed participants — `NodeId`, `EdgeId`, or an
@@ -1378,17 +1396,19 @@ is reachable from any of its participants.
 Three axes parameterize a set, and the vocabulary is worth keeping straight:
 
 - **arity** — `FixedRelationSet` has compile-time-known arity; `VarRelationSet` is variable-arity;
-- **ordering** — `Unordered` or `Ordered`, which is what controls canonicalization;
-- **factor** — a birelation set relates *two* factors, each with its own participant type, ordering,
-  and arity. `FixedFixedBirelationSet`, `FixedVarBirelationSet`, `VarVarBirelationSet`.
+- **factor** — a birelation set relates *two* factors, each with its own participant type and arity.
+  `FixedFixedBirelationSet`, `FixedVarBirelationSet`, `VarVarBirelationSet`.
+
+A set stores the participant sequence it is given. The multiset is the relation's identity; the
+stored sequence is the coordinate frame its payload is expressed in, and only graph IR interprets
+that frame.
 
 The incidence index of a birelation set spans both factors, so a relation is reachable from a
 participant regardless of which id-space it belongs to.
 
 **Not:** a relational-database table, though the whitepaper uses that reading to explain overlays.
 Not the overlay itself: an overlay entity is *stored in* a relation set.
-**In code:** `FixedRelationSet`, `VarRelationSet`, `FixedFixedBirelationSet`, `ParticipantAnchor`,
-`RelationParticipant`.
+**In code:** `FixedRelationSet`, `VarRelationSet`, `FixedFixedBirelationSet`, `RelationParticipant`.
 
 ### Relational constraint
 
@@ -1407,9 +1427,9 @@ such as an lhs-anchored reaction union, so it is not necessarily surjective, bij
 reversible.
 
 `umol_graph_core::Remapping` transports graph nodes, edges, and relation participants.
-`IdRemapping` transports typed references across all eight molecule entity families. When relation
-participant order changes during transport, the relation-set operation also permutes positional
-relation data so that values remain aligned with their participants.
+`IdRemapping` transports typed references across all eight molecule entity families. A remapping
+relabels participants and preserves their stored sequence, so a positional payload stays aligned
+without being touched.
 
 A correspondence that is total on the left can produce a remapping. Applying a remapping to a
 complete standalone molecule requires a bijection onto dense target tables, which corresponds to
