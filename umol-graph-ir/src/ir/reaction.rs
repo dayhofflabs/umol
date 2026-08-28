@@ -46,9 +46,10 @@ use super::molecule::MoleculeEntries;
 use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
+use super::reframe::find_reframed;
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
-use super::traits::Normalize;
+use super::traits::{Equiv, Normalize};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -1565,13 +1566,20 @@ fn reframe_stereo(
                         change: StereoAtomFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        let sigma = Permutation::between(&before, &after)
+                        // `old` and `new` move under one action, and the search supplies it: the
+                        // action is the one under which `old` agrees with what the host holds.
+                        // Equal virtual ligands leave several, differing by a stabilizer element of
+                        // the host frame, so the products they give denote one arrangement.
+                        let (action, reframed_old) =
+                            find_reframed(old, &before, &after, |action, restated| {
+                                restated
+                                    .equiv(&host_view.attributes.configuration)
+                                    .then_some((action, restated))
+                            })
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
-                        *old = old
-                            .apply(sigma)
-                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *old = reframed_old;
                         *new = new
-                            .apply(sigma)
+                            .apply(action)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoAtomDelta::Remove {
@@ -1579,10 +1587,14 @@ fn reframe_stereo(
                         attributes,
                         ..
                     } => {
-                        *attributes = attributes
-                            .clone()
-                            .reframe_to(&before, &after)
-                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        // Restate the removal form into the host frame under whichever admissible
+                        // action agrees with what the host holds. Equal virtual ligands leave
+                        // several; they differ by a stabilizer element of the host frame, so any
+                        // that agrees denotes the arrangement being removed.
+                        *attributes = find_reframed(attributes, &before, &after, |_, restated| {
+                            restated.equiv(host_view.attributes).then_some(restated)
+                        })
+                        .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
                     _ => {}
@@ -1612,13 +1624,20 @@ fn reframe_stereo(
                         change: StereoBondFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        let sigma = Permutation::between(&before, &after)
+                        // `old` and `new` move under one action, and the search supplies it: the
+                        // action is the one under which `old` agrees with what the host holds.
+                        // Equal virtual ligands leave several, differing by a stabilizer element of
+                        // the host frame, so the products they give denote one arrangement.
+                        let (action, reframed_old) =
+                            find_reframed(old, &before, &after, |action, restated| {
+                                restated
+                                    .equiv(&host_view.attributes.configuration)
+                                    .then_some((action, restated))
+                            })
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
-                        *old = old
-                            .apply(sigma)
-                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *old = reframed_old;
                         *new = new
-                            .apply(sigma)
+                            .apply(action)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoBondDelta::Remove {
@@ -1626,10 +1645,14 @@ fn reframe_stereo(
                         attributes,
                         ..
                     } => {
-                        *attributes = attributes
-                            .clone()
-                            .reframe_to(&before, &after)
-                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        // Restate the removal form into the host frame under whichever admissible
+                        // action agrees with what the host holds. Equal virtual ligands leave
+                        // several; they differ by a stabilizer element of the host frame, so any
+                        // that agrees denotes the arrangement being removed.
+                        *attributes = find_reframed(attributes, &before, &after, |_, restated| {
+                            restated.equiv(host_view.attributes).then_some(restated)
+                        })
+                        .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
                     _ => {}
@@ -3135,6 +3158,203 @@ mod tests {
             .rhs()
             .clone();
         assert_eq!(rhs, expected);
+    }
+
+    #[fixture]
+    fn prochiral_removal() -> Reaction {
+        // Remove the stereo atom on a prochiral C(0) bearing F, Cl and two implicit hydrogens.
+        let ligands = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        ];
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::C),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                ],
+                stereo_atoms: vec![(AtomId(0), ligands.clone(), attributes.clone())],
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
+                id: StereoAtomId(0),
+                site: AtomId(0),
+                ligands,
+                attributes,
+            })]),
+        )
+    }
+
+    // Removing a stereo entity whose ligand frame repeats a virtual ligand. The two implicit
+    // hydrogens are equal values, so the frame has a residual stabilizer and the removal form has to
+    // be restated into the host frame under whichever admissible action agrees with what the host
+    // holds. `same_frame` needs no reordering at all and still exercises it, because a repeat leaves
+    // the identity ambiguous; `exchanged_coset` and `reordered_frame` state the same arrangement the
+    // other way round.
+    #[rstest]
+    #[case::same_frame([0, 1, 2, 3], 0)]
+    #[case::exchanged_coset([0, 1, 2, 3], 1)]
+    #[case::reordered_frame([1, 0, 2, 3], 1)]
+    fn test_reaction_apply_stereo_atom_removal_repeated_ligands(
+        prochiral_removal: Reaction,
+        #[case] host_order: [usize; 4],
+        #[case] host_coset: u32,
+    ) {
+        let atoms = vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+        ];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        ];
+        let host = Molecule::from_entries(MoleculeEntries {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_atoms: vec![(
+                AtomId(0),
+                host_order
+                    .into_iter()
+                    .map(|position| {
+                        [
+                            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        ][position]
+                    })
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, host_coset),
+            )],
+            constraints: Constraints::new(),
+            ..Default::default()
+        });
+        let expected = Molecule::from_entries(MoleculeEntries {
+            atoms,
+            bonds,
+            constraints: Constraints::new(),
+            ..Default::default()
+        });
+        let rhs = prochiral_removal
+            .apply(&host, MATCH_CONFIG)
+            .unwrap()
+            .next()
+            .expect("the removal rule matches the host")
+            .unwrap()
+            .rhs()
+            .clone();
+        assert_eq!(rhs, expected);
+    }
+
+    #[fixture]
+    fn prochiral_square_planar_modification() -> Reaction {
+        // A square-planar Pt(0) bearing F, Cl and two implicit hydrides, whose frame repeats the
+        // hydride at positions 1 and 2. The rule carries coset 0 to coset 2; the transposition of
+        // the two hydrides exchanges cosets 0 and 1 and fixes coset 2.
+        Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::Pt),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                ],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomForm::new(StereoKind::SquarePlanar, 0u32),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::ModifyField {
+                id: StereoAtomId(0),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationForm::Kinded(
+                        StereoKind::SquarePlanar,
+                        StereoCoset::Lit(0),
+                    ),
+                    new: StereoConfigurationForm::Kinded(
+                        StereoKind::SquarePlanar,
+                        StereoCoset::Lit(2),
+                    ),
+                },
+            })]),
+        )
+    }
+
+    // Modifying a configuration whose ligand frame repeats a virtual ligand. `old` and `new` must
+    // move under one action, and searching supplies it: the action is the one under which `old`
+    // agrees with the host. Cosets 0 and 1 are one orbit, so both are the arrangement the rule
+    // names and both reach the same determinate product, coset 2 being stabilizer-fixed. Coset 2 is
+    // its own orbit, so the rule does not apply there at all.
+    #[rstest]
+    #[case::first_representative(0, Some(2))]
+    #[case::other_representative(1, Some(2))]
+    #[case::distinct_orbit(2, None)]
+    fn test_reaction_apply_stereo_atom_modification_repeated_ligands(
+        prochiral_square_planar_modification: Reaction,
+        #[case] host_coset: u32,
+        #[case] product_coset: Option<u32>,
+    ) {
+        let molecule = |coset: u32| {
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![
+                    AtomForm::from_element(Element::Pt),
+                    AtomForm::from_element(Element::F),
+                    AtomForm::from_element(Element::Cl),
+                ],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                ],
+                stereo_atoms: vec![(
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomForm::new(StereoKind::SquarePlanar, coset),
+                )],
+                constraints: Constraints::new(),
+                ..Default::default()
+            })
+        };
+        let mut applications = prochiral_square_planar_modification
+            .apply(&molecule(host_coset), MATCH_CONFIG)
+            .unwrap();
+        match product_coset {
+            Some(coset) => {
+                let rhs = applications
+                    .next()
+                    .expect("the modification rule matches the host")
+                    .unwrap()
+                    .rhs()
+                    .clone();
+                assert_eq!(rhs, molecule(coset));
+            }
+            None => assert!(applications.next().is_none()),
+        }
     }
 
     // A stereo-bond addition can name a bond added by the same reaction. Its `BondHandle::New`

@@ -10,8 +10,6 @@
 use std::borrow::Cow;
 use std::hash::Hash;
 
-use umol_graph_core::{BiRelationData, ParticipantPosition, RelationData};
-
 use super::error::{Contradiction, NoJoin};
 
 /// Build `Self` from a borrowed IR value of type `A` plus a configuration context.
@@ -211,43 +209,7 @@ pub trait Reframe: Sized + PartialEq {
     }
 }
 
-/// Frame-aware equivalence for a single-factor relation payload.
-pub trait RelationEquiv: RelationData + Equiv {
-    /// Reindex a single-factor relation value into `other`'s participant frame before comparison.
-    fn equiv_under(&self, other: &Self, order: &[ParticipantPosition]) -> bool {
-        if self.is_permutation_invariant() {
-            self.equiv(other)
-        } else {
-            let mut probe = self.clone();
-            probe.on_permutation(order);
-            probe.equiv(other)
-        }
-    }
-}
-
 impl<T: Normalize> Equiv for T {}
-impl<T: RelationData + Equiv> RelationEquiv for T {}
-
-/// Two-factor analog of [`RelationEquiv`] for a birelation payload: `equiv_under` reindexes `self`
-/// per factor before comparing normal forms.
-pub trait BiRelationEquiv: BiRelationData + Equiv {
-    fn equiv_under(
-        &self,
-        other: &Self,
-        order_1: &[ParticipantPosition],
-        order_2: &[ParticipantPosition],
-    ) -> bool {
-        if self.is_permutation_invariant() {
-            self.equiv(other)
-        } else {
-            let mut probe = self.clone();
-            probe.on_permutation(order_1, order_2);
-            probe.equiv(other)
-        }
-    }
-}
-
-impl<T: BiRelationData + Equiv> BiRelationEquiv for T {}
 
 /// A value carrying the guarantee that it is normalized. Built via `new` (which
 /// normalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore

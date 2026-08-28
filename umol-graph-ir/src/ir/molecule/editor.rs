@@ -10,12 +10,10 @@ use std::collections::HashSet;
 use std::mem;
 use std::sync::Arc;
 
-use umol_perm::Permutation;
-
 use umol_graph_core::{
     compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
-    FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered,
-    ParticipantPosition, RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
+    FixedRelationSet, FixedVarBirelationSet, Graph, GraphCompaction, NodeId, Ordered, RelationData,
+    RelationId, RelationParticipant, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
@@ -36,6 +34,7 @@ use super::super::id::{
 use super::super::ligand::StereoLigand;
 use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
+use super::super::reframe::find_reframed;
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
 use super::super::traits::Equiv;
@@ -435,38 +434,6 @@ where
             q2.sort_unstable();
             s1 == q1 && s2 == q2
         }
-    }
-
-    fn participant_permutation(
-        &self,
-        i: usize,
-        query_1: &[L1],
-        query_2: &[L2],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let stored_1 = self.participants_1(i);
-        let stored_2 = self.participants_2(i);
-        if stored_1.len() != query_1.len() || stored_2.len() != query_2.len() {
-            return None;
-        }
-        let sigma_1: Vec<ParticipantPosition> = stored_1
-            .iter()
-            .map(|s| {
-                query_1
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect::<Option<_>>()?;
-        let sigma_2: Vec<ParticipantPosition> = stored_2
-            .iter()
-            .map(|s| {
-                query_2
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect::<Option<_>>()?;
-        Some((sigma_1, sigma_2))
     }
 
     fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
@@ -1040,14 +1007,12 @@ impl MoleculeEditor {
         // half of the question.
         let stored = self.stereo_atoms.participants_2(id.index());
         AtomId::from(self.stereo_atoms.participants_1(id.index())[0]) == site
-            && Permutation::between_all(ligands, &stored)
-                .into_iter()
-                .any(|action| {
-                    attributes
-                        .clone()
-                        .reframe_by(action)
-                        .is_some_and(|restated| restated.equiv(&self.stereo_atoms.data(id.index())))
-                })
+            && find_reframed(attributes, ligands, &stored, |_, restated| {
+                restated
+                    .equiv(&self.stereo_atoms.data(id.index()))
+                    .then_some(())
+            })
+            .is_some()
     }
 
     /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
@@ -1061,14 +1026,12 @@ impl MoleculeEditor {
         // As for stereo atoms: every admissible reframing of the offered ligand frame is tried.
         let stored = self.stereo_bonds.participants_2(id.index());
         BondId::from(self.stereo_bonds.participants_1(id.index())[0]) == site
-            && Permutation::between_all(ligands, &stored)
-                .into_iter()
-                .any(|action| {
-                    attributes
-                        .clone()
-                        .reframe_by(action)
-                        .is_some_and(|restated| restated.equiv(&self.stereo_bonds.data(id.index())))
-                })
+            && find_reframed(attributes, ligands, &stored, |_, restated| {
+                restated
+                    .equiv(&self.stereo_bonds.data(id.index()))
+                    .then_some(())
+            })
+            .is_some()
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
@@ -1644,8 +1607,8 @@ mod tests {
     use crate::ir::ligand::StereoLigandKind;
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
-    use crate::ir::traits::Equiv;
     use crate::mol_dsl;
+    use umol_graph_core::ParticipantPosition;
     use umol_perm::Permutation;
 
     #[derive(Debug)]
@@ -1746,29 +1709,6 @@ mod tests {
         b
     }
 
-    /// The derived reading of [`MoleculeEditor::aromatic_system_equiv`]: restate the offered
-    /// attributes into the stored participant frame, then compare normal forms.
-    ///
-    /// Held beside the implementation it replaces for the duration of S4d.1 so the two can be
-    /// checked against each other rather than swapped on assertion.
-    fn aromatic_system_equiv_derived(
-        editor: &MoleculeEditor,
-        id: AromaticSystemId,
-        atoms: &[AtomId],
-        attributes: &AromaticSystemForm,
-    ) -> bool {
-        let stored: Vec<AtomId> = editor
-            .aromatic_systems
-            .participants(id.index())
-            .iter()
-            .map(|&node| AtomId::from(node))
-            .collect();
-        attributes
-            .clone()
-            .reframe_to(atoms, &stored)
-            .is_some_and(|restated| restated.equiv(&editor.aromatic_systems.data(id.index())))
-    }
-
     /// Aromatic systems, where the alignment is genuinely used: `on_permutation` reindexes the
     /// electron counts and `is_permutation_invariant` is false for a determinate vector.
     ///
@@ -1782,7 +1722,7 @@ mod tests {
     #[case::different_counts(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 99], false)]
     #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
     #[case::wrong_arity(vec![AtomId(0), AtomId(1)], vec![10, 20], false)]
-    fn test_molecule_editor_aromatic_system_equiv_differential(
+    fn test_molecule_editor_aromatic_system_equiv(
         #[case] atoms: Vec<AtomId>,
         #[case] electrons: Vec<i64>,
         #[case] expected: bool,
@@ -1797,83 +1737,7 @@ mod tests {
         );
         let offered = AromaticSystemForm::from_electrons(electrons);
 
-        let current = editor.aromatic_system_equiv(AromaticSystemId(0), &atoms, &offered);
-        let derived = aromatic_system_equiv_derived(&editor, AromaticSystemId(0), &atoms, &offered);
-
-        assert_eq!(current, expected, "current implementation");
-        assert_eq!(derived, current, "the derived reading agrees");
-    }
-
-    /// The derived reading of [`MoleculeEditor::multicenter_bond_equiv`]. Held beside the
-    /// implementation it replaces for the duration of S4d.1.
-    fn multicenter_bond_equiv_derived(
-        editor: &MoleculeEditor,
-        id: MulticenterBondId,
-        atoms: &[AtomId],
-        attributes: &MulticenterBondForm,
-    ) -> bool {
-        let stored: Vec<AtomId> = editor
-            .multicenter_bonds
-            .participants(id.index())
-            .iter()
-            .map(|&node| AtomId::from(node))
-            .collect();
-        attributes
-            .clone()
-            .reframe_to(atoms, &stored)
-            .is_some_and(|restated| restated.equiv(&editor.multicenter_bonds.data(id.index())))
-    }
-
-    /// The derived reading of [`MoleculeEditor::noncovalent_bond_equiv`]. Held beside the
-    /// implementation it replaces for the duration of S4d.1.
-    fn noncovalent_bond_equiv_derived(
-        editor: &MoleculeEditor,
-        id: NoncovalentBondId,
-        atoms: [AtomId; 2],
-        attributes: &NoncovalentBondForm,
-    ) -> bool {
-        let stored: Vec<AtomId> = editor
-            .noncovalent_bonds
-            .participants(id.index())
-            .iter()
-            .map(|&node| AtomId::from(node))
-            .collect();
-        // Frame-invariant payload: `reframe_to` reads neither frame, so identity is asked for.
-        editor
-            .noncovalent_bonds
-            .is_coincident(id.index(), &atoms.map(NodeId::from))
-            && attributes
-                .clone()
-                .reframe_to(&atoms, &stored)
-                .is_some_and(|restated| restated.equiv(&editor.noncovalent_bonds.data(id.index())))
-    }
-
-    /// The derived reading of [`MoleculeEditor::dative_bond_equiv`]. The donors bear the frame; the
-    /// acceptor is a one-participant factor and is compared directly.
-    fn dative_bond_equiv_derived(
-        editor: &MoleculeEditor,
-        id: DativeBondId,
-        acceptor: AtomId,
-        donors: &[AtomId],
-        attributes: &DativeBondForm,
-    ) -> bool {
-        let stored_acceptor = AtomId::from(editor.dative_bonds.participants_1(id.index())[0]);
-        let stored: Vec<AtomId> = editor
-            .dative_bonds
-            .participants_2(id.index())
-            .iter()
-            .map(|&node| AtomId::from(node))
-            .collect();
-        stored_acceptor == acceptor
-            && editor.dative_bonds.is_coincident(
-                id.index(),
-                &[NodeId::from(acceptor)],
-                &donors.iter().map(|&a| NodeId::from(a)).collect::<Vec<_>>(),
-            )
-            && attributes
-                .clone()
-                .reframe_to(donors, &stored)
-                .is_some_and(|restated| restated.equiv(&editor.dative_bonds.data(id.index())))
+        assert_eq!(editor.aromatic_system_equiv(AromaticSystemId(0), &atoms, &offered), expected);
     }
 
     /// Multicenter bonds mirror aromatic systems: one frame-bearing factor with a position-indexed
@@ -1884,7 +1748,7 @@ mod tests {
     #[case::reordered_frame_carrying_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![30, 10, 20], true)]
     #[case::reordered_frame_keeping_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![10, 20, 30], false)]
     #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
-    fn test_molecule_editor_multicenter_bond_equiv_differential(
+    fn test_molecule_editor_multicenter_bond_equiv(
         #[case] atoms: Vec<AtomId>,
         #[case] electrons: Vec<i64>,
         #[case] expected: bool,
@@ -1899,12 +1763,7 @@ mod tests {
         );
         let offered = MulticenterBondForm::from_electrons(electrons);
 
-        let current = editor.multicenter_bond_equiv(MulticenterBondId(0), &atoms, &offered);
-        let derived =
-            multicenter_bond_equiv_derived(&editor, MulticenterBondId(0), &atoms, &offered);
-
-        assert_eq!(current, expected, "current implementation");
-        assert_eq!(derived, current, "the derived reading agrees");
+        assert_eq!(editor.multicenter_bond_equiv(MulticenterBondId(0), &atoms, &offered), expected);
     }
 
     /// Noncovalent bonds and dative bonds carry frame-invariant payloads, so the alignment cannot
@@ -1914,7 +1773,7 @@ mod tests {
     #[case::stored_frame([AtomId(0), AtomId(1)], true)]
     #[case::reversed_frame([AtomId(1), AtomId(0)], true)]
     #[case::different_pair([AtomId(0), AtomId(2)], false)]
-    fn test_molecule_editor_noncovalent_bond_equiv_differential(
+    fn test_molecule_editor_noncovalent_bond_equiv(
         #[case] atoms: [AtomId; 2],
         #[case] expected: bool,
     ) {
@@ -1928,11 +1787,7 @@ mod tests {
         );
         let offered = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
 
-        let current = editor.noncovalent_bond_equiv(NoncovalentBondId(0), atoms, &offered);
-        let derived = noncovalent_bond_equiv_derived(&editor, NoncovalentBondId(0), atoms, &offered);
-
-        assert_eq!(current, expected, "current implementation");
-        assert_eq!(derived, current, "the derived reading agrees");
+        assert_eq!(editor.noncovalent_bond_equiv(NoncovalentBondId(0), atoms, &offered), expected);
     }
 
     #[rustfmt::skip]
@@ -1941,7 +1796,7 @@ mod tests {
     #[case::reordered_donors(AtomId(0), vec![AtomId(2), AtomId(1)], true)]
     #[case::different_acceptor(AtomId(1), vec![AtomId(1), AtomId(2)], false)]
     #[case::different_donors(AtomId(0), vec![AtomId(1), AtomId(3)], false)]
-    fn test_molecule_editor_dative_bond_equiv_differential(
+    fn test_molecule_editor_dative_bond_equiv(
         #[case] acceptor: AtomId,
         #[case] donors: Vec<AtomId>,
         #[case] expected: bool,
@@ -1957,12 +1812,7 @@ mod tests {
         );
         let offered = DativeBondForm::from_order(1);
 
-        let current = editor.dative_bond_equiv(DativeBondId(0), acceptor, &donors, &offered);
-        let derived =
-            dative_bond_equiv_derived(&editor, DativeBondId(0), acceptor, &donors, &offered);
-
-        assert_eq!(current, expected, "current implementation");
-        assert_eq!(derived, current, "the derived reading agrees");
+        assert_eq!(editor.dative_bond_equiv(DativeBondId(0), acceptor, &donors, &offered), expected);
     }
 
     /// The editor's structural equality must reject a different atom set even when the payload
@@ -2047,43 +1897,24 @@ mod tests {
         b
     }
 
-    /// The derived reading of [`MoleculeEditor::stereo_atom_equiv`]. Held beside the implementation
-    /// it replaces for the duration of S4d.1.
-    fn stereo_atom_equiv_derived(
-        editor: &MoleculeEditor,
-        id: StereoAtomId,
-        site: AtomId,
-        ligands: &[StereoLigand],
-        attributes: &StereoAtomForm,
-    ) -> bool {
-        let stored_site = AtomId::from(editor.stereo_atoms.participants_1(id.index())[0]);
-        let stored: Vec<StereoLigand> = editor.stereo_atoms.participants_2(id.index()).to_vec();
-        stored_site == site
-            && attributes
-                .clone()
-                .reframe_to(ligands, &stored)
-                .is_some_and(|restated| restated.equiv(&editor.stereo_atoms.data(id.index())))
-    }
-
-    /// Stereo atoms, where the alignment is currently discarded: `BiRelationData::on_permutation`
-    /// is a no-op and `is_permutation_invariant` is `true`, so `equiv_under` never applies it.
+    /// A coset is read against its ligand frame, so the offered configuration is restated into the
+    /// stored frame before comparison and the same index under a transposed frame denotes the
+    /// opposite arrangement.
     ///
-    /// The two readings therefore diverge wherever the offered frame differs from the stored one.
-    /// The `current` column records what the editor answers today; `derived` records what frame
-    /// transport gives. Where they differ, `derived` is the correct answer.
+    /// Classes rather than generated inputs — the methods are crate-visible and the property target
+    /// cannot reach them.
     #[rustfmt::skip]
     #[rstest]
-    #[case::stored_frame([1, 2, 3, 4], 0, true, true)]
-    #[case::stored_frame_other_coset([1, 2, 3, 4], 1, false, false)]
-    #[case::transposed_frame_same_coset([2, 1, 3, 4], 0, true, false)]
-    #[case::transposed_frame_other_coset([2, 1, 3, 4], 1, false, true)]
-    #[case::multiset_differs([1, 2, 3, 5], 0, false, false)]
-    fn test_molecule_editor_stereo_atom_equiv_differential(
+    #[case::stored_frame([1, 2, 3, 4], 0, true)]
+    #[case::stored_frame_other_coset([1, 2, 3, 4], 1, false)]
+    #[case::transposed_frame_same_coset([2, 1, 3, 4], 0, false)]
+    #[case::transposed_frame_other_coset([2, 1, 3, 4], 1, true)]
+    #[case::multiset_differs([1, 2, 3, 5], 0, false)]
+    fn test_molecule_editor_stereo_atom_equiv(
         stereo_editor: MoleculeEditor,
         #[case] ligands: [u32; 4],
         #[case] coset: u32,
-        #[case] current: bool,
-        #[case] derived: bool,
+        #[case] expected: bool,
     ) {
         let offered: Vec<StereoLigand> = ligands
             .into_iter()
@@ -2093,19 +1924,47 @@ mod tests {
 
         assert_eq!(
             stereo_editor.stereo_atom_equiv(StereoAtomId(0), AtomId(0), &offered, &attributes),
-            current,
-            "current implementation",
+            expected,
         );
+    }
+
+    /// A prochiral site: the two implicit hydrogens are equal values, so transposing their frame
+    /// positions is a symmetry and the two tetrahedral cosets it relates describe one arrangement.
+    #[rstest]
+    #[case::stored_coset(0, true)]
+    #[case::exchanged_coset(1, true)]
+    fn test_molecule_editor_stereo_atom_equiv_repeated_ligands(
+        #[case] coset: u32,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        editor.add_atom(AtomForm::from_element(Element::C));
+        for element in [Element::F, Element::Cl] {
+            editor.add_atom(AtomForm::from_element(element));
+        }
+        for ligand in 1..=2 {
+            editor.add_bond(AtomId(0), AtomId(ligand), BondForm::from_order(1));
+        }
+        let ligands = vec![
+            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        ];
+        editor.add_stereo_atom(
+            AtomId(0),
+            ligands.clone(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        );
+
         assert_eq!(
-            stereo_atom_equiv_derived(
-                &stereo_editor,
+            editor.stereo_atom_equiv(
                 StereoAtomId(0),
                 AtomId(0),
-                &offered,
-                &attributes,
+                &ligands,
+                &StereoAtomForm::new(StereoKind::Tetrahedral, coset),
             ),
-            derived,
-            "derived reading",
+            expected,
         );
     }
 
@@ -2115,12 +1974,7 @@ mod tests {
     /// opposite arrangement. Presenting the stored entry's own configuration against a transposed
     /// frame therefore describes a different stereocentre, and the check must say so.
     ///
-    /// `StereoAtomForm`'s `BiRelationData::on_permutation` is a no-op and its
-    /// `is_permutation_invariant` is `true`, so `equiv_under` takes its fast path and never applies
-    /// the alignment — the omission doc 210 recorded for editor equality checks.
     #[rstest]
-    #[ignore = "S4d.1: the editor's stereo equality does not transport the frame; \
-                unignore when it moves onto reframe_to"]
     fn test_molecule_editor_stereo_atom_equiv_reordered_frame(stereo_editor: MoleculeEditor) {
         let stored: Vec<StereoLigand> = (1..=4)
             .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))

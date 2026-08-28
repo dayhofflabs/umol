@@ -205,7 +205,7 @@ fn minimum_kinded_stereo_frames(
 
     let mut minimum: Option<StereoConfigurationForm> = None;
     let mut permutations = Vec::new();
-    for permutation in Permutation::between_all(before, after)
+    for permutation in Permutation::enumerate_between(before, after)
         .into_iter()
         .filter(|permutation| kind.class_key().space().reindex(0, *permutation).is_some())
     {

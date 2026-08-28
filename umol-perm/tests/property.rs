@@ -202,8 +202,8 @@ proptest! {
     }
 
     #[test]
-    fn test_permutation_between_all((source, target) in repeated_orderings()) {
-        let mut actual = Permutation::between_all(&source, &target);
+    fn test_permutation_enumerate_between((source, target) in repeated_orderings()) {
+        let mut actual = Permutation::enumerate_between(&source, &target);
         let mut expected = (0..factorial(source.len()))
             .map(|rank| Permutation::unrank(source.len(), rank))
             .filter(|permutation| permutation.act(&source) == target)

@@ -9,6 +9,7 @@
 //!   coset representatives, NOT the OpenSMILES arrangement index.
 
 use std::fmt;
+use std::ops::ControlFlow;
 
 use crate::error::PermutationError;
 
@@ -113,7 +114,7 @@ impl Permutation {
     /// The unique τ that relabels `from` into `to`: `act(τ, from) == to`.
     /// Returns `None` unless exactly one such permutation exists. Repeated equal
     /// values therefore return `None` when their occurrences can be exchanged;
-    /// use [`Self::between_all`] to retain those alternatives. Panics when the
+    /// use [`Self::enumerate_between`] to retain those alternatives. Panics when the
     /// common length exceeds the fixed representation maximum.
     pub fn between<T: Eq>(from: &[T], to: &[T]) -> Option<Self> {
         if from.len() != to.len() {
@@ -134,46 +135,62 @@ impl Permutation {
         Some(Self::from_image(&image))
     }
 
-    /// Every τ that relabels `from` into `to`: `act(τ, from) == to`.
+    /// Visits every τ that relabels `from` into `to` (`act(τ, from) == to`), until the
+    /// enumeration completes or the visitor returns [`ControlFlow::Break`].
     ///
-    /// Equal repeated values may produce several permutations because their
-    /// occurrences are interchangeable. Returns an empty vector when the slices
-    /// have different lengths or are not orderings of the same multiset. Panics
+    /// Equal repeated values are interchangeable, so several τ may be produced. Visits nothing
+    /// when the slices have different lengths or are not orderings of the same multiset. Panics
     /// when their common length exceeds the fixed representation maximum.
-    pub fn between_all<T: Eq>(from: &[T], to: &[T]) -> Vec<Self> {
+    pub fn visit_between<T: Eq, B, F>(from: &[T], to: &[T], mut visitor: F) -> ControlFlow<B>
+    where
+        F: FnMut(Permutation) -> ControlFlow<B>,
+    {
         if from.len() != to.len() {
-            return Vec::new();
+            return ControlFlow::Continue(());
         }
         let degree = from.len();
         assert!(degree <= MAX_DEGREE);
         let mut image = vec![0usize; degree];
         let mut used = [false; MAX_DEGREE];
-        let mut permutations = Vec::new();
 
-        fn visit<T: Eq>(
+        fn visit<T: Eq, B, F>(
             from: &[T],
             to: &[T],
             position: usize,
             image: &mut [usize],
             used: &mut [bool; MAX_DEGREE],
-            permutations: &mut Vec<Permutation>,
-        ) {
+            visitor: &mut F,
+        ) -> ControlFlow<B>
+        where
+            F: FnMut(Permutation) -> ControlFlow<B>,
+        {
             if position == to.len() {
-                permutations.push(Permutation::from_image(image));
-                return;
+                return visitor(Permutation::from_image(image));
             }
             for source_position in 0..from.len() {
                 if !used[source_position] && from[source_position] == to[position] {
                     used[source_position] = true;
                     image[position] = source_position;
-                    visit(from, to, position + 1, image, used, permutations);
+                    let flow = visit(from, to, position + 1, image, used, visitor);
                     used[source_position] = false;
+                    flow?;
                 }
             }
+            ControlFlow::Continue(())
         }
 
-        visit(from, to, 0, &mut image, &mut used, &mut permutations);
-        permutations
+        visit(from, to, 0, &mut image, &mut used, &mut visitor)
+    }
+
+    /// Collects every τ that relabels `from` into `to` by collecting
+    /// [`Permutation::visit_between`].
+    pub fn enumerate_between<T: Eq>(from: &[T], to: &[T]) -> Vec<Self> {
+        let mut result = Vec::new();
+        let _: ControlFlow<()> = Self::visit_between(from, to, |permutation| {
+            result.push(permutation);
+            ControlFlow::Continue(())
+        });
+        result
     }
 
     /// Lehmer rank in `0..degree!` — the internal canonical numbering.
@@ -429,12 +446,12 @@ mod tests {
     )]
     #[case::membership(&['a', 'b'], &['a', 'c'], vec![])]
     #[case::length(&['a', 'b'], &['a'], vec![])]
-    fn test_permutation_between_all(
+    fn test_permutation_enumerate_between(
         #[case] from: &[char],
         #[case] to: &[char],
         #[case] expected: Vec<Permutation>,
     ) {
-        assert_eq!(Permutation::between_all(from, to), expected);
+        assert_eq!(Permutation::enumerate_between(from, to), expected);
     }
 
     #[rstest]
@@ -455,8 +472,8 @@ mod tests {
 
     #[rstest]
     #[should_panic]
-    fn test_permutation_between_all_degree_error() {
-        Permutation::between_all(&[0, 1, 2, 3, 4, 5, 6], &[0, 1, 2, 3, 4, 5, 6]);
+    fn test_permutation_enumerate_between_degree_error() {
+        Permutation::enumerate_between(&[0, 1, 2, 3, 4, 5, 6], &[0, 1, 2, 3, 4, 5, 6]);
     }
 
     #[rstest]

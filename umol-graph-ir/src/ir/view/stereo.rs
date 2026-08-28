@@ -3,14 +3,14 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_perm::{OrientedPermutationGroup, Permutation};
+use umol_perm::OrientedPermutationGroup;
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
+use super::super::reframe::find_reframed;
 use super::super::stereo::{
-    coset_apply_permutation, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind,
-    Stereogenicity, Topicity,
+    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
@@ -279,19 +279,21 @@ impl<'a> StereoAtomView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    pub fn permutation_for(
-        &self,
-        ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<Permutation> {
-        permutation_for_ligands(self.ligands, ligands)
-    }
-
+    /// The stored configuration read against `ligands`, which must hold the same participants as
+    /// the stored frame. Equal virtual ligands leave several actions carrying one frame to the
+    /// other; they differ by a stabilizer element of the frame, so the cosets they give denote one
+    /// arrangement and the first stands.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
-        let permutation = self.permutation_for(ligands)?;
-        coset_apply_permutation(self.coset(), permutation, self.kind())
+        let requested: Vec<StereoLigand> = ligands.into_iter().collect();
+        find_reframed(
+            &self.attributes.configuration,
+            self.ligands,
+            &requested,
+            |_, restated| restated.coset().cloned(),
+        )
     }
 
     /// Site atom followed by the distinct ligand atoms — the relation's atom
@@ -601,19 +603,21 @@ impl<'a> StereoBondView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    pub fn permutation_for(
-        &self,
-        ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<Permutation> {
-        permutation_for_ligands(self.ligands, ligands)
-    }
-
+    /// The stored configuration read against `ligands`, which must hold the same participants as
+    /// the stored frame. Equal virtual ligands leave several actions carrying one frame to the
+    /// other; they differ by a stabilizer element of the frame, so the cosets they give denote one
+    /// arrangement and the first stands.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
-        let permutation = self.permutation_for(ligands)?;
-        coset_apply_permutation(self.coset(), permutation, self.kind())
+        let requested: Vec<StereoLigand> = ligands.into_iter().collect();
+        find_reframed(
+            &self.attributes.configuration,
+            self.ligands,
+            &requested,
+            |_, restated| restated.coset().cloned(),
+        )
     }
 
     /// The site bond's two atoms followed by the distinct ligand atoms — the
@@ -724,14 +728,6 @@ macro_rules! stereo_view_queries {
 stereo_view_queries!(StereoAtomView);
 stereo_view_queries!(StereoBondView);
 
-fn permutation_for_ligands(
-    current: &[StereoLigand],
-    ligands: impl IntoIterator<Item = StereoLigand>,
-) -> Option<Permutation> {
-    let requested: Vec<StereoLigand> = ligands.into_iter().collect();
-    Permutation::between(current, &requested)
-}
-
 // Derivation layer beneath the stereo facades. No projection is defined for
 // the stereo constraint kinds: they are model assertions about the overlay
 // entity, so the derived side is vacuous under both modes.
@@ -830,7 +826,6 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::AutomorphismAlgorithm;
-    use umol_perm::Permutation;
 
     use super::super::assert_exact_size_by;
     use crate::ir::atom::AtomForm;
@@ -1279,40 +1274,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_permutation_for(molecule: Molecule) {
-        let view = molecule.stereo_atom(StereoAtomId(0));
-        let ligands = vec![
-            StereoLigand {
-                atom_id: AtomId(1),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(2),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(3),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(4),
-                kind: StereoLigandKind::Atom,
-            },
-        ];
-        assert_eq!(
-            view.permutation_for(ligands.clone()),
-            Some(Permutation::identity(4)),
-        );
-
-        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(
-            view.permutation_for(reordered),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_atom_view_permutation_for_none(molecule: Molecule) {
+    fn test_stereo_atom_view_coset_for_none(molecule: Molecule) {
         let view = molecule.stereo_atom(StereoAtomId(0));
         let ligands = [
             StereoLigand {
@@ -1332,13 +1294,13 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(view.permutation_for(ligands[..3].iter().copied()), None);
+        assert_eq!(view.coset_for(ligands[..3].iter().copied()), None);
         assert_eq!(
-            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            view.coset_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
             None,
         );
         assert_eq!(
-            view.permutation_for([
+            view.coset_for([
                 ligands[0],
                 ligands[1],
                 ligands[2],
@@ -1657,40 +1619,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bond_view_permutation_for(molecule: Molecule) {
-        let view = molecule.stereo_bond(StereoBondId(0));
-        let ligands = vec![
-            StereoLigand {
-                atom_id: AtomId(4),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(5),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(0),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(1),
-                kind: StereoLigandKind::Atom,
-            },
-        ];
-        assert_eq!(
-            view.permutation_for(ligands.clone()),
-            Some(Permutation::identity(4)),
-        );
-
-        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(
-            view.permutation_for(reordered),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_bond_view_permutation_for_none(molecule: Molecule) {
+    fn test_stereo_bond_view_coset_for_none(molecule: Molecule) {
         let view = molecule.stereo_bond(StereoBondId(0));
         let ligands = [
             StereoLigand {
@@ -1710,13 +1639,13 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(view.permutation_for(ligands[..1].iter().copied()), None);
+        assert_eq!(view.coset_for(ligands[..1].iter().copied()), None);
         assert_eq!(
-            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            view.coset_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
             None,
         );
         assert_eq!(
-            view.permutation_for([
+            view.coset_for([
                 ligands[0],
                 ligands[1],
                 ligands[2],

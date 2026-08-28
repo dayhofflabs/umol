@@ -31,6 +31,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
+use super::reframe::FrameAction;
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
@@ -695,7 +696,7 @@ impl Molecule {
                 return false;
             }
             let frames =
-                Permutation::between_all(&mapped_ligands, other.stereo_atoms.ligands(right))
+                Permutation::enumerate_between(&mapped_ligands, other.stereo_atoms.ligands(right))
                     .into_iter()
                     .filter(|&permutation| {
                         self.stereo_atoms
@@ -745,7 +746,7 @@ impl Molecule {
                 return false;
             }
             let frames =
-                Permutation::between_all(&mapped_ligands, other.stereo_bonds.ligands(right))
+                Permutation::enumerate_between(&mapped_ligands, other.stereo_bonds.ligands(right))
                     .into_iter()
                     .filter(|&permutation| {
                         self.stereo_bonds

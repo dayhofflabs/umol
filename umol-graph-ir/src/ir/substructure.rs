@@ -26,8 +26,8 @@ use super::entity::Entity;
 use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
+use super::reframe::find_reframed;
 use super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
-use super::stereo::coset_matches;
 use super::traits::Lattice;
 
 /// Strategy for `substructure_matches`, each composing over a
@@ -445,33 +445,23 @@ impl Molecule {
             }
         }
 
-        // Stereo: a pattern stereo overlay matches iff the corresponding host site
-        // bears a stereo element of the same class whose coset, reindexed from the
-        // host ligand frame into the pattern's frame (via the atom correspondence),
-        // is admitted by the pattern coset. An `Undetermined` pattern coset admits
-        // both handednesses. TODO: a pattern that asserts stereo via `#T`/`#C` atom
-        // /bond constraints rather than a `:stereo-atoms`/`:stereo-bonds` overlay is
-        // not handled here — that needs the pattern run through stereo perception
-        // (but not grounding, so no valence resolution).
+        // Stereo: a pattern stereo overlay matches iff the corresponding host site bears a stereo
+        // element whose form, restated into the pattern's ligand frame (via the atom
+        // correspondence), the pattern form admits. The comparison is over the whole form, so the
+        // kind, the configuration and every frame-relative constraint are one question; an
+        // `Undetermined` pattern configuration admits both handednesses. Equal virtual ligands
+        // leave several admissible restatements, and any one of them agreeing is the host stating
+        // the same arrangement.
         let mut stereo_atom = Vec::new();
         for sp in pattern.stereo_atoms().iter() {
             let host_site =
                 map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
-            // `incident` returns stereo atoms where `host_site` is the site *or* a ligand; select the
-            // one it is the site of (≤1 by the site-uniqueness invariant), not merely the first.
-            let sh = host
-                .stereo_atoms()
-                .incident(host_site)
-                .find(|sh| sh.site_id() == host_site)?;
-            if sp.kind() != sh.kind() {
-                return None;
-            }
+            let sh = host.atom(host_site).stereo_atom()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let host_coset = sh.coset_for(frame)?;
-            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
-                return None;
-            }
+            find_reframed(sh.attributes, &sh.ligand_frame(), &frame, |_, restated| {
+                sp.attributes.matches(&restated).then_some(())
+            })?;
             stereo_atom.push((sp.id, sh.id));
         }
         let stereo_atoms = Correspondence::new(
@@ -487,15 +477,11 @@ impl Molecule {
                 .right_of(sp.site_id())
                 .expect("a matched pattern bond is matched");
             let sh = host.bond(host_site).stereo_bond()?;
-            if sp.kind() != sh.kind() {
-                return None;
-            }
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let host_coset = sh.coset_for(frame)?;
-            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
-                return None;
-            }
+            find_reframed(sh.attributes, &sh.ligand_frame(), &frame, |_, restated| {
+                sp.attributes.matches(&restated).then_some(())
+            })?;
             stereo_bond.push((sp.id, sh.id));
         }
         let stereo_bonds = Correspondence::new(
@@ -926,6 +912,21 @@ mod tests {
     #[case::stereo_reframed_enantiomer(
         mol_dsl!(r#"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
         mol_dsl!(r#"{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
+        vec![]
+    )]
+    #[case::stereo_constraint_agrees(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
+    )]
+    #[case::stereo_constraint_contradicts(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)/"}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        vec![]
+    )]
+    #[case::stereo_constraint_absent_in_host(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
         vec![]
     )]
     #[case::stereo_bond(

@@ -43,6 +43,7 @@ use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
 use super::reaction::{Reaction, ReactionIntegrityError};
 use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
+use super::reframe::FrameAction;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
@@ -4149,7 +4150,7 @@ fn canonicalize_complete_stereo_frames(
             let permutations = match configuration {
                 StereoConfigurationForm::Undetermined => {
                     let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
+                    Permutation::enumerate_between(&ligands, &sorted)
                 }
                 StereoConfigurationForm::Kinded(..) => {
                     canonical_kinded_stereo_frame(&ligands, &configuration)?
@@ -4180,7 +4181,7 @@ fn canonicalize_complete_stereo_frames(
             let permutations = match configuration {
                 StereoConfigurationForm::Undetermined => {
                     let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
+                    Permutation::enumerate_between(&ligands, &sorted)
                 }
                 StereoConfigurationForm::Kinded(..) => {
                     canonical_kinded_stereo_frame(&ligands, &configuration)?

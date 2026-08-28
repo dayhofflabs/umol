@@ -1526,7 +1526,7 @@ reasoned about, after several rounds of my asserting them wrongly:
 - Consequently `pushout` reading its output buffer and `pullback` reading the source were
   indistinguishable. Both now read the source, so the two operations agree.
 
-**Deferred to measurement.** Two allocation costs, both with no semantic content, left for
+**Deferred to measurement.** Three allocation costs, none with semantic content, left for
 adversarial review to surface rather than pre-empted here:
 
 - `pushout` clones every payload of `self` to seed its output vector and then rebuilds the CSR and
@@ -1536,6 +1536,13 @@ adversarial review to surface rather than pre-empted here:
   `Lattice` in-place member is `narrow_from`, which cannot serve: its default calls `meet` anyway,
   and its `bool` return collapses ⊥ into "unchanged", which `glue` must distinguish. Saving the
   allocation would need a new member consuming an owned receiver and yielding `Option<Self>`.
+- `Permutation::between_all` returns a `Vec<Permutation>`, and every entry-level stereo comparison
+  now calls it. Where the frame does not repeat the vector holds exactly one 24-byte element and the
+  caller's `find_map` consumes it immediately, so the cost is one heap allocation per comparison over
+  a search that does no branching. Its recursion already produces candidates one at a time: a variant
+  handing each to a visitor as `visit` reaches it would drop the vector and let a caller stop at the
+  first success without materialising the rest. The public name is not settled and does not have to
+  mirror the private `visit`.
 
 **Change class:** breaking signature change with caller migration (green within the stage).
 

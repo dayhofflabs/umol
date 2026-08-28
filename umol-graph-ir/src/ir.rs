@@ -27,6 +27,7 @@ pub(crate) mod num;
 pub(crate) mod operators;
 pub(crate) mod reaction;
 pub(crate) mod reaction_span;
+pub(crate) mod reframe;
 pub(crate) mod remap;
 pub(crate) mod ring;
 pub(crate) mod spin;
@@ -107,6 +108,7 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
+pub use reframe::{find_reframed, FrameAction};
 pub use remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
@@ -123,8 +125,8 @@ pub use substructure::{
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
-    AsLit, BiRelationEquiv, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized,
-    Reframe, RelationEquiv, TryFromIr, TryIntoIr,
+    AsLit, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized, Reframe, TryFromIr,
+    TryIntoIr,
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
