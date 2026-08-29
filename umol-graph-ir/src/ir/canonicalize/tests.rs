@@ -2329,28 +2329,6 @@ fn test_molecule_canonicalize_contradiction(canonicalize_context: CanonicalizeCo
 }
 
 #[rstest]
-fn test_molecule_canonicalize_integrity_error(
-    stereo_atom_canonicalization_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
-) {
-    let mut malformed = stereo_atom_canonicalization_molecule;
-    malformed.stereo_atom_mut(StereoAtomId(0)).configuration =
-        StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
-
-    assert_eq!(
-        malformed.canonicalize(&canonicalize_context),
-        Err(MoleculeCanonicalizeError::Integrity(
-            MoleculeIntegrityError::StereoLigandArity {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-                kind: StereoKind::Octahedral,
-                expected: 6,
-                actual: 4,
-            },
-        )),
-    );
-}
-
-#[rstest]
 #[case::topology(DescriptionLevel::Topology)]
 #[case::constitution(DescriptionLevel::Constitution)]
 #[case::structure(DescriptionLevel::Structure)]
@@ -2410,24 +2388,6 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
 
     assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
     assert!(!left_contradiction.canonical_eq(&valid, &canonicalize_context));
-}
-
-#[rstest]
-fn test_molecule_canonical_eq_integrity_error(
-    stereo_atom_canonicalization_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
-) {
-    let mut malformed_left = stereo_atom_canonicalization_molecule.clone();
-    malformed_left
-        .stereo_atom_mut(StereoAtomId(0))
-        .configuration = StereoConfigurationForm::kinded(StereoKind::Octahedral, 0u32);
-    let mut malformed_right = stereo_atom_canonicalization_molecule;
-    malformed_right
-        .stereo_atom_mut(StereoAtomId(0))
-        .configuration = StereoConfigurationForm::kinded(StereoKind::TrigonalBipyramidal, 0u32);
-
-    assert!(malformed_left.canonical_eq(&malformed_left, &canonicalize_context));
-    assert!(!malformed_left.canonical_eq(&malformed_right, &canonicalize_context));
 }
 
 #[rstest]
@@ -5193,14 +5153,6 @@ fn test_initial_classes_error() {
 }
 
 #[rstest]
-#[case::integrity(
-        MoleculeCanonicalizeError::from(MoleculeIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-        MoleculeCanonicalizeError::Integrity(MoleculeIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-    )]
 #[case::contradiction(
     MoleculeCanonicalizeError::from(Contradiction),
     MoleculeCanonicalizeError::Contradiction(Contradiction)
@@ -5405,16 +5357,6 @@ fn test_canonicalize_checked_reaction_span_modified(
 }
 
 #[rstest]
-#[case::integrity(
-        ReactionSpanCanonicalizeError::from(ReactionSpanIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-        ReactionSpanCanonicalizeError::Integrity(
-            ReactionSpanIntegrityError::InvalidReference {
-                entity: Entity::Atom(AtomId(1)),
-            },
-        ),
-    )]
 #[case::contradiction(
     ReactionSpanCanonicalizeError::from(Contradiction),
     ReactionSpanCanonicalizeError::Contradiction(Contradiction)
@@ -5427,14 +5369,6 @@ fn test_reaction_span_canonicalize_error_from(
 }
 
 #[rstest]
-#[case::integrity(
-        ReactionCanonicalizeError::from(ReactionIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-        ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
-            entity: Entity::Atom(AtomId(1)),
-        }),
-    )]
 #[case::contradiction(
     ReactionCanonicalizeError::from(Contradiction),
     ReactionCanonicalizeError::Contradiction(Contradiction)

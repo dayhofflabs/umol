@@ -292,12 +292,4 @@ proptest! {
         prop_assert_eq!(sequential, direct);
     }
 
-    #[test]
-    fn test_molecule_remap_integrity(
-        (source, correspondence, _) in remapping_scenario_strategy(),
-    ) {
-        let remapped = source.remap(&correspondence);
-
-        prop_assert_eq!(remapped.check_integrity(), Ok(()));
-    }
 }

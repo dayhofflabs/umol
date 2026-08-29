@@ -462,9 +462,6 @@ fn corpus() -> Vec<CorpusCase> {
             .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
             .into_parts()
             .0;
-        molecule
-            .check_integrity()
-            .unwrap_or_else(|error| panic!("benchmark case {name} must be valid: {error}"));
         assert_eq!(
             molecule_counts(&molecule),
             expected_counts,

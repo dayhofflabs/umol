@@ -48,9 +48,6 @@ enum OverlayFrame {
 /// Failure of the representation contract required to interpret a [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionIntegrityError {
-    /// The left-hand-side molecule is not representation-integrity valid.
-    #[error("reaction lhs is not a valid molecule representation: {0}")]
-    Lhs(#[from] MoleculeIntegrityError),
     /// A delta refers to an entity unavailable from either the lhs or the reaction's additions.
     #[error("reaction references unavailable entity {entity:?}")]
     InvalidReference { entity: Entity },
@@ -567,11 +564,11 @@ impl ReactionIntegrityCheck {
 impl Reaction {
     /// Check the representation invariants required to interpret this reaction.
     ///
-    /// The check covers the lhs molecule, delta references, created-id uniqueness, local stereo
-    /// data carried by additions and constraint wrappers, and the source incidence and exact
-    /// participant frame recorded by removals. It does not impose DPO or chemistry semantics.
-    pub fn check_integrity(&self) -> Result<(), ReactionIntegrityError> {
-        self.lhs.check_integrity()?;
+    /// The check covers delta references, created-id uniqueness, local stereo data carried by
+    /// additions and constraint wrappers, and the source incidence and participant structure
+    /// recorded by removals. The closed lhs already satisfies molecule integrity. This check does
+    /// not impose DPO or chemistry semantics.
+    pub(crate) fn check_integrity(&self) -> Result<(), ReactionIntegrityError> {
         ReactionIntegrityCheck.check(&self.lhs, &self.deltas)
     }
 }

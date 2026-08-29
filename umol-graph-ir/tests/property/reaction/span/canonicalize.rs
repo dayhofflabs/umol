@@ -75,7 +75,7 @@ proptest! {
                 .canonicalize_with_correspondence(&context)
                 .expect("successful canonicalization returns its correspondence");
 
-            prop_assert_eq!(canonical.check_integrity(), Ok(()));
+            prop_assert!(canonical.to_reaction().to_reaction_span().is_ok());
             prop_assert_eq!(&with_correspondence, &canonical);
             prop_assert_eq!(
                 scenario

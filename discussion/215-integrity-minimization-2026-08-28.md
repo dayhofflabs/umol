@@ -443,7 +443,7 @@ inherited transport ledger is unchanged.
   Remove the now-unreachable integrity arm from `MoleculeCanonicalizeError`, its conversions and
   Python mapping, and stale `None`, error, and panic documentation. Replace malformed-published-value
   tests with constructor-boundary and trusted-publisher preservation cases. **Breaking
-  (red→green).** [dep: S1a, S1b, S1c]
+  (red→green).** [dep: S1a, S1b, S1c] **Done.**
 - **S2b — reaction closed-source cleanup** (`umol-graph-ir/src/ir/reaction.rs`,
   `ir/reaction/integrity.rs`, `ir/canonicalize.rs`, reaction DSL and Python canonicalization callers and
   tests): remove `ReactionIntegrityError::Lhs` and its check after molecule closure; delete the
@@ -451,13 +451,13 @@ inherited transport ledger is unchanged.
   every error branch they alone made reachable. Remove the integrity arm from
   `ReactionCanonicalizeError` and migrate Rust/Python error translation and exact tests while
   retaining operation-specific materialization, DPO, and contradiction failures. **Breaking
-  (red→green).** [dep: S1a, S1b, S1c, S1d]
+  (red→green).** [dep: S1a, S1b, S1c, S1d] **Done.**
 - **S2c — reaction-span closed-source cleanup** (`umol-graph-ir/src/ir/reaction_span.rs`,
   `ir/canonicalize.rs`, Rust/Python canonicalization callers and tests): remove source and result
   integrity checks from `ReactionSpan::try_remap` and the three canonicalization/key checks. Remove
   the unreachable integrity arm from `ReactionSpanCanonicalizeError`, update Python translation and
   rustdoc, and cover unsuitable correspondences separately from preservation of a valid closed
-  source and result. **Breaking (red→green).** [dep: S1e]
+  source and result. **Breaking (red→green).** [dep: S1e] **Done.**
 - **S2d — internal integrity gates and publisher preservation** (`umol-graph-ir` aggregate
   constructors, editors, transformations, integration/property tests): restrict
   `Molecule::check_integrity`, `Reaction::check_integrity`, and `ReactionSpan::check_integrity` to
@@ -465,7 +465,20 @@ inherited transport ledger is unchanged.
   checked/asserted construction and transactional publication. Migrate direct public-validator tests
   to exact checked-boundary cases and preservation properties covering editors, remapping,
   canonicalization, reaction/span conversion, composition, reversal, and application publishers.
-  **Breaking (red→green).** [dep: S2a, S2b, S2c]
+  **Breaking (red→green).** [dep: S2a, S2b, S2c] **Done.**
+
+  S2 removed all 19 closed-source integrity expressions and the public diagnostics that only those
+  expressions could produce. The three aggregate integrity gates are now graph-IR-private and
+  remain behind checked constructors, editors, and transactional publishers. External direct-gate
+  properties now exercise exact checked publication or trusted transformation preservation.
+  Focused molecule remapping and canonicalization, reaction construction, precondition and
+  canonicalization, reaction-span remapping and canonicalization, and affected bounded property
+  cases passed. Graph-IR all-target compilation with `proptest`, dependent graph and I/O all-target
+  compilation, graph-IR doctests, strict graph-IR and Python clippy, Python canonicalization unit
+  tests, extension rebuilding under Python 3.13, and focused Python canonicalization tests passed.
+  Three bounded canonicalization selections reproduced failures already present in doc 214's
+  inherited transport ledger; no new failure was observed. The slow complete checkpoint remains
+  deferred to S3b as planned.
 
 S2 ends with the closed-container execution model enforced: malformed open carriers fail at their
 publication boundary, while operations on published aggregates contain no defensive integrity moat

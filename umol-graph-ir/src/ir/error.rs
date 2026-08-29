@@ -74,13 +74,6 @@ pub enum ApplyPreconditionError {
     /// The reaction violates its rule-local DPO invariant.
     #[error("invalid reaction: {0}")]
     ReactionDpo(DpoContradiction),
-    /// A delta or molecule constraint references an entity unavailable on the reaction LHS or among
-    /// the entities created by the reaction.
-    #[error("reaction references unavailable entity {entity:?}")]
-    InvalidReactionReference { entity: Entity },
-    /// A delta's endpoints, participants, site, or ligands disagree with its identified LHS entity.
-    #[error("reaction incidence does not match lhs entity {entity:?}")]
-    ReactionIncidenceMismatch { entity: Entity },
     /// The reaction LHS is not a matchable pattern.
     #[error(transparent)]
     Match(#[from] SubstructureMatchError),
@@ -135,26 +128,6 @@ mod tests {
         "application reached an internal invariant failure"
     )]
     fn test_apply_error_display(#[case] error: ApplyError, #[case] expected: &str) {
-        assert_eq!(error.to_string(), expected);
-    }
-
-    #[rstest]
-    #[case::invalid_reference(
-        ApplyPreconditionError::InvalidReactionReference {
-            entity: Entity::Atom(AtomId(3)),
-        },
-        "reaction references unavailable entity Atom(AtomId(3))",
-    )]
-    #[case::incidence(
-        ApplyPreconditionError::ReactionIncidenceMismatch {
-            entity: Entity::Bond(BondId(2)),
-        },
-        "reaction incidence does not match lhs entity Bond(BondId(2))",
-    )]
-    fn test_apply_precondition_error_display(
-        #[case] error: ApplyPreconditionError,
-        #[case] expected: &str,
-    ) {
         assert_eq!(error.to_string(), expected);
     }
 }

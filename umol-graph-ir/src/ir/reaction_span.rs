@@ -193,7 +193,7 @@ impl ReactionSpan {
     ///
     /// Union-frame references are established by checked construction. This check additionally
     /// materializes both projections through the authoritative molecule integrity contract.
-    pub fn check_integrity(&self) -> Result<(), ReactionSpanIntegrityError> {
+    pub(crate) fn check_integrity(&self) -> Result<(), ReactionSpanIntegrityError> {
         Molecule::try_from_entries(self.project_entries(Side::Left))
             .map_err(ReactionSpanIntegrityError::Lhs)?;
         Molecule::try_from_entries(self.project_entries(Side::Right))
@@ -240,28 +240,23 @@ impl ReactionSpan {
     ///
     /// # Panics
     ///
-    /// Panics when this span fails its representation-integrity contract or `correspondence` does
-    /// not describe a complete dense renumbering of it. Use [`Self::try_remap`] for independently
-    /// supplied values.
+    /// Panics when `correspondence` does not describe a complete dense renumbering of this span.
+    /// Use [`Self::try_remap`] for an independently supplied correspondence.
     ///
     /// # Semantic properties
     ///
     /// Identity remapping is exact, inverse remapping recovers the original span, and sequential
     /// remapping agrees with correspondence composition.
     pub fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        self.try_remap(correspondence).expect(
-            "reaction-span remapping requires an integrity-valid source and a complete dense correspondence",
-        )
+        self.try_remap(correspondence)
+            .expect("reaction-span remapping requires a complete dense correspondence")
     }
 
     /// Checked form of [`Self::remap`].
     ///
-    /// Returns `None` when this span fails its representation-integrity contract, when the
-    /// correspondence's source counts differ from the union entity counts, or when any entity
-    /// family is not a bijection onto a dense target id space.
+    /// Returns `None` when the correspondence's source counts differ from the union entity counts
+    /// or when any entity family is not a bijection onto a dense target id space.
     pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
-        self.check_integrity().ok()?;
-
         let counts_match = [
             (correspondence.atoms().left_count(), self.atoms.len()),
             (correspondence.bonds().left_count(), self.bonds.len()),
@@ -423,7 +418,7 @@ impl ReactionSpan {
             })
             .collect();
 
-        let remapped = Self {
+        Some(Self {
             graph: Graph::new(atoms.len(), &edges),
             atoms,
             bonds,
@@ -434,9 +429,7 @@ impl ReactionSpan {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        };
-        remapped.check_integrity().ok()?;
-        Some(remapped)
+        })
     }
 }
 

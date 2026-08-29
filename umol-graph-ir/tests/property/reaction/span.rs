@@ -523,7 +523,6 @@ proptest! {
         let direct = ReactionSpan::try_from_entries(entries).map_err(|error| {
             TestCaseError::fail(format!("generated entries were invalid: {error}"))
         })?;
-        prop_assert_eq!(direct.check_integrity(), Ok(()));
         let parsed = direct.to_string().parse::<ReactionSpan>().map_err(|error| {
             TestCaseError::fail(format!("rendered span did not parse: {error}"))
         })?;

@@ -37,12 +37,12 @@ use super::id::{
 };
 use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::{DescriptionLevel, Molecule, MoleculeEntries, MoleculeIntegrityError};
+use super::molecule::{DescriptionLevel, Molecule, MoleculeEntries};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
-use super::reaction::{Reaction, ReactionIntegrityError};
-use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
+use super::reaction::Reaction;
+use super::reaction_span::ReactionSpan;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     CisTransStereoForm, FrameAction, StereoAtomForm, StereoBondForm, StereoConfigurationForm,
@@ -381,9 +381,8 @@ pub trait Canonicalize: Sized {
     ///
     /// # Errors
     ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when normalization of any carried value is unsatisfiable, including a
-    /// value excluded from frame selection.
+    /// Returns the aggregate-specific canonicalization error when normalization of any carried
+    /// value is unsatisfiable, including a value excluded from frame selection.
     fn canonicalize_by(
         self,
         level: DescriptionLevel,
@@ -420,10 +419,10 @@ pub trait Canonicalize: Sized {
     ///
     /// # Errors
     ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when normalization of selected data is unsatisfiable. At reduced levels,
-    /// contradictions confined to excluded features do not affect the hash. A [`Reaction`] may
-    /// also report failure to materialize its selected reaction span.
+    /// Returns the aggregate-specific canonicalization error when normalization of selected data
+    /// is unsatisfiable. At reduced levels, contradictions confined to excluded features do not
+    /// affect the hash. A [`Reaction`] may also report failure to materialize its selected
+    /// reaction span.
     ///
     /// # Semantic properties
     ///
@@ -441,7 +440,7 @@ pub trait Canonicalize: Sized {
     /// Compare complete canonical forms.
     ///
     /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
-    /// compare equal, while an integrity failure never makes distinct inputs equal.
+    /// compare equal.
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
 
     /// Compare canonical forms at the selected structural layer.
@@ -4401,7 +4400,6 @@ fn canonicalize_topology_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
@@ -4448,7 +4446,6 @@ fn canonicalize_constitution_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
     let classes = rank_initial_classes(&entity_keys, &incidence_keys);
@@ -4495,7 +4492,6 @@ fn canonicalize_structure_with_options(
     context: &CanonicalizeContext,
     mut options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     // A structure-frame automorphism acts on both entity ids and stereo configurations. The graph
     // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
     // whose coupled frame action changes the leaf key. Keep full stereo search exhaustive within
@@ -4555,7 +4551,6 @@ fn canonicalize_full_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     let normalized = normalize_molecule(molecule.clone())?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
@@ -4599,7 +4594,6 @@ fn canonical_key_by(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     if level == DescriptionLevel::Full {
         let normalized = normalize_molecule(molecule.clone())?;
         return canonical_key_by_full(&normalized, context);
@@ -5238,9 +5232,6 @@ impl Canonicalize for Molecule {
 /// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
-    /// The molecule does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] MoleculeIntegrityError),
     /// Intrinsic normalization of a carried value reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
@@ -5249,9 +5240,6 @@ pub enum MoleculeCanonicalizeError {
 /// Failure to construct a canonical [`ReactionSpan`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionSpanCanonicalizeError {
-    /// The span does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] ReactionSpanIntegrityError),
     /// Intrinsic normalization of a carried value reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
@@ -5336,7 +5324,6 @@ fn canonicalize_reaction_span_by(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
-    span.check_integrity()?;
     Ok(canonicalize_checked_reaction_span_by(span, level, context)?)
 }
 
@@ -5377,7 +5364,6 @@ fn canonical_reaction_span_key(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
-    span.check_integrity()?;
     if level == DescriptionLevel::Full {
         let normalized = normalize_reaction_span(span.clone())?;
         return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
@@ -5398,7 +5384,6 @@ fn canonicalize_reaction_span_with_correspondence_by_effective(
     level: CanonicalizeLevel,
     context: &CanonicalizeContext,
 ) -> Result<(ReactionSpan, MoleculeCorrespondence), ReactionSpanCanonicalizeError> {
-    span.check_integrity()?;
     Ok(canonicalize_checked_reaction_span_with_correspondence_by(
         span,
         level.as_description_level(),
@@ -5490,9 +5475,6 @@ impl Canonicalize for ReactionSpan {
 /// Failure to construct a canonical [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionCanonicalizeError {
-    /// The reaction does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] ReactionIntegrityError),
     /// Intrinsic normalization or span materialization reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
@@ -5540,7 +5522,6 @@ fn canonicalize_reaction_by(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<Reaction, ReactionCanonicalizeError> {
-    reaction.check_integrity()?;
     let span = reaction.to_reaction_span()?;
     Ok(canonicalize_checked_reaction_span_by(&span, level, context)?.to_reaction())
 }
@@ -5558,7 +5539,6 @@ fn canonicalize_reaction_with_correspondence_by_effective(
     level: CanonicalizeLevel,
     context: &CanonicalizeContext,
 ) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizeError> {
-    reaction.check_integrity()?;
     let span = reaction.to_reaction_span()?;
     let (canonical, correspondence) = canonicalize_checked_reaction_span_with_correspondence_by(
         &span,
@@ -5600,7 +5580,6 @@ impl Canonicalize for Reaction {
         if level == DescriptionLevel::Full {
             return self.canonical_hash(context);
         }
-        self.check_integrity()?;
         let span = project_reaction(&self, level).to_reaction_span()?;
         let key = reaction_span_canonical_candidate(&span, level, context)?.key;
         Ok(hash_value(&key))
@@ -5635,9 +5614,6 @@ impl Canonicalize for Reaction {
         }
         if level == DescriptionLevel::Full {
             return self.canonical_eq(other, context);
-        }
-        if self.check_integrity().is_err() || other.check_integrity().is_err() {
-            return false;
         }
         match (
             project_reaction(self, level).to_reaction_span(),

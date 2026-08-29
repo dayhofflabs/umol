@@ -21,9 +21,8 @@ impl Molecule {
     ///
     /// # Panics
     ///
-    /// Panics when this molecule fails its representation-integrity contract or `correspondence`
-    /// does not describe a complete dense renumbering of it. Use [`Self::try_remap`] for
-    /// independently supplied values.
+    /// Panics when `correspondence` does not describe a complete dense renumbering of this
+    /// molecule. Use [`Self::try_remap`] for an independently supplied correspondence.
     ///
     /// # Semantic properties
     ///
@@ -31,19 +30,15 @@ impl Molecule {
     /// inverse remapping recovers the original molecule, and sequential remapping agrees with
     /// correspondence composition.
     pub fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        self.try_remap(correspondence).expect(
-            "molecule remapping requires an integrity-valid source and a complete dense correspondence",
-        )
+        self.try_remap(correspondence)
+            .expect("molecule remapping requires a complete dense correspondence")
     }
 
     /// Checked form of [`Self::remap`].
     ///
-    /// Returns `None` when this molecule fails its representation-integrity contract, when the
-    /// correspondence's source counts differ from the molecule's entity counts, or when any entity
-    /// family is not a bijection onto a dense target id space.
+    /// Returns `None` when the correspondence's source counts differ from the molecule's entity
+    /// counts or when any entity family is not a bijection onto a dense target id space.
     pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
-        self.check_integrity().ok()?;
-
         let counts_match = [
             (correspondence.atoms().left_count(), self.atoms.len()),
             (correspondence.bonds().left_count(), self.bonds.len()),

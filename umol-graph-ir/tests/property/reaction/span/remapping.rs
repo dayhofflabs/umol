@@ -1,8 +1,8 @@
 //! Dense union-frame remapping properties for reaction spans.
 //!
 //! Generated spans include direct span entries and materializable reactions. Two independently
-//! generated total correspondences exercise exact identity, inverse, composition, integrity, and
-//! preservation of both compact side projections.
+//! generated total correspondences exercise exact identity, inverse, composition, and preservation
+//! of both compact side projections.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -113,15 +113,6 @@ proptest! {
         let direct = scenario.span.remap(&scenario.first.compose(&scenario.second));
 
         prop_assert_eq!(sequential, direct);
-    }
-
-    #[test]
-    fn test_reaction_span_remap_integrity(
-        scenario in reaction_span_scenario_strategy(),
-    ) {
-        let remapped = scenario.span.remap(&scenario.first);
-
-        prop_assert_eq!(remapped.check_integrity(), Ok(()));
     }
 
     #[test]

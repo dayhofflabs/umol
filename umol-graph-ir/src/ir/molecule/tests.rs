@@ -1882,14 +1882,6 @@ fn test_molecule_remap(
         ),
     )
 })]
-#[case::source_integrity(|mut molecule: Molecule, correspondence: &MoleculeCorrespondence| {
-    molecule.constraints_mut().push(Constraint::Molecule(
-        MoleculeConstraint::Connected {
-            atoms: Some(vec![AtomId(4)]),
-        },
-    ));
-    (molecule, correspondence.clone())
-})]
 fn test_molecule_try_remap_error(
     #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
     #[case] prepare: fn(Molecule, &MoleculeCorrespondence) -> (Molecule, MoleculeCorrespondence),
@@ -1901,9 +1893,7 @@ fn test_molecule_try_remap_error(
 }
 
 #[rstest]
-#[should_panic(
-    expected = "molecule remapping requires an integrity-valid source and a complete dense correspondence"
-)]
+#[should_panic(expected = "molecule remapping requires a complete dense correspondence")]
 fn test_molecule_remap_error(
     #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {

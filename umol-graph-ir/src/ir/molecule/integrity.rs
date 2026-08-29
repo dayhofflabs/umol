@@ -102,7 +102,7 @@ impl Molecule {
     /// This checks stored references, parallel collection shapes, the fixed relation semantics of
     /// every entity family, and kind-dependent stereo domains. It does not check chemistry or
     /// constraint satisfaction.
-    pub fn check_integrity(&self) -> Result<(), MoleculeIntegrityError> {
+    pub(crate) fn check_integrity(&self) -> Result<(), MoleculeIntegrityError> {
         let contains = |entity| match entity {
             Entity::Atom(id) => id.index() < self.atoms.len(),
             Entity::Bond(id) => id.index() < self.bonds.len(),

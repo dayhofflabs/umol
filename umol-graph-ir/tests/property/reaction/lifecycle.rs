@@ -18,8 +18,10 @@ proptest! {
     })]
 
     #[test]
-    fn test_reaction_check_integrity(reaction in comprehensive_reaction_strategy()) {
-        prop_assert_eq!(reaction.check_integrity(), Ok(()));
+    fn test_reaction_try_new_roundtrip(reaction in comprehensive_reaction_strategy()) {
+        let republished = Reaction::try_new(reaction.lhs().clone(), reaction.deltas().clone());
+
+        prop_assert_eq!(republished, Ok(reaction));
     }
 
     #[test]

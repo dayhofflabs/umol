@@ -14,7 +14,7 @@ use umol_graph_ir::ir::{
 
 use crate::algorithm::AutomorphismAlgorithm;
 use crate::correspondence::MoleculeCorrespondence;
-use crate::error::{ContradictionError, InvalidStructureError};
+use crate::error::ContradictionError;
 use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
 use crate::reaction::Reaction;
@@ -118,9 +118,6 @@ fn canonicalize_context(
 
 fn molecule_canonicalization_error(error: GraphIrMoleculeCanonicalizeError) -> PyErr {
     match error {
-        GraphIrMoleculeCanonicalizeError::Integrity(error) => {
-            InvalidStructureError::new_err(error.to_string())
-        }
         GraphIrMoleculeCanonicalizeError::Contradiction(error) => {
             ContradictionError::new_err(error.to_string())
         }
@@ -129,9 +126,6 @@ fn molecule_canonicalization_error(error: GraphIrMoleculeCanonicalizeError) -> P
 
 fn reaction_span_canonicalization_error(error: GraphIrReactionSpanCanonicalizeError) -> PyErr {
     match error {
-        GraphIrReactionSpanCanonicalizeError::Integrity(error) => {
-            InvalidStructureError::new_err(error.to_string())
-        }
         GraphIrReactionSpanCanonicalizeError::Contradiction(error) => {
             ContradictionError::new_err(error.to_string())
         }
@@ -140,9 +134,6 @@ fn reaction_span_canonicalization_error(error: GraphIrReactionSpanCanonicalizeEr
 
 fn reaction_canonicalization_error(error: GraphIrReactionCanonicalizeError) -> PyErr {
     match error {
-        GraphIrReactionCanonicalizeError::Integrity(error) => {
-            InvalidStructureError::new_err(error.to_string())
-        }
         GraphIrReactionCanonicalizeError::Contradiction(error) => {
             ContradictionError::new_err(error.to_string())
         }

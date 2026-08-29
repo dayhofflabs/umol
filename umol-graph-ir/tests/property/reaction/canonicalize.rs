@@ -2,8 +2,8 @@
 //!
 //! Materializable reactions and independently renumbered reaction spans exercise exact canonical
 //! forms, equality, canonical hashes, normalization, reversal, and covariant application. Named
-//! defects separately cover integrity failure, discontinuous deltas, and intrinsically
-//! contradictory forms. Nauty is currently the only canonical-labeling selector; frozen canonical
+//! defects separately cover discontinuous deltas and intrinsically contradictory forms. Nauty is
+//! currently the only canonical-labeling selector; frozen canonical
 //! fixtures, rather than a tautological second case, remain the compatibility target for future
 //! algorithms.
 
@@ -220,7 +220,10 @@ proptest! {
                 ))
             })?;
 
-        prop_assert_eq!(canonical.check_integrity(), Ok(()));
+        prop_assert_eq!(
+            Reaction::try_new(canonical.lhs().clone(), canonical.deltas().clone()),
+            Ok(canonical.clone()),
+        );
         prop_assert_eq!(&with_correspondence, &canonical);
         prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
     }

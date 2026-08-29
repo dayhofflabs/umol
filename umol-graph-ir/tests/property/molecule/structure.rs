@@ -24,11 +24,6 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_check_integrity(molecule in molecule_with_constraints_strategy()) {
-        prop_assert_eq!(molecule.check_integrity(), Ok(()));
-    }
-
-    #[test]
     fn test_molecule_stereo_frame_integrity(molecule in molecule_with_constraints_strategy()) {
         for stereo_atom in molecule.stereo_atoms().iter() {
             let frame = stereo_atom.ligand_frame();

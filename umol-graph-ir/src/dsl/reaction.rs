@@ -1056,9 +1056,6 @@ impl ReactionInput {
         }
         let metadata = context.into_metadata();
         let reaction = Reaction::new(lhs, resolved);
-        reaction
-            .check_integrity()
-            .map_err(|error| ParseError::RaisingError(error.to_string()))?;
         Ok((reaction, metadata))
     }
 }
