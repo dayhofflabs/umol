@@ -765,10 +765,15 @@ rather than being left silently unframed.
 A reaction removal may carry the source entity's structured incidence in another participant
 ordering. Its repeated sequence is an explicit local frame for the recorded payload. Construction
 preserves that frame; a consumer derives the unique local-to-source action, transports the payload,
-and then applies its value relation. Aggregate reaction reframing composes this alignment with the
-one owning action selected from the lhs or `Add` frame. An incompatible distinguished factor or
-stereo-bond endpoint-block assignment changes structured incidence rather than producing a second
-frame of the same entity.
+and then applies its value relation. For generic aggregate frame transport, let `q` be that
+local-to-owner action and `a` the action on the owning lhs or `Add` frame. The removal consumes the
+conjugate `q.compose(a).compose(q.inverse())`; this preserves its local-to-owner relation and the
+identity, inverse, and composition laws. Reaction normalization instead applies `q` directly to
+align the removal with its owner. Reframing normalizes first, so `q` is identity when it applies the
+selected owning action. Application-specific rule-to-host alignment may likewise move an already
+normalized removal directly into the host frame; that is not generic frame transport of a raw
+locally framed reaction. An incompatible distinguished factor or stereo-bond endpoint-block
+assignment changes structured incidence rather than producing a second frame of the same entity.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public

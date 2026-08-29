@@ -224,13 +224,17 @@ two complete blocks. Moving a ligand between blocks without that complete swap i
 `ParticipantFrameMismatch` is removed because a compatible ordering is transportable and an
 incompatible ordering is different structured incidence.
 
-The single per-id owning action remains the aggregate witness. Reaction transport composes a
-removal's derived local-to-owner action with the owner-to-target action before transporting that
-removal. Field and constraint deltas consume the owner action directly. It does not require the
-deltas to materialize a reaction span and does not change the older delta-normalization rule that a
-created entity subsequently removed is an unobservable no-op. Changing an overlay's participants is
-still expressed by removing the old entity and adding a new entity with a new id; no delta changes
-an existing entity's incidence.
+The single per-id owning action remains the aggregate witness. Let `q` be a removal's derived
+local-to-owner action and `a` the owner-to-target action. `FrameTransport for Reaction` transports
+that removal by the conjugate `q.compose(a).compose(q.inverse())`, keeping the same local-to-owner
+relation while the owner moves under `a`. This is what gives raw locally framed removals the same
+identity, inverse, and composition laws as the rest of `FrameTransport`. Normalization is a
+different operation: it applies `q` to align the removal directly with its owner. Because `Reframe`
+normalizes first, `q` is then identity and the conjugate reduces to `a`. Field and constraint deltas
+consume the owner action directly. This does not require the deltas to materialize a reaction span
+and does not change the older delta-normalization rule that a created entity subsequently removed is
+an unobservable no-op. Changing an overlay's participants is still expressed by removing the old
+entity and adding a new entity with a new id; no delta changes an existing entity's incidence.
 
 ### The three nested operations
 
@@ -368,8 +372,8 @@ A correspondence is the witness for an entity-id action, and a frame action is t
 participant-frame action. Both have identity, inverse, and composition laws. A frame action is not
 merely assembly bookkeeping: the same action selected from an entity frame transports its form,
 span sides, field and constraint delta values, and every frame-relative constraint that refers to
-it. A removal stated in a compatible local frame consumes the composition of its local-to-owner
-alignment and that owning action.
+it. A removal stated in a compatible local frame consumes the conjugate of that owning action by
+its local-to-owner alignment, so transport preserves the relation between the two frames.
 
 `FrameTransport::Action` denotes the complete action on `Self`, not one row of a separately returned
 vector. The carrier grows with the value being acted on:
@@ -431,8 +435,8 @@ group. Frame-invariant forms return themselves under every such compatible local
 introducing span-form newtypes. `Constraint`, `ConstraintSpan`, and kind-specific overlay delta
 payloads also implement `FrameTransport` for a supplied local action, but none derives an action
 independently. `Deltas` does not implement transport under owning `OverlaysFrameAction` in isolation:
-only `Reaction` has the owning frames needed to align a compatible removal-local frame before
-applying the per-id action.
+only `Reaction` has the owning frames needed to conjugate each per-id action into a compatible
+removal-local frame.
 
 The six overlay aggregates and their span counterparts are the first frame-owning carriers.
 They were introduced because each overlay entity kind, unlike a graph-core relation set, knows which
@@ -502,7 +506,7 @@ retains only any sparse internal lookup needed when several deltas refer to the 
 `FrameTransport for Reaction` applies an independently supplied composite to the lhs and dispatches
 the corresponding local action to every delta. Field and constraint deltas consume the owning
 action directly. For a `Remove`, the reaction derives the local removal-to-owner alignment and
-composes it with the owner action before transporting:
+conjugates the owner action into the removal's coordinates before transporting:
 
 - dative `Add` and `Remove` donor sequences;
 - aromatic and multicenter `Add` and `Remove` forms and both sides of electron-count field changes;
@@ -512,18 +516,19 @@ composes it with the owner action before transporting:
   `ConstraintDelta`.
 
 `ConstraintDelta` delegates to `FrameTransport for Constraint`, which recursively transports only
-the position-bearing leaves and accepts irrelevant entries in the composite action. The complete
-transported reaction is normalized again before return. `Delta::remap` relabels ids while preserving
-the supplied participant sequence; it does not silently select a frame.
+the position-bearing leaves and accepts irrelevant entries in the composite action.
+`FrameTransport for Reaction` returns the transported representation without reducing it;
+`reframe` and `reframe_with_action` normalize after transport. `Delta::remap` relabels ids while
+preserving the supplied participant sequence; it does not silently select a frame.
 
 `Normalize for ReactionSpan` reduces every carried side and constraint span without selecting a
 participant frame. Its six existing `*Spans` aggregates derive the same aggregate actions as their
 molecule peers and assemble them into `OverlaysFrameAction`; atom and localized-bond spans remain
 plain vectors because they have no frame action. `FrameTransport for ReactionSpan` applies the
-composite to every span aggregate and every `ConstraintSpan` before final reduction. Plain `reframe`
-instead derives each local action once and transports every present side and affected constraint
-without materializing that complete composite. A modified entity therefore cannot let its lhs and
-rhs choose different presentations.
+composite to every span aggregate and every `ConstraintSpan` without reducing the result. Its
+reframing operations perform the final reduction. Plain `reframe` derives each local action once and
+transports every present side and affected constraint without materializing that complete composite.
+A modified entity therefore cannot let its lhs and rhs choose different presentations.
 
 Raw span construction preserves an explicitly supplied `Modified { lhs, rhs }` even when the two
 values are `normalized_eq`; the tag has no additional semantic assertion beyond those side values.
@@ -1110,11 +1115,24 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   sparse internal lookup needed for repeated references to one entity rather than the complete
   public witness. Return the composite from `reframe_with_action` and normalize the transported
   result; do not promise preservation of incidental pre-normalization delta order.
-  Cover the trait and action laws, every delta arm and relation-valued entity kind, the complete lhs plus sparse
-  created-id domain, compatible removal-local frames and composed local-to-owner-to-target actions,
-  created entities erased by normalization, intrinsically contradictory but
+  Cover the trait and action laws, every delta arm and relation-valued entity kind, the complete lhs
+  plus sparse created-id domain, compatible removal-local frames and owner actions conjugated into
+  those local frames, created entities erased by normalization, intrinsically contradictory but
   integrity-valid reactions with total representative actions, multiple changes to one entity, and
   missing/incompatible map entries. **Additive; inherited red ledger unchanged.** [dep: S0n, S0q]
+  **Done.** `Reaction` now implements reduction-only normalization, complete input-domain
+  representative actions, contextual `FrameTransport`, and fused `Reframe`. Raw removals conjugate
+  the owner action into their local coordinates, while normalization first aligns them with their
+  owner; exact identity and noncommuting composition cases enforce the distinction. Focused cases
+  cover all six removal kinds, complete lhs plus sparse erased-`Add` domains, repeated changes,
+  frame-relative molecule constraints, both stereo constraint kinds, contradiction, and missing or
+  incompatible actions. The 256-case reaction reframe properties cover the action laws, witnessed
+  and fused agreement, idempotence, and framed equality over comprehensive reactions. A dedicated
+  six-kind domain generates compatible removals in a distinct local frame and checks exact action
+  identity, inverse/composition, and convergence with the owner-framed representation, including
+  noncommuting stereo-bond actions. Graph IR's 6,541 unit cases (three ignored), doctests, and strict
+  all-target Clippy with the property feature pass. No inherited failure is assigned to S0r; the S0p
+  ten-failure checkpoint remains the ledger baseline.
 - **S0s — reaction-span reduction and reframing** (`ir/reaction_span.rs`): implement reduction-only
   `Normalize for ReactionSpan`, then `FrameTransport` and consuming `Reframe for ReactionSpan`.
   Preserve equivalent `Modified` entries at checked and asserted construction, collapse them only
@@ -1131,10 +1149,13 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   reactions, and modified spans with nonuniform sides. **Additive; inherited red ledger unchanged.**
   [dep: S0n, S0q]
 - **S0t — rule-to-host overlay-frame transport** (`ir/reaction.rs`, application fixtures): replace
-  the stereo-only helper with one alignment pass over all matched overlay kinds. Derive the
-  unique local action from each atom-mapped rule frame to the host frame, assemble those actions into
-  `OverlaysFrameAction`, and let `FrameTransport for Reaction` dispatch it contextually. A removal
-  first composes its local-to-owner alignment with the owner-to-host action. This transports
+  the stereo-only helper with one application-owned alignment pass over all matched overlay kinds.
+  Derive the unique action from each atom-mapped rule owner frame to the host frame, then transport
+  the already normalized deltas contextually. Normalization has aligned every compatible removal
+  with its owner, so the removal consumes the owner-to-host action directly. If an application path
+  instead retains a raw local removal frame, it must align that payload directly by the composition
+  of its local-to-owner and owner-to-host actions; this host alignment is intentionally distinct from
+  the conjugation used by generic `FrameTransport for Reaction`. This transports
   aromatic and multicenter electron values, noncovalent ordered endpoint predicates, every stereo
   delta arm, and every frame-relative molecule-level constraint delta. Test a reframed rule `old`
   with `matches` and install the actual host value as realized `old`; added entities retain their

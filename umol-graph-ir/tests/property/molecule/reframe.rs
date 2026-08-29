@@ -1,4 +1,4 @@
-//! Aggregate molecule frame-transport and reframing properties.
+//! Aggregate molecule frame-transport and reframe properties.
 //!
 //! The generated domain contains integrity-valid molecules with all overlay kinds, positional
 //! payloads, and recursive constraints. Transport is checked through its action algebra, while

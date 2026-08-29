@@ -540,3 +540,16 @@ representation through their existing molecule-integrity gate. A permissive `Rea
 carry a prospective product that fails when materialized, consistent with the reaction/span
 boundary recorded above. The complete `(acceptor, donor multiset)` identity key and the permission
 for distinct dative entities to share individual participants remain unchanged.
+
+## Correction — 2026-08-29: removal frame transport
+
+The earlier statement that aggregate reaction transport composes a removal's local-to-owner
+alignment directly with the supplied owner action is superseded by doc 214 S0r. That composition
+aligns a removal directly into a target frame and is appropriate to normalization followed by
+application-specific rule-to-host transport, but it does not define a group action on a raw
+locally framed `Reaction`.
+
+For generic `FrameTransport for Reaction`, let `q` be the local-to-owner action and `a` the supplied
+owner action. The removal consumes `q.compose(a).compose(q.inverse())`. This conjugation preserves
+the relation between its local frame and the moving owner and therefore satisfies identity,
+inverse, and composition. The owning action returned by `reframe_with_action` remains unchanged.

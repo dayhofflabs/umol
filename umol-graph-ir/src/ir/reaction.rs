@@ -17,11 +17,16 @@ pub use integrity::ReactionIntegrityError;
 use umol_graph_core::Correspondence;
 use umol_perm::{DynPermutation, Permutation};
 
-use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
+use super::aromatic::{
+    aromatic_system_representative_action, AromaticSystemForm, AromaticSystemUpdate,
+};
 use super::atom::{AtomForm, AtomUpdate};
 use super::bond::{BondForm, BondUpdate};
+use super::constraint::{
+    ConstraintFrameActionDomain, Constraints, StereoAtomConstraintForm, StereoBondConstraintForm,
+};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::{DativeBondForm, DativeBondUpdate};
+use super::dative::{dative_bond_representative_action, DativeBondForm, DativeBondUpdate};
 use super::delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, DativeBondDelta, Delta, Deltas,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
@@ -36,6 +41,11 @@ use super::edit::{
 };
 use super::entity::Entity;
 use super::error::{ApplyError, ApplyPreconditionError, Contradiction};
+use super::frame::{
+    AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+    NoncovalentBondsFrameAction, OverlaysFrameAction, StereoAtomsFrameAction,
+    StereoBondsFrameAction,
+};
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -44,11 +54,18 @@ use super::ligand::StereoLigand;
 #[cfg(test)]
 use super::molecule::MoleculeEntries;
 use super::molecule::{Molecule, MoleculeIntegrityError};
-use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
-use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
-use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
+use super::multicenter::{
+    multicenter_bond_representative_action, MulticenterBondForm, MulticenterBondUpdate,
+};
+use super::noncovalent::{
+    noncovalent_bond_representative_action, NoncovalentBondForm, NoncovalentBondUpdate,
+};
+use super::stereo::{
+    stereo_atom_representative_action, stereo_bond_representative_action, StereoConfigurationForm,
+    StereoCoset, StereoKind, StereoTerm,
+};
 use super::substructure::SubstructureMatchConfig;
-use super::traits::{FrameTransport, Normalize};
+use super::traits::{FrameTransport, Normalize, Reframe};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -523,6 +540,438 @@ pub(super) fn normalize_reaction_deltas(
         }
     }
     restated.normalize()
+}
+
+#[derive(Default)]
+struct ReactionFrameActionDomain {
+    dative_bonds: HashSet<DativeBondId>,
+    aromatic_systems: HashSet<AromaticSystemId>,
+    multicenter_bonds: HashSet<MulticenterBondId>,
+    noncovalent_bonds: HashSet<NoncovalentBondId>,
+    stereo_atoms: HashSet<StereoAtomId>,
+    stereo_bonds: HashSet<StereoBondId>,
+    constraints: ConstraintFrameActionDomain,
+}
+
+impl ReactionFrameActionDomain {
+    fn from_deltas(deltas: &Deltas) -> Self {
+        let mut domain = Self::default();
+        let mut constraints = Vec::new();
+        for delta in deltas.iter() {
+            match delta {
+                Delta::DativeBond(
+                    DativeBondDelta::Add { id, .. } | DativeBondDelta::Remove { id, .. },
+                ) => {
+                    domain.dative_bonds.insert(*id);
+                }
+                Delta::AromaticSystem(
+                    AromaticSystemDelta::Add { id, .. }
+                    | AromaticSystemDelta::Remove { id, .. }
+                    | AromaticSystemDelta::ModifyField {
+                        id,
+                        change: AromaticSystemFieldChange::Electrons { .. },
+                    },
+                ) => {
+                    domain.aromatic_systems.insert(*id);
+                }
+                Delta::MulticenterBond(
+                    MulticenterBondDelta::Add { id, .. }
+                    | MulticenterBondDelta::Remove { id, .. }
+                    | MulticenterBondDelta::ModifyField {
+                        id,
+                        change: MulticenterBondFieldChange::Electrons { .. },
+                    },
+                ) => {
+                    domain.multicenter_bonds.insert(*id);
+                }
+                Delta::NoncovalentBond(
+                    NoncovalentBondDelta::Add { id, .. } | NoncovalentBondDelta::Remove { id, .. },
+                ) => {
+                    domain.noncovalent_bonds.insert(*id);
+                }
+                Delta::StereoAtom(delta) => {
+                    let uses_frame = match delta {
+                        StereoAtomDelta::Add { .. }
+                        | StereoAtomDelta::Remove { .. }
+                        | StereoAtomDelta::ModifyField { .. } => true,
+                        StereoAtomDelta::ModifyConstraint { old, new, .. } => {
+                            old.iter().chain(new).any(|constraint| {
+                                !matches!(constraint, StereoAtomConstraintForm::Stereogenicity(_))
+                            })
+                        }
+                    };
+                    if uses_frame {
+                        domain.stereo_atoms.insert(delta.id());
+                    }
+                }
+                Delta::StereoBond(delta) => {
+                    let uses_frame = match delta {
+                        StereoBondDelta::Add { .. }
+                        | StereoBondDelta::Remove { .. }
+                        | StereoBondDelta::ModifyField { .. } => true,
+                        StereoBondDelta::ModifyConstraint { old, new, .. } => {
+                            old.iter().chain(new).any(|constraint| {
+                                !matches!(constraint, StereoBondConstraintForm::Stereogenicity(_))
+                            })
+                        }
+                    };
+                    if uses_frame {
+                        domain.stereo_bonds.insert(delta.id());
+                    }
+                }
+                Delta::Constraint(ConstraintDelta::Add(constraint))
+                | Delta::Constraint(ConstraintDelta::Remove(constraint)) => {
+                    constraints.push(constraint.clone());
+                }
+                Delta::Atom(_)
+                | Delta::Bond(_)
+                | Delta::DativeBond(_)
+                | Delta::AromaticSystem(_)
+                | Delta::MulticenterBond(_)
+                | Delta::NoncovalentBond(_) => {}
+            }
+        }
+        domain.constraints = Constraints::from_iter(constraints).frame_action_domain();
+        domain
+    }
+
+    fn contains_dative_bond(&self, id: DativeBondId) -> bool {
+        self.dative_bonds.contains(&id) || self.constraints.contains_dative_bond(id)
+    }
+
+    fn contains_aromatic_system(&self, id: AromaticSystemId) -> bool {
+        self.aromatic_systems.contains(&id) || self.constraints.contains_aromatic_system(id)
+    }
+
+    fn contains_multicenter_bond(&self, id: MulticenterBondId) -> bool {
+        self.multicenter_bonds.contains(&id) || self.constraints.contains_multicenter_bond(id)
+    }
+
+    fn contains_noncovalent_bond(&self, id: NoncovalentBondId) -> bool {
+        self.noncovalent_bonds.contains(&id) || self.constraints.contains_noncovalent_bond(id)
+    }
+
+    fn contains_stereo_atom(&self, id: StereoAtomId) -> bool {
+        self.stereo_atoms.contains(&id) || self.constraints.contains_stereo_atom(id)
+    }
+
+    fn contains_stereo_bond(&self, id: StereoBondId) -> bool {
+        self.stereo_bonds.contains(&id) || self.constraints.contains_stereo_bond(id)
+    }
+}
+
+fn reaction_frame_action(
+    lhs: &Molecule,
+    deltas: &Deltas,
+    domain: Option<&ReactionFrameActionDomain>,
+) -> OverlaysFrameAction {
+    let mut dative_bonds = BTreeMap::new();
+    let mut aromatic_systems = BTreeMap::new();
+    let mut multicenter_bonds = BTreeMap::new();
+    let mut noncovalent_bonds = BTreeMap::new();
+    let mut stereo_atoms = BTreeMap::new();
+    let mut stereo_bonds = BTreeMap::new();
+
+    for view in lhs.dative_bonds().iter() {
+        if domain.is_none_or(|domain| domain.contains_dative_bond(view.id)) {
+            dative_bonds.insert(
+                view.id,
+                dative_bond_representative_action(view.donor_ids().collect()),
+            );
+        }
+    }
+    for view in lhs.aromatic_systems().iter() {
+        if domain.is_none_or(|domain| domain.contains_aromatic_system(view.id)) {
+            aromatic_systems.insert(
+                view.id,
+                aromatic_system_representative_action(view.atom_ids().collect()),
+            );
+        }
+    }
+    for view in lhs.multicenter_bonds().iter() {
+        if domain.is_none_or(|domain| domain.contains_multicenter_bond(view.id)) {
+            multicenter_bonds.insert(
+                view.id,
+                multicenter_bond_representative_action(view.atom_ids().collect()),
+            );
+        }
+    }
+    for view in lhs.noncovalent_bonds().iter() {
+        if domain.is_none_or(|domain| domain.contains_noncovalent_bond(view.id)) {
+            noncovalent_bonds.insert(
+                view.id,
+                noncovalent_bond_representative_action(view.atom_ids()),
+            );
+        }
+    }
+    for view in lhs.stereo_atoms().iter() {
+        if domain.is_none_or(|domain| domain.contains_stereo_atom(view.id)) {
+            stereo_atoms.insert(
+                view.id,
+                stereo_atom_representative_action(&view.ligand_frame())
+                    .expect("integrity-valid stereo-atom frames fit the bounded action"),
+            );
+        }
+    }
+    for view in lhs.stereo_bonds().iter() {
+        if domain.is_none_or(|domain| domain.contains_stereo_bond(view.id)) {
+            stereo_bonds.insert(
+                view.id,
+                stereo_bond_representative_action(&view.ligand_frame())
+                    .expect("integrity-valid stereo-bond frames admit a standard-frame action"),
+            );
+        }
+    }
+
+    for delta in deltas.iter() {
+        match delta {
+            Delta::DativeBond(DativeBondDelta::Add { id, donors, .. })
+                if domain.is_none_or(|domain| domain.contains_dative_bond(*id)) =>
+            {
+                dative_bonds.insert(*id, dative_bond_representative_action(donors.clone()));
+            }
+            Delta::AromaticSystem(AromaticSystemDelta::Add { id, atoms, .. })
+                if domain.is_none_or(|domain| domain.contains_aromatic_system(*id)) =>
+            {
+                aromatic_systems.insert(*id, aromatic_system_representative_action(atoms.clone()));
+            }
+            Delta::MulticenterBond(MulticenterBondDelta::Add { id, atoms, .. })
+                if domain.is_none_or(|domain| domain.contains_multicenter_bond(*id)) =>
+            {
+                multicenter_bonds
+                    .insert(*id, multicenter_bond_representative_action(atoms.clone()));
+            }
+            Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, atoms, .. })
+                if domain.is_none_or(|domain| domain.contains_noncovalent_bond(*id)) =>
+            {
+                noncovalent_bonds.insert(*id, noncovalent_bond_representative_action(*atoms));
+            }
+            Delta::StereoAtom(StereoAtomDelta::Add { id, ligands, .. })
+                if domain.is_none_or(|domain| domain.contains_stereo_atom(*id)) =>
+            {
+                stereo_atoms.insert(
+                    *id,
+                    stereo_atom_representative_action(ligands)
+                        .expect("integrity-valid stereo-atom frames fit the bounded action"),
+                );
+            }
+            Delta::StereoBond(StereoBondDelta::Add { id, ligands, .. })
+                if domain.is_none_or(|domain| domain.contains_stereo_bond(*id)) =>
+            {
+                stereo_bonds.insert(
+                    *id,
+                    stereo_bond_representative_action(ligands)
+                        .expect("integrity-valid stereo-bond frames admit a standard-frame action"),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    OverlaysFrameAction::new(
+        DativeBondsFrameAction::from_action_map(dative_bonds)
+            .expect("every dynamic permutation is a dative-bond action"),
+        AromaticSystemsFrameAction::from_action_map(aromatic_systems)
+            .expect("every dynamic permutation is an aromatic-system action"),
+        MulticenterBondsFrameAction::from_action_map(multicenter_bonds)
+            .expect("every dynamic permutation is a multicenter-bond action"),
+        NoncovalentBondsFrameAction::from_action_map(noncovalent_bonds)
+            .expect("every noncovalent-bond action has degree two"),
+        StereoAtomsFrameAction::from_action_map(stereo_atoms)
+            .expect("every bounded permutation is a stereo-atom action"),
+        StereoBondsFrameAction::from_action_map(stereo_bonds)
+            .expect("every selected stereo-bond action preserves endpoint blocks"),
+    )
+}
+
+fn reframe_reaction_deltas(
+    lhs: &Molecule,
+    deltas: Deltas,
+    actions: &OverlaysFrameAction,
+) -> Option<Deltas> {
+    let mut dative_adds = HashMap::new();
+    let mut aromatic_adds = HashMap::new();
+    let mut multicenter_adds = HashMap::new();
+    let mut noncovalent_adds = HashMap::new();
+    let mut stereo_atom_adds = HashMap::new();
+    let mut stereo_bond_adds = HashMap::new();
+    for delta in deltas.iter() {
+        match delta {
+            Delta::DativeBond(DativeBondDelta::Add {
+                id,
+                donors,
+                acceptor,
+                ..
+            }) => {
+                dative_adds.insert(*id, (donors.clone(), *acceptor));
+            }
+            Delta::AromaticSystem(AromaticSystemDelta::Add { id, atoms, .. }) => {
+                aromatic_adds.insert(*id, atoms.clone());
+            }
+            Delta::MulticenterBond(MulticenterBondDelta::Add { id, atoms, .. }) => {
+                multicenter_adds.insert(*id, atoms.clone());
+            }
+            Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, atoms, .. }) => {
+                noncovalent_adds.insert(*id, *atoms);
+            }
+            Delta::StereoAtom(StereoAtomDelta::Add {
+                id, site, ligands, ..
+            }) => {
+                stereo_atom_adds.insert(*id, (*site, ligands.clone()));
+            }
+            Delta::StereoBond(StereoBondDelta::Add {
+                id, site, ligands, ..
+            }) => {
+                stereo_bond_adds.insert(*id, (*site, ligands.clone()));
+            }
+            _ => {}
+        }
+    }
+
+    // A raw removal stays in its local coordinates while its owner moves, so transport uses the
+    // conjugate of the owner action by the local-to-owner action.
+    deltas
+        .into_iter()
+        .map(|delta| {
+            Some(match delta {
+                Delta::DativeBond(delta @ DativeBondDelta::Remove { .. }) => {
+                    let DativeBondDelta::Remove { id, donors, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let id = *id;
+                    let owner = lhs
+                        .dative_bonds()
+                        .get(id)
+                        .map(|view| (view.donor_ids().collect(), view.acceptor_id()))
+                        .or_else(|| dative_adds.get(&id).cloned())?;
+                    let local_to_owner = DynPermutation::between(donors, &owner.0)?;
+                    let local_action = local_to_owner
+                        .compose(actions.dative_bonds().action(id)?)?
+                        .compose(&local_to_owner.inverse())?;
+                    Delta::DativeBond(delta.reframe_by(&local_action)?)
+                }
+                Delta::AromaticSystem(delta @ AromaticSystemDelta::Remove { .. }) => {
+                    let AromaticSystemDelta::Remove { id, atoms, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let id = *id;
+                    let owner = lhs
+                        .aromatic_systems()
+                        .get(id)
+                        .map(|view| view.atom_ids().collect())
+                        .or_else(|| aromatic_adds.get(&id).cloned())?;
+                    let local_to_owner = DynPermutation::between(atoms, &owner)?;
+                    let local_action = local_to_owner
+                        .compose(actions.aromatic_systems().action(id)?)?
+                        .compose(&local_to_owner.inverse())?;
+                    Delta::AromaticSystem(delta.reframe_by(&local_action)?)
+                }
+                Delta::MulticenterBond(delta @ MulticenterBondDelta::Remove { .. }) => {
+                    let MulticenterBondDelta::Remove { id, atoms, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let id = *id;
+                    let owner = lhs
+                        .multicenter_bonds()
+                        .get(id)
+                        .map(|view| view.atom_ids().collect())
+                        .or_else(|| multicenter_adds.get(&id).cloned())?;
+                    let local_to_owner = DynPermutation::between(atoms, &owner)?;
+                    let local_action = local_to_owner
+                        .compose(actions.multicenter_bonds().action(id)?)?
+                        .compose(&local_to_owner.inverse())?;
+                    Delta::MulticenterBond(delta.reframe_by(&local_action)?)
+                }
+                Delta::NoncovalentBond(delta @ NoncovalentBondDelta::Remove { .. }) => {
+                    let NoncovalentBondDelta::Remove { id, atoms, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let id = *id;
+                    let owner = lhs
+                        .noncovalent_bonds()
+                        .get(id)
+                        .map(|view| view.atom_ids())
+                        .or_else(|| noncovalent_adds.get(&id).copied())?;
+                    let local_to_owner = DynPermutation::between(atoms, &owner)?;
+                    let local_action = local_to_owner
+                        .compose(actions.noncovalent_bonds().action(id)?)?
+                        .compose(&local_to_owner.inverse())?;
+                    Delta::NoncovalentBond(delta.reframe_by(&local_action)?)
+                }
+                Delta::StereoAtom(delta @ StereoAtomDelta::Remove { .. }) => {
+                    let id = delta.id();
+                    let owner = lhs
+                        .stereo_atoms()
+                        .get(id)
+                        .map(|view| (view.site_id(), view.ligand_frame()))
+                        .or_else(|| stereo_atom_adds.get(&id).cloned())?;
+                    let StereoAtomDelta::Remove { ligands, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let local_to_owner = Permutation::between(ligands, &owner.1)?;
+                    let owner_to_target = *actions.stereo_atoms().action(id)?;
+                    (local_to_owner.degree() == owner_to_target.degree()).then_some(())?;
+                    let local_action = local_to_owner
+                        .compose(owner_to_target)
+                        .compose(local_to_owner.inverse());
+                    Delta::StereoAtom(delta.reframe_by(&local_action)?)
+                }
+                Delta::StereoBond(delta @ StereoBondDelta::Remove { .. }) => {
+                    let id = delta.id();
+                    let owner = lhs
+                        .stereo_bonds()
+                        .get(id)
+                        .map(|view| (view.site_id(), view.ligand_frame()))
+                        .or_else(|| stereo_bond_adds.get(&id).cloned())?;
+                    let StereoBondDelta::Remove { ligands, .. } = &delta else {
+                        unreachable!()
+                    };
+                    let local_to_owner = Permutation::between(ligands, &owner.1)?;
+                    let owner_to_target = *actions.stereo_bonds().action(id)?;
+                    (local_to_owner.degree() == owner_to_target.degree()).then_some(())?;
+                    let local_action = local_to_owner
+                        .compose(owner_to_target)
+                        .compose(local_to_owner.inverse());
+                    Delta::StereoBond(delta.reframe_by(&local_action)?)
+                }
+                delta => delta.reframe_by(actions)?,
+            })
+        })
+        .collect()
+}
+
+impl Normalize for Reaction {
+    fn normalize(self) -> Result<Self, Contradiction> {
+        let deltas = normalize_reaction_deltas(&self.lhs, &self.deltas)?;
+        let lhs = self.lhs.normalize()?;
+        Ok(Self { lhs, deltas })
+    }
+}
+
+impl FrameTransport for Reaction {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        let deltas = reframe_reaction_deltas(&self.lhs, self.deltas, actions)?;
+        let lhs = self.lhs.reframe_by(actions)?;
+        Some(Self { lhs, deltas })
+    }
+}
+
+impl Reframe for Reaction {
+    fn representative_action(&self) -> Self::Action {
+        reaction_frame_action(&self.lhs, &self.deltas, None)
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        let normalized = self.normalize()?;
+        let domain = ReactionFrameActionDomain::from_deltas(&normalized.deltas);
+        let actions = reaction_frame_action(&normalized.lhs, &normalized.deltas, Some(&domain));
+        let deltas = reframe_reaction_deltas(&normalized.lhs, normalized.deltas, &actions)
+            .ok_or(Contradiction)?;
+        let lhs = normalized.lhs.reframe()?;
+        Self { lhs, deltas }.normalize()
+    }
 }
 
 impl Reaction {
@@ -1871,15 +2320,18 @@ mod tests {
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
         NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
-        StereoBondConstraintForm, StereogenicityForm,
+        StereoBondConstraintForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+        TopicityRelationForm,
     };
     use super::super::edit::{AtomFieldChange, BondFieldChange};
+    use super::super::electrons::ElectronCountsForm;
     use super::super::entity::{Entity, EntityKind};
+    use super::super::id::StereoLigandPosition;
     use super::super::ligand::StereoLigandKind;
     use super::super::molecule::transact::TransactionError;
     use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBondKind};
     use super::super::num::NumForm;
-    use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind};
+    use super::super::stereo::{StereoAtomForm, StereoBondForm, StereoCoset, StereoKind, Topicity};
     use super::super::substructure::SubstructureMatchAlgorithm;
     use super::*;
 
@@ -2824,6 +3276,376 @@ mod tests {
             local.reverse().unwrap().to_reaction_span().unwrap(),
             owner.reverse().unwrap().to_reaction_span().unwrap(),
         );
+    }
+
+    #[rstest]
+    #[case::dative(EntityKind::DativeBond)]
+    #[case::aromatic(EntityKind::AromaticSystem)]
+    #[case::multicenter(EntityKind::MulticenterBond)]
+    #[case::noncovalent(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_reaction_normalize_removal(#[case] entity_kind: EntityKind) {
+        let (owner, local) = removal_frame_reactions(entity_kind);
+
+        assert_eq!(local.normalize(), owner.normalize());
+    }
+
+    #[rstest]
+    #[case::dative(EntityKind::DativeBond)]
+    #[case::aromatic(EntityKind::AromaticSystem)]
+    #[case::multicenter(EntityKind::MulticenterBond)]
+    #[case::noncovalent(EntityKind::NoncovalentBond)]
+    #[case::stereo_atom(EntityKind::StereoAtom)]
+    #[case::stereo_bond(EntityKind::StereoBond)]
+    fn test_reaction_reframe_by_identity(#[case] entity_kind: EntityKind) {
+        let (_, local) = removal_frame_reactions(entity_kind);
+        let identity = local.representative_action().identity();
+
+        assert_eq!(local.clone().reframe_by(&identity), Some(local));
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_by_composition() {
+        let owner_atoms = vec![AtomId(2), AtomId(0), AtomId(1)];
+        let local_atoms = vec![AtomId(0), AtomId(2), AtomId(1)];
+        let owner_attributes = AromaticSystemForm::from_electrons(vec![3, 1, 2]);
+        let owner_to_local = DynPermutation::between(&owner_atoms, &local_atoms)
+            .expect("the frames have the same atoms");
+        let local_attributes = owner_attributes
+            .clone()
+            .reframe_by(&owner_to_local)
+            .expect("the action has the form's degree");
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                aromatic: vec![(owner_atoms, owner_attributes)],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Remove {
+                id: AromaticSystemId(0),
+                atoms: local_atoms,
+                attributes: local_attributes,
+            })]),
+        );
+        let action = reaction.representative_action();
+        let inverse = action.inverse();
+        let composite = action
+            .compose(&inverse)
+            .expect("an action and its inverse have the same domain");
+
+        assert_eq!(
+            reaction
+                .clone()
+                .reframe_by(&action)
+                .and_then(|transported| transported.reframe_by(&inverse)),
+            reaction.clone().reframe_by(&composite),
+        );
+        assert_eq!(reaction.clone().reframe_by(&composite), Some(reaction));
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_with_action_erased_entity() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::N),
+            ],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![1, 2]),
+            )],
+            ..Default::default()
+        });
+        let attributes = MulticenterBondForm::from_electrons(vec![3, 4]);
+        let id = MulticenterBondId(7);
+        let reaction = Reaction::new(
+            lhs.clone(),
+            Deltas::from_iter([
+                Delta::MulticenterBond(MulticenterBondDelta::Add {
+                    id,
+                    atoms: vec![AtomId(1), AtomId(0)],
+                    attributes: attributes.clone(),
+                }),
+                Delta::MulticenterBond(MulticenterBondDelta::Remove {
+                    id,
+                    atoms: vec![AtomId(1), AtomId(0)],
+                    attributes,
+                }),
+            ]),
+        );
+
+        let (reframed, action) = reaction
+            .reframe_with_action()
+            .expect("the created-then-removed entity is satisfiable");
+
+        assert_eq!(
+            reframed,
+            Reaction::new(
+                lhs.reframe().expect("the lhs is satisfiable"),
+                Deltas::new()
+            ),
+        );
+        assert_eq!(action.aromatic_systems().count(), 1);
+        assert_eq!(
+            action
+                .multicenter_bonds()
+                .action(id)
+                .map(DynPermutation::image),
+            Some([1, 0].as_slice()),
+        );
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_change_chain() {
+        let id = AromaticSystemId(0);
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                aromatic: vec![(
+                    vec![AtomId(2), AtomId(0), AtomId(1)],
+                    AromaticSystemForm::from_electrons(vec![30, 10, 20]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::from_iter([
+                Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                    id,
+                    change: AromaticSystemFieldChange::Electrons {
+                        old: ElectronCountsForm::Lit(vec![30, 10, 20]),
+                        new: ElectronCountsForm::Lit(vec![31, 11, 21]),
+                    },
+                }),
+                Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                    id,
+                    change: AromaticSystemFieldChange::Electrons {
+                        old: ElectronCountsForm::Lit(vec![31, 11, 21]),
+                        new: ElectronCountsForm::Lit(vec![32, 12, 22]),
+                    },
+                }),
+            ]),
+        );
+        let expected = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                aromatic: vec![(
+                    vec![AtomId(0), AtomId(1), AtomId(2)],
+                    AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+                )],
+                ..Default::default()
+            }),
+            Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+                id,
+                change: AromaticSystemFieldChange::Electrons {
+                    old: ElectronCountsForm::Lit(vec![10, 20, 30]),
+                    new: ElectronCountsForm::Lit(vec![12, 22, 32]),
+                },
+            })]),
+        );
+
+        assert_eq!(reaction.reframe(), Ok(expected));
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_constraint_delta() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            noncovalent: vec![(
+                AtomId(1),
+                AtomId(0),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            ..Default::default()
+        });
+        let input = Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+            ],
+        });
+        let expected = Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            ],
+        });
+        let reaction = Reaction::new(
+            lhs.clone(),
+            Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(input))]),
+        );
+
+        assert_eq!(
+            reaction.reframe(),
+            Ok(Reaction::new(
+                lhs.reframe().expect("the lhs is satisfiable"),
+                Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(expected))]),
+            )),
+        );
+    }
+
+    #[rstest]
+    #[case::atom(EntityKind::StereoAtom)]
+    #[case::bond(EntityKind::StereoBond)]
+    fn test_reaction_reframe_stereo_constraint(#[case] entity_kind: EntityKind) {
+        let atom_ligands = [2, 1, 3, 4]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let bond_ligands = [1, 0, 3, 2]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 7],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(5), AtomId(6), BondForm::from_order(2)),
+                (AtomId(5), AtomId(0), BondForm::from_order(1)),
+                (AtomId(5), AtomId(1), BondForm::from_order(1)),
+                (AtomId(6), AtomId(2), BondForm::from_order(1)),
+                (AtomId(6), AtomId(3), BondForm::from_order(1)),
+            ],
+            stereo_atoms: vec![(
+                AtomId(0),
+                atom_ligands,
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(4),
+                bond_ligands,
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
+            )],
+            ..Default::default()
+        });
+        let pair = StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2));
+        let delta = match entity_kind {
+            EntityKind::StereoAtom => Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
+                id: StereoAtomId(0),
+                kind: Some(StereoKind::Tetrahedral),
+                old: None,
+                new: Some(StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair,
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                })),
+            }),
+            EntityKind::StereoBond => Delta::StereoBond(StereoBondDelta::ModifyConstraint {
+                id: StereoBondId(0),
+                kind: Some(StereoKind::CisTrans),
+                old: None,
+                new: Some(StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair,
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                })),
+            }),
+            _ => unreachable!("test cases contain only stereo entity kinds"),
+        };
+        let reaction = Reaction::new(lhs, Deltas::from_iter([delta]));
+        // This exact domain exercises sparse action discovery for frame-relative stereo
+        // constraints; the comprehensive reaction strategy does not generate these delta arms.
+        let expected = reaction
+            .clone()
+            .reframe_with_action()
+            .map(|(reframed, _)| reframed);
+
+        assert_eq!(reaction.reframe(), expected);
+    }
+
+    #[rstest]
+    fn test_reaction_representative_action_contradiction() {
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C); 2],
+            aromatic: vec![(
+                vec![AtomId(1), AtomId(0)],
+                AromaticSystemForm::from_electrons(vec![1, 2]),
+            )],
+            ..Default::default()
+        });
+        let reaction = Reaction::new(
+            lhs,
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Undetermined,
+                        new: NumForm::Lit(1),
+                    },
+                }),
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(0),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Lit(2),
+                        new: NumForm::Lit(3),
+                    },
+                }),
+            ]),
+        );
+
+        let action = reaction.representative_action();
+
+        assert_eq!(
+            action
+                .aromatic_systems()
+                .action(AromaticSystemId(0))
+                .map(DynPermutation::image),
+            Some([1, 0].as_slice()),
+        );
+        assert_eq!(reaction.normalize(), Err(Contradiction));
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_by_action_coverage() {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                dative: vec![(
+                    vec![AtomId(1), AtomId(0)],
+                    AtomId(2),
+                    DativeBondForm::from_order(1),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        );
+        let action = Reaction::default().representative_action();
+
+        assert_eq!(reaction.reframe_by(&action), None);
+    }
+
+    #[rstest]
+    fn test_reaction_reframe_by_action_degree() {
+        let reaction = Reaction::new(
+            Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); 3],
+                dative: vec![(
+                    vec![AtomId(1), AtomId(0)],
+                    AtomId(2),
+                    DativeBondForm::from_order(1),
+                )],
+                ..Default::default()
+            }),
+            Deltas::new(),
+        );
+        let action = OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![DynPermutation::identity(1)])
+                .expect("a dynamic permutation is a dative-bond action"),
+            AromaticSystemsFrameAction::from_vec(vec![])
+                .expect("the empty aromatic-system action is admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![])
+                .expect("the empty multicenter-bond action is admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![])
+                .expect("the empty noncovalent-bond action is admissible"),
+            StereoAtomsFrameAction::from_vec(vec![])
+                .expect("the empty stereo-atom action is admissible"),
+            StereoBondsFrameAction::from_vec(vec![])
+                .expect("the empty stereo-bond action is admissible"),
+        );
+
+        assert_eq!(reaction.reframe_by(&action), None);
     }
 
     #[rstest]

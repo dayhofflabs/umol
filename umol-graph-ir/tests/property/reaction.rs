@@ -21,6 +21,8 @@ mod lifecycle;
 mod malformed;
 #[path = "reaction/metadata.rs"]
 mod metadata;
+#[path = "reaction/reframe.rs"]
+mod reframe;
 #[path = "reaction/serialization.rs"]
 mod serialization;
 #[path = "reaction/span.rs"]

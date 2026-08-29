@@ -63,18 +63,17 @@ macro_rules! overlay_frame_action {
 
         impl $name {
             pub(crate) fn from_vec(actions: Vec<$action>) -> Option<Self> {
-                actions
-                    .iter()
-                    .all($allows)
-                    .then(|| {
-                        Self(
-                            actions
-                                .into_iter()
-                                .enumerate()
-                                .map(|(index, action)| (<$id>::from(index), action))
-                                .collect(),
-                        )
-                    })
+                Self::from_action_map(
+                    actions
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, action)| (<$id>::from(index), action))
+                        .collect(),
+                )
+            }
+
+            pub(crate) fn from_action_map(actions: BTreeMap<$id, $action>) -> Option<Self> {
+                actions.values().all($allows).then_some(Self(actions))
             }
 
             /// Number of entity ids in this exact action domain.
@@ -317,6 +316,27 @@ mod tests {
             Some([2, 0, 1].as_slice()),
         );
         assert_eq!(action.action(AromaticSystemId(2)), None);
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_frame_action_from_action_map() {
+        let action = AromaticSystemsFrameAction::from_action_map(BTreeMap::from([
+            (AromaticSystemId(2), dynamic(vec![1, 0])),
+            (AromaticSystemId(7), dynamic(vec![2, 0, 1])),
+        ]))
+        .expect("actions are admissible");
+
+        assert_eq!(
+            action.ids().collect::<Vec<_>>(),
+            [AromaticSystemId(2), AromaticSystemId(7)],
+        );
+        assert_eq!(
+            action
+                .action(AromaticSystemId(7))
+                .map(DynPermutation::image),
+            Some([2, 0, 1].as_slice()),
+        );
+        assert_eq!(action.action(AromaticSystemId(0)), None);
     }
 
     #[rstest]

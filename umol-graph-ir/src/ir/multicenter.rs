@@ -185,7 +185,7 @@ impl Reframe for MulticenterBonds {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.atoms(id).collect()))
+            .map(|id| multicenter_bond_representative_action(self.atoms(id).collect()))
             .collect();
         MulticenterBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a multicenter-bond action")
@@ -208,7 +208,7 @@ pub(crate) fn reframe_multicenter_bonds_with(
             .iter()
             .map(|&atom| AtomId::from(atom))
             .collect();
-        let action = representative_action(stored);
+        let action = multicenter_bond_representative_action(stored);
         let attributes = set.data(relation_id).clone().normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
@@ -305,7 +305,7 @@ impl Reframe for MulticenterBondSpans {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.atoms(id).collect()))
+            .map(|id| multicenter_bond_representative_action(self.atoms(id).collect()))
             .collect();
         MulticenterBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a multicenter-bond action")
@@ -319,7 +319,7 @@ impl Reframe for MulticenterBondSpans {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let action = representative_action(stored);
+            let action = multicenter_bond_representative_action(stored);
             let span = self.0.data(relation_id).clone().normalize()?;
             *self.0.data_mut(relation_id) =
                 span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
@@ -330,7 +330,7 @@ impl Reframe for MulticenterBondSpans {
     }
 }
 
-fn representative_action(frame: Vec<AtomId>) -> DynPermutation {
+pub(crate) fn multicenter_bond_representative_action(frame: Vec<AtomId>) -> DynPermutation {
     let mut image: Vec<usize> = (0..frame.len()).collect();
     image.sort_unstable_by_key(|&position| frame[position]);
     DynPermutation::try_from(image).expect("sorted positions form a permutation")

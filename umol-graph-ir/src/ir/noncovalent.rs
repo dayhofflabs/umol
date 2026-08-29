@@ -176,7 +176,7 @@ impl Reframe for NoncovalentBonds {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.atoms(id)))
+            .map(|id| noncovalent_bond_representative_action(self.atoms(id)))
             .collect();
         NoncovalentBondsFrameAction::from_vec(actions)
             .expect("every noncovalent-bond action has degree two")
@@ -195,7 +195,7 @@ pub(crate) fn reframe_noncovalent_bonds_with(
     for relation_id in set.ids().collect::<Vec<_>>() {
         let id = NoncovalentBondId::from(relation_id);
         let stored = set.participants(relation_id).map(AtomId::from);
-        let action = representative_action(stored);
+        let action = noncovalent_bond_representative_action(stored);
         let attributes = set.data(relation_id).clone().normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
@@ -286,7 +286,7 @@ impl Reframe for NoncovalentBondSpans {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.atoms(id)))
+            .map(|id| noncovalent_bond_representative_action(self.atoms(id)))
             .collect();
         NoncovalentBondsFrameAction::from_vec(actions)
             .expect("every noncovalent-bond action has degree two")
@@ -295,7 +295,7 @@ impl Reframe for NoncovalentBondSpans {
     fn reframe(mut self) -> Result<Self, Contradiction> {
         for relation_id in self.0.ids().collect::<Vec<_>>() {
             let stored = self.0.participants(relation_id).map(AtomId::from);
-            let action = representative_action(stored);
+            let action = noncovalent_bond_representative_action(stored);
             let span = self.0.data(relation_id).clone().normalize()?;
             *self.0.data_mut(relation_id) =
                 span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
@@ -306,7 +306,7 @@ impl Reframe for NoncovalentBondSpans {
     }
 }
 
-fn representative_action(frame: [AtomId; 2]) -> DynPermutation {
+pub(crate) fn noncovalent_bond_representative_action(frame: [AtomId; 2]) -> DynPermutation {
     let mut image = vec![0, 1];
     image.sort_unstable_by_key(|&position| frame[position]);
     DynPermutation::try_from(image).expect("sorted positions form a permutation")

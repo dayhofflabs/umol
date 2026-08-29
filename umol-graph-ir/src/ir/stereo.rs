@@ -162,13 +162,13 @@ impl StereoAtoms {
     }
 }
 
-fn stereo_atom_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
+pub(crate) fn stereo_atom_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
     let mut image: Vec<usize> = (0..frame.len()).collect();
     image.sort_by(|&left, &right| frame[left].cmp(&frame[right]).then(left.cmp(&right)));
     Permutation::try_from(image.as_slice()).ok()
 }
 
-fn stereo_bond_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
+pub(crate) fn stereo_bond_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
     ClassKey::CisTrans.space().normalizer(frame)
 }
 

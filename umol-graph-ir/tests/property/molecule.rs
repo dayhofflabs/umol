@@ -29,8 +29,8 @@ mod metadata;
 mod publication;
 #[path = "molecule/references.rs"]
 mod references;
-#[path = "molecule/reframing.rs"]
-mod reframing;
+#[path = "molecule/reframe.rs"]
+mod reframe;
 #[path = "molecule/remapping.rs"]
 mod remapping;
 #[path = "molecule/ring.rs"]

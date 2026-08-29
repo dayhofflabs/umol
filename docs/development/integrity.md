@@ -121,7 +121,9 @@ An overlay removal may record compatible incidence in a participant order differ
 That sequence is an explicit local frame, not malformed representation. Because complete participant
 values cannot repeat, the entity kind determines one local-to-source action. Matching transports the
 recorded payload through that action before comparing it with the source. Aggregate reaction
-reframing composes the local alignment with the one owning action for the lhs or `Add` entity.
+transport conjugates the one owning action for the lhs or `Add` entity by the local alignment, so
+the removal retains the same relation to its owner. Normalization instead uses the local-to-source
+action directly to align the removal with that owner before reframing.
 
 Reaction integrity intentionally does not establish delta normal form, old/new continuity,
 constraint satisfiability, two-sided span materializability, DPO gluing conditions, host

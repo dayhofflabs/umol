@@ -1429,8 +1429,10 @@ participant-frame action between two supplied frames, then applies it through
 `FrameTransport::reframe_by`.
 Integrity prohibits repeated complete participant values, so equal structured incidence determines
 one action. `Reframe` instead selects an action for a frame-owning carrier. A reaction removal may
-carry another explicit local ordering of its source incidence: reaction transport composes the
-derived local-to-owner alignment with the owning action.
+carry another explicit local ordering of its source incidence: reaction transport conjugates the
+owning action by the derived local-to-owner alignment, preserving the relation between the removal
+frame and its owner. Normalization instead aligns the removal directly with the owner before
+reframing selects another frame.
 
 An action over an entity aggregate uses the aggregate's plural name followed by singular
 `FrameAction`: `DativeBondsFrameAction`, `AromaticSystemsFrameAction`,

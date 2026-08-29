@@ -203,7 +203,7 @@ impl Reframe for DativeBonds {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.donors(id).collect()))
+            .map(|id| dative_bond_representative_action(self.donors(id).collect()))
             .collect();
         DativeBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a dative-bond action")
@@ -226,7 +226,7 @@ pub(crate) fn reframe_dative_bonds_with(
             .iter()
             .map(|&atom| AtomId::from(atom))
             .collect();
-        let action = representative_action(stored);
+        let action = dative_bond_representative_action(stored);
         let attributes = set.data(relation_id).clone().normalize()?;
         *set.data_mut(relation_id) = attributes
             .reframe_by(&action)
@@ -337,7 +337,7 @@ impl Reframe for DativeBondSpans {
     fn representative_action(&self) -> Self::Action {
         let actions = self
             .ids()
-            .map(|id| representative_action(self.donors(id).collect()))
+            .map(|id| dative_bond_representative_action(self.donors(id).collect()))
             .collect();
         DativeBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a dative-bond action")
@@ -351,7 +351,7 @@ impl Reframe for DativeBondSpans {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let action = representative_action(stored);
+            let action = dative_bond_representative_action(stored);
             let span = self.0.data(relation_id).clone().normalize()?;
             *self.0.data_mut(relation_id) =
                 span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
@@ -362,7 +362,7 @@ impl Reframe for DativeBondSpans {
     }
 }
 
-fn representative_action(frame: Vec<AtomId>) -> DynPermutation {
+pub(crate) fn dative_bond_representative_action(frame: Vec<AtomId>) -> DynPermutation {
     let mut image: Vec<usize> = (0..frame.len()).collect();
     image.sort_unstable_by_key(|&position| frame[position]);
     DynPermutation::try_from(image).expect("sorted positions form a permutation")
