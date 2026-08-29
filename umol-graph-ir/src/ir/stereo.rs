@@ -553,18 +553,28 @@ impl Reframe for StereoAtomSpans {
             .expect("every bounded permutation is a stereo-atom action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let action = stereo_atom_representative_action(self.0.participants_2(relation_id))
-                .ok_or(Contradiction)?;
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_2_with(relation_id, &participant_order(action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_stereo_atom_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_stereo_atom_spans_with(
+    mut stereo_atoms: StereoAtomSpans,
+    mut visit: impl FnMut(StereoAtomId, Permutation),
+) -> Result<StereoAtomSpans, Contradiction> {
+    for relation_id in stereo_atoms.0.ids().collect::<Vec<_>>() {
+        let id = StereoAtomId::from(relation_id);
+        let action = stereo_atom_representative_action(stereo_atoms.0.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let span = stereo_atoms.0.data(relation_id).clone().normalize()?;
+        *stereo_atoms.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        stereo_atoms
+            .0
+            .permute_2_with(relation_id, &participant_order(action));
+        visit(id, action);
+    }
+    Ok(stereo_atoms)
 }
 
 /// The reaction span's stereo bonds, one [`EntitySpan`] per entity against a single ligand frame.
@@ -667,18 +677,28 @@ impl Reframe for StereoBondSpans {
             .expect("every selected stereo-bond action is block-preserving")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let action = stereo_bond_representative_action(self.0.participants_2(relation_id))
-                .ok_or(Contradiction)?;
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_2_with(relation_id, &participant_order(action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_stereo_bond_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_stereo_bond_spans_with(
+    mut stereo_bonds: StereoBondSpans,
+    mut visit: impl FnMut(StereoBondId, Permutation),
+) -> Result<StereoBondSpans, Contradiction> {
+    for relation_id in stereo_bonds.0.ids().collect::<Vec<_>>() {
+        let id = StereoBondId::from(relation_id);
+        let action = stereo_bond_representative_action(stereo_bonds.0.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let span = stereo_bonds.0.data(relation_id).clone().normalize()?;
+        *stereo_bonds.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        stereo_bonds
+            .0
+            .permute_2_with(relation_id, &participant_order(action));
+        visit(id, action);
+    }
+    Ok(stereo_bonds)
 }
 
 /// Defines the stereo entity forms.

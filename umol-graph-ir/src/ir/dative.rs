@@ -343,23 +343,33 @@ impl Reframe for DativeBondSpans {
             .expect("every dynamic permutation is a dative-bond action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let stored = self
-                .0
-                .participants_2(relation_id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let action = dative_bond_representative_action(stored);
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_2_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_dative_bond_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_dative_bond_spans_with(
+    mut dative_bonds: DativeBondSpans,
+    mut visit: impl FnMut(DativeBondId, &DynPermutation),
+) -> Result<DativeBondSpans, Contradiction> {
+    for relation_id in dative_bonds.0.ids().collect::<Vec<_>>() {
+        let id = DativeBondId::from(relation_id);
+        let stored = dative_bonds
+            .0
+            .participants_2(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = dative_bond_representative_action(stored);
+        let span = dative_bonds.0.data(relation_id).clone().normalize()?;
+        *dative_bonds.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        dative_bonds
+            .0
+            .permute_2_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(dative_bonds)
 }
 
 pub(crate) fn dative_bond_representative_action(frame: Vec<AtomId>) -> DynPermutation {

@@ -1148,6 +1148,27 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   pipeline collapse, exact lhs and semantic rhs superimposition projections, roundtrips through
   reactions, and modified spans with nonuniform sides. **Additive; inherited red ledger unchanged.**
   [dep: S0n, S0q]
+  **Done.** `ReactionSpan` now implements reduction-only `Normalize`, complete
+  `OverlaysFrameAction` transport, and fused `Reframe` over its six typed span aggregates. Checked
+  and asserted construction still preserve raw equivalent `Modified` entries; normalization and
+  the reframe prefix collapse them, normalize every entity side and constraint span, and
+  sort/deduplicate the constraint-span set without rebuilding or rechecking the closed container.
+  Raw transport leaves atom and localized-bond spans untouched, transports both sides of every
+  overlay span under one local action, and transports frame-relative constraint spans through the
+  same complete witness. The fused path derives each local action once, records only actions named
+  by the sparse constraint domain, whose empty case allocates nothing, and avoids constructing the
+  complete witness.
+  The reusable internal constraint action map now lives beside that domain and serves molecule
+  reframe, molecule pushout, and reaction-span reframe. Canonicalization uses the public span
+  normalization implementation instead of its former duplicate. Exact tests cover raw constructor
+  preservation and pipeline collapse across all eight entity kinds, constraint-span reduction,
+  nonuniform endpoint predicates, incomplete actions, and a nonuniform stereo-bond `Modified`
+  entry under a block-swapping representative. The 256-case reaction-span properties cover the
+  action laws, fused/witness agreement, the normalization prefix, framed equality, idempotence,
+  both projections, and the reaction roundtrip. Graph IR's 6,544 unit cases (three ignored),
+  doctests, the focused molecule pushout/reframe regressions, and strict all-target Clippy with the
+  property feature pass. No inherited failure is assigned to S0s; the S0p ten-failure checkpoint
+  remains the ledger baseline.
 - **S0t — rule-to-host overlay-frame transport** (`ir/reaction.rs`, application fixtures): replace
   the stereo-only helper with one application-owned alignment pass over all matched overlay kinds.
   Derive the unique action from each atom-mapped rule owner frame to the host frame, then transport

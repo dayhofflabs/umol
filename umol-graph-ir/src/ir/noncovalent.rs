@@ -292,18 +292,31 @@ impl Reframe for NoncovalentBondSpans {
             .expect("every noncovalent-bond action has degree two")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let stored = self.0.participants(relation_id).map(AtomId::from);
-            let action = noncovalent_bond_representative_action(stored);
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_noncovalent_bond_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_noncovalent_bond_spans_with(
+    mut noncovalent_bonds: NoncovalentBondSpans,
+    mut visit: impl FnMut(NoncovalentBondId, &DynPermutation),
+) -> Result<NoncovalentBondSpans, Contradiction> {
+    for relation_id in noncovalent_bonds.0.ids().collect::<Vec<_>>() {
+        let id = NoncovalentBondId::from(relation_id);
+        let stored = noncovalent_bonds
+            .0
+            .participants(relation_id)
+            .map(AtomId::from);
+        let action = noncovalent_bond_representative_action(stored);
+        let span = noncovalent_bonds.0.data(relation_id).clone().normalize()?;
+        *noncovalent_bonds.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        noncovalent_bonds
+            .0
+            .permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(noncovalent_bonds)
 }
 
 pub(crate) fn noncovalent_bond_representative_action(frame: [AtomId; 2]) -> DynPermutation {

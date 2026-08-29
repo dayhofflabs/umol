@@ -3940,71 +3940,6 @@ fn stereo_bond_span_frame_key(
     ]))
 }
 
-fn normalize_entity_span<T: Normalize>(
-    span: EntitySpan<T>,
-) -> Result<EntitySpan<T>, Contradiction> {
-    Ok(match span {
-        EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value.normalize()?),
-        EntitySpan::Added(value) => EntitySpan::Added(value.normalize()?),
-        EntitySpan::Removed(value) => EntitySpan::Removed(value.normalize()?),
-        EntitySpan::Modified { lhs, rhs } => {
-            let lhs = lhs.normalize()?;
-            let rhs = rhs.normalize()?;
-            if lhs == rhs {
-                EntitySpan::Unchanged(lhs)
-            } else {
-                EntitySpan::Modified { lhs, rhs }
-            }
-        }
-    })
-}
-
-fn normalize_constraint_span(span: ConstraintSpan) -> Result<ConstraintSpan, Contradiction> {
-    Ok(match span {
-        ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(value.normalize()?),
-        ConstraintSpan::Added(value) => ConstraintSpan::Added(value.normalize()?),
-        ConstraintSpan::Removed(value) => ConstraintSpan::Removed(value.normalize()?),
-    })
-}
-
-fn normalize_reaction_span(span: ReactionSpan) -> Result<ReactionSpan, Contradiction> {
-    let mut entries = span.entries();
-    entries.atoms = entries
-        .atoms
-        .into_iter()
-        .map(normalize_entity_span)
-        .collect::<Result<_, _>>()?;
-    for (_, _, value) in &mut entries.bonds {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.dative {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, value) in &mut entries.aromatic {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, value) in &mut entries.multicenter {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.noncovalent {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.stereo_atoms {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.stereo_bonds {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(normalize_constraint_span)
-        .collect::<Result<_, _>>()?;
-    entries.constraints.sort();
-    entries.constraints.dedup();
-    Ok(ReactionSpan::from_entries(entries))
-}
-
 fn canonicalize_topology(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4965,7 +4900,7 @@ fn canonicalize_checked_reaction_span_with_correspondence_by(
     level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<(ReactionSpan, MoleculeCorrespondence), Contradiction> {
-    let normalized = normalize_reaction_span(span.clone())?;
+    let normalized = span.clone().normalize()?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
     let incidence_level = match level {
         DescriptionLevel::Topology => IncidenceLevel::Topology,
@@ -4990,7 +4925,7 @@ fn canonical_reaction_span_key(
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
     if level == DescriptionLevel::Full {
-        let normalized = normalize_reaction_span(span.clone())?;
+        let normalized = span.clone().normalize()?;
         return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
     }
     Ok(reaction_span_canonical_candidate(span, level, context)?.key)

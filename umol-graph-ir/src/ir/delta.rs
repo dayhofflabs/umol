@@ -18,7 +18,8 @@ use super::atom::{AtomForm, AtomUpdate};
 use super::bond::{BondForm, BondUpdate};
 use super::constraint::{
     AromaticSystemConstraintForm, AromaticSystemConstraintKey, AtomConstraintForm,
-    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint, DativeBondConstraintForm,
+    AtomConstraintKey, BondConstraintForm, BondConstraintKey, Constraint,
+    ConstraintFrameActionDomain, ConstraintFrameActions, DativeBondConstraintForm,
     DativeBondConstraintKey, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
     NoncovalentBondConstraintForm, NoncovalentBondConstraintKey, StereoAtomConstraintForm,
     StereoAtomConstraintKey, StereoBondConstraintForm, StereoBondConstraintKey,
@@ -1592,6 +1593,22 @@ impl ConstraintSpan {
             Self::Removed(_) => None,
         }
     }
+
+    pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+        match self {
+            Self::Unchanged(constraint) | Self::Added(constraint) | Self::Removed(constraint) => {
+                constraint.collect_frame_action_domain(domain);
+            }
+        }
+    }
+
+    pub(crate) fn reframe_by_actions(self, actions: &impl ConstraintFrameActions) -> Option<Self> {
+        Some(match self {
+            Self::Unchanged(constraint) => Self::Unchanged(constraint.reframe_by_actions(actions)?),
+            Self::Added(constraint) => Self::Added(constraint.reframe_by_actions(actions)?),
+            Self::Removed(constraint) => Self::Removed(constraint.reframe_by_actions(actions)?),
+        })
+    }
 }
 
 impl Normalize for ConstraintSpan {
@@ -1608,11 +1625,7 @@ impl FrameTransport for ConstraintSpan {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        Some(match self {
-            Self::Unchanged(constraint) => Self::Unchanged(constraint.reframe_by(actions)?),
-            Self::Added(constraint) => Self::Added(constraint.reframe_by(actions)?),
-            Self::Removed(constraint) => Self::Removed(constraint.reframe_by(actions)?),
-        })
+        self.reframe_by_actions(actions)
     }
 }
 

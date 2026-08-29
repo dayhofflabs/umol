@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
+use std::mem;
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -16,12 +17,14 @@ use umol_graph_core::{
 };
 use umol_perm::{DynPermutation, Permutation};
 
-use super::aromatic::{AromaticSystemForm, AromaticSystemSpans};
+use super::aromatic::{
+    reframe_aromatic_system_spans_with, AromaticSystemForm, AromaticSystemSpans,
+};
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::Constraint;
+use super::constraint::{Constraint, ConstraintFrameActionDomain, ConstraintFrameActionMap};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::{DativeBondForm, DativeBondSpans};
+use super::dative::{reframe_dative_bond_spans_with, DativeBondForm, DativeBondSpans};
 use super::delta::{
     apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
     apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
@@ -29,8 +32,9 @@ use super::delta::{
     ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan,
     MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
-use super::entity::Entity;
+use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
+use super::frame::OverlaysFrameAction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -39,12 +43,19 @@ use super::ligand::StereoLigand;
 use super::molecule::{
     validate_constraint_references, Molecule, MoleculeEntries, MoleculeIntegrityError,
 };
-use super::multicenter::{MulticenterBondForm, MulticenterBondSpans};
-use super::noncovalent::{NoncovalentBondForm, NoncovalentBondSpans};
+use super::multicenter::{
+    reframe_multicenter_bond_spans_with, MulticenterBondForm, MulticenterBondSpans,
+};
+use super::noncovalent::{
+    reframe_noncovalent_bond_spans_with, NoncovalentBondForm, NoncovalentBondSpans,
+};
 use super::reaction::{normalize_reaction_deltas, Reaction};
 use super::remap::IdRemapping;
-use super::stereo::{StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind};
-use super::traits::{EntityPatch, FrameTransport, Normalize};
+use super::stereo::{
+    reframe_stereo_atom_spans_with, reframe_stereo_bond_spans_with, StereoAtomForm,
+    StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
+};
+use super::traits::{EntityPatch, FrameTransport, Normalize, Reframe};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
@@ -1695,6 +1706,160 @@ impl ReactionSpan {
     }
 }
 
+fn normalize_entity_spans<T: Normalize>(
+    spans: Vec<EntitySpan<T>>,
+) -> Result<Vec<EntitySpan<T>>, Contradiction> {
+    spans.into_iter().map(Normalize::normalize).collect()
+}
+
+fn normalize_constraint_spans(
+    spans: Vec<ConstraintSpan>,
+) -> Result<Vec<ConstraintSpan>, Contradiction> {
+    let mut spans = spans
+        .into_iter()
+        .map(Normalize::normalize)
+        .collect::<Result<Vec<_>, _>>()?;
+    spans.sort();
+    spans.dedup();
+    Ok(spans)
+}
+
+impl Normalize for ReactionSpan {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        self.atoms = normalize_entity_spans(self.atoms)?;
+        self.bonds = normalize_entity_spans(self.bonds)?;
+        self.dative_bonds = self.dative_bonds.normalize()?;
+        self.aromatic_systems = self.aromatic_systems.normalize()?;
+        self.multicenter_bonds = self.multicenter_bonds.normalize()?;
+        self.noncovalent_bonds = self.noncovalent_bonds.normalize()?;
+        self.stereo_atoms = self.stereo_atoms.normalize()?;
+        self.stereo_bonds = self.stereo_bonds.normalize()?;
+        self.constraints = normalize_constraint_spans(self.constraints)?;
+        Ok(self)
+    }
+}
+
+impl FrameTransport for ReactionSpan {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        self.dative_bonds = self.dative_bonds.reframe_by(actions.dative_bonds())?;
+        self.aromatic_systems = self
+            .aromatic_systems
+            .reframe_by(actions.aromatic_systems())?;
+        self.multicenter_bonds = self
+            .multicenter_bonds
+            .reframe_by(actions.multicenter_bonds())?;
+        self.noncovalent_bonds = self
+            .noncovalent_bonds
+            .reframe_by(actions.noncovalent_bonds())?;
+        self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
+        self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
+        self.constraints = self
+            .constraints
+            .into_iter()
+            .map(|span| span.reframe_by(actions))
+            .collect::<Option<_>>()?;
+        Some(self)
+    }
+}
+
+impl Reframe for ReactionSpan {
+    fn representative_action(&self) -> Self::Action {
+        OverlaysFrameAction::new(
+            self.dative_bonds.representative_action(),
+            self.aromatic_systems.representative_action(),
+            self.multicenter_bonds.representative_action(),
+            self.noncovalent_bonds.representative_action(),
+            self.stereo_atoms.representative_action(),
+            self.stereo_bonds.representative_action(),
+        )
+    }
+
+    fn reframe(mut self) -> Result<Self, Contradiction> {
+        let mut action_domain = ConstraintFrameActionDomain::default();
+        for span in &self.constraints {
+            span.collect_frame_action_domain(&mut action_domain);
+        }
+
+        self.atoms = normalize_entity_spans(self.atoms)?;
+        self.bonds = normalize_entity_spans(self.bonds)?;
+        self.constraints = normalize_constraint_spans(self.constraints)?;
+
+        let mut actions = ConstraintFrameActionMap::default();
+        self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
+            mem::take(&mut self.dative_bonds).reframe()?
+        } else {
+            reframe_dative_bond_spans_with(mem::take(&mut self.dative_bonds), |id, action| {
+                if action_domain.contains_dative_bond(id) {
+                    actions.insert_dative_bond(id, action.clone());
+                }
+            })?
+        };
+        self.aromatic_systems = if action_domain.count(EntityKind::AromaticSystem) == 0 {
+            mem::take(&mut self.aromatic_systems).reframe()?
+        } else {
+            reframe_aromatic_system_spans_with(
+                mem::take(&mut self.aromatic_systems),
+                |id, action| {
+                    if action_domain.contains_aromatic_system(id) {
+                        actions.insert_aromatic_system(id, action.clone());
+                    }
+                },
+            )?
+        };
+        self.multicenter_bonds = if action_domain.count(EntityKind::MulticenterBond) == 0 {
+            mem::take(&mut self.multicenter_bonds).reframe()?
+        } else {
+            reframe_multicenter_bond_spans_with(
+                mem::take(&mut self.multicenter_bonds),
+                |id, action| {
+                    if action_domain.contains_multicenter_bond(id) {
+                        actions.insert_multicenter_bond(id, action.clone());
+                    }
+                },
+            )?
+        };
+        self.noncovalent_bonds = if action_domain.count(EntityKind::NoncovalentBond) == 0 {
+            mem::take(&mut self.noncovalent_bonds).reframe()?
+        } else {
+            reframe_noncovalent_bond_spans_with(
+                mem::take(&mut self.noncovalent_bonds),
+                |id, action| {
+                    if action_domain.contains_noncovalent_bond(id) {
+                        actions.insert_noncovalent_bond(id, action.clone());
+                    }
+                },
+            )?
+        };
+        self.stereo_atoms = if action_domain.count(EntityKind::StereoAtom) == 0 {
+            mem::take(&mut self.stereo_atoms).reframe()?
+        } else {
+            reframe_stereo_atom_spans_with(mem::take(&mut self.stereo_atoms), |id, action| {
+                if action_domain.contains_stereo_atom(id) {
+                    actions.insert_stereo_atom(id, action);
+                }
+            })?
+        };
+        self.stereo_bonds = if action_domain.count(EntityKind::StereoBond) == 0 {
+            mem::take(&mut self.stereo_bonds).reframe()?
+        } else {
+            reframe_stereo_bond_spans_with(mem::take(&mut self.stereo_bonds), |id, action| {
+                if action_domain.contains_stereo_bond(id) {
+                    actions.insert_stereo_bond(id, action);
+                }
+            })?
+        };
+        self.constraints = self
+            .constraints
+            .into_iter()
+            .map(|span| span.reframe_by_actions(&actions).ok_or(Contradiction))
+            .collect::<Result<_, _>>()?;
+        self.constraints = normalize_constraint_spans(self.constraints)?;
+        Ok(self)
+    }
+}
+
 /// Which side of the span a projection reads.
 #[derive(Clone, Copy)]
 enum Side {
@@ -2411,8 +2576,8 @@ mod tests {
     use super::super::constraint::{
         AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint,
         Constraints, DativeBondConstraintForm, MoleculeConstraint, MulticenterBondConstraintForm,
-        NoncovalentBondConstraintForm, StereoAtomConstraintForm, StereoBondConstraintForm,
-        StereogenicityForm,
+        NoncovalentBondConstraintForm, RelationalConstraint, StereoAtomConstraintForm,
+        StereoBondConstraintForm, StereogenicityForm,
     };
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
@@ -2758,6 +2923,282 @@ mod tests {
                 rhs: StereoBondForm::default(),
             }
         );
+    }
+
+    #[rstest]
+    fn test_reaction_span_normalize() {
+        let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
+        let connected = |atoms| {
+            ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected {
+                atoms: Some(atoms),
+            }))
+        };
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Modified {
+                    lhs: lhs_atom.clone(),
+                    rhs: AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64])),
+                },
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Modified {
+                    lhs: BondForm::default(),
+                    rhs: BondForm::default(),
+                },
+            )],
+            dative: vec![(
+                vec![AtomId(1)],
+                AtomId(0),
+                EntitySpan::Modified {
+                    lhs: DativeBondForm::default(),
+                    rhs: DativeBondForm::default(),
+                },
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Modified {
+                    lhs: AromaticSystemForm::default(),
+                    rhs: AromaticSystemForm::default(),
+                },
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Modified {
+                    lhs: MulticenterBondForm::default(),
+                    rhs: MulticenterBondForm::default(),
+                },
+            )],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::default(),
+                    rhs: NoncovalentBondForm::default(),
+                },
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::default(),
+                    rhs: StereoAtomForm::default(),
+                },
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Modified {
+                    lhs: StereoBondForm::default(),
+                    rhs: StereoBondForm::default(),
+                },
+            )],
+            constraints: vec![
+                connected(vec![AtomId(1), AtomId(0)]),
+                connected(vec![AtomId(0), AtomId(1)]),
+            ],
+        });
+        let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(lhs_atom),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            dative: vec![(
+                vec![AtomId(1)],
+                AtomId(0),
+                EntitySpan::Unchanged(DativeBondForm::default()),
+            )],
+            aromatic: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Unchanged(AromaticSystemForm::default()),
+            )],
+            multicenter: vec![(
+                vec![AtomId(0), AtomId(1)],
+                EntitySpan::Unchanged(MulticenterBondForm::default()),
+            )],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(NoncovalentBondForm::default()),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+                EntitySpan::Unchanged(StereoAtomForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+                ],
+                EntitySpan::Unchanged(StereoBondForm::default()),
+            )],
+            constraints: vec![connected(vec![AtomId(0), AtomId(1)])],
+        });
+
+        assert_eq!(source.normalize(), Ok(expected));
+    }
+
+    #[rstest]
+    fn test_reaction_span_reframe_by() {
+        let predicate = |value| Box::new(AtomConstraintForm::valence(NumForm::Lit(value)));
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64])),
+                ),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            noncovalent: vec![(
+                AtomId(1),
+                AtomId(0),
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::default(),
+                    rhs: NoncovalentBondForm::default(),
+                },
+            )],
+            constraints: vec![ConstraintSpan::Unchanged(Constraint::Relational(
+                RelationalConstraint::NoncovalentBondEndsSatisfy {
+                    bond: NoncovalentBondId(0),
+                    predicates: [predicate(3), predicate(4)],
+                },
+            ))],
+            ..Default::default()
+        });
+        let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(
+                    AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64])),
+                ),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            noncovalent: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Modified {
+                    lhs: NoncovalentBondForm::default(),
+                    rhs: NoncovalentBondForm::default(),
+                },
+            )],
+            constraints: vec![ConstraintSpan::Unchanged(Constraint::Relational(
+                RelationalConstraint::NoncovalentBondEndsSatisfy {
+                    bond: NoncovalentBondId(0),
+                    predicates: [predicate(4), predicate(3)],
+                },
+            ))],
+            ..Default::default()
+        });
+        let action = source.representative_action();
+
+        assert_eq!(source.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_reaction_span_reframe_by_error() {
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+                EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
+            ],
+            noncovalent: vec![(
+                AtomId(1),
+                AtomId(0),
+                EntitySpan::Unchanged(NoncovalentBondForm::default()),
+            )],
+            ..Default::default()
+        });
+        let incomplete =
+            ReactionSpan::from_entries(ReactionSpanEntries::default()).representative_action();
+
+        assert_eq!(source.reframe_by(&incomplete), None);
+    }
+
+    #[rstest]
+    fn test_reaction_span_reframe() {
+        let lhs = StereoBondForm::new(StereoKind::CisTrans, 0u32);
+        let rhs = StereoBondForm::new(StereoKind::CisTrans, 1u32);
+        let action = Permutation::from_image(&[3, 2, 1, 0]);
+        let atoms = vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C)); 6];
+        let bonds = vec![
+            (
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::from_order(2)),
+            ),
+            (
+                AtomId(0),
+                AtomId(5),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(0),
+                AtomId(3),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(4),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+        ];
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: atoms.clone(),
+            bonds: bonds.clone(),
+            stereo_bonds: vec![(
+                BondId(0),
+                [5, 3, 4, 2]
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                EntitySpan::Modified {
+                    lhs: lhs.clone(),
+                    rhs: rhs.clone(),
+                },
+            )],
+            ..Default::default()
+        });
+        let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms,
+            bonds,
+            stereo_bonds: vec![(
+                BondId(0),
+                [2, 4, 3, 5]
+                    .into_iter()
+                    .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                    .collect(),
+                EntitySpan::Modified {
+                    lhs: lhs
+                        .reframe_by(&action)
+                        .expect("the block-preserving action is admissible"),
+                    rhs: rhs
+                        .reframe_by(&action)
+                        .expect("the block-preserving action is admissible"),
+                },
+            )],
+            ..Default::default()
+        });
+
+        assert_eq!(source.reframe(), Ok(expected));
     }
 
     #[rstest]

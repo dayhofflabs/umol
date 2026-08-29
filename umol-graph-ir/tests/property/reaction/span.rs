@@ -22,6 +22,8 @@ use crate::strategies::{
 
 #[path = "span/canonicalize.rs"]
 mod canonicalize;
+#[path = "span/reframe.rs"]
+mod reframe;
 #[path = "span/remapping.rs"]
 mod remapping;
 

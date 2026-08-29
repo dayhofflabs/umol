@@ -1,7 +1,7 @@
 //! Molecule-scope constraints, the `Constraint` combinator tree, and the
 //! molecule-level `Constraints` store.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -37,6 +37,76 @@ pub(crate) trait ConstraintFrameActions {
     fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation>;
     fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation>;
     fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation>;
+}
+
+#[derive(Default)]
+pub(crate) struct ConstraintFrameActionMap {
+    dative_bonds: HashMap<DativeBondId, DynPermutation>,
+    aromatic_systems: HashMap<AromaticSystemId, DynPermutation>,
+    multicenter_bonds: HashMap<MulticenterBondId, DynPermutation>,
+    noncovalent_bonds: HashMap<NoncovalentBondId, DynPermutation>,
+    stereo_atoms: HashMap<StereoAtomId, Permutation>,
+    stereo_bonds: HashMap<StereoBondId, Permutation>,
+}
+
+impl ConstraintFrameActionMap {
+    pub(crate) fn insert_dative_bond(&mut self, id: DativeBondId, action: DynPermutation) {
+        self.dative_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_aromatic_system(&mut self, id: AromaticSystemId, action: DynPermutation) {
+        self.aromatic_systems.insert(id, action);
+    }
+
+    pub(crate) fn insert_multicenter_bond(
+        &mut self,
+        id: MulticenterBondId,
+        action: DynPermutation,
+    ) {
+        self.multicenter_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_noncovalent_bond(
+        &mut self,
+        id: NoncovalentBondId,
+        action: DynPermutation,
+    ) {
+        self.noncovalent_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_stereo_atom(&mut self, id: StereoAtomId, action: Permutation) {
+        self.stereo_atoms.insert(id, action);
+    }
+
+    pub(crate) fn insert_stereo_bond(&mut self, id: StereoBondId, action: Permutation) {
+        self.stereo_bonds.insert(id, action);
+    }
+}
+
+impl ConstraintFrameActions for ConstraintFrameActionMap {
+    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation> {
+        self.dative_bonds.get(&id)
+    }
+
+    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation> {
+        self.aromatic_systems.get(&id)
+    }
+
+    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation> {
+        self.multicenter_bonds.get(&id)
+    }
+
+    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation> {
+        self.noncovalent_bonds.get(&id)
+    }
+
+    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation> {
+        self.stereo_atoms.get(&id)
+    }
+
+    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation> {
+        self.stereo_bonds.get(&id)
+    }
 }
 
 impl ConstraintFrameActions for OverlaysFrameAction {
@@ -282,7 +352,7 @@ impl Constraint {
         }
     }
 
-    fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+    pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
         match self {
             Self::DativeBond(id, constraint) if constraint.uses_participant_frame() => {
                 domain.insert_dative_bond(*id)

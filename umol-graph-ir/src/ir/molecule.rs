@@ -13,13 +13,12 @@ pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
     Correspondence, EdgeId, Graph, NodeId, RelationParticipant, Remapping, UnionFind,
 };
-use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
 use super::constraint::{
-    Constraint, ConstraintFrameActions, Constraints, MoleculeConstraint, RelationalConstraint,
+    Constraint, ConstraintFrameActionMap, Constraints, MoleculeConstraint, RelationalConstraint,
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
@@ -2266,7 +2265,7 @@ impl Reframe for Molecule {
         } else {
             reframe_dative_bonds_with(mem::take(&mut self.dative_bonds), |id, action| {
                 if action_domain.contains_dative_bond(id) {
-                    actions.dative_bonds.insert(id, action.clone());
+                    actions.insert_dative_bond(id, action.clone());
                 }
             })?
         };
@@ -2275,7 +2274,7 @@ impl Reframe for Molecule {
         } else {
             reframe_aromatic_systems_with(mem::take(&mut self.aromatic_systems), |id, action| {
                 if action_domain.contains_aromatic_system(id) {
-                    actions.aromatic_systems.insert(id, action.clone());
+                    actions.insert_aromatic_system(id, action.clone());
                 }
             })?
         };
@@ -2284,7 +2283,7 @@ impl Reframe for Molecule {
         } else {
             reframe_multicenter_bonds_with(mem::take(&mut self.multicenter_bonds), |id, action| {
                 if action_domain.contains_multicenter_bond(id) {
-                    actions.multicenter_bonds.insert(id, action.clone());
+                    actions.insert_multicenter_bond(id, action.clone());
                 }
             })?
         };
@@ -2293,7 +2292,7 @@ impl Reframe for Molecule {
         } else {
             reframe_noncovalent_bonds_with(mem::take(&mut self.noncovalent_bonds), |id, action| {
                 if action_domain.contains_noncovalent_bond(id) {
-                    actions.noncovalent_bonds.insert(id, action.clone());
+                    actions.insert_noncovalent_bond(id, action.clone());
                 }
             })?
         };
@@ -2302,7 +2301,7 @@ impl Reframe for Molecule {
         } else {
             reframe_stereo_atoms_with(mem::take(&mut self.stereo_atoms), |id, action| {
                 if action_domain.contains_stereo_atom(id) {
-                    actions.stereo_atoms.insert(id, action);
+                    actions.insert_stereo_atom(id, action);
                 }
             })?
         };
@@ -2311,7 +2310,7 @@ impl Reframe for Molecule {
         } else {
             reframe_stereo_bonds_with(mem::take(&mut self.stereo_bonds), |id, action| {
                 if action_domain.contains_stereo_bond(id) {
-                    actions.stereo_bonds.insert(id, action);
+                    actions.insert_stereo_bond(id, action);
                 }
             })?
         };
@@ -2321,42 +2320,6 @@ impl Reframe for Molecule {
             .ok_or(Contradiction)?
             .normalize()?;
         Ok(self)
-    }
-}
-
-#[derive(Default)]
-struct ConstraintFrameActionMap {
-    dative_bonds: HashMap<DativeBondId, DynPermutation>,
-    aromatic_systems: HashMap<AromaticSystemId, DynPermutation>,
-    multicenter_bonds: HashMap<MulticenterBondId, DynPermutation>,
-    noncovalent_bonds: HashMap<NoncovalentBondId, DynPermutation>,
-    stereo_atoms: HashMap<StereoAtomId, Permutation>,
-    stereo_bonds: HashMap<StereoBondId, Permutation>,
-}
-
-impl ConstraintFrameActions for ConstraintFrameActionMap {
-    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation> {
-        self.dative_bonds.get(&id)
-    }
-
-    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation> {
-        self.aromatic_systems.get(&id)
-    }
-
-    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation> {
-        self.multicenter_bonds.get(&id)
-    }
-
-    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation> {
-        self.noncovalent_bonds.get(&id)
-    }
-
-    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation> {
-        self.stereo_atoms.get(&id)
-    }
-
-    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation> {
-        self.stereo_bonds.get(&id)
     }
 }
 

@@ -311,23 +311,33 @@ impl Reframe for MulticenterBondSpans {
             .expect("every dynamic permutation is a multicenter-bond action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let stored = self
-                .0
-                .participants(relation_id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let action = multicenter_bond_representative_action(stored);
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_multicenter_bond_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_multicenter_bond_spans_with(
+    mut multicenter_bonds: MulticenterBondSpans,
+    mut visit: impl FnMut(MulticenterBondId, &DynPermutation),
+) -> Result<MulticenterBondSpans, Contradiction> {
+    for relation_id in multicenter_bonds.0.ids().collect::<Vec<_>>() {
+        let id = MulticenterBondId::from(relation_id);
+        let stored = multicenter_bonds
+            .0
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = multicenter_bond_representative_action(stored);
+        let span = multicenter_bonds.0.data(relation_id).clone().normalize()?;
+        *multicenter_bonds.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        multicenter_bonds
+            .0
+            .permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(multicenter_bonds)
 }
 
 pub(crate) fn multicenter_bond_representative_action(frame: Vec<AtomId>) -> DynPermutation {

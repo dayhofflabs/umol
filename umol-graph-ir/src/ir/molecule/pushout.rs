@@ -195,9 +195,7 @@ impl Molecule {
                     .map(|atom| right.atoms().right_of(atom))
                     .collect::<Option<Vec<_>>>()?;
                 let target = object.dative_bonds.donors(target_id).collect::<Vec<_>>();
-                actions
-                    .dative_bonds
-                    .insert(id, DynPermutation::between(&mapped, &target)?);
+                actions.insert_dative_bond(id, DynPermutation::between(&mapped, &target)?);
             }
             for id in other
                 .aromatic_systems
@@ -211,9 +209,7 @@ impl Molecule {
                     .map(|atom| right.atoms().right_of(atom))
                     .collect::<Option<Vec<_>>>()?;
                 let target = object.aromatic_systems.atoms(target_id).collect::<Vec<_>>();
-                actions
-                    .aromatic_systems
-                    .insert(id, DynPermutation::between(&mapped, &target)?);
+                actions.insert_aromatic_system(id, DynPermutation::between(&mapped, &target)?);
             }
             for id in other
                 .multicenter_bonds
@@ -230,9 +226,7 @@ impl Molecule {
                     .multicenter_bonds
                     .atoms(target_id)
                     .collect::<Vec<_>>();
-                actions
-                    .multicenter_bonds
-                    .insert(id, DynPermutation::between(&mapped, &target)?);
+                actions.insert_multicenter_bond(id, DynPermutation::between(&mapped, &target)?);
             }
             for id in other
                 .noncovalent_bonds
@@ -246,7 +240,7 @@ impl Molecule {
                     .into_iter()
                     .map(|atom| right.atoms().right_of(atom))
                     .collect::<Option<Vec<_>>>()?;
-                actions.noncovalent_bonds.insert(
+                actions.insert_noncovalent_bond(
                     id,
                     DynPermutation::between(&mapped, &object.noncovalent_bonds.atoms(target_id))?,
                 );
@@ -268,7 +262,7 @@ impl Molecule {
                             .map(|atom| StereoLigand::new(atom, ligand.kind))
                     })
                     .collect::<Option<Vec<_>>>()?;
-                actions.stereo_atoms.insert(
+                actions.insert_stereo_atom(
                     id,
                     Permutation::between(&mapped, object.stereo_atoms.ligands(target_id))?,
                 );
@@ -290,7 +284,7 @@ impl Molecule {
                             .map(|atom| StereoLigand::new(atom, ligand.kind))
                     })
                     .collect::<Option<Vec<_>>>()?;
-                actions.stereo_bonds.insert(
+                actions.insert_stereo_bond(
                     id,
                     Permutation::between(&mapped, object.stereo_bonds.ligands(target_id))?,
                 );

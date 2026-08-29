@@ -312,23 +312,33 @@ impl Reframe for AromaticSystemSpans {
             .expect("every dynamic permutation is an aromatic-system action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        for relation_id in self.0.ids().collect::<Vec<_>>() {
-            let stored = self
-                .0
-                .participants(relation_id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let action = aromatic_system_representative_action(stored);
-            let span = self.0.data(relation_id).clone().normalize()?;
-            *self.0.data_mut(relation_id) =
-                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
-            self.0
-                .permute_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_aromatic_system_spans_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_aromatic_system_spans_with(
+    mut aromatic_systems: AromaticSystemSpans,
+    mut visit: impl FnMut(AromaticSystemId, &DynPermutation),
+) -> Result<AromaticSystemSpans, Contradiction> {
+    for relation_id in aromatic_systems.0.ids().collect::<Vec<_>>() {
+        let id = AromaticSystemId::from(relation_id);
+        let stored = aromatic_systems
+            .0
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = aromatic_system_representative_action(stored);
+        let span = aromatic_systems.0.data(relation_id).clone().normalize()?;
+        *aromatic_systems.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        aromatic_systems
+            .0
+            .permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(aromatic_systems)
 }
 
 pub(crate) fn aromatic_system_representative_action(frame: Vec<AtomId>) -> DynPermutation {
