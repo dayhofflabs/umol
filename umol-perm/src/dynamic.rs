@@ -2,13 +2,32 @@
 
 use crate::PermutationError;
 
+fn validate_image(image: &[usize]) -> Result<(), PermutationError> {
+    let degree = image.len();
+    let mut seen = vec![false; degree];
+    for (position, &value) in image.iter().enumerate() {
+        if value >= degree {
+            return Err(PermutationError::ImageValueOutOfRange {
+                position,
+                value,
+                degree,
+            });
+        }
+        if seen[value] {
+            return Err(PermutationError::DuplicateImageValue { value });
+        }
+        seen[value] = true;
+    }
+    Ok(())
+}
+
 /// A permutation with runtime degree, in one-line notation.
 ///
 /// Unlike [`Permutation`](crate::Permutation), this action has no fixed maximum degree and is not
 /// `Copy`. Its direction is `new[i] = old[action[i]]`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DynPermutation {
-    image: Box<[usize]>,
+    image: Vec<usize>,
 }
 
 impl DynPermutation {
@@ -58,9 +77,7 @@ impl DynPermutation {
         for (position, &source) in self.image.iter().enumerate() {
             image[source] = position;
         }
-        Self {
-            image: image.into_boxed_slice(),
-        }
+        Self { image }
     }
 
     /// The unique action carrying `from` to `to`, such that `action.act(from) == Some(to)`.
@@ -81,9 +98,7 @@ impl DynPermutation {
             used[source] = true;
             image.push(source);
         }
-        Some(Self {
-            image: image.into_boxed_slice(),
-        })
+        Some(Self { image })
     }
 }
 
@@ -91,23 +106,9 @@ impl TryFrom<&[usize]> for DynPermutation {
     type Error = PermutationError;
 
     fn try_from(image: &[usize]) -> Result<Self, Self::Error> {
-        let degree = image.len();
-        let mut seen = vec![false; degree];
-        for (position, &value) in image.iter().enumerate() {
-            if value >= degree {
-                return Err(PermutationError::ImageValueOutOfRange {
-                    position,
-                    value,
-                    degree,
-                });
-            }
-            if seen[value] {
-                return Err(PermutationError::DuplicateImageValue { value });
-            }
-            seen[value] = true;
-        }
+        validate_image(image)?;
         Ok(Self {
-            image: image.into(),
+            image: image.to_vec(),
         })
     }
 }
@@ -116,9 +117,8 @@ impl TryFrom<Vec<usize>> for DynPermutation {
     type Error = PermutationError;
 
     fn try_from(image: Vec<usize>) -> Result<Self, Self::Error> {
-        Self::try_from(image.as_slice()).map(|_| Self {
-            image: image.into_boxed_slice(),
-        })
+        validate_image(&image)?;
+        Ok(Self { image })
     }
 }
 
