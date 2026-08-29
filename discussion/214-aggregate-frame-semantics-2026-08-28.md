@@ -1222,6 +1222,20 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   canonicalization properties, and the three reaction-span canonicalization properties.
   **Breaking; inherited red ledger decreases from eight to zero.**
   [dep: S0p, S0r, S0s]
+  **Done.** `Canonicalize` now has `Reframe` as its supertrait. Reaction-span search applies the
+  aggregate representative action to every id-remapped candidate, and construction reframes the
+  selected candidate in its target id space. The previous canonicalization-only stereo
+  position-order machinery is removed; ordinary and stereo overlays now share the six-kind
+  `ReactionSpan` implementation. Reduced-level comparison keys apply frame transport without
+  normalizing excluded data, preserving their documented contradiction independence. The
+  correspondence-returning cases now assert the settled witness law: entity-id remapping followed
+  by reframing reconstructs the canonical value, while remapping alone need not.
+
+  All 279 canonicalization unit cases and all 15 exact canonicalization fixtures pass. All 19
+  molecule, reaction, and reaction-span canonicalization properties pass at 256 cases, including
+  the four reaction and three reaction-span failures assigned here. Graph IR's 6,552 unit cases
+  pass with three ignores, as do doctests and strict all-target Clippy with the property feature.
+  The inherited red ledger is now empty.
 - **S0v — frame and quotient algebra property suite**
   (`umol-graph-ir/tests/property/{frame,strategies,molecule/comparison,molecule/canonicalize,
   reaction/canonicalize,reaction/span/canonicalize}.rs`): review the existing stereo-transport,

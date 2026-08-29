@@ -381,34 +381,38 @@ entity-id-witness form of `framed_eq`, not another quotient level.
 The context-bearing trait has the semantic shape
 
 ```rust
-pub trait Canonicalize: Sized {
+pub trait Canonicalize: Reframe {
     type Error;
 
     fn canonicalize(
         self,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
     fn canonicalize_by(
         self,
         level: DescriptionLevel,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
     fn canonical_eq(
         &self,
         other: &Self,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> bool;
 
     fn canonical_eq_by(
         &self,
         other: &Self,
         level: DescriptionLevel,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> bool;
 }
 ```
+
+`canonicalize_with_correspondence` returns the entity-id-renumbering witness, not the participant
+frame action. Applying that correspondence and then `reframe` reconstructs the canonical value;
+remapping alone need not do so.
 
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
 implementation establishes a real need for distinct context types. Canonical-form construction is
@@ -434,8 +438,8 @@ A parameterized operation may select a frame using only a coarser structural lay
 the complete original molecule in that frame. Its guarantee is deliberately limited:
 
 - the selected structural layer is in canonical form;
-- the complete result is a remapping of the input and retains excluded features semantically,
-  while still normalizing their carried form values; and
+- the complete result is a remapping and reframing of the input and retains excluded features
+  semantically, while still normalizing their carried form values; and
 - the ordering of excluded features within an automorphism class of the selected layer is not
   determined.
 

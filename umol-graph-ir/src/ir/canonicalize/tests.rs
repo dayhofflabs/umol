@@ -9,19 +9,18 @@ use std::{array, iter};
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
-use umol_perm::{Orientation, Permutation};
+use umol_perm::Permutation;
 
 use super::*;
 use crate::ir::{
     AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
     AtomFieldChange, AtomForm, AtomId, BondFieldChange, BondForm, BondId, BooleanForm, Constraint,
     ConstraintDelta, Constraints, DativeBondFieldChange, DativeBondForm, DativeBondId, Entity,
-    IncidenceLevel, LigandPermutation, LigandSymmetryForm, MoleculeCorrespondence, MoleculeEntries,
-    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId, NoncovalentBondFieldChange,
-    NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation, ReactionSpanEntries,
-    StereoAtomConstraintForm, StereoAtomFieldChange, StereoAtomForm, StereoAtomId,
-    StereoBondConstraintForm, StereoBondFieldChange, StereoBondForm, StereoBondId,
-    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandPair,
+    IncidenceLevel, MoleculeCorrespondence, MoleculeEntries, MulticenterBondFieldChange,
+    MulticenterBondForm, MulticenterBondId, NoncovalentBondFieldChange, NoncovalentBondForm,
+    NoncovalentBondId, ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomFieldChange,
+    StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondFieldChange, StereoBondForm,
+    StereoBondId, StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandPair,
     Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
@@ -1224,7 +1223,10 @@ fn test_molecule_canonicalize_by_effective(
     assert_eq!(molecule_canonicalize_level(&source), level);
     assert_eq!(canonical, forced_full);
     assert_eq!(with_correspondence, canonical);
-    assert_eq!(source.remap(&correspondence), canonical);
+    assert_eq!(
+        source.remap(&correspondence).reframe(),
+        Ok(canonical.clone())
+    );
     assert_eq!(
         source.canonical_hash(&canonicalize_context),
         Ok(hash_value(&canonical)),
@@ -1256,6 +1258,8 @@ fn test_reaction_canonicalize_by_effective(
         .to_reaction_span()
         .expect("representative reaction materializes")
         .remap(&correspondence)
+        .reframe()
+        .expect("canonical correspondence preserves compatible frames")
         .to_reaction();
 
     assert_eq!(reaction_canonicalize_level(&source), level);
@@ -1295,7 +1299,10 @@ fn test_reaction_span_canonicalize_by_effective(
     assert_eq!(reaction_span_canonicalize_level(&source), level);
     assert_eq!(canonical, forced_full);
     assert_eq!(with_correspondence, canonical);
-    assert_eq!(source.remap(&correspondence), canonical);
+    assert_eq!(
+        source.remap(&correspondence).reframe(),
+        Ok(canonical.clone())
+    );
     assert_eq!(
         source.canonical_hash(&canonicalize_context),
         Ok(hash_value(&canonical)),
@@ -1398,50 +1405,6 @@ fn test_reaction_span_canonicalize_contradiction(canonicalize_context: Canonical
     assert_eq!(
         span.canonicalize(&canonicalize_context),
         Err(ReactionSpanCanonicalizeError::Contradiction(Contradiction)),
-    );
-}
-
-#[rstest]
-fn test_reframe_stereo_bond_form_by_order() {
-    let order = position_order_from_permutation(Permutation::from_image(&[3, 2, 1, 0]));
-    let source = StereoBondForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: vec![
-            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
-                permutation: OrientedLigandPermutation {
-                    permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
-                    orientation: Orientation::Proper,
-                },
-                invariant: BooleanForm::Lit(true),
-            }),
-            StereoBondConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
-                relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
-            }),
-        ]
-        .into(),
-    };
-    let expected = StereoBondForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: vec![
-            StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
-                permutation: OrientedLigandPermutation {
-                    permutation: LigandPermutation(Permutation::from_image(&[0, 1, 3, 2])),
-                    orientation: Orientation::Proper,
-                },
-                invariant: BooleanForm::Lit(true),
-            }),
-            StereoBondConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(2usize.into(), 3usize.into()),
-                relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
-            }),
-        ]
-        .into(),
-    };
-
-    assert_eq!(
-        reframe_stereo_bond_form_by_order(&source, &order),
-        Some(expected)
     );
 }
 

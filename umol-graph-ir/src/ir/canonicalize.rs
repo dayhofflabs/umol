@@ -6,8 +6,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId, ParticipantPosition,
-    SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId, SubdivisionNodeSource,
 };
 use umol_perm::{Orientation, Permutation};
 
@@ -19,8 +18,7 @@ use super::constraint::{
     Constraint, DativeBondConstraintForm, LigandPermutation, MoleculeConstraint,
     MulticenterBondConstraintForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
     OrientedLigandPermutation, RelationalConstraint, RingMembershipForm, RingScope,
-    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
     TopicityRelationForm,
 };
 use super::correspondence::MoleculeCorrespondence;
@@ -313,11 +311,11 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
 
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.
 ///
-/// Unlike [`Normalize`], canonicalization may change entity ids and participant frames. It
-/// preserves the represented aggregate, transports every reference and position-sensitive value,
-/// and normalizes carried forms in the selected frame. Construction of the canonical form is
-/// fallible; canonical equality totalizes those failures according to the aggregate's semantic
-/// contract.
+/// Canonicalization extends [`Reframe`]: normalization is the fixed-frame prefix, reframing adds
+/// participant-frame selection, and canonicalization additionally selects entity ids. It preserves
+/// the represented aggregate, transports every reference and position-sensitive value, and
+/// normalizes carried forms in the selected frame. Construction of the canonical form is fallible;
+/// canonical equality totalizes those failures according to the aggregate's semantic contract.
 ///
 /// # Semantic properties
 ///
@@ -340,7 +338,7 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
 /// series, the typed comparison schema and resulting representatives may change between releases.
 /// Returned canonical forms are ordinary IR values without schema-version provenance and must not
 /// be used as persistent cross-release identifiers.
-pub trait Canonicalize: Sized {
+pub trait Canonicalize: Reframe {
     type Error;
 
     /// Construct the complete canonical form.
@@ -3519,427 +3517,6 @@ fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: u
     }
 }
 
-fn apply_position_order<T: Clone>(values: &[T], order: &[ParticipantPosition]) -> Option<Vec<T>> {
-    if values.len() != order.len() {
-        return None;
-    }
-    let mut seen = vec![false; order.len()];
-    let mut reordered = Vec::with_capacity(order.len());
-    for position in order {
-        let index = position.index();
-        if index >= order.len() || seen[index] {
-            return None;
-        }
-        seen[index] = true;
-        reordered.push(values[index].clone());
-    }
-    Some(reordered)
-}
-
-fn inverse_position_order(order: &[ParticipantPosition]) -> Option<Vec<ParticipantPosition>> {
-    let mut inverse = vec![ParticipantPosition(0); order.len()];
-    let mut seen = vec![false; order.len()];
-    for (new, old) in order.iter().enumerate() {
-        let old = old.index();
-        if old >= order.len() || seen[old] {
-            return None;
-        }
-        seen[old] = true;
-        inverse[old] = ParticipantPosition(new as u32);
-    }
-    Some(inverse)
-}
-
-fn permutation_from_position_order(order: &[ParticipantPosition]) -> Option<Permutation> {
-    let image = order
-        .iter()
-        .map(|position| position.index())
-        .collect::<Vec<_>>();
-    Permutation::try_from(image.as_slice()).ok()
-}
-
-fn position_order_from_permutation(permutation: Permutation) -> Vec<ParticipantPosition> {
-    (0..permutation.degree())
-        .map(|position| ParticipantPosition(permutation.apply(position) as u32))
-        .collect()
-}
-
-fn reframe_stereo_atom_constraint_by_order(
-    constraint: StereoAtomConstraintForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoAtomConstraintForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return StereoAtomForm {
-            configuration: StereoConfigurationForm::Undetermined,
-            constraints: constraint.into(),
-        }
-        .reframe_by(&permutation)?
-        .constraints
-        .into_iter()
-        .next();
-    }
-    let inverse = inverse_position_order(order)?;
-    Some(match constraint {
-        StereoAtomConstraintForm::Topicity(topicity) => {
-            StereoAtomConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(
-                    inverse.get(topicity.pair.first().index())?.index().into(),
-                    inverse.get(topicity.pair.second().index())?.index().into(),
-                ),
-                relation: topicity.relation,
-            })
-        }
-        StereoAtomConstraintForm::Stereogenicity(stereogenicity) => {
-            StereoAtomConstraintForm::Stereogenicity(stereogenicity)
-        }
-        StereoAtomConstraintForm::LigandSymmetry(_) | StereoAtomConstraintForm::Fluxionality(_) => {
-            return None
-        }
-    })
-}
-
-fn reframe_stereo_bond_constraint_by_order(
-    constraint: StereoBondConstraintForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoBondConstraintForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return StereoBondForm {
-            configuration: StereoConfigurationForm::Undetermined,
-            constraints: constraint.into(),
-        }
-        .reframe_by(&permutation)?
-        .constraints
-        .into_iter()
-        .next();
-    }
-    let inverse = inverse_position_order(order)?;
-    Some(match constraint {
-        StereoBondConstraintForm::Topicity(topicity) => {
-            StereoBondConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(
-                    inverse.get(topicity.pair.first().index())?.index().into(),
-                    inverse.get(topicity.pair.second().index())?.index().into(),
-                ),
-                relation: topicity.relation,
-            })
-        }
-        StereoBondConstraintForm::Stereogenicity(stereogenicity) => {
-            StereoBondConstraintForm::Stereogenicity(stereogenicity)
-        }
-        StereoBondConstraintForm::LigandSymmetry(_) | StereoBondConstraintForm::Fluxionality(_) => {
-            return None
-        }
-    })
-}
-
-fn reframe_stereo_atom_form_by_order(
-    form: &StereoAtomForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoAtomForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return form.clone().reframe_by(&permutation);
-    }
-    if form.configuration != StereoConfigurationForm::Undetermined {
-        return None;
-    }
-    Some(StereoAtomForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: form
-            .constraints
-            .iter()
-            .cloned()
-            .map(|constraint| reframe_stereo_atom_constraint_by_order(constraint, order))
-            .collect::<Option<StereoAtomConstraintsForm>>()?,
-    })
-}
-
-fn reframe_stereo_bond_form_by_order(
-    form: &StereoBondForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoBondForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return form.clone().reframe_by(&permutation);
-    }
-    if form.configuration != StereoConfigurationForm::Undetermined {
-        return None;
-    }
-    Some(StereoBondForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: form
-            .constraints
-            .iter()
-            .cloned()
-            .map(|constraint| reframe_stereo_bond_constraint_by_order(constraint, order))
-            .collect::<Option<StereoBondConstraintsForm>>()?,
-    })
-}
-
-fn reframe_stereo_atom_span_by_order(
-    span: &EntitySpan<StereoAtomForm>,
-    order: &[ParticipantPosition],
-) -> Option<EntitySpan<StereoAtomForm>> {
-    Some(match span {
-        EntitySpan::Unchanged(value) => {
-            EntitySpan::Unchanged(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Added(value) => {
-            EntitySpan::Added(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Removed(value) => {
-            EntitySpan::Removed(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: reframe_stereo_atom_form_by_order(lhs, order)?,
-            rhs: reframe_stereo_atom_form_by_order(rhs, order)?,
-        },
-    })
-}
-
-fn reframe_stereo_bond_span_by_order(
-    span: &EntitySpan<StereoBondForm>,
-    order: &[ParticipantPosition],
-) -> Option<EntitySpan<StereoBondForm>> {
-    Some(match span {
-        EntitySpan::Unchanged(value) => {
-            EntitySpan::Unchanged(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Added(value) => {
-            EntitySpan::Added(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Removed(value) => {
-            EntitySpan::Removed(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: reframe_stereo_bond_form_by_order(lhs, order)?,
-            rhs: reframe_stereo_bond_form_by_order(rhs, order)?,
-        },
-    })
-}
-
-fn reframe_molecule_constraint_by_order(
-    constraint: Constraint,
-    entity: Entity,
-    order: &[ParticipantPosition],
-) -> Option<Constraint> {
-    Some(match constraint {
-        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
-            Constraint::StereoAtom(
-                id,
-                kind,
-                reframe_stereo_atom_constraint_by_order(constraint, order)?,
-            )
-        }
-        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
-            Constraint::StereoBond(
-                id,
-                kind,
-                reframe_stereo_bond_constraint_by_order(constraint, order)?,
-            )
-        }
-        Constraint::And(constraints) => Constraint::And(
-            constraints
-                .into_iter()
-                .map(|constraint| reframe_molecule_constraint_by_order(constraint, entity, order))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Or(constraints) => Constraint::Or(
-            constraints
-                .into_iter()
-                .map(|constraint| reframe_molecule_constraint_by_order(constraint, entity, order))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Not(constraint) => Constraint::Not(Box::new(
-            reframe_molecule_constraint_by_order(*constraint, entity, order)?,
-        )),
-        constraint => constraint,
-    })
-}
-
-fn reframe_reaction_span_stereo_atom_by_order(
-    span: &ReactionSpan,
-    id: StereoAtomId,
-    order: &[ParticipantPosition],
-) -> Option<ReactionSpan> {
-    let mut entries = span.entries();
-    let (_, ligands, attributes) = &mut entries.stereo_atoms[id.index()];
-    *attributes = reframe_stereo_atom_span_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|span| {
-            let reframe = |constraint| {
-                reframe_molecule_constraint_by_order(constraint, Entity::StereoAtom(id), order)
-            };
-            Some(match span {
-                ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(reframe(value)?),
-                ConstraintSpan::Added(value) => ConstraintSpan::Added(reframe(value)?),
-                ConstraintSpan::Removed(value) => ConstraintSpan::Removed(reframe(value)?),
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    ReactionSpan::try_from_entries(entries).ok()
-}
-
-fn reframe_reaction_span_stereo_bond_by_order(
-    span: &ReactionSpan,
-    id: StereoBondId,
-    order: &[ParticipantPosition],
-) -> Option<ReactionSpan> {
-    let mut entries = span.entries();
-    let (_, ligands, attributes) = &mut entries.stereo_bonds[id.index()];
-    *attributes = reframe_stereo_bond_span_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|span| {
-            let reframe = |constraint| {
-                reframe_molecule_constraint_by_order(constraint, Entity::StereoBond(id), order)
-            };
-            Some(match span {
-                ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(reframe(value)?),
-                ConstraintSpan::Added(value) => ConstraintSpan::Added(reframe(value)?),
-                ConstraintSpan::Removed(value) => ConstraintSpan::Removed(reframe(value)?),
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    ReactionSpan::try_from_entries(entries).ok()
-}
-
-fn canonicalize_reaction_span_stereo_frames(
-    mut span: ReactionSpan,
-) -> Result<ReactionSpan, Contradiction> {
-    for index in 0..span.stereo_atoms().count() {
-        let id = StereoAtomId(index as u32);
-        let ligands = span.stereo_atoms().ligands(id).to_vec();
-        let mut best = None;
-        for permutation in all_span_frame_permutations(
-            &ligands,
-            span.stereo_atoms()
-                .attributes(id)
-                .lhs()
-                .map(|form| &form.configuration),
-            span.stereo_atoms()
-                .attributes(id)
-                .rhs()
-                .map(|form| &form.configuration),
-        )? {
-            let order = position_order_from_permutation(permutation);
-            let candidate = reframe_reaction_span_stereo_atom_by_order(&span, id, &order)
-                .expect("integrity established a valid stereo-atom frame action");
-            let key = stereo_atom_span_frame_key(&candidate, id)?;
-            if best.as_ref().is_none_or(|(best_key, _)| key < *best_key) {
-                best = Some((key, candidate));
-            }
-        }
-        span = best
-            .expect("every valid stereo frame has an identity action")
-            .1;
-    }
-    for index in 0..span.stereo_bonds().count() {
-        let id = StereoBondId(index as u32);
-        let ligands = span.stereo_bonds().ligands(id).to_vec();
-        let mut best = None;
-        for permutation in all_span_frame_permutations(
-            &ligands,
-            span.stereo_bonds()
-                .attributes(id)
-                .lhs()
-                .map(|form| &form.configuration),
-            span.stereo_bonds()
-                .attributes(id)
-                .rhs()
-                .map(|form| &form.configuration),
-        )? {
-            let order = position_order_from_permutation(permutation);
-            let candidate = reframe_reaction_span_stereo_bond_by_order(&span, id, &order)
-                .expect("integrity established a valid stereo-bond frame action");
-            let key = stereo_bond_span_frame_key(&candidate, id)?;
-            if best.as_ref().is_none_or(|(best_key, _)| key < *best_key) {
-                best = Some((key, candidate));
-            }
-        }
-        span = best
-            .expect("every valid stereo frame has an identity action")
-            .1;
-    }
-    Ok(span)
-}
-
-fn all_span_frame_permutations(
-    ligands: &[StereoLigand],
-    lhs: Option<&StereoConfigurationForm>,
-    rhs: Option<&StereoConfigurationForm>,
-) -> Result<Vec<Permutation>, Contradiction> {
-    let mut permutations = stereo_frame_permutations_for(lhs, ligands.len())?;
-    permutations
-        .retain(|permutation| stereo_frame_permutation_allowed(rhs, ligands.len(), *permutation));
-    Ok(permutations)
-}
-
-fn stereo_frame_permutations_for(
-    configuration: Option<&StereoConfigurationForm>,
-    degree: usize,
-) -> Result<Vec<Permutation>, Contradiction> {
-    let count = (1..=degree).product::<usize>().max(1);
-    Ok((0..count)
-        .map(|rank| Permutation::unrank(degree, rank))
-        .filter(|&permutation| stereo_frame_permutation_allowed(configuration, degree, permutation))
-        .collect())
-}
-
-fn stereo_frame_permutation_allowed(
-    configuration: Option<&StereoConfigurationForm>,
-    degree: usize,
-    permutation: Permutation,
-) -> bool {
-    match configuration {
-        None | Some(StereoConfigurationForm::Undetermined) => permutation.degree() == degree,
-        Some(StereoConfigurationForm::Kinded(kind, _)) => {
-            kind.degree() == degree && kind.class_key().space().reindex(0, permutation).is_some()
-        }
-    }
-}
-
-fn stereo_atom_span_frame_key(
-    span: &ReactionSpan,
-    id: StereoAtomId,
-) -> Result<CanonicalKeyValue, Contradiction> {
-    Ok(product([
-        sequence(
-            span.stereo_atoms()
-                .ligands(id)
-                .iter()
-                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-        ),
-        normalized_entity_span_key(span.stereo_atoms().attributes(id), |form| {
-            Ok(stereo_configuration_form_key(
-                form.configuration.normalized()?.as_ref(),
-            ))
-        })?,
-    ]))
-}
-
-fn stereo_bond_span_frame_key(
-    span: &ReactionSpan,
-    id: StereoBondId,
-) -> Result<CanonicalKeyValue, Contradiction> {
-    Ok(product([
-        sequence(
-            span.stereo_bonds()
-                .ligands(id)
-                .iter()
-                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-        ),
-        normalized_entity_span_key(span.stereo_bonds().attributes(id), |form| {
-            Ok(stereo_configuration_form_key(
-                form.configuration.normalized()?.as_ref(),
-            ))
-        })?,
-    ]))
-}
-
 fn canonicalize_topology(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4830,14 +4407,12 @@ fn reaction_span_canonical_candidate(
     let leaf_candidate = |order: &[NodeId]| {
         let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
         let remapped = span.remap(&correspondence);
-        let remapped = if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
-            canonicalize_reaction_span_stereo_frames(remapped)
-                .expect("initial classes established stereo normalization")
-        } else {
-            remapped
-        };
+        let action = remapped.representative_action();
+        let reframed = remapped
+            .reframe_by(&action)
+            .expect("integrity established compatible reaction-span frame actions");
         CanonicalCandidate {
-            key: reaction_span_comparison_key(&remapped, level)
+            key: reaction_span_comparison_key(&reframed, level)
                 .expect("initial classes established span normalization"),
             entity_order: order.to_vec(),
         }
@@ -4871,12 +4446,7 @@ fn reaction_span_from_candidate(
     let incidence_graph = span.incidence_graph(incidence_level);
     let correspondence =
         lhs_anchored_correspondence_from_order(span, &incidence_graph, &candidate.entity_order);
-    let remapped = span.remap(&correspondence);
-    if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
-        Ok(canonicalize_reaction_span_stereo_frames(remapped)?)
-    } else {
-        Ok(remapped)
-    }
+    span.remap(&correspondence).reframe()
 }
 
 fn canonicalize_reaction_span_by(
