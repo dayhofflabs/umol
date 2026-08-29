@@ -1564,12 +1564,12 @@ impl MoleculeEditor {
             self.graph,
             self.atoms,
             self.bonds,
-            self.dative_bonds.into_arc().into(),
-            self.aromatic_systems.into_arc().into(),
-            self.multicenter_bonds.into_arc().into(),
-            self.noncovalent_bonds.into_arc().into(),
-            self.stereo_atoms.into_arc().into(),
-            self.stereo_bonds.into_arc().into(),
+            DativeBonds::from_arc(self.dative_bonds.into_arc()),
+            AromaticSystems::from_arc(self.aromatic_systems.into_arc()),
+            MulticenterBonds::from_arc(self.multicenter_bonds.into_arc()),
+            NoncovalentBonds::from_arc(self.noncovalent_bonds.into_arc()),
+            StereoAtoms::from_arc(self.stereo_atoms.into_arc()),
+            StereoBonds::from_arc(self.stereo_bonds.into_arc()),
             self.constraints,
         );
         molecule.check_integrity()?;

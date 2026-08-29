@@ -33,18 +33,25 @@ use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 /// site is an atom.
 ///
 /// Owns the frame structure its storage shape cannot state: which factor bears the participant
-/// frame, and which is a site.
+/// frame, and which is a site. Values are issued by checked molecule construction and trusted
+/// graph-IR transformations; raw assembly is not a public construction path.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoAtoms(Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>);
 
 impl StereoAtoms {
-    pub fn new(entries: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>) -> Self {
         Self(Arc::new(FixedVarBirelationSet::new(
             entries
                 .into_iter()
                 .map(|(site, ligands, attributes)| ([NodeId::from(site)], ligands, attributes))
                 .collect(),
         )))
+    }
+
+    pub(crate) fn from_arc(
+        set: Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>,
+    ) -> Self {
+        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -89,7 +96,7 @@ impl StereoAtoms {
         self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
+    pub(crate) fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
@@ -184,34 +191,29 @@ impl Reframe for StereoAtoms {
     }
 }
 
-impl From<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>> for StereoAtoms {
-    fn from(set: FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>) -> Self {
-        Self(Arc::new(set))
-    }
-}
-
-impl From<Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>> for StereoAtoms {
-    fn from(set: Arc<FixedVarBirelationSet<NodeId, 1, StereoLigand, StereoAtomForm>>) -> Self {
-        Self(set)
-    }
-}
-
 /// The molecule's stereo bonds. The ligands bear the frame the configuration is read against; the
 /// site is a bond.
 ///
 /// Owns the frame structure its storage shape cannot state: which factor bears the participant
-/// frame, and which is a site.
+/// frame, and which is a site. Values are issued by checked molecule construction and trusted
+/// graph-IR transformations; raw assembly is not a public construction path.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoBonds(Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>);
 
 impl StereoBonds {
-    pub fn new(entries: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>) -> Self {
         Self(Arc::new(FixedVarBirelationSet::new(
             entries
                 .into_iter()
                 .map(|(site, ligands, attributes)| ([EdgeId::from(site)], ligands, attributes))
                 .collect(),
         )))
+    }
+
+    pub(crate) fn from_arc(
+        set: Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>,
+    ) -> Self {
+        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -271,7 +273,7 @@ impl StereoBonds {
         self.0.has_incident_edge(EdgeId::from(bond))
     }
 
-    pub fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
+    pub(crate) fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, StereoBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
@@ -365,27 +367,18 @@ impl Reframe for StereoBonds {
     }
 }
 
-impl From<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>> for StereoBonds {
-    fn from(set: FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>) -> Self {
-        Self(Arc::new(set))
-    }
-}
-
-impl From<Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>> for StereoBonds {
-    fn from(set: Arc<FixedVarBirelationSet<EdgeId, 1, StereoLigand, StereoBondForm>>) -> Self {
-        Self(set)
-    }
-}
-
 /// The reaction span's stereo atoms, one [`EntitySpan`] per entity against a single ligand frame.
-/// The `Molecule` peer is [`StereoAtoms`].
+/// The `Molecule` peer is [`StereoAtoms`]. Values are issued by
+/// [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoAtomSpans(
     FixedVarBirelationSet<NodeId, 1, StereoLigand, EntitySpan<StereoAtomForm>>,
 );
 
 impl StereoAtomSpans {
-    pub fn into_entries(self) -> Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> {
+    pub(crate) fn into_entries(
+        self,
+    ) -> Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> {
         self.0
             .into_entries()
             .into_iter()
@@ -393,7 +386,9 @@ impl StereoAtomSpans {
             .collect()
     }
 
-    pub fn new(entries: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)>) -> Self {
+    pub(crate) fn new(
+        entries: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)>,
+    ) -> Self {
         Self(FixedVarBirelationSet::new(
             entries
                 .into_iter()
@@ -486,14 +481,17 @@ impl Reframe for StereoAtomSpans {
 }
 
 /// The reaction span's stereo bonds, one [`EntitySpan`] per entity against a single ligand frame.
-/// The `Molecule` peer is [`StereoBonds`].
+/// The `Molecule` peer is [`StereoBonds`]. Values are issued by
+/// [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoBondSpans(
     FixedVarBirelationSet<EdgeId, 1, StereoLigand, EntitySpan<StereoBondForm>>,
 );
 
 impl StereoBondSpans {
-    pub fn into_entries(self) -> Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> {
+    pub(crate) fn into_entries(
+        self,
+    ) -> Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> {
         self.0
             .into_entries()
             .into_iter()
@@ -501,7 +499,9 @@ impl StereoBondSpans {
             .collect()
     }
 
-    pub fn new(entries: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)>) -> Self {
+    pub(crate) fn new(
+        entries: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)>,
+    ) -> Self {
         Self(FixedVarBirelationSet::new(
             entries
                 .into_iter()

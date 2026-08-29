@@ -11,6 +11,34 @@ The central rule is that an aggregate constructor establishes that its input can
 does not establish every useful property of the resulting value. Semantic properties are lazy and
 must be requested through named operations.
 
+### Closed containers and the minimum eager contract
+
+`Molecule`, `Reaction`, and `ReactionSpan` are closed containers. Every value obtainable through
+their public construction, conversion, mutation, and transformation surfaces satisfies the type's
+tier-1 representation-integrity contract. Their independently assembled entry and delta types are
+open carriers: they may be incomplete or inconsistent until a checked or asserted aggregate
+constructor accepts them.
+
+The closed-container contract is deliberately the smallest eager validation surface that makes the
+stored representation coherent and mutually interpretable. An operation on a closed value may rely
+on that contract instead of repeatedly checking references, collection shapes, participant frames,
+and other representation invariants inside the type's implementation. Every publisher must either
+invoke the authoritative integrity gate or establish preservation of the complete contract by
+construction.
+
+Closed does not mean fully validated. A coherent value may still violate model-independent physical
+invariants, fail a selected chemistry model, be unsatisfiable, fail to match a host, or violate an
+operation-specific precondition. Those questions remain lazy and are checked by the named operation
+that first requires them. Do not enlarge a closed container's eager contract merely to save a later
+operation-specific check, and do not defer a representation invariant when doing so would force most
+operations on the type to rediscover whether its stored fields have a coherent interpretation.
+
+Use this tradeoff when defining other aggregate types: eagerly establish exactly the invariants
+needed for all operations to interpret the value consistently, then leave properties needed by only
+some operations to their explicit validation or execution boundaries. The current check-by-check
+inventory and the concrete failure prevented by each check are maintained in
+[Representation integrity](integrity.md).
+
 An invariant is therefore enforced by the first operation that requires it, not by the earliest
 operation capable of checking it. A caller may request an explicit validator earlier. If it does
 not, a later conversion or operation reports the failure when that invariant becomes a precondition
@@ -59,8 +87,9 @@ The fixed relation semantics of every entity family are part of molecule integri
 contain the same actual atom more than once. This excludes localized and noncovalent self-loops,
 repeated dative donors or an acceptor also used as a donor, repeated aromatic and multicenter
 participants, repeated actual-atom stereo ligands, and a stereo-atom site reused as an actual-atom
-ligand. Stereo virtual ligands anchored at the same atom are ligand occurrences rather than repeated
-atom participants and remain valid.
+ligand. Virtual ligands are not actual-atom participants, but an identical virtual ligand occurrence
+may not repeat within one stereo frame. An implicit hydrogen and a lone pair anchored at the same
+atom remain distinct ligands.
 
 Stereo ligand frames also carry site-relative incidence. An actual ligand of a stereo atom must be
 a covalent graph neighbor of the site, while an implicit hydrogen or lone pair is borne by the site
@@ -241,6 +270,12 @@ an equal addition/removal pair. Materializing the normalized delta against an LH
 continuity: adding an already-present canonical constraint or removing an absent one is a
 `Contradiction`, not an idempotent no-op. This matches old/new continuity for entity changes and
 keeps addition and removal as meaningful inverses.
+
+An equivalent `Modified` reaction-span entry is another raw/normal distinction. The tag carries no
+assertion beyond its two side values. If those values are equal under `normalized_eq`, the entry is
+semantically a no-op and normalizes to `Unchanged`. Checked and asserted span construction preserve
+the explicitly supplied raw tag; `Normalize for ReactionSpan` collapses it, and reframing and
+canonicalization inherit the collapse because normalization is their first pipeline step.
 
 This does not license silent normalization in an operation that promises faithful representation
 conversion. Instead, classify the operation accurately:
@@ -698,14 +733,14 @@ live in graph IR.
 
 Comparing two entries therefore has three independent parts, and a site chooses each:
 
-- **identity** — do the two hold the same participants, each factor as a multiset. This is
-  coincidence: `coincident` and `coincident_edge` search for the entity with given participants,
-  `is_coincident` asks it of a known one, and `participants_match` is the underlying comparison.
-- **frame transport** — restating one side's payload in the other's frame. `reframe_to` for the four
-  distinct-participant entity kinds, whose frames cannot repeat a participant, so the restatement is
-  unique. For the two stereo kinds a ligand frame may repeat a virtual ligand, so `find_reframed`
-  walks the admissible restatements with `FrameAction::reframe_by` and the caller keeps the first
-  that satisfies its own relation.
+- **identity** — do the two hold the same structured participants under the entity kind's factor
+  semantics. Each ordinary factor is compared as a multiset; stereo-bond endpoint blocks may be
+  exchanged only as complete blocks. Graph-core coincidence supplies ordinary factor comparison
+  through `coincident`, `coincident_edge`, `is_coincident`, and `participants_match`; graph IR adds
+  the entity-kind structure that storage alone cannot express.
+- **frame transport** — restating one side's payload in the other's frame. Every entity frame has
+  distinct complete participant values, so equal structured incidence determines one action in the
+  entity kind's group. `reframe_to` derives that action and transports the payload.
 - **the value relation** — `equiv`, `matches`, or `meet`, the caller's own.
 
 `reframe_to` returning `Some` does not establish identity: a frame-invariant payload reads neither
@@ -718,9 +753,13 @@ noncovalent-bond kind and their constraints are not, and their `reframe_to` dest
 exhaustively and rebuilds it, so a new position-indexed field fails to compile rather than being
 left silently unframed.
 
-A stereo entity's configuration denotes the orbit of the stored coset under the residual stabilizer
-of its stored frame. Equal virtual ligands make several restatements admissible; they differ by a
-stabilizer element, so they denote one arrangement and the first the caller accepts stands.
+A reaction removal may carry the source entity's structured incidence in another participant
+ordering. Its repeated sequence is an explicit local frame for the recorded payload. Construction
+preserves that frame; a consumer derives the unique local-to-source action, transports the payload,
+and then applies its value relation. Aggregate reaction reframing composes this alignment with the
+one owning action selected from the lhs or `Add` frame. An incompatible distinguished factor or
+stereo-bond endpoint-block assignment changes structured incidence rather than producing a second
+frame of the same entity.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public
@@ -781,6 +820,8 @@ span must contain both objects of the span. Consequently:
 - `ReactionSpan::try_from_entries` checks the union namespace and the referential integrity of
   each projected side;
 - `ReactionSpan::from_entries` asserts the same invariant for trusted producers;
+- both entry constructors preserve an explicitly supplied `Modified` tag, including one whose
+  sides are `normalized_eq`;
 - parsing accepts only entries that construct an actual two-sided span;
 - `ReactionSpan::lhs`, `rhs`, `to_reaction`, and `correspondence` are infallible;
 - projection retains every entity and constraint present on the selected side and remaps its
@@ -800,6 +841,10 @@ lhs ids and rhs-only entities are appended. Consequently,
 supplied `rhs` under the induced total correspondence rather than necessarily structurally equal to
 it. A crossing source correspondence changes rhs entity order; neither a reaction's deltas nor the
 span membership columns encode that otherwise semantically irrelevant permutation.
+For a paired entity whose values are `normalized_eq`, `superimpose` emits `Unchanged` carrying the
+lhs value. This is permitted because `superimpose` derives a span rather than faithfully converting
+open entries: the choice retains exact lhs projection and the same semantic rhs-projection
+guarantee without eagerly normalizing the selected payload.
 `ReactionSpan::correspondence` relates the normalized projections and does not retain a source
 correspondence whose rhs frame differs. A span-to-reaction-to-span roundtrip is therefore exact only
 for an LHS-anchored span in the documented constraint normal form; for another valid union order it

@@ -42,6 +42,8 @@
 
 - `docs/development/data-types.md` is normative for construction, conversion, validation,
   transformation, provenance, and contextual fallibility.
+- `docs/development/integrity.md` is normative for the minimum eager representation contract and
+  the justified integrity-check inventory for closed aggregate types.
 - `docs/development/nomenclature.md` is normative for repository-specific terms and public names.
 - `docs/development/property-tests.md` is normative for executable-specification, evidence, and
   property-suite organization policy.

@@ -14,6 +14,7 @@ Relates: [103](103-stereochemistry-overlay-and-ports-2026-05-28.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [212](212-remapping-layer-2026-08-26.md),
+[215](215-integrity-minimization-2026-08-28.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
@@ -201,26 +202,34 @@ An inability to perceive `#T` or `#C`, a frame-to-frame action outside a configu
 failed pattern match, and an unsatisfiable combination of valid constraints remain semantic failures.
 They must not be reported as molecule integrity errors.
 
-### A reaction has one participant frame per overlay entity
+### A reaction has one owning participant frame per overlay entity
 
-A `Reaction` uses one participant coordinate frame for every overlay entity id it carries. For an
-entity present on the lhs, that frame is exactly the lhs entity's frame. For a created entity, it is
-exactly the frame in the unique `Add` delta. Every field or constraint delta for that id is stated in
-the owning frame even though those delta variants do not repeat the participants.
+A `Reaction` uses one owning participant coordinate frame for every overlay entity id it carries.
+For an entity present on the lhs, that frame is the lhs entity's frame. For a created entity, it is
+the frame in the unique `Add` delta. Every field or constraint delta for that id is stated in the
+owning frame even though those delta variants do not repeat the participants.
 
-Every overlay `Remove` repeats the source entity's site and exact ordered participant frame. A
-different site or participant multiset is `ReactionIntegrityError::IncidenceMismatch`; equal
-incidence in a different order is the distinct
-`ReactionIntegrityError::ParticipantFrameMismatch`. Integrity checks reference availability first,
-then incidence, then participant-frame equality, so the diagnostic does not depend on attempting
-payload transport. Stereo incidence compares complete `StereoLigand` values, including ligand kind.
+Every overlay `Remove` repeats the source entity's site and structured participant incidence, but it
+may state its recorded attributes in another ordering of those participants. The repeated sequence
+is an explicit local frame. Because integrity prohibits repeated participants, equal structured
+incidence determines one local removal-to-owner action. Removal matching transports the payload by
+that action before applying its value relation; construction preserves the supplied frame and does
+not normalize it eagerly.
 
-This is tier-1 reaction representation integrity: without one frame per id, a field change or
-constraint delta has no unique coordinate system and one entity-specific action cannot transport the
-reaction. It does not require the deltas to materialize a reaction span and does not change the older
-delta-normalization rule that a created entity subsequently removed is an unobservable no-op.
-Changing an overlay's participants is still expressed by removing the old entity and adding a new
-entity with a new id; no delta changes an existing entity's participant frame.
+The structured incidence comparison respects every entity kind's factors. Dative acceptors and
+donors remain distinguished; a stereo-bond action permutes within endpoint blocks and may swap the
+two complete blocks. Moving a ligand between blocks without that complete swap is
+`ReactionIntegrityError::IncidenceMismatch`, as are a different site or participant multiset.
+`ParticipantFrameMismatch` is removed because a compatible ordering is transportable and an
+incompatible ordering is different structured incidence.
+
+The single per-id owning action remains the aggregate witness. Reaction transport composes a
+removal's derived local-to-owner action with the owner-to-target action before transporting that
+removal. Field and constraint deltas consume the owner action directly. It does not require the
+deltas to materialize a reaction span and does not change the older delta-normalization rule that a
+created entity subsequently removed is an unobservable no-op. Changing an overlay's participants is
+still expressed by removing the old entity and adding a new entity with a new id; no delta changes
+an existing entity's incidence.
 
 ### The three nested operations
 
@@ -356,7 +365,9 @@ as integrity rejection cases.
 A correspondence is the witness for an entity-id action, and a frame action is the witness for a
 participant-frame action. Both have identity, inverse, and composition laws. A frame action is not
 merely assembly bookkeeping: the same action selected from an entity frame transports its form,
-span sides, delta values, and every frame-relative constraint that refers to it.
+span sides, field and constraint delta values, and every frame-relative constraint that refers to
+it. A removal stated in a compatible local frame consumes the composition of its local-to-owner
+alignment and that owning action.
 
 `FrameTransport::Action` denotes the complete action on `Self`, not one row of a separately returned
 vector. The carrier grows with the value being acted on:
@@ -365,9 +376,12 @@ vector. The carrier grows with the value being acted on:
 | --- | --- |
 | One ordinary entity form or `EntitySpan<form>` | One `ParticipantPermutation` |
 | One stereo entity form or `EntitySpan<form>` | One bounded `Permutation` admissible for that entity kind |
+| One kind-specific overlay delta payload | One local action for that entity kind |
 | One entity-family aggregate or its `*Spans` peer | One local action per dense typed entity id |
 | `Molecule` or `ReactionSpan` | One `OverlayFrameActions` value covering every entry in all six overlay families |
-| `Reaction`, `Delta`, `Deltas`, `ConstraintDelta`, `Constraint`, or `ConstraintSpan` | The compatible `OverlayFrameActions` value, whose typed maps may be sparse but cover every frame-relative entity reference carried by the receiver |
+| `Reaction` | One `OverlayFrameActions` value covering every lhs and `Add`-owned overlay entity |
+| `ConstraintDelta`, `Constraint`, or `ConstraintSpan` | The compatible `OverlayFrameActions` value whose typed maps cover every frame-relative entity reference carried by the receiver |
+| `Deltas` in isolation | No complete action: removals may use local frames, and only the containing `Reaction` supplies their owning frames |
 
 `OverlayFrameActions` is a typed six-family composite. Each field maps the corresponding entity id
 to its local `ParticipantPermutation` or bounded `Permutation`; atom and localized-bond entries are
@@ -412,9 +426,11 @@ group. Frame-invariant forms return themselves under every such compatible local
 `EntitySpan<T>` is likewise payload-only rather than frame-owning. It has the generic
 `FrameTransport` implementation whenever `T` does, applying one action to every present side through
 `try_map`; it does not implement `Reframe`. This covers every kind-specific entity span without
-introducing span-form newtypes. `Constraint`, `ConstraintSpan`, the kind-specific overlay deltas,
-`Delta`, `ConstraintDelta`, and `Deltas` also implement `FrameTransport` at the local or composite
-action level appropriate to the whole value, but none derives an action independently.
+introducing span-form newtypes. `Constraint`, `ConstraintSpan`, and kind-specific overlay delta
+payloads also implement `FrameTransport` for a supplied local action, but none derives an action
+independently. `Deltas` does not implement transport under owning `OverlayFrameActions` in isolation:
+only `Reaction` has the owning frames needed to align a compatible removal-local frame before
+applying the per-id action.
 
 The six entity-family aggregates and their span counterparts are the first frame-owning carriers.
 They were introduced because each family, unlike a graph-core relation set, knows which factor bears
@@ -475,9 +491,10 @@ whose delta chain normalization later erases. `reframe_with_action` derives that
 normalization, applies it to the normalized lhs and deltas, and ignores entries no longer required by
 the normalized receiver. Plain `reframe` derives and consumes the same actions incrementally and
 retains only any sparse internal lookup needed when several deltas refer to the same entity.
-`FrameTransport for Reaction` applies an independently supplied composite to the lhs and deltas;
-`FrameTransport for Deltas` and its kind-specific delta implementations apply it to every delta
-value against the frame:
+`FrameTransport for Reaction` applies an independently supplied composite to the lhs and dispatches
+the corresponding local action to every delta. Field and constraint deltas consume the owning
+action directly. For a `Remove`, the reaction derives the local removal-to-owner alignment and
+composes it with the owner action before transporting:
 
 - dative `Add` and `Remove` donor sequences;
 - aromatic and multicenter `Add` and `Remove` forms and both sides of electron-count field changes;
@@ -499,6 +516,14 @@ composite to every family span and every `ConstraintSpan` before final reduction
 instead derives each local action once and transports every present side and affected constraint
 without materializing that complete composite. A modified entity therefore cannot let its lhs and
 rhs choose different presentations.
+
+Raw span construction preserves an explicitly supplied `Modified { lhs, rhs }` even when the two
+values are `normalized_eq`; the tag has no additional semantic assertion beyond those side values.
+`Normalize for ReactionSpan` collapses that no-op to `Unchanged`, so `Reframe` and `Canonicalize`
+inherit the same collapse through their normalization prefix. `ReactionSpan::superimpose` is a
+deriving producer rather than a faithful entry conversion: it may emit the standardized
+`Unchanged(lhs)` directly for a `normalized_eq` pair, retaining exact lhs projection and semantic
+rhs projection under the induced correspondence.
 
 Reaction application performs the alignment counterpart of aggregate selection. For every matched
 existing overlay it derives the unique action from the rule frame after atom mapping to the host's
@@ -525,9 +550,9 @@ preservation rather than scatter duplicate validation logic.
 | `Molecule::{stereo_atom_mut, stereo_bond_mut, modify_stereo_atoms, modify_stereo_bonds, constraints_mut}` and public family `attributes_mut` | Mutable references and unchecked replacement closures can install a kind, position domain, or reference that disagrees with the containing molecule after construction. | Restrict family mutation to graph IR and replace integrity-sensitive molecule mutation with checked replacement or transactional methods that validate before committing. No public mutation may leave a published `Molecule` outside its tier-1 contract. |
 | `MoleculeBuilder::build`; `MoleculeEditor::{snapshot, try_build, build}`; `Molecule::apply` | Publish through editor integrity, with asserted and checked variants. | Retain the shared gate; add exact regressions for transient invalid frames rejected only at publication. |
 | `Molecule::{try_remap, remap, extract, combine_all, combine, split}` and fragment, glue, pushout, canonicalization, resolution, and reaction-product paths | Trusted transforms, usually rebuilding through checked or asserted molecule construction. | Audit every publisher and add preservation properties; do not add redundant front-door checks to each operation. |
-| `Reaction::new`, struct literals, `Reaction::check_integrity`, and `Reaction::from_sides` | `new` and public fields are unchecked; callers must remember a later check, and removals need not use the lhs or added entity's exact frame. | Add `try_new`, make `new` the asserted sibling, make fields private with read/parts accessors, validate every added stereo frame and stereo constraint wrapper, and enforce one exact participant frame per overlay id with distinct incidence/frame diagnostics. |
+| `Reaction::new`, struct literals, `Reaction::check_integrity`, and `Reaction::from_sides` | `new` and public fields are unchecked; callers must remember a later check, and removal incidence is not established against the lhs or added entity. | Add `try_new`, make `new` the asserted sibling, make fields private with read/parts accessors, validate every added stereo frame and stereo constraint wrapper, and require each removal to repeat the source's structured incidence while accepting any uniquely alignable local ordering. |
 | Reaction composition, derivation reversal, span conversion, canonicalization, and application | Trusted reaction publishers currently use unchecked `Reaction::new` or literals. | Route through the checked/asserted constructor and add preservation properties. |
-| `ReactionSpan::{try_from_entries, from_entries, superimpose}` and reaction/span conversions | Checked / asserted entry pair; integrity projects both sides through `Molecule::try_from_entries`. | Retain projection as authority and verify added, removed, modified, and unchanged stereo spans reject repeated or oversized frames on the affected side. |
+| `ReactionSpan::{try_from_entries, from_entries, superimpose}` and reaction/span conversions | Checked / asserted entry pair; integrity projects both sides through `Molecule::try_from_entries`; construction currently normalizes an equivalent `Modified`. | Retain projection as authority and verify added, removed, modified, and unchanged stereo spans reject repeated or oversized frames on the affected side. Remove eager normalization from entry construction, preserve the raw tag there, and let `superimpose` emit `Unchanged(lhs)` for a `normalized_eq` pair. |
 | Parsed molecule, reaction, and reaction-span DSL; `mol_dsl!` and typed `IntoIr` paths | Parsed molecule/span paths map aggregate integrity; reaction paths can construct unchecked IR. | Map checked failures to `ParseError::InvalidValue`; keep macros and typed conversion as asserted paths over trusted input. |
 | TableIR raise and SMILES/CTfile ingestion | TableIR ends at `Molecule::try_from_entries`; current TableIR has no raw-frame field and its stereo raise emits no repeated frame. | Preserve the central gate, prove current `#T`/`#C` paths never publish an invalid frame, and document repeated-virtual completion as perception absence rather than deduplication. |
 | Python `Molecule.from_entries`, parse/SMILES, and editor snapshot/build/apply | Molecule entry and editor publication are checked. | Preserve `ValueError` mapping and add exact duplicate/maximum cases. |
@@ -564,6 +589,11 @@ must never add an unlisted failure. The expected latest closure points are:
 An earlier closure is welcome and is recorded at implementation time; a later closure or a new
 failure is not. Each subitem runs its focused checks against this ledger, and S0 ends with the full
 graph-IR normal and feature-gated property suites green.
+
+The slow canonicalization integration and feature-gated property targets are not per-subitem gates.
+Run them only at a checkpoint that owns a ledger closure, or at the S0 stage boundary; other
+subitems use dependency-local tests plus the relevant compile, documentation, format, and lint
+checks.
 
 ### S0 — Integrity, orbit removal, and frame-transport recovery
 
@@ -662,16 +692,45 @@ graph-IR normal and feature-gated property suites green.
   1,635 Python-binding Rust tests passed with two ignored. The nightly graph-IR fuzz build, the
   Python-3.13 workspace all-target check, and strict clippy for graph IR, graph, IO, and Python all
   passed.
+
+  **Superseded in part by doc 215.** The exact-order restriction and
+  `ParticipantFrameMismatch` diagnostic implemented here are not part of the final integrity
+  contract. Compatible removal-local frames are accepted and transported through their unique
+  alignment with the owning lhs or `Add` frame; a non-compatible structured frame remains
+  `IncidenceMismatch`. Doc 215 owns unwinding this part of S0c before S0e.
 - **S0d — reaction-span and low-level carrier audit** (`umol-graph-ir/src/ir/stereo.rs`, family
   modules, `ir/reaction_span.rs`): restrict raw frame-bearing collection construction, conversions,
   and mutation to their actual graph-IR assembly role, and verify that checked/asserted span
   construction reports the lhs or rhs projection carrying an invalid frame. Retain no public
   unchecked frame publisher. **Breaking; inherited red ledger unchanged after carrier migration.**
-  [dep: S0b]
+  [dep: S0b] **Done.** Raw `new` / `into_entries` collection methods for all six overlay families
+  and their reaction-span peers are now graph-IR-private, and the public raw relation-set `From`
+  conversions were removed. The molecule editor's trusted publication path uses explicit
+  crate-private `from_arc` assembly; public consumers receive read-only collections from checked
+  aggregates, with only the intrinsically valid empty `Default` available independently.
+
+  `ReactionSpanEntries` is documented as an open carrier, while `try_from_entries` and
+  `from_entries` establish both projected molecules through the authoritative molecule integrity
+  gate. A dedicated eight-case checked-constructor table covers atom and bond stereo spans in every
+  added, removed, modified, and unchanged state, with repeated and oversized frames reported as the
+  affected `Lhs` or `Rhs`. A separate asserted-constructor table verifies that the same side-specific
+  error is retained in the panic message.
+
+  The focused reaction-span run passed all 159 selected tests. The graph-IR library ran 6,408 tests,
+  passing 6,400 and ignoring four while retaining exactly the four inherited failures. Graph-IR
+  doctests, the Python-3.13 workspace all-target check, formatting, strict graph-IR clippy, and the
+  public-surface audit passed. Per the checkpoint verification rule, the slow canonicalization
+  integration and property targets remain deferred to their owning closure checkpoint.
 
 At S0d, all independent Rust aggregate constructors are locally green and malformed repeated or
 oversized frames cannot enter an immutable public aggregate through those constructors. The
 inherited transport ledger remains.
+
+The post-S0d admission audit found that the broader closed-container contract is not yet minimal or
+fully closed. Doc [215](215-integrity-minimization-2026-08-28.md) owns the dative and entity-count
+corrections, aromatic/multicenter mutation closure, defensive-check removal, and reaction-span
+construction and derived-standardization semantics. Complete doc 215 before S0e; S0e-S2 rely on
+its corrected integrity domain and error surface.
 
 #### External publication boundaries
 
@@ -679,7 +738,8 @@ inherited transport ledger remains.
   DSL macros): route resolved reactions through `try_new`, map frame failures to
   `ParseError::InvalidValue`, and retain typed `IntoIr` and macros as asserted paths. Roundtrip valid
   frames and reject repeated/oversized atom, bond, reaction-add, and span frames plus reaction
-  removal incidence/frame mismatches with exact parser diagnostics. **Breaking; parsed reaction
+  removal structured-incidence mismatches with exact parser diagnostics; accept compatible
+  reordered removal frames without normalizing them during construction. **Breaking; parsed reaction
   failure propagation without expanding the inherited red ledger.** [dep: S0c, S0d]
 - **S0f — TableIR and format raise** (`umol-io/src/table_ir/raise.rs`, SMILES and CTfile ingestion):
   retain `Molecule::try_from_entries` as the final gate, test that the current `#T`/`#C` paths never
@@ -689,9 +749,9 @@ inherited transport ledger remains.
 - **S0g — Python publication** (`umol-py/src/{molecule,reaction,reaction_span,transaction}.rs` and
   Python tests): preserve molecule/span `ValueError` mapping; validate `Reaction(...)`, parse,
   reaction-SMILES, and every operation snapshotting live lhs/deltas through `Reaction::try_new`.
-  Cover construction and mutation-to-invalid-state, including distinct removal incidence and frame
-  mismatches, without changing the live editing model. Build and test only under the repository
-  Python 3.13 environment. **Breaking; snapshot methods become fallible where required without
+  Cover construction and mutation-to-invalid-state, including invalid removal incidence and valid
+  compatible removal reordering, without changing the live editing model. Build and test only under
+  the repository Python 3.13 environment. **Breaking; snapshot methods become fallible where
   expanding the inherited red ledger.** [dep: S0c, S0d, S0e, S0f]
 - **S0h — trusted publisher preservation** (`umol-graph-ir` remapping, editing, extraction,
   combination, pushout/glue, reaction/span conversion, composition and application; `umol-graph`
@@ -830,8 +890,8 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   consuming `Reframe for Reaction`. Before normalization, derive one input-domain
   `OverlayFrameActions`: existing entity frames come from every lhs overlay and created entity
   frames come from every unique raw `Add`, whose ids need not be dense. Retain entries for created
-  entities whose delta chains normalization later erases. Apply it to the normalized lhs and through
-  `FrameTransport for Deltas`, carrying
+  entities whose delta chains normalization later erases. Apply it to the normalized lhs and use a
+  reaction-owned contextual pass over the normalized deltas, carrying
   dative structural deltas, aromatic and multicenter electron values, noncovalent structural deltas
   and ordered predicate constraint deltas, and every stereo delta and stereo constraint delta under
   the owning entity's one action. Implement plain `reframe` as a fused pass, retaining only the
@@ -839,24 +899,30 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   public witness. Return the composite from `reframe_with_action` and normalize the transported
   result; do not promise preservation of incidental pre-normalization delta order.
   Cover the trait and action laws, every delta arm and relation family, the complete lhs plus sparse
-  created-id domain, created entities erased by normalization, intrinsically contradictory but
+  created-id domain, compatible removal-local frames and composed local-to-owner-to-target actions,
+  created entities erased by normalization, intrinsically contradictory but
   integrity-valid reactions with total representative actions, multiple changes to one entity, and
   missing/incompatible map entries. **Additive; inherited red ledger unchanged.** [dep: S0n, S0q]
 - **S0s — reaction-span reduction and reframing** (`ir/reaction_span.rs`): implement reduction-only
   `Normalize for ReactionSpan`, then `FrameTransport` and consuming `Reframe for ReactionSpan`.
+  Preserve equivalent `Modified` entries at checked and asserted construction, collapse them only
+  in normalization and its reframing/canonicalization prefixes, and retain `superimpose` as a
+  standardized producer that emits `Unchanged(lhs)` for `normalized_eq` paired values.
   Reuse the existing six `*Spans` packages. On `reframe_with_action`, assemble their family actions
   into `OverlayFrameActions` and apply it to every entity side and `ConstraintSpan`; on plain
   `reframe`, derive each local action once and immediately transport all present sides and affected
   constraints without constructing the complete composite. Atom and localized-bond spans remain
   plain vectors. Return the composite from `reframe_with_action`, then reduce the complete span.
   Assert the trait and action laws, projection agreement, stereo-bond block
-  preservation, nonuniform endpoint predicates, roundtrips through reactions, and modified spans
-  with nonuniform sides. **Additive; inherited red ledger unchanged.**
+  preservation, nonuniform endpoint predicates, equivalent-`Modified` constructor preservation and
+  pipeline collapse, exact lhs and semantic rhs superimposition projections, roundtrips through
+  reactions, and modified spans with nonuniform sides. **Additive; inherited red ledger unchanged.**
   [dep: S0n, S0q]
 - **S0t — rule-to-host overlay-frame transport** (`ir/reaction.rs`, application fixtures): replace
   the stereo-only helper with one alignment pass over all matched overlay families. Derive the
   unique local action from each atom-mapped rule frame to the host frame, assemble those actions into
-  `OverlayFrameActions`, and pass that composite through `FrameTransport for Deltas`. This transports
+  `OverlayFrameActions`, and let `FrameTransport for Reaction` dispatch it contextually. A removal
+  first composes its local-to-owner alignment with the owner-to-host action. This transports
   aromatic and multicenter electron values, noncovalent ordered endpoint predicates, every stereo
   delta arm, and every frame-relative molecule-level constraint delta. Test a reframed rule `old`
   with `matches` and install the actual host value as realized `old`; added entities retain their
@@ -930,10 +996,13 @@ require a new application-result witness in doc 204.
   family, and `OverlayFrameActions` carrier hierarchy, the per-family representative-action table,
   stereo-bond endpoint-block wreath-product actions, noncovalent ordered predicate transport, and
   delta behavior: id remapping preserves participant frames, reframing transports every
-  frame-relative delta payload under the owning entity action, a reaction has one exact lhs- or
-  `Add`-owned participant frame per overlay id, `ParticipantFrameMismatch` is distinct from changed
-  incidence, and reaction application installs the realized host value as `old` after pattern
-  matching. Also cover input-domain representative actions, receiver-relative compatibility,
+  frame-relative delta payload under the owning entity action, a reaction has one lhs- or
+  `Add`-owned participant frame per overlay id, a compatible removal may carry another explicit
+  local ordering whose action is composed with the owner action, structured incompatibility is
+  `IncidenceMismatch`, raw span construction preserves an equivalent `Modified` tag while
+  normalization and standardized producers collapse it, and reaction application installs the
+  realized host value as `old` after pattern matching. Also cover input-domain representative
+  actions, receiver-relative compatibility,
   exact-domain action algebra with subset-compatible consumers, and the `normalized_eq` /
   `framed_eq` / `framed_eq_under` ladder, operation-issued action and correspondence witnesses,
   the coherent action/reframing/pipeline property laws and their operational domains, `#T`/`#C`

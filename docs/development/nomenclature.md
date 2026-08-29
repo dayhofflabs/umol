@@ -1324,7 +1324,11 @@ span `L ←K→ R` is read off those tags: `K = Unchanged ∪ Modified`, `L = K 
 `R = K ∪ Added`.
 
 `Modified` — a preserved entity relabeled across the reaction — is the relabeling-DPO reading: the
-entity persists in `K` and its label is resolved per side.
+entity persists in `K` and its label is resolved per side. The tag asserts nothing beyond those two
+side values. If they are `normalized_eq`, the entry is semantically a no-op whose normal form is
+`Unchanged`. Raw span construction preserves an explicitly supplied tag; normalization,
+reframing, and canonicalization collapse it, while `superimpose` may emit `Unchanged` directly
+because it derives a standardized span.
 
 A correspondence with values and a direction added is what lifts it to a span.
 
@@ -1378,10 +1382,11 @@ three nested quotients on a value: `normalize` reduces it, `reframe` reduces and
 frame, `canonicalize` reduces, reframes and then selects ids. Their equalities nest the same way:
 `==` refines `normalized_eq`, which refines `framed_eq`, which refines `canonical_eq`.
 
-`reframe_to(from, to)` restates a form between two given frames. `FrameAction::reframe_by` applies a
-single relabelling to a stereo form, and `find_reframed` walks the admissible ones when equal
-virtual ligands leave more than one. `select_frame` chooses the canonical relabelling for a stereo
-frame, taking the orbit representative when the frame's residual stabilizer leaves several.
+`reframe_to(from, to)` restates a form between two given frames. Integrity prohibits repeated
+complete participant values, so equal structured incidence determines one entity-kind action.
+`FrameTransport` applies a supplied compatible action; `Reframe` selects an action for a
+frame-owning carrier. A reaction removal may carry another explicit local ordering of its source
+incidence: reaction transport composes the derived local-to-owner alignment with the owning action.
 
 **Not:** a remapping, which relabels ids across id spaces and does not touch order; not
 canonicalization, which also selects ids.

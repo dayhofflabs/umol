@@ -64,8 +64,11 @@ pub struct ReactionSpan {
     constraints: Vec<ConstraintSpan>,
 }
 
-/// Flat constructor input for [`ReactionSpan::from_entries`]. Each [`EntitySpan`] is present on
-/// at least one side by construction; a value absent from both sides has no entry representation.
+/// Flat, independently assembled constructor input for [`ReactionSpan`]. Each [`EntitySpan`] is
+/// present on at least one side by construction; a value absent from both sides has no entry
+/// representation. This carrier does not establish reference or projected-molecule integrity;
+/// pass it to [`ReactionSpan::try_from_entries`] or [`ReactionSpan::from_entries`] to publish a
+/// span.
 #[derive(Clone, Debug, Default)]
 pub struct ReactionSpanEntries {
     pub atoms: Vec<EntitySpan<AtomForm>>,
@@ -112,25 +115,33 @@ pub enum ReactionSpanIntegrityError {
 }
 
 impl ReactionSpan {
-    /// Construct a reaction span from entries whose structural integrity is established by the
-    /// caller.
+    /// Construct a reaction span from entries, asserting union-frame and projected-side molecule
+    /// integrity.
     ///
     /// # Panics
     ///
     /// Panics when a participant, site, ligand, or constraint references an entity absent from the
-    /// union frame or from a side on which the referring entry is present.
+    /// union frame or from a side on which the referring entry is present, when either projection
+    /// violates molecule representation integrity, or when a modified stereo entity changes kind.
+    /// Projection failures identify the invalid lhs or rhs. Use [`Self::try_from_entries`] for
+    /// independently assembled or untrusted entries.
     pub fn from_entries(entries: ReactionSpanEntries) -> Self {
         Self::try_from_entries(entries)
             .unwrap_or_else(|error| panic!("invalid reaction span entries: {error}"))
     }
 
-    /// Construct a reaction span after checking union-frame and projected-side references.
+    /// Construct a reaction span after checking union-frame and projected-side molecule integrity.
     ///
     /// # Errors
     ///
-    /// Returns [`ReactionSpanIntegrityError::InvalidReference`] when a participant, site, ligand, or
-    /// constraint references an entity absent from the union frame or from a side on which the
-    /// referring entry is present. Chemistry and other semantic properties are not validated.
+    /// Returns [`ReactionSpanIntegrityError::InvalidReference`] when a participant, site, ligand,
+    /// or constraint references an entity absent from the union frame.
+    /// [`ReactionSpanIntegrityError::Lhs`] or [`ReactionSpanIntegrityError::Rhs`] identifies a
+    /// projection that violates [`Molecule`] representation integrity, including a repeated stereo
+    /// ligand or a stereo frame exceeding the supported degree. A modified stereo entity carrying
+    /// different kinds on its two sides returns
+    /// [`ReactionSpanIntegrityError::StereoKindModified`]. Chemistry and constraint satisfiability
+    /// are not validated.
     pub fn try_from_entries(
         mut entries: ReactionSpanEntries,
     ) -> Result<Self, ReactionSpanIntegrityError> {
@@ -2424,9 +2435,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::panic::catch_unwind;
+
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::AutomorphismAlgorithm;
+    use umol_perm::MAX_DEGREE;
 
     use super::super::canonicalize::{Canonicalize, CanonicalizeContext};
     use super::super::constraint::{
@@ -2985,6 +2999,69 @@ mod tests {
     }
 
     #[rstest]
+    #[case::lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+                    2
+                ],
+                EntitySpan::Unchanged(StereoAtomForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        }),
+    )]
+    #[case::rhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); MAX_DEGREE + 1],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                (0..=MAX_DEGREE)
+                    .map(|index| StereoLigand::new(
+                        AtomId(index as u32),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ))
+                    .collect(),
+                EntitySpan::Added(StereoBondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    )]
+    fn test_reaction_span_from_entries_stereo_frame_error(
+        #[case] entries: ReactionSpanEntries,
+        #[case] expected: ReactionSpanIntegrityError,
+    ) {
+        let panic = catch_unwind(|| ReactionSpan::from_entries(entries))
+            .expect_err("invalid reaction span entries must panic");
+        let message = panic
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| panic.downcast_ref::<&str>().copied())
+            .expect("reaction span constructor panic must carry a message");
+
+        assert_eq!(
+            message,
+            format!("invalid reaction span entries: {expected}")
+        );
+    }
+
+    #[rstest]
     #[case::bond_union(
         ReactionSpanEntries {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
@@ -3303,6 +3380,202 @@ mod tests {
         }),
     )]
     fn test_reaction_span_try_from_entries_error(
+        #[case] entries: ReactionSpanEntries,
+        #[case] expected: ReactionSpanIntegrityError,
+    ) {
+        assert_eq!(ReactionSpan::try_from_entries(entries), Err(expected));
+    }
+
+    #[rstest]
+    #[case::atom_unchanged_duplicate_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+                    2
+                ],
+                EntitySpan::Unchanged(StereoAtomForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        }),
+    )]
+    #[case::atom_added_duplicate_rhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
+            stereo_atoms: vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+                    2
+                ],
+                EntitySpan::Added(StereoAtomForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        }),
+    )]
+    #[case::atom_removed_maximum_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); MAX_DEGREE + 1],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (0..=MAX_DEGREE)
+                    .map(|index| StereoLigand::new(
+                        AtomId(index as u32),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ))
+                    .collect(),
+                EntitySpan::Removed(StereoAtomForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    )]
+    #[case::atom_modified_maximum_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); MAX_DEGREE + 1],
+            stereo_atoms: vec![(
+                AtomId(0),
+                (0..=MAX_DEGREE)
+                    .map(|index| StereoLigand::new(
+                        AtomId(index as u32),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ))
+                    .collect(),
+                EntitySpan::Modified {
+                    lhs: StereoAtomForm::default(),
+                    rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                },
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoAtom(StereoAtomId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    )]
+    #[case::bond_unchanged_duplicate_lhs(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::default()),
+                EntitySpan::Unchanged(AtomForm::default()),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+                    2
+                ],
+                EntitySpan::Unchanged(StereoBondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        }),
+    )]
+    #[case::bond_added_duplicate_rhs(
+        ReactionSpanEntries {
+            atoms: vec![
+                EntitySpan::Unchanged(AtomForm::default()),
+                EntitySpan::Unchanged(AtomForm::default()),
+            ],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
+                    2
+                ],
+                EntitySpan::Added(StereoBondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Rhs(MoleculeIntegrityError::DuplicateStereoLigand {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+        }),
+    )]
+    #[case::bond_removed_maximum_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); MAX_DEGREE + 1],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                (0..=MAX_DEGREE)
+                    .map(|index| StereoLigand::new(
+                        AtomId(index as u32),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ))
+                    .collect(),
+                EntitySpan::Removed(StereoBondForm::default()),
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    )]
+    #[case::bond_modified_maximum_lhs(
+        ReactionSpanEntries {
+            atoms: vec![EntitySpan::Unchanged(AtomForm::default()); MAX_DEGREE + 1],
+            bonds: vec![(
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::default()),
+            )],
+            stereo_bonds: vec![(
+                BondId(0),
+                (0..=MAX_DEGREE)
+                    .map(|index| StereoLigand::new(
+                        AtomId(index as u32),
+                        StereoLigandKind::ImplicitHydrogen,
+                    ))
+                    .collect(),
+                EntitySpan::Modified {
+                    lhs: StereoBondForm::default(),
+                    rhs: StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                },
+            )],
+            ..Default::default()
+        },
+        ReactionSpanIntegrityError::Lhs(MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+            entity: Entity::StereoBond(StereoBondId(0)),
+            degree: MAX_DEGREE + 1,
+            maximum: MAX_DEGREE,
+        }),
+    )]
+    fn test_reaction_span_try_from_entries_stereo_frame_error(
         #[case] entries: ReactionSpanEntries,
         #[case] expected: ReactionSpanIntegrityError,
     ) {

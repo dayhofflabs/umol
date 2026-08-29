@@ -36,6 +36,9 @@ the statuses recorded here remain authoritative.
   replaces doc 209's unfinished scope: stereo frames are pairwise-distinct and bounded by
   `MAX_DEGREE`; its staged plan closes every publication boundary, removes occurrence-orbit
   machinery, and completes molecule, reaction, and reaction-span frame transport.
+- [215 - Integrity closure and minimization](215-integrity-minimization-2026-08-28.md)
+  corrects the minimum aggregate integrity domain and closes the remaining mutation and defensive
+  check gaps before doc 214 continues.
 - [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
   records the missing single-id-space remapping layer and the representation decision it requires.
@@ -254,4 +257,5 @@ the statuses recorded here remain authoritative.
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-28   | Repeat-valid orbit semantics superseded by doc 214; frame-preserving relation API remains completed.       |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Proposed      | 2026-08-28   | Findings on the missing remapping id-transport layer; representation decision open, out of doc 211's scope. |
 | [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-08-27   | The editor's three copy-on-write wrappers collapse onto one over `Overlays`. Moved out of 211 S4f: a simplification, not a correctness change, and nothing depends on it. `Participants` associated type and its comparison member are open. |
-| [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | In Progress   | 2026-08-28   | S0a-S0c complete; S0d-S2 remain.                                                                           |
+| [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | In Progress   | 2026-08-28   | S0a-S0d complete; doc 215 precedes S0e-S2.                                                                 |
+| [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Proposed      | 2026-08-28   | Staged plan minimizes integrity, closes mutation and defensive checks, accepts compatible removals, and preserves raw span entries. |

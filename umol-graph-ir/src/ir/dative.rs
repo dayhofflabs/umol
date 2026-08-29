@@ -16,12 +16,14 @@ use super::traits::{Equiv, Lattice, Normalize, Reframe};
 /// The molecule's dative bonds.
 ///
 /// The donors bear the participant frame; the acceptor is a single distinguished atom. Neither
-/// factor is position-sensitive for [`DativeBondForm`], whose order is a scalar.
+/// factor is position-sensitive for [`DativeBondForm`], whose order is a scalar. Values are issued
+/// by checked molecule construction and trusted graph-IR transformations; raw assembly is not a
+/// public construction path.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct DativeBonds(Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>);
 
 impl DativeBonds {
-    pub fn new(entries: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>) -> Self {
         Self(Arc::new(FixedVarBirelationSet::new(
             entries
                 .into_iter()
@@ -34,6 +36,12 @@ impl DativeBonds {
                 })
                 .collect(),
         )))
+    }
+
+    pub(crate) fn from_arc(
+        set: Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>,
+    ) -> Self {
+        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -81,7 +89,7 @@ impl DativeBonds {
         self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, DativeBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
@@ -163,18 +171,6 @@ impl DativeBonds {
     }
 }
 
-impl From<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>> for DativeBonds {
-    fn from(set: FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>) -> Self {
-        Self(Arc::new(set))
-    }
-}
-
-impl From<Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>> for DativeBonds {
-    fn from(set: Arc<FixedVarBirelationSet<NodeId, 1, NodeId, DativeBondForm>>) -> Self {
-        Self(set)
-    }
-}
-
 impl Reframe for DativeBonds {
     type Action = (DativeBondId, Vec<ParticipantPosition>);
 
@@ -212,12 +208,12 @@ impl Reframe for DativeBonds {
 }
 
 /// The reaction span's dative bonds, one [`EntitySpan`] per entity against a single donor frame.
-/// The `Molecule` peer is [`DativeBonds`].
+/// The `Molecule` peer is [`DativeBonds`]. Values are issued by [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct DativeBondSpans(FixedVarBirelationSet<NodeId, 1, NodeId, EntitySpan<DativeBondForm>>);
 
 impl DativeBondSpans {
-    pub fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> {
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)> {
         self.0
             .into_entries()
             .into_iter()
@@ -231,7 +227,7 @@ impl DativeBondSpans {
             .collect()
     }
 
-    pub fn new(entries: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)>) -> Self {
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)>) -> Self {
         Self(FixedVarBirelationSet::new(
             entries
                 .into_iter()

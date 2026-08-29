@@ -15,12 +15,14 @@ use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 /// The molecule's noncovalent bonds.
 ///
 /// The atom pair bears the participant frame, but [`NoncovalentBondForm`] carries no
-/// position-sensitive field, so a reordering of the pair leaves the attributes unchanged.
+/// position-sensitive field, so a reordering of the pair leaves the attributes unchanged. Values
+/// are issued by checked molecule construction and trusted graph-IR transformations; raw assembly
+/// is not a public construction path.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>);
 
 impl NoncovalentBonds {
-    pub fn new(entries: Vec<(AtomId, AtomId, NoncovalentBondForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<(AtomId, AtomId, NoncovalentBondForm)>) -> Self {
         Self(Arc::new(FixedRelationSet::new(
             entries
                 .into_iter()
@@ -29,6 +31,10 @@ impl NoncovalentBonds {
                 })
                 .collect(),
         )))
+    }
+
+    pub(crate) fn from_arc(set: Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>) -> Self {
+        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -72,7 +78,7 @@ impl NoncovalentBonds {
         self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn into_entries(self) -> Vec<(AtomId, AtomId, NoncovalentBondForm)> {
+    pub(crate) fn into_entries(self) -> Vec<(AtomId, AtomId, NoncovalentBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
@@ -138,18 +144,6 @@ impl NoncovalentBonds {
     }
 }
 
-impl From<FixedRelationSet<NodeId, NoncovalentBondForm, 2>> for NoncovalentBonds {
-    fn from(set: FixedRelationSet<NodeId, NoncovalentBondForm, 2>) -> Self {
-        Self(Arc::new(set))
-    }
-}
-
-impl From<Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>> for NoncovalentBonds {
-    fn from(set: Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>) -> Self {
-        Self(set)
-    }
-}
-
 impl Reframe for NoncovalentBonds {
     type Action = (NoncovalentBondId, Vec<ParticipantPosition>);
 
@@ -187,12 +181,13 @@ impl Reframe for NoncovalentBonds {
 }
 
 /// The reaction span's noncovalent bonds, one [`EntitySpan`] per entity against a single
-/// participant frame. The `Molecule` peer is [`NoncovalentBonds`].
+/// participant frame. The `Molecule` peer is [`NoncovalentBonds`]. Values are issued by
+/// [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct NoncovalentBondSpans(FixedRelationSet<NodeId, EntitySpan<NoncovalentBondForm>, 2>);
 
 impl NoncovalentBondSpans {
-    pub fn into_entries(self) -> Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> {
+    pub(crate) fn into_entries(self) -> Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> {
         self.0
             .into_entries()
             .into_iter()
@@ -200,7 +195,7 @@ impl NoncovalentBondSpans {
             .collect()
     }
 
-    pub fn new(entries: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>) -> Self {
+    pub(crate) fn new(entries: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>) -> Self {
         Self(FixedRelationSet::new(
             entries
                 .into_iter()

@@ -17,12 +17,14 @@ use super::traits::{Equiv, Lattice, Normalize, Reframe};
 /// The molecule's multicenter bonds.
 ///
 /// The atoms bear the participant frame: the per-member electron counts of
-/// [`MulticenterBondForm`] are read against it, position by position.
+/// [`MulticenterBondForm`] are read against it, position by position. Values are issued by checked
+/// molecule construction and trusted graph-IR transformations; raw assembly is not a public
+/// construction path.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MulticenterBonds(Arc<VarRelationSet<NodeId, MulticenterBondForm>>);
 
 impl MulticenterBonds {
-    pub fn new(entries: Vec<(Vec<AtomId>, MulticenterBondForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, MulticenterBondForm)>) -> Self {
         Self(Arc::new(VarRelationSet::new(
             entries
                 .into_iter()
@@ -31,6 +33,10 @@ impl MulticenterBonds {
                 })
                 .collect(),
         )))
+    }
+
+    pub(crate) fn from_arc(set: Arc<VarRelationSet<NodeId, MulticenterBondForm>>) -> Self {
+        Self(set)
     }
 
     pub fn count(&self) -> usize {
@@ -77,7 +83,7 @@ impl MulticenterBonds {
         self.0.has_incident(NodeId::from(atom))
     }
 
-    pub fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, MulticenterBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
@@ -149,18 +155,6 @@ impl MulticenterBonds {
     }
 }
 
-impl From<VarRelationSet<NodeId, MulticenterBondForm>> for MulticenterBonds {
-    fn from(set: VarRelationSet<NodeId, MulticenterBondForm>) -> Self {
-        Self(Arc::new(set))
-    }
-}
-
-impl From<Arc<VarRelationSet<NodeId, MulticenterBondForm>>> for MulticenterBonds {
-    fn from(set: Arc<VarRelationSet<NodeId, MulticenterBondForm>>) -> Self {
-        Self(set)
-    }
-}
-
 impl Reframe for MulticenterBonds {
     type Action = (MulticenterBondId, Vec<ParticipantPosition>);
 
@@ -201,12 +195,13 @@ impl Reframe for MulticenterBonds {
 ///
 /// The `Molecule` peer is [`MulticenterBonds`]. The surface is deliberately duplicated rather than shared
 /// through a payload parameter: a type parameter on the molecule-level families would complicate
-/// the primary carrier to serve this one.
+/// the primary carrier to serve this one. Values are issued by
+/// [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MulticenterBondSpans(VarRelationSet<NodeId, EntitySpan<MulticenterBondForm>>);
 
 impl MulticenterBondSpans {
-    pub fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> {
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)> {
         self.0
             .into_entries()
             .into_iter()
@@ -214,7 +209,7 @@ impl MulticenterBondSpans {
             .collect()
     }
 
-    pub fn new(entries: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)>) -> Self {
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)>) -> Self {
         Self(VarRelationSet::new(
             entries
                 .into_iter()

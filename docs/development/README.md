@@ -9,6 +9,9 @@ rule changes and carry neither dates nor implementation status.
 - [Data type contracts](data-types.md) defines construction, conversion, validation tiers,
   transformation, representation ownership and crate layering, provenance, fallibility, and public
   contract review.
+- [Representation integrity](integrity.md) defines the narrow closed-container exception, inventories
+  every molecule, reaction, and reaction-span integrity check, and records the concrete failure each
+  check prevents.
 - [Nomenclature](nomenclature.md) defines repository-specific terms and public naming conventions.
 - [Python API](python-api.md) defines ownership, mutability, view, editor, conversion, and nested
   value contracts for the Python bindings.
