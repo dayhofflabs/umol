@@ -59,7 +59,7 @@ proptest! {
                 .expect("successful canonicalization returns its correspondence");
 
             prop_assert_eq!(&with_correspondence, &canonical);
-            prop_assert!(molecule.equiv_under(&canonical, &correspondence));
+            prop_assert!(molecule.framed_eq_under(&canonical, &correspondence));
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }
     }

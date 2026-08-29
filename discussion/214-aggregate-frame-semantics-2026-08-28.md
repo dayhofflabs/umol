@@ -1039,6 +1039,22 @@ ledger remains.
   `test_aromatic_systems_glue_differing_frames`, `test_molecule_meet_pushout_overlays`, and
   `molecule::comparison::test_molecule_equiv_under_reframed`. **Breaking; inherited red ledger
   decreases from fifteen to twelve.** [dep: S0n]
+  **Done.** `Molecule::framed_eq_under` now performs checked entity-id remapping followed by
+  `framed_eq`; the hand-written mapped-comparison paths and the `equiv_under` name are removed.
+  Molecule pushout preserves the selected entity frame and transports every frame-relative
+  constraint before entity-id remapping, including ordered noncovalent endpoint predicates and
+  stereo atom and stereo bond constraints. The frame-invariant constraint path constructs no
+  aggregate action map. Exact unit tests cover identity, renumbering, ordinary and stereo frame
+  differences, stereo-bond endpoint-block swaps, partial and incompatible correspondences, and
+  nonuniform pushout constraints. Properties cover identity reduction to `framed_eq`, inverse and
+  composed correspondences, and participant-frame changes. The canonical-equality tests restrict
+  the correspondence-witness characterization to successful canonicalization and separately
+  preserve totalized equality for intrinsic contradictions. The three assigned regressions pass;
+  the renamed comparison property is
+  `molecule::comparison::test_molecule_framed_eq_under_participant_frame`. The all-core,
+  feature-gated graph-IR checkpoint reports 6,878 passed, 12 inherited failures, and 4 skipped;
+  those failures are exactly the two S0p canonicalization cases and the ten later reaction and
+  reaction-span cases. Graph-IR doctests and strict all-target Clippy pass.
 - **S0p — canonicalization composition** (`ir/canonicalize.rs` and focused benchmarks): after
   canonical id remapping, call the aggregate frame operation; remove complete-stereo candidate
   products and the above-`MAX_DEGREE` position-order fallback, then remove

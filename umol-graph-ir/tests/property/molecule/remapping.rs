@@ -255,12 +255,12 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_remap_equiv_under(
+    fn test_molecule_remap_framed_eq_under(
         (source, correspondence, _) in remapping_scenario_strategy(),
     ) {
         let remapped = source.remap(&correspondence);
 
-        prop_assert!(source.equiv_under(&remapped, &correspondence));
+        prop_assert!(source.framed_eq_under(&remapped, &correspondence));
     }
 
     #[test]

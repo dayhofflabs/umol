@@ -308,7 +308,7 @@ defines the selected frame; backend canonical labels may guide and prune the sea
 define that order.
 
 **Canonical equality** compares the complete canonical forms produced under the same context. It is
-the search-based counterpart of `equiv_under`: the caller does not supply a correspondence because
+the search-based counterpart of `framed_eq_under`: the caller does not supply a correspondence because
 canonicalization selects the frame.
 
 For a fixed umol release, level, and context, canonicalization is deterministic. During the 0.x
@@ -731,19 +731,23 @@ includes ring constraints.
 
 ### Equality ladder
 
-Three levels of equality exist on forms and molecules. `equiv_under` is the mapped form of
-`equiv`, not a fourth relation.
+The equality ladder follows the normalization, reframing, and canonicalization pipeline.
+`framed_eq_under` is the explicit entity-id-witness form of `framed_eq`, not another quotient
+level.
 
 - **`==`** — derived structural equality of the stored IR. Same structure, constraints, ids, and order.
   Deliberately *not* chemical identity, so it stays cheap on the hot path.
-- **`equiv`** — equality of normalized forms in the current id and participant frame.
-  **`Molecule::equiv_under`** is the same under an explicitly supplied `MoleculeCorrespondence`,
-  restating each matched entry into the stored frame before comparing.
+- **`normalized_eq`** — equality of normal forms in the current entity-id and participant frame.
+- **`framed_eq`** — equality after normalization and participant-frame selection.
+  **`Molecule::framed_eq_under`** first remaps entity ids through an explicitly supplied
+  `MoleculeCorrespondence`, then performs framed equality.
 - **`canonical_eq`** — equality of complete aggregate canonical forms under a shared context. The
-  implementation selects the canonical frame rather than receiving one from the caller.
+  implementation selects participant frames and entity ids rather than receiving an id witness
+  from the caller.
 
-For inputs in the canonicalization domain, `canonical_eq` holds exactly when an admissible remapping
-exists under which `equiv_under` holds.
+For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
+when an admissible total dense correspondence exists under which `framed_eq_under` holds. Equality
+totalization for two intrinsic contradictions does not require such a witness.
 
 Structural canonical labeling initially establishes automorphism orbits from inherent fields and
 incidence without constraints. Complete aggregate canonicalization then uses normalized
@@ -751,10 +755,10 @@ constraints to select among structurally equivalent frames. This distinction is 
 important for patterns: constraints do not define the underlying structural orbits, but they remain
 meaningful parts of the canonical IR assertion.
 
-**Not:** each other. Reaching for `==` when `equiv` is meant is the common error, because `==` exists
-on everything and silently answers a different question.
-**In code:** `PartialEq`, `Equiv::equiv`, `Molecule::equiv_under`, and
-`Canonicalize::canonical_eq`.
+**Not:** each other. Reaching for `==` when `normalized_eq` or `framed_eq` is meant is the common
+error, because `==` exists on everything and silently answers a different question.
+**In code:** `PartialEq`, `Normalize::normalized_eq`, `Reframe::framed_eq`,
+`Molecule::framed_eq_under`, and `Canonicalize::canonical_eq`.
 
 ### Error
 
@@ -1186,14 +1190,15 @@ deduplicates logical constraints, normalizes entity fields and constraints, and 
 fixed-frame transformation values such as `Deltas`. It is context-free, idempotent on satisfiable
 values, and returns `Err(Contradiction)` for an unsatisfiable represented value.
 
-**Normalized equivalence** is `equiv`: two values are equivalent in the current frame when their
+**Normalized equality** is `normalized_eq`: two values are equal in the current frame when their
 normal forms are structurally equal. `Normalized<T>` carries the guarantee that normalization has
 already run, so its derived `Eq`, `Hash`, and `Ord` operate on normal forms and can be used for
 semantic deduplication.
 
 **Not:** aggregate canonicalization, which selects an entity and participant frame and requires an
 explicit context. Not chemical standardization, resolution, validation, or repair.
-**In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`, `Equiv::equiv`.
+**In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`,
+`Normalize::normalized_eq`.
 
 ### Operation names
 
@@ -1256,7 +1261,7 @@ algebra: `apply` carries a state forward by a delta, `diff` factors two states b
 between them.
 
 The law is `apply(lhs, diff(lhs, rhs)) == rhs`. The entity update API states the same law as
-`x.update(x.difference_to(y)) == y`. Both are read under `equiv`, not `==`: a delta's payload is
+`x.update(x.difference_to(y)) == y`. Both are read under `normalized_eq`, not `==`: a delta's payload is
 compared up to normal form, so the law holds for values that are equivalent rather than identical.
 Applying a delta checks its `old` against the stored state the same way.
 

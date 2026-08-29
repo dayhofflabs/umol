@@ -382,15 +382,17 @@ operational domains interchangeable.
 The comparison suite already records distinct relations:
 
 - `==` compares stored representation;
-- `equiv` compares normalized semantics in the current ID and participant frame;
-- `equiv_under` compares after an explicit correspondence;
+- `normalized_eq` compares normal forms in the current entity-id and participant frame;
+- `framed_eq` compares after participant-frame selection;
+- `framed_eq_under` first applies an explicit entity-id correspondence and then compares under
+  `framed_eq`;
 - aggregate `canonical_eq` compares complete canonical forms after selecting the frame.
 
 The properties exercise:
 
-- reflexivity and symmetry of `equiv`;
-- agreement of `equiv` with `==` on normalized forms;
-- reduction of `equiv_under` to `equiv` under the identity correspondence;
+- reflexivity and symmetry of `normalized_eq`;
+- agreement of `normalized_eq` with `==` on normalized forms;
+- reduction of `framed_eq_under` to `framed_eq` under the identity correspondence;
 - symmetry under reversing a correspondence;
 - composition of correspondence-aware equivalence on generated atom reorderings;
 - exact idempotence and dense-remapping invariance of complete molecule canonicalization;
@@ -410,10 +412,11 @@ When both applications succeed, their products must be equivalent under the indu
 correspondence. When both fail, the first diagnostic need not be identical because relabeling may
 change which of several invalid embeddings or stereo frames is encountered first.
 
-If `equiv` is publicly presented as an equivalence relation, transitivity is part of that claim. The
-suite directly checks reflexivity and symmetry, while its transitivity property is expressed through
-`equiv_under` on a restricted atom-reordering domain. A later coverage pass should either test
-general `equiv` transitivity or document a narrower contract.
+If an operation is publicly presented as an equivalence relation, transitivity is part of that
+claim. The suite directly checks reflexivity and symmetry of `normalized_eq`, while correspondence
+composition checks the mapped `framed_eq_under` relation on a restricted atom-reordering domain.
+The coherent pipeline property stage systematizes the remaining `framed_eq` and cross-quotient
+laws.
 
 ### Reaction operations
 

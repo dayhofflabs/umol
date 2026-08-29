@@ -394,7 +394,7 @@ proptest! {
                     &right,
                 );
                 prop_assert!(products.is_total());
-                prop_assert!(left.rhs().equiv_under(right.rhs(), &products));
+                prop_assert!(left.rhs().framed_eq_under(right.rhs(), &products));
             }
             (left, right) => prop_assert!(false, "application mismatch: {left:?} != {right:?}"),
         }

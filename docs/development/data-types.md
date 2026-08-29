@@ -325,11 +325,13 @@ ordinary conversion must not perform one as an incidental implementation step.
 ## Identity and constraints
 
 Derived `==` compares the stored IR structure exactly, including constraints, ids, ordering, and
-non-normal value encodings. `equiv` compares normalized forms in the current frame;
-`equiv_under` performs the same comparison under an explicitly supplied correspondence.
-Aggregate `canonical_eq` compares complete canonical IR values after selecting the canonical frame.
-All three semantic comparisons include constraints. This distinction matters for patterns, where
-constraints are not redundant with the structural description.
+non-normal value encodings. `normalized_eq` compares normal forms in the current participant and
+entity-id frame. `framed_eq` additionally selects participant frames, while
+`framed_eq_under` first applies an explicitly supplied entity-id correspondence and then performs
+framed equality. Aggregate `canonical_eq` compares complete canonical IR values after selecting
+participant frames and entity ids. Every semantic comparison includes constraints. This
+distinction matters for patterns, where constraints are not redundant with the structural
+description.
 
 Entity and molecular structural identity is established from inherent fields and structural
 incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
@@ -361,18 +363,20 @@ transports position-sensitive relation data, carries stereo cosets through stere
 permutations, and normalizes every carried value in the selected frame. It does not perceive,
 resolve, strip, repair, or validate chemistry.
 
-The equality operations form three levels:
+The equality operations form the same nested quotient pipeline:
 
 - `==` compares the exact stored representation;
-- `equiv` compares normalized values in the current frame, while `equiv_under` applies an explicitly
-  supplied correspondence before that comparison; and
+- `normalized_eq` compares normal forms in the current participant and entity-id frame;
+- `framed_eq` compares after selecting participant frames, while `framed_eq_under` first applies an
+  explicitly supplied entity-id correspondence and then performs framed equality; and
 - `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
-  frame rather than receiving it from the caller.
+  participant frames and entity ids rather than receiving an id witness from the caller.
 
-For inputs in the aggregate operation domain, `canonical_eq` holds exactly when canonicalization
-produces the same complete IR value. Equivalently, an admissible remapping exists under which
-`equiv_under` holds. `equiv_under` is therefore the explicit-map member of the `equiv` family, not a
-fourth equality relation.
+For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
+when an admissible total dense correspondence exists under which `framed_eq_under` holds. Two
+intrinsic contradictions still compare equal under canonical equality's failure-totalization rule,
+but that convention does not require a correspondence witness. `framed_eq_under` is the explicit
+entity-id-witness form of `framed_eq`, not another quotient level.
 
 The context-bearing trait has the semantic shape
 
@@ -746,7 +750,7 @@ Comparing two entries therefore has three independent parts, and a site chooses 
   distinct complete participant values, so equal structured incidence determines one action in the
   entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and
   `FrameTransport::reframe_by` transports the payload.
-- **the value relation** — `equiv`, `matches`, or `meet`, the caller's own.
+- **the value relation** — `normalized_eq`, `matches`, or `meet`, the caller's own.
 
 `FrameTransport::reframe_by` returning `Some` does not establish identity: a frame-invariant payload
 reads neither frame, and an undetermined electron-count vector has nothing to reorder. A site that
@@ -796,7 +800,7 @@ entities. Identity remapping is exact; applying a remapping and its inverse reco
 and sequential remapping agrees with correspondence composition.
 
 Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
-`source.equiv_under(&remapped, &correspondence)`. Property tests must state this law directly in
+`source.framed_eq_under(&remapped, &correspondence)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
 include crossing permutations, all entity kinds, position-sensitive relation data and stereo
 frames, and constraints containing typed entity references; testing only reordered atom and bond

@@ -527,7 +527,7 @@ proptest! {
             sides.projected_rhs_atoms,
         ).expect("reaction-frame normalization preserves unique entity incidence");
         prop_assert!(projected_to_source.is_total());
-        prop_assert!(projected_rhs.equiv_under(&sides.rhs, &projected_to_source));
+        prop_assert!(projected_rhs.framed_eq_under(&sides.rhs, &projected_to_source));
     }
 
     /// Independently generated, structurally valid span entries converge through direct

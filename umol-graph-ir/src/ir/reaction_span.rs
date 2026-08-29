@@ -5111,7 +5111,7 @@ mod tests {
 
         assert_eq!(span.atoms(), &[EntitySpan::Unchanged(lhs_atom)]);
         assert_eq!(span.lhs(), lhs);
-        assert!(span.rhs().equiv_under(&rhs, &correspondence));
+        assert!(span.rhs().framed_eq_under(&rhs, &correspondence));
     }
 
     #[rstest]

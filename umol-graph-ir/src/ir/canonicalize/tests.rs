@@ -2276,7 +2276,7 @@ fn test_molecule_canonicalize_retained(
 
     assert_eq!(canonical, expected);
     assert_eq!(transported, expected);
-    assert!(source.equiv_under(&canonical, &correspondence));
+    assert!(source.framed_eq_under(&canonical, &correspondence));
 }
 
 #[rstest]
@@ -2370,6 +2370,36 @@ fn test_molecule_canonical_eq(
 }
 
 #[rstest]
+#[case::renumbering(false, true)]
+#[case::atom_form(true, false)]
+fn test_molecule_canonical_eq_correspondence_witness(
+    canonicalize_context: CanonicalizeContext,
+    #[case] distinguish: bool,
+    #[case] expected: bool,
+) {
+    let left = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    });
+    let mut right = left.remap(&reverse_correspondence(&left));
+    if distinguish {
+        right.atom_mut(AtomId(0)).attributes.element = ElementForm::Lit(Element::F);
+    }
+
+    assert!(left.clone().canonicalize(&canonicalize_context).is_ok());
+    assert!(right.clone().canonicalize(&canonicalize_context).is_ok());
+    assert_eq!(explicitly_dense_equivalent(&left, &right), expected);
+    assert_eq!(
+        left.canonical_eq(&right, &canonicalize_context),
+        explicitly_dense_equivalent(&left, &right),
+    );
+}
+
+#[rstest]
 fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeContext) {
     let mut left_contradiction = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
@@ -2377,7 +2407,10 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
     });
     left_contradiction.atom_mut(AtomId(0)).attributes.charge = NumForm::lit_set(Vec::<i64>::new());
     let mut right_contradiction = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::N)],
+        atoms: vec![
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+        ],
         ..Default::default()
     });
     right_contradiction.atom_mut(AtomId(0)).attributes.charge = NumForm::lit_set(Vec::<i64>::new());
@@ -2387,6 +2420,10 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
     });
 
     assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
+    assert!(!explicitly_dense_equivalent(
+        &left_contradiction,
+        &right_contradiction,
+    ));
     assert!(!left_contradiction.canonical_eq(&valid, &canonicalize_context));
 }
 
@@ -2982,7 +3019,7 @@ fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> bool {
         right: &Molecule,
     ) -> bool {
         if entity_kind == images.len() {
-            return left.equiv_under(right, &molecule_correspondence(images));
+            return left.framed_eq_under(right, &molecule_correspondence(images));
         }
 
         permutations[entity_kind].iter().any(|permutation| {
@@ -4240,8 +4277,8 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
     let canonical_again = canonicalize_topology(&canonical, &canonicalize_context).unwrap();
     let canonical_again_incidence = canonical_again.incidence_graph(IncidenceLevel::Topology);
 
-    assert!(molecule.equiv_under(&canonical, &correspondence));
-    assert!(remapped.equiv_under(&canonical_remapped, &remapped_correspondence));
+    assert!(molecule.framed_eq_under(&canonical, &correspondence));
+    assert!(remapped.framed_eq_under(&canonical_remapped, &remapped_correspondence));
     assert_eq!(canonical.check_integrity(), Ok(()));
     assert_eq!(canonical_remapped.check_integrity(), Ok(()));
     assert_eq!(
@@ -4346,7 +4383,7 @@ fn test_canonicalize_topology_exhaustive_domain(
         );
         assert_eq!(unpruned, canonical, "edge mask {edge_mask:#08b}");
         assert!(
-            molecule.equiv_under(&canonical, &correspondence),
+            molecule.framed_eq_under(&canonical, &correspondence),
             "edge mask {edge_mask:#08b}",
         );
         assert_eq!(canonical.check_integrity(), Ok(()));
@@ -4618,8 +4655,8 @@ fn test_canonicalize_constitution_properties(
     let inverse = correspondence.reverse();
 
     assert_eq!(acted, canonical);
-    assert!(initial_class_molecule.equiv_under(&canonical, &correspondence));
-    assert!(canonical.equiv_under(&normalized_source, &inverse));
+    assert!(initial_class_molecule.framed_eq_under(&canonical, &correspondence));
+    assert!(canonical.framed_eq_under(&normalized_source, &inverse));
     assert_eq!(canonical.check_integrity(), Ok(()));
 
     let (canonical_again, _) = canonicalize_constitution_with_options(
@@ -4668,7 +4705,7 @@ fn test_canonicalize_constitution_properties(
         canonical_renumbered.incidence_graph(IncidenceLevel::Constitution);
 
     assert_eq!(composed_action, canonical_renumbered);
-    assert!(initial_class_molecule.equiv_under(&canonical_renumbered, &composed));
+    assert!(initial_class_molecule.framed_eq_under(&canonical_renumbered, &composed));
     assert_eq!(
         constitution_comparison_key(
             &canonical,
@@ -4840,7 +4877,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
         );
         assert_eq!(unpruned, canonical, "{entity_kind}");
         assert!(
-            molecule.equiv_under(&canonical, &correspondence),
+            molecule.framed_eq_under(&canonical, &correspondence),
             "{entity_kind}"
         );
         assert_eq!(canonical.check_integrity(), Ok(()), "{entity_kind}");

@@ -525,9 +525,8 @@ mod tests {
     /// the left frame before meeting; meeting the two vectors position-by-position without that
     /// compares different atoms' counts and yields bottom.
     ///
-    /// Both sides state 1 -> 20, 4 -> 30, 7 -> 10. The left frame is permuted apart from sorted
-    /// order, as the frame-preserving storage S5b introduces would leave it; the right stays sorted
-    /// because `remap` reconstructs it through `new`, which still sorts an `Unordered` factor.
+    /// Both sides state 1 -> 20, 4 -> 30, 7 -> 10. The left uses an unsorted stored frame and the
+    /// right uses the sorted frame supplied below.
     #[rstest]
     fn test_aromatic_systems_glue_differing_frames() {
         let mut left = AromaticSystems::new(vec![(
@@ -574,8 +573,12 @@ mod tests {
 
         assert_eq!(glued.count(), 1);
         assert_eq!(
+            glued.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+        assert_eq!(
             glued.attributes(AromaticSystemId(0)),
-            &AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+            &AromaticSystemForm::from_electrons(vec![10, 20, 30]),
         );
     }
 

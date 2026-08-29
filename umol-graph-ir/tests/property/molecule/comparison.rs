@@ -1,15 +1,15 @@
 //! Molecule comparison properties.
 //!
 //! The identity-frame laws for `normalized_eq`, the correspondence laws for
-//! `equiv_under`, and agreement with `==` on normalized graph-IR values deliberately use
-//! overlapping molecule domains. They establish distinct relations: semantic
-//! equivalence in a shared frame, semantic equivalence under an explicit frame
-//! mapping, and a normal-form oracle, respectively.
+//! `framed_eq_under`, and agreement with `==` on normalized graph-IR values deliberately use
+//! overlapping molecule domains. They establish distinct relations: normalized equality in a
+//! shared frame, framed equality under an explicit entity-id mapping, and a normal-form oracle,
+//! respectively.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::Correspondence;
-use umol_graph_ir::ir::MoleculeCorrespondence;
+use umol_graph_ir::ir::{MoleculeCorrespondence, Reframe};
 
 use crate::strategies::*;
 
@@ -74,7 +74,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_equiv_under_transitive(
+    fn test_molecule_framed_eq_under_composition(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
     ) {
         let count = atoms.len();
@@ -111,9 +111,9 @@ proptest! {
         let first_second = correspondence(&first_order, &second_order);
         let second_third = correspondence(&second_order, &third_order);
 
-        prop_assert!(first.equiv_under(&second, &first_second));
-        prop_assert!(second.equiv_under(&third, &second_third));
-        prop_assert!(first.equiv_under(&third, &first_second.compose(&second_third)));
+        prop_assert!(first.framed_eq_under(&second, &first_second));
+        prop_assert!(second.framed_eq_under(&third, &second_third));
+        prop_assert!(first.framed_eq_under(&third, &first_second.compose(&second_third)));
     }
 
     #[test]
@@ -125,7 +125,7 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_equiv_under_identity_reduces_to_normalized_eq(
+    fn test_molecule_framed_eq_under_identity(
         molecule in molecule_with_constraints_strategy(),
     ) {
         let correspondence = identity_correspondence(&molecule);
@@ -135,25 +135,25 @@ proptest! {
         }
 
         prop_assert_eq!(
-            molecule.equiv_under(&other, &correspondence),
-            molecule.normalized_eq(&other),
+            molecule.framed_eq_under(&other, &correspondence),
+            molecule.framed_eq(&other),
         );
     }
 
     #[test]
-    fn test_molecule_equiv_under_reframed(
+    fn test_molecule_framed_eq_under_participant_frame(
         (left, right) in stereo_reframed_molecule_pair_strategy(),
     ) {
         let correspondence = identity_correspondence(&left);
 
         prop_assert_eq!(
-            left.equiv_under(&right, &correspondence),
-            left.normalized_eq(&right),
+            left.framed_eq_under(&right, &correspondence),
+            left.framed_eq(&right),
         );
     }
 
     #[test]
-    fn test_molecule_equiv_under_symmetric_under_reverse(
+    fn test_molecule_framed_eq_under_inverse_correspondence(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
         change_mapped_atom in any::<bool>(),
     ) {
@@ -181,8 +181,8 @@ proptest! {
             Correspondence::from_images(&[], 0),
         );
 
-        let forward = left.equiv_under(&right, &correspondence);
-        let reverse = right.equiv_under(&left, &correspondence.reverse());
+        let forward = left.framed_eq_under(&right, &correspondence);
+        let reverse = right.framed_eq_under(&left, &correspondence.reverse());
         prop_assert_eq!(forward, reverse);
         prop_assert_eq!(forward, !change_mapped_atom || count == 0);
     }

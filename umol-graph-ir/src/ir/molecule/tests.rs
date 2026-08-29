@@ -1402,7 +1402,7 @@ fn test_molecule_from_entries_error() {
 }
 
 #[fixture]
-fn equiv_under_molecules(
+fn framed_eq_under_molecules(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) -> (Molecule, Molecule, MoleculeCorrespondence) {
     let atom_images = [AtomId(2), AtomId(3), AtomId(0), AtomId(1)];
@@ -2025,19 +2025,48 @@ fn test_molecule_normalized_eq_structure_and_counts(
 }
 
 #[rstest]
-fn test_molecule_equiv_under_non_identity(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+fn test_molecule_framed_eq_under_entity_ids(
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {
     let (left, right, correspondence) = case;
 
     assert!(correspondence.is_total());
     assert!(!left.normalized_eq(&right));
-    assert!(left.equiv_under(&right, &correspondence));
-    assert!(right.equiv_under(&left, &correspondence.reverse()));
+    assert!(left.framed_eq_under(&right, &correspondence));
+    assert!(right.framed_eq_under(&left, &correspondence.reverse()));
 }
 
 #[rstest]
-fn test_molecule_equiv_under_stereo_constraint_frame() {
+fn test_molecule_framed_eq_under_aromatic_system_frame() {
+    let left = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![2, 4, 6]),
+        )],
+        ..Default::default()
+    });
+    let right = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        aromatic: vec![(
+            vec![AtomId(2), AtomId(0), AtomId(1)],
+            AromaticSystemForm::from_electrons(vec![6, 2, 4]),
+        )],
+        ..Default::default()
+    });
+    let correspondence = MoleculeCorrespondence::induce(
+        &left,
+        &right,
+        Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
+    )
+    .expect("the identity atom mapping induces the aromatic-system correspondence");
+
+    assert!(!left.normalized_eq(&right));
+    assert!(left.framed_eq_under(&right, &correspondence));
+}
+
+#[rstest]
+fn test_molecule_framed_eq_under_stereo_atom_constraint() {
     let atoms = vec![AtomForm::from_element(Element::C); 5];
     let bonds = (1..=4)
         .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
@@ -2084,7 +2113,66 @@ fn test_molecule_equiv_under_stereo_constraint_frame() {
     )
     .expect("the identity atom mapping induces the overlay correspondence");
 
-    assert!(left.equiv_under(&right, &correspondence));
+    assert!(left.framed_eq_under(&right, &correspondence));
+}
+
+#[rstest]
+fn test_molecule_framed_eq_under_stereo_bond_block() {
+    let atoms = vec![AtomForm::from_element(Element::C); 4];
+    let bonds = vec![
+        (AtomId(0), AtomId(1), BondForm::from_order(2)),
+        (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        (AtomId(1), AtomId(3), BondForm::from_order(1)),
+    ];
+    let atom = |id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom);
+    let lone_pair = |id| StereoLigand::new(AtomId(id), StereoLigandKind::LonePair);
+    let left = Molecule::from_entries(MoleculeEntries {
+        atoms: atoms.clone(),
+        bonds: bonds.clone(),
+        stereo_bonds: vec![(
+            BondId(0),
+            vec![atom(2), lone_pair(0), atom(3), lone_pair(1)],
+            StereoBondForm::default(),
+        )],
+        constraints: Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            }),
+        )
+        .into(),
+        ..Default::default()
+    });
+    let right = Molecule::from_entries(MoleculeEntries {
+        atoms,
+        bonds,
+        stereo_bonds: vec![(
+            BondId(0),
+            vec![atom(3), lone_pair(1), atom(2), lone_pair(0)],
+            StereoBondForm::default(),
+        )],
+        constraints: Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(2usize.into(), 3usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            }),
+        )
+        .into(),
+        ..Default::default()
+    });
+    let correspondence = MoleculeCorrespondence::induce(
+        &left,
+        &right,
+        Correspondence::from_images(&(0..4).map(AtomId::from).collect::<Vec<_>>(), 4),
+    )
+    .expect("the identity atom mapping induces the stereo-bond correspondence");
+
+    assert!(!left.normalized_eq(&right));
+    assert!(left.framed_eq_under(&right, &correspondence));
 }
 
 /// A correspondence must map each matched entity's participants onto its counterpart's. That is a
@@ -2101,7 +2189,7 @@ fn test_molecule_equiv_under_stereo_constraint_frame() {
 #[case::dative(Entity::DativeBond(DativeBondId(0)))]
 #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(0)))]
 #[case::stereo_bond(Entity::StereoBond(StereoBondId(0)))]
-fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Entity) {
+fn test_molecule_framed_eq_under_participant_mismatch_error(#[case] entity: Entity) {
     // Atom 0 is bonded to 1, 4 and 5; atom 1 to 0, 2 and 5; atom 2 to 1 and 3. That gives every
     // entity kind a legal participant to move to.
     let build = |shifted: bool| {
@@ -2194,14 +2282,14 @@ fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Ent
     );
 
     assert!(
-        !left.equiv_under(&right, &correspondence),
+        !left.framed_eq_under(&right, &correspondence),
         "{entity}: participants that do not correspond must not compare equivalent",
     );
 }
 
 #[rstest]
-fn test_molecule_equiv_under_rejects_partial_correspondence(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+fn test_molecule_framed_eq_under_partial_correspondence_error(
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {
     let (left, right, correspondence) = case;
     let partial = MoleculeCorrespondence::new(
@@ -2224,12 +2312,12 @@ fn test_molecule_equiv_under_rejects_partial_correspondence(
         correspondence.stereo_bonds().clone(),
     );
 
-    assert!(!left.equiv_under(&right, &partial));
+    assert!(!left.framed_eq_under(&right, &partial));
 }
 
 #[rstest]
-fn test_molecule_equiv_under_rejects_inconsistent_correspondence(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+fn test_molecule_framed_eq_under_entity_id_mismatch_error(
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {
     let (left, right, correspondence) = case;
     let inconsistent = MoleculeCorrespondence::new(
@@ -2244,12 +2332,12 @@ fn test_molecule_equiv_under_rejects_inconsistent_correspondence(
     );
 
     assert!(inconsistent.is_total());
-    assert!(!left.equiv_under(&right, &inconsistent));
+    assert!(!left.framed_eq_under(&right, &inconsistent));
 }
 
 #[rstest]
 fn test_molecule_remap(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {
     let (left, right, correspondence) = case;
 
@@ -2297,7 +2385,7 @@ fn test_molecule_remap(
     )
 })]
 fn test_molecule_try_remap_error(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
     #[case] prepare: fn(Molecule, &MoleculeCorrespondence) -> (Molecule, MoleculeCorrespondence),
 ) {
     let (left, _, correspondence) = case;
@@ -2309,7 +2397,7 @@ fn test_molecule_try_remap_error(
 #[rstest]
 #[should_panic(expected = "molecule remapping requires a complete dense correspondence")]
 fn test_molecule_remap_error(
-    #[from(equiv_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
+    #[from(framed_eq_under_molecules)] case: (Molecule, Molecule, MoleculeCorrespondence),
 ) {
     let (left, _, correspondence) = case;
     let partial = MoleculeCorrespondence::new(
