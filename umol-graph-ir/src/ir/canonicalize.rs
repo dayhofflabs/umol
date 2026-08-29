@@ -767,10 +767,15 @@ fn normalized_entity_span_key<T>(
         EntitySpan::Unchanged(value) => (SpanTagPosition::UNCHANGED, vec![value_key(value)?]),
         EntitySpan::Added(value) => (SpanTagPosition::ADDED, vec![value_key(value)?]),
         EntitySpan::Removed(value) => (SpanTagPosition::REMOVED, vec![value_key(value)?]),
-        EntitySpan::Modified { lhs, rhs } => (
-            SpanTagPosition::MODIFIED,
-            vec![value_key(lhs)?, value_key(rhs)?],
-        ),
+        EntitySpan::Modified { lhs, rhs } => {
+            let lhs = value_key(lhs)?;
+            let rhs = value_key(rhs)?;
+            if lhs == rhs {
+                (SpanTagPosition::UNCHANGED, vec![lhs])
+            } else {
+                (SpanTagPosition::MODIFIED, vec![lhs, rhs])
+            }
+        }
     };
     Ok(CanonicalKeyValue::Span(SpanKey { position, values }))
 }
@@ -4317,10 +4322,15 @@ fn normalize_entity_span<T: Normalize>(
         EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value.normalize()?),
         EntitySpan::Added(value) => EntitySpan::Added(value.normalize()?),
         EntitySpan::Removed(value) => EntitySpan::Removed(value.normalize()?),
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: lhs.normalize()?,
-            rhs: rhs.normalize()?,
-        },
+        EntitySpan::Modified { lhs, rhs } => {
+            let lhs = lhs.normalize()?;
+            let rhs = rhs.normalize()?;
+            if lhs == rhs {
+                EntitySpan::Unchanged(lhs)
+            } else {
+                EntitySpan::Modified { lhs, rhs }
+            }
+        }
     })
 }
 

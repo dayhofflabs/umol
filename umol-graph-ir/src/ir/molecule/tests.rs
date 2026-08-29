@@ -636,6 +636,40 @@ fn test_molecule_try_from_entries_error(
 }
 
 #[rstest]
+#[case::shared_incidence(
+    |entries: &mut MoleculeEntries| entries.dative.push((
+        vec![AtomId(0), AtomId(1)],
+        AtomId(3),
+        DativeBondForm::from_order(2),
+    )),
+    vec![
+        (vec![AtomId(1), AtomId(2)], AtomId(3)),
+        (vec![AtomId(0), AtomId(1)], AtomId(3)),
+    ],
+)]
+#[case::donor_is_acceptor(
+    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
+    vec![(vec![AtomId(1), AtomId(3)], AtomId(3))],
+)]
+fn test_molecule_try_from_entries(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] modify: fn(&mut MoleculeEntries),
+    #[case] expected: Vec<(Vec<AtomId>, AtomId)>,
+) {
+    modify(&mut entries);
+
+    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
+    assert_eq!(
+        molecule
+            .dative_bonds()
+            .iter()
+            .map(|dative| (dative.donor_ids().collect(), dative.acceptor_id()))
+            .collect::<Vec<_>>(),
+        expected,
+    );
+}
+
+#[rstest]
 #[case::aromatic_electron_count(
     |entries: &mut MoleculeEntries| {
         entries.aromatic[0].1.electrons = ElectronCountsForm::Lit(vec![2]);
@@ -693,22 +727,15 @@ fn test_molecule_try_from_entries_error(
         atom: AtomId(1),
     },
 )]
-#[case::dative_acceptor_is_donor(
-    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
-    MoleculeIntegrityError::DuplicateParticipant {
-        entity: Entity::DativeBond(DativeBondId(0)),
-        atom: AtomId(3),
-    },
-)]
-#[case::dative_bonds_parallel(
+#[case::dative_bonds_identical(
     |entries: &mut MoleculeEntries| entries.dative.push((
-        vec![AtomId(1)],
+        vec![AtomId(2), AtomId(1)],
         AtomId(3),
         DativeBondForm::from_order(2),
     )),
-    MoleculeIntegrityError::DativeBondsParallel {
+    MoleculeIntegrityError::DativeBondsIdentical {
         acceptor: AtomId(3),
-        shared_donor: AtomId(1),
+        donors: vec![AtomId(1), AtomId(2)],
     },
 )]
 #[case::aromatic_systems_overlap(

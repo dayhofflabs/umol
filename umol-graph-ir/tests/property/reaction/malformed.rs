@@ -369,36 +369,6 @@ fn incompatible_incidence_strategy() -> impl Strategy<
         Just((
             Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
-                    atoms: vec![AtomForm::from_element(Element::C); 5],
-                    bonds: (1..=4)
-                        .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
-                        .collect(),
-                    stereo_atoms: vec![(
-                        AtomId(0),
-                        (1..=4)
-                            .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
-                            .collect(),
-                        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    )],
-                    ..Default::default()
-                }),
-                Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
-                    id: StereoAtomId(0),
-                    site: AtomId(0),
-                    ligands: [2, 1, 3, 4]
-                        .into_iter()
-                        .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
-                        .collect(),
-                    attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                })]),
-            ),
-            ReactionIntegrityError::ParticipantFrameMismatch {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-            },
-        )),
-        Just((
-            Reaction::try_new(
-                Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 6],
                     bonds: vec![
                         (AtomId(0), AtomId(1), BondForm::from_order(2)),
@@ -419,14 +389,14 @@ fn incompatible_incidence_strategy() -> impl Strategy<
                 Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
                     id: StereoBondId(0),
                     site: BondId(0),
-                    ligands: [3, 2, 4, 5]
+                    ligands: [2, 4, 3, 5]
                         .into_iter()
                         .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                         .collect(),
                     attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
                 })]),
             ),
-            ReactionIntegrityError::ParticipantFrameMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::StereoBond(StereoBondId(0)),
             },
         )),

@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyTypeError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -370,13 +370,13 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
+    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .multicenter_bond_mut(self.id)
-            .attributes
-            .electrons = value.to_rust(py);
+            .try_modify_multicenter_bond(self.id, |bond| bond.electrons = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     #[getter]
@@ -389,13 +389,13 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: NumLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .multicenter_bond_mut(self.id)
-            .attributes
-            .charge = value.to_rust(py);
+            .try_modify_multicenter_bond(self.id, |bond| bond.charge = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     #[getter]
@@ -411,13 +411,17 @@ impl MulticenterBondView {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
+    fn set_unpaired_electrons(
+        &self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .multicenter_bond_mut(self.id)
-            .attributes
-            .unpaired_electrons = value.to_rust(py);
+            .try_modify_multicenter_bond(self.id, |bond| bond.unpaired_electrons = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The bond's constraints as a live handle onto the molecule: reads borrow the
@@ -440,13 +444,12 @@ impl MulticenterBondView {
         py: Python<'_>,
         value: MulticenterBondConstraintsLike,
     ) -> PyResult<()> {
+        let value = value.to_rust(py)?;
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .multicenter_bond_mut(self.id)
-            .attributes
-            .constraints = value.to_rust(py)?;
-        Ok(())
+            .try_modify_multicenter_bond(self.id, |bond| bond.constraints = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
@@ -540,8 +543,11 @@ impl MulticenterBondViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_multicenter_bond_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().multicenter_bond_mut(id).attributes = bond.to_rust().clone();
-        Ok(())
+        let bond = bond.to_rust().clone();
+        molecule
+            .to_rust_mut()
+            .try_modify_multicenter_bond(id, |candidate| *candidate = bond)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The multicenter bond whose member atom set equals `atoms`, or `None`.
@@ -854,7 +860,8 @@ mod tests {
                 view.electrons(py).unwrap().to_rust(),
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1])
             );
-            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2]));
+            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2]))
+                .unwrap();
             let fresh = MulticenterBondView {
                 owner,
                 id: GraphIrMulticenterBondId(0),
@@ -874,7 +881,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrMulticenterBondId(0),
             };
-            view.set_charge(py, NumLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = MulticenterBondView {
                 owner,
                 id: GraphIrMulticenterBondId(0),
@@ -900,7 +907,8 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrMulticenterBondId(0),
             };
-            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
+            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
+                .unwrap();
             let fresh = MulticenterBondView {
                 owner,
                 id: GraphIrMulticenterBondId(0),

@@ -22,12 +22,6 @@ use super::Molecule;
 pub enum MoleculeIntegrityError {
     #[error("molecule references unavailable {entity}")]
     InvalidReference { entity: Entity },
-    #[error("molecule stores {actual} {kind:?} values for {expected} graph entities")]
-    EntityCountMismatch {
-        kind: super::super::entity::EntityKind,
-        expected: usize,
-        actual: usize,
-    },
     #[error(
         "{entity}: electron-count vector has length {electron_counts}, expected {participants}"
     )]
@@ -40,12 +34,10 @@ pub enum MoleculeIntegrityError {
     DuplicateParticipant { entity: Entity, atom: AtomId },
     #[error("bond: parallel bonds on atoms {atoms:?}")]
     BondsParallel { atoms: [AtomId; 2] },
-    #[error(
-        "dative bond: parallel datives to acceptor {acceptor:?} sharing donor {shared_donor:?}"
-    )]
-    DativeBondsParallel {
+    #[error("dative bonds: identical acceptor {acceptor:?} and donor set {donors:?}")]
+    DativeBondsIdentical {
         acceptor: AtomId,
-        shared_donor: AtomId,
+        donors: Vec<AtomId>,
     },
     #[error("noncovalent bond: parallel bonds on atoms {atoms:?}")]
     NoncovalentBondsParallel { atoms: [AtomId; 2] },
@@ -111,23 +103,6 @@ impl Molecule {
     /// every entity family, and kind-dependent stereo domains. It does not check chemistry or
     /// constraint satisfaction.
     pub fn check_integrity(&self) -> Result<(), MoleculeIntegrityError> {
-        use super::super::entity::EntityKind;
-
-        if self.atoms.len() != self.graph.node_count() {
-            return Err(MoleculeIntegrityError::EntityCountMismatch {
-                kind: EntityKind::Atom,
-                expected: self.graph.node_count(),
-                actual: self.atoms.len(),
-            });
-        }
-        if self.bonds.len() != self.graph.edge_count() {
-            return Err(MoleculeIntegrityError::EntityCountMismatch {
-                kind: EntityKind::Bond,
-                expected: self.graph.edge_count(),
-                actual: self.bonds.len(),
-            });
-        }
-
         let contains = |entity| match entity {
             Entity::Atom(id) => id.index() < self.atoms.len(),
             Entity::Bond(id) => id.index() < self.bonds.len(),
@@ -151,19 +126,18 @@ impl Molecule {
             }
         }
 
-        let mut dative_incidences = HashSet::new();
+        let mut dative_identities = HashSet::new();
         for view in self.dative_bonds().iter() {
             let entity = Entity::DativeBond(view.id);
             let acceptor = view.acceptor_id();
             require_references(&contains, view.atom_ids().map(Entity::Atom))?;
-            check_unique_participants(entity, view.atom_ids())?;
-            for donor in view.donor_ids() {
-                if !dative_incidences.insert((acceptor, donor)) {
-                    return Err(MoleculeIntegrityError::DativeBondsParallel {
-                        acceptor,
-                        shared_donor: donor,
-                    });
-                }
+            check_unique_participants(entity, view.donor_ids())?;
+            let donors = view.donor_ids().collect::<BTreeSet<_>>();
+            if !dative_identities.insert((acceptor, donors.clone())) {
+                return Err(MoleculeIntegrityError::DativeBondsIdentical {
+                    acceptor,
+                    donors: donors.into_iter().collect(),
+                });
             }
         }
 

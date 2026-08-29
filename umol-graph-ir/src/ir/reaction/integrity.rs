@@ -57,12 +57,9 @@ pub enum ReactionIntegrityError {
     /// Stereo data carried by the reaction violates a local representation invariant.
     #[error("reaction stereo representation is invalid: {0}")]
     StereoIntegrityError(MoleculeIntegrityError),
-    /// A removal records incidence that disagrees with its source entity.
+    /// A removal records incidence incompatible with its source entity's participant structure.
     #[error("reaction incidence does not match source entity {entity:?}")]
     IncidenceMismatch { entity: Entity },
-    /// A removal records the source incidence in a different participant frame.
-    #[error("reaction participant frame does not match source entity {entity:?}")]
-    ParticipantFrameMismatch { entity: Entity },
     /// A configuration change replaces one stereo kind with another within a single entity.
     #[error("{entity:?}: configuration change replaces stereo kind {old:?} with {new:?}")]
     StereoKindModified {
@@ -113,9 +110,6 @@ impl ReactionIntegrityCheck {
         }
         for delta in deltas.iter() {
             self.validate_removal_incidence(lhs, &source_frames, delta)?;
-        }
-        for delta in deltas.iter() {
-            self.validate_removal_frame(&source_frames, delta)?;
         }
         Ok(())
     }
@@ -394,9 +388,7 @@ impl ReactionIntegrityCheck {
                 };
                 (
                     entity,
-                    *source_site == *site
-                        && unordered_ligands(source.iter().copied())
-                            == unordered_ligands(ligands.iter().copied()),
+                    *source_site == *site && stereo_bond_frames_match(source, ligands),
                 )
             }
             _ => return Ok(()),
@@ -405,69 +397,6 @@ impl ReactionIntegrityCheck {
             Ok(())
         } else {
             Err(ReactionIntegrityError::IncidenceMismatch { entity })
-        }
-    }
-
-    fn validate_removal_frame(
-        &self,
-        source_frames: &HashMap<Entity, OverlayFrame>,
-        delta: &Delta,
-    ) -> Result<(), ReactionIntegrityError> {
-        let (entity, matches) = match delta {
-            Delta::DativeBond(DativeBondDelta::Remove { id, donors, .. }) => {
-                let entity = Entity::DativeBond(*id);
-                let OverlayFrame::Dative { donors: source, .. } = &source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == donors)
-            }
-            Delta::AromaticSystem(AromaticSystemDelta::Remove { id, atoms, .. }) => {
-                let entity = Entity::AromaticSystem(*id);
-                let OverlayFrame::Aromatic(source) = &source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == atoms)
-            }
-            Delta::MulticenterBond(MulticenterBondDelta::Remove { id, atoms, .. }) => {
-                let entity = Entity::MulticenterBond(*id);
-                let OverlayFrame::Multicenter(source) = &source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == atoms)
-            }
-            Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, atoms, .. }) => {
-                let entity = Entity::NoncovalentBond(*id);
-                let OverlayFrame::Noncovalent(source) = source_frames[&entity] else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == *atoms)
-            }
-            Delta::StereoAtom(StereoAtomDelta::Remove { id, ligands, .. }) => {
-                let entity = Entity::StereoAtom(*id);
-                let OverlayFrame::StereoAtom {
-                    ligands: source, ..
-                } = &source_frames[&entity]
-                else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == ligands)
-            }
-            Delta::StereoBond(StereoBondDelta::Remove { id, ligands, .. }) => {
-                let entity = Entity::StereoBond(*id);
-                let OverlayFrame::StereoBond {
-                    ligands: source, ..
-                } = &source_frames[&entity]
-                else {
-                    unreachable!("entity kind fixes its source-frame variant")
-                };
-                (entity, source == ligands)
-            }
-            _ => return Ok(()),
-        };
-        if matches {
-            Ok(())
-        } else {
-            Err(ReactionIntegrityError::ParticipantFrameMismatch { entity })
         }
     }
 
@@ -770,6 +699,20 @@ fn unordered_ligands(ligands: impl IntoIterator<Item = StereoLigand>) -> Vec<Ste
     let mut ligands: Vec<StereoLigand> = ligands.into_iter().collect();
     ligands.sort_unstable();
     ligands
+}
+
+/// Stereo-bond ligand frames have two endpoint blocks. A compatible local frame may reorder each
+/// block and may swap the two complete blocks, but may not move one ligand across the partition.
+fn stereo_bond_frames_match(source: &[StereoLigand], local: &[StereoLigand]) -> bool {
+    if source.len() != 4 || local.len() != 4 {
+        return false;
+    }
+    let source_first = unordered_ligands(source[..2].iter().copied());
+    let source_second = unordered_ligands(source[2..].iter().copied());
+    let local_first = unordered_ligands(local[..2].iter().copied());
+    let local_second = unordered_ligands(local[2..].iter().copied());
+    (source_first == local_first && source_second == local_second)
+        || (source_first == local_second && source_second == local_first)
 }
 
 fn unordered_pair(mut atoms: [AtomId; 2]) -> [AtomId; 2] {

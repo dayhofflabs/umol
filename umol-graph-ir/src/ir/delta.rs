@@ -1118,8 +1118,9 @@ impl<T> EntitySpan<T> {
 
 impl<T: Normalize> EntitySpan<T> {
     /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
-    /// `ReactionSpan::superimpose`: present-both maps to `Unchanged` (equal) or `Modified`,
-    /// lhs-only to `Removed`, rhs-only to `Added`, neither to `None`.
+    /// `ReactionSpan::superimpose`: present-both maps to `Unchanged(lhs)` when the values are
+    /// semantically equivalent and to `Modified` otherwise, lhs-only to `Removed`, rhs-only to
+    /// `Added`, neither to `None`.
     pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
         match (lhs, rhs) {
             (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => Some(Self::Unchanged(lhs)),

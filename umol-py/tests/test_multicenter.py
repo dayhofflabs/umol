@@ -252,6 +252,14 @@ def test_multicenterbondview_set_electrons():
     assert mol.multicenter_bonds[0].electrons == ElectronCountsForm.Lit([2, 2, 2])
 
 
+def test_multicenterbondview_set_electrons_error():
+    mol = three_center_bond()
+    before = str(mol)
+    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 3"):
+        mol.multicenter_bonds[0].electrons = [2]
+    assert str(mol) == before
+
+
 def test_multicenterbondview_set_charge():
     mol = three_center_bond()
     mol.multicenter_bonds[0].charge = -1
@@ -318,6 +326,14 @@ def test_multicenterbondviews_setitem():
     # value replaced, members preserved
     assert view.electrons == ElectronCountsForm.Lit([2, 2, 2])
     assert view.atom_ids == (0, 1, 2)
+
+
+def test_multicenterbondviews_setitem_error():
+    mol = three_center_bond()
+    before = str(mol)
+    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 3"):
+        mol.multicenter_bonds[0] = MulticenterBondForm([2])
+    assert str(mol) == before
 
 
 def test_multicenterbondviews_setitem_out_of_range():

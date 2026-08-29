@@ -40,12 +40,12 @@ use super::molecule::{
 };
 use super::multicenter::{MulticenterBondForm, MulticenterBondSpans};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondSpans};
-use super::reaction::Reaction;
+use super::reaction::{normalize_reaction_deltas, Reaction};
 use super::remap::IdRemapping;
 use super::stereo::{
     find_reframed, StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
 };
-use super::traits::{EntityPatch, Equiv, Normalize};
+use super::traits::{EntityPatch, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
@@ -68,7 +68,8 @@ pub struct ReactionSpan {
 /// present on at least one side by construction; a value absent from both sides has no entry
 /// representation. This carrier does not establish reference or projected-molecule integrity;
 /// pass it to [`ReactionSpan::try_from_entries`] or [`ReactionSpan::from_entries`] to publish a
-/// span.
+/// span. Publication preserves the supplied span variants and side values, including an explicit
+/// `Modified` whose sides are semantically equivalent.
 #[derive(Clone, Debug, Default)]
 pub struct ReactionSpanEntries {
     pub atoms: Vec<EntitySpan<AtomForm>>,
@@ -116,7 +117,7 @@ pub enum ReactionSpanIntegrityError {
 
 impl ReactionSpan {
     /// Construct a reaction span from entries, asserting union-frame and projected-side molecule
-    /// integrity.
+    /// integrity while preserving every supplied [`EntitySpan`] variant and side value.
     ///
     /// # Panics
     ///
@@ -130,7 +131,9 @@ impl ReactionSpan {
             .unwrap_or_else(|error| panic!("invalid reaction span entries: {error}"))
     }
 
-    /// Construct a reaction span after checking union-frame and projected-side molecule integrity.
+    /// Construct a reaction span after checking union-frame and projected-side molecule integrity,
+    /// preserving every supplied [`EntitySpan`] variant and side value. In particular, an explicit
+    /// [`EntitySpan::Modified`] is not collapsed when its sides are semantically equivalent.
     ///
     /// # Errors
     ///
@@ -143,9 +146,8 @@ impl ReactionSpan {
     /// [`ReactionSpanIntegrityError::StereoKindModified`]. Chemistry and constraint satisfiability
     /// are not validated.
     pub fn try_from_entries(
-        mut entries: ReactionSpanEntries,
+        entries: ReactionSpanEntries,
     ) -> Result<Self, ReactionSpanIntegrityError> {
-        normalize_reaction_span_entries(&mut entries);
         validate_reaction_span_entries(&entries)?;
 
         let ReactionSpanEntries {
@@ -595,43 +597,6 @@ fn validate_reaction_span_entries(
     Ok(())
 }
 
-fn normalize_entity_span<T: Normalize + Clone>(span: &mut EntitySpan<T>) {
-    let unchanged = match span {
-        EntitySpan::Modified { lhs, rhs } if lhs.equiv(rhs) => Some(lhs.clone()),
-        _ => None,
-    };
-    if let Some(value) = unchanged {
-        *span = EntitySpan::Unchanged(value);
-    }
-}
-
-fn normalize_reaction_span_entries(entries: &mut ReactionSpanEntries) {
-    for span in &mut entries.atoms {
-        normalize_entity_span(span);
-    }
-    for (_, _, span) in &mut entries.bonds {
-        normalize_entity_span(span);
-    }
-    for (_, _, span) in &mut entries.dative {
-        normalize_entity_span(span);
-    }
-    for (_, span) in &mut entries.aromatic {
-        normalize_entity_span(span);
-    }
-    for (_, span) in &mut entries.multicenter {
-        normalize_entity_span(span);
-    }
-    for (_, _, span) in &mut entries.noncovalent {
-        normalize_entity_span(span);
-    }
-    for (_, _, span) in &mut entries.stereo_atoms {
-        normalize_entity_span(span);
-    }
-    for (_, _, span) in &mut entries.stereo_bonds {
-        normalize_entity_span(span);
-    }
-}
-
 /// Map every union id into one projected id space. Present entities occupy the valid dense prefix;
 /// absent entities follow it, so a surviving reference to one is retained but rejected by the
 /// molecule-entry validator.
@@ -663,12 +628,12 @@ where
 #[allow(clippy::type_complexity)]
 impl ReactionSpan {
     /// Superimpose two molecules over their correspondence into the reaction span. Matched entities
-    /// become `Unchanged` / `Modified` carrying both molecules' actual values; entities unmatched
-    /// on the lhs become `Removed`, those unmatched on the rhs `Added`. Lhs-anchored: lhs ids kept,
-    /// right-unmatched entities appended, rhs participants and constraints remapped into that union
-    /// frame. Returns `None` when any correspondence family declares counts different from the
-    /// supplied molecules or a matched bond, overlay, or stereo entity has incompatible incidence
-    /// under the atom correspondence, and when the resulting span fails its
+    /// become `Unchanged(lhs)` when their values are semantically equivalent and `Modified`
+    /// otherwise; entities unmatched on the lhs become `Removed`, those unmatched on the rhs
+    /// `Added`. Lhs-anchored: lhs ids kept, right-unmatched entities appended, rhs participants and
+    /// constraints remapped into that union frame. Returns `None` when any correspondence family
+    /// declares counts different from the supplied molecules or a matched bond, overlay, or stereo
+    /// entity has incompatible incidence under the atom correspondence, and when the resulting span fails its
     /// representation-integrity contract — a matched pair of stereo entities asserting different
     /// stereo kinds, which each side satisfies alone. A compatible correspondence may leave
     /// otherwise matchable entities unmatched; they are represented as removals and additions.
@@ -1109,11 +1074,11 @@ impl ReactionSpan {
         .ok()
     }
 
-    /// Recover the per-family correspondence between the two normalized side projections,
-    /// forgetting the values. For every span,
-    /// `superimpose(self.lhs(), self.rhs(), &self.correspondence())` reproduces `Some(self)`.
-    /// A source correspondence used to construct the span is not retained when it assigns a
-    /// different rhs entity order.
+    /// Recover the per-family correspondence between the two side projections, forgetting the
+    /// values. Superimposing those projections with the recovered correspondence preserves their
+    /// semantics but may standardize a redundant `Modified` entry to `Unchanged`. A source
+    /// correspondence used to construct the span is not retained when it assigns a different rhs
+    /// entity order.
     pub fn correspondence(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             recover_correspondence(self.atoms.iter()),
@@ -1299,7 +1264,9 @@ impl ReactionSpan {
     ///
     /// Converting the result back to a span and then to a reaction is idempotent by exact
     /// structural equality. When this span already uses canonical set-difference semantics for
-    /// constraints, converting the returned reaction back to a span reproduces `self` exactly.
+    /// constraints and contains no redundant equivalent `Modified` entry, converting the returned
+    /// reaction back to a span reproduces `self` exactly. Otherwise the conversion may standardize
+    /// those representational distinctions while preserving both side semantics.
     pub fn to_reaction(&self) -> Reaction {
         let atom_ids: HashMap<AtomId, AtomId> =
             projected_ids(self.atoms.iter().map(|span| span.lhs().is_some()));
@@ -1765,7 +1732,7 @@ impl Reaction {
     /// exact error or [`ReactionDerivation`](super::ReactionDerivation). Repeating the span/reaction
     /// conversion on `n` returns `n` by exact structural equality.
     pub fn to_reaction_span(&self) -> Result<ReactionSpan, Contradiction> {
-        let deltas = self.deltas().clone().normalize()?;
+        let deltas = normalize_reaction_deltas(self.lhs(), self.deltas())?;
         let lhs = self.lhs();
         let atom_count = lhs.atoms().count();
         let bond_count = lhs.bonds().count();
@@ -2308,7 +2275,7 @@ impl Reaction {
     /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
     pub fn reverse(&self) -> Result<Reaction, Contradiction> {
-        let deltas = self.deltas().clone().normalize()?;
+        let deltas = normalize_reaction_deltas(self.lhs(), self.deltas())?;
         let new_lhs = self.to_reaction_span()?.rhs();
         let atom_count = self.lhs().atoms().count();
         let bond_count = self.lhs().bonds().count();
@@ -2660,15 +2627,15 @@ mod tests {
     }
 
     #[rstest]
-    fn test_reaction_span_from_entries_normalization() {
+    fn test_reaction_span_from_entries_raw() {
         let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
         let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
         assert_ne!(lhs_atom, rhs_atom);
-        let span = ReactionSpan::from_entries(ReactionSpanEntries {
+        let entries = ReactionSpanEntries {
             atoms: vec![
                 EntitySpan::Modified {
                     lhs: lhs_atom.clone(),
-                    rhs: rhs_atom,
+                    rhs: rhs_atom.clone(),
                 },
                 EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
             ],
@@ -2732,33 +2699,66 @@ mod tests {
                 },
             )],
             constraints: Vec::new(),
-        });
+        };
+        let checked = ReactionSpan::try_from_entries(entries.clone()).unwrap();
+        let span = ReactionSpan::from_entries(entries);
 
-        assert_eq!(span.atoms()[0], EntitySpan::Unchanged(lhs_atom));
-        assert_eq!(span.bonds()[0], EntitySpan::Unchanged(BondForm::default()));
+        assert_eq!(span, checked);
+        assert_eq!(
+            span.atoms()[0],
+            EntitySpan::Modified {
+                lhs: lhs_atom,
+                rhs: rhs_atom,
+            }
+        );
+        assert_eq!(
+            span.bonds()[0],
+            EntitySpan::Modified {
+                lhs: BondForm::default(),
+                rhs: BondForm::default(),
+            }
+        );
         assert_eq!(
             span.dative_bonds().attributes(DativeBondId(0)),
-            &EntitySpan::Unchanged(DativeBondForm::default())
+            &EntitySpan::Modified {
+                lhs: DativeBondForm::default(),
+                rhs: DativeBondForm::default(),
+            }
         );
         assert_eq!(
             span.aromatic_systems().attributes(AromaticSystemId(0)),
-            &EntitySpan::Unchanged(AromaticSystemForm::default())
+            &EntitySpan::Modified {
+                lhs: AromaticSystemForm::default(),
+                rhs: AromaticSystemForm::default(),
+            }
         );
         assert_eq!(
             span.multicenter_bonds().attributes(MulticenterBondId(0)),
-            &EntitySpan::Unchanged(MulticenterBondForm::default())
+            &EntitySpan::Modified {
+                lhs: MulticenterBondForm::default(),
+                rhs: MulticenterBondForm::default(),
+            }
         );
         assert_eq!(
             span.noncovalent_bonds().attributes(NoncovalentBondId(0)),
-            &EntitySpan::Unchanged(NoncovalentBondForm::default())
+            &EntitySpan::Modified {
+                lhs: NoncovalentBondForm::default(),
+                rhs: NoncovalentBondForm::default(),
+            }
         );
         assert_eq!(
             span.stereo_atoms().attributes(StereoAtomId(0)),
-            &EntitySpan::Unchanged(StereoAtomForm::default())
+            &EntitySpan::Modified {
+                lhs: StereoAtomForm::default(),
+                rhs: StereoAtomForm::default(),
+            }
         );
         assert_eq!(
             span.stereo_bonds().attributes(StereoBondId(0)),
-            &EntitySpan::Unchanged(StereoBondForm::default())
+            &EntitySpan::Modified {
+                lhs: StereoBondForm::default(),
+                rhs: StereoBondForm::default(),
+            }
         );
     }
 
@@ -4652,6 +4652,29 @@ mod tests {
     }
 
     #[rstest]
+    fn test_reaction_span_to_reaction_equivalent_modified() {
+        let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
+        let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
+        let source = ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Modified {
+                lhs: lhs_atom.clone(),
+                rhs: rhs_atom,
+            }],
+            ..Default::default()
+        });
+        let source_rhs = source.rhs();
+
+        let reaction = source.to_reaction();
+        let roundtrip = reaction.to_reaction_span().unwrap();
+
+        assert_eq!(reaction.lhs(), &source.lhs());
+        assert_eq!(roundtrip.atoms(), &[EntitySpan::Unchanged(lhs_atom)]);
+        assert_eq!(roundtrip.lhs(), source.lhs());
+        assert!(roundtrip.rhs().equiv(&source_rhs));
+        assert_eq!(roundtrip.to_reaction(), reaction);
+    }
+
+    #[rstest]
     fn test_reaction_span_to_reaction_reordered() {
         let span = ReactionSpan::from_entries(ReactionSpanEntries {
             atoms: vec![
@@ -5065,6 +5088,32 @@ mod tests {
                 ],
             })),
         );
+    }
+
+    #[rstest]
+    fn test_reaction_span_superimpose_equivalent_pair() {
+        let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
+        let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
+        let lhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![lhs_atom.clone()],
+            ..Default::default()
+        });
+        let rhs = Molecule::from_entries(MoleculeEntries {
+            atoms: vec![rhs_atom],
+            ..Default::default()
+        });
+        let correspondence = MoleculeCorrespondence::induce(
+            &lhs,
+            &rhs,
+            Correspondence::from_images(&[AtomId(0)], 1),
+        )
+        .expect("the identity atom correspondence describes the molecule pair");
+
+        let span = ReactionSpan::superimpose(&lhs, &rhs, &correspondence).unwrap();
+
+        assert_eq!(span.atoms(), &[EntitySpan::Unchanged(lhs_atom)]);
+        assert_eq!(span.lhs(), lhs);
+        assert!(span.rhs().equiv_under(&rhs, &correspondence));
     }
 
     #[rstest]

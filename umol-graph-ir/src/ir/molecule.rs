@@ -1118,7 +1118,10 @@ impl Molecule {
         }
     }
 
-    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
+    pub(crate) fn aromatic_system_mut(
+        &mut self,
+        id: AromaticSystemId,
+    ) -> AromaticSystemViewMut<'_> {
         let atoms = self.aromatic_systems.atoms(id).collect();
         let attributes = self.aromatic_systems.attributes_mut(id);
         AromaticSystemViewMut {
@@ -1129,7 +1132,7 @@ impl Molecule {
     }
 
     /// Replace every aromatic system with `f(system)` in place.
-    pub fn modify_aromatic_systems(
+    pub(crate) fn modify_aromatic_systems(
         &mut self,
         mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
     ) {
@@ -1180,7 +1183,10 @@ impl Molecule {
         })
     }
 
-    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
+    pub(crate) fn multicenter_bond_mut(
+        &mut self,
+        id: MulticenterBondId,
+    ) -> MulticenterBondViewMut<'_> {
         let atoms = self.multicenter_bonds.atoms(id).collect();
         let attributes = self.multicenter_bonds.attributes_mut(id);
         MulticenterBondViewMut {
@@ -1191,7 +1197,7 @@ impl Molecule {
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
-    pub fn modify_multicenter_bonds(
+    pub(crate) fn modify_multicenter_bonds(
         &mut self,
         mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
     ) {

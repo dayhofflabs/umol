@@ -1653,7 +1653,8 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
 
             let datives = prop::collection::vec(
                 (
-                    distinct_atoms_strategy(atom_count, 2, 2),
+                    (0..atom_count as u32, 0..atom_count as u32)
+                        .prop_map(|(donor, acceptor)| vec![AtomId(donor), AtomId(acceptor)]),
                     dative_bond_strategy(),
                 ),
                 0..=dative_count_max,
@@ -1711,14 +1712,11 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                 stereo_atoms,
                 stereo_bonds,
             )| {
-                let mut dative_incidences = HashSet::new();
+                let mut dative_identities = HashSet::new();
                 let dative_triples: Vec<_> = datives
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
-                        [donor, acceptor]
-                            if donor != acceptor
-                                && dative_incidences.insert((*acceptor, *donor)) =>
-                        {
+                        [donor, acceptor] if dative_identities.insert((*acceptor, *donor)) => {
                             Some((vec![*donor], *acceptor, data))
                         }
                         _ => None,

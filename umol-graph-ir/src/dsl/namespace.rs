@@ -30,7 +30,7 @@ pub struct MoleculeContext {
     metadata: MoleculeMetadata,
     atoms: EntityCounter<AtomId>,
     bonds: EntityRegistry<BondId, [AtomId; 2]>,
-    dative_bonds: EntityRegistry<DativeBondId, (BTreeSet<AtomId>, AtomId)>,
+    dative_bonds: EntityRegistry<DativeBondId, (Vec<AtomId>, AtomId)>,
     aromatic_systems: EntityRegistry<AromaticSystemId, BTreeSet<AtomId>>,
     multicenter_bonds: EntityRegistry<MulticenterBondId, BTreeSet<AtomId>>,
     noncovalent_bonds: EntityRegistry<NoncovalentBondId, [AtomId; 2]>,
@@ -211,7 +211,7 @@ impl MoleculeContext {
         self.set_keyword(Entity::DativeBond(id), keyword)?;
         Ok(self
             .dative_bonds
-            .register((donors.iter().copied().collect(), acceptor)))
+            .register((atom_multiset(donors), acceptor)))
     }
 
     pub(crate) fn register_aromatic_system(
@@ -383,7 +383,7 @@ impl MoleculeContext {
         acceptor: AtomId,
     ) -> Option<DativeBondId> {
         self.dative_bonds
-            .find_by_participants(&(donors.iter().copied().collect(), acceptor))
+            .find_by_participants(&(atom_multiset(donors), acceptor))
     }
 
     pub(crate) fn find_aromatic_system_by_participants(
@@ -655,6 +655,12 @@ fn atom_pair_key(a: AtomId, b: AtomId) -> [AtomId; 2] {
     } else {
         [b, a]
     }
+}
+
+fn atom_multiset(atoms: &[AtomId]) -> Vec<AtomId> {
+    let mut atoms = atoms.to_vec();
+    atoms.sort_unstable();
+    atoms
 }
 
 /// The canonical key of a stereo element's ligand frame: the ligand sorted multiset
@@ -993,6 +999,7 @@ mod tests {
 
     #[rstest]
     #[case::donors_reordered(&[AtomId(2), AtomId(1)], AtomId(0), Some(DativeBondId(0)))]
+    #[case::donor_repeated(&[AtomId(1), AtomId(1), AtomId(2)], AtomId(0), None)]
     #[case::wrong_acceptor(&[AtomId(1), AtomId(2)], AtomId(3), None)]
     #[case::wrong_donors(&[AtomId(1), AtomId(3)], AtomId(0), None)]
     fn test_molecule_context_find_dative_bond_by_participants(

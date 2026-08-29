@@ -88,8 +88,10 @@ published aggregate has no meaningful public `check_integrity` failure domain.
 **Conversions and preserved information:** construction and faithful conversion do not normalize,
 repair, or discard a representable distinction unless that transformation has a separate explicit
 contract. `ReactionSpan::{try_from_entries, from_entries}` therefore preserve an explicit
-equivalent `Modified` entry. `Normalize for ReactionSpan` collapses it to `Unchanged`; reframing and
-canonicalization inherit that collapse because normalization is their first pipeline step.
+equivalent `Modified` entry. The current private reaction-span normalization path collapses it to
+`Unchanged`, and canonicalization invokes that path before selecting a representative. Doc 214 S0s
+will expose the same semantics through `Normalize`; reframing will inherit the collapse because
+normalization is its first pipeline step.
 
 **Explicit transformations:** normalization, reframing, remapping, and canonicalization remain
 named operations. Trusted transformations preserve integrity by construction and property tests,
@@ -274,10 +276,11 @@ tag remains a representable distinction. Remove `normalize_reaction_span_entries
 asserted construction. `ReactionSpanEntries` is an open carrier, and its constructors must preserve
 an explicitly supplied equivalent `Modified` entry after checking integrity.
 
-`Normalize for ReactionSpan` performs the collapse. `Reframe` and `Canonicalize` also collapse the
-entry because each includes normalization as its first pipeline prefix. This is lazy
-standardization: independently supplied data is retained until a named operation requests its
-semantic normal form.
+The current private reaction-span normalization path performs the collapse, and canonicalization
+calls it before representative selection. Doc 214 S0s will expose the same operation through
+`Normalize`; `Reframe` will also collapse the entry because normalization is its first pipeline
+prefix. This is lazy standardization: independently supplied data is retained until a named
+operation requests its semantic normal form.
 
 Operation-generated values may already use that normal form when the operation's result contract
 permits it. `ReactionSpan::superimpose` derives a valid span from two molecules and a
@@ -386,18 +389,19 @@ S0 ends with the replacement Rust vocabulary available while every existing call
   exhaustive error match. Exact cases accept shared incidences with distinct complete identities
   and donor-equals-acceptor, reject reordered duplicate identities and repeated donors, and retain
   graph/table preservation properties for trusted publishers. **Breaking (red→green).** [dep: none]
+  **Done.**
 - **S1b — aromatic-system mutation closure** (`umol-graph-ir/src/ir/molecule.rs`,
   `umol-py/src/{aromatic,constraint/aromatic}.rs`, Rust and Python tests): restrict
   `aromatic_system_mut` and `modify_aromatic_systems` to graph IR, migrate every Python live-view
   field setter, constraint mutation, and collection `__setitem__` through the S0a checked operation,
   and map rejection to `ValueError`. Cover successful field and whole-form replacement, invalid
   electron-count length, exact exception, and unchanged owner state after failure. Internal graph-IR
-  transforms may retain the crate-private raw path. **Breaking (red→green).** [dep: S0a]
+  transforms may retain the crate-private raw path. **Breaking (red→green).** [dep: S0a] **Done.**
 - **S1c — multicenter-bond mutation closure** (`umol-graph-ir/src/ir/molecule.rs`,
   `umol-py/src/{multicenter,constraint/multicenter}.rs`, Rust and Python tests): apply the S1b
   closure and migration to multicenter forms, including every live field, constraint, and
   `__setitem__` path. Cover the same exact success, `ValueError`, and rollback contract independently.
-  **Breaking (red→green).** [dep: S0b]
+  **Breaking (red→green).** [dep: S0b] **Done.**
 - **S1d — compatible reaction removal frames** (`umol-graph-ir/src/ir/reaction.rs`,
   `ir/reaction/integrity.rs`, reaction property scenarios, DSL diagnostics): remove
   `ParticipantFrameMismatch` and the exact-order validation pass while retaining entity-specific
@@ -406,7 +410,7 @@ S0 ends with the replacement Rust vocabulary available while every existing call
   accepted nonidentity frames for all six overlay families, nonuniform transported payloads,
   created-entity owners, rejection of a stereo-bond cross-block move as `IncidenceMismatch`, and
   agreement of materialization, application, and reversal with an owner-framed restatement.
-  **Breaking (red→green).** [dep: none]
+  **Breaking (red→green).** [dep: none] **Done.**
 - **S1e — reaction-span raw/normal separation** (`umol-graph-ir/src/ir/{reaction_span,delta,
   canonicalize}.rs`, reaction-span and canonicalization tests): remove
   `normalize_reaction_span_entries` from checked/asserted construction. Make the current private
@@ -415,7 +419,17 @@ S0 ends with the replacement Rust vocabulary available while every existing call
   public `Normalize`/`Reframe` trait migration to doc 214 S0s. Preserve `EntitySpan::superimpose` as
   the deriving kernel that emits `Unchanged(lhs)` for equivalent sides. Test raw constructor
   preservation, normalization/canonicalization collapse, exact lhs projection, semantic rhs
-  projection, and conversion roundtrips. **Breaking (red→green).** [dep: none]
+  projection, and conversion roundtrips. **Breaking (red→green).** [dep: none] **Done.**
+
+  S1 verification passed the 76 focused molecule-construction cases, the independent five-case
+  aromatic and multicenter checked-mutation groups, all 19 focused removal-frame cases, and the 102
+  reaction-span unit cases. The affected molecule-reference and malformed-reaction property modules
+  passed; the latter retained its one pre-existing ignored application case. The new private
+  normalization, four-level canonicalization, and normalized-key cases passed. Focused Python
+  aromatic and multicenter mutation tests passed during S1b/S1c. `umol-graph` compiled against the
+  restricted mutation surface, graph-IR doctests passed, strict graph-IR library clippy passed, and
+  formatting and `git diff --check` were clean. The slow integration, complete property, and
+  workspace gates remain deferred to S3b as planned.
 
 S1 ends with every accepted aggregate still coherent, every public molecule mutation transactional,
 compatible removal-local frames admitted, and span construction representation-preserving. The

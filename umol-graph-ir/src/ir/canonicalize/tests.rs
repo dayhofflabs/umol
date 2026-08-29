@@ -5259,6 +5259,152 @@ fn test_canonicalize_checked_reaction_span_by(
 }
 
 #[rstest]
+fn test_normalize_reaction_span_modified() {
+    let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
+    let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
+    let source = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Modified {
+                lhs: lhs_atom.clone(),
+                rhs: rhs_atom,
+            },
+            EntitySpan::Unchanged(AtomForm::from_element(Element::O)),
+        ],
+        bonds: vec![(
+            AtomId(0),
+            AtomId(1),
+            EntitySpan::Modified {
+                lhs: BondForm::default(),
+                rhs: BondForm::default(),
+            },
+        )],
+        dative: vec![(
+            vec![AtomId(1)],
+            AtomId(0),
+            EntitySpan::Modified {
+                lhs: DativeBondForm::default(),
+                rhs: DativeBondForm::default(),
+            },
+        )],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::default(),
+                rhs: AromaticSystemForm::default(),
+            },
+        )],
+        multicenter: vec![(
+            vec![AtomId(0), AtomId(1)],
+            EntitySpan::Modified {
+                lhs: MulticenterBondForm::default(),
+                rhs: MulticenterBondForm::default(),
+            },
+        )],
+        noncovalent: vec![(
+            AtomId(0),
+            AtomId(1),
+            EntitySpan::Modified {
+                lhs: NoncovalentBondForm::default(),
+                rhs: NoncovalentBondForm::default(),
+            },
+        )],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
+            EntitySpan::Modified {
+                lhs: StereoAtomForm::default(),
+                rhs: StereoAtomForm::default(),
+            },
+        )],
+        stereo_bonds: vec![(
+            BondId(0),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            ],
+            EntitySpan::Modified {
+                lhs: StereoBondForm::default(),
+                rhs: StereoBondForm::default(),
+            },
+        )],
+        constraints: Vec::new(),
+    });
+
+    let normalized = normalize_reaction_span(source).unwrap();
+
+    assert_eq!(normalized.atoms()[0], EntitySpan::Unchanged(lhs_atom));
+    assert_eq!(
+        normalized.bonds()[0],
+        EntitySpan::Unchanged(BondForm::default())
+    );
+    assert_eq!(
+        normalized.dative_bonds().attributes(DativeBondId(0)),
+        &EntitySpan::Unchanged(DativeBondForm::default())
+    );
+    assert_eq!(
+        normalized
+            .aromatic_systems()
+            .attributes(AromaticSystemId(0)),
+        &EntitySpan::Unchanged(AromaticSystemForm::default())
+    );
+    assert_eq!(
+        normalized
+            .multicenter_bonds()
+            .attributes(MulticenterBondId(0)),
+        &EntitySpan::Unchanged(MulticenterBondForm::default())
+    );
+    assert_eq!(
+        normalized
+            .noncovalent_bonds()
+            .attributes(NoncovalentBondId(0)),
+        &EntitySpan::Unchanged(NoncovalentBondForm::default())
+    );
+    assert_eq!(
+        normalized.stereo_atoms().attributes(StereoAtomId(0)),
+        &EntitySpan::Unchanged(StereoAtomForm::default())
+    );
+    assert_eq!(
+        normalized.stereo_bonds().attributes(StereoBondId(0)),
+        &EntitySpan::Unchanged(StereoBondForm::default())
+    );
+}
+
+#[rstest]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
+fn test_canonicalize_checked_reaction_span_modified(
+    canonicalize_context: CanonicalizeContext,
+    #[case] level: DescriptionLevel,
+) {
+    let lhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::Lit(1));
+    let rhs_atom = AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1_i64]));
+    let source = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Modified {
+            lhs: lhs_atom.clone(),
+            rhs: rhs_atom,
+        }],
+        ..Default::default()
+    });
+    let expected = ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Unchanged(lhs_atom)],
+        ..Default::default()
+    });
+
+    assert_eq!(
+        canonicalize_checked_reaction_span_by(&source, level, &canonicalize_context),
+        Ok(expected.clone()),
+    );
+    assert_eq!(
+        canonical_reaction_span_key(&source, level, &canonicalize_context),
+        canonical_reaction_span_key(&expected, level, &canonicalize_context),
+    );
+}
+
+#[rstest]
 #[case::integrity(
         ReactionSpanCanonicalizeError::from(ReactionSpanIntegrityError::InvalidReference {
             entity: Entity::Atom(AtomId(1)),
@@ -5526,6 +5672,28 @@ fn test_entity_span_key(
     assert_eq!(
         entity_span_key(&span, |value| CanonicalKeyValue::Signed(*value)),
         CanonicalKeyValue::Span(SpanKey { position, values }),
+    );
+}
+
+#[rstest]
+#[case::equivalent(
+    EntitySpan::Modified { lhs: 1, rhs: 1 },
+    SpanTagPosition::UNCHANGED,
+    vec![CanonicalKeyValue::Signed(1)],
+)]
+#[case::distinct(
+    EntitySpan::Modified { lhs: 1, rhs: 2 },
+    SpanTagPosition::MODIFIED,
+    vec![CanonicalKeyValue::Signed(1), CanonicalKeyValue::Signed(2)],
+)]
+fn test_normalized_entity_span_key(
+    #[case] span: EntitySpan<i64>,
+    #[case] position: SpanTagPosition,
+    #[case] values: Vec<CanonicalKeyValue>,
+) {
+    assert_eq!(
+        normalized_entity_span_key(&span, |value| { Ok(CanonicalKeyValue::Signed(*value)) }),
+        Ok(CanonicalKeyValue::Span(SpanKey { position, values })),
     );
 }
 

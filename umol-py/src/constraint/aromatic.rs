@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -492,8 +492,8 @@ pub(crate) enum AromaticSystemConstraintsBacking {
 
 /// A live handle onto one aromatic system's constraints, backed by either a
 /// molecule-system or a standalone `AromaticSystemForm`. Reads borrow the constraints
-/// and read only the item they need (no whole-container clone); mutators write through
-/// to the system in place, without a clone-and-writeback.
+/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
+/// the molecule integrity gate; standalone forms mutate directly.
 #[pyclass]
 pub struct AromaticSystemConstraintsView {
     pub(crate) backing: AromaticSystemConstraintsBacking,
@@ -530,12 +530,17 @@ impl AromaticSystemConstraintsView {
         f: impl FnOnce(&mut GraphIrAromaticSystemConstraintsForm) -> R,
     ) -> PyResult<R> {
         match &self.backing {
-            AromaticSystemConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .aromatic_system_mut(*id)
-                .attributes
-                .constraints)),
+            AromaticSystemConstraintsBacking::Molecule { owner, id } => {
+                let mut output = None;
+                owner
+                    .borrow_mut(py)
+                    .to_rust_mut()
+                    .try_modify_aromatic_system(*id, |system| {
+                        output = Some(f(&mut system.constraints));
+                    })
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                Ok(output.expect("a successful checked mutation invokes its callback"))
+            }
             AromaticSystemConstraintsBacking::AromaticSystem(system) => {
                 Ok(f(&mut system.borrow_mut(py).to_rust_mut()?.constraints))
             }
