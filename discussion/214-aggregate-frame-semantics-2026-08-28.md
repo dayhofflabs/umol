@@ -321,12 +321,13 @@ A frame action always has the direction
 selected[i] = stored[action[i]]
 ```
 
-For an ordinary relation this is a possibly unbounded `ParticipantPermutation`: a checked
-permutation of `ParticipantPosition` values with identity, inverse, composition, and `between`
-operations. Graph core owns this storage-neutral action on a participant sequence; graph IR owns
-which positions may move and how payload follows. Stereo uses the existing bounded `Permutation`,
-whose `act` operation has the same direction. Pairwise-distinct legal participants make the action
-between a stored and representative presentation unique.
+For an ordinary relation this is a possibly unbounded `DynPermutation`: a checked
+permutation of integer participant indices with identity, inverse, composition, and `between`
+operations. `umol-perm` owns this storage-neutral action on a sequence; graph IR owns which
+positions may move and how payload follows. Stereo uses the existing bounded `Permutation`, whose
+`act` operation has the same direction. Pairwise-distinct legal participants make the action between
+a stored and representative presentation unique. The graph-core storage-facing
+`ParticipantPosition` type is not part of this action carrier.
 
 Atoms and localized bonds do not bear graph-IR payload frames. A localized bond's endpoints are
 unordered topology, and no current bond value is indexed by endpoint position. Reframing begins at
@@ -334,10 +335,10 @@ the six overlay families:
 
 | Entity family | Representative frame | Action group | Values transported under the action |
 | --- | --- | --- | --- |
-| Dative bond | donors sorted by `AtomId`; singleton acceptor fixed | `S_n` on the donor factor, represented by `ParticipantPermutation` | donor sequence only; current form and molecule-level dative constraints are frame-invariant |
-| Aromatic system | participating atoms sorted by `AtomId` | `S_n`, represented by `ParticipantPermutation` | participant electron counts; charge, unpaired electrons, and current constraints are invariant |
-| Multicenter bond | participating atoms sorted by `AtomId` | `S_n`, represented by `ParticipantPermutation` | participant electron counts; charge, unpaired electrons, and current constraints are invariant |
-| Noncovalent bond | endpoints sorted by `AtomId` | `S_2`, represented by `ParticipantPermutation` | endpoint sequence and every `NoncovalentBondEndsSatisfy` predicate pair referring to the entity; the entity form is invariant |
+| Dative bond | donors sorted by `AtomId`; singleton acceptor fixed | `S_n` on the donor factor, represented by `DynPermutation` | donor sequence only; current form and molecule-level dative constraints are frame-invariant |
+| Aromatic system | participating atoms sorted by `AtomId` | `S_n`, represented by `DynPermutation` | participant electron counts; charge, unpaired electrons, and current constraints are invariant |
+| Multicenter bond | participating atoms sorted by `AtomId` | `S_n`, represented by `DynPermutation` | participant electron counts; charge, unpaired electrons, and current constraints are invariant |
+| Noncovalent bond | endpoints sorted by `AtomId` | `S_2`, represented by `DynPermutation` | endpoint sequence and every `NoncovalentBondEndsSatisfy` predicate pair referring to the entity; the entity form is invariant |
 | Stereo atom | complete `StereoLigand` values sorted | `S_n` on the ligand factor, represented by bounded `Permutation` | configuration, ligand-symmetry and fluxionality permutations, topicity positions, inline constraints, and molecule-level `StereoAtom` leaves |
 | Stereo bond | sort within each two-ligand endpoint block, then order the two blocks lexicographically | wreath product `S_2 wr S_2 = (S_2 x S_2) semidirect S_2`, represented by bounded `Permutation` | the corresponding stereo-bond configuration, inline constraints, and molecule-level `StereoBond` leaves |
 
@@ -353,7 +354,7 @@ may be semantically inconsistent, but they do not make frame selection ambiguous
 Representative selection therefore belongs to the family aggregate, which knows the site and
 frame-bearing factors. A form implements `FrameTransport` and can apply a local action, but it does
 not implement `Reframe`. The existing stereo-only `FrameAction` trait and form-level `select_frame`
-retire in favor of this common operation. `ParticipantPermutation::between` and
+retire in favor of this common operation. `DynPermutation::between` and
 `Permutation::between` derive the unique action between two legal presentations; representative
 selection is the corresponding one-frame derivation. `find_reframed`, `Permutation::visit_between`,
 and `Permutation::enumerate_between` are removed after their callers migrate. `virtual_block_swaps`
@@ -374,7 +375,7 @@ vector. The carrier grows with the value being acted on:
 
 | Carrier | Complete associated action |
 | --- | --- |
-| One ordinary entity form or `EntitySpan<form>` | One `ParticipantPermutation` |
+| One ordinary entity form or `EntitySpan<form>` | One `DynPermutation` |
 | One stereo entity form or `EntitySpan<form>` | One bounded `Permutation` admissible for that entity kind |
 | One kind-specific overlay delta payload | One local action for that entity kind |
 | One entity-family aggregate or its `*Spans` peer | One local action per dense typed entity id |
@@ -384,7 +385,7 @@ vector. The carrier grows with the value being acted on:
 | `Deltas` in isolation | No complete action: removals may use local frames, and only the containing `Reaction` supplies their owning frames |
 
 `OverlayFrameActions` is a typed six-family composite. Each field maps the corresponding entity id
-to its local `ParticipantPermutation` or bounded `Permutation`; atom and localized-bond entries are
+to its local `DynPermutation` or bounded `Permutation`; atom and localized-bond entries are
 absent because those families have no participant-frame action. Molecule and reaction-span producers
 fill dense id domains, while a reaction adds sparse created-entity domains to the dense domains of
 its lhs. A consumer requires every action needed by the frame-relative values it carries and ignores
@@ -416,7 +417,7 @@ shared with its span-family peer. `reframe_with_action` returns this complete wi
 Entity forms do not implement `Reframe`: by definition they exclude their participants and cannot
 know their current frame or select another one. They implement `FrameTransport` with the local
 entity-kind action. The ordinary `reframe_to(from, to)` combination reduces to
-`ParticipantPermutation::between(from, to)` followed by `reframe_by`; stereo uses the bounded
+`DynPermutation::between(from, to)` followed by `reframe_by`; stereo uses the bounded
 counterpart. Compatibility is receiver-relative: a fixed-arity form or a determinate positional
 payload checks the degree it exposes, while a variable-arity, dimensionless, or frame-invariant form
 cannot reconstruct an absent owning frame and accepts every structurally valid action in its local
@@ -826,9 +827,9 @@ editors remain permitted and fail only when publishing. The inherited transport 
 
 #### Frame-action foundation and repeated-ligand orbit removal
 
-- **S0i — action carriers and local transport** (`umol-graph-core/src/relation.rs`,
+- **S0i — action carriers and local transport** (`umol-perm/src/dynamic.rs`,
   `umol-graph-ir/src/ir/{traits,electrons,aromatic,multicenter,dative,noncovalent,stereo,delta}.rs`):
-  add checked unbounded `ParticipantPermutation` with identity, inverse, composition, and `between`;
+  add checked unbounded `DynPermutation` with identity, inverse, composition, and `between`;
   add `FrameTransport` with associated `Action` and consuming `reframe_by`; and implement local
   transport for the six entity forms, stereo configuration values, kind-specific overlay deltas,
   and generic `EntitySpan<T>` where `T: FrameTransport`. Keep the old helpers temporarily while
@@ -837,12 +838,24 @@ editors remain permitted and fail only when publishing. The inherited transport 
   actual-frame checks to their owning aggregate. Assert the action laws, action direction,
   incompatible-domain absence, exact acceptance for leaves with and without an observable degree,
   stereo outside-group failure, and one-action transport of every present span side with nonuniform
-  values. **Additive; inherited red ledger unchanged.** [dep: S0b]
+  values. **Additive; inherited red ledger unchanged.** [dep: S0b] **Done.** `umol-perm` now
+  exposes the checked, unbounded `DynPermutation` over integer indices with the stated direction and
+  group operations. Graph IR exposes the consuming `FrameTransport` trait and implements local
+  transport for all six overlay forms, stereo configurations and frame-relative inline constraints,
+  all six kind-specific overlay deltas, and generic `EntitySpan<T>`. Compatibility is checked only
+  where the receiver exposes it: positional values check length, fixed noncovalent and stereo-bond
+  families check their action groups, kinded stereo values check their parent group even when the
+  coset is undetermined, and dimensionless variable-arity values carry unchanged. The temporary
+  `FrameAction`, `reframe_to`, and orbit-search helpers remain for S0j migration.
+
+  Eighteen focused dynamic-action unit cases, two action-law properties, and forty-four focused
+  graph-IR transport cases pass. Strict all-target Clippy with permutation and graph-IR property
+  features passes. The inherited red ledger was not rerun or changed.
 - **S0j — unique alignment at graph-IR consumers** (`ir/stereo.rs`, `ir/molecule/editor.rs`,
   `ir/molecule.rs`, `ir/substructure.rs`, `ir/view/stereo.rs`, `ir/reaction.rs`,
   `ir/reaction_span.rs`): replace `find_reframed` and candidate enumeration in lookup, glue, editor
   equality, mapped equality, matching, and span selection with one
-  `ParticipantPermutation::between` or `Permutation::between` followed by `FrameTransport`.
+  `DynPermutation::between` or `Permutation::between` followed by `FrameTransport`.
   Retire ordinary form `reframe_to` after its callers use the same two kernels. Preserve
   operation-specific `meet`, `matches`, or exact comparison semantics; do not collapse them into one
   generic callback. **Breaking; inherited red ledger unchanged after consumer migration.**
@@ -1051,7 +1064,7 @@ require a new application-result witness in doc 204.
 - **S1c — living documentation** (`docs/development/{data-types,nomenclature,property-tests,python-api}.md`,
   rustdoc, Python docs): align the public guides with fixed relation repeated-participant integrity,
   including the explicit prohibition on repeated complete stereo-ligand values, bounded frames,
-  direct frame transport, `ParticipantPermutation`, the `FrameTransport` / `Reframe` distinction,
+  direct frame transport, `DynPermutation`, the `FrameTransport` / `Reframe` distinction,
   and the rule that plain aggregate `reframe` fuses local action derivation and transport without
   materializing a complete witness. Document the local,
   family, and `OverlayFrameActions` carrier hierarchy, the per-family representative-action table,

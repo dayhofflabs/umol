@@ -177,6 +177,25 @@ pub trait Equiv: Normalize {
     }
 }
 
+/// Transport a frame-relative value through an independently supplied compatible action.
+///
+/// This operation neither normalizes the value nor selects a participant frame. Compatibility is
+/// receiver-relative: an implementation checks every action-domain, degree, positional-length, and
+/// subgroup condition represented by `self`, and returns `None` when any such condition fails.
+/// Information available only from an owning aggregate is checked by that aggregate.
+///
+/// # Semantic properties
+///
+/// For every compatible action family, identity leaves the value unchanged, applying an action and
+/// its inverse recovers the value, and sequential application agrees with action composition.
+pub trait FrameTransport: Sized {
+    /// The complete frame action on `Self`.
+    type Action;
+
+    /// Restate `self` under `action`, or return `None` when the receiver exposes an incompatibility.
+    fn reframe_by(self, action: &Self::Action) -> Option<Self>;
+}
+
 /// The frame quotient over an entity family: select a determinate participant frame and restate the
 /// frame-relative payload accordingly.
 ///

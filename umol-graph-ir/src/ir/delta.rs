@@ -12,6 +12,7 @@ use std::slice::{Iter, IterMut};
 use std::vec::IntoIter;
 
 use umol_graph_core::ParticipantPosition;
+use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
@@ -42,7 +43,7 @@ use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
     StereoKind,
 };
-use super::traits::{EntityPatch, Equiv, Lattice, Normalize};
+use super::traits::{EntityPatch, Equiv, FrameTransport, Lattice, Normalize};
 
 /// A resolved edit to a single atom.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -895,6 +896,298 @@ impl StereoBondDelta {
     }
 }
 
+fn transport_optional<T: FrameTransport>(
+    value: Option<T>,
+    action: &T::Action,
+) -> Option<Option<T>> {
+    match value {
+        Some(value) => FrameTransport::reframe_by(value, action).map(Some),
+        None => Some(None),
+    }
+}
+
+impl FrameTransport for DativeBondDelta {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Add {
+                id,
+                donors,
+                acceptor,
+                attributes,
+            } => Self::Add {
+                id,
+                donors: action.act(&donors)?,
+                acceptor,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::Remove {
+                id,
+                donors,
+                acceptor,
+                attributes,
+            } => Self::Remove {
+                id,
+                donors: action.act(&donors)?,
+                acceptor,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField { id, change },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+        })
+    }
+}
+
+impl FrameTransport for AromaticSystemDelta {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Add {
+                id,
+                atoms,
+                attributes,
+            } => Self::Add {
+                id,
+                atoms: action.act(&atoms)?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::Remove {
+                id,
+                atoms,
+                attributes,
+            } => Self::Remove {
+                id,
+                atoms: action.act(&atoms)?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: match change {
+                    AromaticSystemFieldChange::Electrons { old, new } => {
+                        AromaticSystemFieldChange::Electrons {
+                            old: FrameTransport::reframe_by(old, action)?,
+                            new: FrameTransport::reframe_by(new, action)?,
+                        }
+                    }
+                    AromaticSystemFieldChange::Charge { old, new } => {
+                        AromaticSystemFieldChange::Charge { old, new }
+                    }
+                    AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
+                        AromaticSystemFieldChange::UnpairedElectrons { old, new }
+                    }
+                },
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+        })
+    }
+}
+
+impl FrameTransport for MulticenterBondDelta {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Add {
+                id,
+                atoms,
+                attributes,
+            } => Self::Add {
+                id,
+                atoms: action.act(&atoms)?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::Remove {
+                id,
+                atoms,
+                attributes,
+            } => Self::Remove {
+                id,
+                atoms: action.act(&atoms)?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: match change {
+                    MulticenterBondFieldChange::Electrons { old, new } => {
+                        MulticenterBondFieldChange::Electrons {
+                            old: FrameTransport::reframe_by(old, action)?,
+                            new: FrameTransport::reframe_by(new, action)?,
+                        }
+                    }
+                    MulticenterBondFieldChange::Charge { old, new } => {
+                        MulticenterBondFieldChange::Charge { old, new }
+                    }
+                    MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
+                        MulticenterBondFieldChange::UnpairedElectrons { old, new }
+                    }
+                },
+            },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+        })
+    }
+}
+
+impl FrameTransport for NoncovalentBondDelta {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != 2 {
+            return None;
+        }
+        Some(match self {
+            Self::Add {
+                id,
+                atoms,
+                attributes,
+            } => Self::Add {
+                id,
+                atoms: action.act(&atoms)?.try_into().ok()?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::Remove {
+                id,
+                atoms,
+                attributes,
+            } => Self::Remove {
+                id,
+                atoms: action.act(&atoms)?.try_into().ok()?,
+                attributes: FrameTransport::reframe_by(attributes, action)?,
+            },
+            Self::ModifyField { id, change } => Self::ModifyField { id, change },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+        })
+    }
+}
+
+impl FrameTransport for StereoAtomDelta {
+    type Action = Permutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Add {
+                id,
+                site,
+                ligands,
+                attributes,
+            } => {
+                if action.degree() != ligands.len() {
+                    return None;
+                }
+                Self::Add {
+                    id,
+                    site,
+                    ligands: action.act(&ligands),
+                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                }
+            }
+            Self::Remove {
+                id,
+                site,
+                ligands,
+                attributes,
+            } => {
+                if action.degree() != ligands.len() {
+                    return None;
+                }
+                Self::Remove {
+                    id,
+                    site,
+                    ligands: action.act(&ligands),
+                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                }
+            }
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: match change {
+                    StereoAtomFieldChange::Configuration { old, new } => {
+                        StereoAtomFieldChange::Configuration {
+                            old: FrameTransport::reframe_by(old, action)?,
+                            new: FrameTransport::reframe_by(new, action)?,
+                        }
+                    }
+                },
+            },
+            Self::ModifyConstraint { id, kind, old, new } => {
+                if kind.is_some_and(|kind| kind.act(0, *action).is_none()) {
+                    return None;
+                }
+                Self::ModifyConstraint {
+                    id,
+                    kind,
+                    old: transport_optional(old, action)?,
+                    new: transport_optional(new, action)?,
+                }
+            }
+        })
+    }
+}
+
+impl FrameTransport for StereoBondDelta {
+    type Action = Permutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        StereoKind::CisTrans.act(0, *action)?;
+        Some(match self {
+            Self::Add {
+                id,
+                site,
+                ligands,
+                attributes,
+            } => {
+                if action.degree() != ligands.len() {
+                    return None;
+                }
+                Self::Add {
+                    id,
+                    site,
+                    ligands: action.act(&ligands),
+                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                }
+            }
+            Self::Remove {
+                id,
+                site,
+                ligands,
+                attributes,
+            } => {
+                if action.degree() != ligands.len() {
+                    return None;
+                }
+                Self::Remove {
+                    id,
+                    site,
+                    ligands: action.act(&ligands),
+                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                }
+            }
+            Self::ModifyField { id, change } => Self::ModifyField {
+                id,
+                change: match change {
+                    StereoBondFieldChange::Configuration { old, new } => {
+                        StereoBondFieldChange::Configuration {
+                            old: FrameTransport::reframe_by(old, action)?,
+                            new: FrameTransport::reframe_by(new, action)?,
+                        }
+                    }
+                },
+            },
+            Self::ModifyConstraint { id, kind, old, new } => {
+                if kind.is_some_and(|kind| kind.act(0, *action).is_none()) {
+                    return None;
+                }
+                Self::ModifyConstraint {
+                    id,
+                    kind,
+                    old: transport_optional(old, action)?,
+                    new: transport_optional(new, action)?,
+                }
+            }
+        })
+    }
+}
+
 /// A resolved change to the molecule-level constraint set, as a set-diff.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ConstraintDelta {
@@ -1113,6 +1406,14 @@ impl<T> EntitySpan<T> {
             Self::Added(value) => EntitySpan::Added(f(value)?),
             Self::Removed(value) => EntitySpan::Removed(f(value)?),
         })
+    }
+}
+
+impl<T: FrameTransport> FrameTransport for EntitySpan<T> {
+    type Action = T::Action;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        self.try_map(|value| FrameTransport::reframe_by(value, action))
     }
 }
 
@@ -3839,6 +4140,173 @@ mod tests {
     fn test_delta_inverse(#[case] input: Delta, #[case] expected: Delta) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    fn test_dative_bond_delta_reframe_by() {
+        let action =
+            DynPermutation::try_from([2, 0, 1].as_slice()).expect("test image is a permutation");
+        let input = DativeBondDelta::Add {
+            id: DativeBondId(4),
+            donors: vec![AtomId(1), AtomId(2), AtomId(3)],
+            acceptor: AtomId(9),
+            attributes: DativeBondForm::from_order(2),
+        };
+        let expected = DativeBondDelta::Add {
+            id: DativeBondId(4),
+            donors: vec![AtomId(3), AtomId(1), AtomId(2)],
+            acceptor: AtomId(9),
+            attributes: DativeBondForm::from_order(2),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_delta_reframe_by() {
+        let action =
+            DynPermutation::try_from([2, 0, 1].as_slice()).expect("test image is a permutation");
+        let input = AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(3),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![10, 20, 30]),
+                new: ElectronCountsForm::Lit(vec![11, 21, 31]),
+            },
+        };
+        let expected = AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(3),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![30, 10, 20]),
+                new: ElectronCountsForm::Lit(vec![31, 11, 21]),
+            },
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_delta_reframe_by() {
+        let action =
+            DynPermutation::try_from([2, 0, 1].as_slice()).expect("test image is a permutation");
+        let input = MulticenterBondDelta::Remove {
+            id: MulticenterBondId(2),
+            atoms: vec![AtomId(1), AtomId(2), AtomId(3)],
+            attributes: MulticenterBondForm::from_electrons(vec![2, 4, 6]),
+        };
+        let expected = MulticenterBondDelta::Remove {
+            id: MulticenterBondId(2),
+            atoms: vec![AtomId(3), AtomId(1), AtomId(2)],
+            attributes: MulticenterBondForm::from_electrons(vec![6, 2, 4]),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_delta_reframe_by() {
+        let action =
+            DynPermutation::try_from([1, 0].as_slice()).expect("test image is a permutation");
+        let input = NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(5),
+            atoms: [AtomId(1), AtomId(2)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        };
+        let expected = NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(5),
+            atoms: [AtomId(2), AtomId(1)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_delta_reframe_by_error() {
+        let action = DynPermutation::identity(3);
+        let input = NoncovalentBondDelta::ModifyField {
+            id: NoncovalentBondId(5),
+            change: NoncovalentBondFieldChange::Kind {
+                old: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HydrogenBond),
+                new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::HalogenBond),
+            },
+        };
+
+        assert_eq!(input.reframe_by(&action), None);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_delta_reframe_by() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoAtomDelta::Add {
+            id: StereoAtomId(6),
+            site: AtomId(0),
+            ligands: [1, 2, 3, 4]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        };
+        let expected = StereoAtomDelta::Add {
+            id: StereoAtomId(6),
+            site: AtomId(0),
+            ligands: [2, 1, 3, 4]
+                .into_iter()
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_delta_reframe_by() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoBondDelta::ModifyField {
+            id: StereoBondId(7),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
+            },
+        };
+        let expected = StereoBondDelta::ModifyField {
+            id: StereoBondId(7),
+            change: StereoBondFieldChange::Configuration {
+                old: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
+                new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+            },
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_delta_reframe_by_error() {
+        let action = Permutation::from_image(&[1, 2, 0, 3]);
+        let input = StereoBondDelta::ModifyConstraint {
+            id: StereoBondId(7),
+            kind: None,
+            old: None,
+            new: None,
+        };
+
+        assert_eq!(input.reframe_by(&action), None);
+    }
+
+    #[rstest]
+    fn test_entity_span_reframe_by() {
+        let action =
+            DynPermutation::try_from([2, 0, 1].as_slice()).expect("test image is a permutation");
+        let input = EntitySpan::Modified {
+            lhs: AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+            rhs: AromaticSystemForm::from_electrons(vec![11, 21, 31]),
+        };
+        let expected = EntitySpan::Modified {
+            lhs: AromaticSystemForm::from_electrons(vec![30, 10, 20]),
+            rhs: AromaticSystemForm::from_electrons(vec![31, 11, 21]),
+        };
+
+        assert_eq!(input.reframe_by(&action), Some(expected));
     }
 
     #[rstest]

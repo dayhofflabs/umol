@@ -27,6 +27,7 @@ use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
+use super::traits;
 use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
 
 /// The molecule's stereo atoms. The ligands bear the frame the configuration is read against; the
@@ -619,74 +620,86 @@ macro_rules! stereo_element {
         }
 
 
+        impl traits::FrameTransport for $constraint {
+            type Action = Permutation;
+
+            fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                let inverse = action.inverse();
+                let reframe_permutation = |value: LigandPermutation| {
+                    (value.0.degree() == action.degree()).then(|| {
+                        LigandPermutation(inverse.compose(value.0).compose(*action))
+                    })
+                };
+                Some(match self {
+                    Self::LigandSymmetry(symmetry) => Self::LigandSymmetry(LigandSymmetryForm {
+                        permutation: OrientedLigandPermutation {
+                            permutation: reframe_permutation(symmetry.permutation.permutation)?,
+                            orientation: symmetry.permutation.orientation,
+                        },
+                        invariant: symmetry.invariant,
+                    }),
+                    Self::Fluxionality(fluxionality) => Self::Fluxionality(FluxionalityForm {
+                        permutation: reframe_permutation(fluxionality.permutation)?,
+                        active: fluxionality.active,
+                    }),
+                    Self::Topicity(topicity) => {
+                        let first = topicity.pair.first().index();
+                        let second = topicity.pair.second().index();
+                        if first >= action.degree() || second >= action.degree() {
+                            return None;
+                        }
+                        Self::Topicity(TopicityForm {
+                            pair: StereoLigandPair::new(
+                                inverse.apply(first).into(),
+                                inverse.apply(second).into(),
+                            ),
+                            relation: topicity.relation,
+                        })
+                    }
+                    Self::Stereogenicity(stereogenicity) => {
+                        Self::Stereogenicity(stereogenicity)
+                    }
+                })
+            }
+        }
+
+        impl traits::FrameTransport for $constraints {
+            type Action = Permutation;
+
+            fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                self.into_iter()
+                    .map(|constraint| {
+                        traits::FrameTransport::reframe_by(constraint, action)
+                    })
+                    .collect()
+            }
+        }
+
         /// Configuration, permutation-valued constraints, and topicity positions move together.
         /// `None` when the permutation is not an action of the configured stereo kind or its degree
         /// is incompatible with a frame-relative constraint.
-        impl FrameAction for $name {
-        fn reframe_by(self, permutation: Permutation) -> Option<Self> {
-            let Self {
-                configuration,
-                constraints,
-            } = self;
-            if configuration.kind().is_some_and(|kind| {
-                kind.degree() != permutation.degree()
-                    || !kind.class_key().space().allows(permutation)
-            }) {
-                return None;
+        impl traits::FrameTransport for $name {
+            type Action = Permutation;
+
+            fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                let Self {
+                    configuration,
+                    constraints,
+                } = self;
+                Some(Self {
+                    configuration: traits::FrameTransport::reframe_by(
+                        configuration,
+                        action,
+                    )?,
+                    constraints: traits::FrameTransport::reframe_by(constraints, action)?,
+                })
             }
-            let inverse = permutation.inverse();
-            let reframe_permutation = |value: LigandPermutation| {
-                (value.0.degree() == permutation.degree()).then(|| {
-                    LigandPermutation(inverse.compose(value.0).compose(permutation))
-                })
-            };
-            let constraints = constraints
-                .iter()
-                .cloned()
-                .map(|constraint| {
-                    Some(match constraint {
-                        $constraint::LigandSymmetry(symmetry) => {
-                            $constraint::LigandSymmetry(LigandSymmetryForm {
-                                permutation: OrientedLigandPermutation {
-                                    permutation: reframe_permutation(
-                                        symmetry.permutation.permutation,
-                                    )?,
-                                    orientation: symmetry.permutation.orientation,
-                                },
-                                invariant: symmetry.invariant,
-                            })
-                        }
-                        $constraint::Fluxionality(fluxionality) => {
-                            $constraint::Fluxionality(FluxionalityForm {
-                                permutation: reframe_permutation(fluxionality.permutation)?,
-                                active: fluxionality.active,
-                            })
-                        }
-                        $constraint::Topicity(topicity) => {
-                            let first = topicity.pair.first().index();
-                            let second = topicity.pair.second().index();
-                            if first >= permutation.degree() || second >= permutation.degree() {
-                                return None;
-                            }
-                            $constraint::Topicity(TopicityForm {
-                                pair: StereoLigandPair::new(
-                                    inverse.apply(first).into(),
-                                    inverse.apply(second).into(),
-                                ),
-                                relation: topicity.relation,
-                            })
-                        }
-                        $constraint::Stereogenicity(stereogenicity) => {
-                            $constraint::Stereogenicity(stereogenicity)
-                        }
-                    })
-                })
-                .collect::<Option<$constraints>>()?;
-            Some(Self {
-                configuration: configuration.apply(permutation)?,
-                constraints,
-            })
         }
+
+        impl FrameAction for $name {
+            fn reframe_by(self, permutation: Permutation) -> Option<Self> {
+                traits::FrameTransport::reframe_by(self, &permutation)
+            }
         }
 
         impl From<&str> for $name {
@@ -1232,11 +1245,24 @@ where
     }
 }
 
-impl FrameAction for StereoConfigurationForm {
+impl traits::FrameTransport for StereoConfigurationForm {
+    type Action = Permutation;
+
     /// The coset under the kind's action; an undetermined configuration has no kind and carries
     /// unchanged. `None` when the permutation is not an action of the configured kind.
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if self.kind().is_some_and(|kind| {
+            kind.degree() != action.degree() || !kind.class_key().space().allows(*action)
+        }) {
+            return None;
+        }
+        self.apply(*action)
+    }
+}
+
+impl FrameAction for StereoConfigurationForm {
     fn reframe_by(self, permutation: Permutation) -> Option<Self> {
-        self.apply(permutation)
+        traits::FrameTransport::reframe_by(self, &permutation)
     }
 }
 
@@ -1777,9 +1803,11 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_perm::Orientation;
 
-    use super::super::constraint::StereogenicityForm;
-    use super::super::id::AtomId;
+    use super::super::boolean::BooleanForm;
+    use super::super::constraint::{StereogenicityForm, TopicityRelationForm};
+    use super::super::id::{AtomId, StereoLigandPosition};
     use super::super::ligand::StereoLigandKind;
     use super::*;
 
@@ -2499,6 +2527,116 @@ mod tests {
         #[case] permutation: Permutation,
     ) {
         assert_eq!(kind.act(index, permutation), None);
+    }
+
+    #[rstest]
+    #[case::kinded(
+        StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0_u32),
+        Permutation::from_image(&[1, 0, 2, 3]),
+        Some(StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32)),
+    )]
+    #[case::undetermined(
+        StereoConfigurationForm::Undetermined,
+        Permutation::identity(3),
+        Some(StereoConfigurationForm::Undetermined)
+    )]
+    #[case::outside_parent_group(
+        StereoConfigurationForm::kinded(StereoKind::CisTrans, 0_u32),
+        Permutation::from_image(&[1, 2, 0, 3]),
+        None,
+    )]
+    #[case::kinded_undetermined_outside_parent_group(
+        StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Undetermined),
+        Permutation::from_image(&[1, 2, 0, 3]),
+        None,
+    )]
+    fn test_stereo_configuration_form_reframe_by(
+        #[case] input: StereoConfigurationForm,
+        #[case] action: Permutation,
+        #[case] expected: Option<StereoConfigurationForm>,
+    ) {
+        assert_eq!(traits::FrameTransport::reframe_by(input, &action), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), orientation: Orientation::Improper },
+            invariant: BooleanForm::Lit(true),
+        }),
+        Permutation::from_image(&[1, 0, 2, 3]),
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])), orientation: Orientation::Improper },
+            invariant: BooleanForm::Lit(true),
+        }),
+    )]
+    #[case::fluxionality(
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])), active: BooleanForm::Lit(false) }),
+        Permutation::from_image(&[1, 0, 2, 3]),
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm { permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])), active: BooleanForm::Lit(false) }),
+    )]
+    #[case::topicity(
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        }),
+        Permutation::from_image(&[1, 0, 2, 3]),
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        }),
+    )]
+    #[case::stereogenicity(
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+        Permutation::identity(3),
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Prochiral)),
+    )]
+    fn test_stereo_atom_constraint_form_reframe_by(
+        #[case] input: StereoAtomConstraintForm,
+        #[case] action: Permutation,
+        #[case] expected: StereoAtomConstraintForm,
+    ) {
+        assert_eq!(traits::FrameTransport::reframe_by(input, &action), Some(expected));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::permutation_degree(StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+        permutation: LigandPermutation(Permutation::identity(4)),
+        active: BooleanForm::Lit(true),
+    }))]
+    #[case::topicity_position(StereoAtomConstraintForm::Topicity(TopicityForm {
+        pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(3)),
+        relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+    }))]
+    fn test_stereo_atom_constraint_form_reframe_by_error(
+        #[case] input: StereoAtomConstraintForm,
+    ) {
+        let action = Permutation::identity(3);
+        assert_eq!(traits::FrameTransport::reframe_by(input, &action), None);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_form_reframe_by_constraints() {
+        let action = Permutation::from_image(&[1, 0, 2, 3]);
+        let input = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::from_image(&[0, 2, 1, 3])),
+                active: BooleanForm::Lit(true),
+            }),
+        );
+        let expected = StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32).with_constraint(
+            StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+                permutation: LigandPermutation(Permutation::from_image(&[2, 1, 0, 3])),
+                active: BooleanForm::Lit(true),
+            }),
+        );
+
+        assert_eq!(
+            traits::FrameTransport::reframe_by(input, &action),
+            Some(expected),
+        );
     }
 
     #[rstest]

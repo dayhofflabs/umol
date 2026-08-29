@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, ParticipantPosition, RelationId, Remapping};
 use umol_graph_ir_macros::{Lattice, Normalize};
+use umol_perm::DynPermutation;
 
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::delta::EntitySpan;
 use super::error::Contradiction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
-use super::traits::{Equiv, Lattice, Normalize, Reframe};
+use super::traits::{Equiv, FrameTransport, Lattice, Normalize, Reframe};
 
 /// The site this entry is borne by.
 /// The molecule's dative bonds.
@@ -428,6 +429,15 @@ impl DativeBondForm {
     }
 }
 
+impl FrameTransport for DativeBondForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, _action: &Self::Action) -> Option<Self> {
+        let Self { order, constraints } = self;
+        Some(Self { order, constraints })
+    }
+}
+
 impl From<&str> for DativeBondForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid dative bond string")
@@ -664,6 +674,19 @@ mod tests {
             input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
             Some(input),
         );
+    }
+
+    #[rstest]
+    #[case::ground(DativeBondForm::from_order(1))]
+    #[case::with_constraint(
+        DativeBondForm::from_order(1)
+            .with_constraint(DativeBondConstraintForm::aromatic(true)),
+    )]
+    #[case::undetermined(DativeBondForm::default())]
+    fn test_dative_bond_form_reframe_by(#[case] input: DativeBondForm) {
+        let action =
+            DynPermutation::try_from(vec![6, 5, 4, 3, 2, 1, 0]).expect("case is a permutation");
+        assert_eq!(input.clone().reframe_by(&action), Some(input));
     }
 
     #[rstest]

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
+use umol_perm::DynPermutation;
 
 use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraintsForm};
 use super::delta::EntitySpan;
@@ -12,7 +13,7 @@ use super::error::Contradiction;
 use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Equiv, Lattice, Normalize, Reframe};
+use super::traits::{Equiv, FrameTransport, Lattice, Normalize, Reframe};
 
 /// The molecule's multicenter bonds.
 ///
@@ -452,6 +453,25 @@ impl MulticenterBondForm {
     }
 }
 
+impl FrameTransport for MulticenterBondForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        let Self {
+            electrons,
+            charge,
+            unpaired_electrons,
+            constraints,
+        } = self;
+        Some(Self {
+            electrons: electrons.reframe_by(action)?,
+            charge,
+            unpaired_electrons,
+            constraints,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -850,6 +870,31 @@ mod tests {
         #[case] expected: Option<MulticenterBondForm>,
     ) {
         assert_eq!(input.reframe_to(from, to), expected);
+    }
+
+    #[rstest]
+    #[case::positioned(
+        MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
+        vec![2, 0, 1],
+        Some(MulticenterBondForm::from_electrons(vec![30, 10, 20]).with_charge(-1)),
+    )]
+    #[case::positioned_degree(
+        MulticenterBondForm::from_electrons(vec![10, 20]),
+        vec![2, 0, 1],
+        None,
+    )]
+    #[case::dimensionless(
+        MulticenterBondForm::default(),
+        vec![3, 1, 0, 2],
+        Some(MulticenterBondForm::default()),
+    )]
+    fn test_multicenter_bond_form_reframe_by(
+        #[case] input: MulticenterBondForm,
+        #[case] image: Vec<usize>,
+        #[case] expected: Option<MulticenterBondForm>,
+    ) {
+        let action = DynPermutation::try_from(image).expect("case is a permutation");
+        assert_eq!(input.reframe_by(&action), expected);
     }
 
     /// `reframe_to` does not establish that `to` is a reordering of `from`. It checks that only

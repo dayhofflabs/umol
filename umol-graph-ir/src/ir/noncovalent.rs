@@ -5,12 +5,13 @@ use std::sync::Arc;
 
 use umol_graph_core::{FixedRelationSet, NodeId, ParticipantPosition, RelationId, Remapping};
 use umol_graph_ir_macros::{Lattice, Normalize};
+use umol_perm::DynPermutation;
 
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, Equiv, Lattice, Normalize, Reframe};
+use super::traits::{AsLit, Equiv, FrameTransport, Lattice, Normalize, Reframe};
 
 /// The molecule's noncovalent bonds.
 ///
@@ -389,6 +390,18 @@ impl NoncovalentBondForm {
     }
 }
 
+impl FrameTransport for NoncovalentBondForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if action.degree() != 2 {
+            return None;
+        }
+        let Self { kind, constraints } = self;
+        Some(Self { kind, constraints })
+    }
+}
+
 /// Noncovalent interaction kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondKindForm {
@@ -694,6 +707,21 @@ mod tests {
             input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
             Some(input),
         );
+    }
+
+    #[rstest]
+    #[case::swap(
+        vec![1, 0],
+        Some(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)),
+    )]
+    #[case::degree(vec![2, 0, 1], None)]
+    fn test_noncovalent_bond_form_reframe_by(
+        #[case] image: Vec<usize>,
+        #[case] expected: Option<NoncovalentBondForm>,
+    ) {
+        let action = DynPermutation::try_from(image).expect("case is a permutation");
+        let input = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        assert_eq!(input.reframe_by(&action), expected);
     }
 
     #[rstest]
