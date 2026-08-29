@@ -1038,6 +1038,7 @@ impl Molecule {
         &self.constraints
     }
 
+    #[cfg(test)]
     pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
     }

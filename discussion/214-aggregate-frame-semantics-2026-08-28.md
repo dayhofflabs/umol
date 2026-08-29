@@ -1064,6 +1064,21 @@ ledger remains.
   pre-change distinct-frame baseline. Close `test_canonicalize_constitution_entity_kind_minimum` and
   `test_canonicalize_constitution_participant_order`. **Breaking; inherited red ledger decreases
   from twelve to ten.** [dep: S0n, S0o]
+  **Done.** Every molecule description-level path now applies the selected entity-id correspondence
+  and then the aggregate `Reframe` operation. The complete-stereo candidate product, molecule-local
+  frame helpers and duplicate normalizer, kindless stereo-atom position-order fallback, and
+  `Permutation::between_all` repeat machinery are removed; reaction-span position-order transport
+  remains for S0s. Unit and property coverage preserves exhaustive minima, renumbering invariance,
+  canonical equality and hashing, and now asserts the exact witness law
+  `canonical == source.remap(correspondence).reframe()`. The existing canonicalization operation
+  benchmark compared against the S0a `doc214-s0a` baseline: affected structure cases improve by
+  about 14–18%, para-stereo structure cases by about 13–21%, and full overlay/stereo cases by about
+  22–29%; feature-free full cases improve by about 3–4%. Topology and constitution are mostly
+  within noise, apart from small regressions and an 8% topology overlay regression. Both assigned
+  unit regressions pass. Graph-IR's 6,505 unit cases, graph-IR and permutation strict all-target
+  Clippy, graph-IR doctests, the focused canonicalization properties, and the permutation suite
+  pass. The all-core feature-gated checkpoint reports 6,869 passed, 10 inherited failures, and 4
+  skipped; the remaining failures are exactly the reaction and reaction-span cases assigned below.
 
 At S0p, one complete molecule frame-transport path is shared by equality, pushout, and
 canonicalization. Ten inherited reaction and reaction-span failures remain.

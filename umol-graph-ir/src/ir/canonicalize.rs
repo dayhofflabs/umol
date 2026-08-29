@@ -37,7 +37,7 @@ use super::id::{
 };
 use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::{DescriptionLevel, Molecule, MoleculeEntries};
+use super::molecule::{DescriptionLevel, Molecule};
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
@@ -48,7 +48,7 @@ use super::stereo::{
     CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
 };
-use super::traits::{FrameTransport, Normalize};
+use super::traits::{FrameTransport, Normalize, Reframe};
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3146,7 +3146,6 @@ fn constitution_candidate(
 struct CanonicalStereoFrame {
     ligands: Vec<StereoLigand>,
     configuration: StereoConfigurationForm,
-    permutations: Vec<Permutation>,
 }
 
 fn canonical_kinded_stereo_frame(
@@ -3161,7 +3160,6 @@ fn canonical_kinded_stereo_frame(
     }
 
     let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
-    let mut permutations = Vec::new();
     for permutation in stereo_frame_permutations(kind) {
         let candidate = (
             permutation.act(ligands),
@@ -3173,11 +3171,8 @@ fn canonical_kinded_stereo_frame(
         match minimum.as_ref().map(|value| candidate.cmp(value)) {
             None | Some(Ordering::Less) => {
                 minimum = Some(candidate);
-                permutations.clear();
-                permutations.push(permutation);
             }
-            Some(Ordering::Equal) => permutations.push(permutation),
-            Some(Ordering::Greater) => {}
+            Some(Ordering::Equal | Ordering::Greater) => {}
         }
     }
 
@@ -3185,7 +3180,6 @@ fn canonical_kinded_stereo_frame(
         minimum.map(|(ligands, configuration)| CanonicalStereoFrame {
             ligands,
             configuration,
-            permutations,
         }),
     )
 }
@@ -3223,10 +3217,10 @@ fn structure_candidate(
         |ligands: Vec<StereoLigand>,
          configuration: &StereoConfigurationForm|
          -> Result<(Vec<StereoLigand>, StereoConfigurationForm), Contradiction> {
-            let ligands = remap_ligands(ligands);
+            let mut ligands = remap_ligands(ligands);
             match configuration {
                 StereoConfigurationForm::Undetermined => {
-                    let (ligands, _) = sort_ligand_frame(&ligands);
+                    ligands.sort_unstable();
                     Ok((ligands, StereoConfigurationForm::Undetermined))
                 }
                 StereoConfigurationForm::Kinded(..) => {
@@ -3331,9 +3325,8 @@ fn complete_candidate(
     let mut candidate = structure_candidate(molecule, incidence_graph, order)?;
     let correspondence =
         correspondence_from_order(molecule, incidence_graph, &candidate.entity_order);
-    let remapped = molecule.remap(&correspondence);
-    let (constraints, complete) = canonicalize_complete_stereo_frames(remapped)?;
-    candidate.key.constraints = constraints;
+    let complete = molecule.remap(&correspondence).reframe()?;
+    candidate.key.constraints = constraint_blocks(&complete);
     Ok((candidate, complete))
 }
 
@@ -3571,22 +3564,6 @@ fn position_order_from_permutation(permutation: Permutation) -> Vec<ParticipantP
         .collect()
 }
 
-/// Sort a structural ligand multiset and return the position order carrying the original frame
-/// into the sorted frame. Equal occurrences retain their input order; their exchange remains a
-/// structural automorphism rather than becoming an arbitrary tie-break here.
-fn sort_ligand_frame(ligands: &[StereoLigand]) -> (Vec<StereoLigand>, Vec<ParticipantPosition>) {
-    let mut order: Vec<usize> = (0..ligands.len()).collect();
-    order.sort_by_key(|&index| ligands[index]);
-    let sorted: Vec<StereoLigand> = order.iter().map(|&index| ligands[index]).collect();
-    (
-        sorted,
-        order
-            .into_iter()
-            .map(|index| ParticipantPosition(index as u32))
-            .collect(),
-    )
-}
-
 fn reframe_stereo_atom_constraint_by_order(
     constraint: StereoAtomConstraintForm,
     order: &[ParticipantPosition],
@@ -3778,76 +3755,6 @@ fn reframe_molecule_constraint_by_order(
     })
 }
 
-fn molecule_entries(molecule: &Molecule) -> MoleculeEntries {
-    MoleculeEntries {
-        atoms: molecule
-            .atoms()
-            .iter()
-            .map(|atom| atom.attributes.clone())
-            .collect(),
-        bonds: molecule
-            .bonds()
-            .iter()
-            .map(|bond| {
-                let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
-            })
-            .collect(),
-        dative: molecule
-            .dative_bonds()
-            .iter()
-            .map(|bond| {
-                (
-                    bond.donor_ids().collect(),
-                    bond.acceptor_id(),
-                    bond.attributes.clone(),
-                )
-            })
-            .collect(),
-        aromatic: molecule
-            .aromatic_systems()
-            .iter()
-            .map(|system| (system.atom_ids().collect(), system.attributes.clone()))
-            .collect(),
-        multicenter: molecule
-            .multicenter_bonds()
-            .iter()
-            .map(|bond| (bond.atom_ids().collect(), bond.attributes.clone()))
-            .collect(),
-        noncovalent: molecule
-            .noncovalent_bonds()
-            .iter()
-            .map(|bond| {
-                let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
-            })
-            .collect(),
-        stereo_atoms: molecule
-            .stereo_atoms()
-            .iter()
-            .map(|stereo| {
-                (
-                    stereo.site_id(),
-                    stereo.ligand_frame(),
-                    stereo.attributes.clone(),
-                )
-            })
-            .collect(),
-        stereo_bonds: molecule
-            .stereo_bonds()
-            .iter()
-            .map(|stereo| {
-                (
-                    stereo.site_id(),
-                    stereo.ligand_frame(),
-                    stereo.attributes.clone(),
-                )
-            })
-            .collect(),
-        constraints: molecule.constraints().clone(),
-    }
-}
-
 fn reframe_reaction_span_stereo_atom_by_order(
     span: &ReactionSpan,
     id: StereoAtomId,
@@ -4033,286 +3940,6 @@ fn stereo_bond_span_frame_key(
     ]))
 }
 
-fn reframe_stereo_atom(molecule: &Molecule, id: StereoAtomId, frame: Permutation) -> Molecule {
-    reframe_stereo_atom_by_order(molecule, id, &position_order_from_permutation(frame))
-        .expect("canonicalization generates a valid stereo-atom frame action")
-}
-
-fn reframe_stereo_atom_by_order(
-    molecule: &Molecule,
-    id: StereoAtomId,
-    order: &[ParticipantPosition],
-) -> Option<Molecule> {
-    let mut entries = molecule_entries(molecule);
-    let (_, ligands, attributes) = &mut entries.stereo_atoms[id.index()];
-    *attributes = reframe_stereo_atom_form_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|constraint| {
-            reframe_molecule_constraint_by_order(constraint, Entity::StereoAtom(id), order)
-        })
-        .collect::<Option<Vec<_>>>()?
-        .into();
-    Some(Molecule::from_entries(entries))
-}
-
-fn reframe_stereo_bond(molecule: &Molecule, id: StereoBondId, frame: Permutation) -> Molecule {
-    reframe_stereo_bond_by_order(molecule, id, &position_order_from_permutation(frame))
-        .expect("canonicalization generates a valid stereo-bond frame action")
-}
-
-fn reframe_stereo_bond_by_order(
-    molecule: &Molecule,
-    id: StereoBondId,
-    order: &[ParticipantPosition],
-) -> Option<Molecule> {
-    let mut entries = molecule_entries(molecule);
-    let (_, ligands, attributes) = &mut entries.stereo_bonds[id.index()];
-    *attributes = reframe_stereo_bond_form_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|constraint| {
-            reframe_molecule_constraint_by_order(constraint, Entity::StereoBond(id), order)
-        })
-        .collect::<Option<Vec<_>>>()?
-        .into();
-    Some(Molecule::from_entries(entries))
-}
-
-fn canonicalize_stereo_frames(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
-    let stereo_atom_count = molecule.stereo_atoms().count();
-    for index in 0..stereo_atom_count {
-        let id = StereoAtomId(index as u32);
-        let (ligands, configuration) = {
-            let stereo = molecule
-                .stereo_atoms()
-                .get(id)
-                .expect("dense stereo-atom id is in range");
-            (
-                stereo.ligand_frame(),
-                stereo.attributes.configuration.clone(),
-            )
-        };
-        molecule = match configuration {
-            StereoConfigurationForm::Undetermined => {
-                let (_, order) = sort_ligand_frame(&ligands);
-                reframe_stereo_atom_by_order(&molecule, id, &order)
-                    .expect("integrity established a valid kindless stereo-atom frame")
-            }
-            StereoConfigurationForm::Kinded(..) => {
-                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
-                    .expect("integrity established the kinded stereo-atom frame degree");
-                reframe_stereo_atom(&molecule, id, frame.permutations[0])
-            }
-        };
-    }
-
-    let stereo_bond_count = molecule.stereo_bonds().count();
-    for index in 0..stereo_bond_count {
-        let id = StereoBondId(index as u32);
-        let (ligands, configuration) = {
-            let stereo = molecule
-                .stereo_bonds()
-                .get(id)
-                .expect("dense stereo-bond id is in range");
-            (
-                stereo.ligand_frame(),
-                stereo.attributes.configuration.clone(),
-            )
-        };
-        molecule = match configuration {
-            StereoConfigurationForm::Undetermined => {
-                let (_, order) = sort_ligand_frame(&ligands);
-                reframe_stereo_bond_by_order(&molecule, id, &order)
-                    .expect("integrity established a valid kindless stereo-bond frame")
-            }
-            StereoConfigurationForm::Kinded(..) => {
-                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
-                    .expect("integrity established the kinded stereo-bond frame degree");
-                reframe_stereo_bond(&molecule, id, frame.permutations[0])
-            }
-        };
-    }
-
-    Ok(molecule)
-}
-
-fn canonicalize_complete_stereo_frames(
-    molecule: Molecule,
-) -> Result<(Vec<ConstraintBlockKey>, Molecule), Contradiction> {
-    let mut candidates = vec![molecule];
-    let stereo_atom_count = candidates[0].stereo_atoms().count();
-    for index in 0..stereo_atom_count {
-        let id = StereoAtomId(index as u32);
-        let mut next = Vec::new();
-        for molecule in candidates {
-            let stereo = molecule
-                .stereo_atoms()
-                .get(id)
-                .expect("dense stereo-atom id is in range");
-            let ligands = stereo.ligand_frame();
-            let configuration = stereo.attributes.configuration.clone();
-            let permutations = match configuration {
-                StereoConfigurationForm::Undetermined => {
-                    let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
-                }
-                StereoConfigurationForm::Kinded(..) => {
-                    canonical_kinded_stereo_frame(&ligands, &configuration)?
-                        .expect("integrity established the kinded stereo-atom frame degree")
-                        .permutations
-                }
-            };
-            next.extend(
-                permutations
-                    .into_iter()
-                    .map(|frame| reframe_stereo_atom(&molecule, id, frame)),
-            );
-        }
-        candidates = next;
-    }
-
-    let stereo_bond_count = candidates[0].stereo_bonds().count();
-    for index in 0..stereo_bond_count {
-        let id = StereoBondId(index as u32);
-        let mut next = Vec::new();
-        for molecule in candidates {
-            let stereo = molecule
-                .stereo_bonds()
-                .get(id)
-                .expect("dense stereo-bond id is in range");
-            let ligands = stereo.ligand_frame();
-            let configuration = stereo.attributes.configuration.clone();
-            let permutations = match configuration {
-                StereoConfigurationForm::Undetermined => {
-                    let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
-                }
-                StereoConfigurationForm::Kinded(..) => {
-                    canonical_kinded_stereo_frame(&ligands, &configuration)?
-                        .expect("integrity established the kinded stereo-bond frame degree")
-                        .permutations
-                }
-            };
-            next.extend(
-                permutations
-                    .into_iter()
-                    .map(|frame| reframe_stereo_bond(&molecule, id, frame)),
-            );
-        }
-        candidates = next;
-    }
-
-    candidates
-        .into_iter()
-        .map(|molecule| {
-            let molecule = normalize_molecule(molecule)?;
-            Ok((constraint_blocks(&molecule), molecule))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?
-        .into_iter()
-        .min_by(|lhs, rhs| lhs.0.cmp(&rhs.0))
-        .ok_or(Contradiction)
-}
-
-fn normalize_molecule(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
-    let mut atoms = molecule
-        .atoms()
-        .iter()
-        .map(|atom| atom.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_atoms(|_| atoms.next().expect("one normalized form per atom"));
-
-    let mut bonds = molecule
-        .bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_bonds(|_| bonds.next().expect("one normalized form per bond"));
-
-    let mut dative_bonds = molecule
-        .dative_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_dative_bonds(|_| {
-        dative_bonds
-            .next()
-            .expect("one normalized form per dative bond")
-    });
-
-    let mut aromatic_systems = molecule
-        .aromatic_systems()
-        .iter()
-        .map(|system| system.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_aromatic_systems(|_| {
-        aromatic_systems
-            .next()
-            .expect("one normalized form per aromatic system")
-    });
-
-    let mut multicenter_bonds = molecule
-        .multicenter_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_multicenter_bonds(|_| {
-        multicenter_bonds
-            .next()
-            .expect("one normalized form per multicenter bond")
-    });
-
-    let mut noncovalent_bonds = molecule
-        .noncovalent_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_noncovalent_bonds(|_| {
-        noncovalent_bonds
-            .next()
-            .expect("one normalized form per noncovalent bond")
-    });
-
-    let mut stereo_atoms = molecule
-        .stereo_atoms()
-        .iter()
-        .map(|stereo| stereo.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_stereo_atoms(|_| {
-        stereo_atoms
-            .next()
-            .expect("one normalized form per stereo atom")
-    });
-
-    let mut stereo_bonds = molecule
-        .stereo_bonds()
-        .iter()
-        .map(|stereo| stereo.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_stereo_bonds(|_| {
-        stereo_bonds
-            .next()
-            .expect("one normalized form per stereo bond")
-    });
-
-    let constraints = molecule.constraints().clone().normalize()?;
-    *molecule.constraints_mut() = constraints;
-    Ok(molecule)
-}
-
 fn normalize_entity_span<T: Normalize>(
     span: EntitySpan<T>,
 ) -> Result<EntitySpan<T>, Contradiction> {
@@ -4420,7 +4047,7 @@ fn canonicalize_topology_with_options(
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = normalize_molecule(molecule.remap(&correspondence))?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
@@ -4466,7 +4093,7 @@ fn canonicalize_constitution_with_options(
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = normalize_molecule(molecule.remap(&correspondence))?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
@@ -4524,8 +4151,7 @@ fn canonicalize_structure_with_options(
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = canonicalize_stereo_frames(molecule.remap(&correspondence))?;
-    let canonical = normalize_molecule(canonical)?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
@@ -4550,7 +4176,7 @@ fn canonicalize_full_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    let normalized = normalize_molecule(molecule.clone())?;
+    let normalized = molecule.clone().normalize()?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
@@ -4594,7 +4220,7 @@ fn canonical_key_by(
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     if level == DescriptionLevel::Full {
-        let normalized = normalize_molecule(molecule.clone())?;
+        let normalized = molecule.clone().normalize()?;
         return canonical_key_by_full(&normalized, context);
     }
     let incidence_level = match level {

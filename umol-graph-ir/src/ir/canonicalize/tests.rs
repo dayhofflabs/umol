@@ -16,14 +16,13 @@ use crate::ir::{
     AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
     AtomFieldChange, AtomForm, AtomId, BondFieldChange, BondForm, BondId, BooleanForm, Constraint,
     ConstraintDelta, Constraints, DativeBondFieldChange, DativeBondForm, DativeBondId, Entity,
-    FluxionalityForm, IncidenceLevel, LigandPermutation, LigandSymmetryForm,
-    MoleculeCorrespondence, MoleculeEntries, MulticenterBondFieldChange, MulticenterBondForm,
-    MulticenterBondId, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondId,
-    OrientedLigandPermutation, ReactionSpanEntries, StereoAtomConstraintForm,
-    StereoAtomFieldChange, StereoAtomForm, StereoAtomId, StereoBondConstraintForm,
-    StereoBondFieldChange, StereoBondForm, StereoBondId, StereoConfigurationForm, StereoCoset,
-    StereoKind, StereoLigand, StereoLigandPair, StereoTerm, Stereogenicity, StereogenicityForm,
-    Topicity, TopicityForm, TopicityRelationForm,
+    IncidenceLevel, LigandPermutation, LigandSymmetryForm, MoleculeCorrespondence, MoleculeEntries,
+    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondId, NoncovalentBondFieldChange,
+    NoncovalentBondForm, NoncovalentBondId, OrientedLigandPermutation, ReactionSpanEntries,
+    StereoAtomConstraintForm, StereoAtomFieldChange, StereoAtomForm, StereoAtomId,
+    StereoBondConstraintForm, StereoBondFieldChange, StereoBondForm, StereoBondId,
+    StereoConfigurationForm, StereoCoset, StereoKind, StereoLigand, StereoLigandPair,
+    Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
 fn node_branch_order(
@@ -183,51 +182,6 @@ fn structure_comparison_key(
     order: &[NodeId],
 ) -> Result<CanonicalComparisonKey, Contradiction> {
     Ok(structure_candidate(molecule, incidence_graph, order)?.key)
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct MinimumStereoFrames {
-    configuration: StereoConfigurationForm,
-    permutations: Vec<Permutation>,
-}
-
-fn minimum_kinded_stereo_frames(
-    configuration: &StereoConfigurationForm,
-    before: &[StereoLigand],
-    after: &[StereoLigand],
-) -> Result<Option<MinimumStereoFrames>, Contradiction> {
-    let Some(kind) = configuration.kind() else {
-        return Ok(None);
-    };
-    if before.len() != kind.degree() || after.len() != kind.degree() {
-        return Ok(None);
-    }
-
-    let mut minimum: Option<StereoConfigurationForm> = None;
-    let mut permutations = Vec::new();
-    for permutation in Permutation::between_all(before, after)
-        .into_iter()
-        .filter(|permutation| kind.class_key().space().reindex(0, *permutation).is_some())
-    {
-        let candidate = configuration
-            .apply(permutation)
-            .ok_or(Contradiction)?
-            .normalize()?;
-        match minimum.as_ref().map(|value| candidate.cmp(value)) {
-            None | Some(Ordering::Less) => {
-                minimum = Some(candidate);
-                permutations.clear();
-                permutations.push(permutation);
-            }
-            Some(Ordering::Equal) => permutations.push(permutation),
-            Some(Ordering::Greater) => {}
-        }
-    }
-
-    Ok(minimum.map(|configuration| MinimumStereoFrames {
-        configuration,
-        permutations,
-    }))
 }
 
 #[fixture]
@@ -1448,365 +1402,8 @@ fn test_reaction_span_canonicalize_contradiction(canonicalize_context: Canonical
 }
 
 #[rstest]
-#[case::tetrahedral(StereoKind::Tetrahedral)]
-#[case::axial(StereoKind::Axial)]
-#[case::square_planar(StereoKind::SquarePlanar)]
-#[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal)]
-#[case::octahedral(StereoKind::Octahedral)]
-fn test_reframe_stereo_atom(#[case] kind: StereoKind) {
-    let degree = kind.degree();
-    let swap = |first, second| {
-        let mut image = (0..degree).collect::<Vec<_>>();
-        image.swap(first, second);
-        Permutation::from_image(&image)
-    };
-    let (frame, next_frame, expected_permutation, expected_pair) = if kind == StereoKind::Axial {
-        (
-            Permutation::from_image(&[2, 3, 0, 1]),
-            Permutation::from_image(&[1, 0, 2, 3]),
-            LigandPermutation(swap(2, 3)),
-            StereoLigandPair::new(2usize.into(), 3usize.into()),
-        )
-    } else {
-        (
-            Permutation::from_image(&(1..degree).chain(iter::once(0)).collect::<Vec<_>>()),
-            swap(1, 2),
-            LigandPermutation(swap(0, degree - 1)),
-            StereoLigandPair::new(0usize.into(), (degree - 1).into()),
-        )
-    };
-    let source_permutation = LigandPermutation(swap(0, 1));
-    let source_pair = StereoLigandPair::new(0usize.into(), 1usize.into());
-    let source_constraints = vec![
-        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: source_permutation,
-                orientation: Orientation::Improper,
-            },
-            invariant: BooleanForm::Lit(true),
-        }),
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: source_permutation,
-            active: BooleanForm::Lit(true),
-        }),
-        StereoAtomConstraintForm::Topicity(TopicityForm {
-            pair: source_pair,
-            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
-        }),
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-    ];
-    let expected_constraints = vec![
-        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: expected_permutation,
-                orientation: Orientation::Improper,
-            },
-            invariant: BooleanForm::Lit(true),
-        }),
-        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: expected_permutation,
-            active: BooleanForm::Lit(true),
-        }),
-        StereoAtomConstraintForm::Topicity(TopicityForm {
-            pair: expected_pair,
-            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
-        }),
-        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-    ];
-    let global_constraints = |constraints: &[StereoAtomConstraintForm]| {
-        Constraints::from(Constraint::And(vec![
-            Constraint::Not(Box::new(Constraint::StereoAtom(
-                StereoAtomId(0),
-                kind,
-                constraints[0].clone(),
-            ))),
-            Constraint::Or(
-                constraints[1..]
-                    .iter()
-                    .cloned()
-                    .map(|constraint| Constraint::StereoAtom(StereoAtomId(0), kind, constraint))
-                    .collect(),
-            ),
-        ]))
-    };
-    let atoms = (0..=degree)
-        .map(|_| AtomForm::from_element(Element::C))
-        .collect::<Vec<_>>();
-    let ligands = (1..=degree)
-        .map(|atom| StereoLigand::new(AtomId(atom as u32), StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let source_form = StereoAtomForm {
-        configuration: StereoConfigurationForm::kinded(kind, StereoCoset::Lit(0)),
-        constraints: source_constraints.clone().into(),
-    };
-    let source = Molecule::from_entries(MoleculeEntries {
-        atoms: atoms.clone(),
-        bonds: (1..=degree)
-            .map(|atom| (AtomId(0), AtomId(atom as u32), BondForm::from_order(1)))
-            .collect(),
-        stereo_atoms: vec![(AtomId(0), ligands.clone(), source_form.clone())],
-        constraints: global_constraints(&source_constraints),
-        ..Default::default()
-    });
-    let expected = Molecule::from_entries(MoleculeEntries {
-        atoms,
-        bonds: (1..=degree)
-            .map(|atom| (AtomId(0), AtomId(atom as u32), BondForm::from_order(1)))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            frame.act(&ligands),
-            StereoAtomForm {
-                configuration: source_form
-                    .configuration
-                    .apply(frame)
-                    .expect("the permutation is a parent-group action of the form's kind"),
-                constraints: expected_constraints.clone().into(),
-            },
-        )],
-        constraints: global_constraints(&expected_constraints),
-        ..Default::default()
-    });
-
-    let reframed = reframe_stereo_atom(&source, StereoAtomId(0), frame);
-    assert_eq!(reframed, expected);
-    assert_eq!(
-        reframe_stereo_atom(&reframed, StereoAtomId(0), frame.inverse()),
-        source
-    );
-    assert_eq!(
-        reframe_stereo_atom(&reframed, StereoAtomId(0), next_frame),
-        reframe_stereo_atom(&source, StereoAtomId(0), frame.compose(next_frame))
-    );
-}
-
-#[rstest]
-fn test_reframe_stereo_bond() {
-    let degree = StereoKind::CisTrans.degree();
-    let swap = |first, second| {
-        let mut image = (0..degree).collect::<Vec<_>>();
-        image.swap(first, second);
-        Permutation::from_image(&image)
-    };
-    let frame = Permutation::from_image(&[2, 3, 0, 1]);
-    let next_frame = Permutation::from_image(&[1, 0, 2, 3]);
-    let source_permutation = LigandPermutation(swap(0, 1));
-    let expected_permutation = LigandPermutation(swap(2, 3));
-    let source_pair = StereoLigandPair::new(0usize.into(), 1usize.into());
-    let expected_pair = StereoLigandPair::new(2usize.into(), 3usize.into());
-    let source_constraints = vec![
-        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: source_permutation,
-                orientation: Orientation::Proper,
-            },
-            invariant: BooleanForm::Lit(true),
-        }),
-        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: source_permutation,
-            active: BooleanForm::Lit(true),
-        }),
-        StereoBondConstraintForm::Topicity(TopicityForm {
-            pair: source_pair,
-            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
-        }),
-        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-    ];
-    let expected_constraints = vec![
-        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
-            permutation: OrientedLigandPermutation {
-                permutation: expected_permutation,
-                orientation: Orientation::Proper,
-            },
-            invariant: BooleanForm::Lit(true),
-        }),
-        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
-            permutation: expected_permutation,
-            active: BooleanForm::Lit(true),
-        }),
-        StereoBondConstraintForm::Topicity(TopicityForm {
-            pair: expected_pair,
-            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
-        }),
-        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
-    ];
-    let global_constraints = |constraints: &[StereoBondConstraintForm]| {
-        Constraints::from(Constraint::And(vec![
-            Constraint::Not(Box::new(Constraint::StereoBond(
-                StereoBondId(0),
-                StereoKind::CisTrans,
-                constraints[0].clone(),
-            ))),
-            Constraint::Or(
-                constraints[1..]
-                    .iter()
-                    .cloned()
-                    .map(|constraint| {
-                        Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint)
-                    })
-                    .collect(),
-            ),
-        ]))
-    };
-    let atoms = (0..6)
-        .map(|_| AtomForm::from_element(Element::C))
-        .collect::<Vec<_>>();
-    let ligands = (2..6)
-        .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let source_form = StereoBondForm {
-        configuration: StereoConfigurationForm::kinded(StereoKind::CisTrans, StereoCoset::Lit(0)),
-        constraints: source_constraints.clone().into(),
-    };
-    let source = Molecule::from_entries(MoleculeEntries {
-        atoms: atoms.clone(),
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            (AtomId(1), AtomId(4), BondForm::from_order(1)),
-            (AtomId(1), AtomId(5), BondForm::from_order(1)),
-        ],
-        stereo_bonds: vec![(BondId(0), ligands.clone(), source_form.clone())],
-        constraints: global_constraints(&source_constraints),
-        ..Default::default()
-    });
-    let expected = Molecule::from_entries(MoleculeEntries {
-        atoms,
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            (AtomId(1), AtomId(4), BondForm::from_order(1)),
-            (AtomId(1), AtomId(5), BondForm::from_order(1)),
-        ],
-        stereo_bonds: vec![(
-            BondId(0),
-            frame.act(&ligands),
-            StereoBondForm {
-                configuration: source_form
-                    .configuration
-                    .apply(frame)
-                    .expect("the permutation is a parent-group action of the form's kind"),
-                constraints: expected_constraints.clone().into(),
-            },
-        )],
-        constraints: global_constraints(&expected_constraints),
-        ..Default::default()
-    });
-
-    let reframed = reframe_stereo_bond(&source, StereoBondId(0), frame);
-    assert_eq!(reframed, expected);
-    assert_eq!(
-        reframe_stereo_bond(&reframed, StereoBondId(0), frame.inverse()),
-        source
-    );
-    assert_eq!(
-        reframe_stereo_bond(&reframed, StereoBondId(0), next_frame),
-        reframe_stereo_bond(&source, StereoBondId(0), frame.compose(next_frame))
-    );
-}
-
-#[rstest]
-#[case::literal(
-        StereoCoset::Lit(0),
-        StereoCoset::Lit(0),
-        vec![Permutation::from_image(&[1, 2, 0, 3])]
-    )]
-#[case::undetermined(
-        StereoCoset::Undetermined,
-        StereoCoset::Undetermined,
-        vec![
-            Permutation::from_image(&[1, 2, 0, 3]),
-            Permutation::from_image(&[2, 1, 0, 3]),
-        ]
-    )]
-#[case::set_valued(
-        StereoCoset::lit_set([0, 1]),
-        StereoCoset::lit_set([0, 1]),
-        vec![
-            Permutation::from_image(&[1, 2, 0, 3]),
-            Permutation::from_image(&[2, 1, 0, 3]),
-        ]
-    )]
-#[case::symbolic(
-        StereoCoset::term(StereoTerm::var("x")),
-        StereoCoset::term(StereoTerm::var("x")),
-        vec![Permutation::from_image(&[1, 2, 0, 3])]
-    )]
-fn test_minimum_kinded_stereo_frames(
-    #[case] coset: StereoCoset,
-    #[case] expected_coset: StereoCoset,
-    #[case] expected_permutations: Vec<Permutation>,
-) {
-    let repeated = StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen);
-    let before = vec![
-        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-        repeated,
-        repeated,
-        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-    ];
-    let (after, _) = sort_ligand_frame(&before);
-    let result = minimum_kinded_stereo_frames(
-        &StereoConfigurationForm::kinded(StereoKind::Tetrahedral, coset),
-        &before,
-        &after,
-    )
-    .expect("fixed configurations normalize")
-    .expect("the frames contain the same ligand multiset");
-
-    assert_eq!(
-        result,
-        MinimumStereoFrames {
-            configuration: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, expected_coset,),
-            permutations: expected_permutations,
-        }
-    );
-}
-
-#[rstest]
-fn test_kindless_stereo_atom_frame_order() {
-    let ligands = (0..7)
-        .rev()
-        .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let (sorted, order) = sort_ligand_frame(&ligands);
-    let source = StereoAtomForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: StereoAtomConstraintForm::Topicity(TopicityForm {
-            pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
-            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
-        })
-        .into(),
-    };
-    let expected = StereoAtomForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: StereoAtomConstraintForm::Topicity(TopicityForm {
-            pair: StereoLigandPair::new(4usize.into(), 6usize.into()),
-            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
-        })
-        .into(),
-    };
-
-    assert_eq!(
-        sorted,
-        (0..7)
-            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(
-        reframe_stereo_atom_form_by_order(&source, &order),
-        Some(expected)
-    );
-}
-
-#[rstest]
-fn test_kindless_stereo_bond_frame_order() {
-    let ligands = (0..4)
-        .rev()
-        .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-        .collect::<Vec<_>>();
-    let (_, order) = sort_ligand_frame(&ligands);
+fn test_reframe_stereo_bond_form_by_order() {
+    let order = position_order_from_permutation(Permutation::from_image(&[3, 2, 1, 0]));
     let source = StereoBondForm {
         configuration: StereoConfigurationForm::Undetermined,
         constraints: vec![
@@ -1968,12 +1565,12 @@ fn test_canonicalize_structure_para_stereo(
 
 #[rstest]
 fn test_structure_comparison_key(stereo_atom_canonicalization_molecule: Molecule) {
-    let mut constrained_entries = molecule_entries(&stereo_atom_canonicalization_molecule);
-    constrained_entries.stereo_atoms[0].2.constraints = StereoAtomConstraintForm::Stereogenicity(
-        StereogenicityForm::Lit(Stereogenicity::Stereogenic),
-    )
-    .into();
-    let constrained = Molecule::from_entries(constrained_entries);
+    let mut constrained = stereo_atom_canonicalization_molecule.clone();
+    constrained.stereo_atom_mut(StereoAtomId(0)).constraints =
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ))
+        .into();
     let incidence_graph =
         stereo_atom_canonicalization_molecule.incidence_graph(IncidenceLevel::Full);
     let constrained_incidence_graph = constrained.incidence_graph(IncidenceLevel::Full);
@@ -2028,10 +1625,9 @@ fn test_canonicalize_structure_configuration(
     canonicalize_context: CanonicalizeContext,
     stereo_atom_canonicalization_molecule: Molecule,
 ) {
-    let mut opposite_entries = molecule_entries(&stereo_atom_canonicalization_molecule);
-    opposite_entries.stereo_atoms[0].2.configuration =
+    let mut opposite = stereo_atom_canonicalization_molecule.clone();
+    opposite.stereo_atom_mut(StereoAtomId(0)).configuration =
         StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1u32);
-    let opposite = Molecule::from_entries(opposite_entries);
 
     assert_ne!(
         canonicalize_structure(
@@ -2085,16 +1681,14 @@ fn test_canonicalize_structure_stereo_atom_constraints(
         pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
         relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
     });
-    let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
-    entries.stereo_atoms[0].2.constraints = constraint.clone().into();
-    entries.constraints =
+    let mut source = stereo_atom_canonicalization_molecule;
+    source.stereo_atom_mut(StereoAtomId(0)).constraints = constraint.clone().into();
+    *source.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
-    let source = Molecule::from_entries(entries);
-    let reframed = reframe_stereo_atom(
-        &source,
-        StereoAtomId(0),
-        Permutation::from_image(&[1, 0, 2, 3]),
-    );
+    let reframed = source
+        .clone()
+        .reframe()
+        .expect("integrity-valid molecule reframes");
 
     assert_eq!(
         canonicalize_structure(&reframed, &canonicalize_context),
@@ -2111,16 +1705,14 @@ fn test_canonicalize_structure_stereo_bond_constraints(
         pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
         relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
     });
-    let mut entries = molecule_entries(&stereo_bond_canonicalization_molecule);
-    entries.stereo_bonds[0].2.constraints = constraint.clone().into();
-    entries.constraints =
+    let mut source = stereo_bond_canonicalization_molecule;
+    source.stereo_bond_mut(StereoBondId(0)).constraints = constraint.clone().into();
+    *source.constraints_mut() =
         Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, constraint).into();
-    let source = Molecule::from_entries(entries);
-    let reframed = reframe_stereo_bond(
-        &source,
-        StereoBondId(0),
-        Permutation::from_image(&[2, 3, 0, 1]),
-    );
+    let reframed = source
+        .clone()
+        .reframe()
+        .expect("integrity-valid molecule reframes");
     let left = canonicalize_structure(&source, &canonicalize_context)
         .expect("fixed molecule canonicalizes");
     let right = canonicalize_structure(&reframed, &canonicalize_context)
@@ -2288,16 +1880,14 @@ fn test_molecule_canonicalize_stereo_frame(
         pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
         relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
     });
-    let mut entries = molecule_entries(&stereo_constraint_canonicalization_molecule);
-    entries.stereo_atoms[0].2.constraints = constraint.clone().into();
-    entries.constraints =
+    let mut source = stereo_constraint_canonicalization_molecule;
+    source.stereo_atom_mut(StereoAtomId(0)).constraints = constraint.clone().into();
+    *source.constraints_mut() =
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint).into();
-    let source = Molecule::from_entries(entries);
-    let reframed = reframe_stereo_atom(
-        &source,
-        StereoAtomId(0),
-        Permutation::from_image(&[0, 1, 3, 2]),
-    );
+    let reframed = source
+        .clone()
+        .reframe()
+        .expect("integrity-valid molecule reframes");
     let canonical = source
         .clone()
         .canonicalize(&canonicalize_context)
@@ -2470,9 +2060,19 @@ fn test_molecule_canonical_eq_by_constitution(
     stereo_atom_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
-    let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
-    entries.stereo_atoms.clear();
-    let constitution = Molecule::from_entries(entries);
+    let constitution = Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .into_iter()
+            .map(AtomForm::from_element)
+            .collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    });
 
     assert!(constitution.canonical_eq_by(
         &stereo_atom_canonicalization_molecule,
@@ -2491,9 +2091,19 @@ fn test_molecule_canonical_hash_by_constitution(
     stereo_atom_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
-    let mut entries = molecule_entries(&stereo_atom_canonicalization_molecule);
-    entries.stereo_atoms.clear();
-    let constitution = Molecule::from_entries(entries);
+    let constitution = Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .into_iter()
+            .map(AtomForm::from_element)
+            .collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+        ],
+        ..Default::default()
+    });
 
     assert_eq!(
         constitution.canonical_hash_by(DescriptionLevel::Constitution, &canonicalize_context),
@@ -2918,14 +2528,12 @@ fn test_canonicalize_structure_stereo_frame(
     canonicalize_context: CanonicalizeContext,
     #[case] configuration: StereoConfigurationForm,
 ) {
-    let mut entries = molecule_entries(&stereo_constraint_canonicalization_molecule);
-    entries.stereo_atoms[0].2.configuration = configuration;
-    let source = Molecule::from_entries(entries);
-    let reframed = reframe_stereo_atom(
-        &source,
-        StereoAtomId(0),
-        Permutation::from_image(&[0, 1, 3, 2]),
-    );
+    let mut source = stereo_constraint_canonicalization_molecule;
+    source.stereo_atom_mut(StereoAtomId(0)).configuration = configuration;
+    let reframed = source
+        .clone()
+        .reframe()
+        .expect("integrity-valid molecule reframes");
 
     assert_eq!(
         canonicalize_structure(&reframed, &canonicalize_context),
@@ -4542,7 +4150,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
         vec![0, 1],
         vec![0, 1],
     ]);
-    let expected = normalize_molecule(molecule.remap(&expected_correspondence)).unwrap();
+    let expected = molecule.remap(&expected_correspondence).reframe().unwrap();
 
     assert_eq!(
         canonicalize_constitution_with_options(
@@ -4640,7 +4248,7 @@ fn test_canonicalize_constitution_properties(
     initial_class_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
-    let normalized_source = normalize_molecule(initial_class_molecule.clone()).unwrap();
+    let normalized_source = initial_class_molecule.clone().normalize().unwrap();
     let (canonical, correspondence) = canonicalize_constitution_with_options(
         &initial_class_molecule,
         &canonicalize_context,
@@ -4651,7 +4259,10 @@ fn test_canonicalize_constitution_properties(
         },
     )
     .unwrap();
-    let acted = normalize_molecule(initial_class_molecule.remap(&correspondence)).unwrap();
+    let acted = initial_class_molecule
+        .remap(&correspondence)
+        .reframe()
+        .unwrap();
     let inverse = correspondence.reverse();
 
     assert_eq!(acted, canonical);
@@ -4700,7 +4311,7 @@ fn test_canonicalize_constitution_properties(
     )
     .unwrap();
     let composed = renumbering.compose(&renumbered_correspondence);
-    let composed_action = normalize_molecule(initial_class_molecule.remap(&composed)).unwrap();
+    let composed_action = initial_class_molecule.remap(&composed).reframe().unwrap();
     let canonical_renumbered_incidence =
         canonical_renumbered.incidence_graph(IncidenceLevel::Constitution);
 

@@ -11,7 +11,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, DescriptionLevel};
+use umol_graph_ir::ir::{Canonicalize, CanonicalizeContext, DescriptionLevel, Reframe};
 
 use crate::strategies::*;
 
@@ -57,8 +57,13 @@ proptest! {
                 .clone()
                 .canonicalize_with_correspondence(&context)
                 .expect("successful canonicalization returns its correspondence");
+            let reframed = molecule
+                .remap(&correspondence)
+                .reframe()
+                .expect("a canonical correspondence preserves molecule integrity");
 
             prop_assert_eq!(&with_correspondence, &canonical);
+            prop_assert_eq!(&reframed, &canonical);
             prop_assert!(molecule.framed_eq_under(&canonical, &correspondence));
             prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
         }

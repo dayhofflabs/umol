@@ -1285,8 +1285,7 @@ entities. It produces a policy-free derivation.
 
 A **permutation** is a bijective action on the integer positions of one frame. Both carriers use a
 one-line image with the direction `new[i] = old[action[i]]`; `between(from, to)` derives the unique
-action carrying `from` to `to`, while `between_all(from, to)` returns every such action when equal
-values make the occurrence alignment non-unique.
+action carrying `from` to `to` and returns `None` when no unique action exists.
 
 `Permutation` stores up to `MAX_DEGREE` positions in a fixed array and is `Copy`. It supports the
 bounded permutation-group, coset, and stereo algebra. `DynPermutation` owns a `Vec<usize>`, has no
