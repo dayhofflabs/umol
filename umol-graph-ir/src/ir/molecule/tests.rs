@@ -3875,6 +3875,88 @@ fn test_molecule_modify_aromatic_systems(#[from(rich_molecule)] mut molecule: Mo
 }
 
 #[rstest]
+fn test_molecule_try_modify_aromatic_system(#[from(rich_molecule)] mut molecule: Molecule) {
+    assert_eq!(
+        molecule.try_modify_aromatic_system(AromaticSystemId(0), |form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 1, 0]);
+        }),
+        Ok(()),
+    );
+    assert_eq!(
+        molecule
+            .aromatic_system(AromaticSystemId(0))
+            .attributes
+            .electrons,
+        ElectronCountsForm::Lit(vec![2, 1, 0]),
+    );
+}
+
+#[rstest]
+#[case::invalid_reference(
+    AromaticSystemId(1),
+    ElectronCountsForm::Lit(vec![2, 1, 0]),
+    MoleculeIntegrityError::InvalidReference {
+        entity: Entity::AromaticSystem(AromaticSystemId(1)),
+    },
+)]
+#[case::electron_count_length(
+    AromaticSystemId(0),
+    ElectronCountsForm::Lit(vec![2, 1]),
+    MoleculeIntegrityError::ElectronCountLengthMismatch {
+        entity: Entity::AromaticSystem(AromaticSystemId(0)),
+        participants: 3,
+        electron_counts: 2,
+    },
+)]
+fn test_molecule_try_modify_aromatic_system_error(
+    #[from(rich_molecule)] mut molecule: Molecule,
+    #[case] id: AromaticSystemId,
+    #[case] electrons: ElectronCountsForm,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_aromatic_system(id, |form| form.electrons = electrons),
+        Err(expected),
+    );
+    assert_eq!(molecule, before);
+}
+
+#[rstest]
+fn test_molecule_try_modify_aromatic_systems(#[from(rich_molecule)] mut molecule: Molecule) {
+    assert_eq!(
+        molecule.try_modify_aromatic_systems(|form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 1, 0]);
+        }),
+        Ok(()),
+    );
+    assert_eq!(
+        molecule
+            .aromatic_systems()
+            .iter()
+            .map(|view| view.attributes.electrons.clone())
+            .collect::<Vec<_>>(),
+        vec![ElectronCountsForm::Lit(vec![2, 1, 0])],
+    );
+}
+
+#[rstest]
+fn test_molecule_try_modify_aromatic_systems_error(#[from(rich_molecule)] mut molecule: Molecule) {
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_aromatic_systems(|form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 1]);
+        }),
+        Err(MoleculeIntegrityError::ElectronCountLengthMismatch {
+            entity: Entity::AromaticSystem(AromaticSystemId(0)),
+            participants: 3,
+            electron_counts: 2,
+        }),
+    );
+    assert_eq!(molecule, before);
+}
+
+#[rstest]
 fn test_molecule_multicenter_bond_mut(#[from(rich_molecule)] mut molecule: Molecule) {
     molecule
         .multicenter_bond_mut(MulticenterBondId(0))
@@ -3901,6 +3983,88 @@ fn test_molecule_modify_multicenter_bonds(#[from(rich_molecule)] mut molecule: M
         .map(|v| v.attributes.electrons.clone())
         .collect();
     assert_eq!(electrons, vec![ElectronCountsForm::Lit(vec![1, 1, 0])],);
+}
+
+#[rstest]
+fn test_molecule_try_modify_multicenter_bond(#[from(rich_molecule)] mut molecule: Molecule) {
+    assert_eq!(
+        molecule.try_modify_multicenter_bond(MulticenterBondId(0), |form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 0, 0]);
+        }),
+        Ok(()),
+    );
+    assert_eq!(
+        molecule
+            .multicenter_bond(MulticenterBondId(0))
+            .attributes
+            .electrons,
+        ElectronCountsForm::Lit(vec![2, 0, 0]),
+    );
+}
+
+#[rstest]
+#[case::invalid_reference(
+    MulticenterBondId(1),
+    ElectronCountsForm::Lit(vec![2, 0, 0]),
+    MoleculeIntegrityError::InvalidReference {
+        entity: Entity::MulticenterBond(MulticenterBondId(1)),
+    },
+)]
+#[case::electron_count_length(
+    MulticenterBondId(0),
+    ElectronCountsForm::Lit(vec![2, 0]),
+    MoleculeIntegrityError::ElectronCountLengthMismatch {
+        entity: Entity::MulticenterBond(MulticenterBondId(0)),
+        participants: 3,
+        electron_counts: 2,
+    },
+)]
+fn test_molecule_try_modify_multicenter_bond_error(
+    #[from(rich_molecule)] mut molecule: Molecule,
+    #[case] id: MulticenterBondId,
+    #[case] electrons: ElectronCountsForm,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_multicenter_bond(id, |form| form.electrons = electrons),
+        Err(expected),
+    );
+    assert_eq!(molecule, before);
+}
+
+#[rstest]
+fn test_molecule_try_modify_multicenter_bonds(#[from(rich_molecule)] mut molecule: Molecule) {
+    assert_eq!(
+        molecule.try_modify_multicenter_bonds(|form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 0, 0]);
+        }),
+        Ok(()),
+    );
+    assert_eq!(
+        molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|view| view.attributes.electrons.clone())
+            .collect::<Vec<_>>(),
+        vec![ElectronCountsForm::Lit(vec![2, 0, 0])],
+    );
+}
+
+#[rstest]
+fn test_molecule_try_modify_multicenter_bonds_error(#[from(rich_molecule)] mut molecule: Molecule) {
+    let before = molecule.clone();
+    assert_eq!(
+        molecule.try_modify_multicenter_bonds(|form| {
+            form.electrons = ElectronCountsForm::Lit(vec![2, 0]);
+        }),
+        Err(MoleculeIntegrityError::ElectronCountLengthMismatch {
+            entity: Entity::MulticenterBond(MulticenterBondId(0)),
+            participants: 3,
+            electron_counts: 2,
+        }),
+    );
+    assert_eq!(molecule, before);
 }
 
 #[rstest]

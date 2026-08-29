@@ -1,6 +1,6 @@
 # 215 — Integrity closure and minimization
 
-Status: Proposed
+Status: In Progress
 Date: 2026-08-28
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
@@ -361,11 +361,18 @@ in the same subitem.
   tests): add `try_modify_aromatic_system` and `try_modify_aromatic_systems` on the existing private
   candidate-and-commit kernel without changing the current raw mutation surface yet. Give each new
   method its own success, exact invalid-reference or electron-count-length failure, and rollback
-  cases. **Additive (green).** [dep: none]
+  cases. **Additive (green).** [dep: none] **Done.**
 - **S0b — multicenter-bond transactional mutation** (`umol-graph-ir/src/ir/molecule.rs`, molecule
   tests): add `try_modify_multicenter_bond` and `try_modify_multicenter_bonds` with the same candidate,
   exact-error, and rollback contract. Give each new method its own focused cases rather than sharing
-  the aromatic tests as indirect evidence. **Additive (green).** [dep: none]
+  the aromatic tests as indirect evidence. **Additive (green).** [dep: none] **Done.**
+
+  `Molecule` now exposes the four checked operations over the existing private candidate-and-commit
+  kernel. Each singular operation reports an exact unavailable-id or electron-count-length error;
+  each family-wide operation reports the exact length error; every failure leaves the original
+  molecule structurally unchanged. The focused checked-mutation run passed all ten new cases and
+  the five existing stereo/constraint cases. Graph-IR doctests and strict graph-IR library clippy
+  passed, and formatting is clean. The slow integration and property checkpoints were not run.
 
 S0 ends with the replacement Rust vocabulary available while every existing caller still compiles.
 

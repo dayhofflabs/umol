@@ -1138,6 +1138,48 @@ impl Molecule {
         }
     }
 
+    /// Transactionally modify one aromatic-system form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_aromatic_system(
+        &mut self,
+        id: AromaticSystemId,
+        f: impl FnOnce(&mut AromaticSystemForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.aromatic_systems.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::AromaticSystem(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.aromatic_systems.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every aromatic-system form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_aromatic_systems(
+        &mut self,
+        mut f: impl FnMut(&mut AromaticSystemForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for aromatic_system in candidate.aromatic_systems.attributes_iter_mut() {
+                f(aromatic_system);
+            }
+        })
+    }
+
     pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
         let atoms = self.multicenter_bonds.atoms(id).collect();
         let attributes = self.multicenter_bonds.attributes_mut(id);
@@ -1156,6 +1198,48 @@ impl Molecule {
         for multicenter_bond in self.multicenter_bonds.attributes_iter_mut() {
             *multicenter_bond = f(mem::take(multicenter_bond));
         }
+    }
+
+    /// Transactionally modify one multicenter-bond form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_multicenter_bond(
+        &mut self,
+        id: MulticenterBondId,
+        f: impl FnOnce(&mut MulticenterBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.multicenter_bonds.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::MulticenterBond(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.multicenter_bonds.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every multicenter-bond form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_multicenter_bonds(
+        &mut self,
+        mut f: impl FnMut(&mut MulticenterBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for multicenter_bond in candidate.multicenter_bonds.attributes_iter_mut() {
+                f(multicenter_bond);
+            }
+        })
     }
 
     pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
