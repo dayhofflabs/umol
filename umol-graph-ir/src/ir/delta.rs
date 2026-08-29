@@ -11,7 +11,6 @@ use std::mem::{discriminant, Discriminant};
 use std::slice::{Iter, IterMut};
 use std::vec::IntoIter;
 
-use umol_graph_core::ParticipantPosition;
 use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
@@ -1255,19 +1254,6 @@ pub enum Delta {
     StereoAtom(StereoAtomDelta),
     StereoBond(StereoBondDelta),
     Constraint(ConstraintDelta),
-}
-
-/// Sort `atoms` and return the position order carrying the original frame into the sorted one.
-/// Equal values keep their input order.
-fn sort_atoms(atoms: &mut [AtomId]) -> Vec<ParticipantPosition> {
-    let mut order: Vec<usize> = (0..atoms.len()).collect();
-    order.sort_by_key(|&index| atoms[index]);
-    let sorted: Vec<AtomId> = order.iter().map(|&index| atoms[index]).collect();
-    atoms.copy_from_slice(&sorted);
-    order
-        .into_iter()
-        .map(|index| ParticipantPosition(index as u32))
-        .collect()
 }
 
 impl Delta {
@@ -2980,8 +2966,8 @@ fn fold_stereo_bond_group(
 
 /// Re-anchor a delta's ids and participant atoms through a total id relabeling. Used to move
 /// deltas between id spaces (reverse re-anchoring, composition). The relabeling must cover every id
-/// the delta references. Overlay participants on `Unordered` factors are re-sorted to canonical
-/// order; aromatic/multicenter electrons are permuted to stay aligned with their atoms.
+/// the delta references. Participant sequences and frame-relative payloads retain their supplied
+/// frame; selecting another frame is a separate [`FrameTransport`] operation.
 pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
     match delta {
         Delta::Atom(a) => Delta::Atom(match a {
@@ -3033,38 +3019,28 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             },
         }),
         Delta::DativeBond(d) => Delta::DativeBond(match d {
-            // Donors are the unordered factor with no per-participant attributes data, so normalize the
-            // order after remap (acceptor is the single ordered factor). No permutation to track.
             DativeBondDelta::Add {
                 id,
                 donors,
                 acceptor,
                 attributes,
-            } => {
-                let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
-                donors.sort_unstable();
-                DativeBondDelta::Add {
-                    id: map.map_dative(id),
-                    donors,
-                    acceptor: map.map_atom(acceptor),
-                    attributes,
-                }
-            }
+            } => DativeBondDelta::Add {
+                id: map.map_dative(id),
+                donors: donors.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                acceptor: map.map_atom(acceptor),
+                attributes,
+            },
             DativeBondDelta::Remove {
                 id,
                 donors,
                 acceptor,
                 attributes,
-            } => {
-                let mut donors: Vec<AtomId> = donors.iter().map(|a| map.map_atom(*a)).collect();
-                donors.sort_unstable();
-                DativeBondDelta::Remove {
-                    id: map.map_dative(id),
-                    donors,
-                    acceptor: map.map_atom(acceptor),
-                    attributes,
-                }
-            }
+            } => DativeBondDelta::Remove {
+                id: map.map_dative(id),
+                donors: donors.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                acceptor: map.map_atom(acceptor),
+                attributes,
+            },
             DativeBondDelta::ModifyField { id, change } => DativeBondDelta::ModifyField {
                 id: map.map_dative(id),
                 change,
@@ -3081,31 +3057,21 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             AromaticSystemDelta::Add {
                 id,
                 atoms,
-                mut attributes,
-            } => {
-                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = sort_atoms(&mut atoms);
-                attributes.permute(&order);
-                AromaticSystemDelta::Add {
-                    id: map.map_aromatic(id),
-                    atoms,
-                    attributes,
-                }
-            }
+                attributes,
+            } => AromaticSystemDelta::Add {
+                id: map.map_aromatic(id),
+                atoms: atoms.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                attributes,
+            },
             AromaticSystemDelta::Remove {
                 id,
                 atoms,
-                mut attributes,
-            } => {
-                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = sort_atoms(&mut atoms);
-                attributes.permute(&order);
-                AromaticSystemDelta::Remove {
-                    id: map.map_aromatic(id),
-                    atoms,
-                    attributes,
-                }
-            }
+                attributes,
+            } => AromaticSystemDelta::Remove {
+                id: map.map_aromatic(id),
+                atoms: atoms.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                attributes,
+            },
             AromaticSystemDelta::ModifyField { id, change } => AromaticSystemDelta::ModifyField {
                 id: map.map_aromatic(id),
                 change,
@@ -3122,31 +3088,21 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             MulticenterBondDelta::Add {
                 id,
                 atoms,
-                mut attributes,
-            } => {
-                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = sort_atoms(&mut atoms);
-                attributes.permute(&order);
-                MulticenterBondDelta::Add {
-                    id: map.map_multicenter(id),
-                    atoms,
-                    attributes,
-                }
-            }
+                attributes,
+            } => MulticenterBondDelta::Add {
+                id: map.map_multicenter(id),
+                atoms: atoms.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                attributes,
+            },
             MulticenterBondDelta::Remove {
                 id,
                 atoms,
-                mut attributes,
-            } => {
-                let mut atoms: Vec<AtomId> = atoms.iter().map(|a| map.map_atom(*a)).collect();
-                let order = sort_atoms(&mut atoms);
-                attributes.permute(&order);
-                MulticenterBondDelta::Remove {
-                    id: map.map_multicenter(id),
-                    atoms,
-                    attributes,
-                }
-            }
+                attributes,
+            } => MulticenterBondDelta::Remove {
+                id: map.map_multicenter(id),
+                atoms: atoms.into_iter().map(|atom| map.map_atom(atom)).collect(),
+                attributes,
+            },
             MulticenterBondDelta::ModifyField { id, change } => MulticenterBondDelta::ModifyField {
                 id: map.map_multicenter(id),
                 change,
@@ -3160,34 +3116,24 @@ pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
             }
         }),
         Delta::NoncovalentBond(n) => Delta::NoncovalentBond(match n {
-            // Both participants are the unordered factor with no per-participant attributes data, so
-            // normalize the order after remap. No permutation to track.
             NoncovalentBondDelta::Add {
                 id,
                 atoms,
                 attributes,
-            } => {
-                let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
-                atoms.sort_unstable();
-                NoncovalentBondDelta::Add {
-                    id: map.map_noncovalent(id),
-                    atoms,
-                    attributes,
-                }
-            }
+            } => NoncovalentBondDelta::Add {
+                id: map.map_noncovalent(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
+                attributes,
+            },
             NoncovalentBondDelta::Remove {
                 id,
                 atoms,
                 attributes,
-            } => {
-                let mut atoms = [map.map_atom(atoms[0]), map.map_atom(atoms[1])];
-                atoms.sort_unstable();
-                NoncovalentBondDelta::Remove {
-                    id: map.map_noncovalent(id),
-                    atoms,
-                    attributes,
-                }
-            }
+            } => NoncovalentBondDelta::Remove {
+                id: map.map_noncovalent(id),
+                atoms: [map.map_atom(atoms[0]), map.map_atom(atoms[1])],
+                attributes,
+            },
             NoncovalentBondDelta::ModifyField { id, change } => NoncovalentBondDelta::ModifyField {
                 id: map.map_noncovalent(id),
                 change,
@@ -4672,14 +4618,98 @@ mod tests {
                 (AtomId(0), AtomId(2)),
                 (AtomId(1), AtomId(0)),
                 (AtomId(2), AtomId(1)),
+                (AtomId(3), AtomId(4)),
+                (AtomId(4), AtomId(3)),
             ]),
             HashMap::from([(BondId(0), BondId(1)), (BondId(1), BondId(0))]),
             HashMap::from([(DativeBondId(0), DativeBondId(1))]),
             HashMap::from([(AromaticSystemId(0), AromaticSystemId(1))]),
             HashMap::from([(MulticenterBondId(0), MulticenterBondId(1))]),
             HashMap::from([(NoncovalentBondId(0), NoncovalentBondId(1))]),
-            HashMap::new(),
-            HashMap::new(),
+            HashMap::from([(StereoAtomId(0), StereoAtomId(1))]),
+            HashMap::from([(StereoBondId(0), StereoBondId(1))]),
+        )
+    }
+
+    #[fixture]
+    fn inverse_remapping() -> IdRemapping {
+        IdRemapping::new(
+            HashMap::from([
+                (AtomId(0), AtomId(1)),
+                (AtomId(1), AtomId(2)),
+                (AtomId(2), AtomId(0)),
+                (AtomId(3), AtomId(4)),
+                (AtomId(4), AtomId(3)),
+            ]),
+            HashMap::from([(BondId(0), BondId(1)), (BondId(1), BondId(0))]),
+            HashMap::from([(DativeBondId(1), DativeBondId(0))]),
+            HashMap::from([(AromaticSystemId(1), AromaticSystemId(0))]),
+            HashMap::from([(MulticenterBondId(1), MulticenterBondId(0))]),
+            HashMap::from([(NoncovalentBondId(1), NoncovalentBondId(0))]),
+            HashMap::from([(StereoAtomId(1), StereoAtomId(0))]),
+            HashMap::from([(StereoBondId(1), StereoBondId(0))]),
+        )
+    }
+
+    #[fixture]
+    fn source_frame_action() -> OverlaysFrameAction {
+        OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            StereoAtomsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+            StereoBondsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+        )
+    }
+
+    #[fixture]
+    fn target_frame_action() -> OverlaysFrameAction {
+        OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![
+                DynPermutation::identity(3),
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation"),
+            ])
+            .expect("actions are admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![
+                DynPermutation::identity(3),
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation"),
+            ])
+            .expect("actions are admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![
+                DynPermutation::identity(3),
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation"),
+            ])
+            .expect("actions are admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![
+                DynPermutation::identity(2),
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation"),
+            ])
+            .expect("actions are admissible"),
+            StereoAtomsFrameAction::from_vec(vec![
+                Permutation::identity(4),
+                Permutation::from_image(&[1, 0, 2, 3]),
+            ])
+            .expect("actions are admissible"),
+            StereoBondsFrameAction::from_vec(vec![
+                Permutation::identity(4),
+                Permutation::from_image(&[1, 0, 2, 3]),
+            ])
+            .expect("actions are admissible"),
         )
     }
 
@@ -4700,7 +4730,7 @@ mod tests {
             attributes: BondForm::default(),
         })
     )]
-    #[case::dative_resort(
+    #[case::dative_bond(
         Delta::DativeBond(DativeBondDelta::Add {
             id: DativeBondId(0),
             donors: vec![AtomId(0), AtomId(2)],
@@ -4709,12 +4739,12 @@ mod tests {
         }),
         Delta::DativeBond(DativeBondDelta::Add {
             id: DativeBondId(1),
-            donors: vec![AtomId(1), AtomId(2)],
+            donors: vec![AtomId(2), AtomId(1)],
             acceptor: AtomId(0),
             attributes: DativeBondForm::from_order(1),
         })
     )]
-    #[case::aromatic_resort_permute(
+    #[case::aromatic_system_add(
         Delta::AromaticSystem(AromaticSystemDelta::Add {
             id: AromaticSystemId(0),
             atoms: vec![AtomId(0), AtomId(1)],
@@ -4722,8 +4752,8 @@ mod tests {
         }),
         Delta::AromaticSystem(AromaticSystemDelta::Add {
             id: AromaticSystemId(1),
-            atoms: vec![AtomId(0), AtomId(2)],
-            attributes: AromaticSystemForm::from_electrons(vec![2, 1]),
+            atoms: vec![AtomId(2), AtomId(0)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
         })
     )]
     #[case::aromatic_remove(
@@ -4734,11 +4764,11 @@ mod tests {
         }),
         Delta::AromaticSystem(AromaticSystemDelta::Remove {
             id: AromaticSystemId(1),
-            atoms: vec![AtomId(0), AtomId(2)],
-            attributes: AromaticSystemForm::from_electrons(vec![2, 1]),
+            atoms: vec![AtomId(2), AtomId(0)],
+            attributes: AromaticSystemForm::from_electrons(vec![1, 2]),
         })
     )]
-    #[case::multicenter_resort_permute(
+    #[case::multicenter_bond(
         Delta::MulticenterBond(MulticenterBondDelta::Add {
             id: MulticenterBondId(0),
             atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
@@ -4746,11 +4776,11 @@ mod tests {
         }),
         Delta::MulticenterBond(MulticenterBondDelta::Add {
             id: MulticenterBondId(1),
-            atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
-            attributes: MulticenterBondForm::from_electrons(vec![5, 7, 3]),
+            atoms: vec![AtomId(2), AtomId(0), AtomId(1)],
+            attributes: MulticenterBondForm::from_electrons(vec![3, 5, 7]),
         })
     )]
-    #[case::noncovalent_resort(
+    #[case::noncovalent_bond(
         Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(0),
             atoms: [AtomId(2), AtomId(1)],
@@ -4758,7 +4788,7 @@ mod tests {
         }),
         Delta::NoncovalentBond(NoncovalentBondDelta::Add {
             id: NoncovalentBondId(1),
-            atoms: [AtomId(0), AtomId(1)],
+            atoms: [AtomId(1), AtomId(0)],
             attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         })
     )]
@@ -4804,6 +4834,124 @@ mod tests {
     )]
     fn test_remap_delta(remapping: IdRemapping, #[case] input: Delta, #[case] expected: Delta) {
         assert_eq!(remap_delta(input, &remapping), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::dative_bond(Delta::DativeBond(DativeBondDelta::Add {
+        id: DativeBondId(0),
+        donors: vec![AtomId(0), AtomId(1), AtomId(2)],
+        acceptor: AtomId(3),
+        attributes: DativeBondForm::from_order(2),
+    }))]
+    #[case::aromatic_system(Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+        attributes: AromaticSystemForm::from_electrons(vec![2, 4, 6]),
+    }))]
+    #[case::multicenter_bond(Delta::MulticenterBond(MulticenterBondDelta::Remove {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 3, 5]),
+    }))]
+    #[case::noncovalent_bond(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+    }))]
+    #[case::stereo_atom(Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: [1, 2, 3, 4].into_iter().map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    }))]
+    #[case::stereo_bond(Delta::StereoBond(StereoBondDelta::Add {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: [0, 1, 2, 3].into_iter().map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+        attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    }))]
+    #[case::constraint(Delta::Constraint(ConstraintDelta::Add(Constraint::Relational(
+        RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+            ],
+        },
+    ))))]
+    fn test_remap_delta_roundtrip(
+        remapping: IdRemapping,
+        inverse_remapping: IdRemapping,
+        #[case] input: Delta,
+    ) {
+        let remapped = remap_delta(input.clone(), &remapping);
+
+        assert_eq!(remap_delta(remapped, &inverse_remapping), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::dative_bond(Delta::DativeBond(DativeBondDelta::Add {
+        id: DativeBondId(0),
+        donors: vec![AtomId(0), AtomId(1), AtomId(2)],
+        acceptor: AtomId(3),
+        attributes: DativeBondForm::from_order(2),
+    }))]
+    #[case::aromatic_system(Delta::AromaticSystem(AromaticSystemDelta::Add {
+        id: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+        attributes: AromaticSystemForm::from_electrons(vec![2, 4, 6]),
+    }))]
+    #[case::multicenter_bond(Delta::MulticenterBond(MulticenterBondDelta::Remove {
+        id: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1), AtomId(2)],
+        attributes: MulticenterBondForm::from_electrons(vec![1, 3, 5]),
+    }))]
+    #[case::noncovalent_bond(Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+        id: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)],
+        attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+    }))]
+    #[case::stereo_atom(Delta::StereoAtom(StereoAtomDelta::Add {
+        id: StereoAtomId(0),
+        site: AtomId(0),
+        ligands: [1, 2, 3, 4].into_iter().map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+        attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+    }))]
+    #[case::stereo_bond(Delta::StereoBond(StereoBondDelta::Add {
+        id: StereoBondId(0),
+        site: BondId(0),
+        ligands: [0, 1, 2, 3].into_iter().map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom)).collect(),
+        attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
+    }))]
+    #[case::constraint(Delta::Constraint(ConstraintDelta::Add(Constraint::Relational(
+        RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+            ],
+        },
+    ))))]
+    fn test_remap_delta_frame_transport(
+        remapping: IdRemapping,
+        source_frame_action: OverlaysFrameAction,
+        target_frame_action: OverlaysFrameAction,
+        #[case] input: Delta,
+    ) {
+        let reframed = input
+            .clone()
+            .reframe_by(&source_frame_action)
+            .expect("source action covers the delta");
+        let remapped = remap_delta(input, &remapping);
+
+        assert_eq!(
+            remap_delta(reframed, &remapping),
+            remapped
+                .reframe_by(&target_frame_action)
+                .expect("target action covers the remapped delta"),
+        );
     }
 
     fn charge_set(id: u32, old: i64, new: i64) -> Delta {

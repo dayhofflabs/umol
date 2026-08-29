@@ -1089,6 +1089,14 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   doc 212): make `Delta::remap` relabel entity and participant ids without sorting the participant
   frame or changing frame-relative payloads. Assert remap/inverse-remap and remap-then-reframe laws.
   **Additive; inherited red ledger unchanged.** [dep: S0l]
+  **Done.** `delta::remap_delta` now performs only typed id substitution: dative donors, aromatic
+  and multicenter atoms and electron counts, and noncovalent endpoints retain their supplied
+  participant frame. The obsolete sorting helper and all four remap-time sorting paths are gone.
+  Exact cases cover the former sorting paths, while separate roundtrip and frame-transport tables
+  cover all six overlay kinds plus a frame-relative molecule constraint. Graph-IR's 6,519 unit
+  cases, the focused reaction-reversal property, and strict all-target Clippy with the property
+  feature pass. No inherited failure is assigned to S0q; the S0p ten-failure checkpoint remains the
+  ledger baseline.
 - **S0r — reaction reduction and reframing** (`ir/reaction.rs`): implement reduction-only
   `Normalize for Reaction` over the lhs and deltas in their stored frames, then `FrameTransport` and
   consuming `Reframe for Reaction`. Before normalization, derive one input-domain
