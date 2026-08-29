@@ -1,6 +1,6 @@
 # 215 — Integrity closure and minimization
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-28
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
@@ -491,7 +491,7 @@ or unreachable public diagnostic.
   justifications, dative identity and factor rules, checked mutation names and rollback behavior,
   compatible removal-local frames, crate-private integrity gates, closed-source remapping and
   canonicalization contracts, and raw-versus-normal reaction-span construction. Remove every stale
-  public error, panic, and defensive-validation claim. **Additive (green).** [dep: S2d]
+  public error, panic, and defensive-validation claim. **Additive (green).** [dep: S2d] **Done.**
 - **S3b — checkpoint verification and lifecycle closeout** (workspace, doc 215, status index): run
   formatting, graph-IR unit and doctests, the affected property modules, strict relevant clippy,
   workspace all-target compilation, and the Python extension and Python tests under the repository
@@ -499,7 +499,26 @@ or unreachable public diagnostic.
   property target, and workspace test gate once here; require exact agreement with doc 214's
   inherited ledger and no new failure. Record the evidence, mark every subitem **Done**, then change
   doc 215 and its status row to `Completed` only when the full scope is implemented. **Additive
-  (green).** [dep: S3a]
+  (green).** [dep: S3a] **Done.**
+
+  S3a brought the integrity, data-type, and nomenclature guides into agreement with the implemented
+  26-error inventory and closed-container surface: factor-aware dative identity, checked aromatic
+  and multicenter mutation with rollback, compatible removal-local frames, crate-private aggregate
+  integrity gates, closed-source remapping and canonicalization, and representation-preserving raw
+  reaction-span construction are now explicit. Canonicalization rustdoc no longer advertises
+  unreachable integrity errors. The audit found no stale Python canonicalization error claim.
+
+  S3b ran `cargo fmt --all`, `cargo check --workspace --all-targets`, strict all-target clippy for
+  graph IR, graph, I/O, and Python, `cargo test --workspace --no-fail-fast`, the complete
+  feature-gated property target, extension rebuilding with `maturin develop`, and full pytest under
+  Python 3.13. Workspace compilation, clippy, all unaffected Rust targets, and all doctests passed.
+  The current workspace test gate retains exactly doc 214's four graph-IR library failures
+  (6,393 passed and four ignored) and one canonicalization integration failure (14 passed). The
+  property target passed 318, failed exactly the ten named inherited transport properties, and
+  ignored one in 108.22 seconds. Extension rebuilding passed and pytest passed 1,328 with two
+  skipped. The checkpoint exposed one stale DSL expectation of constructor normalization and two
+  Python metadata fixtures with out-of-range stereo cosets; their focused corrections pass and the
+  final ledger contains no new failure.
 
 Critical path: S0a/S0b → S1b/S1c → S2a/S2b → S2d → S3a → S3b. S1a, S1d, and S1e may proceed after
 the current doc 214 S0d baseline and converge before their S2 consumers. No stage is deferrable:

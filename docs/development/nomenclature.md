@@ -645,6 +645,11 @@ edge — an undirected edge cannot carry a direction.
 The order attribute counts donated pairs, not per-atom contributions, which is what distinguishes a
 dative bond from a multicenter bond over the same atoms.
 
+Donors form one participant frame and the acceptor is a distinguished second factor. Donors may not
+repeat, but the same atom may occur once as a donor and once as the acceptor. A dative bond's
+identity is its complete `(acceptor, donor multiset)` key; distinct dative bonds may share individual
+donors or their acceptor.
+
 **Not:** interchangeable, and not *participants* used flatly; a diagnostic should name the role.
 **In code:** `:donors`, `:acceptor`; `DativeBondForm`.
 
@@ -936,18 +941,20 @@ model-independent semantic conditions are invariants rather than integrity.
 
 **Not:** an invariant or conformance. Integrity is established by construction and checked in
 `umol-graph-ir`; it is not a `Solution` verdict.
-**In code:** `check_integrity`, `*IntegrityError`.
+**In code:** crate-private `check_integrity`, public `*IntegrityError`.
 
 ### Integrity check
 
 An **integrity check** is the graph-IR-owned, error-valued operation that enforces tier 1. It returns
 `Result<(), *IntegrityError>` and is shared by checked constructors, boundary conversions, and every
 path that publishes the IR type. Trusted asserted constructors use the same implementation and
-change only the failure reporting. There is no `*Checker` object.
+change only the failure reporting. The operation is crate-private: callers publish through the
+checked or asserted boundary rather than validating an already published aggregate. There is no
+public validator or `*Checker` object.
 
 **Not:** a validator. Validators return semantic `Solution` values and belong in `umol-graph`.
-**In code:** `Molecule::check_integrity`, `Reaction::check_integrity`,
-`ReactionSpan::check_integrity`; the corresponding `*IntegrityError` types.
+**In code:** crate-private `Molecule::check_integrity`, `Reaction::check_integrity`, and
+`ReactionSpan::check_integrity`; the public corresponding `*IntegrityError` types.
 
 ### Invariant
 
@@ -1326,9 +1333,10 @@ span `L ←K→ R` is read off those tags: `K = Unchanged ∪ Modified`, `L = K 
 `Modified` — a preserved entity relabeled across the reaction — is the relabeling-DPO reading: the
 entity persists in `K` and its label is resolved per side. The tag asserts nothing beyond those two
 side values. If they are `normalized_eq`, the entry is semantically a no-op whose normal form is
-`Unchanged`. Raw span construction preserves an explicitly supplied tag; normalization,
-reframing, and canonicalization collapse it, while `superimpose` may emit `Unchanged` directly
-because it derives a standardized span.
+`Unchanged`. Raw span construction preserves an explicitly supplied tag; the current private
+normalization path and canonicalization collapse it, while `superimpose` may emit `Unchanged`
+directly because it derives a standardized span. Doc 214 will expose the same behavior through the
+public normalization and reframing pipeline.
 
 A correspondence with values and a direction added is what lifts it to a span.
 

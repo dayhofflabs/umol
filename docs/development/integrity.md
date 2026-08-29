@@ -44,7 +44,7 @@ prevents the named failure because the representation or operation changes, remo
 Independent assembly uses open carriers. Publication turns an accepted carrier into a closed
 aggregate:
 
-| Aggregate | Open input | Authoritative check | Checked publication | Asserted publication |
+| Aggregate | Open input | Crate-private authoritative check | Checked publication | Asserted publication |
 | --- | --- | --- | --- | --- |
 | `Molecule` | `MoleculeEntries`; transient `MoleculeEditor` state | `Molecule::check_integrity` | `Molecule::try_from_entries`, `MoleculeEditor::snapshot`, `MoleculeEditor::try_build`, and checked integrity-sensitive mutations | `Molecule::from_entries`, `MoleculeEditor::build`, and trusted internal publishers |
 | `Reaction` | a closed lhs `Molecule` plus independently assembled `Deltas` | `Reaction::check_integrity` | `Reaction::try_new` | `Reaction::new` and trusted internal publishers |
@@ -60,6 +60,13 @@ contract by construction and test that preservation. A new public raw constructo
 hatch is not harmless convenience: it reopens the container and would require defensive checks
 throughout its operations.
 
+Integrity-sensitive live mutation follows the same rule. Raw whole-form aromatic-system and
+multicenter-bond mutation is restricted to graph IR. The public singular and family-wide
+`try_modify_aromatic_system*` and `try_modify_multicenter_bond*` operations modify a private
+candidate, publish it only after the authoritative check succeeds, return the exact
+`MoleculeIntegrityError` on rejection, and leave the source unchanged. Python live views use those
+checked operations and translate rejection to `ValueError`; they do not publish a partial change.
+
 ## `Molecule` integrity inventory
 
 ### References and parallel storage
@@ -67,16 +74,15 @@ throughout its operations.
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
 | `InvalidReference` | A bond endpoint, relation participant or site, stereo-ligand anchor, or constraint refers to an entity outside the owning molecule. | Internal entity, relation, constraint, remapping, and projection code uses dense ids to index aggregate storage. A dangling stored id would otherwise become an out-of-bounds panic or be remapped as the wrong entity. |
-| `EntityCountMismatch` | The atom or bond attribute vector is not parallel to the graph's node or edge set. | Molecule views and mutations address graph entities and their attributes by the same dense id. Different lengths permit out-of-bounds access or associate an entity with the wrong attributes. |
 | `ElectronCountLengthMismatch` | A literal aromatic or multicenter electron-count vector does not have one value per participant. | Counts are transported position by position with the participant frame. A mismatch currently turns reframing into `None` or leaves `permute` unchanged; accepting it would silently detach counts from atoms and later surface as an unrelated contradiction. |
 
 ### Fixed entity identity
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `DuplicateParticipant` | A simple relation repeats an actual atom: a bond or noncovalent self-loop, a repeated dative donor or donor equal to its acceptor, a repeated aromatic or multicenter member, a repeated actual stereo ligand, or a stereo-atom site repeated as an actual ligand. | Relation coincidence, incidence, and frame operations assume these are simple participant sets. Repetition would make identity and participant actions ambiguous or make one occurrence masquerade as two positions. |
+| `DuplicateParticipant` | A participant frame or undistinguished factor repeats an actual atom: a bond or noncovalent self-loop, a repeated dative donor, a repeated aromatic or multicenter member, a repeated actual stereo ligand, or a stereo-atom site repeated as an actual ligand. A dative acceptor may also occur once as a donor because the two roles are distinguished factors. | Relation coincidence, incidence, and frame operations assume each individual participant frame is simple. Repetition within one frame would make identity and participant actions ambiguous or make one occurrence masquerade as two positions; occurrence across distinguished dative factors remains unambiguous. |
 | `BondsParallel` | Two covalent bonds have the same unordered endpoint pair. | The graph-IR molecule gives a covalent bond identity by its endpoints. Single-edge lookup, correspondence induction, and bond matching would otherwise have multiple answers. |
-| `DativeBondsParallel` | Two dative bonds share the same acceptor and any donor. | A dative incidence `(acceptor, donor)` identifies at most one relation. Overlap would make incidence-based lookup and reaction correspondence non-unique. |
+| `DativeBondsIdentical` | Two dative bonds have the same acceptor and donor multiset, including when their stored donor orders differ. Shared acceptors or donors are permitted when the complete keys differ. | The complete `(acceptor, donor multiset)` is the dative identity and singular coincidence key. Duplicate complete keys would make lookup, correspondence, and delta targeting non-unique. |
 | `NoncovalentBondsParallel` | Two noncovalent bonds have the same unordered endpoint pair, even if their kinds differ. | Noncovalent bond identity is the endpoint pair. Multiple entries would make `coincident_id`, matching, and delta targeting ambiguous. Combined interaction kinds must be represented in one form instead. |
 | `AromaticSystemsOverlap` | One atom belongs to more than one aromatic system. | Aromatic membership names a unique owning system. Algorithms that recover the system from a member atom would otherwise choose an arbitrary incident relation. |
 | `MulticenterBondsIdentical` | Two multicenter bonds have the same participant set. | The participant set is the multicenter bond's uniqueness key. Duplicate sets would make coincidence lookup, correspondence, and delta targeting non-unique. |
@@ -106,7 +112,6 @@ It does not require that the deltas can already materialize a consistent reactio
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `Lhs` | The lhs fails any `Molecule` integrity check. | Reaction reference, source-frame, application, reversal, and span-construction code relies on dense, coherent lhs storage. The wrapper prevents all molecule failure modes above from entering the reaction. |
 | `InvalidReference` | A delta or nested constraint refers to neither an lhs entity nor a uniquely added entity; an added id collides with the lhs or another addition. | Delta execution and remapping index entities by id, while removal integrity indexes source-frame maps after reference validation. Missing ids would panic; colliding created ids would give later deltas and correspondences two incompatible meanings. |
 | `StereoIntegrityError` | A stereo addition has an invalid local frame, configuration, or inline constraint, or a stereo constraint wrapper asserts a kind inadmissible for its site type. | These values enter reaction operations without first becoming a molecule. Reusing the molecule-local checks prevents bounded-permutation panics, invalid position domains, and wrong site-group interpretation before span materialization. |
 | `IncidenceMismatch` | An overlay removal names a site or structured participant incidence different from the lhs entity or same-reaction addition it removes. Factor-local reordering and complete stereo-bond endpoint-block exchange preserve incidence; moving individual ligands between blocks does not. | A removal id and its recorded incidence would describe different entities. Span conversion and application could then delete one entity while matching, transporting, or reporting another. |
@@ -152,10 +157,12 @@ checked eagerly:
 - canonical form, canonical equality, resolution, perception, or source-format interpretation.
 
 An equivalent `Modified` reaction-span entry is not an integrity failure. Checked and asserted span
-construction preserve that raw tag. `Normalize for ReactionSpan` collapses it to `Unchanged`, and
-`ReactionSpan::superimpose` may emit the standardized form directly under its separate deriving
-contract. A semantically invalid but representation-coherent value remains representable until the
-named operation that needs the stronger property is invoked.
+construction preserve that raw tag. The current internal reaction-span normalization path collapses
+it to `Unchanged`, canonicalization invokes that path, and `ReactionSpan::superimpose` may emit the
+standardized form directly under its separate deriving contract. Doc 214 will expose the same
+normal-form behavior through the public normalization and reframing pipeline. A semantically invalid
+but representation-coherent value remains representable until the named operation that needs the
+stronger property is invoked.
 
 ## Maintenance rule
 

@@ -468,10 +468,10 @@ def test_reaction_parse_keyword_error():
         pytest.param(
             '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
             ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
-            ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
-            ':attrs "Th1"}]} '
-            ':deltas [{:stereo-atom {:add '
-            '{:id :delta :site 0 :ligands [1 2 3 4] :attrs "Th2"}}}]}',
+                ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
+                ':attrs "Th1"}]} '
+                ':deltas [{:stereo-atom {:add '
+                '{:id :delta :site 0 :ligands [1 2 3 4] :attrs "Th0"}}}]}',
             Entity.StereoAtom(0),
             Entity.StereoAtom(1),
             id="stereo-atom",
@@ -482,10 +482,10 @@ def test_reaction_parse_keyword_error():
             '{:id :second :atoms [2 3] :attrs "2"} '
             '{:atoms [0 2] :attrs "1"} '
             '{:atoms [1 3] :attrs "1"}] '
-            ':stereo-bonds [{:id :lhs :site :first '
-            ':ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]} '
-            ':deltas [{:stereo-bond {:add '
-            '{:id :delta :site :second :ligands [0 [:h 2] 1 [:h 3]] :attrs "Ct2"}}}]}',
+                ':stereo-bonds [{:id :lhs :site :first '
+                ':ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]} '
+                ':deltas [{:stereo-bond {:add '
+                '{:id :delta :site :second :ligands [0 [:h 2] 1 [:h 3]] :attrs "Ct0"}}}]}',
             Entity.StereoBond(0),
             Entity.StereoBond(1),
             id="stereo-bond",

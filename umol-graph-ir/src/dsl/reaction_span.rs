@@ -2157,6 +2157,17 @@ mod tests {
             metadata
         },
     )]
+    #[case::equivalent_modified(
+        r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#,
+        ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Modified {
+                lhs: AtomForm::from_element(Element::C).with_charge(1_i64),
+                rhs: AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+            }],
+            ..Default::default()
+        }),
+        MoleculeMetadata::new(),
+    )]
     #[case::dative_overlay(
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         ReactionSpan::from_entries(ReactionSpanEntries {
@@ -2191,23 +2202,6 @@ mod tests {
                 .unwrap(),
             (expected_span, expected_metadata),
         );
-    }
-
-    #[rstest]
-    fn test_span_input_into_ir_normalizes_canonical_modified() {
-        let (span, metadata) =
-            parse_span_input(&read_string(r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#).unwrap())
-                .unwrap()
-                .into_ir()
-                .unwrap();
-
-        assert_eq!(
-            span.atoms(),
-            &[EntitySpan::Unchanged(
-                AtomForm::from_element(Element::C).with_charge(1_i64),
-            )],
-        );
-        assert_eq!(metadata, MoleculeMetadata::new());
     }
 
     #[rstest]

@@ -321,7 +321,7 @@ fn reaction_span_canonicalize_level(span: &ReactionSpan) -> CanonicalizeLevel {
 ///
 /// # Semantic properties
 ///
-/// For every integrity-valid aggregate and fixed context:
+/// For every aggregate and fixed context:
 ///
 /// - successful complete canonicalization is exactly idempotent and invariant under valid dense
 ///   entity remapping;
@@ -347,8 +347,8 @@ pub trait Canonicalize: Sized {
     ///
     /// # Errors
     ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when intrinsic normalization is unsatisfiable.
+    /// Returns the aggregate-specific canonicalization error when intrinsic normalization is
+    /// unsatisfiable.
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error>;
 
     /// Construct the complete canonical form and its source-to-canonical correspondence.
@@ -360,9 +360,8 @@ pub trait Canonicalize: Sized {
     ///
     /// # Errors
     ///
-    /// Returns the same aggregate-specific integrity or intrinsic-normalization error as
-    /// [`Self::canonicalize`]. A [`Reaction`] also reports failure to materialize its reaction
-    /// span.
+    /// Returns the same aggregate-specific intrinsic-normalization error as
+    /// [`Self::canonicalize`]. A [`Reaction`] also reports failure to materialize its reaction span.
     ///
     /// # Semantic properties
     ///

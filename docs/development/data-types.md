@@ -83,13 +83,14 @@ kind-dependent domain needed to interpret their representation. A checked constr
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
-The fixed relation semantics of every entity family are part of molecule integrity. No entity may
-contain the same actual atom more than once. This excludes localized and noncovalent self-loops,
-repeated dative donors or an acceptor also used as a donor, repeated aromatic and multicenter
-participants, repeated actual-atom stereo ligands, and a stereo-atom site reused as an actual-atom
-ligand. Virtual ligands are not actual-atom participants, but an identical virtual ligand occurrence
-may not repeat within one stereo frame. An implicit hydrogen and a lone pair anchored at the same
-atom remain distinct ligands.
+The fixed relation semantics of every entity family are part of molecule integrity. Each participant
+frame or undistinguished factor is simple. This excludes localized and noncovalent self-loops,
+repeated dative donors, repeated aromatic and multicenter participants, repeated actual-atom stereo
+ligands, and a stereo-atom site reused as an actual-atom ligand. The distinguished donor and
+acceptor factors of a dative bond may contain the same atom once in each role. Virtual ligands are
+not actual-atom participants, but an identical virtual ligand occurrence may not repeat within one
+stereo frame. An implicit hydrogen and a lone pair anchored at the same atom remain distinct
+ligands.
 
 Stereo ligand frames also carry site-relative incidence. An actual ligand of a stereo atom must be
 a covalent graph neighbor of the site, while an implicit hydrogen or lone pair is borne by the site
@@ -99,12 +100,12 @@ virtual ligands must be borne by that endpoint. Exchanging the two complete endp
 valid, but moving one ligand across the endpoint boundary is not.
 
 The same contract supplies the cross-entity uniqueness needed to interpret each relation family:
-localized bonds have unique unordered endpoint pairs; dative `(acceptor, donor)` incidences are
-unique; aromatic systems are atom-disjoint; multicenter participant sets are unique; noncovalent
-bonds have unique unordered endpoint pairs regardless of interaction kind; and stereo-atom and
-stereo-bond sites are unique within their families. These are not deferred semantic judgments. They
-define the stored relation represented by each entity family and are established whenever a
-`Molecule` is published.
+localized bonds have unique unordered endpoint pairs; dative bonds have unique complete
+`(acceptor, donor multiset)` keys while distinct keys may share incidences; aromatic systems are
+atom-disjoint; multicenter participant sets are unique; noncovalent bonds have unique unordered
+endpoint pairs regardless of interaction kind; and stereo-atom and stereo-bond sites are unique
+within their families. These are not deferred semantic judgments. They define the stored relation
+represented by each entity family and are established whenever a `Molecule` is published.
 
 For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
 outside that kind's coset space are representation-integrity failures. The same applies to an
@@ -128,9 +129,10 @@ them. It must not turn an earlier-tier failure into a chemistry contradiction.
 
 ### Invoking an integrity check
 
-Representation integrity has one authoritative implementation in the crate that owns the graph IR. It
-is exposed as `check_integrity` with a corresponding `*IntegrityError`; there is no `*Checker`
-object. An integrity check returns `Result<(), *IntegrityError>`, never `Solution`,
+Representation integrity has one authoritative implementation in the crate that owns the graph IR.
+It is the crate-private `check_integrity` operation with a corresponding public `*IntegrityError`;
+there is no public validator or `*Checker` object. An integrity check returns
+`Result<(), *IntegrityError>`, never `Solution`,
 `Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
 collection shapes such as participant and electron-count lengths, fixed entity-relation semantics,
 and kind-dependent data needed to interpret a value such as stereo frame arity, coset domains, and
@@ -149,17 +151,18 @@ Every path that publishes an aggregate IR value uses that same implementation:
    state. The integrity gate is at the operation that publishes a `Molecule`, not at every
    primitive mutation. A trusted internal producer may take the asserted route only when its
    construction establishes the complete invariant.
-4. A public operation that requires interpretable representation, including aggregate
-   canonicalization, invokes the same check defensively if unchecked or compromised values can
-   reach it. It returns a typed integrity error and never turns the failure into a chemistry
-   contradiction or indexing panic.
+4. An operation accepting a published aggregate relies on the closed-container contract and does
+   not invoke the check defensively. Trusted remapping, canonicalization, projection, reversal, and
+   application publishers establish preservation by construction and property tests.
 
 For `Molecule`, this places the same gate behind direct checked entry construction, molecule-DSL
 raise, TableIR raise, Python construction from entries, and finalization of builders and editors.
-Reaction code uses it whenever it materializes a molecule side or projection; it does not grow a
-reaction-specific copy of molecule integrity. A route that already establishes the contract may use
-the asserted constructor, but the asserted and checked routes must share the implementation and the
-set of accepted values.
+The public aromatic-system and multicenter-bond mutation operations use a private candidate and
+commit only after the same gate succeeds; their raw whole-form mutation kernels remain crate-private.
+Reaction code uses the molecule constructor whenever it materializes a molecule side or projection;
+it does not grow a reaction-specific copy of molecule integrity. A route that already establishes
+the contract may use the asserted constructor, but the asserted and checked routes must share the
+implementation and the set of accepted values.
 
 Do not run a semantic validator at these boundaries. DSL and external-format raise may preserve an
 atom `#T` or bond `#C` assertion before a stereo entity has been perceived or resolved. Validating
@@ -168,11 +171,10 @@ an operation order. Source-format checks such as wedge, directional-bond, or chi
 interpretation likewise stay in the source-format layer; only the resulting graph IR's representation
 is checked by the shared integrity gate.
 
-Canonicalization is a transformation of a representation-integrity-valid value. It does not repair,
-preserve as opaque data, or select a canonical form for malformed representation state. If an
-unchecked or compromised value reaches a public canonicalization operation, the operation reports a
-typed integrity error and does not panic. Canonicalization otherwise preserves tier-2 and tier-3
-invalid states; an intrinsic lattice `Contradiction` remains distinct from malformed storage.
+Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
+repair or revalidate malformed representation state, and its error types contain no unreachable
+integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization
+or reaction-span materialization may still report `Contradiction`.
 
 ## Representation ownership and crate layering
 
@@ -274,8 +276,9 @@ keeps addition and removal as meaningful inverses.
 An equivalent `Modified` reaction-span entry is another raw/normal distinction. The tag carries no
 assertion beyond its two side values. If those values are equal under `normalized_eq`, the entry is
 semantically a no-op and normalizes to `Unchanged`. Checked and asserted span construction preserve
-the explicitly supplied raw tag; `Normalize for ReactionSpan` collapses it, and reframing and
-canonicalization inherit the collapse because normalization is their first pipeline step.
+the explicitly supplied raw tag. The current private reaction-span normalization path collapses it,
+and canonicalization invokes that path. Doc 214 will expose the same behavior through `Normalize`;
+reframing will inherit the collapse because normalization is its first pipeline step.
 
 This does not license silent normalization in an operation that promises faithful representation
 conversion. Instead, classify the operation accurately:
@@ -781,8 +784,8 @@ therefore related operations with different codomains.
 A public end-to-end remapping operation on `Molecule` accepts a `MoleculeCorrespondence` that
 describes the complete old and new id spaces. The correspondence source counts must equal the
 molecule counts, and every component correspondence must be total on both sides. The operation
-returns `None` when these structural conditions do not hold or when the source molecule fails its
-representation-integrity contract. The asserted route panics under either condition.
+returns `None` when these independently supplied structural conditions do not hold. The asserted
+route panics under the same condition. The published source is already closed and is not rechecked.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity forms, and every typed reference in constraints. It does not validate
@@ -856,8 +859,9 @@ counts must equal the span's table sizes and each component must be a total bije
 target id space. The operation transports both values of every `EntitySpan`, relation participants,
 position-sensitive relation data, stereo frames, and all constraint references. It does not
 normalize, repair, project, or reanchor the span implicitly. The asserted route panics when its
-documented producer contract is violated; the checked route returns `None` for an integrity-invalid
-source or unsuitable correspondence.
+documented producer contract is violated; the checked route returns `None` only for an unsuitable
+correspondence. The published source and remapped result are closed by construction and are not
+rechecked.
 
 Canonicalization derives an LHS-anchored correspondence and applies this ordinary remapping
 operation. It does not maintain a second canonicalization-only transport path. For
