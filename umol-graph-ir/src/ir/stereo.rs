@@ -138,12 +138,8 @@ impl StereoAtoms {
                         .and_then(|&node| set.coincident(node, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
-                    // Equal virtual ligands leave several restatements of the right entry in the
-                    // retained left frame. They lie in one coset of that frame's stabilizer, so the
-                    // values they meet to denote one arrangement and the first success stands.
-                    find_reframed(right, right_ligands, left_ligands, |_, restated| {
-                        restated.meet(left)
-                    })
+                    let action = Permutation::between(right_ligands, left_ligands)?;
+                    traits::FrameTransport::reframe_by(right.clone(), &action)?.meet(left)
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))
@@ -315,12 +311,8 @@ impl StereoBonds {
                         .and_then(|&edge| set.coincident_edge(edge, site, ligands))
                 },
                 |(_, left_ligands, left), (_, right_ligands, right)| {
-                    // Equal virtual ligands leave several restatements of the right entry in the
-                    // retained left frame. They lie in one coset of that frame's stabilizer, so the
-                    // values they meet to denote one arrangement and the first success stands.
-                    find_reframed(right, right_ligands, left_ligands, |_, restated| {
-                        restated.meet(left)
-                    })
+                    let action = Permutation::between(right_ligands, left_ligands)?;
+                    traits::FrameTransport::reframe_by(right.clone(), &action)?.meet(left)
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))
@@ -598,7 +590,7 @@ impl Reframe for StereoBondSpans {
 macro_rules! stereo_element {
     (
         $(#[doc = $doc:literal])+
-        $name:ident, $constraints:ident, $constraint:ident
+        $name:ident, $constraints:ident, $constraint:ident, $allows_action:expr
     ) => {
         $(#[doc = $doc])+
         #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
@@ -624,6 +616,9 @@ macro_rules! stereo_element {
             type Action = Permutation;
 
             fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                if !($allows_action)(*action) {
+                    return None;
+                }
                 let inverse = action.inverse();
                 let reframe_permutation = |value: LigandPermutation| {
                     (value.0.degree() == action.degree()).then(|| {
@@ -667,6 +662,9 @@ macro_rules! stereo_element {
             type Action = Permutation;
 
             fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                if !($allows_action)(*action) {
+                    return None;
+                }
                 self.into_iter()
                     .map(|constraint| {
                         traits::FrameTransport::reframe_by(constraint, action)
@@ -682,6 +680,9 @@ macro_rules! stereo_element {
             type Action = Permutation;
 
             fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+                if !($allows_action)(*action) {
+                    return None;
+                }
                 let Self {
                     configuration,
                     constraints,
@@ -799,12 +800,14 @@ macro_rules! stereo_element {
 
 stereo_element! {
     /// Stereo atom form with geometry class, configuration, and per-site constraints.
-    StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm
+    StereoAtomForm, StereoAtomConstraintsForm, StereoAtomConstraintForm, |_: Permutation| true
 }
 
 stereo_element! {
     /// Stereo bond form with cis/trans configuration and per-site constraints.
-    StereoBondForm, StereoBondConstraintsForm, StereoBondConstraintForm
+    StereoBondForm, StereoBondConstraintsForm, StereoBondConstraintForm, |action: Permutation| {
+        StereoKind::CisTrans.class_key().space().allows(action)
+    }
 }
 
 /// Configuration portion of a stereo-element update.
@@ -1218,8 +1221,8 @@ pub trait FrameAction: Sized {
 /// frames do not hold the same ligands, or when `select` accepts none of the restatements.
 ///
 /// Stereo only, and necessarily so: `Permutation` is bounded by `MAX_DEGREE`, where an aromatic or
-/// multicenter frame is not. Those families cannot repeat a participant either, so their frame
-/// change is unique and `reframe_to` is total on it.
+/// multicenter frame is not. Those families cannot repeat a participant, so their alignment is the
+/// unique `DynPermutation::between` action followed by `FrameTransport`.
 pub fn find_reframed<T, B, F>(
     value: &T,
     from: &[StereoLigand],
@@ -2618,6 +2621,32 @@ mod tests {
     }
 
     #[rstest]
+    #[case::within_endpoint(
+        Permutation::from_image(&[1, 0, 2, 3]),
+        Some(StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+            Stereogenicity::Stereogenic,
+        ))),
+    )]
+    #[case::across_endpoints(
+        Permutation::from_image(&[1, 2, 0, 3]),
+        None,
+    )]
+    fn test_stereo_bond_constraint_frame_transport_domain(
+        #[case] action: Permutation,
+        #[case] expected: Option<StereoBondConstraintForm>,
+    ) {
+        assert_eq!(
+            traits::FrameTransport::reframe_by(
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
+                    Stereogenicity::Stereogenic,
+                )),
+                &action,
+            ),
+            expected,
+        );
+    }
+
+    #[rstest]
     fn test_stereo_atom_form_reframe_by_constraints() {
         let action = Permutation::from_image(&[1, 0, 2, 3]);
         let input = StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32).with_constraint(
@@ -3378,13 +3407,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case::degree(Permutation::identity(3))]
-    #[case::outside_parent(Permutation::from_image(&[1, 2, 0, 3]))]
-    fn test_stereo_bond_form_reframe_by_error(#[case] permutation: Permutation) {
-        assert_eq!(
-            StereoBondForm::new(StereoKind::CisTrans, 0u32).reframe_by(permutation),
-            None,
-        );
+    #[case::degree(
+        StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        Permutation::identity(3)
+    )]
+    #[case::kinded_outside_parent(
+        StereoBondForm::new(StereoKind::CisTrans, 0u32),
+        Permutation::from_image(&[1, 2, 0, 3]),
+    )]
+    #[case::kindless_outside_parent(
+        StereoBondForm::default(),
+        Permutation::from_image(&[1, 2, 0, 3]),
+    )]
+    fn test_stereo_bond_form_frame_transport_domain(
+        #[case] form: StereoBondForm,
+        #[case] permutation: Permutation,
+    ) {
+        assert_eq!(traits::FrameTransport::reframe_by(form, &permutation), None,);
     }
 
     #[rstest]

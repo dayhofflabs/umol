@@ -3,17 +3,16 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_perm::OrientedPermutationGroup;
+use umol_perm::{OrientedPermutationGroup, Permutation};
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
 use super::super::stereo::{
-    find_reframed, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind,
-    Stereogenicity, Topicity,
+    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
-use super::super::traits::Lattice;
+use super::super::traits::{FrameTransport, Lattice};
 use super::atom::AtomView;
 use super::bond::BondView;
 use super::constraints::{StereoAtomConstraintsView, StereoBondConstraintsView};
@@ -279,21 +278,20 @@ impl<'a> StereoAtomView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    /// The stored configuration read against `ligands`, which must hold the same participants as
-    /// the stored frame. Equal virtual ligands leave several actions carrying one frame to the
-    /// other; they differ by a stabilizer element of the frame, so the cosets they give denote one
-    /// arrangement and the first stands.
+    /// The stored configuration read against `ligands`, which must hold the same distinct
+    /// participants as the stored frame.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
         let requested: Vec<StereoLigand> = ligands.into_iter().collect();
-        find_reframed(
-            &self.attributes.configuration,
-            self.ligands,
-            &requested,
-            |_, restated| restated.coset().cloned(),
-        )
+        let action = Permutation::between(self.ligands, &requested)?;
+        self.attributes
+            .configuration
+            .clone()
+            .reframe_by(&action)?
+            .coset()
+            .cloned()
     }
 
     /// Site atom followed by the distinct ligand atoms — the relation's atom
@@ -603,21 +601,20 @@ impl<'a> StereoBondView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    /// The stored configuration read against `ligands`, which must hold the same participants as
-    /// the stored frame. Equal virtual ligands leave several actions carrying one frame to the
-    /// other; they differ by a stabilizer element of the frame, so the cosets they give denote one
-    /// arrangement and the first stands.
+    /// The stored configuration read against `ligands`, which must hold the same distinct
+    /// participants as the stored frame.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
         let requested: Vec<StereoLigand> = ligands.into_iter().collect();
-        find_reframed(
-            &self.attributes.configuration,
-            self.ligands,
-            &requested,
-            |_, restated| restated.coset().cloned(),
-        )
+        let action = Permutation::between(self.ligands, &requested)?;
+        self.attributes
+            .configuration
+            .clone()
+            .reframe_by(&action)?
+            .coset()
+            .cloned()
     }
 
     /// The site bond's two atoms followed by the distinct ligand atoms — the

@@ -14,6 +14,7 @@ Relates: [103](103-stereochemistry-overlay-and-ports-2026-05-28.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
 [212](212-remapping-layer-2026-08-26.md),
+[213](213-editor-overlay-storage-2026-08-27.md),
 [215](215-integrity-minimization-2026-08-28.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
@@ -859,7 +860,31 @@ editors remain permitted and fail only when publishing. The inherited transport 
   Retire ordinary form `reframe_to` after its callers use the same two kernels. Preserve
   operation-specific `meet`, `matches`, or exact comparison semantics; do not collapse them into one
   generic callback. **Breaking; inherited red ledger unchanged after consumer migration.**
-  [dep: S0h, S0i]
+  [dep: S0h, S0i] **Done.** Every graph-IR alignment consumer now derives one checked action and
+  transports through `FrameTransport`: overlay glue retains `meet`, editor and mapped equality retain
+  normalized equivalence, substructure matching retains pattern-directed `matches`, reaction
+  application retains its host-value precondition, and span superimposition retains exact side
+  selection. Mapped molecule constraints consume the same unique per-entity stereo action rather
+  than recursively searching a candidate product. Ordinary `reframe_to` methods and their duplicate
+  tests are removed; `find_reframed` is unused but remains exported until the S0l legacy-trait
+  removal, while the remaining `enumerate_between` sites belong to S0k frame selection or S0p
+  canonicalization.
+
+  The migration exposed and corrected one S0i domain omission: kindless stereo-bond forms and
+  positionless stereo-bond constraints now reject permutations outside the endpoint-block
+  `S_2 wr S_2` parent just as kinded forms and stereo-bond deltas already did. Exact form,
+  constraint, and editor tables cover within-endpoint swaps, complete endpoint-block swaps, and an
+  illegal cross-endpoint movement. The obsolete active editor orbit test and ignored mapped-equality
+  stabilizer test were removed because their repeated frames cannot be published under S0b.
+
+  Focused graph-IR runs passed 46 editor cases, 10 mapped-equality cases, 45 substructure cases, 18
+  local-removal cases, 12 span-superimposition cases, 12 stereo-pushout cases, 8 stereo-reaction
+  application cases, 4 stereo-view coset cases, 42 local `reframe_by` cases, and the new five-case
+  stereo-bond transport-domain tables. Graph-IR doctests and strict all-target Clippy with the
+  property feature passed. The two directly affected inherited failures retain their prior
+  frame-direction diffs (`test_aromatic_systems_glue_differing_frames` and
+  `test_molecule_meet_pushout_overlays`); the untouched canonicalization failures and slow property
+  ledger were not rerun.
 - **S0k — frame selection and symmetry cleanup** (`ir/stereo.rs`, `ir/symmetry.rs`, property
   strategies, family modules): implement the per-kind representative rules in the six family
   aggregates. Stereo atoms sort the complete ligand frame under the full symmetric group; stereo

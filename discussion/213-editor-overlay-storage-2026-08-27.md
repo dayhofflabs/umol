@@ -3,6 +3,8 @@
 Status: Proposed
 Date: 2026-08-27
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md),
+[data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
 ## Purpose
@@ -19,7 +21,7 @@ One wrapper parameterised by the overlay type replaces the three:
 ```rust
 enum OverlayEditor<O: Overlays> {
     Shared(O),
-    Mutable(Vec<O::Entry>),
+    Mutable(Vec<(O::Participants, O::Attributes)>),
 }
 ```
 
@@ -36,15 +38,16 @@ never hold. The accumulating state belongs to the editor.
 The shared surface of the six overlay storage types, in `traits.rs`. Settled, and specified here in
 full because it has to be written along with everything else.
 
-Public, carrying the members that were already `pub` and inherent on all six, plus two:
+Public, carrying the members that were already `pub` and inherent on all six, plus three:
 
 ```rust
 type Id: Copy + From<usize>;
-type Entry: Clone;
-type Attributes;
+type Participants: Clone;
+type Attributes: Clone + Normalize + FrameTransport<Action = Self::LocalAction>;
+type LocalAction;
 
-fn into_entries(self) -> Vec<Self::Entry>;
-fn entry(&self, id: Self::Id) -> Self::Entry;                                    // new
+fn into_entries(self) -> Vec<(Self::Participants, Self::Attributes)>;
+fn entry(&self, id: Self::Id) -> (Self::Participants, Self::Attributes);         // new
 fn count(&self) -> usize;
 fn contains(&self, id: Self::Id) -> bool;
 fn ids(&self) -> impl ExactSizeIterator<Item = Self::Id> + '_;
@@ -53,6 +56,11 @@ fn attributes_mut(&mut self, id: Self::Id) -> &mut Self::Attributes;
 fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = Self::Id> + '_;
 fn has_incident(&self, atom: AtomId) -> bool;
 fn compact(&self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>);  // new
+
+fn alignment_action(
+    from: &Self::Participants,
+    to: &Self::Participants,
+) -> Option<Self::LocalAction>;                                                  // new
 ```
 
 Members whose shape is the entity kind's own stay inherent: the participant accessors, `is_coincident`
@@ -63,41 +71,62 @@ accessors, `StereoBonds`'s bond-keyed incidence, and the crate-private `remap`, 
 `ids` needs an explicit `+ '_`: in trait position it captures the `&self` lifetime where the
 inherent `impl Trait` did not, and that propagates to the four `*Views::ids` methods.
 
-## The open piece: `Participants`
+## Participant alignment
 
 The editor's six `*_equiv` old-state checks ask two questions of one entry — is this the entity you
-mean, and does its value agree. The first is a participant comparison, each factor as a multiset,
-with the attributes taking no part. It has no home today: the overlays' `is_coincident` takes an id
-and loose per-kind participants, which the editor's accumulating state cannot supply.
+mean, and does its value agree in the stored participant frame. The first cannot be a Boolean
+participant comparison. It must retain the unique local frame action from the offered participants
+to the stored participants so that the second can transport the offered attributes before comparing
+their normal forms.
 
-Attempting it as a static comparison of two `Entry` values named the operation three times and got
-it wrong three times, because the thing being compared has no type. It is not entry equality — the
-caller builds an offered entry whose attributes are cloned and never read.
+This operation has no home in the three storage-shaped editor wrappers. Their relation sets know
+only factors and multisets; they do not know which factor bears the entity frame or, for a stereo
+bond, that its ligand factor consists of two endpoint blocks. The six entity-family aggregates do
+know that structure, so `Overlays::alignment_action` owns the per-kind derivation. Its direction is
 
-The fix is an associated type:
+```text
+to[i] = from[action[i]]
+```
 
-| overlay | `Participants` |
-| --- | --- |
-| aromatic system, multicenter bond | `Vec<AtomId>` |
-| noncovalent bond | `[AtomId; 2]` |
-| dative bond | `(Vec<AtomId>, AtomId)` — donors, acceptor |
-| stereo atom, stereo bond | `(AtomId \| BondId, Vec<StereoLigand>)` — site, ligands |
+and it returns `None` unless `from` and `to` are two frames of the same entity under that family's
+structured-participant semantics. Ordinary unordered factors use `DynPermutation`; stereo factors
+use the bounded `Permutation`. Stereo-bond alignment permits permutations within each endpoint
+block and exchange of the two complete blocks, but not movement of one ligand across the endpoint
+boundary. Integrity-valid frames have distinct complete participant values, so the admissible
+action is unique.
 
-With it, `Entry` stops being an arbitrary per-kind tuple and is `(Participants, Attributes)`
-everywhere, and the comparison is on `Participants`, where it can be named for the question rather
-than for whatever shape was at hand. The name is not settled: `coincident` and `is_coincident`
-already differ by three characters while asking a search and a predicate respectively, so a third
-member on that root compounds a collision rather than joining a family.
+The participant and local-action types are:
+
+| overlay | `Participants` | `LocalAction` |
+| --- | --- | --- |
+| aromatic system, multicenter bond | `Vec<AtomId>` | `DynPermutation` |
+| noncovalent bond | `[AtomId; 2]` | `DynPermutation` in `S_2` |
+| dative bond | `(Vec<AtomId>, AtomId)` — donors, acceptor | `DynPermutation` on donors |
+| stereo atom | `(AtomId, Vec<StereoLigand>)` — site, ligands | `Permutation` on ligands |
+| stereo bond | `(BondId, Vec<StereoLigand>)` — site, ligands | `Permutation` in `S_2 wr S_2` |
+
+`OverlayEditor<O>` then owns one `entry_framed_eq` old-state check for every family. It obtains the
+stored entry, calls `O::alignment_action(offered, stored)`, transports the offered attributes with
+`FrameTransport`, and calls `normalized_eq` against the stored attributes. It neither selects a
+representative frame nor implements `Reframe`; this is pairwise alignment between two supplied local
+frames. Participant or transport incompatibility returns `false`, and the transaction retains its
+existing `TransactionError::OldStateMismatch` boundary.
+
+The current six `MoleculeEditor::*_equiv` methods therefore retire with the wrapper migration. Their
+per-kind knowledge moves into the six `alignment_action` implementations rather than remaining as
+six copies of the transaction operation.
 
 Two consequences:
 
 - Four constructors nest one level deeper — dative, noncovalent and both stereo kinds. `new` and
   `into_entries` are `pub`, but every caller is inside `umol-graph-ir` and most are in test modules;
   nothing in `umol-graph`, `umol-io` or `umol-py` constructs or destructures an overlay. The span
-  types mirror the overlays and want the same `Entry` shape or they drift from what they mirror.
+  types mirror the overlays and want the same `(Participants, Attributes)` entry shape or they drift
+  from what they mirror.
 - If `new` leaves the trait, `OverlayEditor`'s publish step still has to rebuild the overlay from
   entries, so construction must stay reachable generically — either a construction member under a
-  name that is not `new`, or a `From<Vec<Self::Entry>>` bound on the wrapper.
+  name that is not `new`, or a
+  `From<Vec<(Self::Participants, Self::Attributes)>>` bound on the wrapper.
 
 ## Editor views
 
@@ -120,15 +149,21 @@ Retain every editor and transaction assertion, including rollback. Assert that p
 unmodified overlay returns the same handle without rebuilding, and that a batch of pushes
 materialises once rather than per operation.
 
+Exercise `alignment_action` and the generic old-state check for every family: identity and a legal
+reordering succeed, a participant mismatch fails, and stereo-bond cases distinguish within-block and
+complete-block exchange from an illegal cross-block movement. Use a position-sensitive aromatic or
+multicenter payload and a stereo payload so success demonstrates transport rather than only
+frame-invariant comparison.
+
 ## Handoff
 
 Nothing here is in the tree. `Overlays` and its six impls were written and reverted along with the
 rest, which is no great loss: the members are lifted verbatim out of the six inherent blocks, and
 the specification above is what took the thinking.
 
-The whole of it is to be done: `Overlays` and its impls, the `Participants` associated type with its
-comparison member, `OverlayEditor`, the editor view change, and the migration of the editor call
-sites — around 66 of them, every one a "trait not in scope" or an index-keyed read becoming an
-entry.
+The whole of it is to be done: `Overlays` and its impls, the `Participants` and `LocalAction`
+associated types with `alignment_action`, `OverlayEditor`, the generic framed old-state check, the
+editor view change, and the migration of the editor call sites — around 66 of them, every one a
+"trait not in scope" or an index-keyed read becoming an entry.
 
 None of it is required by doc 211's remaining stages.

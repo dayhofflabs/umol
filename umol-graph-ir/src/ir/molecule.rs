@@ -13,7 +13,7 @@ pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
     Correspondence, EdgeId, Graph, NodeId, RelationId, RelationParticipant, Remapping, UnionFind,
 };
-use umol_perm::Permutation;
+use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
@@ -33,8 +33,8 @@ use super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{FrameAction, StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::traits::{Equiv, Lattice};
+use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
+use super::traits::{Equiv, FrameTransport, Lattice};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -556,11 +556,14 @@ impl Molecule {
                 return false;
             };
             let stored_donors: Vec<AtomId> = other.dative_bonds.donors(right).collect();
+            let Some(action) = DynPermutation::between(&mapped_donors, &stored_donors) else {
+                return false;
+            };
             let Some(attributes) = self
                 .dative_bonds
                 .attributes(left)
                 .clone()
-                .reframe_to(&mapped_donors, &stored_donors)
+                .reframe_by(&action)
             else {
                 return false;
             };
@@ -586,11 +589,14 @@ impl Molecule {
                 return false;
             };
             let stored: Vec<AtomId> = other.aromatic_systems.atoms(right).collect();
+            let Some(action) = DynPermutation::between(&mapped, &stored) else {
+                return false;
+            };
             let Some(attributes) = self
                 .aromatic_systems
                 .attributes(left)
                 .clone()
-                .reframe_to(&mapped, &stored)
+                .reframe_by(&action)
             else {
                 return false;
             };
@@ -616,11 +622,14 @@ impl Molecule {
                 return false;
             };
             let stored: Vec<AtomId> = other.multicenter_bonds.atoms(right).collect();
+            let Some(action) = DynPermutation::between(&mapped, &stored) else {
+                return false;
+            };
             let Some(attributes) = self
                 .multicenter_bonds
                 .attributes(left)
                 .clone()
-                .reframe_to(&mapped, &stored)
+                .reframe_by(&action)
             else {
                 return false;
             };
@@ -645,11 +654,14 @@ impl Molecule {
                 return false;
             };
             let stored: Vec<AtomId> = other.noncovalent_bonds.atoms(right).into();
+            let Some(action) = DynPermutation::between(&mapped, &stored) else {
+                return false;
+            };
             let Some(attributes) = self
                 .noncovalent_bonds
                 .attributes(left)
                 .clone()
-                .reframe_to(&mapped, &stored)
+                .reframe_by(&action)
             else {
                 return false;
             };
@@ -682,34 +694,21 @@ impl Molecule {
             let Some(mapped_ligands) = mapped_ligands else {
                 return false;
             };
-            if mapped_ligands == other.stereo_atoms.ligands(right)
-                && self
-                    .stereo_atoms
-                    .attributes(left)
-                    .equiv(other.stereo_atoms.attributes(right))
+            let Some(action) =
+                Permutation::between(&mapped_ligands, other.stereo_atoms.ligands(right))
+            else {
+                return false;
+            };
+            if !self
+                .stereo_atoms
+                .attributes(left)
+                .clone()
+                .reframe_by(&action)
+                .is_some_and(|attributes| attributes.equiv(other.stereo_atoms.attributes(right)))
             {
-                continue;
-            }
-            if mapped_ligands.len() > 6 {
                 return false;
             }
-            let frames =
-                Permutation::enumerate_between(&mapped_ligands, other.stereo_atoms.ligands(right))
-                    .into_iter()
-                    .filter(|&permutation| {
-                        self.stereo_atoms
-                            .attributes(left)
-                            .clone()
-                            .reframe_by(permutation)
-                            .is_some_and(|attributes| {
-                                attributes.equiv(other.stereo_atoms.attributes(right))
-                            })
-                    })
-                    .collect::<Vec<_>>();
-            if frames.is_empty() {
-                return false;
-            }
-            stereo_frames.push((Entity::StereoAtom(right), frames));
+            stereo_frames.push((Entity::StereoAtom(right), action));
         }
 
         for &(left, right) in correspondence.stereo_bonds().matched_pairs() {
@@ -732,34 +731,21 @@ impl Molecule {
             let Some(mapped_ligands) = mapped_ligands else {
                 return false;
             };
-            if mapped_ligands == other.stereo_bonds.ligands(right)
-                && self
-                    .stereo_bonds
-                    .attributes(left)
-                    .equiv(other.stereo_bonds.attributes(right))
+            let Some(action) =
+                Permutation::between(&mapped_ligands, other.stereo_bonds.ligands(right))
+            else {
+                return false;
+            };
+            if !self
+                .stereo_bonds
+                .attributes(left)
+                .clone()
+                .reframe_by(&action)
+                .is_some_and(|attributes| attributes.equiv(other.stereo_bonds.attributes(right)))
             {
-                continue;
-            }
-            if mapped_ligands.len() > 6 {
                 return false;
             }
-            let frames =
-                Permutation::enumerate_between(&mapped_ligands, other.stereo_bonds.ligands(right))
-                    .into_iter()
-                    .filter(|&permutation| {
-                        self.stereo_bonds
-                            .attributes(left)
-                            .clone()
-                            .reframe_by(permutation)
-                            .is_some_and(|attributes| {
-                                attributes.equiv(other.stereo_bonds.attributes(right))
-                            })
-                    })
-                    .collect::<Vec<_>>();
-            if frames.is_empty() {
-                return false;
-            }
-            stereo_frames.push((Entity::StereoBond(right), frames));
+            stereo_frames.push((Entity::StereoBond(right), action));
         }
 
         let Some(remapping) = correspondence.to_remapping() else {
@@ -2654,7 +2640,7 @@ fn transform_constraint_stereo_frame(
                 configuration: Default::default(),
                 constraints: constraint.into(),
             }
-            .reframe_by(permutation)?;
+            .reframe_by(&permutation)?;
             Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
         }
         Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
@@ -2662,7 +2648,7 @@ fn transform_constraint_stereo_frame(
                 configuration: Default::default(),
                 constraints: constraint.into(),
             }
-            .reframe_by(permutation)?;
+            .reframe_by(&permutation)?;
             Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
         }
         Constraint::And(constraints) => Constraint::And(
@@ -2691,21 +2677,17 @@ fn transform_constraint_stereo_frame(
 fn constraints_equiv_under_stereo_frames(
     constraints: Constraints,
     other: &Constraints,
-    frames: &[(Entity, Vec<Permutation>)],
+    frames: &[(Entity, Permutation)],
 ) -> bool {
-    let Some(((entity, permutations), remaining)) = frames.split_first() else {
-        return constraints.equiv(other);
-    };
-    permutations.iter().copied().any(|permutation| {
-        let transformed = constraints
-            .clone()
-            .into_iter()
-            .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, permutation))
-            .collect::<Option<Constraints>>();
-        transformed.is_some_and(|constraints| {
-            constraints_equiv_under_stereo_frames(constraints, other, remaining)
-        })
-    })
+    let transformed = frames
+        .iter()
+        .try_fold(constraints, |constraints, (entity, action)| {
+            constraints
+                .into_iter()
+                .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, *action))
+                .collect::<Option<Constraints>>()
+        });
+    transformed.is_some_and(|constraints| constraints.equiv(other))
 }
 
 #[cfg(test)]

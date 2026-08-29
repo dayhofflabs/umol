@@ -171,9 +171,8 @@ impl Reframe for NoncovalentBonds {
                 .collect();
 
             let attributes = reframed.data(id).clone().normalize()?;
-            *reframed.data_mut(id) = attributes
-                .reframe_to(&stored, &selected)
-                .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
+            *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
             reframed.permute_with(id, &order);
             actions.push((NoncovalentBondId::from(id), order));
         }
@@ -258,8 +257,9 @@ impl Reframe for NoncovalentBondSpans {
             let reduced = span
                 .try_map(|form| form.normalize().ok())
                 .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = reduced
-                .try_map(|form| form.reframe_to(&stored, &selected))
+                .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
             reframed.permute_with(id, &order);
             actions.push((NoncovalentBondId::from(id), order));
@@ -354,17 +354,6 @@ impl NoncovalentBondForm {
             kind: update.kind.clone().unwrap_or_else(|| self.kind.clone()),
             constraints,
         }
-    }
-
-    /// Derive the minimal normalized attribute update carrying `self` to `other`.
-    /// Frame-invariant: no field is position-indexed, so a frame change carries the form
-    /// unchanged.
-    ///
-    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
-    /// here rather than be silently left in the old frame.
-    pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> {
-        let Self { kind, constraints } = self;
-        Some(Self { kind, constraints })
     }
 
     pub fn difference_to(&self, other: &Self) -> NoncovalentBondUpdate {
@@ -694,19 +683,6 @@ mod tests {
     #[case::empty(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond).with_constraint(NoncovalentBondConstraintForm::intramolecular(true)))]
     fn test_noncovalent_bond_form_update_identity(#[case] bond: NoncovalentBondForm) {
         assert_eq!(bond.update(&NoncovalentBondUpdate::default()), bond);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ground(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))]
-    #[case::with_constraint(NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
-        .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)))]
-    #[case::undetermined(NoncovalentBondForm::default())]
-    fn test_noncovalent_bond_form_reframe_to(#[case] input: NoncovalentBondForm) {
-        assert_eq!(
-            input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
-            Some(input),
-        );
     }
 
     #[rstest]

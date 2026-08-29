@@ -34,7 +34,7 @@ use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId, StereoLigandPosition,
+    StereoAtomId, StereoBondId,
 };
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::multicenter::MulticenterBondForm;
@@ -1603,6 +1603,57 @@ fn test_molecule_equiv_under_non_identity(
     assert!(right.equiv_under(&left, &correspondence.reverse()));
 }
 
+#[rstest]
+fn test_molecule_equiv_under_stereo_constraint_frame() {
+    let atoms = vec![AtomForm::from_element(Element::C); 5];
+    let bonds = (1..=4)
+        .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+        .collect::<Vec<_>>();
+    let left_ligands = (1..=4)
+        .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+        .collect::<Vec<_>>();
+    let mut right_ligands = left_ligands.clone();
+    right_ligands.swap(0, 1);
+    let left = Molecule::from_entries(MoleculeEntries {
+        atoms: atoms.clone(),
+        bonds: bonds.clone(),
+        stereo_atoms: vec![(AtomId(0), left_ligands, StereoAtomForm::default())],
+        constraints: Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            }),
+        )
+        .into(),
+        ..Default::default()
+    });
+    let right = Molecule::from_entries(MoleculeEntries {
+        atoms,
+        bonds,
+        stereo_atoms: vec![(AtomId(0), right_ligands, StereoAtomForm::default())],
+        constraints: Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(1usize.into(), 2usize.into()),
+                relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+            }),
+        )
+        .into(),
+        ..Default::default()
+    });
+    let correspondence = MoleculeCorrespondence::induce(
+        &left,
+        &right,
+        Correspondence::from_images(&(0..5).map(AtomId::from).collect::<Vec<_>>(), 5),
+    )
+    .expect("the identity atom mapping induces the overlay correspondence");
+
+    assert!(left.equiv_under(&right, &correspondence));
+}
+
 /// A correspondence must map each matched entity's participants onto its counterpart's. That is a
 /// property of the correspondence, checked once, not of any per-family payload comparison.
 ///
@@ -1712,76 +1763,6 @@ fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Ent
     assert!(
         !left.equiv_under(&right, &correspondence),
         "{entity}: participants that do not correspond must not compare equivalent",
-    );
-}
-
-/// Does `equiv_under`'s stereo short-circuit reject a pair the full path would accept?
-///
-/// It `continue`s when the mapped ligand frame already equals the stored one and the configurations
-/// agree, which skips pushing the entity onto `stereo_frames` — the list
-/// `constraints_equiv_under_stereo_frames` recurses over. An omitted entity has its molecule-level
-/// constraints compared under the identity alone, never under the frame's residual stabilizer.
-///
-/// Here the two implicit hydrogens at positions 0 and 1 are indistinguishable, so swapping them is
-/// a stabilizer element; the configuration is undetermined, so the swap preserves it. The two sides
-/// carry topicity constraints that differ exactly by that swap, and therefore describe the same
-/// arrangement.
-#[rstest]
-#[ignore = "209 S2b.1: the stereo short-circuit omits the entity from `stereo_frames`, so its \
-            molecule-level constraints are compared under the identity alone"]
-fn test_molecule_equiv_under_stereo_stabilizer_constraint() {
-    let build = |pair: StereoLigandPair| {
-        Molecule::try_from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C); 3],
-            bonds: vec![
-                (AtomId(0), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            ],
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::default(),
-            )],
-            constraints: Constraint::StereoAtom(
-                StereoAtomId(0),
-                StereoKind::Tetrahedral,
-                StereoAtomConstraintForm::Topicity(TopicityForm {
-                    pair,
-                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
-                }),
-            )
-            .into(),
-            ..Default::default()
-        })
-    };
-    let position =
-        |a: u32, b: u32| StereoLigandPair::new(StereoLigandPosition(a), StereoLigandPosition(b));
-    let (Ok(left), Ok(right)) = (build(position(0, 2)), build(position(1, 2))) else {
-        panic!("both molecules satisfy integrity");
-    };
-
-    fn identity<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
-        Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
-    }
-    let correspondence = MoleculeCorrespondence::new(
-        identity(3),
-        identity(2),
-        identity(0),
-        identity(0),
-        identity(0),
-        identity(0),
-        identity(1),
-        identity(0),
-    );
-
-    assert!(
-        left.equiv_under(&right, &correspondence),
-        "constraints differing by a swap of two indistinguishable ligands describe one arrangement",
     );
 }
 

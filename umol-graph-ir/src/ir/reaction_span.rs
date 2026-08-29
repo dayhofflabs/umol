@@ -14,6 +14,7 @@ use umol_graph_core::{
     Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, RelationId,
     Remapping, VarRelationSet,
 };
+use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemSpans};
 use super::atom::AtomForm;
@@ -42,10 +43,8 @@ use super::multicenter::{MulticenterBondForm, MulticenterBondSpans};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondSpans};
 use super::reaction::{normalize_reaction_deltas, Reaction};
 use super::remap::IdRemapping;
-use super::stereo::{
-    find_reframed, StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind,
-};
-use super::traits::{EntityPatch, Normalize};
+use super::stereo::{StereoAtomForm, StereoAtomSpans, StereoBondForm, StereoBondSpans, StereoKind};
+use super::traits::{EntityPatch, FrameTransport, Normalize};
 
 /// The superimposed reaction graph — the reaction's DPO rule span, materialized. The union
 /// topology is the `lhs` id space (deleted entities kept as nodes/edges) with created entities
@@ -808,11 +807,12 @@ impl ReactionSpan {
                         .copied()
                         .map(AtomId::from)
                         .collect();
+                    let action = DynPermutation::between(&rhs_frame, &participants)?;
                     Some(
                         remapped_rhs_aromatic
                             .data(relation_id)
                             .clone()
-                            .reframe_to(&rhs_frame, &participants)?,
+                            .reframe_by(&action)?,
                     )
                 }
                 None => None,
@@ -852,11 +852,12 @@ impl ReactionSpan {
                         .copied()
                         .map(AtomId::from)
                         .collect();
+                    let action = DynPermutation::between(&rhs_frame, &participants)?;
                     Some(
                         remapped_rhs_multicenter
                             .data(relation_id)
                             .clone()
-                            .reframe_to(&rhs_frame, &participants)?,
+                            .reframe_by(&action)?,
                     )
                 }
                 None => None,
@@ -940,18 +941,20 @@ impl ReactionSpan {
         let mut stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)> =
             Vec::new();
         for view in lhs.stereo_atoms().iter() {
-            // As for the other families, but equal virtual ligands leave several admissible
-            // restatements and any of them denotes the same arrangement in the lhs frame.
             let lhs_frame = view.ligand_frame();
             let rhs_attributes = match stereo_atom_corr.right_of(view.id) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
-                    Some(find_reframed(
-                        remapped_rhs_stereo_atoms.data(relation_id),
+                    let action = Permutation::between(
                         remapped_rhs_stereo_atoms.participants_2(relation_id),
                         &lhs_frame,
-                        |_, restated| Some(restated),
-                    )?)
+                    )?;
+                    Some(
+                        remapped_rhs_stereo_atoms
+                            .data(relation_id)
+                            .clone()
+                            .reframe_by(&action)?,
+                    )
                 }
                 None => None,
             };
@@ -979,18 +982,20 @@ impl ReactionSpan {
         let mut stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)> =
             Vec::new();
         for view in lhs.stereo_bonds().iter() {
-            // As for the other families, but equal virtual ligands leave several admissible
-            // restatements and any of them denotes the same arrangement in the lhs frame.
             let lhs_frame = view.ligand_frame();
             let rhs_attributes = match stereo_bond_corr.right_of(view.id) {
                 Some(id) => {
                     let relation_id = RelationId::from(id);
-                    Some(find_reframed(
-                        remapped_rhs_stereo_bonds.data(relation_id),
+                    let action = Permutation::between(
                         remapped_rhs_stereo_bonds.participants_2(relation_id),
                         &lhs_frame,
-                        |_, restated| Some(restated),
-                    )?)
+                    )?;
+                    Some(
+                        remapped_rhs_stereo_bonds
+                            .data(relation_id)
+                            .clone()
+                            .reframe_by(&action)?,
+                    )
                 }
                 None => None,
             };

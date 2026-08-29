@@ -13,6 +13,7 @@ use thiserror::Error;
 use umol_graph_core::{
     Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
+use umol_perm::{DynPermutation, Permutation};
 
 use super::atom::AtomForm;
 use super::bond::BondForm;
@@ -26,8 +27,7 @@ use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
 use super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
-use super::stereo::find_reframed;
-use super::traits::Lattice;
+use super::traits::{FrameTransport, Lattice};
 
 /// Strategy for `substructure_matches`, each composing over a
 /// [`SubgraphIsomorphismAlgorithm`].
@@ -408,10 +408,11 @@ impl Molecule {
                         .expect("host overlay atom is matched")
                 })
                 .collect();
+            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
             if !p_view
                 .attributes
                 .clone()
-                .reframe_to(&pat_atoms, &host_frame)?
+                .reframe_by(&action)?
                 .matches(h_view.attributes)
             {
                 return None;
@@ -436,10 +437,11 @@ impl Molecule {
                         .expect("host overlay atom is matched")
                 })
                 .collect();
+            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
             if !p_view
                 .attributes
                 .clone()
-                .reframe_to(&pat_atoms, &host_frame)?
+                .reframe_by(&action)?
                 .matches(h_view.attributes)
             {
                 return None;
@@ -464,9 +466,7 @@ impl Molecule {
         // element whose form, restated into the pattern's ligand frame (via the atom
         // correspondence), the pattern form admits. The comparison is over the whole form, so the
         // kind, the configuration and every frame-relative constraint are one question; an
-        // `Undetermined` pattern configuration admits both handednesses. Equal virtual ligands
-        // leave several admissible restatements, and any one of them agreeing is the host stating
-        // the same arrangement.
+        // `Undetermined` pattern configuration admits both handednesses.
         let mut stereo_atom = Vec::new();
         for sp in pattern.stereo_atoms().iter() {
             let host_site =
@@ -474,9 +474,9 @@ impl Molecule {
             let sh = host.atom(host_site).stereo_atom()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            find_reframed(sh.attributes, &sh.ligand_frame(), &frame, |_, restated| {
-                sp.attributes.matches(&restated).then_some(())
-            })?;
+            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes.clone().reframe_by(&action)?;
+            sp.attributes.matches(&restated).then_some(())?;
             stereo_atom.push((sp.id, sh.id));
         }
         let stereo_atoms = Correspondence::new(
@@ -494,9 +494,9 @@ impl Molecule {
             let sh = host.bond(host_site).stereo_bond()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            find_reframed(sh.attributes, &sh.ligand_frame(), &frame, |_, restated| {
-                sp.attributes.matches(&restated).then_some(())
-            })?;
+            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes.clone().reframe_by(&action)?;
+            sp.attributes.matches(&restated).then_some(())?;
             stereo_bond.push((sp.id, sh.id));
         }
         let stereo_bonds = Correspondence::new(

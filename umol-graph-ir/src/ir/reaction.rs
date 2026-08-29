@@ -15,7 +15,7 @@ use dpo::check_reaction_dpo;
 pub use dpo::DpoContradiction;
 pub use integrity::ReactionIntegrityError;
 use umol_graph_core::Correspondence;
-use umol_perm::Permutation;
+use umol_perm::{DynPermutation, Permutation};
 
 use super::aromatic::{AromaticSystemForm, AromaticSystemUpdate};
 use super::atom::{AtomForm, AtomUpdate};
@@ -46,9 +46,9 @@ use super::molecule::MoleculeEntries;
 use super::molecule::{Molecule, MoleculeIntegrityError};
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
-use super::stereo::{find_reframed, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
+use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
-use super::traits::{Equiv, Normalize};
+use super::traits::{Equiv, FrameTransport, Normalize};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -417,9 +417,10 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| (view.donor_ids().collect(), view.acceptor_id()))
                     .or_else(|| dative_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
+                let action = DynPermutation::between(donors, &owner.0).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
-                    .reframe_to(donors, &owner.0)
+                    .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *donors = owner.0;
                 *acceptor = owner.1;
@@ -435,9 +436,10 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| view.atom_ids().collect())
                     .or_else(|| aromatic_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
+                let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
-                    .reframe_to(atoms, &owner)
+                    .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
             }
@@ -452,9 +454,10 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| view.atom_ids().collect())
                     .or_else(|| multicenter_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
+                let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
-                    .reframe_to(atoms, &owner)
+                    .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
             }
@@ -469,9 +472,10 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| view.atom_ids())
                     .or_else(|| noncovalent_adds.get(id).copied())
                     .ok_or(Contradiction)?;
+                let action = DynPermutation::between(atoms, &owner).ok_or(Contradiction)?;
                 *attributes = attributes
                     .clone()
-                    .reframe_to(atoms, &owner)
+                    .reframe_by(&action)
                     .ok_or(Contradiction)?;
                 *atoms = owner;
             }
@@ -487,9 +491,11 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| (view.site_id(), view.ligand_frame()))
                     .or_else(|| stereo_atom_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
-                *attributes =
-                    find_reframed(attributes, ligands, &owner.1, |_, restated| Some(restated))
-                        .ok_or(Contradiction)?;
+                let action = Permutation::between(ligands, &owner.1).ok_or(Contradiction)?;
+                *attributes = attributes
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
                 *site = owner.0;
                 *ligands = owner.1;
             }
@@ -505,9 +511,11 @@ pub(super) fn normalize_reaction_deltas(
                     .map(|view| (view.site_id(), view.ligand_frame()))
                     .or_else(|| stereo_bond_adds.get(id).cloned())
                     .ok_or(Contradiction)?;
-                *attributes =
-                    find_reframed(attributes, ligands, &owner.1, |_, restated| Some(restated))
-                        .ok_or(Contradiction)?;
+                let action = Permutation::between(ligands, &owner.1).ok_or(Contradiction)?;
+                *attributes = attributes
+                    .clone()
+                    .reframe_by(&action)
+                    .ok_or(Contradiction)?;
                 *site = owner.0;
                 *ligands = owner.1;
             }
@@ -1746,20 +1754,17 @@ fn reframe_stereo(
                         change: StereoAtomFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        // `old` and `new` move under one action, and the search supplies it: the
-                        // action is the one under which `old` agrees with what the host holds.
-                        // Equal virtual ligands leave several, differing by a stabilizer element of
-                        // the host frame, so the products they give denote one arrangement.
-                        let (action, reframed_old) =
-                            find_reframed(old, &before, &after, |action, restated| {
-                                restated
-                                    .equiv(&host_view.attributes.configuration)
-                                    .then_some((action, restated))
-                            })
+                        let action = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        let reframed_old = old
+                            .clone()
+                            .reframe_by(&action)
+                            .filter(|restated| restated.equiv(&host_view.attributes.configuration))
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = reframed_old;
                         *new = new
-                            .apply(action)
+                            .clone()
+                            .reframe_by(&action)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoAtomDelta::Remove {
@@ -1767,14 +1772,13 @@ fn reframe_stereo(
                         attributes,
                         ..
                     } => {
-                        // Restate the removal form into the host frame under whichever admissible
-                        // action agrees with what the host holds. Equal virtual ligands leave
-                        // several; they differ by a stabilizer element of the host frame, so any
-                        // that agrees denotes the arrangement being removed.
-                        *attributes = find_reframed(attributes, &before, &after, |_, restated| {
-                            restated.equiv(host_view.attributes).then_some(restated)
-                        })
-                        .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        let action = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *attributes = attributes
+                            .clone()
+                            .reframe_by(&action)
+                            .filter(|restated| restated.equiv(host_view.attributes))
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
                     _ => {}
@@ -1804,20 +1808,17 @@ fn reframe_stereo(
                         change: StereoBondFieldChange::Configuration { old, new },
                         ..
                     } => {
-                        // `old` and `new` move under one action, and the search supplies it: the
-                        // action is the one under which `old` agrees with what the host holds.
-                        // Equal virtual ligands leave several, differing by a stabilizer element of
-                        // the host frame, so the products they give denote one arrangement.
-                        let (action, reframed_old) =
-                            find_reframed(old, &before, &after, |action, restated| {
-                                restated
-                                    .equiv(&host_view.attributes.configuration)
-                                    .then_some((action, restated))
-                            })
+                        let action = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        let reframed_old = old
+                            .clone()
+                            .reframe_by(&action)
+                            .filter(|restated| restated.equiv(&host_view.attributes.configuration))
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = reframed_old;
                         *new = new
-                            .apply(action)
+                            .clone()
+                            .reframe_by(&action)
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                     }
                     StereoBondDelta::Remove {
@@ -1825,14 +1826,13 @@ fn reframe_stereo(
                         attributes,
                         ..
                     } => {
-                        // Restate the removal form into the host frame under whichever admissible
-                        // action agrees with what the host holds. Equal virtual ligands leave
-                        // several; they differ by a stabilizer element of the host frame, so any
-                        // that agrees denotes the arrangement being removed.
-                        *attributes = find_reframed(attributes, &before, &after, |_, restated| {
-                            restated.equiv(host_view.attributes).then_some(restated)
-                        })
-                        .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        let action = Permutation::between(&before, &after)
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
+                        *attributes = attributes
+                            .clone()
+                            .reframe_by(&action)
+                            .filter(|restated| restated.equiv(host_view.attributes))
+                            .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
                     _ => {}
@@ -1937,8 +1937,14 @@ mod tests {
                         id: AromaticSystemId(0),
                         atoms: vec![AtomId(1), AtomId(0)],
                         attributes: attributes
-                            .reframe_to(&[AtomId(0), AtomId(1)], &[AtomId(1), AtomId(0)])
-                            .expect("the frames have the same atoms"),
+                            .reframe_by(
+                                &DynPermutation::between(
+                                    &[AtomId(0), AtomId(1)],
+                                    &[AtomId(1), AtomId(0)],
+                                )
+                                .expect("the frames have the same atoms"),
+                            )
+                            .expect("the action has the form's degree"),
                     }),
                 )
             }
@@ -1957,8 +1963,14 @@ mod tests {
                         id: MulticenterBondId(0),
                         atoms: vec![AtomId(1), AtomId(0)],
                         attributes: attributes
-                            .reframe_to(&[AtomId(0), AtomId(1)], &[AtomId(1), AtomId(0)])
-                            .expect("the frames have the same atoms"),
+                            .reframe_by(
+                                &DynPermutation::between(
+                                    &[AtomId(0), AtomId(1)],
+                                    &[AtomId(1), AtomId(0)],
+                                )
+                                .expect("the frames have the same atoms"),
+                            )
+                            .expect("the action has the form's degree"),
                     }),
                 )
             }
@@ -1987,10 +1999,12 @@ mod tests {
                     .push((AtomId(0), atom_ligands.clone(), attributes.clone()));
                 let mut local_ligands = atom_ligands.clone();
                 local_ligands.swap(0, 1);
-                let local_attributes =
-                    find_reframed(&attributes, &atom_ligands, &local_ligands, |_, restated| {
-                        Some(restated)
-                    })
+                let local_attributes = attributes
+                    .clone()
+                    .reframe_by(
+                        &Permutation::between(&atom_ligands, &local_ligands)
+                            .expect("the frames have the same ligands"),
+                    )
                     .expect("the local frame is a tetrahedral action");
                 (
                     Delta::StereoAtom(StereoAtomDelta::Remove {
@@ -2014,10 +2028,12 @@ mod tests {
                     .push((BondId(4), bond_ligands.clone(), attributes.clone()));
                 let mut local_ligands = bond_ligands.clone();
                 local_ligands.swap(0, 1);
-                let local_attributes =
-                    find_reframed(&attributes, &bond_ligands, &local_ligands, |_, restated| {
-                        Some(restated)
-                    })
+                let local_attributes = attributes
+                    .clone()
+                    .reframe_by(
+                        &Permutation::between(&bond_ligands, &local_ligands)
+                            .expect("the frames have the same ligands"),
+                    )
                     .expect("the local frame preserves the stereo-bond endpoint blocks");
                 (
                     Delta::StereoBond(StereoBondDelta::Remove {

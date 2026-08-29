@@ -743,18 +743,19 @@ Comparing two entries therefore has three independent parts, and a site chooses 
   the entity-kind structure that storage alone cannot express.
 - **frame transport** — restating one side's payload in the other's frame. Every entity frame has
   distinct complete participant values, so equal structured incidence determines one action in the
-  entity kind's group. `reframe_to` derives that action and transports the payload.
+  entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and
+  `FrameTransport::reframe_by` transports the payload.
 - **the value relation** — `equiv`, `matches`, or `meet`, the caller's own.
 
-`reframe_to` returning `Some` does not establish identity: a frame-invariant payload reads neither
-frame, and an undetermined electron-count vector has nothing to reorder. A site that needs both must
-ask for both.
+`FrameTransport::reframe_by` returning `Some` does not establish identity: a frame-invariant payload
+reads neither frame, and an undetermined electron-count vector has nothing to reorder. A site that
+needs both must ask for both.
 
 Only the per-participant electron counts of aromatic systems and multicenter bonds, and the stereo
 configuration with its frame-relative constraints, are position-sensitive. Dative-bond order,
-noncovalent-bond kind and their constraints are not, and their `reframe_to` destructures the form
-exhaustively and rebuilds it, so a new position-indexed field fails to compile rather than being
-left silently unframed.
+noncovalent-bond kind and their constraints are not, and their `FrameTransport` implementation
+destructures the form exhaustively and rebuilds it, so a new position-indexed field fails to compile
+rather than being left silently unframed.
 
 A reaction removal may carry the source entity's structured incidence in another participant
 ordering. Its repeated sequence is an explicit local frame for the recorded payload. Construction

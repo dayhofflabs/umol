@@ -128,10 +128,8 @@ impl MulticenterBonds {
                         left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
                     let right_atoms: Vec<AtomId> =
                         right_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
-                    right
-                        .clone()
-                        .reframe_to(&right_atoms, &left_atoms)?
-                        .meet(left)
+                    let action = DynPermutation::between(&right_atoms, &left_atoms)?;
+                    right.clone().reframe_by(&action)?.meet(left)
                 },
             )
             .map(|merged| Self(Arc::new(merged.object)))
@@ -182,9 +180,8 @@ impl Reframe for MulticenterBonds {
                 .collect();
 
             let attributes = reframed.data(id).clone().normalize()?;
-            *reframed.data_mut(id) = attributes
-                .reframe_to(&stored, &selected)
-                .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
+            *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
             reframed.permute_with(id, &order);
             actions.push((MulticenterBondId::from(id), order));
         }
@@ -276,8 +273,9 @@ impl Reframe for MulticenterBondSpans {
             let reduced = span
                 .try_map(|form| form.normalize().ok())
                 .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = reduced
-                .try_map(|form| form.reframe_to(&stored, &selected))
+                .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
             reframed.permute_with(id, &order);
             actions.push((MulticenterBondId::from(id), order));
@@ -423,27 +421,6 @@ impl MulticenterBondForm {
                 .difference_to(&other.unpaired_electrons),
             constraints,
         }
-    }
-
-    /// Restate the form in the `to` participant frame, given it is stated in the `from` frame.
-    /// Only `electrons` is position-indexed; charge, unpaired electrons, and constraints are
-    /// positionless and carry unchanged. `None` when `electrons` declines the frame change.
-    ///
-    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
-    /// here rather than be silently left in the old frame.
-    pub fn reframe_to(self, from: &[AtomId], to: &[AtomId]) -> Option<Self> {
-        let Self {
-            electrons,
-            charge,
-            unpaired_electrons,
-            constraints,
-        } = self;
-        Some(Self {
-            electrons: electrons.reframe_to(from, to)?,
-            charge,
-            unpaired_electrons,
-            constraints,
-        })
     }
 
     /// Reorder the positional `electrons` by `order`, tracking a participant
@@ -651,13 +628,19 @@ mod tests {
         );
 
         let (_, order) = &actions[0];
-        let stored: Vec<AtomId> = unsorted_bond.atoms(MulticenterBondId(0)).collect();
-        let selected: Vec<AtomId> = order.iter().map(|p| stored[p.index()]).collect();
         assert_eq!(
             unsorted_bond
                 .attributes(MulticenterBondId(0))
                 .clone()
-                .reframe_to(&stored, &selected),
+                .reframe_by(
+                    &DynPermutation::try_from(
+                        order
+                            .iter()
+                            .map(|position| position.index())
+                            .collect::<Vec<_>>(),
+                    )
+                    .expect("recorded order is a permutation")
+                ),
             Some(reframed.attributes(MulticenterBondId(0)).clone()),
         );
     }
@@ -838,41 +821,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::reorder(
-        MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
-        &[AtomId(4), AtomId(7), AtomId(9)], &[AtomId(9), AtomId(4), AtomId(7)],
-        Some(MulticenterBondForm::from_electrons(vec![30, 10, 20]).with_charge(-1)),
-    )]
-    #[case::undetermined_electrons(
-        MulticenterBondForm::new(ElectronCountsForm::Undetermined).with_charge(-1),
-        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)],
-        Some(MulticenterBondForm::new(ElectronCountsForm::Undetermined).with_charge(-1)),
-    )]
-    #[case::constraint_carries(
-        MulticenterBondForm::from_electrons(vec![10, 20]).with_constraint(MulticenterBondConstraintForm::electron_count(30)),
-        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)],
-        Some(MulticenterBondForm::from_electrons(vec![20, 10]).with_constraint(MulticenterBondConstraintForm::electron_count(30))),
-    )]
-    #[case::not_a_reordering(
-        MulticenterBondForm::from_electrons(vec![10, 20]),
-        &[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(5)],
-        None,
-    )]
-    #[case::frames_differ_in_length(
-        MulticenterBondForm::from_electrons(vec![10, 20]),
-        &[AtomId(4), AtomId(7)], &[AtomId(7)],
-        None,
-    )]
-    fn test_multicenter_bond_form_reframe_to(
-        #[case] input: MulticenterBondForm,
-        #[case] from: &[AtomId],
-        #[case] to: &[AtomId],
-        #[case] expected: Option<MulticenterBondForm>,
-    ) {
-        assert_eq!(input.reframe_to(from, to), expected);
-    }
-
-    #[rstest]
     #[case::positioned(
         MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
         vec![2, 0, 1],
@@ -895,46 +843,6 @@ mod tests {
     ) {
         let action = DynPermutation::try_from(image).expect("case is a permutation");
         assert_eq!(input.reframe_by(&action), expected);
-    }
-
-    /// `reframe_to` does not establish that `to` is a reordering of `from`. It checks that only
-    /// when it has a determinate vector to reorder; an undetermined one carries through untouched,
-    /// so the frames are never read.
-    ///
-    /// A caller needing participant identity therefore cannot get it from transport, whatever the
-    /// family — the same reason the frame-invariant forms establish nothing.
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::determinate_rejects_non_reordering(
-        MulticenterBondForm::from_electrons(vec![10, 20]),
-        &[AtomId(4), AtomId(7)], &[AtomId(4), AtomId(9)],
-        None,
-    )]
-    #[case::undetermined_accepts_non_reordering(
-        MulticenterBondForm::default(),
-        &[AtomId(4), AtomId(7)], &[AtomId(4), AtomId(9)],
-        Some(MulticenterBondForm::default()),
-    )]
-    #[case::undetermined_accepts_disjoint_frames(
-        MulticenterBondForm::default(),
-        &[AtomId(4), AtomId(7)], &[AtomId(1), AtomId(2)],
-        Some(MulticenterBondForm::default()),
-    )]
-    fn test_multicenter_bond_form_reframe_to_does_not_establish_identity(
-        #[case] input: MulticenterBondForm,
-        #[case] from: &[AtomId],
-        #[case] to: &[AtomId],
-        #[case] expected: Option<MulticenterBondForm>,
-    ) {
-        assert_eq!(input.reframe_to(from, to), expected);
-    }
-
-    #[rstest]
-    #[case::identity_frame(MulticenterBondForm::from_electrons(vec![10, 20, 30]).with_charge(-1))]
-    #[case::undetermined_electrons(MulticenterBondForm::new(ElectronCountsForm::Undetermined))]
-    fn test_multicenter_bond_form_reframe_to_identity(#[case] input: MulticenterBondForm) {
-        let frame = [AtomId(4), AtomId(7), AtomId(9)];
-        assert_eq!(input.clone().reframe_to(&frame, &frame), Some(input));
     }
 
     #[rstest]

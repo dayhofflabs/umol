@@ -901,7 +901,7 @@ fn transport_optional<T: FrameTransport>(
     action: &T::Action,
 ) -> Option<Option<T>> {
     match value {
-        Some(value) => FrameTransport::reframe_by(value, action).map(Some),
+        Some(value) => value.reframe_by(action).map(Some),
         None => Some(None),
     }
 }
@@ -920,7 +920,7 @@ impl FrameTransport for DativeBondDelta {
                 id,
                 donors: action.act(&donors)?,
                 acceptor,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::Remove {
                 id,
@@ -931,7 +931,7 @@ impl FrameTransport for DativeBondDelta {
                 id,
                 donors: action.act(&donors)?,
                 acceptor,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
             Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
@@ -951,7 +951,7 @@ impl FrameTransport for AromaticSystemDelta {
             } => Self::Add {
                 id,
                 atoms: action.act(&atoms)?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::Remove {
                 id,
@@ -960,15 +960,15 @@ impl FrameTransport for AromaticSystemDelta {
             } => Self::Remove {
                 id,
                 atoms: action.act(&atoms)?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
                 change: match change {
                     AromaticSystemFieldChange::Electrons { old, new } => {
                         AromaticSystemFieldChange::Electrons {
-                            old: FrameTransport::reframe_by(old, action)?,
-                            new: FrameTransport::reframe_by(new, action)?,
+                            old: old.reframe_by(action)?,
+                            new: new.reframe_by(action)?,
                         }
                     }
                     AromaticSystemFieldChange::Charge { old, new } => {
@@ -996,7 +996,7 @@ impl FrameTransport for MulticenterBondDelta {
             } => Self::Add {
                 id,
                 atoms: action.act(&atoms)?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::Remove {
                 id,
@@ -1005,15 +1005,15 @@ impl FrameTransport for MulticenterBondDelta {
             } => Self::Remove {
                 id,
                 atoms: action.act(&atoms)?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField {
                 id,
                 change: match change {
                     MulticenterBondFieldChange::Electrons { old, new } => {
                         MulticenterBondFieldChange::Electrons {
-                            old: FrameTransport::reframe_by(old, action)?,
-                            new: FrameTransport::reframe_by(new, action)?,
+                            old: old.reframe_by(action)?,
+                            new: new.reframe_by(action)?,
                         }
                     }
                     MulticenterBondFieldChange::Charge { old, new } => {
@@ -1044,7 +1044,7 @@ impl FrameTransport for NoncovalentBondDelta {
             } => Self::Add {
                 id,
                 atoms: action.act(&atoms)?.try_into().ok()?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::Remove {
                 id,
@@ -1053,7 +1053,7 @@ impl FrameTransport for NoncovalentBondDelta {
             } => Self::Remove {
                 id,
                 atoms: action.act(&atoms)?.try_into().ok()?,
-                attributes: FrameTransport::reframe_by(attributes, action)?,
+                attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
             Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
@@ -1079,7 +1079,7 @@ impl FrameTransport for StereoAtomDelta {
                     id,
                     site,
                     ligands: action.act(&ligands),
-                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                    attributes: attributes.reframe_by(action)?,
                 }
             }
             Self::Remove {
@@ -1095,7 +1095,7 @@ impl FrameTransport for StereoAtomDelta {
                     id,
                     site,
                     ligands: action.act(&ligands),
-                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                    attributes: attributes.reframe_by(action)?,
                 }
             }
             Self::ModifyField { id, change } => Self::ModifyField {
@@ -1103,8 +1103,8 @@ impl FrameTransport for StereoAtomDelta {
                 change: match change {
                     StereoAtomFieldChange::Configuration { old, new } => {
                         StereoAtomFieldChange::Configuration {
-                            old: FrameTransport::reframe_by(old, action)?,
-                            new: FrameTransport::reframe_by(new, action)?,
+                            old: old.reframe_by(action)?,
+                            new: new.reframe_by(action)?,
                         }
                     }
                 },
@@ -1143,7 +1143,7 @@ impl FrameTransport for StereoBondDelta {
                     id,
                     site,
                     ligands: action.act(&ligands),
-                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                    attributes: attributes.reframe_by(action)?,
                 }
             }
             Self::Remove {
@@ -1159,7 +1159,7 @@ impl FrameTransport for StereoBondDelta {
                     id,
                     site,
                     ligands: action.act(&ligands),
-                    attributes: FrameTransport::reframe_by(attributes, action)?,
+                    attributes: attributes.reframe_by(action)?,
                 }
             }
             Self::ModifyField { id, change } => Self::ModifyField {
@@ -1167,8 +1167,8 @@ impl FrameTransport for StereoBondDelta {
                 change: match change {
                     StereoBondFieldChange::Configuration { old, new } => {
                         StereoBondFieldChange::Configuration {
-                            old: FrameTransport::reframe_by(old, action)?,
-                            new: FrameTransport::reframe_by(new, action)?,
+                            old: old.reframe_by(action)?,
+                            new: new.reframe_by(action)?,
                         }
                     }
                 },
@@ -1413,7 +1413,7 @@ impl<T: FrameTransport> FrameTransport for EntitySpan<T> {
     type Action = T::Action;
 
     fn reframe_by(self, action: &Self::Action) -> Option<Self> {
-        self.try_map(|value| FrameTransport::reframe_by(value, action))
+        self.try_map(|value| value.reframe_by(action))
     }
 }
 

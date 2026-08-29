@@ -198,9 +198,8 @@ impl Reframe for DativeBonds {
                 .collect();
 
             let attributes = reframed.data(id).clone().normalize()?;
-            *reframed.data_mut(id) = attributes
-                .reframe_to(&stored, &selected)
-                .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
+            *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
             reframed.permute_2_with(id, &order);
             actions.push((DativeBondId::from(id), order));
         }
@@ -304,8 +303,9 @@ impl Reframe for DativeBondSpans {
             let reduced = span
                 .try_map(|form| form.normalize().ok())
                 .ok_or(Contradiction)?;
+            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = reduced
-                .try_map(|form| form.reframe_to(&stored, &selected))
+                .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
             reframed.permute_2_with(id, &order);
             actions.push((DativeBondId::from(id), order));
@@ -393,17 +393,6 @@ impl DativeBondForm {
             order: update.order.clone().unwrap_or_else(|| self.order.clone()),
             constraints,
         }
-    }
-
-    /// Derive the minimal normalized attribute update carrying `self` to `other`.
-    /// Frame-invariant: no field is position-indexed, so a frame change carries the form
-    /// unchanged.
-    ///
-    /// Destructured exhaustively on purpose: a new position-indexed field must fail to compile
-    /// here rather than be silently left in the old frame.
-    pub fn reframe_to(self, _from: &[AtomId], _to: &[AtomId]) -> Option<Self> {
-        let Self { order, constraints } = self;
-        Some(Self { order, constraints })
     }
 
     pub fn difference_to(&self, other: &Self) -> DativeBondUpdate {
@@ -661,19 +650,6 @@ mod tests {
     #[case::empty(DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))))]
     fn test_dative_bond_form_update_identity(#[case] bond: DativeBondForm) {
         assert_eq!(bond.update(&DativeBondUpdate::default()), bond);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ground(DativeBondForm::from_order(1))]
-    #[case::with_constraint(DativeBondForm::from_order(1)
-        .with_constraint(DativeBondConstraintForm::aromatic(true)))]
-    #[case::undetermined(DativeBondForm::default())]
-    fn test_dative_bond_form_reframe_to(#[case] input: DativeBondForm) {
-        assert_eq!(
-            input.clone().reframe_to(&[AtomId(4), AtomId(7)], &[AtomId(7), AtomId(4)]),
-            Some(input),
-        );
     }
 
     #[rstest]

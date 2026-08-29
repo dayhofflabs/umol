@@ -65,6 +65,12 @@ total on its source, although its image may occupy only part of a larger target.
 the partial old-to-new mapping produced by removal: surviving ids have dense images and removed ids
 have none. Partiality from pairing and partiality from removal are different semantics.
 
+**Position-space actions.** A *permutation* reorders positions within one participant frame; it does
+not pair, relabel, or remove entities. `Permutation` is the fixed-maximum, `Copy` carrier used by
+bounded stereo algebra. `DynPermutation` is the arbitrary-degree carrier used by ordinary overlay
+participant frames. Both act on integer positions and are distinct from every id-space relation
+above.
+
 ## Suffixes
 
 The generative core of this guide. Each family gains members as work lands, so a new type's suffix
@@ -1267,6 +1273,26 @@ entities. It produces a policy-free derivation.
 **Not:** resolution (which applies policy and edits), validation.
 **In code:** `AromaticityPerception`.
 
+### Permutation and dynamic permutation
+
+A **permutation** is a bijective action on the integer positions of one frame. Both carriers use a
+one-line image with the direction `new[i] = old[action[i]]`; `between(from, to)` derives the unique
+action carrying `from` to `to`.
+
+`Permutation` stores up to `MAX_DEGREE` positions in a fixed array and is `Copy`. It supports the
+bounded permutation-group, coset, and stereo algebra. `DynPermutation` owns a `Vec<usize>`, has no
+fixed maximum degree, and is not `Copy`; it carries actions for ordinary relation frames such as an
+aromatic system with arbitrarily many participants. The two names distinguish representation and
+degree, not two action conventions.
+
+The image contains participant positions, never graph or entity ids. `ParticipantPosition` remains
+the graph-core storage-facing position type and does not enter either action carrier.
+
+**Not:** a remapping, which relabels every source id into another id space; a correspondence, which
+pairs ids in two declared carriers and may be partial; or a compaction, which maps surviving ids and
+has no image for removals.
+**In code:** `Permutation`, `DynPermutation`, `MAX_DEGREE`, `FrameTransport::Action`.
+
 ### Plan
 
 A **plan** is the complete edit sequence derived without mutating the source object.
@@ -1390,15 +1416,16 @@ three nested quotients on a value: `normalize` reduces it, `reframe` reduces and
 frame, `canonicalize` reduces, reframes and then selects ids. Their equalities nest the same way:
 `==` refines `normalized_eq`, which refines `framed_eq`, which refines `canonical_eq`.
 
-`reframe_to(from, to)` restates a form between two given frames. Integrity prohibits repeated
-complete participant values, so equal structured incidence determines one entity-kind action.
-`FrameTransport` applies a supplied compatible action; `Reframe` selects an action for a
-frame-owning carrier. A reaction removal may carry another explicit local ordering of its source
-incidence: reaction transport composes the derived local-to-owner alignment with the owning action.
+Pairwise alignment uses `DynPermutation::between` or `Permutation::between` to derive the unique
+entity-kind action between two supplied frames, then applies it through `FrameTransport::reframe_by`.
+Integrity prohibits repeated complete participant values, so equal structured incidence determines
+one action. `Reframe` instead selects an action for a frame-owning carrier. A reaction removal may
+carry another explicit local ordering of its source incidence: reaction transport composes the
+derived local-to-owner alignment with the owning action.
 
 **Not:** a remapping, which relabels ids across id spaces and does not touch order; not
 canonicalization, which also selects ids.
-**In code:** `Reframe`, `FrameAction`, `reframe_to`, `reframe_by`, `find_reframed`, `select_frame`.
+**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe`, `reframe_by`.
 
 ### Relation set
 
