@@ -35,19 +35,19 @@ pub(crate) use umol_graph_ir::ir::{
     Constraint, ConstraintEdit, Constraints, DativeBondConstraintForm, DativeBondConstraintKey,
     DativeBondConstraintsForm, DativeBondDelta, DativeBondFieldChange, DativeBondForm,
     DativeBondHandle, DativeBondId, DativeBondUpdate, Delta, Deltas, Edit, Edits,
-    ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, Equiv, FluxionalityForm,
-    FrameAction, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation, LigandSymmetryForm,
-    MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
-    MoleculeIntegrityError, MulticenterBondConstraintForm, MulticenterBondConstraintKey,
-    MulticenterBondConstraintsForm, MulticenterBondDelta, MulticenterBondFieldChange,
-    MulticenterBondForm, MulticenterBondHandle, MulticenterBondId, MulticenterBondUpdate,
-    MulticenterValenceForm, NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm,
-    NoncovalentBondDelta, NoncovalentBondFieldChange, NoncovalentBondForm, NoncovalentBondHandle,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
-    Normalize, NumForm, OrientedLigandPermutation, PredExpr, Reaction, ReactionSpan, RelOp,
-    RelationalConstraint, RingMembershipForm, RingScope, StereoAtomConstraintForm,
-    StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange, StereoAtomForm,
-    StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
+    ElectronCountsForm, ElementForm, Entity, EntityHandle, EntityKind, FluxionalityForm,
+    FrameTransport, FromIr, IntoIr, IsotopeMassForm, Lattice, LigandPermutation,
+    LigandSymmetryForm, MemOp, Molecule, MoleculeConstraint, MoleculeCorrespondence,
+    MoleculeEntries, MoleculeIntegrityError, MulticenterBondConstraintForm,
+    MulticenterBondConstraintKey, MulticenterBondConstraintsForm, MulticenterBondDelta,
+    MulticenterBondFieldChange, MulticenterBondForm, MulticenterBondHandle, MulticenterBondId,
+    MulticenterBondUpdate, MulticenterValenceForm, NoncovalentBondConstraintForm,
+    NoncovalentBondConstraintsForm, NoncovalentBondDelta, NoncovalentBondFieldChange,
+    NoncovalentBondForm, NoncovalentBondHandle, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindForm, NoncovalentBondUpdate, Normalize, NumForm, OrientedLigandPermutation,
+    PredExpr, Reaction, ReactionSpan, RelOp, RelationalConstraint, RingMembershipForm, RingScope,
+    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoAtomDelta, StereoAtomFieldChange,
+    StereoAtomForm, StereoAtomHandle, StereoAtomId, StereoAtomUpdate, StereoBondConstraintForm,
     StereoBondConstraintsForm, StereoBondDelta, StereoBondFieldChange, StereoBondForm,
     StereoBondHandle, StereoBondId, StereoBondUpdate, StereoConfigurationForm,
     StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
@@ -1209,9 +1209,9 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         a.normalized().map(|c| c.into_owned()),
         a.clone().normalize()
     );
-    // `equiv` is equality of normal forms.
+    // `normalized_eq` is equality of normal forms.
     prop_assert_eq!(
-        a.equiv(b),
+        a.normalized_eq(b),
         a.clone().normalize().ok() == b.clone().normalize().ok()
     );
     Ok(())
@@ -2308,7 +2308,7 @@ pub(crate) fn stereo_reframed_molecule_pair_strategy() -> impl Strategy<Value = 
             };
             let reframed = form
                 .clone()
-                .reframe_by(permutation)
+                .reframe_by(&permutation)
                 .expect("a parent-group action of the kind's degree is admissible");
 
             let left = Molecule::from_entries(MoleculeEntries {

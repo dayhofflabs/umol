@@ -40,7 +40,7 @@ use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
     StereoKind,
 };
-use super::traits::{Equiv, Lattice};
+use super::traits::{Lattice, Normalize};
 
 /// One stereo-atom removal in a batched `RemoveStereoAtoms`: id, site, ligand frame, recorded attributes.
 pub type StereoAtomRemoval = (
@@ -766,7 +766,7 @@ impl Edits {
     /// Project an atom update into checked host-relative edits.
     pub fn update_atom(&mut self, id: AtomHandle, current: &AtomForm, update: &AtomUpdate) {
         if let Some(new) = &update.element {
-            if !current.element.equiv(new) {
+            if !current.element.normalized_eq(new) {
                 self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::Element {
@@ -777,7 +777,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.isotope_mass {
-            if !current.isotope_mass.equiv(new) {
+            if !current.isotope_mass.normalized_eq(new) {
                 self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::IsotopeMass {
@@ -788,7 +788,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::Charge {
@@ -799,7 +799,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.implicit_hydrogens {
-            if !current.implicit_hydrogens.equiv(new) {
+            if !current.implicit_hydrogens.normalized_eq(new) {
                 self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::ImplicitHydrogens {
@@ -810,7 +810,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.lone_pairs {
-            if !current.lone_pairs.equiv(new) {
+            if !current.lone_pairs.normalized_eq(new) {
                 self.push(Edit::ModifyAtomField {
                     id: id.clone(),
                     change: AtomFieldChange::LonePairs {
@@ -823,7 +823,10 @@ impl Edits {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             self.push(Edit::ModifyAtomField {
                 id: id.clone(),
                 change: AtomFieldChange::UnpairedElectrons {
@@ -837,7 +840,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -853,7 +856,7 @@ impl Edits {
     /// Project a localized-bond update into checked host-relative edits.
     pub fn update_bond(&mut self, id: BondHandle, current: &BondForm, update: &BondUpdate) {
         if let Some(new) = &update.order {
-            if !current.order.equiv(new) {
+            if !current.order.normalized_eq(new) {
                 self.push(Edit::ModifyBondField {
                     id: id.clone(),
                     change: BondFieldChange::Order {
@@ -864,7 +867,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 self.push(Edit::ModifyBondField {
                     id: id.clone(),
                     change: BondFieldChange::Charge {
@@ -877,7 +880,10 @@ impl Edits {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             self.push(Edit::ModifyBondField {
                 id: id.clone(),
                 change: BondFieldChange::UnpairedElectrons {
@@ -891,7 +897,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -912,7 +918,7 @@ impl Edits {
         update: &DativeBondUpdate,
     ) {
         if let Some(new) = &update.order {
-            if !current.order.equiv(new) {
+            if !current.order.normalized_eq(new) {
                 self.push(Edit::ModifyDativeBondField {
                     id: id.clone(),
                     change: DativeBondFieldChange::Order {
@@ -927,7 +933,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -948,7 +954,7 @@ impl Edits {
         update: &AromaticSystemUpdate,
     ) {
         if let Some(new) = &update.electrons {
-            if !current.electrons.equiv(new) {
+            if !current.electrons.normalized_eq(new) {
                 self.push(Edit::ModifyAromaticSystemField {
                     id: id.clone(),
                     change: AromaticSystemFieldChange::Electrons {
@@ -959,7 +965,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 self.push(Edit::ModifyAromaticSystemField {
                     id: id.clone(),
                     change: AromaticSystemFieldChange::Charge {
@@ -972,7 +978,10 @@ impl Edits {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             self.push(Edit::ModifyAromaticSystemField {
                 id: id.clone(),
                 change: AromaticSystemFieldChange::UnpairedElectrons {
@@ -986,7 +995,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -1007,7 +1016,7 @@ impl Edits {
         update: &MulticenterBondUpdate,
     ) {
         if let Some(new) = &update.electrons {
-            if !current.electrons.equiv(new) {
+            if !current.electrons.normalized_eq(new) {
                 self.push(Edit::ModifyMulticenterBondField {
                     id: id.clone(),
                     change: MulticenterBondFieldChange::Electrons {
@@ -1018,7 +1027,7 @@ impl Edits {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 self.push(Edit::ModifyMulticenterBondField {
                     id: id.clone(),
                     change: MulticenterBondFieldChange::Charge {
@@ -1031,7 +1040,10 @@ impl Edits {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             self.push(Edit::ModifyMulticenterBondField {
                 id: id.clone(),
                 change: MulticenterBondFieldChange::UnpairedElectrons {
@@ -1045,7 +1057,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -1066,7 +1078,7 @@ impl Edits {
         update: &NoncovalentBondUpdate,
     ) {
         if let Some(new) = &update.kind {
-            if !current.kind.equiv(new) {
+            if !current.kind.normalized_eq(new) {
                 self.push(Edit::ModifyNoncovalentBondField {
                     id: id.clone(),
                     change: NoncovalentBondFieldChange::Kind {
@@ -1081,7 +1093,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -1107,7 +1119,7 @@ impl Edits {
             .kind()
             .or_else(|| current.configuration.kind())
             .or_else(|| updated.configuration.kind());
-        if !current.configuration.equiv(&updated.configuration) {
+        if !current.configuration.normalized_eq(&updated.configuration) {
             self.push(Edit::ModifyStereoAtomField {
                 id: id.clone(),
                 change: StereoAtomFieldChange::Configuration {
@@ -1121,7 +1133,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {
@@ -1148,7 +1160,7 @@ impl Edits {
             .kind()
             .or_else(|| current.configuration.kind())
             .or_else(|| updated.configuration.kind());
-        if !current.configuration.equiv(&updated.configuration) {
+        if !current.configuration.normalized_eq(&updated.configuration) {
             self.push(Edit::ModifyStereoBondField {
                 id: id.clone(),
                 change: StereoBondFieldChange::Configuration {
@@ -1162,7 +1174,7 @@ impl Edits {
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
             let unchanged = match (&old, &new) {
                 (None, None) => true,
-                (Some(old), Some(new)) => old.equiv(new),
+                (Some(old), Some(new)) => old.normalized_eq(new),
                 _ => false,
             };
             if !unchanged {

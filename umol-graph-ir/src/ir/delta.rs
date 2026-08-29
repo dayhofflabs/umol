@@ -31,6 +31,7 @@ use super::edit::{
     StereoBondFieldChange,
 };
 use super::error::Contradiction;
+use super::frame::OverlayFrameActions;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -43,7 +44,7 @@ use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
     StereoKind,
 };
-use super::traits::{EntityPatch, Equiv, FrameTransport, Lattice, Normalize};
+use super::traits::{EntityPatch, FrameTransport, Lattice, Normalize};
 
 /// A resolved edit to a single atom.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -89,7 +90,7 @@ impl AtomDelta {
     pub fn for_update(id: AtomId, current: &AtomForm, update: &AtomUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.element {
-            if !current.element.equiv(new) {
+            if !current.element.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::Element {
@@ -100,7 +101,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.isotope_mass {
-            if !current.isotope_mass.equiv(new) {
+            if !current.isotope_mass.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::IsotopeMass {
@@ -111,7 +112,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::Charge {
@@ -122,7 +123,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.implicit_hydrogens {
-            if !current.implicit_hydrogens.equiv(new) {
+            if !current.implicit_hydrogens.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::ImplicitHydrogens {
@@ -133,7 +134,7 @@ impl AtomDelta {
             }
         }
         if let Some(new) = &update.lone_pairs {
-            if !current.lone_pairs.equiv(new) {
+            if !current.lone_pairs.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AtomFieldChange::LonePairs {
@@ -146,7 +147,10 @@ impl AtomDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             deltas.push(Self::ModifyField {
                 id,
                 change: AtomFieldChange::UnpairedElectrons {
@@ -158,7 +162,7 @@ impl AtomDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -227,7 +231,7 @@ impl BondDelta {
     pub fn for_update(id: BondId, current: &BondForm, update: &BondUpdate) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.order {
-            if !current.order.equiv(new) {
+            if !current.order.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: BondFieldChange::Order {
@@ -238,7 +242,7 @@ impl BondDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: BondFieldChange::Charge {
@@ -251,7 +255,10 @@ impl BondDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             deltas.push(Self::ModifyField {
                 id,
                 change: BondFieldChange::UnpairedElectrons {
@@ -263,7 +270,7 @@ impl BondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -343,7 +350,7 @@ impl DativeBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.order {
-            if !current.order.equiv(new) {
+            if !current.order.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: DativeBondFieldChange::Order {
@@ -356,7 +363,7 @@ impl DativeBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -430,7 +437,7 @@ impl AromaticSystemDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.electrons {
-            if !current.electrons.equiv(new) {
+            if !current.electrons.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AromaticSystemFieldChange::Electrons {
@@ -441,7 +448,7 @@ impl AromaticSystemDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: AromaticSystemFieldChange::Charge {
@@ -454,7 +461,10 @@ impl AromaticSystemDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             deltas.push(Self::ModifyField {
                 id,
                 change: AromaticSystemFieldChange::UnpairedElectrons {
@@ -466,7 +476,7 @@ impl AromaticSystemDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -540,7 +550,7 @@ impl MulticenterBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.electrons {
-            if !current.electrons.equiv(new) {
+            if !current.electrons.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: MulticenterBondFieldChange::Electrons {
@@ -551,7 +561,7 @@ impl MulticenterBondDelta {
             }
         }
         if let Some(new) = &update.charge {
-            if !current.charge.equiv(new) {
+            if !current.charge.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: MulticenterBondFieldChange::Charge {
@@ -564,7 +574,10 @@ impl MulticenterBondDelta {
         let new_unpaired_electrons = current
             .unpaired_electrons
             .update(&update.unpaired_electrons);
-        if !current.unpaired_electrons.equiv(&new_unpaired_electrons) {
+        if !current
+            .unpaired_electrons
+            .normalized_eq(&new_unpaired_electrons)
+        {
             deltas.push(Self::ModifyField {
                 id,
                 change: MulticenterBondFieldChange::UnpairedElectrons {
@@ -576,7 +589,7 @@ impl MulticenterBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -650,7 +663,7 @@ impl NoncovalentBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         if let Some(new) = &update.kind {
-            if !current.kind.equiv(new) {
+            if !current.kind.normalized_eq(new) {
                 deltas.push(Self::ModifyField {
                     id,
                     change: NoncovalentBondFieldChange::Kind {
@@ -663,7 +676,7 @@ impl NoncovalentBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, old, new });
             }
         }
@@ -760,7 +773,7 @@ impl StereoAtomDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         let updated = current.update(update);
-        if !current.configuration.equiv(&updated.configuration) {
+        if !current.configuration.normalized_eq(&updated.configuration) {
             deltas.push(Self::ModifyField {
                 id,
                 change: StereoAtomFieldChange::Configuration {
@@ -777,7 +790,7 @@ impl StereoAtomDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, kind, old, new });
             }
         }
@@ -871,7 +884,7 @@ impl StereoBondDelta {
     ) -> Vec<Self> {
         let mut deltas = Vec::new();
         let updated = current.update(update);
-        if !current.configuration.equiv(&updated.configuration) {
+        if !current.configuration.normalized_eq(&updated.configuration) {
             deltas.push(Self::ModifyField {
                 id,
                 change: StereoBondFieldChange::Configuration {
@@ -888,7 +901,7 @@ impl StereoBondDelta {
         for constraint in update.constraints.iter() {
             let old = current.constraints.get(constraint.key()).cloned();
             let new = (!constraint.is_undetermined()).then(|| constraint.clone());
-            if !options_equiv(&old, &new) {
+            if !options_normalized_eq(&old, &new) {
                 deltas.push(Self::ModifyConstraint { id, kind, old, new });
             }
         }
@@ -1204,6 +1217,17 @@ impl ConstraintDelta {
     }
 }
 
+impl FrameTransport for ConstraintDelta {
+    type Action = OverlayFrameActions;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Add(constraint) => Self::Add(constraint.reframe_by(actions)?),
+            Self::Remove(constraint) => Self::Remove(constraint.reframe_by(actions)?),
+        })
+    }
+}
+
 /// One rule-relative modification carried by a reaction, over any entity kind.
 ///
 /// A delta is an algebraic value, not an instruction to a particular molecule. Existing entities
@@ -1263,6 +1287,108 @@ impl Delta {
     }
 }
 
+impl FrameTransport for Delta {
+    type Action = OverlayFrameActions;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Atom(delta) => Self::Atom(delta),
+            Self::Bond(delta) => Self::Bond(delta),
+            Self::DativeBond(delta) => {
+                if matches!(
+                    delta,
+                    DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. }
+                ) {
+                    let action = actions.dative_bonds().action(delta.id())?;
+                    Self::DativeBond(delta.reframe_by(action)?)
+                } else {
+                    Self::DativeBond(delta)
+                }
+            }
+            Self::AromaticSystem(delta) => {
+                if matches!(
+                    delta,
+                    AromaticSystemDelta::Add { .. }
+                        | AromaticSystemDelta::Remove { .. }
+                        | AromaticSystemDelta::ModifyField {
+                            change: AromaticSystemFieldChange::Electrons { .. },
+                            ..
+                        }
+                ) {
+                    let action = actions.aromatic_systems().action(delta.id())?;
+                    Self::AromaticSystem(delta.reframe_by(action)?)
+                } else {
+                    Self::AromaticSystem(delta)
+                }
+            }
+            Self::MulticenterBond(delta) => {
+                if matches!(
+                    delta,
+                    MulticenterBondDelta::Add { .. }
+                        | MulticenterBondDelta::Remove { .. }
+                        | MulticenterBondDelta::ModifyField {
+                            change: MulticenterBondFieldChange::Electrons { .. },
+                            ..
+                        }
+                ) {
+                    let action = actions.multicenter_bonds().action(delta.id())?;
+                    Self::MulticenterBond(delta.reframe_by(action)?)
+                } else {
+                    Self::MulticenterBond(delta)
+                }
+            }
+            Self::NoncovalentBond(delta) => {
+                if matches!(
+                    delta,
+                    NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. }
+                ) {
+                    let action = actions.noncovalent_bonds().action(delta.id())?;
+                    Self::NoncovalentBond(delta.reframe_by(action)?)
+                } else {
+                    Self::NoncovalentBond(delta)
+                }
+            }
+            Self::StereoAtom(delta) => {
+                let needs_action = match &delta {
+                    StereoAtomDelta::Add { .. }
+                    | StereoAtomDelta::Remove { .. }
+                    | StereoAtomDelta::ModifyField { .. } => true,
+                    StereoAtomDelta::ModifyConstraint { old, new, .. } => {
+                        old.iter().chain(new).any(|constraint| {
+                            !matches!(constraint, StereoAtomConstraintForm::Stereogenicity(_))
+                        })
+                    }
+                };
+                if needs_action {
+                    let action = actions.stereo_atoms().action(delta.id())?;
+                    Self::StereoAtom(delta.reframe_by(action)?)
+                } else {
+                    Self::StereoAtom(delta)
+                }
+            }
+            Self::StereoBond(delta) => {
+                let needs_action = match &delta {
+                    StereoBondDelta::Add { .. }
+                    | StereoBondDelta::Remove { .. }
+                    | StereoBondDelta::ModifyField { .. } => true,
+                    StereoBondDelta::ModifyConstraint { old, new, .. } => {
+                        old.iter().chain(new).any(|constraint| {
+                            !matches!(constraint, StereoBondConstraintForm::Stereogenicity(_))
+                        })
+                    }
+                };
+                if needs_action {
+                    let action = actions.stereo_bonds().action(delta.id())?;
+                    Self::StereoBond(delta.reframe_by(action)?)
+                } else {
+                    Self::StereoBond(delta)
+                }
+            }
+            Self::Constraint(delta) => Self::Constraint(delta.reframe_by(actions)?),
+        })
+    }
+}
+
 /// Per-variant diff/apply ops for the `EntityPatch` impl, from the `(variant => attributes field)` map:
 /// `apply_field`, `diff_field`, `diff_constraints`.
 macro_rules! diff_field_ops {
@@ -1271,7 +1397,7 @@ macro_rules! diff_field_ops {
             match change {
                 $(
                     $change::$variant { old, new } => {
-                        if !attributes.$field.equiv(&old) {
+                        if !attributes.$field.normalized_eq(&old) {
                             return Err(Contradiction);
                         }
                         attributes.$field = new;
@@ -1284,7 +1410,7 @@ macro_rules! diff_field_ops {
         fn diff_field(lhs: &$attributes, rhs: &$attributes) -> Vec<$change> {
             let mut out = Vec::new();
             $(
-                if !lhs.$field.equiv(&rhs.$field) {
+                if !lhs.$field.normalized_eq(&rhs.$field) {
                     out.push($change::$variant {
                         old: lhs.$field.clone(),
                         new: rhs.$field.clone(),
@@ -1313,7 +1439,7 @@ macro_rules! diff_field_ops {
             for key in keys {
                 let l = lhs_by_key.get(&key).cloned();
                 let r = rhs_by_key.get(&key).cloned();
-                if !options_equiv(&l, &r) {
+                if !options_normalized_eq(&l, &r) {
                     out.push((l, r));
                 }
             }
@@ -1323,11 +1449,11 @@ macro_rules! diff_field_ops {
 }
 
 /// Normalized equivalence over optional attributes: both absent is equal, both present compares by
-/// `equiv`, presence mismatch is unequal.
-fn options_equiv<T: Normalize>(l: &Option<T>, r: &Option<T>) -> bool {
+/// `normalized_eq`, presence mismatch is unequal.
+fn options_normalized_eq<T: Normalize>(l: &Option<T>, r: &Option<T>) -> bool {
     match (l, r) {
         (None, None) => true,
-        (Some(a), Some(b)) => a.equiv(b),
+        (Some(a), Some(b)) => a.normalized_eq(b),
         _ => false,
     }
 }
@@ -1342,7 +1468,7 @@ macro_rules! fold_field_ops {
                     (
                         $change::$variant { old, new: prev_new },
                         $change::$variant { old: next_old, new },
-                    ) if prev_new.equiv(&next_old) => Some($change::$variant { old, new }),
+                    ) if prev_new.normalized_eq(&next_old) => Some($change::$variant { old, new }),
                 )+
                 #[allow(unreachable_patterns)]
                 _ => None,
@@ -1351,7 +1477,7 @@ macro_rules! fold_field_ops {
 
         fn field_is_identity(change: &$change) -> bool {
             match change {
-                $( $change::$variant { old, new } => old.equiv(new), )+
+                $( $change::$variant { old, new } => old.normalized_eq(new), )+
             }
         }
     };
@@ -1417,6 +1543,25 @@ impl<T: FrameTransport> FrameTransport for EntitySpan<T> {
     }
 }
 
+impl<T: Normalize> Normalize for EntitySpan<T> {
+    fn normalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Unchanged(value) => Self::Unchanged(value.normalize()?),
+            Self::Modified { lhs, rhs } => {
+                let lhs = lhs.normalize()?;
+                let rhs = rhs.normalize()?;
+                if lhs == rhs {
+                    Self::Unchanged(lhs)
+                } else {
+                    Self::Modified { lhs, rhs }
+                }
+            }
+            Self::Added(value) => Self::Added(value.normalize()?),
+            Self::Removed(value) => Self::Removed(value.normalize()?),
+        })
+    }
+}
+
 impl<T: Normalize> EntitySpan<T> {
     /// Superimpose an entity's optional lhs and rhs values into a span — the per-entity kernel of
     /// `ReactionSpan::superimpose`: present-both maps to `Unchanged(lhs)` when the values are
@@ -1424,7 +1569,7 @@ impl<T: Normalize> EntitySpan<T> {
     /// `Added`, neither to `None`.
     pub fn superimpose(lhs: Option<T>, rhs: Option<T>) -> Option<Self> {
         match (lhs, rhs) {
-            (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => Some(Self::Unchanged(lhs)),
+            (Some(lhs), Some(rhs)) if lhs.normalized_eq(&rhs) => Some(Self::Unchanged(lhs)),
             (Some(lhs), Some(rhs)) => Some(Self::Modified { lhs, rhs }),
             (Some(lhs), None) => Some(Self::Removed(lhs)),
             (None, Some(rhs)) => Some(Self::Added(rhs)),
@@ -1460,6 +1605,28 @@ impl ConstraintSpan {
             Self::Unchanged(value) | Self::Added(value) => Some(value),
             Self::Removed(_) => None,
         }
+    }
+}
+
+impl Normalize for ConstraintSpan {
+    fn normalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Unchanged(value) => Self::Unchanged(value.normalize()?),
+            Self::Added(value) => Self::Added(value.normalize()?),
+            Self::Removed(value) => Self::Removed(value.normalize()?),
+        })
+    }
+}
+
+impl FrameTransport for ConstraintSpan {
+    type Action = OverlayFrameActions;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Unchanged(constraint) => Self::Unchanged(constraint.reframe_by(actions)?),
+            Self::Added(constraint) => Self::Added(constraint.reframe_by(actions)?),
+            Self::Removed(constraint) => Self::Removed(constraint.reframe_by(actions)?),
+        })
     }
 }
 
@@ -1623,7 +1790,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_equiv(&prev_new, &old) {
+                        if !options_normalized_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -1654,7 +1821,7 @@ fn fold_preserved<F: EntityFold>(ops: Vec<EntityOp<F>>) -> Result<Vec<EntityOp<F
         }
     }
     for (_key, (old, new)) in constraints {
-        if !options_equiv(&old, &new) {
+        if !options_normalized_eq(&old, &new) {
             out.push(EntityOp::ModifyConstraint { old, new });
         }
     }
@@ -2611,7 +2778,7 @@ fn fold_stereo_atom_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_equiv(&prev_new, &old) {
+                        if !options_normalized_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2661,7 +2828,7 @@ fn fold_stereo_atom_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if !options_equiv(&old, &new) {
+        if !options_normalized_eq(&old, &new) {
             out.push(StereoAtomDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -2754,7 +2921,7 @@ fn fold_stereo_bond_group(
                 };
                 match constraints.remove(&key) {
                     Some((first_old, prev_new)) => {
-                        if !options_equiv(&prev_new, &old) {
+                        if !options_normalized_eq(&prev_new, &old) {
                             return Err(Contradiction);
                         }
                         constraints.insert(key, (first_old, new));
@@ -2804,7 +2971,7 @@ fn fold_stereo_bond_group(
         }),
     }
     for (_key, (old, new)) in constraints {
-        if !options_equiv(&old, &new) {
+        if !options_normalized_eq(&old, &new) {
             out.push(StereoBondDelta::ModifyConstraint { id, kind, old, new });
         }
     }
@@ -3344,6 +3511,10 @@ mod tests {
     use umol_chem::element::Element;
 
     use super::super::constraint::{MoleculeConstraint, RelationalConstraint};
+    use super::super::frame::{
+        AromaticSystemFrameActions, DativeBondFrameActions, MulticenterBondFrameActions,
+        NoncovalentBondFrameActions, StereoAtomFrameActions, StereoBondFrameActions,
+    };
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::num::NumForm;
     use super::*;
@@ -3355,6 +3526,26 @@ mod tests {
         StereoConfigurationUpdate, StereoCoset, StereoKind, StereoLigandKind, Stereogenicity,
         StereogenicityForm, UnpairedElectronsForm, UnpairedElectronsUpdate,
     };
+
+    #[fixture]
+    fn frame_actions() -> OverlayFrameActions {
+        OverlayFrameActions::from_families(
+            DativeBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
+            AromaticSystemFrameActions::from_dense(vec![
+                DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            MulticenterBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
+            NoncovalentBondFrameActions::from_dense(vec![
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            StereoAtomFrameActions::from_dense(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+            StereoBondFrameActions::from_dense(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+        )
+    }
 
     #[rstest]
     #[case::add_remove(
@@ -4307,6 +4498,122 @@ mod tests {
         };
 
         assert_eq!(input.reframe_by(&action), Some(expected));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unchanged(
+        EntitySpan::Unchanged(NumForm::lit_set([2])),
+        EntitySpan::Unchanged(NumForm::Lit(2)),
+    )]
+    #[case::modified_collapses(
+        EntitySpan::Modified { lhs: NumForm::lit_set([2]), rhs: NumForm::Lit(2) },
+        EntitySpan::Unchanged(NumForm::Lit(2)),
+    )]
+    #[case::modified_remains(
+        EntitySpan::Modified { lhs: NumForm::lit_set([2]), rhs: NumForm::Lit(3) },
+        EntitySpan::Modified { lhs: NumForm::Lit(2), rhs: NumForm::Lit(3) },
+    )]
+    fn test_entity_span_normalize(
+        #[case] input: EntitySpan<NumForm>,
+        #[case] expected: EntitySpan<NumForm>,
+    ) {
+        assert_eq!(input.normalize(), Ok(expected));
+    }
+
+    #[rstest]
+    fn test_constraint_span_normalize() {
+        let input = ConstraintSpan::Added(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::lit_set([4])),
+        ));
+        let expected = ConstraintSpan::Added(Constraint::Atom(
+            AtomId(0),
+            AtomConstraintForm::Valence(NumForm::Lit(4)),
+        ));
+
+        assert_eq!(input.normalize(), Ok(expected));
+    }
+
+    #[rstest]
+    fn test_constraint_delta_reframe_by(frame_actions: OverlayFrameActions) {
+        let input = ConstraintDelta::Add(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        ));
+        let expected = ConstraintDelta::Add(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        ));
+
+        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+    }
+
+    #[rstest]
+    fn test_constraint_span_reframe_by(frame_actions: OverlayFrameActions) {
+        let input = ConstraintSpan::Removed(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        ));
+        let expected = ConstraintSpan::Removed(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        ));
+
+        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+    }
+
+    #[rstest]
+    fn test_delta_reframe_by(frame_actions: OverlayFrameActions) {
+        let input = Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![10, 20, 30]),
+                new: ElectronCountsForm::Lit(vec![11, 21, 31]),
+            },
+        });
+        let expected = Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(0),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![30, 10, 20]),
+                new: ElectronCountsForm::Lit(vec![31, 11, 21]),
+            },
+        });
+
+        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+    }
+
+    #[rstest]
+    fn test_delta_reframe_by_error(frame_actions: OverlayFrameActions) {
+        let input = Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
+            id: AromaticSystemId(1),
+            change: AromaticSystemFieldChange::Electrons {
+                old: ElectronCountsForm::Lit(vec![10, 20, 30]),
+                new: ElectronCountsForm::Lit(vec![11, 21, 31]),
+            },
+        });
+
+        assert_eq!(input.reframe_by(&frame_actions), None);
     }
 
     #[rstest]

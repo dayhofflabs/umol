@@ -29,7 +29,7 @@ proptest! {
     }
 
     /// The universal normalization-independent laws on raw, non-normal inputs —
-    /// the `normalized()` fold path, `equiv`, `matches`↔meet, and meet/join
+    /// the `normalized()` fold path, `normalized_eq`, `matches`↔meet, and meet/join
     /// normality — which the normalized strategies above never reach. One per
     /// `normalized()`-overriding leaf with a fold path.
     #[test]

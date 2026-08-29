@@ -5,7 +5,7 @@ use umol_graph_ir_macros::{Lattice, Normalize};
 use super::constraint::{BondConstraintForm, BondConstraintsForm};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Equiv, Lattice};
+use super::traits::{Lattice, Normalize};
 
 /// Bond form: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
@@ -110,7 +110,7 @@ impl BondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.equiv(new))
+                .is_none_or(|old| !old.normalized_eq(new))
             {
                 constraints.set(new.clone());
             }
@@ -121,8 +121,8 @@ impl BondForm {
             }
         }
         BondUpdate {
-            order: (!self.order.equiv(&other.order)).then(|| other.order.clone()),
-            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
+            order: (!self.order.normalized_eq(&other.order)).then(|| other.order.clone()),
+            charge: (!self.charge.normalized_eq(&other.charge)).then(|| other.charge.clone()),
             unpaired_electrons: self
                 .unpaired_electrons
                 .difference_to(&other.unpaired_electrons),

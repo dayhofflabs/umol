@@ -5,7 +5,7 @@ use std::iter;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{ConstitutionColoring, GraphSymmetryConfig};
+use umol_graph_ir::ir::{ConstitutionColoring, FrameTransport, GraphSymmetryConfig};
 
 use crate::strategies::*;
 
@@ -126,8 +126,8 @@ proptest! {
         let (form, permutation) = args;
         prop_assert_eq!(
             form.clone()
-                .reframe_by(permutation)
-                .and_then(|form| form.reframe_by(permutation.inverse())),
+                .reframe_by(&permutation)
+                .and_then(|form| form.reframe_by(&permutation.inverse())),
             Some(form),
         );
     }
@@ -142,8 +142,8 @@ proptest! {
         let (form, permutation) = args;
         prop_assert_eq!(
             form.clone()
-                .reframe_by(permutation)
-                .and_then(|form| form.reframe_by(permutation.inverse())),
+                .reframe_by(&permutation)
+                .and_then(|form| form.reframe_by(&permutation.inverse())),
             Some(form),
         );
     }

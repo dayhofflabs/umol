@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::remap::{IdRemapping, MoleculeCompaction};
-use super::super::traits::{Equiv, Lattice, Normalize};
+use super::super::traits::{Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -151,7 +151,7 @@ impl NoncovalentBondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
+    /// Transactional write at one key: verify the current value `normalized_eq` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -173,7 +173,7 @@ impl NoncovalentBondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {

@@ -8,7 +8,7 @@ use std::vec::IntoIter;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdRemapping, MoleculeCompaction};
-use super::super::traits::{Equiv, Lattice, Normalize};
+use super::super::traits::{Lattice, Normalize};
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondForm` via
 /// `MulticenterBondConstraintsForm`.
@@ -147,7 +147,7 @@ impl MulticenterBondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
+    /// Transactional write at one key: verify the current value `normalized_eq` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -169,7 +169,7 @@ impl MulticenterBondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {

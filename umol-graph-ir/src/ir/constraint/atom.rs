@@ -11,7 +11,7 @@ use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::TetrahedralStereoForm;
-use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
+use super::super::traits::{AsLit, Lattice, Normalize};
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -466,7 +466,7 @@ impl AtomConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value equals `old` (by `equiv`;
+    /// Transactional write at one key: verify the current value equals `old` (by `normalized_eq`;
     /// both absent is a match), then apply `new` (`Some` sets, `None` removes).
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors.
     pub fn compare_and_set(
@@ -487,7 +487,7 @@ impl AtomConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {

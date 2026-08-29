@@ -67,7 +67,7 @@ Review at clean commit `387650962` and the subsequent entry-point audit establis
   snapshot;
 - molecule-level `Constraint::StereoAtom` and `Constraint::StereoBond` wrappers check their kind's
   degree and payload but not whether that kind is admissible for the referenced atom or bond site;
-- `Permutation::visit_between`, `Permutation::enumerate_between`, `FrameAction`, `find_reframed`,
+- `Permutation::visit_between`, `Permutation::between_all`, `FrameAction`, `find_reframed`,
   `virtual_block_swaps`, and the product-candidate portions of molecule equality and canonicalization
   exist specifically because equal frame values make the frame action non-unique;
 - `reaction::application::test_reaction_apply_stereo_atom_update` and its bond twin expose a
@@ -358,7 +358,7 @@ not implement `Reframe`. The existing stereo-only `FrameAction` trait and form-l
 retire in favor of this common operation. `DynPermutation::between` and
 `Permutation::between` derive the unique action between two legal presentations; representative
 selection is the corresponding one-frame derivation. `find_reframed`, `Permutation::visit_between`,
-and `Permutation::enumerate_between` are removed after their callers migrate. `virtual_block_swaps`
+and `Permutation::between_all` are removed after their callers migrate. `virtual_block_swaps`
 and repeat-specific symmetry generators, fixtures, and property strategies are removed or rewritten
 as integrity rejection cases.
 
@@ -867,7 +867,7 @@ editors remain permitted and fail only when publishing. The inherited transport 
   selection. Mapped molecule constraints consume the same unique per-entity stereo action rather
   than recursively searching a candidate product. Ordinary `reframe_to` methods and their duplicate
   tests are removed; `find_reframed` is unused but remains exported until the S0l legacy-trait
-  removal, while the remaining `enumerate_between` sites belong to S0k frame selection or S0p
+  removal, while the remaining `between_all` sites belong to S0k frame selection or S0p
   canonicalization.
 
   The migration exposed and corrected one S0i domain omission: kindless stereo-bond forms and
@@ -915,7 +915,7 @@ editors remain permitted and fail only when publishing. The inherited transport 
   permutations only from explicit graph automorphisms; the distinct explicit-ligand
   stereogenic/prochiral tests remain the evidence. The S0b integrity tables remain the rejection
   surface for repeated complete ligands. The temporary stereo `FrameAction` and `find_reframed`
-  compatibility surface remains for S0l, while the only graph-IR `enumerate_between` production
+  compatibility surface remains for S0l, while the only graph-IR `between_all` production
   uses left are the private canonicalization paths owned by S0p.
 
   Eight complete-action carrier cases, 85 focused reframing cases, eight framed-equality cases, 49
@@ -937,17 +937,35 @@ editors remain permitted and fail only when publishing. The inherited transport 
   Keep `reframe` independently implementable rather than defining it through
   `reframe_with_action`; aggregate implementations fuse local derivation and transport without
   materializing a complete witness, and may override `framed_eq` for the same reason.
-  Implement composite `FrameTransport` for `Constraint`, `ConstraintSpan`, `ConstraintDelta`,
-  `Delta`, and `Deltas`; each requires actions for the frame-relative entity ids it carries and
-  ignores irrelevant map entries. Remove `Equiv`, `Normalized`, the old stereo-only `FrameAction`,
+  Implement composite `FrameTransport` for `Constraint`, `Constraints`, `ConstraintSpan`,
+  `ConstraintDelta`, and `Delta`; each requires actions for the frame-relative entity ids it carries
+  and ignores irrelevant map entries. Do not implement it for standalone `Deltas`: different
+  removal payloads may carry different local frames, and only the owning `Reaction` has the
+  alignment needed to assemble one complete action. Remove `Equiv`, `Normalized`, the old
+  stereo-only `FrameAction`,
   `find_reframed`, and `visit_between`. Migrate every Rust and Python caller according to whether it
   asks normalized equality, framed equality, frame transport, or pattern matching; retain the
   distinct inherent `Molecule::equiv` only until S0m and rename the Python form method to
   `normalized_eq`. Retain
-  `Permutation::enumerate_between` temporarily only for the private canonicalization path that S0p
+  `Permutation::between_all` temporarily only for the private canonicalization path that S0p
   removes, and retain `Permutation::between` as the final alignment primitive. Build the Python
   caller migration under the repository Python 3.13 environment. **Breaking; inherited red ledger
-  unchanged after all callers migrate.** [dep: S0j, S0k]
+  unchanged after all callers migrate.** [dep: S0j, S0k] **Done.** `Normalize` now owns
+  `normalized_eq`; `Equiv` and `Normalized` are gone, and every form-level Rust and Python caller
+  uses the new name. The six frame-owning family aggregates and all six span peers implement
+  reduction-only `Normalize`, complete `FrameTransport`, and consuming `Reframe`; plain `reframe`
+  fuses local action derivation and transport, while `reframe_with_action` returns the same dense
+  typed witness used to reproduce the result. Recursive constraints, constraint stores, constraint
+  spans and deltas, and individual `Delta` values transport through `OverlayFrameActions` without
+  assigning a false complete-action meaning to standalone `Deltas`.
+
+  The stereo-only compatibility trait and search helper and `Permutation::visit_between` are
+  removed. `Permutation::between_all` remains only in the private canonicalization path named
+  above. Focused reframing tests (95), normalization tests (263), and permutation tests (48) pass;
+  the graph-IR all-target property build and strict graph-IR/umol-perm Clippy pass. The Python
+  caller compiles and its focused `normalized_eq` test passes under the repository Python 3.13
+  environment. The pre-existing unused `std::iter` warning in `umol-py/src/reaction.rs` remains;
+  the inherited red ledger was not rerun or changed.
 
 At S0l, no general graph-IR operation or public helper interprets an equal-value occurrence
 permutation as observable stereo state. The isolated private canonicalization candidate product
@@ -994,7 +1012,7 @@ ledger remains.
 - **S0p — canonicalization composition** (`ir/canonicalize.rs` and focused benchmarks): after
   canonical id remapping, call the aggregate frame operation; remove complete-stereo candidate
   products and the above-`MAX_DEGREE` position-order fallback, then remove
-  `Permutation::enumerate_between` and its repeat-specific unit/property surface. Preserve
+  `Permutation::between_all` and its repeat-specific unit/property surface. Preserve
   graph-automorphism search, exact hash/equality behavior, bounded-exhaustive minimum checks,
   renumbering invariance, and the corrected post-remap law. Compare the unified path with the
   pre-change distinct-frame baseline. Close `test_canonicalize_constitution_family_minimum` and

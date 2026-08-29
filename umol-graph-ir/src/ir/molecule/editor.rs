@@ -37,7 +37,7 @@ use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
 use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::super::traits::{Equiv, FrameTransport};
+use super::super::traits::{FrameTransport, Normalize};
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
     BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
@@ -922,7 +922,9 @@ impl MoleculeEditor {
             .is_coincident(id.index(), &atoms.map(NodeId::from))
             && DynPermutation::between(&atoms, &stored)
                 .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.equiv(&self.noncovalent_bonds.data(id.index())))
+                .is_some_and(|restated| {
+                    restated.normalized_eq(&self.noncovalent_bonds.data(id.index()))
+                })
     }
 
     /// `true` iff aromatic system `id` structurally equals `(atoms, attributes)`.
@@ -943,7 +945,7 @@ impl MoleculeEditor {
             &atoms.iter().map(|&a| NodeId::from(a)).collect::<Vec<_>>(),
         ) && DynPermutation::between(atoms, &stored)
             .and_then(|action| attributes.clone().reframe_by(&action))
-            .is_some_and(|restated| restated.equiv(&self.aromatic_systems.data(id.index())))
+            .is_some_and(|restated| restated.normalized_eq(&self.aromatic_systems.data(id.index())))
     }
 
     /// `true` iff multicenter bond `id` structurally equals `(atoms, attributes)`.
@@ -964,7 +966,9 @@ impl MoleculeEditor {
             &atoms.iter().map(|&a| NodeId::from(a)).collect::<Vec<_>>(),
         ) && DynPermutation::between(atoms, &stored)
             .and_then(|action| attributes.clone().reframe_by(&action))
-            .is_some_and(|restated| restated.equiv(&self.multicenter_bonds.data(id.index())))
+            .is_some_and(|restated| {
+                restated.normalized_eq(&self.multicenter_bonds.data(id.index()))
+            })
     }
 
     /// `true` iff dative bond `id` structurally equals `(acceptor, donors, attributes)` — the acceptor
@@ -987,7 +991,7 @@ impl MoleculeEditor {
             .is_coincident(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
             && DynPermutation::between(donors, &stored)
                 .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.equiv(&self.dative_bonds.data(id.index())))
+                .is_some_and(|restated| restated.normalized_eq(&self.dative_bonds.data(id.index())))
     }
 
     /// `true` iff stereo atom `id` structurally equals `(site, ligands, attributes)`.
@@ -1002,7 +1006,7 @@ impl MoleculeEditor {
         AtomId::from(self.stereo_atoms.participants_1(id.index())[0]) == site
             && Permutation::between(ligands, &stored)
                 .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.equiv(&self.stereo_atoms.data(id.index())))
+                .is_some_and(|restated| restated.normalized_eq(&self.stereo_atoms.data(id.index())))
     }
 
     /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
@@ -1017,7 +1021,7 @@ impl MoleculeEditor {
         BondId::from(self.stereo_bonds.participants_1(id.index())[0]) == site
             && Permutation::between(ligands, &stored)
                 .and_then(|action| attributes.clone().reframe_by(&action))
-                .is_some_and(|restated| restated.equiv(&self.stereo_bonds.data(id.index())))
+                .is_some_and(|restated| restated.normalized_eq(&self.stereo_bonds.data(id.index())))
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {

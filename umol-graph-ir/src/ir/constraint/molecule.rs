@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 
 use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
 use super::super::error::Contradiction;
+use super::super::frame::OverlayFrameActions;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -15,7 +16,7 @@ use super::super::num::NumForm;
 use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
-use super::super::traits::{Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize};
 use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
@@ -171,6 +172,58 @@ impl Constraint {
     }
 }
 
+impl FrameTransport for Constraint {
+    type Action = OverlayFrameActions;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::StereoAtom(id, kind, constraint) => {
+                if matches!(constraint, StereoAtomConstraintForm::Stereogenicity(_)) {
+                    Self::StereoAtom(id, kind, constraint)
+                } else {
+                    let action = actions.stereo_atoms().action(id)?;
+                    if !kind.class_key().space().allows(*action) {
+                        return None;
+                    }
+                    Self::StereoAtom(id, kind, constraint.reframe_by(action)?)
+                }
+            }
+            Self::StereoBond(id, kind, constraint) => {
+                if matches!(constraint, StereoBondConstraintForm::Stereogenicity(_)) {
+                    Self::StereoBond(id, kind, constraint)
+                } else {
+                    let action = actions.stereo_bonds().action(id)?;
+                    if !kind.class_key().space().allows(*action) {
+                        return None;
+                    }
+                    Self::StereoBond(id, kind, constraint.reframe_by(action)?)
+                }
+            }
+            Self::Relational(constraint) => Self::Relational(constraint.reframe_by(actions)?),
+            Self::And(constraints) => Self::And(
+                constraints
+                    .into_iter()
+                    .map(|constraint| constraint.reframe_by(actions))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            Self::Or(constraints) => Self::Or(
+                constraints
+                    .into_iter()
+                    .map(|constraint| constraint.reframe_by(actions))
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            Self::Not(constraint) => Self::Not(Box::new(constraint.reframe_by(actions)?)),
+            invariant @ (Self::Atom(..)
+            | Self::Bond(..)
+            | Self::DativeBond(..)
+            | Self::AromaticSystem(..)
+            | Self::MulticenterBond(..)
+            | Self::NoncovalentBond(..)
+            | Self::Molecule(..)) => invariant,
+        })
+    }
+}
+
 impl Normalize for Constraint {
     /// Normalize the inner predicate of each leaf; for `And`/`Or`, recurse,
     /// flatten the same combinator, drop empty `And`/`Or`, sort + dedup
@@ -215,6 +268,17 @@ impl Normalize for Constraints {
     /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self(normalize_logical_constraints(self.0, true)?))
+    }
+}
+
+impl FrameTransport for Constraints {
+    type Action = OverlayFrameActions;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        self.into_iter()
+            .map(|constraint| constraint.reframe_by(actions))
+            .collect::<Option<Vec<_>>>()
+            .map(Self)
     }
 }
 
@@ -528,15 +592,37 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_perm::{DynPermutation, Permutation};
 
     use super::*;
     use crate::ir::constraint::RingScope;
+    use crate::ir::frame::{
+        AromaticSystemFrameActions, DativeBondFrameActions, MulticenterBondFrameActions,
+        NoncovalentBondFrameActions, StereoAtomFrameActions, StereoBondFrameActions,
+    };
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoLigandPosition,
     };
     use crate::ir::num::{ArithExpr, NumForm};
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::BooleanForm;
+    use crate::ir::{BooleanForm, StereoLigandPair, TopicityForm, TopicityRelationForm};
+
+    #[fixture]
+    fn frame_actions() -> OverlayFrameActions {
+        OverlayFrameActions::from_families(
+            DativeBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
+            AromaticSystemFrameActions::from_dense(vec![]).expect("actions are admissible"),
+            MulticenterBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
+            NoncovalentBondFrameActions::from_dense(vec![
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            StereoAtomFrameActions::from_dense(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+            StereoBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
+        )
+    }
 
     fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> MoleculeCompaction {
         MoleculeCompaction::new(
@@ -686,6 +772,78 @@ mod tests {
         #[case] expected: Result<Constraint, Contradiction>,
     ) {
         assert_eq!(input.normalize(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::recursive_relational(
+        Constraint::Not(Box::new(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        ))),
+        Constraint::Not(Box::new(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        ))),
+    )]
+    #[case::stereo_atom_topicity(
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Undetermined,
+            }),
+        ),
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Undetermined,
+            }),
+        ),
+    )]
+    fn test_constraint_reframe_by(
+        #[case] input: Constraint,
+        #[case] expected: Constraint,
+        frame_actions: OverlayFrameActions,
+    ) {
+        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+    }
+
+    #[rstest]
+    fn test_constraints_reframe_by(frame_actions: OverlayFrameActions) {
+        let input = Constraints::from(vec![Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        )]);
+        let expected = Constraints::from(vec![Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        )]);
+
+        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
     }
 
     #[rustfmt::skip]

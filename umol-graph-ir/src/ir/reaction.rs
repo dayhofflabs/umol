@@ -48,7 +48,7 @@ use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
 use super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
 use super::substructure::SubstructureMatchConfig;
-use super::traits::{Equiv, FrameTransport, Normalize};
+use super::traits::{FrameTransport, Normalize};
 
 /// A reaction as one full molecule state (`lhs`) plus one resolved delta (`deltas`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -1759,7 +1759,9 @@ fn reframe_stereo(
                         let reframed_old = old
                             .clone()
                             .reframe_by(&action)
-                            .filter(|restated| restated.equiv(&host_view.attributes.configuration))
+                            .filter(|restated| {
+                                restated.normalized_eq(&host_view.attributes.configuration)
+                            })
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = reframed_old;
                         *new = new
@@ -1777,7 +1779,7 @@ fn reframe_stereo(
                         *attributes = attributes
                             .clone()
                             .reframe_by(&action)
-                            .filter(|restated| restated.equiv(host_view.attributes))
+                            .filter(|restated| restated.normalized_eq(host_view.attributes))
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }
@@ -1813,7 +1815,9 @@ fn reframe_stereo(
                         let reframed_old = old
                             .clone()
                             .reframe_by(&action)
-                            .filter(|restated| restated.equiv(&host_view.attributes.configuration))
+                            .filter(|restated| {
+                                restated.normalized_eq(&host_view.attributes.configuration)
+                            })
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *old = reframed_old;
                         *new = new
@@ -1831,7 +1835,7 @@ fn reframe_stereo(
                         *attributes = attributes
                             .clone()
                             .reframe_by(&action)
-                            .filter(|restated| restated.equiv(host_view.attributes))
+                            .filter(|restated| restated.normalized_eq(host_view.attributes))
                             .ok_or(ApplyError::StereoFrameMismatch { entity })?;
                         *ligands = after.iter().map(from_host).collect::<Result<_, _>>()?;
                     }

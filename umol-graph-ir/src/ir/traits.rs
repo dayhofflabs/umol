@@ -5,7 +5,6 @@
 //! `AsLit` extracts a literal value from a form.
 //! `Lattice` defines the refinement lattice on forms.
 //! `Normalize` puts a form into normal fixed-frame representation.
-//! `Normalized` is a value carrying the guarantee that it is normalized.
 
 use std::borrow::Cow;
 use std::hash::Hash;
@@ -153,7 +152,7 @@ pub trait Lattice: Normalize {
 /// unsatisfiable value (e.g. an empty set).
 ///
 /// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
-/// tree"); semantic equality is [`Equiv::equiv`], comparing normal forms. The hot
+/// tree"); semantic equality is [`Normalize::normalized_eq`], comparing normal forms. The hot
 /// path is cheap — `normalized` borrows values that are already normalized.
 pub trait Normalize: Sized + Clone + PartialEq {
     /// By-value normal form (the folding lives here). Idempotent.
@@ -165,14 +164,11 @@ pub trait Normalize: Sized + Clone + PartialEq {
     fn normalized(&self) -> Result<Cow<'_, Self>, Contradiction> {
         Ok(Cow::Owned(self.clone().normalize()?))
     }
-}
 
-/// Semantic equality of graph-IR values in their current id and participant frame.
-pub trait Equiv: Normalize {
     /// Equal normal forms. Two unsatisfiable values count as equal.
     /// Structural equality short-circuits normalization; otherwise the normal forms
     /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
-    fn equiv(&self, other: &Self) -> bool {
+    fn normalized_eq(&self, other: &Self) -> bool {
         self == other || self.normalized() == other.normalized()
     }
 }
@@ -200,52 +196,45 @@ pub trait FrameTransport: Sized {
 /// frame-relative payload accordingly.
 ///
 /// The family is the carrier that knows both which factor bears a frame and what the payload means,
-/// so it owns the quotient rather than the storage shape or the form. One member is required and
-/// the other two are laws over it: `reframe` is the selection alone, and `framed_eq` is equality of
-/// selected values.
-pub trait Reframe: Sized + PartialEq {
-    /// The complete participant-frame action over the receiver's frame-owning entries.
-    type Action;
+/// so it owns the quotient rather than the storage shape or the form.
+/// `representative_action` exposes the complete witness when a downstream consumer needs it;
+/// `reframe` may fuse local selection and transport when it does not. `reframe_with_action` and
+/// `framed_eq` are provided from those operations.
+pub trait Reframe: Normalize + FrameTransport {
+    /// Derive the complete participant-frame action taking the receiver's stored frames to their
+    /// representatives. The action is derived before normalization and is total for every
+    /// integrity-valid receiver.
+    fn representative_action(&self) -> Self::Action;
 
-    /// Reduce every entry, then present each in its selected frame, returning the complete action.
-    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction>;
-
-    /// Reduce every entry, then present each in its selected frame.
-    fn reframe(&self) -> Result<Self, Contradiction> {
-        Ok(self.reframe_with_action()?.0)
+    /// Reduce every entry, apply the action selected from the input frames, reduce again, and
+    /// return that same input-domain action with the representative.
+    fn reframe_with_action(self) -> Result<(Self, Self::Action), Contradiction> {
+        let action = self.representative_action();
+        let reframed = self
+            .normalize()?
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        Ok((reframed, action))
     }
 
+    /// Reduce every entry, then present each in its selected frame.
+    ///
+    /// Implementations derive and apply local actions as they visit entries; they do not need to
+    /// materialize a complete action that the caller did not request.
+    fn reframe(self) -> Result<Self, Contradiction>;
+
     /// Equality modulo the stored frame: the reframed values agree. Two unsatisfiable families
-    /// count as equal, as they do under [`Equiv`].
+    /// count as equal, as they do under [`Normalize::normalized_eq`].
     fn framed_eq(&self, other: &Self) -> bool {
-        match (self.reframe(), other.reframe()) {
+        if self == other {
+            return true;
+        }
+        match (self.clone().reframe(), other.clone().reframe()) {
             (Ok(left), Ok(right)) => left == right,
             (Err(_), Err(_)) => true,
             _ => false,
         }
-    }
-}
-
-impl<T: Normalize> Equiv for T {}
-
-/// A value carrying the guarantee that it is normalized. Built via `new` (which
-/// normalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore
-/// *semantic*, so it can key a `HashMap` / `BiBTreeMap` for semantic dedup.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Normalized<T>(T);
-
-impl<T: Normalize> Normalized<T> {
-    /// Normalize `value` once; `Err` if it is unsatisfiable.
-    pub fn new(value: T) -> Result<Self, Contradiction> {
-        Ok(Self(value.normalize()?))
-    }
-
-    pub fn get(&self) -> &T {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
     }
 }
 

@@ -45,10 +45,10 @@ use super::reaction::Reaction;
 use super::reaction_span::ReactionSpan;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
-    CisTransStereoForm, FrameAction, StereoAtomForm, StereoBondForm, StereoConfigurationForm,
-    StereoCoset, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
+    CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
+    StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
 };
-use super::traits::Normalize;
+use super::traits::{FrameTransport, Normalize};
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3596,7 +3596,7 @@ fn reframe_stereo_atom_constraint_by_order(
             configuration: StereoConfigurationForm::Undetermined,
             constraints: constraint.into(),
         }
-        .reframe_by(permutation)?
+        .reframe_by(&permutation)?
         .constraints
         .into_iter()
         .next();
@@ -3630,7 +3630,7 @@ fn reframe_stereo_bond_constraint_by_order(
             configuration: StereoConfigurationForm::Undetermined,
             constraints: constraint.into(),
         }
-        .reframe_by(permutation)?
+        .reframe_by(&permutation)?
         .constraints
         .into_iter()
         .next();
@@ -3660,7 +3660,7 @@ fn reframe_stereo_atom_form_by_order(
     order: &[ParticipantPosition],
 ) -> Option<StereoAtomForm> {
     if let Some(permutation) = permutation_from_position_order(order) {
-        return form.clone().reframe_by(permutation);
+        return form.clone().reframe_by(&permutation);
     }
     if form.configuration != StereoConfigurationForm::Undetermined {
         return None;
@@ -3681,7 +3681,7 @@ fn reframe_stereo_bond_form_by_order(
     order: &[ParticipantPosition],
 ) -> Option<StereoBondForm> {
     if let Some(permutation) = permutation_from_position_order(order) {
-        return form.clone().reframe_by(permutation);
+        return form.clone().reframe_by(&permutation);
     }
     if form.configuration != StereoConfigurationForm::Undetermined {
         return None;
@@ -4159,7 +4159,7 @@ fn canonicalize_complete_stereo_frames(
             let permutations = match configuration {
                 StereoConfigurationForm::Undetermined => {
                     let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::enumerate_between(&ligands, &sorted)
+                    Permutation::between_all(&ligands, &sorted)
                 }
                 StereoConfigurationForm::Kinded(..) => {
                     canonical_kinded_stereo_frame(&ligands, &configuration)?
@@ -4190,7 +4190,7 @@ fn canonicalize_complete_stereo_frames(
             let permutations = match configuration {
                 StereoConfigurationForm::Undetermined => {
                     let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::enumerate_between(&ligands, &sorted)
+                    Permutation::between_all(&ligands, &sorted)
                 }
                 StereoConfigurationForm::Kinded(..) => {
                     canonical_kinded_stereo_frame(&ligands, &configuration)?

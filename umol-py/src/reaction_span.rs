@@ -7,8 +7,8 @@ use pyo3::prelude::*;
 use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, Constraint as GraphIrConstraint,
-    ConstraintSpan as GraphIrConstraintSpan, EntitySpan as GraphIrEntitySpan, Equiv, FromIr,
-    IntoIr, Normalize, ReactionSpan as GraphIrReactionSpan,
+    ConstraintSpan as GraphIrConstraintSpan, EntitySpan as GraphIrEntitySpan, FromIr, IntoIr,
+    Normalize, ReactionSpan as GraphIrReactionSpan,
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
@@ -39,7 +39,7 @@ fn constraint_spans(
     rhs: Option<GraphIrConstraint>,
 ) -> PyResult<Vec<GraphIrConstraintSpan>> {
     match (lhs, rhs) {
-        (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => {
+        (Some(lhs), Some(rhs)) if lhs.normalized_eq(&rhs) => {
             Ok(vec![GraphIrConstraintSpan::Unchanged(lhs)])
         }
         (Some(lhs), Some(rhs)) => Ok(vec![

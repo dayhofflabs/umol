@@ -16,7 +16,7 @@ use super::traits::{AsLit, Lattice, Normalize};
 /// mass, valence, bond order, etc.
 ///
 /// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
-/// tree"); semantic equality is `Equiv::equiv`, which compares normal
+/// tree"); semantic equality is `Normalize::normalized_eq`, which compares normal
 /// forms.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NumForm {
@@ -758,6 +758,25 @@ mod tests {
         let once = input.normalize().unwrap();
         let twice = once.clone().normalize().unwrap();
         assert_eq!(once, twice);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::structural(NumForm::Lit(3), NumForm::Lit(3), true)]
+    #[case::equivalent(NumForm::lit_set([3]), NumForm::Lit(3), true)]
+    #[case::different(NumForm::Lit(3), NumForm::Lit(4), false)]
+    #[case::contradictions(
+        NumForm::lit_set(Vec::<i64>::new()),
+        NumForm::pred_expr(PredExpr::Rel(ArithExpr::Lit(1), RelOp::Eq, ArithExpr::Lit(2))),
+        true,
+    )]
+    #[case::one_contradiction(NumForm::lit_set(Vec::<i64>::new()), NumForm::Lit(3), false)]
+    fn test_num_form_normalized_eq(
+        #[case] left: NumForm,
+        #[case] right: NumForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(left.normalized_eq(&right), expected);
     }
 
     #[rustfmt::skip]

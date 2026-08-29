@@ -34,7 +34,7 @@ use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
 use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::traits::{Equiv, FrameTransport, Lattice};
+use super::traits::{FrameTransport, Lattice, Normalize};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -429,12 +429,12 @@ impl Molecule {
             .atoms
             .iter()
             .zip(other.atoms.iter())
-            .all(|(left, right)| left.equiv(right))
+            .all(|(left, right)| left.normalized_eq(right))
             || !self
                 .bonds
                 .iter()
                 .zip(other.bonds.iter())
-                .all(|(left, right)| left.equiv(right))
+                .all(|(left, right)| left.normalized_eq(right))
         {
             return false;
         }
@@ -444,7 +444,7 @@ impl Molecule {
                 || !self
                     .dative_bonds
                     .attributes(id)
-                    .equiv(other.dative_bonds.attributes(id))
+                    .normalized_eq(other.dative_bonds.attributes(id))
             {
                 return false;
             }
@@ -454,7 +454,7 @@ impl Molecule {
                 || !self
                     .aromatic_systems
                     .attributes(id)
-                    .equiv(other.aromatic_systems.attributes(id))
+                    .normalized_eq(other.aromatic_systems.attributes(id))
             {
                 return false;
             }
@@ -464,7 +464,7 @@ impl Molecule {
                 || !self
                     .multicenter_bonds
                     .attributes(id)
-                    .equiv(other.multicenter_bonds.attributes(id))
+                    .normalized_eq(other.multicenter_bonds.attributes(id))
             {
                 return false;
             }
@@ -474,7 +474,7 @@ impl Molecule {
                 || !self
                     .noncovalent_bonds
                     .attributes(id)
-                    .equiv(other.noncovalent_bonds.attributes(id))
+                    .normalized_eq(other.noncovalent_bonds.attributes(id))
             {
                 return false;
             }
@@ -485,7 +485,7 @@ impl Molecule {
                 || !self
                     .stereo_atoms
                     .attributes(id)
-                    .equiv(other.stereo_atoms.attributes(id))
+                    .normalized_eq(other.stereo_atoms.attributes(id))
             {
                 return false;
             }
@@ -496,12 +496,12 @@ impl Molecule {
                 || !self
                     .stereo_bonds
                     .attributes(id)
-                    .equiv(other.stereo_bonds.attributes(id))
+                    .normalized_eq(other.stereo_bonds.attributes(id))
             {
                 return false;
             }
         }
-        self.constraints.equiv(&other.constraints)
+        self.constraints.normalized_eq(&other.constraints)
     }
 
     /// Complete semantic equality under a total correspondence from `self` to `other`.
@@ -525,7 +525,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !left_attributes.equiv(right_attributes) {
+            if !left_attributes.normalized_eq(right_attributes) {
                 return false;
             }
         }
@@ -536,7 +536,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !left_attributes.equiv(right_attributes) {
+            if !left_attributes.normalized_eq(right_attributes) {
                 return false;
             }
         }
@@ -567,7 +567,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !attributes.equiv(other.dative_bonds.attributes(right)) {
+            if !attributes.normalized_eq(other.dative_bonds.attributes(right)) {
                 return false;
             }
         }
@@ -600,7 +600,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !attributes.equiv(other.aromatic_systems.attributes(right)) {
+            if !attributes.normalized_eq(other.aromatic_systems.attributes(right)) {
                 return false;
             }
         }
@@ -633,7 +633,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !attributes.equiv(other.multicenter_bonds.attributes(right)) {
+            if !attributes.normalized_eq(other.multicenter_bonds.attributes(right)) {
                 return false;
             }
         }
@@ -665,7 +665,7 @@ impl Molecule {
             else {
                 return false;
             };
-            if !attributes.equiv(other.noncovalent_bonds.attributes(right)) {
+            if !attributes.normalized_eq(other.noncovalent_bonds.attributes(right)) {
                 return false;
             }
         }
@@ -704,7 +704,9 @@ impl Molecule {
                 .attributes(left)
                 .clone()
                 .reframe_by(&action)
-                .is_some_and(|attributes| attributes.equiv(other.stereo_atoms.attributes(right)))
+                .is_some_and(|attributes| {
+                    attributes.normalized_eq(other.stereo_atoms.attributes(right))
+                })
             {
                 return false;
             }
@@ -741,7 +743,9 @@ impl Molecule {
                 .attributes(left)
                 .clone()
                 .reframe_by(&action)
-                .is_some_and(|attributes| attributes.equiv(other.stereo_bonds.attributes(right)))
+                .is_some_and(|attributes| {
+                    attributes.normalized_eq(other.stereo_bonds.attributes(right))
+                })
             {
                 return false;
             }
@@ -2687,7 +2691,7 @@ fn constraints_equiv_under_stereo_frames(
                 .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, *action))
                 .collect::<Option<Constraints>>()
         });
-    transformed.is_some_and(|constraints| constraints.equiv(other))
+    transformed.is_some_and(|constraints| constraints.normalized_eq(other))
 }
 
 #[cfg(test)]

@@ -119,19 +119,18 @@ pub use ring::{
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
-    find_reframed, CisTransConfiguration, CisTransStereo, CisTransStereoForm, FrameAction,
-    StereoAtomForm, StereoAtomUpdate, StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds,
-    StereoConfiguration, StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset,
-    StereoKind, StereoTerm, Stereogenicity, TetrahedralConfiguration, TetrahedralStereo,
-    TetrahedralStereoForm, Topicity,
+    CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
+    StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
+    Stereogenicity, TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
-    AsLit, EntityPatch, Equiv, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Normalized,
-    Reframe, TryFromIr, TryIntoIr,
+    AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, TryFromIr,
+    TryIntoIr,
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,

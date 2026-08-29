@@ -231,6 +231,25 @@ pub struct OverlayFrameActions {
 }
 
 impl OverlayFrameActions {
+    #[cfg(test)]
+    pub(crate) fn from_families(
+        dative_bonds: DativeBondFrameActions,
+        aromatic_systems: AromaticSystemFrameActions,
+        multicenter_bonds: MulticenterBondFrameActions,
+        noncovalent_bonds: NoncovalentBondFrameActions,
+        stereo_atoms: StereoAtomFrameActions,
+        stereo_bonds: StereoBondFrameActions,
+    ) -> Self {
+        Self {
+            dative_bonds,
+            aromatic_systems,
+            multicenter_bonds,
+            noncovalent_bonds,
+            stereo_atoms,
+            stereo_bonds,
+        }
+    }
+
     pub fn dative_bonds(&self) -> &DativeBondFrameActions {
         &self.dative_bonds
     }

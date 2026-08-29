@@ -12,7 +12,7 @@ use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
 use super::frame::NoncovalentBondFrameActions;
 use super::id::{AtomId, NoncovalentBondId};
-use super::traits::{AsLit, Equiv, FrameTransport, Lattice, Normalize, Reframe};
+use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
 
 /// The molecule's noncovalent bonds.
 ///
@@ -146,40 +146,55 @@ impl NoncovalentBonds {
     }
 }
 
-impl Reframe for NoncovalentBonds {
+impl Normalize for NoncovalentBonds {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for attributes in self.attributes_iter_mut() {
+            *attributes = attributes.clone().normalize()?;
+        }
+        Ok(self)
+    }
+}
+
+impl FrameTransport for NoncovalentBonds {
     type Action = NoncovalentBondFrameActions;
 
-    /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
-    ///
-    /// The payload is frame-invariant, so the action records the reordering without changing what
-    /// the bond means.
-    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
-        let mut reframed = (*self.0).clone();
-        let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.ids().collect::<Vec<_>>() {
-            let stored: Vec<AtomId> = reframed
-                .participants(id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let mut selected = stored.clone();
-            selected.sort_unstable();
-
-            let attributes = reframed.data(id).clone().normalize()?;
-            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
-            *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
-            let order: Vec<ParticipantPosition> = action
-                .image()
-                .iter()
-                .map(|&position| ParticipantPosition(position as u32))
-                .collect();
-            reframed.permute_with(id, &order);
-            actions.push(action);
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
+            let action = actions.action(NoncovalentBondId::from(relation_id))?;
+            if action.degree() != 2 {
+                return None;
+            }
+            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            set.permute_with(relation_id, &participant_order(action));
         }
-        Ok((
-            Self(Arc::new(reframed)),
-            NoncovalentBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
-        ))
+        Some(self)
+    }
+}
+
+impl Reframe for NoncovalentBonds {
+    fn representative_action(&self) -> Self::Action {
+        let actions = self
+            .ids()
+            .map(|id| representative_action(self.atoms(id)))
+            .collect();
+        NoncovalentBondFrameActions::from_dense(actions)
+            .expect("every noncovalent-bond action has degree two")
+    }
+
+    fn reframe(mut self) -> Result<Self, Contradiction> {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
+            let stored = set.participants(relation_id).map(AtomId::from);
+            let action = representative_action(stored);
+            let attributes = set.data(relation_id).clone().normalize()?;
+            *set.data_mut(relation_id) = attributes
+                .reframe_by(&action)
+                .ok_or(Contradiction)?
+                .normalize()?;
+            set.permute_with(relation_id, &participant_order(&action));
+        }
+        Ok(self)
     }
 }
 
@@ -233,44 +248,66 @@ impl NoncovalentBondSpans {
     }
 }
 
-impl Reframe for NoncovalentBondSpans {
+impl Normalize for NoncovalentBondSpans {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for id in self.0.ids().collect::<Vec<_>>() {
+            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+        }
+        Ok(self)
+    }
+}
+
+impl FrameTransport for NoncovalentBondSpans {
     type Action = NoncovalentBondFrameActions;
 
-    /// The payload is frame-invariant and selection sorts the pair, so a `Modified` span needs no
-    /// arbitration between its sides.
-    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
-        let mut reframed = self.0.clone();
-        let mut actions = Vec::with_capacity(reframed.count());
-        for id in reframed.ids().collect::<Vec<_>>() {
-            let stored: Vec<AtomId> = reframed
-                .participants(id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let mut selected = stored.clone();
-            selected.sort_unstable();
-
-            let span = reframed.data(id).clone();
-            let reduced = span
-                .try_map(|form| form.normalize().ok())
-                .ok_or(Contradiction)?;
-            let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
-            *reframed.data_mut(id) = reduced
-                .try_map(|form| form.reframe_by(&action))
-                .ok_or(Contradiction)?;
-            let order: Vec<ParticipantPosition> = action
-                .image()
-                .iter()
-                .map(|&position| ParticipantPosition(position as u32))
-                .collect();
-            reframed.permute_with(id, &order);
-            actions.push(action);
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        for relation_id in self.0.ids().collect::<Vec<_>>() {
+            let action = actions.action(NoncovalentBondId::from(relation_id))?;
+            if action.degree() != 2 {
+                return None;
+            }
+            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            self.0.permute_with(relation_id, &participant_order(action));
         }
-        Ok((
-            Self(reframed),
-            NoncovalentBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
-        ))
+        Some(self)
     }
+}
+
+impl Reframe for NoncovalentBondSpans {
+    fn representative_action(&self) -> Self::Action {
+        let actions = self
+            .ids()
+            .map(|id| representative_action(self.atoms(id)))
+            .collect();
+        NoncovalentBondFrameActions::from_dense(actions)
+            .expect("every noncovalent-bond action has degree two")
+    }
+
+    fn reframe(mut self) -> Result<Self, Contradiction> {
+        for relation_id in self.0.ids().collect::<Vec<_>>() {
+            let stored = self.0.participants(relation_id).map(AtomId::from);
+            let action = representative_action(stored);
+            let span = self.0.data(relation_id).clone().normalize()?;
+            *self.0.data_mut(relation_id) =
+                span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+            self.0
+                .permute_with(relation_id, &participant_order(&action));
+        }
+        Ok(self)
+    }
+}
+
+fn representative_action(frame: [AtomId; 2]) -> DynPermutation {
+    let mut image = vec![0, 1];
+    image.sort_unstable_by_key(|&position| frame[position]);
+    DynPermutation::try_from(image).expect("sorted positions form a permutation")
+}
+
+fn participant_order(action: &DynPermutation) -> [ParticipantPosition; 2] {
+    [
+        ParticipantPosition(action.image()[0] as u32),
+        ParticipantPosition(action.image()[1] as u32),
+    ]
 }
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
@@ -367,7 +404,7 @@ impl NoncovalentBondForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.equiv(new))
+                .is_none_or(|old| !old.normalized_eq(new))
             {
                 constraints.set(new.clone());
             }
@@ -378,7 +415,7 @@ impl NoncovalentBondForm {
             }
         }
         NoncovalentBondUpdate {
-            kind: (!self.kind.equiv(&other.kind)).then(|| other.kind.clone()),
+            kind: (!self.kind.normalized_eq(&other.kind)).then(|| other.kind.clone()),
             constraints,
         }
     }
@@ -504,6 +541,7 @@ mod tests {
             .0
             .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
 
+        let source = spans.clone();
         let (reframed, actions) = spans.reframe_with_action().expect("the forms are satisfiable");
 
         assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
@@ -511,6 +549,27 @@ mod tests {
         assert_eq!(
             actions.action(NoncovalentBondId(0)),
             Some(&DynPermutation::try_from(vec![1, 0]).expect("expected action is valid")),
+        );
+        assert_eq!(source.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_spans_normalize() {
+        let form = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+        let spans = NoncovalentBondSpans::new(vec![(
+            AtomId(2),
+            AtomId(5),
+            EntitySpan::Modified {
+                lhs: form.clone(),
+                rhs: form.clone(),
+            },
+        )]);
+
+        let normalized = spans.normalize().expect("the forms are satisfiable");
+
+        assert_eq!(
+            normalized.attributes(NoncovalentBondId(0)),
+            &EntitySpan::Unchanged(form),
         );
     }
 
@@ -525,7 +584,7 @@ mod tests {
             },
         )]);
         let once = spans.reframe().expect("the forms are satisfiable");
-        let twice = once.reframe().expect("the forms are satisfiable");
+        let twice = once.clone().reframe().expect("the forms are satisfiable");
         assert_eq!(twice, once);
     }
 
@@ -564,19 +623,33 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bonds_reframe_identity(unsorted_bond: NoncovalentBonds) {
         let once = unsorted_bond.reframe().expect("the form is satisfiable");
-        let twice = once.reframe().expect("the form is satisfiable");
+        let twice = once.clone().reframe().expect("the form is satisfiable");
         assert_eq!(twice, once);
     }
 
     #[rstest]
     fn test_noncovalent_bonds_reframe_with_action(unsorted_bond: NoncovalentBonds) {
-        let (_, actions) = unsorted_bond
+        let source = unsorted_bond.clone();
+        let (reframed, actions) = unsorted_bond
             .reframe_with_action()
             .expect("the form is satisfiable");
         assert_eq!(
             actions.action(NoncovalentBondId(0)),
             Some(&DynPermutation::try_from(vec![1, 0]).expect("expected action is valid")),
         );
+        assert_eq!(source.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bonds_normalize() {
+        let bonds = NoncovalentBonds::new(vec![(
+            AtomId(2),
+            AtomId(5),
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        )]);
+        let expected = bonds.clone();
+
+        assert_eq!(bonds.normalize(), Ok(expected));
     }
 
     #[rstest]
