@@ -760,6 +760,15 @@ corrected integrity domain and error surface.
   synthesize repeated frames, and add a semantic case where unavailable repeated-virtual completion
   follows stereo failure policy. Record that any future explicit TableIR frame field must continue
   through the same checked raise boundary. **Additive; inherited red ledger unchanged.** [dep: S0b]
+  **Done.** TableIR raise still assembles `MoleculeEntries` and publishes only through
+  `Molecule::try_from_entries`. Module documentation now records that a future explicit TableIR
+  participant-frame field must remain behind that boundary. Focused SMILES and CTfile cases show
+  that tetrahedral `#T` and cis/trans `#C` are currently raised as atom/bond constraints while both
+  stereo-entity collections remain empty, so these paths cannot synthesize a repeated frame. The
+  semantic `[C@H2](F)Cl` case, whose requested tetrahedral completion would require two virtual
+  positions, returns the existing `TetrahedralLigandCount { count: 2 }` raise error rather than
+  publishing or deduplicating a frame. All 18 focused TableIR conversion cases and both focused
+  CTfile-to-IR stereo cases passed.
 - **S0g — Python publication** (`umol-py/src/{molecule,reaction,reaction_span,transaction}.rs` and
   Python tests): preserve molecule/span `ValueError` mapping; validate `Reaction(...)`, parse,
   reaction-SMILES, and every operation snapshotting live lhs/deltas through `Reaction::try_new`.
