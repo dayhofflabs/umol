@@ -12,7 +12,7 @@ use super::super::delta::{
 };
 use super::super::edit::{StereoAtomFieldChange, StereoBondFieldChange};
 use super::super::entity::Entity;
-use super::super::id::AtomId;
+use super::super::id::{AtomId, BondId};
 use super::super::ligand::StereoLigand;
 use super::super::molecule::integrity::{
     check_stereo_atom_entry, check_stereo_atom_kind, check_stereo_bond_entry,
@@ -40,7 +40,7 @@ enum OverlayFrame {
         ligands: Vec<StereoLigand>,
     },
     StereoBond {
-        site: super::super::id::BondId,
+        site: BondId,
         ligands: Vec<StereoLigand>,
     },
 }

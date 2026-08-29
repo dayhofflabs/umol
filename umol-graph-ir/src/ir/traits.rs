@@ -182,7 +182,7 @@ pub trait Normalize: Sized + Clone + PartialEq {
 ///
 /// # Semantic properties
 ///
-/// For every compatible action family, identity leaves the value unchanged, applying an action and
+/// For every compatible action, identity leaves the value unchanged, applying an action and
 /// its inverse recovers the value, and sequential application agrees with action composition.
 pub trait FrameTransport: Sized {
     /// The complete frame action on `Self`.
@@ -192,14 +192,23 @@ pub trait FrameTransport: Sized {
     fn reframe_by(self, action: &Self::Action) -> Option<Self>;
 }
 
-/// The frame quotient over an entity family: select a determinate participant frame and restate the
+/// The frame quotient over an entity aggregate: select a determinate participant frame and restate the
 /// frame-relative payload accordingly.
 ///
-/// The family is the carrier that knows both which factor bears a frame and what the payload means,
+/// The aggregate is the carrier that knows both which factor bears a frame and what the payload means,
 /// so it owns the quotient rather than the storage shape or the form.
 /// `representative_action` exposes the complete witness when a downstream consumer needs it;
 /// `reframe` may fuse local selection and transport when it does not. `reframe_with_action` and
 /// `framed_eq` are provided from those operations.
+///
+/// # Semantic properties
+///
+/// `representative_action` is total for every integrity-valid receiver. For every satisfiable
+/// receiver, `reframe` agrees with the value returned by `reframe_with_action`; transporting the
+/// normalized input by the returned action and normalizing again reproduces that value. Reframing
+/// is idempotent, and the representative action of a reframed value is identity. Normalized
+/// equality implies framed equality. As with normalized equality, framed equality counts two
+/// intrinsically contradictory values as equal.
 pub trait Reframe: Normalize + FrameTransport {
     /// Derive the complete participant-frame action taking the receiver's stored frames to their
     /// representatives. The action is derived before normalization and is total for every
@@ -224,7 +233,7 @@ pub trait Reframe: Normalize + FrameTransport {
     /// materialize a complete action that the caller did not request.
     fn reframe(self) -> Result<Self, Contradiction>;
 
-    /// Equality modulo the stored frame: the reframed values agree. Two unsatisfiable families
+    /// Equality modulo the stored frame: the reframed values agree. Two unsatisfiable receivers
     /// count as equal, as they do under [`Normalize::normalized_eq`].
     fn framed_eq(&self, other: &Self) -> bool {
         if self == other {

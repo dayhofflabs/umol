@@ -1676,7 +1676,10 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                 let dative_triples: Vec<_> = datives
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
-                        [donor, acceptor] if dative_identities.insert((*acceptor, *donor)) => {
+                        [donor, acceptor]
+                            if donor != acceptor
+                                && dative_identities.insert((*acceptor, *donor)) =>
+                        {
                             Some((vec![*donor], *acceptor, data))
                         }
                         _ => None,
@@ -2249,7 +2252,7 @@ pub(crate) fn constraint_strategy(counts: ConstraintCounts) -> BoxedStrategy<Con
 }
 
 /// Raw molecule-scope constraint tree over a fixed small entity-id domain
-/// (a few ids per family), with combinators of arity 1..=3 — singleton
+/// (a few ids per entity kind), with combinators of arity 1..=3 — singleton
 /// wrappers and duplicate children included, so normalization's
 /// trivial-wrapper reduction is exercised.
 pub(crate) fn raw_constraint_tree_strategy() -> BoxedStrategy<Constraint> {
@@ -2441,7 +2444,7 @@ pub(crate) fn molecule_structurally_unambiguous_strategy() -> impl Strategy<Valu
 pub(crate) fn molecule_entries_structurally_unambiguous_strategy(
 ) -> impl Strategy<Value = MoleculeEntries> {
     molecule_entries_strategy().prop_filter(
-        "entity incidence identifies at most one entity of each family",
+        "entity incidence identifies at most one entity of each kind",
         |entries| molecule_entity_incidence_is_unique(&Molecule::from_entries(entries.clone())),
     )
 }
@@ -2706,7 +2709,7 @@ fn delta_keyword(entity: Entity) -> String {
         Entity::StereoAtom(_) => "stereo_atom",
         Entity::StereoBond(_) => "stereo_bond",
     };
-    format!("delta_{kind}_{}", entity.id_index())
+    format!("delta_{kind}_{}", entity.kind_id())
 }
 
 pub(crate) fn reaction_dsl_strategy() -> impl Strategy<Value = ReactionDsl> {
@@ -4529,7 +4532,7 @@ pub(crate) fn comprehensive_reaction_strategy() -> BoxedStrategy<Reaction> {
 }
 
 /// Reactions whose delta collection materializes a reaction span by construction. The generated
-/// cases cover replacement reactions and reactions over every entity family without filtering out
+/// cases cover replacement reactions and reactions over every entity kind without filtering out
 /// failed materializations.
 pub(crate) fn materializable_reaction_strategy() -> BoxedStrategy<Reaction> {
     comprehensive_reaction_strategy()

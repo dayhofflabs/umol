@@ -18,7 +18,7 @@ use super::super::stereo::{StereoAtomForm, StereoBondForm};
 use super::{Molecule, MoleculeEditor};
 
 /// Build a molecule from scratch. `atom` adds an atom and hands back its handle; the
-/// per-family verbs (`single`/`double`/`triple`, `dative`) add bonds between handles;
+/// per-kind verbs (`single`/`double`/`triple`, `dative`) add bonds between handles;
 /// `build` finalizes. Contrast `MoleculeEditor`, which *mutates an existing* molecule
 /// (`add_*` plus `atom(id)`/`bond(id)` lookups).
 pub struct MoleculeBuilder {
@@ -91,7 +91,7 @@ impl MoleculeBuilder {
         )
     }
 
-    /// Add a dative bond from `donors` to `acceptor` — its own family, not a bond order. Carries
+    /// Add a dative bond from `donors` to `acceptor` — its own entity kind, not a bond order. Carries
     /// `attributes` (a `DativeBondForm` or a DSL spec string).
     pub fn dative_bond(
         &mut self,

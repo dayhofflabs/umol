@@ -5,10 +5,12 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use umol_perm::DynPermutation;
+
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
 use super::super::remap::{IdRemapping, MoleculeCompaction};
-use super::super::traits::{Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
 /// `AromaticSystemConstraintsForm`.
@@ -47,6 +49,12 @@ impl AromaticSystemConstraintForm {
     pub fn remap(self, _map: &IdRemapping) -> Self {
         self
     }
+
+    pub(super) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::ElectronCount(_) => false,
+        }
+    }
 }
 
 impl Normalize for AromaticSystemConstraintForm {
@@ -54,6 +62,16 @@ impl Normalize for AromaticSystemConstraintForm {
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::ElectronCount(v) => Self::ElectronCount(v.normalize()?),
+        })
+    }
+}
+
+impl FrameTransport for AromaticSystemConstraintForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, _action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::ElectronCount(value) => Self::ElectronCount(value),
         })
     }
 }
@@ -249,6 +267,22 @@ impl Normalize for AromaticSystemConstraintsForm {
     }
 }
 
+impl FrameTransport for AromaticSystemConstraintsForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if !self
+            .iter()
+            .any(AromaticSystemConstraintForm::uses_participant_frame)
+        {
+            return Some(self);
+        }
+        self.into_iter()
+            .map(|constraint| constraint.reframe_by(action))
+            .collect()
+    }
+}
+
 impl Lattice for AromaticSystemConstraintsForm {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
@@ -432,6 +466,35 @@ mod tests {
         #[case] expected: Result<AromaticSystemConstraintForm, Contradiction>,
     ) {
         assert_eq!(constraint.normalize(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(AromaticSystemConstraintForm::electron_count(6), false)]
+    fn test_aromatic_system_constraint_form_uses_participant_frame(
+        #[case] constraint: AromaticSystemConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(AromaticSystemConstraintForm::electron_count(6))]
+    fn test_aromatic_system_constraint_form_reframe_by(
+        #[case] constraint: AromaticSystemConstraintForm,
+    ) {
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraint.clone().reframe_by(&action), Some(constraint));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_form_reframe_by() {
+        let constraints = AromaticSystemConstraintsForm::from(vec![
+            AromaticSystemConstraintForm::electron_count(6),
+        ]);
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraints.clone().reframe_by(&action), Some(constraints),);
     }
 
     #[rstest]

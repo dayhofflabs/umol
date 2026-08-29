@@ -2975,19 +2975,19 @@ fn permutations(count: usize) -> Vec<Vec<usize>> {
 
 fn explicitly_dense_equivalent(left: &Molecule, right: &Molecule) -> bool {
     fn visit(
-        family: usize,
+        entity_kind: usize,
         permutations: &[Vec<Vec<usize>>; 8],
         images: &mut [Vec<usize>; 8],
         left: &Molecule,
         right: &Molecule,
     ) -> bool {
-        if family == images.len() {
+        if entity_kind == images.len() {
             return left.equiv_under(right, &molecule_correspondence(images));
         }
 
-        permutations[family].iter().any(|permutation| {
-            images[family].clone_from(permutation);
-            visit(family + 1, permutations, images, left, right)
+        permutations[entity_kind].iter().any(|permutation| {
+            images[entity_kind].clone_from(permutation);
+            visit(entity_kind + 1, permutations, images, left, right)
         })
     }
 
@@ -4711,7 +4711,7 @@ fn test_canonicalize_constitution_properties(
 }
 
 #[rstest]
-fn test_canonicalize_constitution_family_minimum(canonicalize_context: CanonicalizeContext) {
+fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: CanonicalizeContext) {
     let atoms = vec![AtomForm::from_element(Element::C); 4];
     let cases = [
         (
@@ -4790,7 +4790,7 @@ fn test_canonicalize_constitution_family_minimum(canonicalize_context: Canonical
         ),
     ];
 
-    for (family, molecule) in cases {
+    for (entity_kind, molecule) in cases {
         let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
         let (entity_keys, incidence_keys) =
             initial_class_keys(&molecule, &incidence_graph).unwrap();
@@ -4831,19 +4831,19 @@ fn test_canonicalize_constitution_family_minimum(canonicalize_context: Canonical
         assert_eq!(
             constitution_comparison_key(&unpruned, &unpruned_incidence, &unpruned_order),
             Ok(expected.key.clone()),
-            "unpruned {family}",
+            "unpruned {entity_kind}",
         );
         assert_eq!(
             constitution_comparison_key(&canonical, &canonical_incidence, &canonical_order),
             Ok(expected.key),
-            "pruned {family}",
+            "pruned {entity_kind}",
         );
-        assert_eq!(unpruned, canonical, "{family}");
+        assert_eq!(unpruned, canonical, "{entity_kind}");
         assert!(
             molecule.equiv_under(&canonical, &correspondence),
-            "{family}"
+            "{entity_kind}"
         );
-        assert_eq!(canonical.check_integrity(), Ok(()), "{family}");
+        assert_eq!(canonical.check_integrity(), Ok(()), "{entity_kind}");
 
         for (index, atom_images) in permutations(molecule.atoms().count())
             .into_iter()
@@ -4852,8 +4852,8 @@ fn test_canonicalize_constitution_family_minimum(canonicalize_context: Canonical
             let mut images = molecule_counts(&molecule).map(|count| (0..count).collect::<Vec<_>>());
             images[0] = atom_images;
             if index % 2 == 1 {
-                for family_images in &mut images[1..6] {
-                    family_images.reverse();
+                for entity_kind_images in &mut images[1..6] {
+                    entity_kind_images.reverse();
                 }
             }
             let renumbered = molecule.remap(&molecule_correspondence(&images));
@@ -4861,7 +4861,7 @@ fn test_canonicalize_constitution_family_minimum(canonicalize_context: Canonical
             assert_eq!(
                 canonicalize_constitution(&renumbered, &canonicalize_context),
                 Ok(canonical.clone()),
-                "{family}, renumbering {index}",
+                "{entity_kind}, renumbering {index}",
             );
         }
     }

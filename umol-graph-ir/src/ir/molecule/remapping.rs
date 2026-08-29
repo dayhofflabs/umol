@@ -14,7 +14,7 @@ impl Molecule {
     /// Relabel this molecule into the dense target id spaces described by `correspondence`.
     ///
     /// The correspondence must describe every entity in this molecule and be total on both sides
-    /// for all eight entity families. The operation transports topology, relation participants,
+    /// for all eight entity kinds. The operation transports topology, relation participants,
     /// position-sensitive relation data, stereo frames, entity forms, and constraint references.
     /// It does not validate chemistry, normalize attributes, repair references, compact tables, or
     /// remove entities.
@@ -37,7 +37,7 @@ impl Molecule {
     /// Checked form of [`Self::remap`].
     ///
     /// Returns `None` when the correspondence's source counts differ from the molecule's entity
-    /// counts or when any entity family is not a bijection onto a dense target id space.
+    /// counts or when any entity-kind correspondence is not a bijection onto a dense target id space.
     pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
         let counts_match = [
             (correspondence.atoms().left_count(), self.atoms.len()),

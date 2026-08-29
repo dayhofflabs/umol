@@ -435,7 +435,7 @@ mod tests {
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![]
     )]
-    // A carries an aromatic system (a positional family) it never touches; the composite carries it
+    // A carries an aromatic system (a positioned overlay) it never touches; the composite carries it
     // (class ①, identity participants) and fuses the order.
     #[case::aromatic_carry(
         Reaction::new(

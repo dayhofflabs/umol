@@ -8,12 +8,12 @@ use rstest::*;
 use umol_chem::element::Element;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, BipartiteMaximumMatchingAlgorithm,
-    ConnectedComponentsAlgorithm, Correspondence, EdgeId, GeneralMaximumMatchingAlgorithm,
+    ConnectedComponentsAlgorithm, Correspondence, EdgeId, GeneralMaximumMatchingAlgorithm, Graph,
     MatchingEnumerationAlgorithm, MaximumIndependentSetAlgorithm, NodeId, NonBipartiteGraphError,
     RelevantCycleEnumerationAlgorithm, ShortestCycleAlgorithm, SimpleCycleEnumerationAlgorithm,
     SubgraphIsomorphismAlgorithm,
 };
-use umol_perm::{Permutation, MAX_DEGREE};
+use umol_perm::{DynPermutation, Permutation, MAX_DEGREE};
 
 use super::super::aromatic::AromaticSystemForm;
 use super::super::atom::{AtomForm, ElementForm, IsotopeMassForm};
@@ -45,15 +45,15 @@ use super::super::noncovalent::{
 use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
-use super::super::stereo::Topicity;
 use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
-    Stereogenicity,
+    Stereogenicity, Topicity,
 };
-use super::super::traits::Normalize;
+use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::transact::TransactionError;
 use super::{
-    DescriptionLevel, Molecule, MoleculeApplyError, MoleculeEntries, MoleculeIntegrityError,
+    AromaticSystems, DativeBonds, DescriptionLevel, Molecule, MoleculeApplyError, MoleculeEntries,
+    MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
 };
 use crate::{mol_dsl, mol_dsl_concrete};
 
@@ -583,6 +583,116 @@ fn equiv_molecule_entries() -> MoleculeEntries {
     }
 }
 
+#[fixture]
+fn molecule_reframe_source(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+) -> Molecule {
+    entries.dative[0].0 = vec![AtomId(2), AtomId(1)];
+    entries.aromatic[0] = (
+        vec![AtomId(2), AtomId(0), AtomId(1)],
+        AromaticSystemForm::from_electrons(vec![20, 10, 15]),
+    );
+    entries.multicenter[0] = (
+        vec![AtomId(1), AtomId(2), AtomId(0)],
+        MulticenterBondForm::from_electrons(vec![12, 14, 10]),
+    );
+    entries.noncovalent[0].0 = AtomId(3);
+    entries.noncovalent[0].1 = AtomId(0);
+
+    entries.stereo_atoms[0].1 = vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    ];
+    entries.stereo_atoms[0]
+        .2
+        .constraints
+        .set(StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+        }));
+
+    entries.stereo_bonds[0].1 = vec![
+        StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+    ];
+    entries.stereo_bonds[0]
+        .2
+        .constraints
+        .set(StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Diastereotopic),
+        }));
+
+    entries.constraints = Constraints::new();
+    entries.constraints.push(Constraint::Relational(
+        RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::valence(1)),
+                Box::new(AtomConstraintForm::valence(2)),
+            ],
+        },
+    ));
+    entries.constraints.push(Constraint::StereoAtom(
+        StereoAtomId(0),
+        StereoKind::Tetrahedral,
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 1usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+        }),
+    ));
+    entries.constraints.push(Constraint::StereoBond(
+        StereoBondId(0),
+        StereoKind::CisTrans,
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
+            relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+        }),
+    ));
+
+    Molecule::from_entries(entries)
+}
+
+#[rstest]
+fn test_molecule_try_from_entries(#[from(equiv_molecule_entries)] mut entries: MoleculeEntries) {
+    entries.dative.push((
+        vec![AtomId(0), AtomId(1)],
+        AtomId(3),
+        DativeBondForm::from_order(2),
+    ));
+    let expected = Molecule {
+        graph: Graph::new(
+            entries.atoms.len(),
+            &entries
+                .bonds
+                .iter()
+                .map(|(first, second, _)| [first.0, second.0])
+                .collect::<Vec<_>>(),
+        ),
+        atoms: Arc::new(entries.atoms.clone()),
+        bonds: Arc::new(
+            entries
+                .bonds
+                .iter()
+                .map(|(_, _, attributes)| attributes.clone())
+                .collect(),
+        ),
+        dative_bonds: DativeBonds::new(entries.dative.clone()),
+        aromatic_systems: AromaticSystems::new(entries.aromatic.clone()),
+        multicenter_bonds: MulticenterBonds::new(entries.multicenter.clone()),
+        noncovalent_bonds: NoncovalentBonds::new(entries.noncovalent.clone()),
+        stereo_atoms: StereoAtoms::new(entries.stereo_atoms.clone()),
+        stereo_bonds: StereoBonds::new(entries.stereo_bonds.clone()),
+        constraints: entries.constraints.clone(),
+    };
+
+    assert_eq!(Molecule::try_from_entries(entries), Ok(expected));
+}
+
 #[rstest]
 #[case::bond_endpoint(
     |entries: &mut MoleculeEntries| entries.bonds[0].0 = AtomId(4),
@@ -634,40 +744,6 @@ fn test_molecule_try_from_entries_error(
     assert_eq!(
         Molecule::try_from_entries(entries),
         Err(MoleculeIntegrityError::InvalidReference { entity }),
-    );
-}
-
-#[rstest]
-#[case::shared_incidence(
-    |entries: &mut MoleculeEntries| entries.dative.push((
-        vec![AtomId(0), AtomId(1)],
-        AtomId(3),
-        DativeBondForm::from_order(2),
-    )),
-    vec![
-        (vec![AtomId(1), AtomId(2)], AtomId(3)),
-        (vec![AtomId(0), AtomId(1)], AtomId(3)),
-    ],
-)]
-#[case::donor_is_acceptor(
-    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
-    vec![(vec![AtomId(1), AtomId(3)], AtomId(3))],
-)]
-fn test_molecule_try_from_entries(
-    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
-    #[case] modify: fn(&mut MoleculeEntries),
-    #[case] expected: Vec<(Vec<AtomId>, AtomId)>,
-) {
-    modify(&mut entries);
-
-    let molecule = Molecule::try_from_entries(entries).expect("entries satisfy molecule integrity");
-    assert_eq!(
-        molecule
-            .dative_bonds()
-            .iter()
-            .map(|dative| (dative.donor_ids().collect(), dative.acceptor_id()))
-            .collect::<Vec<_>>(),
-        expected,
     );
 }
 
@@ -727,6 +803,13 @@ fn test_molecule_try_from_entries(
     MoleculeIntegrityError::DuplicateParticipant {
         entity: Entity::DativeBond(DativeBondId(0)),
         atom: AtomId(1),
+    },
+)]
+#[case::dative_donor_acceptor_duplicate(
+    |entries: &mut MoleculeEntries| entries.dative[0].0[1] = AtomId(3),
+    MoleculeIntegrityError::DuplicateParticipant {
+        entity: Entity::DativeBond(DativeBondId(0)),
+        atom: AtomId(3),
     },
 )]
 #[case::dative_bonds_identical(
@@ -1520,6 +1603,250 @@ fn test_molecule_normalize_error(
 }
 
 #[rstest]
+fn test_molecule_reframe_by(#[from(molecule_reframe_source)] source: Molecule) {
+    let actions = source.representative_action();
+    let reframed = source
+        .clone()
+        .reframe_by(&actions)
+        .expect("the representative action covers the molecule");
+
+    assert_eq!(
+        reframed
+            .dative_bonds
+            .donors(DativeBondId(0))
+            .collect::<Vec<_>>(),
+        vec![AtomId(1), AtomId(2)],
+    );
+    assert_eq!(
+        reframed
+            .aromatic_systems
+            .atoms(AromaticSystemId(0))
+            .collect::<Vec<_>>(),
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+    );
+    assert_eq!(
+        reframed.aromatic_systems.attributes(AromaticSystemId(0)),
+        &AromaticSystemForm::from_electrons(vec![10, 15, 20]),
+    );
+    assert_eq!(
+        reframed
+            .multicenter_bonds
+            .atoms(MulticenterBondId(0))
+            .collect::<Vec<_>>(),
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+    );
+    assert_eq!(
+        reframed.multicenter_bonds.attributes(MulticenterBondId(0)),
+        &MulticenterBondForm::from_electrons(vec![10, 12, 14]),
+    );
+    assert_eq!(
+        reframed.noncovalent_bonds.atoms(NoncovalentBondId(0)),
+        [AtomId(0), AtomId(3)],
+    );
+    assert_eq!(
+        reframed.stereo_atoms.ligands(StereoAtomId(0)),
+        [
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(1), StereoLigandKind::LonePair),
+            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        ],
+    );
+    assert_eq!(
+        reframed.stereo_bonds.ligands(StereoBondId(0)),
+        [
+            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        ],
+    );
+    assert_eq!(
+        reframed.constraints.as_slice(),
+        &[
+            Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::valence(2)),
+                    Box::new(AtomConstraintForm::valence(1)),
+                ],
+            }),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(2usize.into(), 3usize.into()),
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                }),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(1usize.into(), 2usize.into()),
+                    relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                }),
+            ),
+        ],
+    );
+}
+
+#[rstest]
+fn test_molecule_reframe_by_compatible_action(#[from(molecule_reframe_source)] source: Molecule) {
+    let actions = source.representative_action();
+    let mut compatible = source;
+    compatible.atom_mut(AtomId(0)).attributes.charge = NumForm::Lit(2);
+
+    let reframed = compatible
+        .reframe_by(&actions)
+        .expect("the action domain and participant degrees are compatible");
+
+    assert_eq!(reframed.atom(AtomId(0)).attributes.charge, NumForm::Lit(2));
+    assert_eq!(
+        reframed.representative_action(),
+        reframed.representative_action().identity(),
+    );
+}
+
+#[rstest]
+#[case::missing(|entries: &mut MoleculeEntries| entries.aromatic.clear())]
+#[case::degree(|entries: &mut MoleculeEntries| {
+    entries.aromatic[0] = (
+        vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+        AromaticSystemForm::from_electrons(vec![1, 2, 3, 4]),
+    );
+})]
+fn test_molecule_reframe_by_error(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+    #[case] change_provider: fn(&mut MoleculeEntries),
+) {
+    let source = Molecule::from_entries(entries.clone());
+    let mut provider = entries;
+    change_provider(&mut provider);
+    let actions = Molecule::from_entries(provider).representative_action();
+
+    assert_eq!(source.reframe_by(&actions), None);
+}
+
+#[rstest]
+fn test_molecule_representative_action(#[from(molecule_reframe_source)] source: Molecule) {
+    let actions = source.representative_action();
+
+    assert_eq!(
+        actions
+            .dative_bonds()
+            .action(DativeBondId(0))
+            .expect("the dense action covers the dative bond")
+            .image(),
+        [1, 0],
+    );
+    assert_eq!(
+        actions
+            .aromatic_systems()
+            .action(AromaticSystemId(0))
+            .expect("the dense action covers the aromatic system")
+            .image(),
+        [1, 2, 0],
+    );
+    assert_eq!(
+        actions
+            .multicenter_bonds()
+            .action(MulticenterBondId(0))
+            .expect("the dense action covers the multicenter bond")
+            .image(),
+        [2, 0, 1],
+    );
+    assert_eq!(
+        actions.noncovalent_bonds().action(NoncovalentBondId(0)),
+        Some(&DynPermutation::try_from(vec![1, 0]).expect("the expected action is valid")),
+    );
+    assert_eq!(
+        actions.stereo_atoms().action(StereoAtomId(0)),
+        Some(&Permutation::from_image(&[2, 3, 1, 0])),
+    );
+    assert_eq!(
+        actions.stereo_bonds().action(StereoBondId(0)),
+        Some(&Permutation::from_image(&[3, 2, 0, 1])),
+    );
+}
+
+#[rstest]
+fn test_molecule_reframe_with_action(#[from(molecule_reframe_source)] source: Molecule) {
+    let (reframed, actions) = source
+        .clone()
+        .reframe_with_action()
+        .expect("the molecule is satisfiable");
+
+    let transported = source
+        .clone()
+        .normalize()
+        .expect("the molecule is satisfiable")
+        .reframe_by(&actions)
+        .expect("the representative action covers the molecule")
+        .normalize()
+        .expect("the transported molecule is satisfiable");
+
+    assert_eq!(transported, reframed);
+    assert_eq!(source.reframe(), Ok(reframed));
+}
+
+#[rstest]
+fn test_molecule_reframe_identity() {
+    let molecule = Molecule::default();
+
+    assert_eq!(molecule.clone().reframe(), Ok(molecule));
+}
+
+#[rstest]
+fn test_molecule_reframe_idempotence(#[from(molecule_reframe_source)] source: Molecule) {
+    let once = source.reframe().expect("the molecule is satisfiable");
+
+    assert_eq!(once.clone().reframe(), Ok(once));
+}
+
+#[rstest]
+fn test_molecule_reframe_shared_storage(#[from(molecule_reframe_source)] source: Molecule) {
+    let snapshot = source.clone();
+    let shared = source.clone();
+    assert!(Arc::ptr_eq(&source.atoms, &shared.atoms));
+
+    let reframed = shared.reframe().expect("the molecule is satisfiable");
+
+    assert_eq!(source, snapshot);
+    assert!(source.framed_eq(&reframed));
+}
+
+#[rstest]
+fn test_molecule_reframe_error(#[from(equiv_molecule_entries)] mut entries: MoleculeEntries) {
+    entries.stereo_atoms[0].2 = StereoAtomForm::new(
+        StereoKind::Tetrahedral,
+        StereoCoset::lit_set(Vec::<u32>::new()),
+    );
+
+    assert_eq!(
+        Molecule::from_entries(entries).reframe(),
+        Err(Contradiction)
+    );
+}
+
+#[rstest]
+fn test_molecule_framed_eq(#[from(molecule_reframe_source)] source: Molecule) {
+    let representative = source
+        .clone()
+        .reframe()
+        .expect("the molecule is satisfiable");
+    let mut different = source.clone();
+    different
+        .stereo_atoms
+        .attributes_mut(StereoAtomId(0))
+        .configuration = StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 0u32);
+
+    assert!(!source.normalized_eq(&representative));
+    assert!(source.framed_eq(&representative));
+    assert!(!source.framed_eq(&different));
+}
+
+#[rstest]
 fn test_molecule_normalized_eq_entity_data(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
@@ -1761,10 +2088,10 @@ fn test_molecule_equiv_under_stereo_constraint_frame() {
 }
 
 /// A correspondence must map each matched entity's participants onto its counterpart's. That is a
-/// property of the correspondence, checked once, not of any per-family payload comparison.
+/// property of the correspondence, checked once, not of any per-entity-kind payload comparison.
 ///
-/// Covers all six overlay families. Each case moves one participant of its entity onto a different
-/// atom that is still legal for that family, so both sides satisfy integrity and only the
+/// Covers all six overlay kinds. Each case moves one participant of its entity onto a different
+/// atom that is still legal for that entity kind, so both sides satisfy integrity and only the
 /// correspondence is at fault.
 #[rustfmt::skip]
 #[rstest]
@@ -1776,7 +2103,7 @@ fn test_molecule_equiv_under_stereo_constraint_frame() {
 #[case::stereo_bond(Entity::StereoBond(StereoBondId(0)))]
 fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Entity) {
     // Atom 0 is bonded to 1, 4 and 5; atom 1 to 0, 2 and 5; atom 2 to 1 and 3. That gives every
-    // family a legal participant to move to.
+    // entity kind a legal participant to move to.
     let build = |shifted: bool| {
         let atom = |kept: u32, moved: u32| AtomId(if shifted { moved } else { kept });
         let ligand = |kept: u32, moved: u32| StereoLigand::new(atom(kept, moved), StereoLigandKind::Atom);
@@ -1841,7 +2168,7 @@ fn test_molecule_equiv_under_rejects_mismatched_participants(#[case] entity: Ent
                     StereoBondForm::default(),
                 )]
             }
-            _ => unreachable!("test cases contain only overlay families"),
+            _ => unreachable!("test cases contain only overlay kinds"),
         }
         Molecule::try_from_entries(entries)
     };

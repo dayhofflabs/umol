@@ -1,8 +1,8 @@
 //! Dense molecule-remapping properties.
 //!
-//! The generated domain contains every entity family, position-sensitive aromatic and
-//! multicenter data, stereo frames, and constraints that reference every id family. Both generated
-//! correspondences are complete non-identity cyclic permutations in every family. The success
+//! The generated domain contains every entity kind, position-sensitive aromatic and multicenter
+//! data, stereo frames, and constraints that reference every id kind. Both generated
+//! correspondences are complete nonidentity cyclic permutations in every component. The success
 //! properties use the asserted producer route; independently supplied coverage failures remain in
 //! the exact unit suite for `try_remap`.
 
@@ -19,11 +19,11 @@ where
     Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
 }
 
-fn crossing<Id>(count: usize, seed: u64, family: u32) -> Correspondence<Id>
+fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
 where
     Id: Copy + Ord + From<usize>,
 {
-    let shift = 1 + seed.rotate_right(family * 8) as usize % (count - 1);
+    let shift = 1 + seed.rotate_right(entity_kind * 8) as usize % (count - 1);
     let images = (0..count)
         .map(|left| Id::from((left + shift) % count))
         .collect::<Vec<_>>();

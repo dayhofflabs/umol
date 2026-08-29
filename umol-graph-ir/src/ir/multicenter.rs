@@ -10,7 +10,7 @@ use super::constraint::{MulticenterBondConstraintForm, MulticenterBondConstraint
 use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
-use super::frame::MulticenterBondFrameActions;
+use super::frame::MulticenterBondsFrameAction;
 use super::id::{AtomId, MulticenterBondId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
@@ -165,7 +165,7 @@ impl Normalize for MulticenterBonds {
 }
 
 impl FrameTransport for MulticenterBonds {
-    type Action = MulticenterBondFrameActions;
+    type Action = MulticenterBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         let set = Arc::make_mut(&mut self.0);
@@ -187,34 +187,43 @@ impl Reframe for MulticenterBonds {
             .ids()
             .map(|id| representative_action(self.atoms(id).collect()))
             .collect();
-        MulticenterBondFrameActions::from_dense(actions)
+        MulticenterBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a multicenter-bond action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        let set = Arc::make_mut(&mut self.0);
-        for relation_id in set.ids().collect::<Vec<_>>() {
-            let stored = set
-                .participants(relation_id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let action = representative_action(stored);
-            let attributes = set.data(relation_id).clone().normalize()?;
-            *set.data_mut(relation_id) = attributes
-                .reframe_by(&action)
-                .ok_or(Contradiction)?
-                .normalize()?;
-            set.permute_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_multicenter_bonds_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_multicenter_bonds_with(
+    mut multicenter_bonds: MulticenterBonds,
+    mut visit: impl FnMut(MulticenterBondId, &DynPermutation),
+) -> Result<MulticenterBonds, Contradiction> {
+    let set = Arc::make_mut(&mut multicenter_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = MulticenterBondId::from(relation_id);
+        let stored = set
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(multicenter_bonds)
 }
 
 /// The reaction span's multicenter bonds, one [`EntitySpan`] per entity against a single participant frame.
 ///
 /// The `Molecule` peer is [`MulticenterBonds`]. The surface is deliberately duplicated rather than shared
-/// through a payload parameter: a type parameter on the molecule-level families would complicate
+/// through a payload parameter: a type parameter on the molecule-level aggregates would complicate
 /// the primary carrier to serve this one. Values are issued by
 /// [`ReactionSpan`](super::reaction_span::ReactionSpan).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -277,7 +286,7 @@ impl Normalize for MulticenterBondSpans {
 }
 
 impl FrameTransport for MulticenterBondSpans {
-    type Action = MulticenterBondFrameActions;
+    type Action = MulticenterBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         for relation_id in self.0.ids().collect::<Vec<_>>() {
@@ -298,7 +307,7 @@ impl Reframe for MulticenterBondSpans {
             .ids()
             .map(|id| representative_action(self.atoms(id).collect()))
             .collect();
-        MulticenterBondFrameActions::from_dense(actions)
+        MulticenterBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a multicenter-bond action")
     }
 
@@ -496,7 +505,7 @@ impl FrameTransport for MulticenterBondForm {
             electrons: electrons.reframe_by(action)?,
             charge,
             unpaired_electrons,
-            constraints,
+            constraints: constraints.reframe_by(action)?,
         })
     }
 }
@@ -686,6 +695,24 @@ mod tests {
             .expect("the dense action covers the bond");
         assert_eq!(action.image(), [1, 2, 0]);
         assert_eq!(unsorted_bond.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_reframe_multicenter_bonds_with(unsorted_bond: MulticenterBonds) {
+        let mut visited = None;
+        let reframed = reframe_multicenter_bonds_with(unsorted_bond.clone(), |id, action| {
+            visited = Some((id, action.clone()));
+        })
+        .expect("the form is satisfiable");
+
+        assert_eq!(
+            visited,
+            Some((
+                MulticenterBondId(0),
+                DynPermutation::try_from(vec![1, 2, 0]).expect("the expected action is valid"),
+            )),
+        );
+        assert_eq!(unsorted_bond.reframe(), Ok(reframed));
     }
 
     #[rstest]
@@ -893,6 +920,15 @@ mod tests {
         MulticenterBondForm::default(),
         vec![3, 1, 0, 2],
         Some(MulticenterBondForm::default()),
+    )]
+    #[case::frame_invariant_constraint(
+        MulticenterBondForm::default()
+            .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
+        vec![1, 0],
+        Some(
+            MulticenterBondForm::default()
+                .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
+        ),
     )]
     fn test_multicenter_bond_form_reframe_by(
         #[case] input: MulticenterBondForm,

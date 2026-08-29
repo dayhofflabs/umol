@@ -132,7 +132,7 @@ impl Molecule {
     /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomForm` / `StereoBondForm`.
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
-    #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
+    #[allow(clippy::too_many_arguments)] // one argument per entity kind — the full molecule surface
     fn from_entries(
         py: Python<'_>,
         atoms: Vec<Py<AtomForm>>,
@@ -572,7 +572,7 @@ impl Molecule {
     }
 
     pub(crate) fn __repr__(&self) -> String {
-        // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
+        // Atoms and bonds always; the other entity kinds (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
         // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
         let mut parts = vec![

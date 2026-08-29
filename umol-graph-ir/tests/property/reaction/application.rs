@@ -32,7 +32,7 @@ proptest! {
     // These eight host-refinement properties deliberately have parallel shapes.
     // Each exercises the lowering path for a distinct entity delta; keeping them
     // separate makes a violation of host-relative old-value semantics local to
-    // the affected entity family.
+    // the affected entity kind.
 
     /// A pattern-relative atom update lowers against the matched host atom, including independent
     /// unpaired-electron components and keyed constraint set / replace / remove operations.

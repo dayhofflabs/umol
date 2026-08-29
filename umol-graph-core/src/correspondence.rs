@@ -3,7 +3,7 @@
 //! Framed as a matching in the bipartite graph over the two id sets: an id is **matched** (paired
 //! with a partner on the other side — the shared interface) or **unmatched** (present on only one
 //! side). Generic in the id type, so the same carrier serves node correspondences (atoms) and every
-//! entity family (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
+//! entity kind (bonds, overlays) one layer up; `Correspondence<NodeId>` additionally exposes the
 //! induced edge correspondence over the two graphs.
 
 use std::collections::{BTreeSet, HashMap};
@@ -289,9 +289,9 @@ impl Correspondence<NodeId> {
     }
 }
 
-/// A subgraph↔host correspondence over a `Graph`: its node and edge families. The graph-core base
+/// A subgraph↔host correspondence over a `Graph`: its node and edge components. The graph-core base
 /// that the molecule-level `MoleculeCorrespondence` (atoms + bonds + overlays) extends — produced by
-/// induced subgraphs, subiso matches, and common-subgraph search. The objective of each is a family
+/// induced subgraphs, subiso matches, and common-subgraph search. The objective of each is a component
 /// size: `nodes().matched_pair_count()` (induced / MCIS), `edges().matched_pair_count()` (MCES).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GraphCorrespondence {
@@ -304,11 +304,11 @@ impl GraphCorrespondence {
         Self { nodes, edges }
     }
 
-    /// The graph correspondence a node correspondence induces over `left` / `right`: its edge family
+    /// The graph correspondence a node correspondence induces over `left` / `right`: its edge component
     /// is the induced edge correspondence (an edge matched when both endpoints are matched). Exact
     /// whenever every structurally matched edge is admissible — a subiso match, a common *induced*
     /// subgraph, or a common-subgraph walk whose adjacency enforces the edge predicate; not for an
-    /// edge-subgraph result whose producer selects the edge family directly. Returns `None` when the
+    /// edge-subgraph result whose producer selects the edge component directly. Returns `None` when the
     /// node correspondence does not describe the supplied graphs or does not induce unique edge
     /// pairs.
     pub fn induce(left: &Graph, right: &Graph, nodes: Correspondence<NodeId>) -> Option<Self> {
@@ -725,7 +725,7 @@ mod tests {
         ),
         (false, true, false),
     )]
-    #[case::mixed_families(
+    #[case::mixed_node_and_edge(
         GraphCorrespondence::new(
             Correspondence::from_images(&[n(0)], 2),
             Correspondence::new(vec![(e(0), e(0))], 2, 1)

@@ -16,6 +16,7 @@ use super::super::traits::Lattice;
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 use super::constraints::BondConstraintsView;
+use super::ring::bond_ring_membership;
 use super::stereo::StereoBondView;
 
 /// Namespace accessor for bond views on a `Molecule`.
@@ -277,7 +278,7 @@ pub(crate) fn bond_derived_constraint(
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(BondConstraintForm::ring_membership(
                 scope,
-                super::ring::bond_ring_membership(rings, bond, scope),
+                bond_ring_membership(rings, bond, scope),
             ))
         }
     }

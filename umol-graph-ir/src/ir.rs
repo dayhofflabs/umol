@@ -85,9 +85,9 @@ pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError, NoJoin};
 pub use frame::{
-    AromaticSystemFrameActions, DativeBondFrameActions, MulticenterBondFrameActions,
-    NoncovalentBondFrameActions, OverlayFrameActions, StereoAtomFrameActions,
-    StereoBondFrameActions,
+    AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+    NoncovalentBondsFrameAction, OverlaysFrameAction, StereoAtomsFrameAction,
+    StereoBondsFrameAction,
 };
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,

@@ -1,7 +1,7 @@
 //! Graph-IR id mappings between `Molecule` id spaces.
 //!
 //! [`MoleculeCompaction`] is the removal compaction produced by `MoleculeEditor::remove`: one
-//! `GraphCompaction` for atoms and bonds and one `Compaction` per relation family, each over its own
+//! `GraphCompaction` for atoms and bonds and one `Compaction` per relation set, each over its own
 //! id type. [`IdRemapping`] is the general total relabeling used to move `Delta`s between id spaces
 //! (`reverse`, `compose`).
 
@@ -15,10 +15,10 @@ use super::id::{
 };
 
 /// Molecule-level compaction produced by `MoleculeEditor::remove`. Translates a pre-removal id in
-/// any of the eight entity families to its post-removal id, or reports that the entity was removed.
+/// any of the eight entity kinds to its post-removal id, or reports that the entity was removed.
 ///
-/// Holds one [`GraphCompaction`] for atoms and bonds and one [`Compaction`] per relation family, so
-/// every family is renumbered by the same operation over its own id type.
+/// Holds one [`GraphCompaction`] for atoms and bonds and one [`Compaction`] per relation set, so
+/// every entity kind is renumbered by the same operation over its own id type.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct MoleculeCompaction {
     graph: GraphCompaction,

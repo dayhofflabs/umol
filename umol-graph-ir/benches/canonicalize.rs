@@ -1,4 +1,4 @@
-//! Aggregate canonicalization benchmarks.
+//! Aggregate canonicalization and participant-frame benchmarks.
 //!
 //! Criterion ids include the measured graph's node and edge counts.
 
@@ -14,8 +14,8 @@ use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, DescriptionLevel,
     IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
     MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, NumForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    NoncovalentBondKind, NumForm, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm,
+    StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -200,31 +200,31 @@ fn overlay_heavy() -> Molecule {
             bond(2, 7, 1),
         ],
         dative: vec![(
-            vec![AtomId(4), AtomId(5)],
+            vec![AtomId(5), AtomId(4)],
             AtomId(3),
             DativeBondForm::from_order(1),
         )],
         aromatic: vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+            vec![AtomId(3), AtomId(2), AtomId(1), AtomId(0)],
             AromaticSystemForm::default(),
         )],
         multicenter: vec![(
-            vec![AtomId(0), AtomId(4), AtomId(5)],
+            vec![AtomId(5), AtomId(4), AtomId(0)],
             MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
-            AtomId(6),
             AtomId(7),
+            AtomId(6),
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
             AtomId(1),
-            vec![ligand(0), ligand(2), ligand(4), ligand(5)],
+            vec![ligand(5), ligand(4), ligand(2), ligand(0)],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )],
         stereo_bonds: vec![(
             BondId(1),
-            vec![ligand(0), ligand(4), ligand(3), ligand(6)],
+            vec![ligand(6), ligand(3), ligand(4), ligand(0)],
             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(0)),
         )],
         constraints: Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -233,6 +233,36 @@ fn overlay_heavy() -> Molecule {
         })
         .into(),
     })
+}
+
+fn large_aromatic() -> Molecule {
+    const ATOM_COUNT: usize = 128;
+
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![atom(Element::C); ATOM_COUNT],
+        aromatic: vec![(
+            (0..ATOM_COUNT).rev().map(AtomId::from).collect::<Vec<_>>(),
+            AromaticSystemForm::from_electrons((0..ATOM_COUNT).map(|value| value as i64).collect()),
+        )],
+        ..Default::default()
+    })
+}
+
+fn reframing_corpus() -> Vec<CorpusCase> {
+    vec![
+        CorpusCase {
+            name: "empty",
+            molecule: Molecule::default(),
+        },
+        CorpusCase {
+            name: "overlay_heavy",
+            molecule: overlay_heavy(),
+        },
+        CorpusCase {
+            name: "large_aromatic",
+            molecule: large_aromatic(),
+        },
+    ]
 }
 
 fn tetrahedral_stereo() -> Molecule {
@@ -605,6 +635,65 @@ fn bench_canonicalize(c: &mut Criterion) {
     }
 }
 
+fn bench_reframe(c: &mut Criterion) {
+    let corpus = reframing_corpus();
+
+    let mut group = c.benchmark_group("reframe/representative_action");
+    for case in &corpus {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).representative_action())
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("reframe/reframe_with_action");
+    for case in &corpus {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .reframe_with_action()
+                            .expect("benchmark corpus reframes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("reframe/reframe");
+    for case in &corpus {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| black_box(molecule.reframe().expect("benchmark corpus reframes")),
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let representatives = corpus
+        .iter()
+        .map(|case| {
+            case.molecule
+                .clone()
+                .reframe()
+                .expect("benchmark corpus reframes")
+        })
+        .collect::<Vec<_>>();
+    let mut group = c.benchmark_group("reframe/framed_eq");
+    for (case, representative) in corpus.iter().zip(&representatives) {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).framed_eq(black_box(representative)))
+        });
+    }
+    group.finish();
+}
+
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),
@@ -623,5 +712,6 @@ criterion_group!(
     bench_incidence_construction,
     bench_remapping,
     bench_canonicalize,
+    bench_reframe,
 );
 criterion_main!(canonicalize);

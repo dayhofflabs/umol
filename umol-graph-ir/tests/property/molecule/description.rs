@@ -1,6 +1,6 @@
 //! Molecule description-level properties.
 //!
-//! Integrity-valid molecules may populate any entity family and any inline or molecule-level
+//! Integrity-valid molecules may populate any entity kind and any inline or molecule-level
 //! constraint store. Independently shuffled dense bijections in every entity namespace preserve
 //! the molecule's projected description level.
 

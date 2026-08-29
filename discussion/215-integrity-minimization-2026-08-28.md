@@ -523,3 +523,20 @@ or unreachable public diagnostic.
 Critical path: S0a/S0b → S1b/S1c → S2a/S2b → S2d → S3a → S3b. S1a, S1d, and S1e may proceed after
 the current doc 214 S0d baseline and converge before their S2 consumers. No stage is deferrable:
 doc 214 S0e and later frame transport rely on the complete corrected integrity and error surface.
+
+## Correction — 2026-08-29
+
+The S1a conclusion that one atom may occur as both a dative donor and its acceptor is superseded.
+The complete donors-plus-acceptor participant sequence must be pairwise distinct. Although the two
+roles remain distinguished for identity and frame transport, repeating one atom across them creates
+parallel, differently labelled donor and acceptor incidences between the same atom and dative
+entity. Ordinary incidence matching can then select one parallel edge for both roles and return an
+incorrect result. This satisfies the admission test for representation integrity rather than a
+deferred chemistry predicate.
+
+`MoleculeIntegrityError::DuplicateParticipant` now covers both repeated donors and a donor equal to
+the acceptor. `Molecule` publication and each `ReactionSpan` side projection therefore reject the
+representation through their existing molecule-integrity gate. A permissive `Reaction` may still
+carry a prospective product that fails when materialized, consistent with the reaction/span
+boundary recorded above. The complete `(acceptor, donor multiset)` identity key and the permission
+for distinct dative entities to share individual participants remain unchanged.

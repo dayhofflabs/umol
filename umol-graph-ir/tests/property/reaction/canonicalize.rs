@@ -167,7 +167,7 @@ fn product_correspondence(
     )
     .expect("corresponding products have a bijective atom transport");
     MoleculeCorrespondence::induce(source.rhs(), canonical.rhs(), atoms)
-        .expect("product atom transport induces all entity families")
+        .expect("product atom transport induces all entity kinds")
 }
 
 fn canonicalization_error_strategy() -> impl Strategy<Value = (Reaction, ReactionCanonicalizeError)>

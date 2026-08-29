@@ -181,7 +181,7 @@ impl Correspondence {
     }
 }
 
-/// A read-only correspondence across every molecule entity family.
+/// A read-only correspondence across every molecule entity kind.
 #[pyclass(eq, frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeCorrespondence(GraphIrMoleculeCorrespondence);
@@ -236,12 +236,12 @@ impl MoleculeCorrespondence {
         Correspondence::from_rust(self.0.stereo_bonds())
     }
 
-    /// Whether every id in every entity family is matched.
+    /// Whether every id of every entity kind is matched.
     fn is_total(&self) -> bool {
         self.0.is_total()
     }
 
-    /// Invert every per-family correspondence.
+    /// Invert every per-entity-kind correspondence.
     fn reverse(&self) -> Self {
         Self(self.0.reverse())
     }

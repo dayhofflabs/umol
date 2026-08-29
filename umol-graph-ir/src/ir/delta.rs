@@ -31,7 +31,7 @@ use super::edit::{
     StereoBondFieldChange,
 };
 use super::error::Contradiction;
-use super::frame::OverlayFrameActions;
+use super::frame::OverlaysFrameAction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -1218,7 +1218,7 @@ impl ConstraintDelta {
 }
 
 impl FrameTransport for ConstraintDelta {
-    type Action = OverlayFrameActions;
+    type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
         Some(match self {
@@ -1288,7 +1288,7 @@ impl Delta {
 }
 
 impl FrameTransport for Delta {
-    type Action = OverlayFrameActions;
+    type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
         Some(match self {
@@ -1619,7 +1619,7 @@ impl Normalize for ConstraintSpan {
 }
 
 impl FrameTransport for ConstraintSpan {
-    type Action = OverlayFrameActions;
+    type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
         Some(match self {
@@ -3400,7 +3400,7 @@ impl Normalize for Deltas {
             }
             out.extend(folded.into_iter().map(Delta::Bond));
         }
-        // Overlay families: same fold; a created overlay must not reference a net-removed atom.
+        // Overlay kinds: same fold; a created overlay must not reference a net-removed atom.
         for (id, group) in dative {
             let folded = fold_group::<DativeBondDelta>(id, group)?;
             for delta in &folded {
@@ -3512,8 +3512,8 @@ mod tests {
 
     use super::super::constraint::{MoleculeConstraint, RelationalConstraint};
     use super::super::frame::{
-        AromaticSystemFrameActions, DativeBondFrameActions, MulticenterBondFrameActions,
-        NoncovalentBondFrameActions, StereoAtomFrameActions, StereoBondFrameActions,
+        AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+        NoncovalentBondsFrameAction, StereoAtomsFrameAction, StereoBondsFrameAction,
     };
     use super::super::noncovalent::NoncovalentBondKind;
     use super::super::num::NumForm;
@@ -3528,21 +3528,21 @@ mod tests {
     };
 
     #[fixture]
-    fn frame_actions() -> OverlayFrameActions {
-        OverlayFrameActions::from_families(
-            DativeBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
-            AromaticSystemFrameActions::from_dense(vec![
+    fn overlays_frame_action() -> OverlaysFrameAction {
+        OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![
                 DynPermutation::try_from(vec![2, 0, 1]).expect("action is a permutation")
             ])
             .expect("action is admissible"),
-            MulticenterBondFrameActions::from_dense(vec![]).expect("actions are admissible"),
-            NoncovalentBondFrameActions::from_dense(vec![
+            MulticenterBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![
                 DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
             ])
             .expect("action is admissible"),
-            StereoAtomFrameActions::from_dense(vec![Permutation::from_image(&[1, 0, 2, 3])])
+            StereoAtomsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
                 .expect("action is admissible"),
-            StereoBondFrameActions::from_dense(vec![Permutation::from_image(&[1, 0, 2, 3])])
+            StereoBondsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
                 .expect("action is admissible"),
         )
     }
@@ -4536,7 +4536,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraint_delta_reframe_by(frame_actions: OverlayFrameActions) {
+    fn test_constraint_delta_reframe_by(overlays_frame_action: OverlaysFrameAction) {
         let input = ConstraintDelta::Add(Constraint::Relational(
             RelationalConstraint::NoncovalentBondEndsSatisfy {
                 bond: NoncovalentBondId(0),
@@ -4556,11 +4556,11 @@ mod tests {
             },
         ));
 
-        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
     }
 
     #[rstest]
-    fn test_constraint_span_reframe_by(frame_actions: OverlayFrameActions) {
+    fn test_constraint_span_reframe_by(overlays_frame_action: OverlaysFrameAction) {
         let input = ConstraintSpan::Removed(Constraint::Relational(
             RelationalConstraint::NoncovalentBondEndsSatisfy {
                 bond: NoncovalentBondId(0),
@@ -4580,11 +4580,11 @@ mod tests {
             },
         ));
 
-        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
     }
 
     #[rstest]
-    fn test_delta_reframe_by(frame_actions: OverlayFrameActions) {
+    fn test_delta_reframe_by(overlays_frame_action: OverlaysFrameAction) {
         let input = Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
             id: AromaticSystemId(0),
             change: AromaticSystemFieldChange::Electrons {
@@ -4600,11 +4600,11 @@ mod tests {
             },
         });
 
-        assert_eq!(input.reframe_by(&frame_actions), Some(expected));
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
     }
 
     #[rstest]
-    fn test_delta_reframe_by_error(frame_actions: OverlayFrameActions) {
+    fn test_delta_reframe_by_error(overlays_frame_action: OverlaysFrameAction) {
         let input = Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
             id: AromaticSystemId(1),
             change: AromaticSystemFieldChange::Electrons {
@@ -4613,7 +4613,7 @@ mod tests {
             },
         });
 
-        assert_eq!(input.reframe_by(&frame_actions), None);
+        assert_eq!(input.reframe_by(&overlays_frame_action), None);
     }
 
     #[rstest]

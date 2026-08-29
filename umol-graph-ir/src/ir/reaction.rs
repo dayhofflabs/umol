@@ -634,10 +634,10 @@ impl Reaction {
                 entity: Entity::Atom(AtomId(0)),
             });
         };
-        macro_rules! require_induced_family {
-            ($family:ident, $entity:ident, $fallback:expr) => {{
-                let supplied = correspondence.$family();
-                let expected = induced.$family();
+        macro_rules! require_induced_entity_correspondence {
+            ($entity_set:ident, $entity:ident, $fallback:expr) => {{
+                let supplied = correspondence.$entity_set();
+                let expected = induced.$entity_set();
                 if supplied != expected {
                     let id = supplied
                         .matched_pairs()
@@ -657,11 +657,23 @@ impl Reaction {
                 }
             }};
         }
-        require_induced_family!(bonds, Bond, BondId(0));
-        require_induced_family!(dative_bonds, DativeBond, DativeBondId(0));
-        require_induced_family!(aromatic_systems, AromaticSystem, AromaticSystemId(0));
-        require_induced_family!(multicenter_bonds, MulticenterBond, MulticenterBondId(0));
-        require_induced_family!(noncovalent_bonds, NoncovalentBond, NoncovalentBondId(0));
+        require_induced_entity_correspondence!(bonds, Bond, BondId(0));
+        require_induced_entity_correspondence!(dative_bonds, DativeBond, DativeBondId(0));
+        require_induced_entity_correspondence!(
+            aromatic_systems,
+            AromaticSystem,
+            AromaticSystemId(0)
+        );
+        require_induced_entity_correspondence!(
+            multicenter_bonds,
+            MulticenterBond,
+            MulticenterBondId(0)
+        );
+        require_induced_entity_correspondence!(
+            noncovalent_bonds,
+            NoncovalentBond,
+            NoncovalentBondId(0)
+        );
 
         if correspondence.stereo_atoms().left_count() != self.lhs.stereo_atoms().count()
             || correspondence.stereo_atoms().right_count() != host.stereo_atoms().count()
@@ -1877,13 +1889,7 @@ mod tests {
         relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
     };
 
-    #[derive(Clone, Copy)]
-    enum StereoSiteFamily {
-        Atom,
-        Bond,
-    }
-
-    fn removal_frame_reactions(family: EntityKind) -> (Reaction, Reaction) {
+    fn removal_frame_reactions(entity_kind: EntityKind) -> (Reaction, Reaction) {
         let atom_ligands: Vec<StereoLigand> = (1..=4)
             .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
             .collect();
@@ -1905,7 +1911,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let (owner_removal, local_removal) = match family {
+        let (owner_removal, local_removal) = match entity_kind {
             EntityKind::DativeBond => {
                 let attributes = DativeBondForm::from_order(2);
                 entries
@@ -2502,12 +2508,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom_existing(StereoSiteFamily::Atom, true)]
-    #[case::atom_added(StereoSiteFamily::Atom, false)]
-    #[case::bond_existing(StereoSiteFamily::Bond, true)]
-    #[case::bond_added(StereoSiteFamily::Bond, false)]
+    #[case::atom_existing(EntityKind::StereoAtom, true)]
+    #[case::atom_added(EntityKind::StereoAtom, false)]
+    #[case::bond_existing(EntityKind::StereoBond, true)]
+    #[case::bond_added(EntityKind::StereoBond, false)]
     fn test_reaction_try_new_stereo_constraint_wrapper_error(
-        #[case] family: StereoSiteFamily,
+        #[case] entity_kind: EntityKind,
         #[case] existing: bool,
     ) {
         let atom_ligands: Vec<StereoLigand> = (1..=4)
@@ -2531,8 +2537,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        let (entity, kind, addition, constraint) = match family {
-            StereoSiteFamily::Atom => {
+        let (entity, kind, addition, constraint) = match entity_kind {
+            EntityKind::StereoAtom => {
                 if existing {
                     entries.stereo_atoms.push((
                         AtomId(0),
@@ -2556,7 +2562,7 @@ mod tests {
                     ),
                 )
             }
-            StereoSiteFamily::Bond => {
+            EntityKind::StereoBond => {
                 if existing {
                     entries.stereo_bonds.push((
                         BondId(4),
@@ -2580,6 +2586,7 @@ mod tests {
                     ),
                 )
             }
+            _ => unreachable!("test cases contain only stereo entity kinds"),
         };
         let lhs = Molecule::from_entries(entries);
         let mut deltas = Vec::new();
@@ -2610,7 +2617,7 @@ mod tests {
     #[case::stereo_bond_existing(EntityKind::StereoBond, true)]
     #[case::stereo_bond_created(EntityKind::StereoBond, false)]
     fn test_reaction_try_new_local_removal_frame(
-        #[case] family: EntityKind,
+        #[case] entity_kind: EntityKind,
         #[case] existing: bool,
     ) {
         let atom_ligands: Vec<StereoLigand> = (1..=4)
@@ -2634,7 +2641,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let (_entity, addition, removal) = match family {
+        let (_entity, addition, removal) = match entity_kind {
             EntityKind::DativeBond => {
                 if existing {
                     entries.dative.push((
@@ -2794,8 +2801,8 @@ mod tests {
     #[case::noncovalent(EntityKind::NoncovalentBond)]
     #[case::stereo_atom(EntityKind::StereoAtom)]
     #[case::stereo_bond(EntityKind::StereoBond)]
-    fn test_reaction_local_removal_frame_semantics(#[case] family: EntityKind) {
-        let (owner, local) = removal_frame_reactions(family);
+    fn test_reaction_local_removal_frame_semantics(#[case] entity_kind: EntityKind) {
+        let (owner, local) = removal_frame_reactions(entity_kind);
         let host = owner.lhs().clone();
         let atom_ids: Vec<AtomId> = host.atoms().ids().collect();
         let correspondence = MoleculeCorrespondence::induce(

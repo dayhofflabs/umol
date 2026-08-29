@@ -686,6 +686,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::rstest;
 
+    use super::MAX_DEPTH;
     use crate::collections::{EdnMap, EdnSet};
     use crate::config::{DuplicateKeyPolicy, ParseConfig};
     use crate::edn::{Edn, EdnKeyword};
@@ -1159,7 +1160,7 @@ mod tests {
 
     #[test]
     fn test_read_string_depth_limit() {
-        let depth = super::MAX_DEPTH as usize;
+        let depth = MAX_DEPTH as usize;
         let open: String = "[".repeat(depth + 1);
         let close: String = "]".repeat(depth + 1);
         let input = format!("{open}1{close}");
@@ -1169,7 +1170,7 @@ mod tests {
 
     #[test]
     fn test_read_string_at_depth_limit() {
-        let depth = super::MAX_DEPTH as usize;
+        let depth = MAX_DEPTH as usize;
         let open: String = "[".repeat(depth);
         let close: String = "]".repeat(depth);
         let input = format!("{open}1{close}");
@@ -1179,7 +1180,7 @@ mod tests {
     #[test]
     fn test_read_string_discard_depth_limit() {
         // Deeply nested collections inside a discard are still caught.
-        let depth = super::MAX_DEPTH as usize;
+        let depth = MAX_DEPTH as usize;
         let open: String = "[".repeat(depth + 1);
         let close: String = "]".repeat(depth + 1);
         let input = format!("[#_ {open}1{close} 2]");

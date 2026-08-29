@@ -83,12 +83,12 @@ kind-dependent domain needed to interpret their representation. A checked constr
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
-The fixed relation semantics of every entity family are part of molecule integrity. Each participant
-frame or undistinguished factor is simple. This excludes localized and noncovalent self-loops,
-repeated dative donors, repeated aromatic and multicenter participants, repeated actual-atom stereo
-ligands, and a stereo-atom site reused as an actual-atom ligand. The distinguished donor and
-acceptor factors of a dative bond may contain the same atom once in each role. Virtual ligands are
-not actual-atom participants, but an identical virtual ligand occurrence may not repeat within one
+The fixed relation semantics of every entity kind are part of molecule integrity. Each entity's
+actual-atom participant relation is simple, even when storage divides it into distinguished
+factors. This excludes localized and noncovalent self-loops, repeated dative participants across
+the donors and acceptor, repeated aromatic and multicenter participants, repeated actual-atom
+stereo ligands, and a stereo-atom site reused as an actual-atom ligand. Virtual ligands are not
+actual-atom participants, but an identical virtual ligand occurrence may not repeat within one
 stereo frame. An implicit hydrogen and a lone pair anchored at the same atom remain distinct
 ligands.
 
@@ -99,13 +99,14 @@ actual ligands must be adjacent to its endpoint and cannot be the opposite site 
 virtual ligands must be borne by that endpoint. Exchanging the two complete endpoint blocks is
 valid, but moving one ligand across the endpoint boundary is not.
 
-The same contract supplies the cross-entity uniqueness needed to interpret each relation family:
+The same contract supplies the cross-entity uniqueness needed to interpret each relation-valued
+entity kind:
 localized bonds have unique unordered endpoint pairs; dative bonds have unique complete
 `(acceptor, donor multiset)` keys while distinct keys may share incidences; aromatic systems are
 atom-disjoint; multicenter participant sets are unique; noncovalent bonds have unique unordered
 endpoint pairs regardless of interaction kind; and stereo-atom and stereo-bond sites are unique
-within their families. These are not deferred semantic judgments. They define the stored relation
-represented by each entity family and are established whenever a `Molecule` is published.
+within their kinds. These are not deferred semantic judgments. They define the stored relation
+represented by each entity kind and are established whenever a `Molecule` is published.
 
 For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
 outside that kind's coset space are representation-integrity failures. The same applies to an
@@ -180,7 +181,7 @@ or reaction-span materialization may still report `Contradiction`.
 
 An operation belongs with the crate that owns the representation when its correctness requires
 coordinated access to that representation's complete internal shape. For `Molecule` and the
-reaction representations, this includes operations that must keep all entity families, participant frames,
+reaction representations, this includes operations that must keep all entity sets, participant frames,
 typed ids, and references inside constraints synchronized while rebuilding or remapping the value.
 Such operations belong in `umol-graph-ir`; moving them to `umol-graph` because a higher-level model
 currently contains one of their inputs would invite the higher layer to reconstruct graph-IR internals.
@@ -493,7 +494,7 @@ domain to which it belongs. An absent block contributes no entry. `Full` adds th
 constraint section. Extending an entity domain does not move that section or alter keys for
 molecules that lack the new kind.
 
-Rows compare their components in the following local field order. Every entity family included at
+Rows compare their components in the following local field order. Every entity kind included at
 the selected structural level contributes all of its inherent fields; participant topology,
 participant-indexed values, and frame-dependent values occupy the listed structural components
 rather than being omitted. The dense row index is implicit in the row sequence. Inline constraints
@@ -671,7 +672,7 @@ The resulting rules are:
 
 For molecule correspondences, an atom correspondence read from an external format is a normal input
 to induction over a supplied molecule pair. Count agreement and any structural uniqueness required
-to derive the remaining entity families are therefore operation preconditions, not defenses against
+to derive the remaining entity kinds are therefore operation preconditions, not defenses against
 deliberate tampering. A full correspondence produced for the same molecule pair by a conforming
 operation satisfies those checks by provenance. Reusing that result with the same unchanged pair
 cannot newly produce a contextual mismatch. Supplying an atom correspondence and molecule pair
@@ -717,7 +718,7 @@ The facility has two coordinated levels:
   relation-set remapping relabels each factor and leaves both the participant sequence and the
   payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
   stays aligned because nothing moved.
-- `IdRemapping` maps all eight molecule entity-id families. It is used for graph-IR values that contain
+- `IdRemapping` maps ids for all eight molecule entity kinds. It is used for graph-IR values that contain
   entity references, including constraints and deltas; it does not duplicate graph-core participant
   canonicalization.
 
@@ -776,7 +777,7 @@ supplied; `map_node`, `map_edge`, and participant-level remapping remain direct 
 A total mapping may target a sparse or larger ambient namespace, as when the rhs of a reaction is
 embedded into an lhs-anchored union. Such a mapping can transport relation entries and referenced
 values but cannot by itself produce a standalone `Molecule`, whose eight entity tables use dense
-ids. End-to-end molecule remapping is defined only when every entity-family mapping is a bijection
+ids. End-to-end molecule remapping is defined only when every entity-kind mapping is a bijection
 onto a dense target id space. An embedding into a union and a remapping of a standalone molecule are
 therefore related operations with different codomains.
 
@@ -797,7 +798,7 @@ and sequential remapping agrees with correspondence composition.
 Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
 `source.equiv_under(&remapped, &correspondence)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
-include crossing permutations, all entity families, position-sensitive relation data and stereo
+include crossing permutations, all entity kinds, position-sensitive relation data and stereo
 frames, and constraints containing typed entity references; testing only reordered atom and bond
 tables is insufficient.
 
@@ -833,7 +834,7 @@ span must contain both objects of the span. Consequently:
 
 Construction permits any dense union-frame ordering whose two projections satisfy the integrity
 contract. LHS anchoring is a normal-form property, not an additional construction invariant. In the
-LHS-anchored form, entries present on the LHS form each entity family's dense prefix and right-only
+LHS-anchored form, entries present on the LHS form each entity kind's dense prefix and right-only
 entries are appended. `ReactionSpan::to_reaction` reanchors an arbitrary valid union order into this
 form by assigning compact projected LHS ids first and fresh ids to additions. Aggregate
 canonicalization likewise always emits the LHS-anchored form because it carries no less information

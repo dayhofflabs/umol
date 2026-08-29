@@ -35,8 +35,14 @@ never hold. The accumulating state belongs to the editor.
 
 ## `Overlays`
 
-The shared surface of the six overlay storage types, in `traits.rs`. Settled, and specified here in
-full because it has to be written along with everything else.
+**Open before implementation.** `Overlays` is not an approved trait name: the plural denotes all
+overlays, while each proposed implementation represents one entity set. Whether the editor needs a
+generic set trait at all, whether such a trait should be public, and what it should be called remain
+unsettled. The surface below records the earlier design sketch rather than an implementation-ready
+API.
+
+The earlier sketch placed the shared surface of the six overlay storage types in `traits.rs` and
+specified it as follows:
 
 Public, carrying the members that were already `pub` and inherent on all six, plus three:
 
@@ -81,19 +87,19 @@ their normal forms.
 
 This operation has no home in the three storage-shaped editor wrappers. Their relation sets know
 only factors and multisets; they do not know which factor bears the entity frame or, for a stereo
-bond, that its ligand factor consists of two endpoint blocks. The six entity-family aggregates do
+bond, that its ligand factor consists of two endpoint blocks. The six overlay aggregates do
 know that structure, so `Overlays::alignment_action` owns the per-kind derivation. Its direction is
 
 ```text
 to[i] = from[action[i]]
 ```
 
-and it returns `None` unless `from` and `to` are two frames of the same entity under that family's
-structured-participant semantics. Ordinary unordered factors use `DynPermutation`; stereo factors
-use the bounded `Permutation`. Stereo-bond alignment permits permutations within each endpoint
-block and exchange of the two complete blocks, but not movement of one ligand across the endpoint
-boundary. Integrity-valid frames have distinct complete participant values, so the admissible
-action is unique.
+and it returns `None` unless `from` and `to` are two frames of the same entity under the
+structured-participant semantics of that entity kind. Ordinary unordered factors use
+`DynPermutation`; stereo factors use the bounded `Permutation`. Stereo-bond alignment permits
+permutations within each endpoint block and exchange of the two complete blocks, but not movement
+of one ligand across the endpoint boundary. Integrity-valid frames have distinct complete
+participant values, so the admissible action is unique.
 
 The participant and local-action types are:
 
@@ -105,12 +111,12 @@ The participant and local-action types are:
 | stereo atom | `(AtomId, Vec<StereoLigand>)` — site, ligands | `Permutation` on ligands |
 | stereo bond | `(BondId, Vec<StereoLigand>)` — site, ligands | `Permutation` in `S_2 wr S_2` |
 
-`OverlayEditor<O>` then owns one `entry_framed_eq` old-state check for every family. It obtains the
-stored entry, calls `O::alignment_action(offered, stored)`, transports the offered attributes with
-`FrameTransport`, and calls `normalized_eq` against the stored attributes. It neither selects a
-representative frame nor implements `Reframe`; this is pairwise alignment between two supplied local
-frames. Participant or transport incompatibility returns `false`, and the transaction retains its
-existing `TransactionError::OldStateMismatch` boundary.
+`OverlayEditor<O>` then owns one `entry_framed_eq` old-state check for every overlay kind. It
+obtains the stored entry, calls `O::alignment_action(offered, stored)`, transports the offered
+attributes with `FrameTransport`, and calls `normalized_eq` against the stored attributes. It
+neither selects a representative frame nor implements `Reframe`; this is pairwise alignment
+between two supplied local frames. Participant or transport incompatibility returns `false`, and
+the transaction retains its existing `TransactionError::OldStateMismatch` boundary.
 
 The current six `MoleculeEditor::*_equiv` methods therefore retire with the wrapper migration. Their
 per-kind knowledge moves into the six `alignment_action` implementations rather than remaining as
@@ -149,11 +155,11 @@ Retain every editor and transaction assertion, including rollback. Assert that p
 unmodified overlay returns the same handle without rebuilding, and that a batch of pushes
 materialises once rather than per operation.
 
-Exercise `alignment_action` and the generic old-state check for every family: identity and a legal
-reordering succeed, a participant mismatch fails, and stereo-bond cases distinguish within-block and
-complete-block exchange from an illegal cross-block movement. Use a position-sensitive aromatic or
-multicenter payload and a stereo payload so success demonstrates transport rather than only
-frame-invariant comparison.
+Exercise `alignment_action` and the generic old-state check for every overlay kind: identity and a
+legal reordering succeed, a participant mismatch fails, and stereo-bond cases distinguish
+within-block and complete-block exchange from an illegal cross-block movement. Use a
+position-sensitive aromatic or multicenter payload and a stereo payload so success demonstrates
+transport rather than only frame-invariant comparison.
 
 ## Handoff
 

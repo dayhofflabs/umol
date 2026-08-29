@@ -17,7 +17,11 @@ use std::hash::Hash;
 
 use thiserror::Error;
 
-use super::super::constraint::{Constraint, Constraints};
+use super::super::constraint::{
+    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
+    DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
+    StereoAtomConstraintForm, StereoBondConstraintForm,
+};
 use super::super::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -34,7 +38,7 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::ligand::StereoLigand;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::remap::{MoleculeCompaction, UndoCompaction};
 use super::super::traits::Normalize;
 use super::MoleculeEditor;
@@ -326,7 +330,7 @@ impl ApplicationState {
 
     fn stereo_ligands(
         &self,
-        ligands: Vec<(AtomHandle, super::super::ligand::StereoLigandKind)>,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
     ) -> Result<Vec<StereoLigand>, TransactionError> {
         ligands
             .into_iter()
@@ -1726,8 +1730,8 @@ impl MoleculeEditor {
     fn apply_modify_atom_constraint(
         &mut self,
         id: AtomId,
-        old: Option<super::super::constraint::AtomConstraintForm>,
-        new: Option<super::super::constraint::AtomConstraintForm>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1741,8 +1745,8 @@ impl MoleculeEditor {
     fn apply_modify_bond_constraint(
         &mut self,
         id: BondId,
-        old: Option<super::super::constraint::BondConstraintForm>,
-        new: Option<super::super::constraint::BondConstraintForm>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1756,8 +1760,8 @@ impl MoleculeEditor {
     fn apply_modify_dative_bond_constraint(
         &mut self,
         id: DativeBondId,
-        old: Option<super::super::constraint::DativeBondConstraintForm>,
-        new: Option<super::super::constraint::DativeBondConstraintForm>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1771,8 +1775,8 @@ impl MoleculeEditor {
     fn apply_modify_aromatic_system_constraint(
         &mut self,
         id: AromaticSystemId,
-        old: Option<super::super::constraint::AromaticSystemConstraintForm>,
-        new: Option<super::super::constraint::AromaticSystemConstraintForm>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1786,8 +1790,8 @@ impl MoleculeEditor {
     fn apply_modify_multicenter_bond_constraint(
         &mut self,
         id: MulticenterBondId,
-        old: Option<super::super::constraint::MulticenterBondConstraintForm>,
-        new: Option<super::super::constraint::MulticenterBondConstraintForm>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1801,8 +1805,8 @@ impl MoleculeEditor {
     fn apply_modify_noncovalent_bond_constraint(
         &mut self,
         id: NoncovalentBondId,
-        old: Option<super::super::constraint::NoncovalentBondConstraintForm>,
-        new: Option<super::super::constraint::NoncovalentBondConstraintForm>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1816,8 +1820,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_atom_constraint(
         &mut self,
         id: StereoAtomId,
-        old: Option<super::super::constraint::StereoAtomConstraintForm>,
-        new: Option<super::super::constraint::StereoAtomConstraintForm>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1831,8 +1835,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_bond_constraint(
         &mut self,
         id: StereoBondId,
-        old: Option<super::super::constraint::StereoBondConstraintForm>,
-        new: Option<super::super::constraint::StereoBondConstraintForm>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.

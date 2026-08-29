@@ -10,7 +10,6 @@ use super::super::bond::BondForm;
 use super::super::constraint::Constraints;
 use super::super::correspondence::MoleculeCorrespondence;
 use super::super::id::{AtomId, BondId};
-
 use super::super::remap::IdRemapping;
 use super::super::traits::Lattice;
 use super::{Molecule, MoleculeEntries};

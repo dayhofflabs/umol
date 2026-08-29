@@ -233,7 +233,7 @@ impl ReactionSpan {
     /// Relabel this reaction span into the dense union id spaces described by `correspondence`.
     ///
     /// The correspondence must describe every union entity and be total on both sides for all
-    /// eight entity families. The operation transports topology, relation participants,
+    /// eight entity kinds. The operation transports topology, relation participants,
     /// position-sensitive relation data, stereo frames, both values of modified entities, and
     /// every constraint reference. It does not normalize, repair, project, or reanchor the span.
     ///
@@ -254,7 +254,7 @@ impl ReactionSpan {
     /// Checked form of [`Self::remap`].
     ///
     /// Returns `None` when the correspondence's source counts differ from the union entity counts
-    /// or when any entity family is not a bijection onto a dense target id space.
+    /// or when any entity-kind correspondence is not a bijection onto a dense target id space.
     pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
         let counts_match = [
             (correspondence.atoms().left_count(), self.atoms.len()),
@@ -452,8 +452,8 @@ fn reorder_dense<T>(
     target.into_iter().collect()
 }
 
-/// R id → union id for one entity family: a matched right id reuses its left partner; a
-/// right-unmatched id is appended after the left family's ids.
+/// R id → union id for one entity set: a matched right id reuses its left partner; a
+/// right-unmatched id is appended after the left set's ids.
 fn union_map<Id: Copy + Ord + Hash + From<usize>>(
     correspondence: &Correspondence<Id>,
     left_count: usize,
@@ -469,7 +469,7 @@ fn union_map<Id: Copy + Ord + Hash + From<usize>>(
     map
 }
 
-/// Recover one family's correspondence from its span column (union order): each `Unchanged`/`Modified`
+/// Recover one entity-kind correspondence from its span column (union order): each `Unchanged`/`Modified`
 /// pairs the running left/right ids, `Removed` advances only left, `Added` only right.
 fn recover_correspondence<'a, Id, T: 'a>(
     column: impl Iterator<Item = &'a EntitySpan<T>>,
@@ -623,7 +623,7 @@ impl ReactionSpan {
     /// become `Unchanged(lhs)` when their values are semantically equivalent and `Modified`
     /// otherwise; entities unmatched on the lhs become `Removed`, those unmatched on the rhs
     /// `Added`. Lhs-anchored: lhs ids kept, right-unmatched entities appended, rhs participants and
-    /// constraints remapped into that union frame. Returns `None` when any correspondence family
+    /// constraints remapped into that union frame. Returns `None` when any correspondence component
     /// declares counts different from the supplied molecules or a matched bond, overlay, or stereo
     /// entity has incompatible incidence under the atom correspondence, and when the resulting span fails its
     /// representation-integrity contract — a matched pair of stereo entities asserting different
@@ -652,7 +652,7 @@ impl ReactionSpan {
         let lhs_atom_count = lhs.atoms().count();
         let lhs_bond_count = lhs.bonds().count();
 
-        // R id → union id per family.
+        // R id → union id per entity kind.
         let atom_union: HashMap<AtomId, AtomId> = union_map(atoms_corr, lhs_atom_count);
         let bond_union: HashMap<BondId, BondId> = union_map(bonds_corr, lhs_bond_count);
         let participant_remapping = Remapping::new(
@@ -1072,7 +1072,7 @@ impl ReactionSpan {
         .ok()
     }
 
-    /// Recover the per-family correspondence between the two side projections, forgetting the
+    /// Recover the per-entity-kind correspondence between the two side projections, forgetting the
     /// values. Superimposing those projections with the recovered correspondence preserves their
     /// semantics but may standardize a redundant `Modified` entry to `Unchanged`. A source
     /// correspondence used to construct the span is not retained when it assigns a different rhs
@@ -5300,7 +5300,7 @@ mod tests {
         assert_eq!(lhs.difference_to(&rhs, &correspondence), None);
     }
 
-    /// A dense identity correspondence over `count` entities of one family.
+    /// A dense identity correspondence over `count` entities of one kind.
     fn identity_pairs<Id: Copy + Ord + From<usize>>(count: usize) -> Correspondence<Id> {
         Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
     }
@@ -5332,7 +5332,7 @@ mod tests {
         (side(StereoKind::Tetrahedral), side(StereoKind::Axial))
     }
 
-    /// Leaving the stereo-atom family unmatched says the two stereocenters are different entities,
+    /// Leaving the stereo-atom correspondence unmatched says the two stereocenters are different entities,
     /// which is the encoding the pair rule directs. Superposition then succeeds on the same two
     /// molecules, representing the change as a removal and an addition.
     #[rstest]

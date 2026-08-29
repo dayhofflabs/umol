@@ -24,7 +24,7 @@ use super::constraint::{
 };
 use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
-use super::frame::{StereoAtomFrameActions, StereoBondFrameActions};
+use super::frame::{StereoAtomsFrameAction, StereoBondsFrameAction};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
 use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
@@ -188,7 +188,7 @@ impl Normalize for StereoAtoms {
 }
 
 impl FrameTransport for StereoAtoms {
-    type Action = StereoAtomFrameActions;
+    type Action = StereoAtomsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         let set = Arc::make_mut(&mut self.0);
@@ -213,24 +213,33 @@ impl Reframe for StereoAtoms {
                     .expect("integrity-valid stereo-atom frames fit the bounded action")
             })
             .collect();
-        StereoAtomFrameActions::from_dense(actions)
+        StereoAtomsFrameAction::from_vec(actions)
             .expect("every bounded permutation is a stereo-atom action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        let set = Arc::make_mut(&mut self.0);
-        for relation_id in set.ids().collect::<Vec<_>>() {
-            let action = stereo_atom_representative_action(set.participants_2(relation_id))
-                .ok_or(Contradiction)?;
-            let attributes = set.data(relation_id).clone().normalize()?;
-            *set.data_mut(relation_id) = attributes
-                .reframe_by(&action)
-                .ok_or(Contradiction)?
-                .normalize()?;
-            set.permute_2_with(relation_id, &participant_order(action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_stereo_atoms_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_stereo_atoms_with(
+    mut stereo_atoms: StereoAtoms,
+    mut visit: impl FnMut(StereoAtomId, Permutation),
+) -> Result<StereoAtoms, Contradiction> {
+    let set = Arc::make_mut(&mut stereo_atoms.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = StereoAtomId::from(relation_id);
+        let action = stereo_atom_representative_action(set.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_2_with(relation_id, &participant_order(action));
+        visit(id, action);
+    }
+    Ok(stereo_atoms)
 }
 
 /// The molecule's stereo bonds. The ligands bear the frame the configuration is read against; the
@@ -350,7 +359,7 @@ impl StereoBonds {
         self.0
             .pushout(
                 &right.remap(remapping).0,
-                // A stereo bond's site is a bond: the one family scanning the edge index.
+                // A stereo bond's site is a bond: the one entity kind scanning the edge index.
                 |set, site, ligands| {
                     site.first()
                         .and_then(|&edge| set.coincident_edge(edge, site, ligands))
@@ -373,7 +382,7 @@ impl StereoBonds {
     /// Id of the entity coinciding with these participants — the one whose participants equal
     /// them as a multiset. The identity question, distinct from lookup.
     pub fn coincident_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
-        // A stereo bond's site is a bond, so this is the one family that scans the edge index.
+        // A stereo bond's site is a bond, so this is the one entity kind that scans the edge index.
         self.0
             .coincident_edge(EdgeId::from(site), &[EdgeId::from(site)], ligands)
             .map(StereoBondId::from)
@@ -390,7 +399,7 @@ impl Normalize for StereoBonds {
 }
 
 impl FrameTransport for StereoBonds {
-    type Action = StereoBondFrameActions;
+    type Action = StereoBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         let set = Arc::make_mut(&mut self.0);
@@ -415,24 +424,33 @@ impl Reframe for StereoBonds {
                     .expect("integrity-valid stereo-bond frames have four ligands")
             })
             .collect();
-        StereoBondFrameActions::from_dense(actions)
+        StereoBondsFrameAction::from_vec(actions)
             .expect("every selected stereo-bond action is block-preserving")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        let set = Arc::make_mut(&mut self.0);
-        for relation_id in set.ids().collect::<Vec<_>>() {
-            let action = stereo_bond_representative_action(set.participants_2(relation_id))
-                .ok_or(Contradiction)?;
-            let attributes = set.data(relation_id).clone().normalize()?;
-            *set.data_mut(relation_id) = attributes
-                .reframe_by(&action)
-                .ok_or(Contradiction)?
-                .normalize()?;
-            set.permute_2_with(relation_id, &participant_order(action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_stereo_bonds_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_stereo_bonds_with(
+    mut stereo_bonds: StereoBonds,
+    mut visit: impl FnMut(StereoBondId, Permutation),
+) -> Result<StereoBonds, Contradiction> {
+    let set = Arc::make_mut(&mut stereo_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = StereoBondId::from(relation_id);
+        let action = stereo_bond_representative_action(set.participants_2(relation_id))
+            .ok_or(Contradiction)?;
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_2_with(relation_id, &participant_order(action));
+        visit(id, action);
+    }
+    Ok(stereo_bonds)
 }
 
 /// The reaction span's stereo atoms, one [`EntitySpan`] per entity against a single ligand frame.
@@ -506,7 +524,7 @@ impl Normalize for StereoAtomSpans {
 }
 
 impl FrameTransport for StereoAtomSpans {
-    type Action = StereoAtomFrameActions;
+    type Action = StereoAtomsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         for relation_id in self.0.ids().collect::<Vec<_>>() {
@@ -531,7 +549,7 @@ impl Reframe for StereoAtomSpans {
                     .expect("integrity-valid stereo-atom frames fit the bounded action")
             })
             .collect();
-        StereoAtomFrameActions::from_dense(actions)
+        StereoAtomsFrameAction::from_vec(actions)
             .expect("every bounded permutation is a stereo-atom action")
     }
 
@@ -620,7 +638,7 @@ impl Normalize for StereoBondSpans {
 }
 
 impl FrameTransport for StereoBondSpans {
-    type Action = StereoBondFrameActions;
+    type Action = StereoBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         for relation_id in self.0.ids().collect::<Vec<_>>() {
@@ -645,7 +663,7 @@ impl Reframe for StereoBondSpans {
                     .expect("integrity-valid stereo-bond frames have four ligands")
             })
             .collect();
-        StereoBondFrameActions::from_dense(actions)
+        StereoBondsFrameAction::from_vec(actions)
             .expect("every selected stereo-bond action is block-preserving")
     }
 

@@ -174,7 +174,7 @@ impl Molecule {
 
     /// Per pattern×host entity constraint-satisfaction tables, evaluated once
     /// per run through the hosts' constraint readings under the closure; `None`
-    /// when no pattern entity of that family carries constraints (the common
+    /// when no pattern entity of that kind carries constraints (the common
     /// element/bond-pattern case, which then skips all derivation).
     fn constraint_tables(
         &self,
@@ -365,7 +365,7 @@ impl Molecule {
     /// Post-verify a topology occurrence's overlays against the atom correspondence, returning the
     /// injective pattern→host [`MoleculeCorrespondence`] or `None` if any pattern overlay has no
     /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
-    /// via the per-family inducer (which already checks dative donor/acceptor roles); the pattern
+    /// via the per-kind inducer (which already checks dative donor/acceptor roles); the pattern
     /// overlay's predicate is then required to match the located host overlay's, and every pattern
     /// overlay must be matched. Stereo overlays are matched by the bespoke coset filter.
     fn verify_overlays(

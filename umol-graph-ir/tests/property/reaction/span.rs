@@ -367,14 +367,14 @@ where
     correspondence.left_count() + correspondence.right_count() - correspondence.matched_pair_count()
 }
 
-fn dense_permutation<Id>(count: usize, seed: u64, family: u32) -> Correspondence<Id>
+fn dense_permutation<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
 where
     Id: Copy + Ord + From<usize>,
 {
     if count == 0 {
         return Correspondence::empty();
     }
-    let mut state = seed ^ (u64::from(family) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut state = seed ^ (u64::from(entity_kind) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let mut images = (0..count).collect::<Vec<_>>();
     for index in (1..count).rev() {
         state ^= state << 13;
@@ -476,7 +476,7 @@ proptest! {
     }
 
     /// Cross-validate the two span constructions with overlays present: the direct `superimpose`
-    /// reassembles the delta-path span across all overlay families, not just atoms/bonds.
+    /// reassembles the delta-path span across all overlay kinds, not just atoms/bonds.
     #[test]
     fn test_reaction_span_superimpose_matches_delta_path_overlay(
         reaction in overlay_reaction_strategy(),
@@ -489,7 +489,7 @@ proptest! {
     }
 
     /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs and
-    /// materialized span, including all entity families.
+    /// materialized span, including all entity kinds.
     #[test]
     fn test_reaction_span_roundtrip(reaction in materializable_reaction_strategy()) {
         let span = reaction

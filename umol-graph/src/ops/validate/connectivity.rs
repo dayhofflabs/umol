@@ -15,7 +15,7 @@ use umol_utils::solution::Solution;
 
 /// Connectivity definitions.
 /// - `allow_disconnected`: allow disconnected atom / bond graph
-/// - `allow_disconnected_<family>`: allow straddling relations of that family
+/// - `allow_disconnected_<kind>`: allow straddling relations of that entity kind
 ///   (`false` = its atoms must share one bond component).
 ///
 /// The defaults permit a disconnected molecule and straddling dative / multicenter / noncovalent bonds

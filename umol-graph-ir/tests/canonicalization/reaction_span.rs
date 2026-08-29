@@ -1,6 +1,6 @@
 //! Exact compatibility fixtures for canonical reaction spans.
 //!
-//! The cases freeze the selected union frame for lifecycle changes, every entity family, and a
+//! The cases freeze the selected union frame for lifecycle changes, every entity kind, and a
 //! constraint-only change. Generated relabeling and algebraic properties live in the property
 //! target; these fixtures preserve the published canonical representation itself.
 

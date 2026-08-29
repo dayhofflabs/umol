@@ -354,7 +354,7 @@ pub trait Canonicalize: Sized {
     /// Construct the complete canonical form and its source-to-canonical correspondence.
     ///
     /// The correspondence maps every entity id in the input frame to its id in the returned
-    /// canonical frame. Each of its eight entity-family components is total on both sides and
+    /// canonical frame. Each of its eight entity-kind components is total on both sides and
     /// therefore represents a dense bijection. For [`Reaction`], the two frames are the complete
     /// union frames of the materialized input and returned reaction spans.
     ///
@@ -3392,7 +3392,7 @@ fn correspondence_from_order(
     let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
-        let (family, source) = match incidence_graph.entity(node) {
+        let (entity_kind, kind_id) = match incidence_graph.entity(node) {
             Entity::Atom(id) => (0, id.index()),
             Entity::Bond(id) => (1, id.index()),
             Entity::DativeBond(id) => (2, id.index()),
@@ -3402,8 +3402,8 @@ fn correspondence_from_order(
             Entity::StereoAtom(id) => (6, id.index()),
             Entity::StereoBond(id) => (7, id.index()),
         };
-        images[family][source] = next[family];
-        next[family] += 1;
+        images[entity_kind][kind_id] = next[entity_kind];
+        next[entity_kind] += 1;
     }
     molecule_correspondence(&images)
 }
@@ -3418,7 +3418,7 @@ fn lhs_anchored_correspondence_from_order(
     let mut added = counts.map(|_| Vec::new());
     for &node in order {
         let entity = incidence_graph.entity(node);
-        let (family, source, lhs_present) = match entity {
+        let (entity_kind, kind_id, lhs_present) = match entity {
             Entity::Atom(id) => (0, id.index(), span.atoms()[id.index()].lhs().is_some()),
             Entity::Bond(id) => (1, id.index(), span.bonds()[id.index()].lhs().is_some()),
             Entity::DativeBond(id) => (
@@ -3453,76 +3453,76 @@ fn lhs_anchored_correspondence_from_order(
             ),
         };
         if lhs_present {
-            lhs[family].push(source);
+            lhs[entity_kind].push(kind_id);
         } else {
-            added[family].push(source);
+            added[entity_kind].push(kind_id);
         }
     }
-    for family in 0..counts.len() {
-        let mut present = lhs[family]
+    for entity_kind in 0..counts.len() {
+        let mut present = lhs[entity_kind]
             .iter()
-            .chain(added[family].iter())
+            .chain(added[entity_kind].iter())
             .copied()
             .collect::<BTreeSet<_>>();
-        for source in 0..counts[family] {
-            if present.insert(source) {
-                if reaction_span_lhs_present(span, family, source) {
-                    lhs[family].push(source);
+        for kind_id in 0..counts[entity_kind] {
+            if present.insert(kind_id) {
+                if reaction_span_lhs_present(span, entity_kind, kind_id) {
+                    lhs[entity_kind].push(kind_id);
                 } else {
-                    added[family].push(source);
+                    added[entity_kind].push(kind_id);
                 }
             }
         }
     }
     let mut images = counts.map(|count| vec![0; count]);
-    for family in 0..images.len() {
-        for (image, source) in lhs[family]
+    for entity_kind in 0..images.len() {
+        for (image, kind_id) in lhs[entity_kind]
             .iter()
-            .chain(added[family].iter())
+            .chain(added[entity_kind].iter())
             .copied()
             .enumerate()
         {
-            images[family][source] = image;
+            images[entity_kind][kind_id] = image;
         }
     }
     molecule_correspondence(&images)
 }
 
-fn reaction_span_lhs_present(span: &ReactionSpan, family: usize, source: usize) -> bool {
-    match family {
-        0 => span.atoms()[source].lhs().is_some(),
-        1 => span.bonds()[source].lhs().is_some(),
+fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: usize) -> bool {
+    match entity_kind {
+        0 => span.atoms()[kind_id].lhs().is_some(),
+        1 => span.bonds()[kind_id].lhs().is_some(),
         2 => span
             .dative_bonds()
-            .attributes(DativeBondId(source as u32))
+            .attributes(DativeBondId(kind_id as u32))
             .lhs()
             .is_some(),
         3 => span
             .aromatic_systems()
-            .attributes(AromaticSystemId(source as u32))
+            .attributes(AromaticSystemId(kind_id as u32))
             .lhs()
             .is_some(),
         4 => span
             .multicenter_bonds()
-            .attributes(MulticenterBondId(source as u32))
+            .attributes(MulticenterBondId(kind_id as u32))
             .lhs()
             .is_some(),
         5 => span
             .noncovalent_bonds()
-            .attributes(NoncovalentBondId(source as u32))
+            .attributes(NoncovalentBondId(kind_id as u32))
             .lhs()
             .is_some(),
         6 => span
             .stereo_atoms()
-            .attributes(StereoAtomId(source as u32))
+            .attributes(StereoAtomId(kind_id as u32))
             .lhs()
             .is_some(),
         7 => span
             .stereo_bonds()
-            .attributes(StereoBondId(source as u32))
+            .attributes(StereoBondId(kind_id as u32))
             .lhs()
             .is_some(),
-        _ => unreachable!("reaction-span entity family index is in range"),
+        _ => unreachable!("reaction-span entity-kind index is in range"),
     }
 }
 

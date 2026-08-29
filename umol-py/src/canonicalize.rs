@@ -160,7 +160,7 @@ impl Molecule {
 
     /// Return the complete canonical form and its source-to-canonical correspondence.
     ///
-    /// The correspondence is total across every entity family. Canonical representatives may
+    /// The correspondence is total across every entity kind. Canonical representatives may
     /// change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize_with_correspondence(
@@ -246,7 +246,7 @@ impl ReactionSpan {
 
     /// Return the complete canonical form and its source-to-canonical correspondence.
     ///
-    /// The correspondence is total across every union-frame entity family. Canonical
+    /// The correspondence is total across every union-frame entity kind. Canonical
     /// representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize_with_correspondence(
@@ -333,7 +333,7 @@ impl Reaction {
 
     /// Return the complete canonical form and its source-to-canonical correspondence.
     ///
-    /// The correspondence is total across every materialized union-frame entity family.
+    /// The correspondence is total across every materialized union-frame entity kind.
     /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
     #[pyo3(signature = (*, stereo_model=None, config=None))]
     fn canonicalize_with_correspondence(

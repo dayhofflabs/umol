@@ -15,26 +15,32 @@ use umol_graph_core::{
 };
 use umol_perm::{DynPermutation, Permutation};
 
-use super::aromatic::{AromaticSystemForm, AromaticSystems};
+use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
+use super::constraint::{
+    Constraint, ConstraintFrameActions, Constraints, MoleculeConstraint, RelationalConstraint,
+};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::{DativeBondForm, DativeBonds};
+use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
 use super::edit::{AtomHandle, BondHandle, Edits};
-use super::entity::Entity;
+use super::entity::{Entity, EntityKind};
 use super::error::{Contradiction, MoleculeApplyError};
+use super::frame::OverlaysFrameAction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::multicenter::{MulticenterBondForm, MulticenterBonds};
-use super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
+use super::multicenter::{reframe_multicenter_bonds_with, MulticenterBondForm, MulticenterBonds};
+use super::noncovalent::{reframe_noncovalent_bonds_with, NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
-use super::traits::{FrameTransport, Lattice, Normalize};
+use super::stereo::{
+    reframe_stereo_atoms_with, reframe_stereo_bonds_with, StereoAtomForm, StereoAtoms,
+    StereoBondForm, StereoBonds,
+};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
@@ -46,11 +52,11 @@ use super::view::{
 mod build;
 mod editor;
 mod fragment;
-pub(super) mod integrity;
+pub(crate) mod integrity;
 mod pushout;
 mod remapping;
 pub mod spec;
-pub(super) mod transact;
+pub(crate) mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
@@ -330,7 +336,7 @@ impl Molecule {
     }
 
     /// Checked form of [`Self::from_entries`]. Validates molecule representation integrity,
-    /// including the fixed simple-relation semantics of every entity family, but does not enforce
+    /// including the fixed simple-relation semantics of every entity kind, but does not enforce
     /// chemistry or constraint satisfiability.
     pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeIntegrityError> {
         validate_entry_references(&entries)?;
@@ -1660,7 +1666,7 @@ impl Molecule {
         Ok(editor.try_build()?)
     }
 
-    /// Combine molecules by disjoint concatenation. Input order determines each entity family's
+    /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
     /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
     /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
     pub fn combine_all<'a>(
@@ -2456,6 +2462,149 @@ impl Normalize for Molecule {
     }
 }
 
+impl FrameTransport for Molecule {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        self.dative_bonds = self.dative_bonds.reframe_by(actions.dative_bonds())?;
+        self.aromatic_systems = self
+            .aromatic_systems
+            .reframe_by(actions.aromatic_systems())?;
+        self.multicenter_bonds = self
+            .multicenter_bonds
+            .reframe_by(actions.multicenter_bonds())?;
+        self.noncovalent_bonds = self
+            .noncovalent_bonds
+            .reframe_by(actions.noncovalent_bonds())?;
+        self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
+        self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
+        self.constraints = self.constraints.reframe_by(actions)?;
+        Some(self)
+    }
+}
+
+impl Reframe for Molecule {
+    fn representative_action(&self) -> Self::Action {
+        OverlaysFrameAction::new(
+            self.dative_bonds.representative_action(),
+            self.aromatic_systems.representative_action(),
+            self.multicenter_bonds.representative_action(),
+            self.noncovalent_bonds.representative_action(),
+            self.stereo_atoms.representative_action(),
+            self.stereo_bonds.representative_action(),
+        )
+    }
+
+    fn reframe(mut self) -> Result<Self, Contradiction> {
+        let action_domain = self.constraints.frame_action_domain();
+        for attributes in Arc::make_mut(&mut self.atoms) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        for attributes in Arc::make_mut(&mut self.bonds) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        self.constraints = mem::take(&mut self.constraints).normalize()?;
+
+        let mut actions = ConstraintFrameActionMap::default();
+        self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
+            mem::take(&mut self.dative_bonds).reframe()?
+        } else {
+            reframe_dative_bonds_with(mem::take(&mut self.dative_bonds), |id, action| {
+                if action_domain.contains_dative_bond(id) {
+                    actions.dative_bonds.insert(id, action.clone());
+                }
+            })?
+        };
+        self.aromatic_systems = if action_domain.count(EntityKind::AromaticSystem) == 0 {
+            mem::take(&mut self.aromatic_systems).reframe()?
+        } else {
+            reframe_aromatic_systems_with(mem::take(&mut self.aromatic_systems), |id, action| {
+                if action_domain.contains_aromatic_system(id) {
+                    actions.aromatic_systems.insert(id, action.clone());
+                }
+            })?
+        };
+        self.multicenter_bonds = if action_domain.count(EntityKind::MulticenterBond) == 0 {
+            mem::take(&mut self.multicenter_bonds).reframe()?
+        } else {
+            reframe_multicenter_bonds_with(mem::take(&mut self.multicenter_bonds), |id, action| {
+                if action_domain.contains_multicenter_bond(id) {
+                    actions.multicenter_bonds.insert(id, action.clone());
+                }
+            })?
+        };
+        self.noncovalent_bonds = if action_domain.count(EntityKind::NoncovalentBond) == 0 {
+            mem::take(&mut self.noncovalent_bonds).reframe()?
+        } else {
+            reframe_noncovalent_bonds_with(mem::take(&mut self.noncovalent_bonds), |id, action| {
+                if action_domain.contains_noncovalent_bond(id) {
+                    actions.noncovalent_bonds.insert(id, action.clone());
+                }
+            })?
+        };
+        self.stereo_atoms = if action_domain.count(EntityKind::StereoAtom) == 0 {
+            mem::take(&mut self.stereo_atoms).reframe()?
+        } else {
+            reframe_stereo_atoms_with(mem::take(&mut self.stereo_atoms), |id, action| {
+                if action_domain.contains_stereo_atom(id) {
+                    actions.stereo_atoms.insert(id, action);
+                }
+            })?
+        };
+        self.stereo_bonds = if action_domain.count(EntityKind::StereoBond) == 0 {
+            mem::take(&mut self.stereo_bonds).reframe()?
+        } else {
+            reframe_stereo_bonds_with(mem::take(&mut self.stereo_bonds), |id, action| {
+                if action_domain.contains_stereo_bond(id) {
+                    actions.stereo_bonds.insert(id, action);
+                }
+            })?
+        };
+        self.constraints = self
+            .constraints
+            .reframe_by_actions(&actions)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        Ok(self)
+    }
+}
+
+#[derive(Default)]
+struct ConstraintFrameActionMap {
+    dative_bonds: HashMap<DativeBondId, DynPermutation>,
+    aromatic_systems: HashMap<AromaticSystemId, DynPermutation>,
+    multicenter_bonds: HashMap<MulticenterBondId, DynPermutation>,
+    noncovalent_bonds: HashMap<NoncovalentBondId, DynPermutation>,
+    stereo_atoms: HashMap<StereoAtomId, Permutation>,
+    stereo_bonds: HashMap<StereoBondId, Permutation>,
+}
+
+impl ConstraintFrameActions for ConstraintFrameActionMap {
+    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation> {
+        self.dative_bonds.get(&id)
+    }
+
+    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation> {
+        self.aromatic_systems.get(&id)
+    }
+
+    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation> {
+        self.multicenter_bonds.get(&id)
+    }
+
+    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation> {
+        self.noncovalent_bonds.get(&id)
+    }
+
+    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation> {
+        self.stereo_atoms.get(&id)
+    }
+
+    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation> {
+        self.stereo_bonds.get(&id)
+    }
+}
+
 /// One level in the cumulative graph-IR description hierarchy.
 ///
 /// The derived order is the containment order: topology is contained by constitution,
@@ -2474,7 +2623,7 @@ pub enum DescriptionLevel {
     Full,
 }
 
-/// The correspondence mapping one input family's ids to their offset ids in a combined family.
+/// The correspondence mapping one input entity set's ids to their offset ids in a combined set.
 fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     offset: usize,
     input_count: usize,
@@ -2484,7 +2633,7 @@ fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     Correspondence::from_images(&images, combined_count)
 }
 
-/// The per-family offset map used to remap constraints into a combined molecule.
+/// The per-entity-kind offset map used to remap constraints into a combined molecule.
 fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
     (0..count)
         .map(|k| (Id::from(k), Id::from(offset + k)))
@@ -2501,7 +2650,7 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
     }
 }
 
-/// The per-family `original → compact` remapping a `split` component induces, read off its
+/// The per-entity-kind `original → compact` remapping a `split` component induces, read off its
 /// `component → original` correspondence.
 fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> IdRemapping {
     IdRemapping::new(

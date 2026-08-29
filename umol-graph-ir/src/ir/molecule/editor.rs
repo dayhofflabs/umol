@@ -1224,7 +1224,7 @@ impl MoleculeEditor {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        // Each family reports the relation ids its own compaction consumed, so the drop is
+        // Each entity set reports the relation ids its own compaction consumed, so the drop is
         // discovered once rather than traversed separately. A stereo element whose site or any
         // ligand atom or bond was removed drops out the same way (cascade), and the reported ids
         // feed `MoleculeCompaction` so rollback (`restore_topology`) can reinsert them.
@@ -1587,6 +1587,7 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_perm::Permutation;
 
     use super::*;
     use crate::ir::atom::AtomForm;
@@ -1596,7 +1597,6 @@ mod tests {
     use crate::ir::noncovalent::NoncovalentBondKind;
     use crate::ir::stereo::StereoKind;
     use crate::mol_dsl;
-    use umol_perm::Permutation;
 
     #[derive(Debug)]
     struct CloneCounted {

@@ -5,7 +5,6 @@ use std::str::FromStr;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use std::iter;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::{
@@ -637,6 +636,7 @@ mod tests {
     use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
+    use std::iter;
     use umol_chem::element::Element as ChemElement;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph_ir::dsl::{

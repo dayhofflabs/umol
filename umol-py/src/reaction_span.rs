@@ -124,7 +124,7 @@ impl ReactionSpan {
     /// on each side form a structurally intact molecule. Chemistry is not validated.
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
-    #[allow(clippy::too_many_arguments)] // one argument per entity family
+    #[allow(clippy::too_many_arguments)] // one argument per entity kind
     fn from_entries(
         py: Python<'_>,
         atoms: Vec<SpanPair<AtomForm>>,

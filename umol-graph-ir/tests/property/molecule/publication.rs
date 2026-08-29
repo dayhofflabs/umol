@@ -1,6 +1,6 @@
 //! Representation-integrity preservation by trusted molecule publishers.
 //!
-//! The generated inputs contain every entity family and frame-sensitive payloads. Republishing an
+//! The generated inputs contain every entity kind and frame-sensitive payloads. Republishing an
 //! output through the checked editor boundary must reproduce it exactly; a trusted transform may
 //! not emit a value outside the same aggregate contract.
 

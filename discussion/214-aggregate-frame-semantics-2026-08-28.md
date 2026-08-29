@@ -100,7 +100,7 @@ reproduced doc 209's complete fifteen-test semantic failure ledger:
 - the property target passed 321, failed all ten persisted failure cases, and ignored one in
   708.61 seconds.
 
-The four library failures are `test_canonicalize_constitution_family_minimum`,
+The four library failures are `test_canonicalize_constitution_entity_kind_minimum`,
 `test_canonicalize_constitution_participant_order`,
 `test_aromatic_systems_glue_differing_frames`, and `test_molecule_meet_pushout_overlays`. The
 integration failure is `reaction_span::test_reaction_span_canonicalize::case_2_constitution`. The
@@ -332,9 +332,9 @@ a stored and representative presentation unique. The graph-core storage-facing
 
 Atoms and localized bonds do not bear graph-IR payload frames. A localized bond's endpoints are
 unordered topology, and no current bond value is indexed by endpoint position. Reframing begins at
-the six overlay families:
+the six overlay kinds:
 
-| Entity family | Representative frame | Action group | Values transported under the action |
+| Overlay kind | Representative frame | Action group | Values transported under the action |
 | --- | --- | --- | --- |
 | Dative bond | donors sorted by `AtomId`; singleton acceptor fixed | `S_n` on the donor factor, represented by `DynPermutation` | donor sequence only; current form and molecule-level dative constraints are frame-invariant |
 | Aromatic system | participating atoms sorted by `AtomId` | `S_n`, represented by `DynPermutation` | participant electron counts; charge, unpaired electrons, and current constraints are invariant |
@@ -352,7 +352,7 @@ Current atom-centered kinds all use the full symmetric parent group, so complete
 admissible for every integrity-valid stereo atom assertion. Independently asserted admissible kinds
 may be semantically inconsistent, but they do not make frame selection ambiguous.
 
-Representative selection therefore belongs to the family aggregate, which knows the site and
+Representative selection therefore belongs to the overlay aggregate, which knows the site and
 frame-bearing factors. A form implements `FrameTransport` and can apply a local action, but it does
 not implement `Reframe`. The existing stereo-only `FrameAction` trait and form-level `select_frame`
 retire in favor of this common operation. `DynPermutation::between` and
@@ -379,19 +379,19 @@ vector. The carrier grows with the value being acted on:
 | One ordinary entity form or `EntitySpan<form>` | One `DynPermutation` |
 | One stereo entity form or `EntitySpan<form>` | One bounded `Permutation` admissible for that entity kind |
 | One kind-specific overlay delta payload | One local action for that entity kind |
-| One entity-family aggregate or its `*Spans` peer | One local action per dense typed entity id |
-| `Molecule` or `ReactionSpan` | One `OverlayFrameActions` value covering every entry in all six overlay families |
-| `Reaction` | One `OverlayFrameActions` value covering every lhs and `Add`-owned overlay entity |
-| `ConstraintDelta`, `Constraint`, or `ConstraintSpan` | The compatible `OverlayFrameActions` value whose typed maps cover every frame-relative entity reference carried by the receiver |
+| One entity-kind aggregate or its `*Spans` peer | One local action per dense typed entity id |
+| `Molecule` or `ReactionSpan` | One `OverlaysFrameAction` value covering every entry in all six overlay kinds |
+| `Reaction` | One `OverlaysFrameAction` value covering every lhs and `Add`-owned overlay entity |
+| `ConstraintDelta`, `Constraint`, or `ConstraintSpan` | The compatible `OverlaysFrameAction` value whose typed maps cover every frame-relative entity reference carried by the receiver |
 | `Deltas` in isolation | No complete action: removals may use local frames, and only the containing `Reaction` supplies their owning frames |
 
-`OverlayFrameActions` is a typed six-family composite. Each field maps the corresponding entity id
-to its local `DynPermutation` or bounded `Permutation`; atom and localized-bond entries are
-absent because those families have no participant-frame action. Molecule and reaction-span producers
-fill dense id domains, while a reaction adds sparse created-entity domains to the dense domains of
-its lhs. A consumer requires every action needed by the frame-relative values it carries and ignores
-entries for other entities. An independently supplied missing or incompatible action makes
-`reframe_by` return `None`, not panic.
+`OverlaysFrameAction` is a typed six-component composite. Each field maps the corresponding entity
+id to its local `DynPermutation` or bounded `Permutation`; atom and localized-bond entries are
+absent because those entity kinds have no participant-frame action. Molecule and reaction-span
+producers fill dense id domains, while a reaction adds sparse created-entity domains to the dense
+domains of its lhs. A consumer requires every action needed by the frame-relative values it carries
+and ignores entries for other entities. An independently supplied missing or incompatible action
+makes `reframe_by` return `None`, not panic.
 
 A complete action's domain is its typed id set together with the degree of every local action.
 Identity is relative to that domain, inverse preserves it, and composition is defined only for equal
@@ -409,8 +409,8 @@ by actual cross-carrier use rather than symmetry with `MoleculeCorrespondence`. 
 graph-IR action carrier; no Python action-map class is added in this scope because no supported
 Python workflow independently consumes the witness.
 
-For a family aggregate, the dense action sequence is indexed by the family's typed entity id and is
-shared with its span-family peer. `reframe_with_action` returns this complete witness. Ordinary
+For an entity-kind aggregate, the dense action sequence is indexed by its typed entity id and is
+shared with its span-aggregate peer. `reframe_with_action` returns this complete witness. Ordinary
 `reframe` remains the happy path and does not construct the complete witness.
 
 ### Aggregate normalization, reframing, and canonicalization
@@ -422,7 +422,7 @@ entity-kind action. The ordinary `reframe_to(from, to)` combination reduces to
 counterpart. Compatibility is receiver-relative: a fixed-arity form or a determinate positional
 payload checks the degree it exposes, while a variable-arity, dimensionless, or frame-invariant form
 cannot reconstruct an absent owning frame and accepts every structurally valid action in its local
-action family. The family aggregate always checks the actual frame degree and admissible action
+action group. The overlay aggregate always checks the actual frame degree and admissible action
 group. Frame-invariant forms return themselves under every such compatible local action.
 
 `EntitySpan<T>` is likewise payload-only rather than frame-owning. It has the generic
@@ -430,30 +430,36 @@ group. Frame-invariant forms return themselves under every such compatible local
 `try_map`; it does not implement `Reframe`. This covers every kind-specific entity span without
 introducing span-form newtypes. `Constraint`, `ConstraintSpan`, and kind-specific overlay delta
 payloads also implement `FrameTransport` for a supplied local action, but none derives an action
-independently. `Deltas` does not implement transport under owning `OverlayFrameActions` in isolation:
+independently. `Deltas` does not implement transport under owning `OverlaysFrameAction` in isolation:
 only `Reaction` has the owning frames needed to align a compatible removal-local frame before
 applying the per-id action.
 
-The six entity-family aggregates and their span counterparts are the first frame-owning carriers.
-They were introduced because each family, unlike a graph-core relation set, knows which factor bears
-the frame, which is a site, how its payload moves, and which typed entity id keys the action. Each
-implements reduction-only `Normalize` without changing relation ids or stored participant sequences,
-implements `representative_action` as the dense per-id family action, and applies that complete action
-through `FrameTransport`. Its plain `reframe` instead derives and immediately applies each local
-action without collecting the dense family action. A span family uses the same family action type as
-its molecule peer and applies each local action to every carried side.
+The six overlay aggregates and their span counterparts are the first frame-owning carriers.
+They were introduced because each overlay entity kind, unlike a graph-core relation set, knows which
+factor bears the frame, which is a site, how its payload moves, and which typed entity id keys the
+action. Each aggregate implements reduction-only `Normalize` without changing relation ids or stored
+participant sequences, implements `representative_action` as the dense per-id aggregate action, and
+applies that complete action through `FrameTransport`. Its plain `reframe` instead derives and
+immediately applies each local action without collecting the dense aggregate action. A span aggregate
+uses the same aggregate action type as its molecule peer and applies each local action to every
+carried side.
 
 `Normalize for Molecule` reduces every carried form and constraint without changing ids or
-participant frames. `representative_action` assembles the six dense family actions into one
-`OverlayFrameActions`. `FrameTransport for Molecule` applies that complete action to all six family
+participant frames. `representative_action` assembles the six dense aggregate actions into one
+`OverlaysFrameAction`. `FrameTransport for Molecule` applies that complete action to all six overlay
 aggregates and to the complete constraint tree; atom and localized-bond vectors are unchanged apart
 from normalization performed by `Reframe`. The final reduction restores normalized constraint
 ordering and deduplication after position-bearing keys change. `reframe_with_action` returns the same
 complete action that was applied. Plain `reframe` does not call `reframe_with_action` on its overlay
-families and then apply and discard their complete actions. It derives each local action once and
-uses it immediately for the owning entry and any frame-relative molecule constraint; an internal
-constraint index or selective action lookup is permitted when that avoids rescanning the recursive
-constraint tree, but it need not have the shape or lifetime of `OverlayFrameActions`.
+aggregates and then apply and discard their complete actions. It derives each local action once and
+uses it immediately for the owning entry and any frame-relative molecule constraint. Each
+kind-specific constraint form exhaustively declares whether it uses participant positions and
+defines its transport, so adding a constraint variant requires an explicit classification rather
+than silently treating it as invariant. A single constraint-tree traversal builds a sparse action
+domain over all six overlay kinds. Empty domains and action maps allocate no backing storage; for a
+kind with no frame-relative consumer, plain `reframe` takes the ordinary fused aggregate path. For a
+nonempty domain, it retains only the requested local actions and applies them to the constraint tree
+after all overlays have been reframed.
 
 `Molecule::framed_eq_under(other, correspondence)` is the explicit entity-id-witness comparison. It
 is `try_remap(correspondence)` followed by `framed_eq`, returns `false` when the open correspondence
@@ -511,10 +517,10 @@ transported reaction is normalized again before return. `Delta::remap` relabels 
 the supplied participant sequence; it does not silently select a frame.
 
 `Normalize for ReactionSpan` reduces every carried side and constraint span without selecting a
-participant frame. Its six existing `*Spans` aggregates derive the same family actions as their
-molecule peers and assemble them into `OverlayFrameActions`; atom and localized-bond spans remain
+participant frame. Its six existing `*Spans` aggregates derive the same aggregate actions as their
+molecule peers and assemble them into `OverlaysFrameAction`; atom and localized-bond spans remain
 plain vectors because they have no frame action. `FrameTransport for ReactionSpan` applies the
-composite to every family span and every `ConstraintSpan` before final reduction. Plain `reframe`
+composite to every span aggregate and every `ConstraintSpan` before final reduction. Plain `reframe`
 instead derives each local action once and transports every present side and affected constraint
 without materializing that complete composite. A modified entity therefore cannot let its lhs and
 rhs choose different presentations.
@@ -549,7 +555,7 @@ preservation rather than scatter duplicate validation logic.
 | --- | --- | --- |
 | `StereoAtoms::new`, `StereoBonds::new`, `StereoAtomSpans::new`, `StereoBondSpans::new`, and raw relation-set `From` conversions | Public low-level construction can bypass aggregate checks. | Restrict raw assembly to graph IR; public consumers construct frames through checked/asserted aggregates, and no public unchecked route feeds frame operations. |
 | `Molecule::try_from_entries` / `Molecule::from_entries` | Checked / asserted pair through `Molecule::check_integrity`. | Add the two frame rules and wrapper site-kind rule to the one authoritative check. |
-| `Molecule::{stereo_atom_mut, stereo_bond_mut, modify_stereo_atoms, modify_stereo_bonds, constraints_mut}` and public family `attributes_mut` | Mutable references and unchecked replacement closures can install a kind, position domain, or reference that disagrees with the containing molecule after construction. | Restrict family mutation to graph IR and replace integrity-sensitive molecule mutation with checked replacement or transactional methods that validate before committing. No public mutation may leave a published `Molecule` outside its tier-1 contract. |
+| `Molecule::{stereo_atom_mut, stereo_bond_mut, modify_stereo_atoms, modify_stereo_bonds, constraints_mut}` and public overlay `attributes_mut` | Mutable references and unchecked replacement closures can install a kind, position domain, or reference that disagrees with the containing molecule after construction. | Restrict overlay mutation to graph IR and replace integrity-sensitive molecule mutation with checked replacement or transactional methods that validate before committing. No public mutation may leave a published `Molecule` outside its tier-1 contract. |
 | `MoleculeBuilder::build`; `MoleculeEditor::{snapshot, try_build, build}`; `Molecule::apply` | Publish through editor integrity, with asserted and checked variants. | Retain the shared gate; add exact regressions for transient invalid frames rejected only at publication. |
 | `Molecule::{try_remap, remap, extract, combine_all, combine, split}` and fragment, glue, pushout, canonicalization, resolution, and reaction-product paths | Trusted transforms, usually rebuilding through checked or asserted molecule construction. | Audit every publisher and add preservation properties; do not add redundant front-door checks to each operation. |
 | `Reaction::new`, struct literals, `Reaction::check_integrity`, and `Reaction::from_sides` | `new` and public fields are unchecked; callers must remember a later check, and removal incidence is not established against the lhs or added entity. | Add `try_new`, make `new` the asserted sibling, make fields private with read/parts accessors, validate every added stereo frame and stereo constraint wrapper, and require each removal to repeat the source's structured incidence while accepting any uniquely alignable local ordering. |
@@ -569,7 +575,7 @@ and position checks; the first aggregate that pairs them with a frame owns the f
 
 Tests and benchmarks begin with the first implementation stage. Exact fixtures use nonidentity
 actions and nonuniform position-sensitive payloads; uniform values cannot prove that transport
-happened. Property cases cover all six overlay families, every entity/span state, renumbering,
+happened. Property cases cover all six overlay kinds, every entity/span state, renumbering,
 stereo-bond endpoint blocks, noncovalent ordered predicate pairs, constraints, and the
 checked/asserted boundary.
 
@@ -583,7 +589,7 @@ must never add an unlisted failure. The expected latest closure points are:
 | --- | ---: | --- |
 | S0 start through S0n | 15 | No expansion of the inherited ledger. |
 | S0o | 12 | Aromatic glue, molecule pushout, and mapped molecule equality. |
-| S0p | 10 | Constitution family-minimum and participant-order canonicalization. |
+| S0p | 10 | Constitution entity-kind minimum and participant-order canonicalization. |
 | S0t | 8 | Two inherited stereo-application regressions, closed by generalized overlay transport. |
 | S0u | 0 | Reaction-span integration plus seven reaction/span canonicalization properties. |
 | S0v | 0 | Coherent frame-transport, reframing, and full-pipeline algebraic property suite. |
@@ -623,10 +629,10 @@ checks.
   graph-IR canonicalization benchmark. The inherited fifteen-test semantic ledger remains the S0
   starting point.
 - **S0b — molecule stereo-frame integrity and mutation gates**
-  (`umol-graph-ir/src/ir/{molecule,molecule/integrity,view/stereo}.rs`, family modules): add
+  (`umol-graph-ir/src/ir/{molecule,molecule/integrity,view/stereo}.rs`, overlay modules): add
   `DuplicateStereoLigand` and `StereoFrameDegreeTooLarge`; check maximum then pairwise distinctness
   for stereo atoms and bonds before kind-dependent operations; make molecule-level stereo wrapper
-  kinds use the existing atom/bond site-admissibility table. Restrict family `attributes_mut` to
+  kinds use the existing atom/bond site-admissibility table. Restrict overlay `attributes_mut` to
   graph IR and replace public stereo-form and reference-bearing constraint mutation that can
   compromise integrity with checked replacement or transactional operations that validate before
   committing. Add exact atom, bond, kindless, opposite-endpoint, mixed-virtual, mutation rollback,
@@ -640,7 +646,7 @@ checks.
   repeats of each virtual kind, mixed virtual kinds, the same virtual kind at opposite bond
   endpoints, kindless oversized frames, wrapper kinds, and diagnostic precedence.
 
-  The raw stereo-form, family-attribute, and molecule-constraint mutation surfaces are now internal
+  The raw stereo-form, overlay-attribute, and molecule-constraint mutation surfaces are now internal
   to graph IR. Public callers use five checked, rollback-safe molecule operations for one or all
   stereo atoms, one or all stereo bonds, and the molecule constraint tree; each operation has a
   dedicated success, failure, and rollback regression. The Python live views and setters use those
@@ -667,7 +673,7 @@ checks.
   different order while retaining `IncidenceMismatch` for a different site or participant multiset.
   Check invalid references, incidence, and frame equality in that order. Migrate struct literals and
   trusted producers in the same subitem. Exact cases cover invalid lhs, invalid additions, wrapper
-  kinds on existing and added entities, all six existing and created overlay removal families,
+  kinds on existing and added entities, removals for all six existing and created overlay kinds,
   diagnostic precedence, and valid explicit-H prochiral inputs. **Breaking; inherited red ledger
   unchanged after caller migration.** [dep: S0b] **Done.** `Reaction` now has private `lhs` and
   `deltas` fields, direct `lhs` / `deltas` borrows and `into_parts`, a checked `try_new`, and an
@@ -682,7 +688,7 @@ checks.
   `Add`. Every overlay removal first checks references, then unordered incidence including stereo
   site and complete ligand values, then exact participant order. Equal incidence in another order
   is `ParticipantFrameMismatch`; changed incidence remains `IncidenceMismatch`. The exact table
-  covers all six overlay families for both lhs-owned and `Add`-owned frames, and a separate table
+  covers all six overlay kinds for both lhs-owned and `Add`-owned frames, and a separate table
   fixes reference/incidence/frame diagnostic precedence. Struct literals and trusted consumers were
   migrated to the accessors and checked/asserted construction pair; obsolete properties that
   depended on publicly constructing a malformed `Reaction` now exercise `try_new` directly.
@@ -704,12 +710,12 @@ checks.
   reaction checks and diagnostics that only those checks could produce. The retained S0c contract
   is private reaction storage, checked/asserted construction, local stereo validation, reference
   validation, and structured-incidence validation. Doc 215 completed this unwinding before S0e.
-- **S0d — reaction-span and low-level carrier audit** (`umol-graph-ir/src/ir/stereo.rs`, family
+- **S0d — reaction-span and low-level carrier audit** (`umol-graph-ir/src/ir/stereo.rs`, overlay
   modules, `ir/reaction_span.rs`): restrict raw frame-bearing collection construction, conversions,
   and mutation to their actual graph-IR assembly role, and verify that checked/asserted span
   construction reports the lhs or rhs projection carrying an invalid frame. Retain no public
   unchecked frame publisher. **Breaking; inherited red ledger unchanged after carrier migration.**
-  [dep: S0b] **Done.** Raw `new` / `into_entries` collection methods for all six overlay families
+  [dep: S0b] **Done.** Raw `new` / `into_entries` collection methods for all six overlay kinds
   and their reaction-span peers are now graph-IR-private, and the public raw relation-set `From`
   conversions were removed. The molecule editor's trusted publication path uses explicit
   crate-private `from_arc` assembly; public consumers receive read-only collections from checked
@@ -845,7 +851,7 @@ editors remain permitted and fail only when publishing. The inherited transport 
   transport for all six overlay forms, stereo configurations and frame-relative inline constraints,
   all six kind-specific overlay deltas, and generic `EntitySpan<T>`. Compatibility is checked only
   where the receiver exposes it: positional values check length, fixed noncovalent and stereo-bond
-  families check their action groups, kinded stereo values check their parent group even when the
+  carriers check their action groups, kinded stereo values check their parent group even when the
   coset is undetermined, and dimensionless variable-arity values carry unchanged. The temporary
   `FrameAction`, `reframe_to`, and orbit-search helpers remain for S0j migration.
 
@@ -886,11 +892,11 @@ editors remain permitted and fail only when publishing. The inherited transport 
   `test_molecule_meet_pushout_overlays`); the untouched canonicalization failures and slow property
   ledger were not rerun.
 - **S0k — frame selection and symmetry cleanup** (`ir/stereo.rs`, `ir/symmetry.rs`, property
-  strategies, family modules): implement the per-kind representative rules in the six family
+  strategies, overlay modules): implement the per-kind representative rules in the six overlay
   aggregates. Stereo atoms sort the complete ligand frame under the full symmetric group; stereo
   bonds sort within their two endpoint blocks and then order the complete blocks under the wreath
-  product `S_2 wr S_2`. Add dense complete family-action carriers shared with each `*Spans` peer and
-  the typed six-family `OverlayFrameActions` composite. Make each complete action carry its typed id
+  product `S_2 wr S_2`. Add dense complete aggregate-action carriers shared with each `*Spans` peer
+  and the typed six-component `OverlaysFrameAction` composite. Make each complete action carry its typed id
   domain and local degrees: identity is domain-relative, inverse preserves the domain, composition
   requires equal domains and degrees, and consumers may accept a covering superset. Remove form-level
   `select_frame`,
@@ -898,15 +904,15 @@ editors remain permitted and fail only when publishing. The inherited transport 
   repeat-valid fixtures. Replace them with integrity rejection, atom/bond structural-domain cases,
   distinct-frame symmetry evidence, and complete-action identity/inverse/composition cases.
   **Breaking; inherited red ledger unchanged after fixture migration.** [dep: S0j] **Done.** The
-  six family aggregates and their `*Spans` peers now return kind-specific complete action carriers
-  keyed by their typed dense ids: four carry `DynPermutation`, and the stereo families carry
+  six overlay aggregates and their `*Spans` peers now return kind-specific complete action carriers
+  keyed by their typed dense ids: four carry `DynPermutation`, and the stereo aggregates carry
   bounded `Permutation`. The operation-issued carriers expose typed lookup plus exact-domain
   identity, inverse, and composition; composition rejects unequal id domains or local degrees.
-  `NoncovalentBondFrameActions` admits only degree two and `StereoBondFrameActions` admits only the
-  endpoint-block `S_2 wr S_2` subgroup. The private-field `OverlayFrameActions` composite provides
+  `NoncovalentBondsFrameAction` admits only degree two and `StereoBondsFrameAction` admits only the
+  endpoint-block `S_2 wr S_2` subgroup. The private-field `OverlaysFrameAction` composite provides
   the same algebra componentwise without an independently assembled public constructor.
 
-  Representative selection is structural and family-owned. Dative donors, aromatic and
+  Representative selection is structural and owned by each overlay aggregate. Dative donors, aromatic and
   multicenter atoms, and noncovalent endpoints sort completely. Stereo atoms sort the complete
   distinct ligand frame under `S_n`; stereo bonds sort within endpoint blocks and then order the
   complete blocks under `S_2 wr S_2`, including a nonidentity block-exchange case. Form-level
@@ -925,9 +931,9 @@ editors remain permitted and fail only when publishing. The inherited transport 
   unrelated pre-existing `iter:from_fn` parse error in `umol-py/src/reaction.rs`; no Python file was
   changed in this subitem. The inherited red ledger was not rerun or changed.
 - **S0l — quotient and transport trait migration**
-  (`umol-graph-ir/src/ir/{stereo,traits,constraint,delta}.rs`, family modules and re-exports;
+  (`umol-graph-ir/src/ir/{stereo,traits,constraint,delta}.rs`, overlay modules and re-exports;
   `umol-py` form bindings; `umol-perm/src/permutation.rs`): add `normalized_eq` directly to
-  `Normalize`, implement reduction-only `Normalize` for every entity-family and span-family
+  `Normalize`, implement reduction-only `Normalize` for every overlay and span aggregate,
   aggregate, and make consuming `Reframe: Normalize + FrameTransport` expose
   `representative_action`, `reframe_with_action`, `reframe`, and provided `framed_eq`. Its associated
   action is the complete `FrameTransport::Action`, not one row of a separately returned vector.
@@ -952,11 +958,11 @@ editors remain permitted and fail only when publishing. The inherited transport 
   caller migration under the repository Python 3.13 environment. **Breaking; inherited red ledger
   unchanged after all callers migrate.** [dep: S0j, S0k] **Done.** `Normalize` now owns
   `normalized_eq`; `Equiv` and `Normalized` are gone, and every form-level Rust and Python caller
-  uses the new name. The six frame-owning family aggregates and all six span peers implement
+  uses the new name. The six frame-owning overlay aggregates and all six span peers implement
   reduction-only `Normalize`, complete `FrameTransport`, and consuming `Reframe`; plain `reframe`
   fuses local action derivation and transport, while `reframe_with_action` returns the same dense
   typed witness used to reproduce the result. Recursive constraints, constraint stores, constraint
-  spans and deltas, and individual `Delta` values transport through `OverlayFrameActions` without
+  spans and deltas, and individual `Delta` values transport through `OverlaysFrameAction` without
   assigning a false complete-action meaning to standalone `Deltas`.
 
   The stereo-only compatibility trait and search helper and `Permutation::visit_between` are
@@ -973,10 +979,10 @@ ledger remains.
 
 #### Complete molecule frame transport
 
-- **S0m — reduction-only molecule normalization** (`umol-graph-ir/src/ir/molecule.rs` and family
+- **S0m — reduction-only molecule normalization** (`umol-graph-ir/src/ir/molecule.rs` and overlay
   modules): implement `Normalize for Molecule` over every entity and constraint store without
   changing ids or participant frames, and remove the inherent `Molecule::equiv` in favor of the
-  provided `normalized_eq`. Cover empty/nonempty families, shared storage, idempotence, contradiction
+  provided `normalized_eq`. Cover empty/nonempty overlay aggregates, shared storage, idempotence, contradiction
   propagation, and agreement of `normalized_eq` with structural equality on normalized values.
   **Breaking; inherited red ledger unchanged after molecule callers migrate.** [dep: S0l]
   **Done.** `Molecule` now implements consuming reduction over both inherent form vectors, all six
@@ -987,10 +993,10 @@ ledger remains.
   the three focused molecule equality properties agree with the settled laws. Focused unit and
   reaction-span caller tests and strict graph-IR Clippy pass. The comparison property target retains
   only its listed `test_molecule_equiv_under_reframed` failure, which remains assigned to S0o.
-- **S0n — aggregate molecule reframing** (`ir/molecule.rs`, relation family modules): implement
+- **S0n — aggregate molecule reframing** (`ir/molecule.rs`, overlay modules): implement
   `FrameTransport` and consuming `Reframe for Molecule` from the normalized molecule. Assemble each
-  dense family action into one `OverlayFrameActions`, apply that same complete action to all six
-  family aggregates and the recursive constraint tree, and return it only on the
+  dense aggregate action into one `OverlaysFrameAction`, apply that same complete action to all six
+  overlay aggregates and the recursive constraint tree, and return it only on the
   `reframe_with_action` path. Implement plain `reframe` as a fused pass that derives each local
   action once and immediately transports the owning entry and affected constraints; use only a
   selective internal lookup when needed to avoid rescanning the recursive constraint tree.
@@ -998,12 +1004,29 @@ ledger remains.
   aromatic/multicenter participant-order repair and benchmark `reframe`,
   `representative_action`, `reframe_with_action`, and `framed_eq` separately from this subitem
   onward. Include empty and few-overlay molecules, large aromatic systems, frame-relative
-  constraints, and owned and shared copy-on-write inputs. Assert the per-family action table,
+  constraints, and owned and shared copy-on-write inputs. Assert the per-entity-kind action table,
   complete-action identity/inverse/composition, action reuse against compatible carriers,
   missing/incompatible action absence,
   stereo-bond block preservation, nonuniform endpoint predicates, exact idempotence,
   `normalized_eq => framed_eq`, and no mutation of shared inputs. **Additive; inherited red ledger
   unchanged.** [dep: S0m]
+  **Done.** `Molecule` now implements complete six-component `FrameTransport` and consuming
+  `Reframe`. The witness-returning path assembles the operation-issued `OverlaysFrameAction`; plain
+  `reframe` instead derives each local action once, transports the owning entry immediately, and
+  retains only actions named by a sparse frame-relative constraint domain over all six overlay
+  kinds. Each kind-specific constraint form exhaustively classifies its variants and implements
+  transport; current frame-invariant variants require no action entry, while noncovalent endpoint
+  predicates and position-bearing stereo constraints do. Both paths reduce after transport. Exact
+  coverage exercises the classification and no-action paths, all six action components,
+  nonuniform positional payloads and recursive constraints, compatible witness reuse,
+  missing/incompatible witnesses, the empty representative, contradiction propagation,
+  idempotence, and shared copy-on-write input preservation. Four molecule properties cover the
+  complete action algebra, fused/witnessed agreement, replay, representative identity, pipeline
+  implication, and framed equality. Separate Criterion groups cover `representative_action`,
+  `reframe_with_action`, `reframe`, and `framed_eq` on empty, few-overlay, and 128-participant
+  aromatic inputs. Focused reframing tests, four new properties, the benchmark build, and strict
+  graph-IR Clippy pass. The comparison property target retains exactly its inherited
+  `test_molecule_equiv_under_reframed` failure for S0o; its other six properties pass.
 - **S0o — mapped equality and pushout** (`ir/molecule.rs`, glue/pushout consumers): replace the two
   hand-written `equiv_under` paths with inherent `framed_eq_under`, defined as checked remapping by
   the supplied correspondence followed by `framed_eq`; retire the old name. Use the same unique
@@ -1022,7 +1045,7 @@ ledger remains.
   `Permutation::between_all` and its repeat-specific unit/property surface. Preserve
   graph-automorphism search, exact hash/equality behavior, bounded-exhaustive minimum checks,
   renumbering invariance, and the corrected post-remap law. Compare the unified path with the
-  pre-change distinct-frame baseline. Close `test_canonicalize_constitution_family_minimum` and
+  pre-change distinct-frame baseline. Close `test_canonicalize_constitution_entity_kind_minimum` and
   `test_canonicalize_constitution_participant_order`. **Breaking; inherited red ledger decreases
   from twelve to ten.** [dep: S0n, S0o]
 
@@ -1038,7 +1061,7 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
 - **S0r — reaction reduction and reframing** (`ir/reaction.rs`): implement reduction-only
   `Normalize for Reaction` over the lhs and deltas in their stored frames, then `FrameTransport` and
   consuming `Reframe for Reaction`. Before normalization, derive one input-domain
-  `OverlayFrameActions`: existing entity frames come from every lhs overlay and created entity
+  `OverlaysFrameAction`: existing entity frames come from every lhs overlay and created entity
   frames come from every unique raw `Add`, whose ids need not be dense. Retain entries for created
   entities whose delta chains normalization later erases. Apply it to the normalized lhs and use a
   reaction-owned contextual pass over the normalized deltas, carrying
@@ -1048,7 +1071,7 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   sparse internal lookup needed for repeated references to one entity rather than the complete
   public witness. Return the composite from `reframe_with_action` and normalize the transported
   result; do not promise preservation of incidental pre-normalization delta order.
-  Cover the trait and action laws, every delta arm and relation family, the complete lhs plus sparse
+  Cover the trait and action laws, every delta arm and relation-valued entity kind, the complete lhs plus sparse
   created-id domain, compatible removal-local frames and composed local-to-owner-to-target actions,
   created entities erased by normalization, intrinsically contradictory but
   integrity-valid reactions with total representative actions, multiple changes to one entity, and
@@ -1058,8 +1081,8 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   Preserve equivalent `Modified` entries at checked and asserted construction, collapse them only
   in normalization and its reframing/canonicalization prefixes, and retain `superimpose` as a
   standardized producer that emits `Unchanged(lhs)` for `normalized_eq` paired values.
-  Reuse the existing six `*Spans` packages. On `reframe_with_action`, assemble their family actions
-  into `OverlayFrameActions` and apply it to every entity side and `ConstraintSpan`; on plain
+  Reuse the existing six `*Spans` packages. On `reframe_with_action`, assemble their aggregate actions
+  into `OverlaysFrameAction` and apply it to every entity side and `ConstraintSpan`; on plain
   `reframe`, derive each local action once and immediately transport all present sides and affected
   constraints without constructing the complete composite. Atom and localized-bond spans remain
   plain vectors. Return the composite from `reframe_with_action`, then reduce the complete span.
@@ -1069,9 +1092,9 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   reactions, and modified spans with nonuniform sides. **Additive; inherited red ledger unchanged.**
   [dep: S0n, S0q]
 - **S0t — rule-to-host overlay-frame transport** (`ir/reaction.rs`, application fixtures): replace
-  the stereo-only helper with one alignment pass over all matched overlay families. Derive the
+  the stereo-only helper with one alignment pass over all matched overlay kinds. Derive the
   unique local action from each atom-mapped rule frame to the host frame, assemble those actions into
-  `OverlayFrameActions`, and let `FrameTransport for Reaction` dispatch it contextually. A removal
+  `OverlaysFrameAction`, and let `FrameTransport for Reaction` dispatch it contextually. A removal
   first composes its local-to-owner alignment with the owner-to-host action. This transports
   aromatic and multicenter electron values, noncovalent ordered endpoint predicates, every stereo
   delta arm, and every frame-relative molecule-level constraint delta. Test a reframed rule `old`
@@ -1097,7 +1120,7 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   molecule-comparison, and molecule/reaction/span canonicalization properties and reorganize them
   into one coherent executable specification without duplicating operation-specific evidence.
   Exercise `FrameTransport` identity, inverse, and composition with independently generated
-  compatible actions at the local, family, and root aggregate levels. Use domain-relative identity,
+  compatible actions at the local, entity-kind aggregate, and root aggregate levels. Use domain-relative identity,
   require exact typed domains and degrees for composition, permit covering supersets at consumers,
   and assert exact `None` behavior for missing or incompatible actions. Exercise `Reframe`
   idempotence, representative identity, exact agreement of fused `reframe` with the value returned
@@ -1115,7 +1138,7 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   the canonical correspondence law
   `reframe(remap(x, c)) == canonicalize(x)` and make every equality relation and precondition
   explicit; require a correspondence witness for `canonical_eq` only on successful canonicalization,
-  not for the totalized intrinsic-contradiction class. Cover all six overlay families plus
+  not for the totalized intrinsic-contradiction class. Cover all six overlay kinds plus
   `Molecule`, `Reaction`, and `ReactionSpan`; separate raw satisfiable, normalized, reframed,
   canonical, intrinsically contradictory, and incompatible-action domains. Use nonidentity
   actions, nonuniform position-sensitive payloads, and independently generated relabelings so a
@@ -1143,7 +1166,7 @@ require a new application-result witness in doc 204.
   direct frame transport, `DynPermutation`, the `FrameTransport` / `Reframe` distinction,
   and the rule that plain aggregate `reframe` fuses local action derivation and transport without
   materializing a complete witness. Document the local,
-  family, and `OverlayFrameActions` carrier hierarchy, the per-family representative-action table,
+  entity-kind aggregate, and `OverlaysFrameAction` carrier hierarchy, the per-entity-kind representative-action table,
   stereo-bond endpoint-block wreath-product actions, noncovalent ordered predicate transport, and
   delta behavior: id remapping preserves participant frames, reframing transports every
   frame-relative delta payload under the owning entity action, a reaction has one lhs- or

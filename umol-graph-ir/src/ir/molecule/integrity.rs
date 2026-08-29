@@ -14,8 +14,10 @@ use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
 use super::super::id::{AtomId, BondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
-use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm};
-use super::Molecule;
+use super::super::stereo::{
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, StereoTerm,
+};
+use super::{validate_constraint_references, Molecule};
 
 /// Failure of the representation contract required to interpret a [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -100,7 +102,7 @@ impl Molecule {
     /// Check the representation invariants required to interpret this molecule.
     ///
     /// This checks stored references, parallel collection shapes, the fixed relation semantics of
-    /// every entity family, and kind-dependent stereo domains. It does not check chemistry or
+    /// every entity kind, and kind-dependent stereo domains. It does not check chemistry or
     /// constraint satisfaction.
     pub(crate) fn check_integrity(&self) -> Result<(), MoleculeIntegrityError> {
         let contains = |entity| match entity {
@@ -131,7 +133,7 @@ impl Molecule {
             let entity = Entity::DativeBond(view.id);
             let acceptor = view.acceptor_id();
             require_references(&contains, view.atom_ids().map(Entity::Atom))?;
-            check_unique_participants(entity, view.donor_ids())?;
+            check_unique_participants(entity, view.atom_ids())?;
             let donors = view.donor_ids().collect::<BTreeSet<_>>();
             if !dative_identities.insert((acceptor, donors.clone())) {
                 return Err(MoleculeIntegrityError::DativeBondsIdentical {
@@ -242,7 +244,7 @@ impl Molecule {
             }
         }
         for constraint in self.constraints.iter() {
-            super::validate_constraint_references(constraint, &contains)
+            validate_constraint_references(constraint, &contains)
                 .map_err(|entity| MoleculeIntegrityError::InvalidReference { entity })?;
             check_molecule_constraint(self, constraint)?;
         }
@@ -328,7 +330,7 @@ pub(crate) fn check_stereo_atom_entry(
     entity: Entity,
     site: AtomId,
     ligand_frame: &[StereoLigand],
-    attributes: &super::super::stereo::StereoAtomForm,
+    attributes: &StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
     check_stereo_frame(entity, ligand_frame)?;
     check_unique_participants(
@@ -346,7 +348,7 @@ pub(crate) fn check_stereo_atom_entry(
 pub(crate) fn check_stereo_bond_entry(
     entity: Entity,
     ligand_frame: &[StereoLigand],
-    attributes: &super::super::stereo::StereoBondForm,
+    attributes: &StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
     check_stereo_frame(entity, ligand_frame)?;
     check_unique_participants(
@@ -414,7 +416,7 @@ fn check_electron_count_length(
 fn check_stereo_atom(
     entity: Entity,
     ligand_count: usize,
-    attributes: &super::super::stereo::StereoAtomForm,
+    attributes: &StereoAtomForm,
 ) -> Result<(), MoleculeIntegrityError> {
     check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Atom)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;
@@ -427,7 +429,7 @@ fn check_stereo_atom(
 fn check_stereo_bond(
     entity: Entity,
     ligand_count: usize,
-    attributes: &super::super::stereo::StereoBondForm,
+    attributes: &StereoBondForm,
 ) -> Result<(), MoleculeIntegrityError> {
     check_configuration_site_kind(entity, &attributes.configuration, StereoSite::Bond)?;
     check_configuration(entity, ligand_count, &attributes.configuration)?;

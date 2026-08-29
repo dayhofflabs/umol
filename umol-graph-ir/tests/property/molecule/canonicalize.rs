@@ -1,6 +1,6 @@
 //! Aggregate-canonicalization properties.
 //!
-//! The generated domain contains integrity-valid molecules with every entity family and optional
+//! The generated domain contains integrity-valid molecules with every entity kind and optional
 //! constraints. Independently shuffled complete permutations in every entity namespace supply the
 //! dense-remapping action. Exact fixtures and bounded exhaustive minima remain in the unit suite;
 //! this module asserts the public idempotence, remapping-invariance, equality, and canonical-hash

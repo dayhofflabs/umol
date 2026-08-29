@@ -1607,7 +1607,7 @@ impl ConstraintDelta {
     }
 }
 
-/// One resolved edit from any localized-topology family.
+/// One resolved edit from any localized-topology entity kind.
 #[pyclass(frozen)]
 pub enum Delta {
     Atom(Py<AtomDelta>),
@@ -5001,7 +5001,7 @@ mod tests {
         ],
         Vec::new(),
     )]
-    #[case::family_order(
+    #[case::entity_kind_order(
         vec![
             GraphIrDelta::Bond(GraphIrBondDelta::ModifyField {
                 id: GraphIrBondId(0),

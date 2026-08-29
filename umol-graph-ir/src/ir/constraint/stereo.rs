@@ -79,6 +79,13 @@ macro_rules! stereo_constraint {
             pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
                 self
             }
+
+            pub(super) fn uses_participant_frame(&self) -> bool {
+                match self {
+                    Self::LigandSymmetry(_) | Self::Fluxionality(_) | Self::Topicity(_) => true,
+                    Self::Stereogenicity(_) => false,
+                }
+            }
         }
 
         impl Normalize for $constraint {
@@ -881,6 +888,80 @@ mod tests {
     use rstest::*;
 
     use super::*;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::fluxionality(
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            active: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::topicity(
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+        }),
+        true,
+    )]
+    #[case::stereogenicity(
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        false,
+    )]
+    fn test_stereo_atom_constraint_form_uses_participant_frame(
+        #[case] constraint: StereoAtomConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::fluxionality(
+        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            active: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::topicity(
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+        }),
+        true,
+    )]
+    #[case::stereogenicity(
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        false,
+    )]
+    fn test_stereo_bond_constraint_form_uses_participant_frame(
+        #[case] constraint: StereoBondConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
 
     #[rstest]
     #[case::equal(

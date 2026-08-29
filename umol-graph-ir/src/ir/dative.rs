@@ -9,7 +9,7 @@ use umol_perm::DynPermutation;
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::delta::EntitySpan;
 use super::error::Contradiction;
-use super::frame::DativeBondFrameActions;
+use super::frame::DativeBondsFrameAction;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
@@ -183,7 +183,7 @@ impl Normalize for DativeBonds {
 }
 
 impl FrameTransport for DativeBonds {
-    type Action = DativeBondFrameActions;
+    type Action = DativeBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         let set = Arc::make_mut(&mut self.0);
@@ -205,28 +205,37 @@ impl Reframe for DativeBonds {
             .ids()
             .map(|id| representative_action(self.donors(id).collect()))
             .collect();
-        DativeBondFrameActions::from_dense(actions)
+        DativeBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a dative-bond action")
     }
 
-    fn reframe(mut self) -> Result<Self, Contradiction> {
-        let set = Arc::make_mut(&mut self.0);
-        for relation_id in set.ids().collect::<Vec<_>>() {
-            let stored = set
-                .participants_2(relation_id)
-                .iter()
-                .map(|&atom| AtomId::from(atom))
-                .collect();
-            let action = representative_action(stored);
-            let attributes = set.data(relation_id).clone().normalize()?;
-            *set.data_mut(relation_id) = attributes
-                .reframe_by(&action)
-                .ok_or(Contradiction)?
-                .normalize()?;
-            set.permute_2_with(relation_id, &participant_order(&action));
-        }
-        Ok(self)
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_dative_bonds_with(self, |_, _| {})
     }
+}
+
+pub(crate) fn reframe_dative_bonds_with(
+    mut dative_bonds: DativeBonds,
+    mut visit: impl FnMut(DativeBondId, &DynPermutation),
+) -> Result<DativeBonds, Contradiction> {
+    let set = Arc::make_mut(&mut dative_bonds.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = DativeBondId::from(relation_id);
+        let stored = set
+            .participants_2(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_2_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(dative_bonds)
 }
 
 /// The reaction span's dative bonds, one [`EntitySpan`] per entity against a single donor frame.
@@ -308,7 +317,7 @@ impl Normalize for DativeBondSpans {
 }
 
 impl FrameTransport for DativeBondSpans {
-    type Action = DativeBondFrameActions;
+    type Action = DativeBondsFrameAction;
 
     fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
         for relation_id in self.0.ids().collect::<Vec<_>>() {
@@ -330,7 +339,7 @@ impl Reframe for DativeBondSpans {
             .ids()
             .map(|id| representative_action(self.donors(id).collect()))
             .collect();
-        DativeBondFrameActions::from_dense(actions)
+        DativeBondsFrameAction::from_vec(actions)
             .expect("every dynamic permutation is a dative-bond action")
     }
 
@@ -474,9 +483,12 @@ impl DativeBondForm {
 impl FrameTransport for DativeBondForm {
     type Action = DynPermutation;
 
-    fn reframe_by(self, _action: &Self::Action) -> Option<Self> {
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
         let Self { order, constraints } = self;
-        Some(Self { order, constraints })
+        Some(Self {
+            order,
+            constraints: constraints.reframe_by(action)?,
+        })
     }
 }
 
@@ -628,6 +640,24 @@ mod tests {
             Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
         );
         assert_eq!(source.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_reframe_dative_bonds_with(unsorted_bond: DativeBonds) {
+        let mut visited = None;
+        let reframed = reframe_dative_bonds_with(unsorted_bond.clone(), |id, action| {
+            visited = Some((id, action.clone()));
+        })
+        .expect("the form is satisfiable");
+
+        assert_eq!(
+            visited,
+            Some((
+                DativeBondId(0),
+                DynPermutation::try_from(vec![1, 2, 0]).expect("the expected action is valid"),
+            )),
+        );
+        assert_eq!(unsorted_bond.reframe(), Ok(reframed));
     }
 
     #[rstest]

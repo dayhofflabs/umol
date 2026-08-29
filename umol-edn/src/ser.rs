@@ -1101,12 +1101,14 @@ impl SerializeStructVariant for TreeVariantStructSerializer<'_> {
 mod tests {
     use std::collections::HashMap;
 
-    use ::serde::Serialize;
+    use ::serde::{Serialize, Serializer};
     use rstest::rstest;
 
     use crate::edn::{Edn, EdnKeyword};
     use crate::reader::read_string;
-    use crate::ser::{to_string, to_string_pretty, to_string_with, to_value, EdnSerializer};
+    use crate::ser::{
+        to_string, to_string_pretty, to_string_with, to_value, EdnSerializer, EdnTreeSerializer,
+    };
     use crate::FormatConfig;
 
     #[rstest]
@@ -1473,7 +1475,7 @@ mod tests {
     #[test]
     fn test_to_value_u64_overflow() {
         use ::serde::Serializer;
-        let mut ser = super::EdnTreeSerializer {
+        let mut ser = EdnTreeSerializer {
             keyword_mode: false,
             symbol_mode: false,
             set_mode: false,
@@ -1488,8 +1490,7 @@ mod tests {
 
     #[test]
     fn test_to_value_bytes_error() {
-        use ::serde::Serializer;
-        let mut ser = super::EdnTreeSerializer {
+        let mut ser = EdnTreeSerializer {
             keyword_mode: false,
             symbol_mode: false,
             set_mode: false,

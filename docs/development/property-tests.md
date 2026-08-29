@@ -46,7 +46,7 @@ Semantic property:
 Operational domains:
     normalized entity forms
     entity forms containing independent undetermined fields
-    each of the eight entity families
+    each of the eight entity kinds
 
 Validation method:
     construct the update, apply it, and compare with y
@@ -422,7 +422,7 @@ Reaction properties span several operational domains:
 | Domain | Representative properties |
 | --- | --- |
 | Generated well-formed reactions | Reaction/span reconstruction, derivation reversal, composition, and serialization |
-| Comprehensive entity reactions | Roundtrips and transformations across all eight entity families |
+| Comprehensive entity reactions | Roundtrips and transformations across all eight entity kinds |
 | Host-relative refinements | Pattern-relative updates lower against the matched host value rather than replacing it with the pattern value |
 | Explicit correspondences | `apply_at` agrees with a matching-derived application for the same match |
 | Malformed reactions | Invalid references, incidence mismatches, discontinuous updates, and invalid stereo configurations return exact typed errors without panics |

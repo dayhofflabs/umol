@@ -172,7 +172,7 @@ impl IncidenceGraph {
     pub fn node_of(&self, entity: Entity) -> NodeId {
         let block = entity.kind() as usize;
         let offset: u32 = self.entity_counts[..block].iter().sum();
-        NodeId(offset + entity.id_index() as u32)
+        NodeId(offset + entity.kind_id() as u32)
     }
 
     /// The typed participant occurrence represented by `edge`.

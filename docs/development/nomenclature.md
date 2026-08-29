@@ -83,7 +83,7 @@ approximate.
 | `*Config` | composite operational configuration | 30 | graph-ir (ops), graph, io, py — never graph-core |
 | `*Model` | semantic choices deciding chemical acceptance | 13 | graph |
 | `*Policy` | maps a classified inconsistency to a recovery action | 11 | edn, graph, py |
-| `*Kind` | unit-variant enum discriminating a family | 11 | graph-ir, geometric, graph-core, msym, py |
+| `*Kind` | unit-variant enum discriminating a closed set of alternatives | 11 | graph-ir, geometric, graph-core, msym, py |
 | `*Features` | bitflag set of independently combinable switches | 1 | graph-ir |
 | `*Level` | closed enum selecting one of several nested named layers | 2 | graph-ir |
 | `*Constraint` | one assertable predicate over an entity | 6 | graph-ir, py |
@@ -129,10 +129,10 @@ a different question:
 is itself lattice-shaped and so carries `Form` by the same rule every other lattice type does. A new
 type should be assembled in this order rather than by analogy with the nearest neighbour.
 
-The entity-family storage types are the plurality marker with no role and no representation:
+The entity-kind aggregate types are the plurality marker with no role and no representation:
 `AromaticSystems`, `MulticenterBonds`, `NoncovalentBonds`, `DativeBonds`, `StereoAtoms`, and
 `StereoBonds` each name the container of one entity kind. They own what their storage shape cannot
-state — which factor bears the participant frame, which is a site, and the family's uniqueness key —
+state — which factor bears the participant frame, which is a site, and the entity kind's uniqueness key —
 so they take a bare plural rather than a fourth position, exactly as the rule below requires.
 
 **Two known tensions, neither to be "fixed".** The plural is the least visible marker in the stack —
@@ -330,8 +330,8 @@ determines the coset space, and therefore what a configuration index means.
 Named families: `Symmetric(n)`, `Alternating(n)`, `Cyclic(n)`, `Dihedral(n)`. Geometries:
 `Tetrahedral`, `CisTrans`, `Axial`, `SquarePlanar`, `TrigonalBipyramidal`, `Octahedral`.
 
-**Not:** *kind*, which discriminates entity families. A stereo atom's kind is `StereoKind`; its class
-is `ClassKey`.
+**Not:** *kind*, which selects a parameterless semantic alternative. A stereo atom's kind is
+`StereoKind`; its class is `ClassKey`.
 **In code:** `ClassKey`, and the `class` field of the stereo `:attrs` payload.
 
 ### Combine
@@ -459,7 +459,7 @@ through a constraints view; it belongs to the stored container.
 
 **Not:** the container (`*ConstraintsForm`), which is the storage the view reads; like every view
 it is a receiver, never an argument.
-**In code:** `AtomConstraintsView`, `BondConstraintsView`, and the per-entity family, from
+**In code:** `AtomConstraintsView`, `BondConstraintsView`, and the views for every entity kind, from
 `AtomView::constraints` and its peers.
 
 ### Contradiction
@@ -478,9 +478,9 @@ which entities are paired and the full size of each carrier; unmatched ids remai
 own carrier rather than being interpreted as removed. A correspondence may relate a pattern and a
 host, two reaction sides, or two id frames of the same semantic structure.
 
-`MoleculeCorrespondence` holds one correspondence for each of the eight entity families. Its atom
+`MoleculeCorrespondence` holds one correspondence for each of the eight entity kinds. Its atom
 component is a `Correspondence<AtomId>` aligned with the molecular graph, so the bond component can
-be induced from the atom pairing and the two topologies. The remaining entity families carry their
+be induced from the atom pairing and the two topologies. The remaining entity kinds carry their
 own pairings.
 
 A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
@@ -489,7 +489,7 @@ direction is what lifts it to a reaction span.
 Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
 and `to_remapping` converts one into a total-on-source remapping when it is total on the left. The
 result may map into a larger target id space. End-to-end remapping of a standalone `Molecule`
-requires the stronger condition that every entity-family correspondence is total on both sides, so
+requires the stronger condition that every entity-kind correspondence is total on both sides, so
 the target tables are dense and contain exactly the mapped entities.
 
 **Not:** a compaction, because being unmatched does not mean that an entity was removed; not a
@@ -611,8 +611,9 @@ should use. When projected from a molecule, `Molecule::description_level` return
 containing everything the molecule actually has. A `Topology` result does not imply an incomplete
 molecule; it says that no higher description section is populated.
 
-`Topology` contains atoms and localized bonds. `Constitution` adds non-stereo overlays. `Structure`
-adds stereo atoms and stereo bonds. `Full` adds inline and molecule-level constraints.
+`Topology` contains the topology domain. `Constitution = Topology + NonStereo`, and
+`Structure = Constitution + Stereo`. `Full` adds inline and molecule-level constraints. The domains
+are disjoint groups of entity kinds; the levels are their cumulative prefixes.
 
 **Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
 switches; *domain*, which names a compositional entity group; *scope*, which does not express the
@@ -651,10 +652,11 @@ edge — an undirected edge cannot carry a direction.
 The order attribute counts donated pairs, not per-atom contributions, which is what distinguishes a
 dative bond from a multicenter bond over the same atoms.
 
-Donors form one participant frame and the acceptor is a distinguished second factor. Donors may not
-repeat, but the same atom may occur once as a donor and once as the acceptor. A dative bond's
-identity is its complete `(acceptor, donor multiset)` key; distinct dative bonds may share individual
-donors or their acceptor.
+Donors form one participant frame and the acceptor is a distinguished second factor. All atoms in
+the complete dative participant sequence are pairwise distinct: donors may not repeat, and the
+acceptor may not also occur as a donor. A dative bond's identity is its complete
+`(acceptor, donor multiset)` key; distinct dative bonds may share individual donors or their
+acceptor.
 
 **Not:** interchangeable, and not *participants* used flatly; a diagnostic should name the role.
 **In code:** `:donors`, `:acceptor`; `DativeBondForm`.
@@ -714,8 +716,8 @@ An **entity** is one of the eight kinds represented by `Entity`: atom, localized
 aromatic system, multicenter bond, noncovalent bond, stereo atom, or stereo bond. Use the concrete
 entity name in diagnostics and action fields when it matters which kind is affected.
 
-**Not:** *kind*, which names what distinguishes one entity family from another rather than an
-instance. Not *overlay* either: entity covers all eight kinds, overlay covers the six that are not
+**Not:** *kind*, which is the discriminant naming an entity's category rather than an instance. Not
+*overlay* either: entity covers all eight kinds, overlay covers the six that are not
 topology.
 **In code:** `Entity`, `EntityKind`.
 
@@ -974,13 +976,13 @@ model-independent derived value is also an invariant.
 
 ### Key and kind
 
-A **kind** is a unit-variant discriminant enum naming a family member without parameters; a
+A **kind** is a unit-variant discriminant enum naming an alternative without parameters; a
 **key** is a discriminant that carries parameters. `AtomFieldKind` mirrors `AtomFieldChange`'s
 variants; `AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
 Peer entity forms gain `*FieldKind` enums as consumers arrive.
 
 **Not:** interchangeable — a parameterless discriminant enum is a kind, not a key.
-**In code:** `AtomFieldKind`; `AtomConstraintKey` and the per-family constraint keys.
+**In code:** `AtomFieldKind`; `AtomConstraintKey` and the per-entity-kind constraint keys.
 
 ### Lattice
 
@@ -1022,9 +1024,10 @@ enter `Full`.
 constraints do not occur in an incidence graph. Thus `IncidenceLevel::Full` supplies the carrier for
 `DescriptionLevel::Structure`.
 
-The corresponding entity domains are topology (AB), non-stereo (DAMN), and stereo (SS).
-Constitution is topology plus non-stereo; overlays are non-stereo plus stereo. Domains are
-compositional groups, whereas levels are the nested public selectors.
+The corresponding disjoint entity domains are topology (AB), non-stereo (DAMN), and stereo (SS).
+They form the cumulative levels `Constitution = Topology + NonStereo` and
+`Structure = Constitution + Stereo`; overlays are `NonStereo + Stereo`. A domain groups the entity
+kinds introduced together, whereas a level includes that domain and every preceding domain.
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
@@ -1418,15 +1421,24 @@ frame, `canonicalize` reduces, reframes and then selects ids. Their equalities n
 `==` refines `normalized_eq`, which refines `framed_eq`, which refines `canonical_eq`.
 
 Pairwise alignment uses `DynPermutation::between` or `Permutation::between` to derive the unique
-entity-kind action between two supplied frames, then applies it through `FrameTransport::reframe_by`.
+participant-frame action between two supplied frames, then applies it through
+`FrameTransport::reframe_by`.
 Integrity prohibits repeated complete participant values, so equal structured incidence determines
 one action. `Reframe` instead selects an action for a frame-owning carrier. A reaction removal may
 carry another explicit local ordering of its source incidence: reaction transport composes the
 derived local-to-owner alignment with the owning action.
 
+An action over an entity aggregate uses the aggregate's plural name followed by singular
+`FrameAction`: `DativeBondsFrameAction`, `AromaticSystemsFrameAction`,
+`MulticenterBondsFrameAction`, `NoncovalentBondsFrameAction`, `StereoAtomsFrameAction`, and
+`StereoBondsFrameAction`. `OverlaysFrameAction` is the complete six-component action. The plurality
+belongs to the carrier being acted on; `FrameAction` remains singular because the value is one
+complete action.
+
 **Not:** a remapping, which relabels ids across id spaces and does not touch order; not
 canonicalization, which also selects ids.
-**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe`, `reframe_by`.
+**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe`, `reframe_by`,
+`OverlaysFrameAction`.
 
 ### Relation set
 
@@ -1468,7 +1480,7 @@ such as an lhs-anchored reaction union, so it is not necessarily surjective, bij
 reversible.
 
 `umol_graph_core::Remapping` transports graph nodes, edges, and relation participants.
-`IdRemapping` transports typed references across all eight molecule entity families. A remapping
+`IdRemapping` transports typed references across all eight molecule entity kinds. A remapping
 relabels participants and preserves their stored sequence, so a positional payload stays aligned
 without being touched.
 
@@ -1572,6 +1584,28 @@ Implemented and unlikely to gain analogues; recorded rather than generative.
 
 **Not:** a partition by any other criterion.
 **In code:** `split`.
+
+### Structural domain
+
+A **structural domain** is one of three disjoint groups of entity kinds: topology (AB), non-stereo
+(DAMN), or stereo (SS). The domains state which entity kinds enter the structural hierarchy
+together. They are not cumulative: an atom belongs only to topology, a dative bond only to
+non-stereo, and a stereo atom only to stereo.
+
+The structure levels are cumulative prefixes of these domains:
+
+```text
+Topology     = topology
+Constitution = topology + non-stereo
+Structure    = topology + non-stereo + stereo
+Full         = structure + constraints
+Overlays     = non-stereo + stereo
+```
+
+**Not:** a structure level. `NonStereo` excludes topology even though `Constitution` includes both;
+`Stereo` excludes constitution even though `Structure` includes both.
+**In code:** `StructuralDomainPosition` and the `domain` field of `EntityBlockPosition` in the
+canonical comparison schema.
 
 ### Structure
 

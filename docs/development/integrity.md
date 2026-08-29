@@ -13,7 +13,7 @@ Do not build large defensive API moats, eagerly normalize inputs, or validate se
 merely because a constructor has enough information to do so. Repeating defensive checks in every
 method obscures the actual preconditions, adds cost, and makes the happy path harder to understand.
 
-`Molecule`, `Reaction`, and `ReactionSpan` are the deliberate exception. Their entity families,
+`Molecule`, `Reaction`, and `ReactionSpan` are the deliberate exception. Their entity sets,
 typed ids, participant frames, constraints, and two-sided projections interact across too many
 operations for every operation to rediscover whether the stored representation is coherent. They
 therefore establish a small tier-1 contract when a value is published. This closure is reluctant:
@@ -61,7 +61,7 @@ hatch is not harmless convenience: it reopens the container and would require de
 throughout its operations.
 
 Integrity-sensitive live mutation follows the same rule. Raw whole-form aromatic-system and
-multicenter-bond mutation is restricted to graph IR. The public singular and family-wide
+multicenter-bond mutation is restricted to graph IR. The public singular and aggregate-wide
 `try_modify_aromatic_system*` and `try_modify_multicenter_bond*` operations modify a private
 candidate, publish it only after the authoritative check succeeds, return the exact
 `MoleculeIntegrityError` on rejection, and leave the source unchanged. Python live views use those
@@ -80,7 +80,7 @@ checked operations and translate rejection to `ValueError`; they do not publish 
 
 | Error | Rejected representation | Concrete failure prevented |
 | --- | --- | --- |
-| `DuplicateParticipant` | A participant frame or undistinguished factor repeats an actual atom: a bond or noncovalent self-loop, a repeated dative donor, a repeated aromatic or multicenter member, a repeated actual stereo ligand, or a stereo-atom site repeated as an actual ligand. A dative acceptor may also occur once as a donor because the two roles are distinguished factors. | Relation coincidence, incidence, and frame operations assume each individual participant frame is simple. Repetition within one frame would make identity and participant actions ambiguous or make one occurrence masquerade as two positions; occurrence across distinguished dative factors remains unambiguous. |
+| `DuplicateParticipant` | An entity's actual-atom participant relation repeats an atom: a bond or noncovalent self-loop, a dative atom repeated among the donors or between a donor and the acceptor, a repeated aromatic or multicenter member, a repeated actual stereo ligand, or a stereo-atom site repeated as an actual ligand. | Relation coincidence, incidence, and frame operations assume that every actual-atom occurrence identifies a distinct participant. A dative donor equal to its acceptor creates parallel, differently labelled incidences between the same atom and dative entity; ordinary incidence matching can then select one edge for both roles and return an incorrect result. Other repetitions make identity and participant actions ambiguous or make one occurrence masquerade as two positions. |
 | `BondsParallel` | Two covalent bonds have the same unordered endpoint pair. | The graph-IR molecule gives a covalent bond identity by its endpoints. Single-edge lookup, correspondence induction, and bond matching would otherwise have multiple answers. |
 | `DativeBondsIdentical` | Two dative bonds have the same acceptor and donor multiset, including when their stored donor orders differ. Shared acceptors or donors are permitted when the complete keys differ. | The complete `(acceptor, donor multiset)` is the dative identity and singular coincidence key. Duplicate complete keys would make lookup, correspondence, and delta targeting non-unique. |
 | `NoncovalentBondsParallel` | Two noncovalent bonds have the same unordered endpoint pair, even if their kinds differ. | Noncovalent bond identity is the endpoint pair. Multiple entries would make `coincident_id`, matching, and delta targeting ambiguous. Combined interaction kinds must be represented in one form instead. |
