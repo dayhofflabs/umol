@@ -14,6 +14,7 @@ use umol_graph_ir::dsl::{MetadataError as GraphIrMetadataError, ParseError as Gr
 use umol_graph_ir::ir::{
     Contradiction as GraphIrContradiction, MoleculeApplyError as GraphIrMoleculeApplyError,
     MoleculeIntegrityError as GraphIrMoleculeIntegrityError,
+    ReactionIntegrityError as GraphIrReactionIntegrityError,
     TransactionError as GraphIrTransactionError,
 };
 
@@ -91,6 +92,11 @@ pub(crate) fn transaction_error(error: GraphIrTransactionError) -> PyErr {
 /// Map an `umol_graph_ir` molecule-integrity failure onto the public Python taxonomy.
 pub(crate) fn molecule_integrity_error(error: GraphIrMoleculeIntegrityError) -> PyErr {
     InvalidStructureError::new_err(error.to_string())
+}
+
+/// Map an independently assembled reaction-integrity failure onto `ValueError`.
+pub(crate) fn reaction_integrity_error(error: GraphIrReactionIntegrityError) -> PyErr {
+    PyValueError::new_err(error.to_string())
 }
 
 /// Map immutable molecule-application failures onto the existing Python exception taxonomy.

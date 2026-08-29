@@ -380,7 +380,7 @@ impl Molecule {
         reaction: &Reaction,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionProductsIter>> {
-        let reaction = reaction.to_rust(py);
+        let reaction = reaction.to_rust(py)?;
         let products = GraphIrReact::react(
             self.to_rust(),
             &reaction,
@@ -415,7 +415,7 @@ impl Molecule {
             .iter()
             .map(|molecule| molecule.bind(py).borrow().to_rust().clone())
             .collect::<Vec<_>>();
-        let reaction = reaction.to_rust(py);
+        let reaction = reaction.to_rust(py)?;
         let products = GraphIrReact::react(
             reactants.as_slice(),
             &reaction,

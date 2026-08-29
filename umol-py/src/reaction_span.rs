@@ -1031,7 +1031,8 @@ mod tests {
                 ReactionSpan::from_rust(span)
                     .to_reaction(py)
                     .unwrap()
-                    .to_rust(py),
+                    .to_rust(py)
+                    .unwrap(),
                 expected
             );
         });

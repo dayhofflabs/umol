@@ -325,7 +325,7 @@ impl Reaction {
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
         let canonical = self
-            .to_rust(py)
+            .to_rust(py)?
             .canonicalize(&canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Self::from_rust(py, canonical)
@@ -343,7 +343,7 @@ impl Reaction {
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<(Self, MoleculeCorrespondence)> {
         let (canonical, correspondence) = self
-            .to_rust(py)
+            .to_rust(py)?
             .canonicalize_with_correspondence(&canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Ok((
@@ -364,7 +364,7 @@ impl Reaction {
         config: Option<CanonicalizeConfig>,
     ) -> PyResult<Self> {
         let canonical = self
-            .to_rust(py)
+            .to_rust(py)?
             .canonicalize_by(level.to_rust(), &canonicalize_context(stereo_model, config))
             .map_err(reaction_canonicalization_error)?;
         Self::from_rust(py, canonical)
@@ -378,11 +378,11 @@ impl Reaction {
         py: Python<'_>,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> bool {
-        self.to_rust(py).canonical_eq(
-            &other.to_rust(py),
+    ) -> PyResult<bool> {
+        Ok(self.to_rust(py)?.canonical_eq(
+            &other.to_rust(py)?,
             &canonicalize_context(stereo_model, config),
-        )
+        ))
     }
 
     /// Compare canonical forms at `level` under the same model and config.
@@ -394,12 +394,12 @@ impl Reaction {
         level: DescriptionLevel,
         stereo_model: Option<StereoModel>,
         config: Option<CanonicalizeConfig>,
-    ) -> bool {
-        self.to_rust(py).canonical_eq_by(
-            &other.to_rust(py),
+    ) -> PyResult<bool> {
+        Ok(self.to_rust(py)?.canonical_eq_by(
+            &other.to_rust(py)?,
             level.to_rust(),
             &canonicalize_context(stereo_model, config),
-        )
+        ))
     }
 }
 

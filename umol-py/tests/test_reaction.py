@@ -3,6 +3,8 @@ import re
 import pytest
 
 from umol import (
+    AromaticSystemDelta,
+    AromaticSystemForm,
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityRule,
@@ -46,6 +48,14 @@ from umol import (
     ValenceTable,
     NumForm,
 )
+
+
+@pytest.fixture
+def aromatic_lhs():
+    return Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("N"))],
+        aromatic_systems=[([0, 1], AromaticSystemForm([1, 2]))],
+    )
 
 
 def test_reaction_composition_config_default():
@@ -235,6 +245,61 @@ def test_reaction_constructor():
     assert populated.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]
     )
+
+
+def test_reaction_constructor_integrity(aromatic_lhs):
+    removal = Delta.AromaticSystem(
+        AromaticSystemDelta.Remove(
+            id=0,
+            atoms=[0],
+            attributes=AromaticSystemForm([1]),
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "reaction incidence does not match source entity "
+            "AromaticSystem(AromaticSystemId(0))"
+        ),
+    ):
+        Reaction(aromatic_lhs, Deltas([removal]))
+
+
+def test_reaction_constructor_reordered_removal(aromatic_lhs):
+    removal = Delta.AromaticSystem(
+        AromaticSystemDelta.Remove(
+            id=0,
+            atoms=[1, 0],
+            attributes=AromaticSystemForm([2, 1]),
+        )
+    )
+
+    reaction = Reaction(aromatic_lhs, Deltas([removal]))
+
+    assert reaction.deltas == Deltas([removal])
+
+
+def test_reaction_snapshot_integrity_after_component_mutation(aromatic_lhs):
+    reaction = Reaction(aromatic_lhs)
+    reaction.deltas.append(
+        Delta.AromaticSystem(
+            AromaticSystemDelta.Remove(
+                id=0,
+                atoms=[0],
+                attributes=AromaticSystemForm([1]),
+            )
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "reaction incidence does not match source entity "
+            "AromaticSystem(AromaticSystemId(0))"
+        ),
+    ):
+        reaction.render()
 
 
 def test_reaction_constructor_snapshot():

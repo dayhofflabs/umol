@@ -775,7 +775,22 @@ corrected integrity domain and error surface.
   Cover construction and mutation-to-invalid-state, including invalid removal incidence and valid
   compatible removal reordering, without changing the live editing model. Build and test only under
   the repository Python 3.13 environment. **Breaking; snapshot methods become fallible where
-  expanding the inherited red ledger.** [dep: S0c, S0d, S0e, S0f]
+  expanding the inherited red ledger.** [dep: S0c, S0d, S0e, S0f] **Done.** Python `Reaction`
+  construction now publishes detached lhs and delta snapshots through `Reaction::try_new`, as do
+  the post-lowering parse, side-comparison, and reaction-SMILES paths. The internal live-component
+  snapshot is fallible and authoritative: rendering, equality, span conversion, reversal,
+  composition, application, fingerprinting, canonicalization, and `Molecule.react` / `react_all`
+  all propagate its `ValueError`. Component getters and setters retain the live editing model and
+  deliberately permit a temporarily incoherent pair; the next interpreting operation reports the
+  exact integrity failure.
+
+  Dedicated Rust binding and public Python regressions reject an incidence-mismatched removal at
+  construction, accept and retain a compatible reordered aromatic removal without eager
+  reframing, and show that mutation into the same invalid state succeeds until `render` snapshots
+  the reaction. A separate parse regression retains the public `ParseError` taxonomy for an
+  invalid repeated-virtual stereo addition. The Python reaction Rust module passed 131 tests with
+  its two inherited ignores, and the public reaction test module passed 100 tests with two skips,
+  all under repository Python 3.13.
 - **S0h — trusted publisher preservation** (`umol-graph-ir` remapping, editing, extraction,
   combination, pushout/glue, reaction/span conversion, composition and application; `umol-graph`
   resolution/transform modules): inventory every publisher in the table above, route construction
