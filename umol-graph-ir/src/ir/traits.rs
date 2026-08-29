@@ -204,13 +204,11 @@ pub trait FrameTransport: Sized {
 /// the other two are laws over it: `reframe` is the selection alone, and `framed_eq` is equality of
 /// selected values.
 pub trait Reframe: Sized + PartialEq {
-    /// The frame action selected for one entry, keyed by the family's own id type. Four families
-    /// carry a position order; the two stereo families carry a `Permutation`, since a stereo frame
-    /// is bounded by its kind's degree.
+    /// The complete participant-frame action over the receiver's frame-owning entries.
     type Action;
 
-    /// Reduce every entry, then present each in its selected frame, returning the action per entry.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction>;
+    /// Reduce every entry, then present each in its selected frame, returning the complete action.
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction>;
 
     /// Reduce every entry, then present each in its selected frame.
     fn reframe(&self) -> Result<Self, Contradiction> {

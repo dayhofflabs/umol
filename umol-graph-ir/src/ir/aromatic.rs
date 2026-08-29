@@ -10,6 +10,7 @@ use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsF
 use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
 use super::error::Contradiction;
+use super::frame::AromaticSystemFrameActions;
 use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
@@ -156,13 +157,13 @@ impl AromaticSystems {
 }
 
 impl Reframe for AromaticSystems {
-    type Action = (AromaticSystemId, Vec<ParticipantPosition>);
+    type Action = AromaticSystemFrameActions;
 
     /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each system.
     ///
     /// The action is the position order taking the stored frame to the selected one, so
     /// `reframe_by(reduce(x), action)` reproduces the reframed value.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -171,22 +172,25 @@ impl Reframe for AromaticSystems {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let attributes = reframed.data(id).clone().normalize()?;
             let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_with(id, &order);
-            actions.push((AromaticSystemId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(Arc::new(reframed)), actions))
+        Ok((
+            Self(Arc::new(reframed)),
+            AromaticSystemFrameActions::from_dense(actions)
+                .expect("every dynamic permutation is an aromatic-system action"),
+        ))
     }
 }
 
@@ -247,12 +251,12 @@ impl AromaticSystemSpans {
 }
 
 impl Reframe for AromaticSystemSpans {
-    type Action = (AromaticSystemId, Vec<ParticipantPosition>);
+    type Action = AromaticSystemFrameActions;
 
     /// Selection never consults the payload here — the atoms sort — so a `Modified` span needs no
     /// arbitration between its sides. One action carries every side through [`EntitySpan::try_map`],
     /// and the span declines whole if any side declines.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -261,14 +265,8 @@ impl Reframe for AromaticSystemSpans {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let span = reframed.data(id).clone();
             let reduced = span
@@ -278,10 +276,19 @@ impl Reframe for AromaticSystemSpans {
             *reframed.data_mut(id) = reduced
                 .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_with(id, &order);
-            actions.push((AromaticSystemId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(reframed), actions))
+        Ok((
+            Self(reframed),
+            AromaticSystemFrameActions::from_dense(actions)
+                .expect("every dynamic permutation is an aromatic-system action"),
+        ))
     }
 }
 
@@ -554,15 +561,8 @@ mod tests {
             },
         );
         assert_eq!(
-            actions,
-            vec![(
-                AromaticSystemId(0),
-                vec![
-                    ParticipantPosition(1),
-                    ParticipantPosition(2),
-                    ParticipantPosition(0),
-                ],
-            )],
+            actions.action(AromaticSystemId(0)),
+            Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
         );
     }
 
@@ -675,32 +675,15 @@ mod tests {
             .reframe_with_action()
             .expect("the form is satisfiable");
 
-        assert_eq!(
-            actions,
-            vec![(
-                AromaticSystemId(0),
-                vec![
-                    ParticipantPosition(1),
-                    ParticipantPosition(2),
-                    ParticipantPosition(0),
-                ],
-            )],
-        );
-
-        let (_, order) = &actions[0];
+        let action = actions
+            .action(AromaticSystemId(0))
+            .expect("the dense action covers the system");
+        assert_eq!(action.image(), [1, 2, 0]);
         assert_eq!(
             unsorted_system
                 .attributes(AromaticSystemId(0))
                 .clone()
-                .reframe_by(
-                    &DynPermutation::try_from(
-                        order
-                            .iter()
-                            .map(|position| position.index())
-                            .collect::<Vec<_>>(),
-                    )
-                    .expect("recorded order is a permutation")
-                ),
+                .reframe_by(action),
             Some(reframed.attributes(AromaticSystemId(0)).clone()),
         );
     }

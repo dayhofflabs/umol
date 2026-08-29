@@ -1310,46 +1310,6 @@ pub(crate) fn stereo_atom_form_strategy() -> impl Strategy<Value = StereoAtomFor
     })
 }
 
-/// A stereo-atom form paired with a ligand frame that repeats at least one ligand, and a
-/// parent-group action restating both.
-///
-/// Virtual ligands of the same kind on one site are equal values, so such a frame has a
-/// nontrivial residual stabilizer and the site is not stereogenic. That is a valid stored
-/// arrangement record — distinctness is neither required nor asserted — so it carries a
-/// determinate coset and frame-relative constraints like any other, and every frame operation
-/// must accept it rather than decline.
-pub(crate) fn repeated_ligand_stereo_atom_strategy(
-) -> impl Strategy<Value = (StereoAtomForm, Vec<StereoLigand>, Permutation)> {
-    stereo_atom_kind_strategy().prop_flat_map(|kind| {
-        let degree = kind.degree();
-        (
-            2..=degree,
-            prop_oneof![
-                Just(StereoLigandKind::ImplicitHydrogen),
-                Just(StereoLigandKind::LonePair),
-            ],
-            stereo_coset_for_kind(kind),
-            stereo_atom_constraints_strategy(kind),
-            stereo_frame_permutation_strategy(kind),
-        )
-            .prop_flat_map(move |(repeats, virtual_kind, coset, constraints, action)| {
-                let site = AtomId(0);
-                let mut frame: Vec<StereoLigand> = (0..repeats)
-                    .map(|_| StereoLigand::new(site, virtual_kind))
-                    .collect();
-                frame.extend(
-                    (1..=(degree - repeats) as u32)
-                        .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom)),
-                );
-                (
-                    Just(StereoAtomForm::new(kind, coset).with_constraints(constraints)),
-                    Just(frame).prop_shuffle(),
-                    Just(action),
-                )
-            })
-    })
-}
-
 pub(crate) fn stereo_atom_update_constraints_strategy(
     kind: StereoKind,
 ) -> impl Strategy<Value = StereoAtomConstraintsForm> {

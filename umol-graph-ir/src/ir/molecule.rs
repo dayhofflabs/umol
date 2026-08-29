@@ -509,8 +509,8 @@ impl Molecule {
     /// The correspondence supplies the target id and participant frame. It must cover the actual
     /// id spaces of both molecules, and every mapped topology edge, relation participant, stereo
     /// site, and stereo ligand must agree with its matched entity. Stereo ligand frames may differ
-    /// by any admissible permutation, including alternatives caused by repeated equal ligands;
-    /// configuration and frame-relative inline and molecule-level constraints move together.
+    /// by their unique admissible permutation; configuration and frame-relative inline and
+    /// molecule-level constraints move together.
     pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
         // Whether the correspondence relates these two molecules at all — declared counts and
         // participants mapping onto participants — is its own structural question, asked once here.

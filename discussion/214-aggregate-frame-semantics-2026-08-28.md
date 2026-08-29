@@ -897,7 +897,33 @@ editors remain permitted and fail only when publishing. The inherited transport 
   `virtual_block_swaps`, residual-stabilizer generation, orbit-representative minimization, and
   repeat-valid fixtures. Replace them with integrity rejection, atom/bond structural-domain cases,
   distinct-frame symmetry evidence, and complete-action identity/inverse/composition cases.
-  **Breaking; inherited red ledger unchanged after fixture migration.** [dep: S0j]
+  **Breaking; inherited red ledger unchanged after fixture migration.** [dep: S0j] **Done.** The
+  six family aggregates and their `*Spans` peers now return kind-specific complete action carriers
+  keyed by their typed dense ids: four carry `DynPermutation`, and the stereo families carry
+  bounded `Permutation`. The operation-issued carriers expose typed lookup plus exact-domain
+  identity, inverse, and composition; composition rejects unequal id domains or local degrees.
+  `NoncovalentBondFrameActions` admits only degree two and `StereoBondFrameActions` admits only the
+  endpoint-block `S_2 wr S_2` subgroup. The private-field `OverlayFrameActions` composite provides
+  the same algebra componentwise without an independently assembled public constructor.
+
+  Representative selection is structural and family-owned. Dative donors, aromatic and
+  multicenter atoms, and noncovalent endpoints sort completely. Stereo atoms sort the complete
+  distinct ligand frame under `S_n`; stereo bonds sort within endpoint blocks and then order the
+  complete blocks under `S_2 wr S_2`, including a nonidentity block-exchange case. Form-level
+  `select_frame`, span-side arbitration, candidate enumeration, `virtual_block_swaps`, and the
+  repeat-valid unit/property generator surface are gone. Symmetry projection now obtains ligand
+  permutations only from explicit graph automorphisms; the distinct explicit-ligand
+  stereogenic/prochiral tests remain the evidence. The S0b integrity tables remain the rejection
+  surface for repeated complete ligands. The temporary stereo `FrameAction` and `find_reframed`
+  compatibility surface remains for S0l, while the only graph-IR `enumerate_between` production
+  uses left are the private canonicalization paths owned by S0p.
+
+  Eight complete-action carrier cases, 85 focused reframing cases, eight framed-equality cases, 49
+  symmetry-filter cases, seven focused stereo properties, and four duplicate-stereo-ligand
+  integrity cases pass. The graph-IR all-target property build and strict Clippy pass, and
+  `cargo fmt -p umol-graph-ir` completes. The workspace-wide formatter remains blocked by the
+  unrelated pre-existing `iter:from_fn` parse error in `umol-py/src/reaction.rs`; no Python file was
+  changed in this subitem. The inherited red ledger was not rerun or changed.
 - **S0l — quotient and transport trait migration**
   (`umol-graph-ir/src/ir/{stereo,traits,constraint,delta}.rs`, family modules and re-exports;
   `umol-py` form bindings; `umol-perm/src/permutation.rs`): add `normalized_eq` directly to

@@ -25,6 +25,7 @@ use super::constraint::{
 };
 use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
+use super::frame::{StereoAtomFrameActions, StereoBondFrameActions};
 use super::id::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::ligand::StereoLigand;
 use super::traits;
@@ -163,28 +164,45 @@ impl StereoAtoms {
     }
 }
 
+fn stereo_atom_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
+    let mut image: Vec<usize> = (0..frame.len()).collect();
+    image.sort_by(|&left, &right| frame[left].cmp(&frame[right]).then(left.cmp(&right)));
+    Permutation::try_from(image.as_slice()).ok()
+}
+
+fn stereo_bond_representative_action(frame: &[StereoLigand]) -> Option<Permutation> {
+    ClassKey::CisTrans.space().normalizer(frame)
+}
+
+fn participant_order(action: Permutation) -> Vec<ParticipantPosition> {
+    (0..action.degree())
+        .map(|position| ParticipantPosition(action.apply(position) as u32))
+        .collect()
+}
+
 impl Reframe for StereoAtoms {
-    type Action = (StereoAtomId, Permutation);
+    type Action = StereoAtomFrameActions;
 
     /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each stereo atom.
     ///
-    /// Where ligands compare equal the action is the orbit representative under the frame's
-    /// residual stabilizer, so it is not in general the unique reordering that sorts the frame.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let attributes = reframed.data(id).clone().normalize()?;
-            let action = attributes.select_frame(&stored).ok_or(Contradiction)?;
-            *reframed.data_mut(id) = attributes.reframe_by(action).ok_or(Contradiction)?;
-            let order: Vec<ParticipantPosition> = (0..action.degree())
-                .map(|position| ParticipantPosition(action.apply(position) as u32))
-                .collect();
+            let action = stereo_atom_representative_action(&stored).ok_or(Contradiction)?;
+            *reframed.data_mut(id) =
+                traits::FrameTransport::reframe_by(attributes, &action).ok_or(Contradiction)?;
+            let order = participant_order(action);
             reframed.permute_2_with(id, &order);
-            actions.push((StereoAtomId::from(id), action));
+            actions.push(action);
         }
-        Ok((Self(Arc::new(reframed)), actions))
+        Ok((
+            Self(Arc::new(reframed)),
+            StereoAtomFrameActions::from_dense(actions)
+                .expect("every bounded permutation is a stereo-atom action"),
+        ))
     }
 }
 
@@ -336,27 +354,27 @@ impl StereoBonds {
 }
 
 impl Reframe for StereoBonds {
-    type Action = (StereoBondId, Permutation);
+    type Action = StereoBondFrameActions;
 
     /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each stereo bond.
     ///
-    /// Where ligands compare equal the action is the orbit representative under the frame's
-    /// residual stabilizer, so it is not in general the unique reordering that sorts the frame.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
             let stored = reframed.participants_2(id).to_vec();
             let attributes = reframed.data(id).clone().normalize()?;
-            let action = attributes.select_frame(&stored).ok_or(Contradiction)?;
-            *reframed.data_mut(id) = attributes.reframe_by(action).ok_or(Contradiction)?;
-            let order: Vec<ParticipantPosition> = (0..action.degree())
-                .map(|position| ParticipantPosition(action.apply(position) as u32))
-                .collect();
+            let action = stereo_bond_representative_action(&stored).ok_or(Contradiction)?;
+            *reframed.data_mut(id) =
+                traits::FrameTransport::reframe_by(attributes, &action).ok_or(Contradiction)?;
+            let order = participant_order(action);
             reframed.permute_2_with(id, &order);
-            actions.push((StereoBondId::from(id), action));
+            actions.push(action);
         }
-        Ok((Self(Arc::new(reframed)), actions))
+        Ok((
+            Self(Arc::new(reframed)),
+            StereoBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
+        ))
     }
 }
 
@@ -422,18 +440,10 @@ impl StereoAtomSpans {
 }
 
 impl Reframe for StereoAtomSpans {
-    type Action = (StereoAtomId, Permutation);
+    type Action = StereoAtomFrameActions;
 
-    /// Selection is form-dependent here, and a `Modified` span carries two forms against one frame,
-    /// so one action must serve both sides.
-    ///
-    /// The two sides assert the same stereo kind — molecule integrity requires an admissible kind
-    /// per site type, and span integrity rejects a kind change within one entity — so they share a
-    /// parent group and the candidate actions are the same set for both. Where that set holds more
-    /// than one element, because equal ligands leave a residual stabilizer, the sides can each
-    /// prefer a different member. The selected action is the one minimising the reframed span as a
-    /// whole, which is the orbit representative of the pair rather than of either side.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    /// Selection is structural, so one action transports every present side of a `Modified` span.
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -444,32 +454,21 @@ impl Reframe for StereoAtomSpans {
                 .try_map(|form| form.normalize().ok())
                 .ok_or(Contradiction)?;
 
-            let sorted = reduced
-                .lhs()
-                .or_else(|| reduced.rhs())
-                .expect("every span variant carries at least one side")
-                .select_frame(&stored)
-                .ok_or(Contradiction)?
-                .act(&stored);
-            let (selected, action) = Permutation::enumerate_between(&stored, &sorted)
-                .into_iter()
-                .filter_map(|candidate| {
-                    Some((
-                        reduced.clone().try_map(|form| form.reframe_by(candidate))?,
-                        candidate,
-                    ))
-                })
-                .min()
+            let action = stereo_atom_representative_action(&stored).ok_or(Contradiction)?;
+            let selected = reduced
+                .try_map(|form| traits::FrameTransport::reframe_by(form, &action))
                 .ok_or(Contradiction)?;
 
             *reframed.data_mut(id) = selected;
-            let order: Vec<ParticipantPosition> = (0..action.degree())
-                .map(|position| ParticipantPosition(action.apply(position) as u32))
-                .collect();
+            let order = participant_order(action);
             reframed.permute_2_with(id, &order);
-            actions.push((StereoAtomId::from(id), action));
+            actions.push(action);
         }
-        Ok((Self(reframed), actions))
+        Ok((
+            Self(reframed),
+            StereoAtomFrameActions::from_dense(actions)
+                .expect("every bounded permutation is a stereo-atom action"),
+        ))
     }
 }
 
@@ -535,18 +534,10 @@ impl StereoBondSpans {
 }
 
 impl Reframe for StereoBondSpans {
-    type Action = (StereoBondId, Permutation);
+    type Action = StereoBondFrameActions;
 
-    /// Selection is form-dependent here, and a `Modified` span carries two forms against one frame,
-    /// so one action must serve both sides.
-    ///
-    /// The two sides assert the same stereo kind — molecule integrity requires an admissible kind
-    /// per site type, and span integrity rejects a kind change within one entity — so they share a
-    /// parent group and the candidate actions are the same set for both. Where that set holds more
-    /// than one element, because equal ligands leave a residual stabilizer, the sides can each
-    /// prefer a different member. The selected action is the one minimising the reframed span as a
-    /// whole, which is the orbit representative of the pair rather than of either side.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    /// Selection is structural, so one action transports every present side of a `Modified` span.
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -557,32 +548,20 @@ impl Reframe for StereoBondSpans {
                 .try_map(|form| form.normalize().ok())
                 .ok_or(Contradiction)?;
 
-            let sorted = reduced
-                .lhs()
-                .or_else(|| reduced.rhs())
-                .expect("every span variant carries at least one side")
-                .select_frame(&stored)
-                .ok_or(Contradiction)?
-                .act(&stored);
-            let (selected, action) = Permutation::enumerate_between(&stored, &sorted)
-                .into_iter()
-                .filter_map(|candidate| {
-                    Some((
-                        reduced.clone().try_map(|form| form.reframe_by(candidate))?,
-                        candidate,
-                    ))
-                })
-                .min()
+            let action = stereo_bond_representative_action(&stored).ok_or(Contradiction)?;
+            let selected = reduced
+                .try_map(|form| traits::FrameTransport::reframe_by(form, &action))
                 .ok_or(Contradiction)?;
 
             *reframed.data_mut(id) = selected;
-            let order: Vec<ParticipantPosition> = (0..action.degree())
-                .map(|position| ParticipantPosition(action.apply(position) as u32))
-                .collect();
+            let order = participant_order(action);
             reframed.permute_2_with(id, &order);
-            actions.push((StereoBondId::from(id), action));
+            actions.push(action);
         }
-        Ok((Self(reframed), actions))
+        Ok((
+            Self(reframed),
+            StereoBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
+        ))
     }
 }
 
@@ -764,33 +743,6 @@ macro_rules! stereo_element {
                     configuration: self.configuration.mirror()?,
                     constraints: self.constraints.clone(),
                 })
-            }
-
-            /// The frame action this form selects for the `current` ligand frame.
-            ///
-            /// The frame is presented sorted: under the configuration's parent group when it is
-            /// kinded, under the full symmetric group when it is not. Ligands that compare equal
-            /// leave several admissible actions producing that presentation, so the one selected
-            /// is the action whose reframed form is least — the orbit representative under the
-            /// frame's residual stabilizer. Selecting over the whole form rather than the coset
-            /// alone carries the frame-relative constraints into the same representative.
-            ///
-            /// `None` when the frame exceeds the permutation degree limit, when no admissible
-            /// action presents it sorted, or when every candidate reframing is inadmissible.
-            pub fn select_frame(&self, current: &[StereoLigand]) -> Option<Permutation> {
-                let sorted = match self.configuration.kind() {
-                    Some(kind) => kind.class_key().space().normalizer(current)?.act(current),
-                    None => {
-                        let mut image: Vec<usize> = (0..current.len()).collect();
-                        image.sort_by_key(|&position| current[position]);
-                        Permutation::try_from(image.as_slice()).ok()?.act(current)
-                    }
-                };
-                Permutation::enumerate_between(current, &sorted)
-                    .into_iter()
-                    .filter_map(|action| Some((self.clone().reframe_by(action)?, action)))
-                    .min()
-                    .map(|(_, action)| action)
             }
 
         }
@@ -2920,7 +2872,9 @@ mod tests {
         let (reframed, actions) = spans
             .reframe_with_action()
             .expect("the forms are satisfiable");
-        let (_, action) = actions[0];
+        let action = actions
+            .action(StereoAtomId(0))
+            .expect("the dense action covers the stereo atom");
 
         assert_eq!(
             reframed.ligands(StereoAtomId(0)),
@@ -2933,12 +2887,16 @@ mod tests {
         assert_eq!(
             reframed.attributes(StereoAtomId(0)),
             &EntitySpan::Modified {
-                lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32)
-                    .reframe_by(action)
-                    .expect("a parent-group action"),
-                rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32)
-                    .reframe_by(action)
-                    .expect("a parent-group action"),
+                lhs: traits::FrameTransport::reframe_by(
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+                    action,
+                )
+                .expect("a parent-group action"),
+                rhs: traits::FrameTransport::reframe_by(
+                    StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+                    action,
+                )
+                .expect("a parent-group action"),
             },
         );
     }
@@ -2959,39 +2917,6 @@ mod tests {
         let once = spans.reframe().expect("the forms are satisfiable");
         let twice = once.reframe().expect("the forms are satisfiable");
         assert_eq!(twice, once);
-    }
-
-    /// Repeated ligands leave a residual stabilizer, so more than one action presents the frame
-    /// sorted and the two sides can each prefer a different one. The selected action minimises the
-    /// span as a whole, which makes the canonical value independent of the starting presentation
-    /// for the pair rather than for either side alone.
-    #[rstest]
-    fn test_stereo_atom_spans_reframe_repeated_ligands() {
-        let frame: Vec<StereoLigand> = vec![
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-        ];
-        let span = EntitySpan::Modified {
-            lhs: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-            rhs: StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-        };
-        let stored = StereoAtomSpans::new(vec![(AtomId(0), frame.clone(), span.clone())]);
-
-        let presentation = Permutation::from_image(&[2, 3, 0, 1]);
-        let restated = StereoAtomSpans::new(vec![(
-            AtomId(0),
-            presentation.act(&frame),
-            span.try_map(|form| form.reframe_by(presentation))
-                .expect("a parent-group action"),
-        )]);
-
-        assert_eq!(
-            stored.reframe().expect("the forms are satisfiable"),
-            restated.reframe().expect("the forms are satisfiable"),
-        );
-        assert!(stored.framed_eq(&restated));
     }
 
     /// One side declining takes the whole span: a single action serves both, so there is no partial
@@ -3020,9 +2945,9 @@ mod tests {
             AtomId(0),
             vec![
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         )]);
@@ -3032,8 +2957,8 @@ mod tests {
         assert_eq!(
             reframed.ligands(StereoAtomId(0)),
             [
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
@@ -3063,10 +2988,10 @@ mod tests {
         let atoms = StereoAtoms::new(vec![(
             AtomId(0),
             vec![
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         )]);
@@ -3075,46 +3000,30 @@ mod tests {
             .reframe_with_action()
             .expect("the form is satisfiable");
 
+        let action = actions
+            .action(StereoAtomId(0))
+            .expect("the dense action covers the stereo atom");
+        assert_eq!(action, &Permutation::from_image(&[3, 2, 1, 0]));
         assert_eq!(
-            actions,
-            vec![(StereoAtomId(0), Permutation::from_image(&[1, 0, 2, 3]))],
-        );
-        let (_, action) = actions[0];
-        assert_eq!(
-            atoms.attributes(StereoAtomId(0)).clone().reframe_by(action),
+            traits::FrameTransport::reframe_by(atoms.attributes(StereoAtomId(0)).clone(), action,),
             Some(reframed.attributes(StereoAtomId(0)).clone()),
         );
     }
 
-    /// Two presentations of one arrangement select the same value. With a repeated virtual ligand
-    /// the frame has a residual stabilizer, so the action is the orbit representative rather than
-    /// the unique reordering; selection must still succeed and still agree.
-    ///
-    /// The stabilizer also identifies cosets the frame cannot tell apart, so two configurations
-    /// are distinguishable modulo frame exactly when the ligands are distinct — a site with
-    /// repeated ligands is not stereogenic and its cosets collapse.
-    #[rustfmt::skip]
     #[rstest]
-    #[case::distinct_ligands(
-        vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        Permutation::from_image(&[1, 0, 3, 2]), true)]
-    #[case::two_implicit_hydrogens(
-        vec![StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
-        Permutation::from_image(&[2, 3, 0, 1]), false)]
-    #[case::all_four_equal(
-        vec![StereoLigand::new(AtomId(0), StereoLigandKind::LonePair); 4],
-        Permutation::from_image(&[1, 0, 3, 2]), false)]
-    fn test_stereo_atoms_framed_eq(
-        #[case] frame: Vec<StereoLigand>,
-        #[case] presentation: Permutation,
-        #[case] cosets_distinguishable: bool,
-    ) {
+    fn test_stereo_atoms_framed_eq_distinct_frames() {
+        let frame = [2, 1, 3, 4]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+        let presentation = Permutation::from_image(&[1, 0, 3, 2]);
         let form = StereoAtomForm::new(StereoKind::Tetrahedral, 1u32);
         let stored = StereoAtoms::new(vec![(AtomId(0), frame.clone(), form.clone())]);
         let restated = StereoAtoms::new(vec![(
             AtomId(0),
             presentation.act(&frame),
-            form.reframe_by(presentation).expect("a parent-group action"),
+            form.reframe_by(presentation)
+                .expect("a parent-group action"),
         )]);
 
         assert!(stored.framed_eq(&restated));
@@ -3124,14 +3033,14 @@ mod tests {
             frame,
             StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
         )]);
-        assert_eq!(!stored.framed_eq(&other_coset), cosets_distinguishable);
+        assert!(!stored.framed_eq(&other_coset));
     }
 
     /// A cis/trans span keeps each endpoint's ligands in its own block, so the partitioned parent
     /// group sorts within blocks; one action still carries both sides.
     #[rstest]
     fn test_stereo_bond_spans_reframe() {
-        let frame: Vec<StereoLigand> = [4, 2, 5, 3]
+        let frame: Vec<StereoLigand> = [5, 3, 4, 2]
             .into_iter()
             .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
             .collect();
@@ -3147,7 +3056,9 @@ mod tests {
         let (reframed, actions) = spans
             .reframe_with_action()
             .expect("the forms are satisfiable");
-        let (_, action) = actions[0];
+        let action = actions
+            .action(StereoBondId(0))
+            .expect("the dense action covers the stereo bond");
 
         assert_eq!(
             reframed.ligands(StereoBondId(0)),
@@ -3159,12 +3070,16 @@ mod tests {
         assert_eq!(
             reframed.attributes(StereoBondId(0)),
             &EntitySpan::Modified {
-                lhs: StereoBondForm::new(StereoKind::CisTrans, 0u32)
-                    .reframe_by(action)
-                    .expect("a parent-group action"),
-                rhs: StereoBondForm::new(StereoKind::CisTrans, 1u32)
-                    .reframe_by(action)
-                    .expect("a parent-group action"),
+                lhs: traits::FrameTransport::reframe_by(
+                    StereoBondForm::new(StereoKind::CisTrans, 0u32),
+                    action,
+                )
+                .expect("a parent-group action"),
+                rhs: traits::FrameTransport::reframe_by(
+                    StereoBondForm::new(StereoKind::CisTrans, 1u32),
+                    action,
+                )
+                .expect("a parent-group action"),
             },
         );
     }
@@ -3194,10 +3109,10 @@ mod tests {
         let bonds = StereoBonds::new(vec![(
             BondId(0),
             vec![
-                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
             ],
             StereoBondForm::new(StereoKind::CisTrans, 0u32),
         )]);
@@ -3238,10 +3153,10 @@ mod tests {
         let bonds = StereoBonds::new(vec![(
             BondId(0),
             vec![
+                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                 StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
             ],
             StereoBondForm::new(StereoKind::CisTrans, 0u32),
         )]);
@@ -3250,39 +3165,30 @@ mod tests {
             .reframe_with_action()
             .expect("the form is satisfiable");
 
+        let action = actions
+            .action(StereoBondId(0))
+            .expect("the dense action covers the stereo bond");
+        assert_eq!(action, &Permutation::from_image(&[3, 2, 1, 0]));
         assert_eq!(
-            actions,
-            vec![(StereoBondId(0), Permutation::from_image(&[1, 0, 2, 3]))],
-        );
-        let (_, action) = actions[0];
-        assert_eq!(
-            bonds.attributes(StereoBondId(0)).clone().reframe_by(action),
+            traits::FrameTransport::reframe_by(bonds.attributes(StereoBondId(0)).clone(), action,),
             Some(reframed.attributes(StereoBondId(0)).clone()),
         );
     }
 
-    /// A 1,1-disubstituted alkene repeats a ligand on one endpoint and is not stereogenic, so its
-    /// two cosets collapse under the residual stabilizer while selection still agrees across
-    /// presentations.
-    #[rustfmt::skip]
     #[rstest]
-    #[case::distinct_ligands(
-        vec![StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(5), StereoLigandKind::Atom)],
-        Permutation::from_image(&[1, 0, 3, 2]), true)]
-    #[case::two_hydrogens_on_one_endpoint(
-        vec![StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(5), StereoLigandKind::Atom)],
-        Permutation::from_image(&[1, 0, 3, 2]), false)]
-    fn test_stereo_bonds_framed_eq(
-        #[case] frame: Vec<StereoLigand>,
-        #[case] presentation: Permutation,
-        #[case] cosets_distinguishable: bool,
-    ) {
+    fn test_stereo_bonds_framed_eq_distinct_frames() {
+        let frame = [2, 4, 3, 5]
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+        let presentation = Permutation::from_image(&[1, 0, 3, 2]);
         let form = StereoBondForm::new(StereoKind::CisTrans, 1u32);
         let stored = StereoBonds::new(vec![(BondId(0), frame.clone(), form.clone())]);
         let restated = StereoBonds::new(vec![(
             BondId(0),
             presentation.act(&frame),
-            form.reframe_by(presentation).expect("a parent-group action"),
+            form.reframe_by(presentation)
+                .expect("a parent-group action"),
         )]);
 
         assert!(stored.framed_eq(&restated));
@@ -3292,100 +3198,7 @@ mod tests {
             frame,
             StereoBondForm::new(StereoKind::CisTrans, 0u32),
         )]);
-        assert_eq!(!stored.framed_eq(&other_coset), cosets_distinguishable);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::distinct_sorted(StereoKind::Tetrahedral,
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(4), StereoLigandKind::Atom)],
-        Permutation::from_image(&[0, 1, 2, 3]))]
-    #[case::distinct_reversed(StereoKind::Tetrahedral,
-        [StereoLigand::new(AtomId(4), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::Atom)],
-        Permutation::from_image(&[3, 2, 1, 0]))]
-    #[case::virtual_sorts_before_atoms(StereoKind::Tetrahedral,
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)],
-        Permutation::from_image(&[1, 3, 0, 2]))]
-    fn test_stereo_atom_form_select_frame(
-        #[case] kind: StereoKind,
-        #[case] frame: [StereoLigand; 4],
-        #[case] expected: Permutation,
-    ) {
-        assert_eq!(
-            StereoAtomForm::new(kind, 0u32).select_frame(&frame),
-            Some(expected),
-        );
-    }
-
-    /// A frame that repeats a ligand is a valid arrangement record: distinctness is neither
-    /// required nor asserted, so a repeated frame carries a determinate coset and selection must
-    /// succeed. The repeat leaves a residual stabilizer, so several actions present the frame
-    /// sorted; the selected one makes the canonical value independent of the starting
-    /// presentation.
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::two_implicit_hydrogens(StereoKind::Tetrahedral, 0u32,
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
-        Permutation::from_image(&[2, 3, 0, 1]))]
-    #[case::three_lone_pairs(StereoKind::Tetrahedral, 1u32,
-        [StereoLigand::new(AtomId(0), StereoLigandKind::LonePair), StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair), StereoLigand::new(AtomId(0), StereoLigandKind::LonePair)],
-        Permutation::from_image(&[1, 2, 3, 0]))]
-    #[case::all_four_equal(StereoKind::Tetrahedral, 1u32,
-        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
-        Permutation::from_image(&[1, 0, 3, 2]))]
-    #[case::axial_restricted_parent(StereoKind::Axial, 1u32,
-        [StereoLigand::new(AtomId(1), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen)],
-        Permutation::from_image(&[2, 3, 0, 1]))]
-    fn test_stereo_atom_form_select_frame_repeated_ligands(
-        #[case] kind: StereoKind,
-        #[case] coset: u32,
-        #[case] frame: [StereoLigand; 4],
-        #[case] presentation: Permutation,
-    ) {
-        let form = StereoAtomForm::new(kind, coset);
-        let selected = form
-            .select_frame(&frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        let canonical = form.clone().reframe_by(selected);
-
-        let restated = form
-            .reframe_by(presentation)
-            .expect("the case presentation is a parent-group action");
-        let restated_frame = presentation.act(&frame);
-        let restated_selected = restated
-            .select_frame(&restated_frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        assert_eq!(restated.reframe_by(restated_selected), canonical);
-    }
-
-    /// A 1,1-disubstituted alkene repeats a ligand on one endpoint and is not stereogenic. The
-    /// arrangement record is still valid and its coset still faithful, so selection must accept
-    /// it under the partitioned cis/trans parent group.
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::both_on_first_endpoint(
-        [StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(3), StereoLigandKind::Atom)],
-        Permutation::from_image(&[1, 0, 3, 2]))]
-    #[case::one_on_each_endpoint(
-        [StereoLigand::new(AtomId(2), StereoLigandKind::Atom), StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen), StereoLigand::new(AtomId(3), StereoLigandKind::Atom), StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen)],
-        Permutation::from_image(&[1, 0, 2, 3]))]
-    fn test_stereo_bond_form_select_frame_repeated_ligands(
-        #[case] frame: [StereoLigand; 4],
-        #[case] presentation: Permutation,
-    ) {
-        let form = StereoBondForm::new(StereoKind::CisTrans, 1u32);
-        let selected = form
-            .select_frame(&frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        let canonical = form.clone().reframe_by(selected);
-
-        let restated = form
-            .reframe_by(presentation)
-            .expect("the case presentation is a parent-group action");
-        let restated_selected = restated
-            .select_frame(&presentation.act(&frame))
-            .expect("a repeated ligand frame is a valid arrangement record");
-        assert_eq!(restated.reframe_by(restated_selected), canonical);
+        assert!(!stored.framed_eq(&other_coset));
     }
 
     /// A form's constructors are permissive, so a coset index outside its kind's coset space is
@@ -3395,15 +3208,8 @@ mod tests {
     #[case::atom_coset_out_of_range(StereoKind::Tetrahedral, 2u32)]
     #[case::atom_coset_far_out_of_range(StereoKind::SquarePlanar, 40u32)]
     fn test_stereo_atom_form_reframe_by_error(#[case] kind: StereoKind, #[case] coset: u32) {
-        let frame = [
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-        ];
         let form = StereoAtomForm::new(kind, coset);
         assert_eq!(form.clone().reframe_by(Permutation::identity(4)), None);
-        assert_eq!(form.select_frame(&frame), None);
     }
 
     #[rstest]

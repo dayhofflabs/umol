@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use std::iter;
 use umol_graph::fingerprint::featurize_reaction;
 use umol_graph::ingest::ingest_reaction_smiles_with;
 use umol_graph::ops::model::{
@@ -2236,7 +2237,7 @@ mod tests {
                     ..Default::default()
                 });
 
-            let products: Vec<GraphIrMolecule> = std::iter::from_fn(|| {
+            let products: Vec<GraphIrMolecule> = iter::from_fn(|| {
                 application
                     .borrow_mut(py)
                     .__next__()
@@ -2312,7 +2313,7 @@ mod tests {
             let host = Py::new(py, Molecule::from_rust(host)).unwrap();
             let application = reaction.apply(py, host, Some(config)).unwrap();
 
-            let products: Vec<GraphIrMolecule> = std::iter::from_fn(|| {
+            let products: Vec<GraphIrMolecule> = iter::from_fn(|| {
                 application
                     .borrow_mut(py)
                     .__next__()

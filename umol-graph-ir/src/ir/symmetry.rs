@@ -357,13 +357,6 @@ impl Molecule {
             };
             oriented.push(oriented_permutation(orientation, permutation));
         }
-        // Same-kind virtual ligands are interchangeable; grade each swap locally.
-        for swap in virtual_block_swaps(&ligands) {
-            if let Some(orientation) = grade_local(kind, &coset, swap) {
-                oriented.push(oriented_permutation(orientation, swap));
-            }
-        }
-
         StereoSymmetry {
             group: OrientedPermutationGroup::generate(degree, &oriented),
             kind,
@@ -454,10 +447,9 @@ fn oriented_permutation(orientation: Orientation, permutation: Permutation) -> O
     }
 }
 
-/// A stabilizer generator's action on the carrier's ligand positions: atom ligands
-/// follow the generator; virtual ligands sit on the (fixed) site, so they stay put
-/// (their interchange is supplied separately). `None` if an atom ligand's image
-/// isn't a ligand atom of the carrier.
+/// A stabilizer generator's action on the carrier's ligand positions: atom ligands follow the
+/// generator, while distinct virtual ligands sit on the fixed site and stay put. `None` if an atom
+/// ligand's image is not a ligand atom of the carrier.
 fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Option<Permutation> {
     let degree = ligands.len();
     let mut image = vec![0usize; degree];
@@ -474,49 +466,6 @@ fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Optio
         image[i] = target;
     }
     Permutation::try_from(image.as_slice()).ok()
-}
-
-/// Adjacent transpositions within each same-kind virtual-ligand block (generating
-/// the symmetric group on that block).
-fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
-    let degree = ligands.len();
-    let mut swaps = Vec::new();
-    for kind in [
-        StereoLigandKind::ImplicitHydrogen,
-        StereoLigandKind::LonePair,
-    ] {
-        let positions: Vec<usize> = (0..degree).filter(|&i| ligands[i].kind == kind).collect();
-        for pair in positions.windows(2) {
-            swaps.push(
-                Permutation::from_cycles(degree, &[vec![pair[0], pair[1]]])
-                    .expect("virtual-ligand transposition is in range and disjoint"),
-            );
-        }
-    }
-    swaps
-}
-
-/// Orientation of a local ligand-position permutation: does it preserve the coset
-/// (proper) or send it to its enantiomer (improper)?
-fn grade_local(
-    kind: StereoKind,
-    coset: &StereoCoset,
-    permutation: Permutation,
-) -> Option<Orientation> {
-    let index = coset.as_lit()?;
-    let coset_space = kind.class_key().space();
-    let Some(StereoCoset::Lit(transported)) =
-        coset_apply_permutation(&StereoCoset::Lit(index), permutation, kind)
-    else {
-        return None;
-    };
-    if transported == index {
-        Some(Orientation::Proper)
-    } else if coset_space.enantiomer(index) == Some(transported) {
-        Some(Orientation::Improper)
-    } else {
-        None
-    }
 }
 
 fn orbit_vec(auto: &AutomorphismOutput, node_count: usize) -> Vec<NodeId> {
@@ -843,24 +792,6 @@ mod tests {
                 generator,
             ),
             expected,
-        );
-    }
-
-    #[rstest]
-    fn test_virtual_block_swaps() {
-        assert_eq!(
-            virtual_block_swaps(&[
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-                StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
-            ]),
-            vec![
-                Permutation::from_image(&[1, 0, 2, 3, 4]),
-                Permutation::from_image(&[0, 2, 1, 3, 4]),
-                Permutation::from_image(&[0, 1, 2, 4, 3]),
-            ],
         );
     }
 }

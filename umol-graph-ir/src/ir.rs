@@ -16,6 +16,7 @@ pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod entity;
 pub(crate) mod error;
+pub(crate) mod frame;
 pub(crate) mod id;
 pub(crate) mod incidence;
 pub(crate) mod ligand;
@@ -83,6 +84,11 @@ pub use edit::{
 pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError, NoJoin};
+pub use frame::{
+    AromaticSystemFrameActions, DativeBondFrameActions, MulticenterBondFrameActions,
+    NoncovalentBondFrameActions, OverlayFrameActions, StereoAtomFrameActions,
+    StereoBondFrameActions,
+};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandPosition,

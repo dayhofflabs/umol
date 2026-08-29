@@ -10,6 +10,7 @@ use umol_perm::DynPermutation;
 use super::constraint::{NoncovalentBondConstraintForm, NoncovalentBondConstraintsForm};
 use super::delta::EntitySpan;
 use super::error::{Contradiction, NoJoin};
+use super::frame::NoncovalentBondFrameActions;
 use super::id::{AtomId, NoncovalentBondId};
 use super::traits::{AsLit, Equiv, FrameTransport, Lattice, Normalize, Reframe};
 
@@ -146,13 +147,13 @@ impl NoncovalentBonds {
 }
 
 impl Reframe for NoncovalentBonds {
-    type Action = (NoncovalentBondId, Vec<ParticipantPosition>);
+    type Action = NoncovalentBondFrameActions;
 
     /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
     ///
     /// The payload is frame-invariant, so the action records the reordering without changing what
     /// the bond means.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -161,22 +162,24 @@ impl Reframe for NoncovalentBonds {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let attributes = reframed.data(id).clone().normalize()?;
             let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_with(id, &order);
-            actions.push((NoncovalentBondId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(Arc::new(reframed)), actions))
+        Ok((
+            Self(Arc::new(reframed)),
+            NoncovalentBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
+        ))
     }
 }
 
@@ -231,11 +234,11 @@ impl NoncovalentBondSpans {
 }
 
 impl Reframe for NoncovalentBondSpans {
-    type Action = (NoncovalentBondId, Vec<ParticipantPosition>);
+    type Action = NoncovalentBondFrameActions;
 
     /// The payload is frame-invariant and selection sorts the pair, so a `Modified` span needs no
     /// arbitration between its sides.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -244,14 +247,8 @@ impl Reframe for NoncovalentBondSpans {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let span = reframed.data(id).clone();
             let reduced = span
@@ -261,10 +258,18 @@ impl Reframe for NoncovalentBondSpans {
             *reframed.data_mut(id) = reduced
                 .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_with(id, &order);
-            actions.push((NoncovalentBondId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(reframed), actions))
+        Ok((
+            Self(reframed),
+            NoncovalentBondFrameActions::from_dense(actions).ok_or(Contradiction)?,
+        ))
     }
 }
 
@@ -504,11 +509,8 @@ mod tests {
         assert_eq!(reframed.atoms(NoncovalentBondId(0)), [AtomId(2), AtomId(5)]);
         assert_eq!(reframed.attributes(NoncovalentBondId(0)), &span);
         assert_eq!(
-            actions,
-            vec![(
-                NoncovalentBondId(0),
-                vec![ParticipantPosition(1), ParticipantPosition(0)],
-            )],
+            actions.action(NoncovalentBondId(0)),
+            Some(&DynPermutation::try_from(vec![1, 0]).expect("expected action is valid")),
         );
     }
 
@@ -572,11 +574,8 @@ mod tests {
             .reframe_with_action()
             .expect("the form is satisfiable");
         assert_eq!(
-            actions,
-            vec![(
-                NoncovalentBondId(0),
-                vec![ParticipantPosition(1), ParticipantPosition(0)],
-            )],
+            actions.action(NoncovalentBondId(0)),
+            Some(&DynPermutation::try_from(vec![1, 0]).expect("expected action is valid")),
         );
     }
 

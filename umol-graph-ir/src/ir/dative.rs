@@ -9,6 +9,7 @@ use umol_perm::DynPermutation;
 use super::constraint::{DativeBondConstraintForm, DativeBondConstraintsForm};
 use super::delta::EntitySpan;
 use super::error::Contradiction;
+use super::frame::DativeBondFrameActions;
 use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
 use super::traits::{Equiv, FrameTransport, Lattice, Normalize, Reframe};
@@ -173,13 +174,13 @@ impl DativeBonds {
 }
 
 impl Reframe for DativeBonds {
-    type Action = (DativeBondId, Vec<ParticipantPosition>);
+    type Action = DativeBondFrameActions;
 
     /// Reduce every entry, then present each in its selected frame, returning the frame action selected for each bond.
     ///
     /// The payload is frame-invariant, so the action records the reordering of the donors without
     /// changing what the bond means.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = (*self.0).clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -188,22 +189,25 @@ impl Reframe for DativeBonds {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let attributes = reframed.data(id).clone().normalize()?;
             let action = DynPermutation::between(&stored, &selected).ok_or(Contradiction)?;
             *reframed.data_mut(id) = attributes.reframe_by(&action).ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_2_with(id, &order);
-            actions.push((DativeBondId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(Arc::new(reframed)), actions))
+        Ok((
+            Self(Arc::new(reframed)),
+            DativeBondFrameActions::from_dense(actions)
+                .expect("every dynamic permutation is a dative-bond action"),
+        ))
     }
 }
 
@@ -277,11 +281,11 @@ impl DativeBondSpans {
 }
 
 impl Reframe for DativeBondSpans {
-    type Action = (DativeBondId, Vec<ParticipantPosition>);
+    type Action = DativeBondFrameActions;
 
     /// The payload is frame-invariant and selection sorts the donors, so a `Modified` span needs no
     /// arbitration between its sides.
-    fn reframe_with_action(&self) -> Result<(Self, Vec<Self::Action>), Contradiction> {
+    fn reframe_with_action(&self) -> Result<(Self, Self::Action), Contradiction> {
         let mut reframed = self.0.clone();
         let mut actions = Vec::with_capacity(reframed.count());
         for id in reframed.ids().collect::<Vec<_>>() {
@@ -290,14 +294,8 @@ impl Reframe for DativeBondSpans {
                 .iter()
                 .map(|&atom| AtomId::from(atom))
                 .collect();
-            let mut order: Vec<ParticipantPosition> = (0..stored.len())
-                .map(|position| ParticipantPosition(position as u32))
-                .collect();
-            order.sort_by_key(|position| stored[position.index()]);
-            let selected: Vec<AtomId> = order
-                .iter()
-                .map(|position| stored[position.index()])
-                .collect();
+            let mut selected = stored.clone();
+            selected.sort_unstable();
 
             let span = reframed.data(id).clone();
             let reduced = span
@@ -307,10 +305,19 @@ impl Reframe for DativeBondSpans {
             *reframed.data_mut(id) = reduced
                 .try_map(|form| form.reframe_by(&action))
                 .ok_or(Contradiction)?;
+            let order: Vec<ParticipantPosition> = action
+                .image()
+                .iter()
+                .map(|&position| ParticipantPosition(position as u32))
+                .collect();
             reframed.permute_2_with(id, &order);
-            actions.push((DativeBondId::from(id), order));
+            actions.push(action);
         }
-        Ok((Self(reframed), actions))
+        Ok((
+            Self(reframed),
+            DativeBondFrameActions::from_dense(actions)
+                .expect("every dynamic permutation is a dative-bond action"),
+        ))
     }
 }
 
@@ -476,15 +483,8 @@ mod tests {
         assert_eq!(reframed.acceptor(DativeBondId(0)), AtomId(0));
         assert_eq!(reframed.attributes(DativeBondId(0)), &span);
         assert_eq!(
-            actions,
-            vec![(
-                DativeBondId(0),
-                vec![
-                    ParticipantPosition(1),
-                    ParticipantPosition(2),
-                    ParticipantPosition(0),
-                ],
-            )],
+            actions.action(DativeBondId(0)),
+            Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
         );
     }
 
@@ -556,15 +556,8 @@ mod tests {
             .reframe_with_action()
             .expect("the form is satisfiable");
         assert_eq!(
-            actions,
-            vec![(
-                DativeBondId(0),
-                vec![
-                    ParticipantPosition(1),
-                    ParticipantPosition(2),
-                    ParticipantPosition(0),
-                ],
-            )],
+            actions.action(DativeBondId(0)),
+            Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
         );
     }
 

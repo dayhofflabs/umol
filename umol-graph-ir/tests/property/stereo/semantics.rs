@@ -1,6 +1,5 @@
 //! Stereo graph IR semantic properties.
 
-use std::collections::BTreeSet;
 use std::iter;
 
 use proptest::prelude::*;
@@ -115,42 +114,6 @@ proptest! {
                 count: 2,
             }),
         );
-    }
-
-    /// A ligand frame that repeats a ligand is a valid arrangement record — distinctness is
-    /// neither required nor asserted, and the site being non-stereogenic does not make the stored
-    /// coset vacuous. Frame selection must therefore accept it, and the value it selects must not
-    /// depend on which presentation of the arrangement it started from.
-    #[test]
-    fn test_stereo_atom_form_select_frame_repeated_ligands(
-        (form, frame, action) in repeated_ligand_stereo_atom_strategy(),
-    ) {
-        prop_assert!(
-            frame.len() > frame.iter().collect::<BTreeSet<_>>().len(),
-            "the generator must repeat a ligand",
-        );
-
-        let selected = form
-            .select_frame(&frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        let canonical = form.clone().reframe_by(selected);
-        prop_assert!(canonical.is_some());
-
-        let restated = form.reframe_by(action).expect("a parent-group action is admissible");
-        let restated_frame = action.act(&frame);
-        let restated_selected = restated
-            .select_frame(&restated_frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        prop_assert_eq!(restated.clone().reframe_by(restated_selected), canonical);
-
-        let converged = restated
-            .reframe_by(restated_selected)
-            .expect("selection produced an admissible action");
-        let converged_frame = restated_selected.act(&restated_frame);
-        let again = converged
-            .select_frame(&converged_frame)
-            .expect("a repeated ligand frame is a valid arrangement record");
-        prop_assert_eq!(converged.clone().reframe_by(again), Some(converged));
     }
 
     #[test]
