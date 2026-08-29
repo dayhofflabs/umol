@@ -50,7 +50,7 @@ impl MulticenterBondConstraintForm {
         self
     }
 
-    pub(super) fn uses_participant_frame(&self) -> bool {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
             Self::ElectronCount(_) => false,
         }

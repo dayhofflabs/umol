@@ -30,6 +30,7 @@ use super::edit::{
     MulticenterBondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange,
     StereoBondFieldChange,
 };
+use super::entity::Entity;
 use super::error::Contradiction;
 use super::frame::OverlaysFrameAction;
 use super::id::{
@@ -306,6 +307,19 @@ pub enum DativeBondDelta {
 }
 
 impl DativeBondDelta {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                DativeBondFieldChange::Order { .. } => false,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(DativeBondConstraintForm::uses_participant_frame),
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Add {
@@ -397,6 +411,21 @@ pub enum AromaticSystemDelta {
 }
 
 impl AromaticSystemDelta {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                AromaticSystemFieldChange::Electrons { .. } => true,
+                AromaticSystemFieldChange::Charge { .. }
+                | AromaticSystemFieldChange::UnpairedElectrons { .. } => false,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(AromaticSystemConstraintForm::uses_participant_frame),
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Add {
@@ -510,6 +539,21 @@ pub enum MulticenterBondDelta {
 }
 
 impl MulticenterBondDelta {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                MulticenterBondFieldChange::Electrons { .. } => true,
+                MulticenterBondFieldChange::Charge { .. }
+                | MulticenterBondFieldChange::UnpairedElectrons { .. } => false,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(MulticenterBondConstraintForm::uses_participant_frame),
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Add {
@@ -623,6 +667,19 @@ pub enum NoncovalentBondDelta {
 }
 
 impl NoncovalentBondDelta {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                NoncovalentBondFieldChange::Kind { .. } => false,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(NoncovalentBondConstraintForm::uses_participant_frame),
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Add {
@@ -725,6 +782,19 @@ impl StereoAtomDelta {
             | Self::Remove { id, .. }
             | Self::ModifyField { id, .. }
             | Self::ModifyConstraint { id, .. } => *id,
+        }
+    }
+
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                StereoAtomFieldChange::Configuration { .. } => true,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(StereoAtomConstraintForm::uses_participant_frame),
         }
     }
 
@@ -839,6 +909,19 @@ impl StereoBondDelta {
         }
     }
 
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Add { .. } | Self::Remove { .. } => true,
+            Self::ModifyField { change, .. } => match change {
+                StereoBondFieldChange::Configuration { .. } => true,
+            },
+            Self::ModifyConstraint { old, new, .. } => old
+                .iter()
+                .chain(new)
+                .any(StereoBondConstraintForm::uses_participant_frame),
+        }
+    }
+
     pub fn inverse(self) -> Self {
         match self {
             Self::Add {
@@ -947,7 +1030,11 @@ impl FrameTransport for DativeBondDelta {
                 attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: transport_optional(old, action)?,
+                new: transport_optional(new, action)?,
+            },
         })
     }
 }
@@ -992,7 +1079,11 @@ impl FrameTransport for AromaticSystemDelta {
                     }
                 },
             },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: transport_optional(old, action)?,
+                new: transport_optional(new, action)?,
+            },
         })
     }
 }
@@ -1037,7 +1128,11 @@ impl FrameTransport for MulticenterBondDelta {
                     }
                 },
             },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: transport_optional(old, action)?,
+                new: transport_optional(new, action)?,
+            },
         })
     }
 }
@@ -1069,7 +1164,11 @@ impl FrameTransport for NoncovalentBondDelta {
                 attributes: attributes.reframe_by(action)?,
             },
             Self::ModifyField { id, change } => Self::ModifyField { id, change },
-            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint { id, old, new },
+            Self::ModifyConstraint { id, old, new } => Self::ModifyConstraint {
+                id,
+                old: transport_optional(old, action)?,
+                new: transport_optional(new, action)?,
+            },
         })
     }
 }
@@ -1215,16 +1314,31 @@ impl ConstraintDelta {
             Self::Remove(constraint) => Self::Add(constraint),
         }
     }
+
+    pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+        match self {
+            Self::Add(constraint) | Self::Remove(constraint) => {
+                constraint.collect_frame_action_domain(domain);
+            }
+        }
+    }
+
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
+            Self::Add(constraint) => Self::Add(constraint.reframe_by_actions(actions)?),
+            Self::Remove(constraint) => Self::Remove(constraint.reframe_by_actions(actions)?),
+        })
+    }
 }
 
 impl FrameTransport for ConstraintDelta {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        Some(match self {
-            Self::Add(constraint) => Self::Add(constraint.reframe_by(actions)?),
-            Self::Remove(constraint) => Self::Remove(constraint.reframe_by(actions)?),
-        })
+        self.reframe_by_actions(actions).ok()
     }
 }
 
@@ -1272,107 +1386,163 @@ impl Delta {
             Self::Constraint(delta) => Self::Constraint(delta.inverse()),
         }
     }
+
+    pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+        match self {
+            Self::Atom(_) | Self::Bond(_) => {}
+            Self::DativeBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match delta {
+                        DativeBondDelta::Add { id, .. }
+                        | DativeBondDelta::Remove { id, .. }
+                        | DativeBondDelta::ModifyField { id, .. }
+                        | DativeBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    domain.insert_dative_bond(id);
+                }
+            }
+            Self::AromaticSystem(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match delta {
+                        AromaticSystemDelta::Add { id, .. }
+                        | AromaticSystemDelta::Remove { id, .. }
+                        | AromaticSystemDelta::ModifyField { id, .. }
+                        | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    domain.insert_aromatic_system(id);
+                }
+            }
+            Self::MulticenterBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match delta {
+                        MulticenterBondDelta::Add { id, .. }
+                        | MulticenterBondDelta::Remove { id, .. }
+                        | MulticenterBondDelta::ModifyField { id, .. }
+                        | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    domain.insert_multicenter_bond(id);
+                }
+            }
+            Self::NoncovalentBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match delta {
+                        NoncovalentBondDelta::Add { id, .. }
+                        | NoncovalentBondDelta::Remove { id, .. }
+                        | NoncovalentBondDelta::ModifyField { id, .. }
+                        | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    domain.insert_noncovalent_bond(id);
+                }
+            }
+            Self::StereoAtom(delta) => {
+                if delta.uses_participant_frame() {
+                    domain.insert_stereo_atom(delta.id());
+                }
+            }
+            Self::StereoBond(delta) => {
+                if delta.uses_participant_frame() {
+                    domain.insert_stereo_bond(delta.id());
+                }
+            }
+            Self::Constraint(delta) => delta.collect_frame_action_domain(domain),
+        }
+    }
+
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
+            Self::Atom(delta) => Self::Atom(delta),
+            Self::Bond(delta) => Self::Bond(delta),
+            Self::DativeBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match &delta {
+                        DativeBondDelta::Add { id, .. }
+                        | DativeBondDelta::Remove { id, .. }
+                        | DativeBondDelta::ModifyField { id, .. }
+                        | DativeBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    let entity = Entity::DativeBond(id);
+                    let action = actions.dative_bond_action(id).ok_or(entity)?;
+                    Self::DativeBond(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::DativeBond(delta)
+                }
+            }
+            Self::AromaticSystem(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match &delta {
+                        AromaticSystemDelta::Add { id, .. }
+                        | AromaticSystemDelta::Remove { id, .. }
+                        | AromaticSystemDelta::ModifyField { id, .. }
+                        | AromaticSystemDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    let entity = Entity::AromaticSystem(id);
+                    let action = actions.aromatic_system_action(id).ok_or(entity)?;
+                    Self::AromaticSystem(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::AromaticSystem(delta)
+                }
+            }
+            Self::MulticenterBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match &delta {
+                        MulticenterBondDelta::Add { id, .. }
+                        | MulticenterBondDelta::Remove { id, .. }
+                        | MulticenterBondDelta::ModifyField { id, .. }
+                        | MulticenterBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    let entity = Entity::MulticenterBond(id);
+                    let action = actions.multicenter_bond_action(id).ok_or(entity)?;
+                    Self::MulticenterBond(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::MulticenterBond(delta)
+                }
+            }
+            Self::NoncovalentBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let id = match &delta {
+                        NoncovalentBondDelta::Add { id, .. }
+                        | NoncovalentBondDelta::Remove { id, .. }
+                        | NoncovalentBondDelta::ModifyField { id, .. }
+                        | NoncovalentBondDelta::ModifyConstraint { id, .. } => *id,
+                    };
+                    let entity = Entity::NoncovalentBond(id);
+                    let action = actions.noncovalent_bond_action(id).ok_or(entity)?;
+                    Self::NoncovalentBond(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::NoncovalentBond(delta)
+                }
+            }
+            Self::StereoAtom(delta) => {
+                if delta.uses_participant_frame() {
+                    let entity = Entity::StereoAtom(delta.id());
+                    let action = actions.stereo_atom_action(delta.id()).ok_or(entity)?;
+                    Self::StereoAtom(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::StereoAtom(delta)
+                }
+            }
+            Self::StereoBond(delta) => {
+                if delta.uses_participant_frame() {
+                    let entity = Entity::StereoBond(delta.id());
+                    let action = actions.stereo_bond_action(delta.id()).ok_or(entity)?;
+                    Self::StereoBond(delta.reframe_by(action).ok_or(entity)?)
+                } else {
+                    Self::StereoBond(delta)
+                }
+            }
+            Self::Constraint(delta) => Self::Constraint(delta.reframe_by_actions(actions)?),
+        })
+    }
 }
 
 impl FrameTransport for Delta {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        Some(match self {
-            Self::Atom(delta) => Self::Atom(delta),
-            Self::Bond(delta) => Self::Bond(delta),
-            Self::DativeBond(delta) => {
-                if matches!(
-                    delta,
-                    DativeBondDelta::Add { .. } | DativeBondDelta::Remove { .. }
-                ) {
-                    let action = actions.dative_bonds().action(delta.id())?;
-                    Self::DativeBond(delta.reframe_by(action)?)
-                } else {
-                    Self::DativeBond(delta)
-                }
-            }
-            Self::AromaticSystem(delta) => {
-                if matches!(
-                    delta,
-                    AromaticSystemDelta::Add { .. }
-                        | AromaticSystemDelta::Remove { .. }
-                        | AromaticSystemDelta::ModifyField {
-                            change: AromaticSystemFieldChange::Electrons { .. },
-                            ..
-                        }
-                ) {
-                    let action = actions.aromatic_systems().action(delta.id())?;
-                    Self::AromaticSystem(delta.reframe_by(action)?)
-                } else {
-                    Self::AromaticSystem(delta)
-                }
-            }
-            Self::MulticenterBond(delta) => {
-                if matches!(
-                    delta,
-                    MulticenterBondDelta::Add { .. }
-                        | MulticenterBondDelta::Remove { .. }
-                        | MulticenterBondDelta::ModifyField {
-                            change: MulticenterBondFieldChange::Electrons { .. },
-                            ..
-                        }
-                ) {
-                    let action = actions.multicenter_bonds().action(delta.id())?;
-                    Self::MulticenterBond(delta.reframe_by(action)?)
-                } else {
-                    Self::MulticenterBond(delta)
-                }
-            }
-            Self::NoncovalentBond(delta) => {
-                if matches!(
-                    delta,
-                    NoncovalentBondDelta::Add { .. } | NoncovalentBondDelta::Remove { .. }
-                ) {
-                    let action = actions.noncovalent_bonds().action(delta.id())?;
-                    Self::NoncovalentBond(delta.reframe_by(action)?)
-                } else {
-                    Self::NoncovalentBond(delta)
-                }
-            }
-            Self::StereoAtom(delta) => {
-                let needs_action = match &delta {
-                    StereoAtomDelta::Add { .. }
-                    | StereoAtomDelta::Remove { .. }
-                    | StereoAtomDelta::ModifyField { .. } => true,
-                    StereoAtomDelta::ModifyConstraint { old, new, .. } => {
-                        old.iter().chain(new).any(|constraint| {
-                            !matches!(constraint, StereoAtomConstraintForm::Stereogenicity(_))
-                        })
-                    }
-                };
-                if needs_action {
-                    let action = actions.stereo_atoms().action(delta.id())?;
-                    Self::StereoAtom(delta.reframe_by(action)?)
-                } else {
-                    Self::StereoAtom(delta)
-                }
-            }
-            Self::StereoBond(delta) => {
-                let needs_action = match &delta {
-                    StereoBondDelta::Add { .. }
-                    | StereoBondDelta::Remove { .. }
-                    | StereoBondDelta::ModifyField { .. } => true,
-                    StereoBondDelta::ModifyConstraint { old, new, .. } => {
-                        old.iter().chain(new).any(|constraint| {
-                            !matches!(constraint, StereoBondConstraintForm::Stereogenicity(_))
-                        })
-                    }
-                };
-                if needs_action {
-                    let action = actions.stereo_bonds().action(delta.id())?;
-                    Self::StereoBond(delta.reframe_by(action)?)
-                } else {
-                    Self::StereoBond(delta)
-                }
-            }
-            Self::Constraint(delta) => Self::Constraint(delta.reframe_by(actions)?),
-        })
+        self.reframe_by_actions(actions).ok()
     }
 }
 
@@ -1602,8 +1772,11 @@ impl ConstraintSpan {
         }
     }
 
-    pub(crate) fn reframe_by_actions(self, actions: &impl ConstraintFrameActions) -> Option<Self> {
-        Some(match self {
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
             Self::Unchanged(constraint) => Self::Unchanged(constraint.reframe_by_actions(actions)?),
             Self::Added(constraint) => Self::Added(constraint.reframe_by_actions(actions)?),
             Self::Removed(constraint) => Self::Removed(constraint.reframe_by_actions(actions)?),
@@ -1625,7 +1798,7 @@ impl FrameTransport for ConstraintSpan {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        self.reframe_by_actions(actions)
+        self.reframe_by_actions(actions).ok()
     }
 }
 

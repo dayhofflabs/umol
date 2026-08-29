@@ -1853,7 +1853,7 @@ impl Reframe for ReactionSpan {
         self.constraints = self
             .constraints
             .into_iter()
-            .map(|span| span.reframe_by_actions(&actions).ok_or(Contradiction))
+            .map(|span| span.reframe_by_actions(&actions).map_err(|_| Contradiction))
             .collect::<Result<_, _>>()?;
         self.constraints = normalize_constraint_spans(self.constraints)?;
         Ok(self)

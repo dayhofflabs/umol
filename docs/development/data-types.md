@@ -762,6 +762,12 @@ noncovalent-bond kind and their constraints are not, and their `FrameTransport` 
 destructures the form exhaustively and rebuilds it, so a new position-indexed field fails to compile
 rather than being left silently unframed.
 
+Each constraint form classifies its own participant-frame use through an exhaustive match. Each
+entity delta likewise classifies its fields exhaustively and delegates constraint payloads to that
+form-level decision. Aggregate domain collection and application delegate to those classifications
+rather than repeating variant lists, so adding a field, constraint form, or delta variant cannot be
+silently omitted from frame transport.
+
 A reaction removal may carry the source entity's structured incidence in another participant
 ordering. Its repeated sequence is an explicit local frame for the recorded payload. Construction
 preserves that frame; a consumer derives the unique local-to-source action, transports the payload,

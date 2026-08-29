@@ -290,7 +290,11 @@ impl Molecule {
                 );
             }
 
-            other.constraints.clone().reframe_by_actions(&actions)?
+            other
+                .constraints
+                .clone()
+                .reframe_by_actions(&actions)
+                .ok()?
         };
 
         // Molecule-level constraints: `self`'s hold in the glue as-is (it keeps `self`'s ids and

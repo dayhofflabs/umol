@@ -1185,6 +1185,33 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   nonuniform electron vectors and endpoint predicates, less-specific-old, missing/incompatible
   action, and mismatch cases. Benchmark application separately from match enumeration. **Breaking
   correctness change; inherited red ledger decreases from ten to eight.** [dep: S0j, S0q, S0r]
+  **Done.** Reaction application now derives one sparse, typed action map from atom-mapped rule
+  owner frames to their matched host frames and transports normalized deltas before lowering. The
+  pass covers all six overlay kinds, including aromatic and multicenter electron vectors,
+  noncovalent ordered endpoint predicates, every stereo delta arm, inline stereo constraints, and
+  molecule-level frame-relative constraint deltas. Direct additions retain their existing frame
+  without constructing an action; an identity action is created for an added owner only when a
+  frame-relative constraint delta consumes it. Reframed rule `old` values are checked with
+  `matches`, then replaced with the concrete host value used by the transaction. Missing ordinary
+  correspondences retain `CorrespondenceMismatch`, while missing or inadmissible stereo transport
+  retains `StereoFrameMismatch`.
+
+  Frame sensitivity is owned exhaustively by each constraint form and entity delta.
+  `ModifyConstraint` delegates to its constraint form; aggregate domain collection and application
+  delegate to those per-kind decisions instead of maintaining application-local variant lists.
+  Adding a field, inline constraint form, molecule constraint variant, or top-level delta variant
+  therefore fails to compile until its frame-domain and transport behavior are specified.
+
+  Exact application tables cover identity and nonidentity ordinary and stereo frames, dative
+  donor reordering, aromatic and multicenter nonuniform electron vectors, noncovalent nonuniform
+  endpoint predicates, stereo-atom permutation, stereo-bond endpoint-block swap, added-owner frame
+  preservation, less-specific old values, and correspondence/frame/match failures. All 24 focused
+  `apply_at` cases passed. All 20 reaction-application properties passed at 256 cases, closing the
+  two inherited stereo-update failures assigned here; graph IR's 6,553 unit cases passed with three
+  ignores, as did doctests and strict all-target Clippy with the property feature. A dedicated
+  Criterion target now measures match enumeration and `apply_at` separately; its focused smoke run
+  measured approximately 1.69 us and 4.31 us respectively on the implementation machine. The
+  inherited red ledger is now eight failures, all assigned to S0u.
 - **S0u — aggregate reaction canonicalization** (`ir/canonicalize.rs`): route reaction and
   reaction-span canonicalization through the settled normalization and frame operations, make
   `Canonicalize: Reframe`, and preserve the semantic normalization/reframing/canonicalization prefix

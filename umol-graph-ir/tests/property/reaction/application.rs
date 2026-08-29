@@ -1,4 +1,5 @@
-//! Property tests for reaction application, including host-relative updates and stereo-frame transport.
+//! Property tests for reaction application, including host-relative updates and rule-to-host
+//! overlay-frame transport.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};

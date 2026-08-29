@@ -60,7 +60,7 @@ impl DativeBondConstraintForm {
         self
     }
 
-    pub(super) fn uses_participant_frame(&self) -> bool {
+    pub(crate) fn uses_participant_frame(&self) -> bool {
         match self {
             Self::Aromatic(_) | Self::RingMembership(_) => false,
         }

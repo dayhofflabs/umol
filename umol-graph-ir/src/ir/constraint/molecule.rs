@@ -9,7 +9,7 @@ use std::vec::IntoIter;
 use umol_perm::{DynPermutation, Permutation};
 
 use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
-use super::super::entity::EntityKind;
+use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
 use super::super::frame::OverlaysFrameAction;
 use super::super::id::{
@@ -146,27 +146,27 @@ pub(crate) struct ConstraintFrameActionDomain {
 }
 
 impl ConstraintFrameActionDomain {
-    pub(super) fn insert_dative_bond(&mut self, id: DativeBondId) {
+    pub(crate) fn insert_dative_bond(&mut self, id: DativeBondId) {
         self.dative_bonds.insert(id);
     }
 
-    pub(super) fn insert_aromatic_system(&mut self, id: AromaticSystemId) {
+    pub(crate) fn insert_aromatic_system(&mut self, id: AromaticSystemId) {
         self.aromatic_systems.insert(id);
     }
 
-    pub(super) fn insert_multicenter_bond(&mut self, id: MulticenterBondId) {
+    pub(crate) fn insert_multicenter_bond(&mut self, id: MulticenterBondId) {
         self.multicenter_bonds.insert(id);
     }
 
-    pub(super) fn insert_noncovalent_bond(&mut self, id: NoncovalentBondId) {
+    pub(crate) fn insert_noncovalent_bond(&mut self, id: NoncovalentBondId) {
         self.noncovalent_bonds.insert(id);
     }
 
-    pub(super) fn insert_stereo_atom(&mut self, id: StereoAtomId) {
+    pub(crate) fn insert_stereo_atom(&mut self, id: StereoAtomId) {
         self.stereo_atoms.insert(id);
     }
 
-    pub(super) fn insert_stereo_bond(&mut self, id: StereoBondId) {
+    pub(crate) fn insert_stereo_bond(&mut self, id: StereoBondId) {
         self.stereo_bonds.insert(id);
     }
 
@@ -391,36 +391,67 @@ impl Constraint {
         }
     }
 
-    pub(crate) fn reframe_by_actions(self, actions: &impl ConstraintFrameActions) -> Option<Self> {
-        Some(match self {
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
             Self::DativeBond(id, constraint) => {
                 if constraint.uses_participant_frame() {
-                    let action = actions.dative_bond_action(id)?;
-                    Self::DativeBond(id, constraint.reframe_by(action)?)
+                    let action = actions
+                        .dative_bond_action(id)
+                        .ok_or(Entity::DativeBond(id))?;
+                    Self::DativeBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::DativeBond(id))?,
+                    )
                 } else {
                     Self::DativeBond(id, constraint)
                 }
             }
             Self::AromaticSystem(id, constraint) => {
                 if constraint.uses_participant_frame() {
-                    let action = actions.aromatic_system_action(id)?;
-                    Self::AromaticSystem(id, constraint.reframe_by(action)?)
+                    let action = actions
+                        .aromatic_system_action(id)
+                        .ok_or(Entity::AromaticSystem(id))?;
+                    Self::AromaticSystem(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::AromaticSystem(id))?,
+                    )
                 } else {
                     Self::AromaticSystem(id, constraint)
                 }
             }
             Self::MulticenterBond(id, constraint) => {
                 if constraint.uses_participant_frame() {
-                    let action = actions.multicenter_bond_action(id)?;
-                    Self::MulticenterBond(id, constraint.reframe_by(action)?)
+                    let action = actions
+                        .multicenter_bond_action(id)
+                        .ok_or(Entity::MulticenterBond(id))?;
+                    Self::MulticenterBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::MulticenterBond(id))?,
+                    )
                 } else {
                     Self::MulticenterBond(id, constraint)
                 }
             }
             Self::NoncovalentBond(id, constraint) => {
                 if constraint.uses_participant_frame() {
-                    let action = actions.noncovalent_bond_action(id)?;
-                    Self::NoncovalentBond(id, constraint.reframe_by(action)?)
+                    let action = actions
+                        .noncovalent_bond_action(id)
+                        .ok_or(Entity::NoncovalentBond(id))?;
+                    Self::NoncovalentBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::NoncovalentBond(id))?,
+                    )
                 } else {
                     Self::NoncovalentBond(id, constraint)
                 }
@@ -429,22 +460,24 @@ impl Constraint {
                 if !constraint.uses_participant_frame() {
                     Self::StereoAtom(id, kind, constraint)
                 } else {
-                    let action = actions.stereo_atom_action(id)?;
+                    let entity = Entity::StereoAtom(id);
+                    let action = actions.stereo_atom_action(id).ok_or(entity)?;
                     if !kind.class_key().space().allows(*action) {
-                        return None;
+                        return Err(entity);
                     }
-                    Self::StereoAtom(id, kind, constraint.reframe_by(action)?)
+                    Self::StereoAtom(id, kind, constraint.reframe_by(action).ok_or(entity)?)
                 }
             }
             Self::StereoBond(id, kind, constraint) => {
                 if !constraint.uses_participant_frame() {
                     Self::StereoBond(id, kind, constraint)
                 } else {
-                    let action = actions.stereo_bond_action(id)?;
+                    let entity = Entity::StereoBond(id);
+                    let action = actions.stereo_bond_action(id).ok_or(entity)?;
                     if !kind.class_key().space().allows(*action) {
-                        return None;
+                        return Err(entity);
                     }
-                    Self::StereoBond(id, kind, constraint.reframe_by(action)?)
+                    Self::StereoBond(id, kind, constraint.reframe_by(action).ok_or(entity)?)
                 }
             }
             Self::Relational(constraint) => {
@@ -454,13 +487,13 @@ impl Constraint {
                 constraints
                     .into_iter()
                     .map(|constraint| constraint.reframe_by_actions(actions))
-                    .collect::<Option<Vec<_>>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
             Self::Or(constraints) => Self::Or(
                 constraints
                     .into_iter()
                     .map(|constraint| constraint.reframe_by_actions(actions))
-                    .collect::<Option<Vec<_>>>()?,
+                    .collect::<Result<Vec<_>, _>>()?,
             ),
             Self::Not(constraint) => Self::Not(Box::new(constraint.reframe_by_actions(actions)?)),
             invariant @ (Self::Atom(..) | Self::Bond(..) | Self::Molecule(..)) => invariant,
@@ -472,7 +505,7 @@ impl FrameTransport for Constraint {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        self.reframe_by_actions(actions)
+        self.reframe_by_actions(actions).ok()
     }
 }
 
@@ -527,7 +560,7 @@ impl FrameTransport for Constraints {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        self.reframe_by_actions(actions)
+        self.reframe_by_actions(actions).ok()
     }
 }
 
@@ -540,10 +573,13 @@ impl Constraints {
         domain
     }
 
-    pub(crate) fn reframe_by_actions(self, actions: &impl ConstraintFrameActions) -> Option<Self> {
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
         self.into_iter()
             .map(|constraint| constraint.reframe_by_actions(actions))
-            .collect::<Option<Vec<_>>>()
+            .collect::<Result<Vec<_>, _>>()
             .map(Self)
     }
 }

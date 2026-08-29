@@ -19,6 +19,7 @@
 //!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintForm` to a
 //!   role position, quantified over the matching participants.
 
+use super::super::entity::Entity;
 use super::super::error::Contradiction;
 use super::super::frame::OverlaysFrameAction;
 use super::super::id::{
@@ -571,17 +572,24 @@ impl FrameTransport for RelationalConstraint {
     type Action = OverlaysFrameAction;
 
     fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
-        self.reframe_by_actions(actions)
+        self.reframe_by_actions(actions).ok()
     }
 }
 
 impl RelationalConstraint {
-    pub(super) fn reframe_by_actions(self, actions: &impl ConstraintFrameActions) -> Option<Self> {
-        Some(match self {
+    pub(super) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
             Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
-                let action = actions.noncovalent_bond_action(bond)?;
-                let predicates: [Box<AtomConstraintForm>; 2] =
-                    action.act(&predicates)?.try_into().ok()?;
+                let entity = Entity::NoncovalentBond(bond);
+                let action = actions.noncovalent_bond_action(bond).ok_or(entity)?;
+                let predicates: [Box<AtomConstraintForm>; 2] = action
+                    .act(&predicates)
+                    .ok_or(entity)?
+                    .try_into()
+                    .map_err(|_| entity)?;
                 Self::NoncovalentBondEndsSatisfy { bond, predicates }
             }
             invariant @ (Self::DativeBondDonors { .. }

@@ -2317,7 +2317,7 @@ impl Reframe for Molecule {
         self.constraints = self
             .constraints
             .reframe_by_actions(&actions)
-            .ok_or(Contradiction)?
+            .map_err(|_| Contradiction)?
             .normalize()?;
         Ok(self)
     }

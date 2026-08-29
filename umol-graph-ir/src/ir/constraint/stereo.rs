@@ -80,7 +80,7 @@ macro_rules! stereo_constraint {
                 self
             }
 
-            pub(super) fn uses_participant_frame(&self) -> bool {
+            pub(crate) fn uses_participant_frame(&self) -> bool {
                 match self {
                     Self::LigandSymmetry(_) | Self::Fluxionality(_) | Self::Topicity(_) => true,
                     Self::Stereogenicity(_) => false,
