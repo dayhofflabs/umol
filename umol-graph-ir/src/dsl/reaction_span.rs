@@ -1641,10 +1641,10 @@ mod tests {
     use crate::ir::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::num::NumForm;
     use crate::ir::reaction::Reaction;
-    use crate::ir::MoleculeCorrespondence;
+    use crate::ir::{MoleculeCorrespondence, ReactionSpanIntegrityError};
 
     #[fixture]
     fn populated_reaction_span_dsl() -> ReactionSpanDsl {
@@ -2305,6 +2305,44 @@ mod tests {
         ParseError::InvalidValue(
             "reaction span lhs is not a valid molecule representation: molecule references unavailable bond 2".to_string()
         ),
+    )]
+    #[case::atom_repeated_virtual(
+        r#"{:atoms ["C" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:h 0]] :attrs "Th0"}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Lhs(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            },
+        ).to_string()),
+    )]
+    #[case::atom_oversized(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I" "N" "O" "S"] :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4 5 6 7] :attrs "*"}}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Rhs(
+            MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                degree: 7,
+                maximum: 6,
+            },
+        ).to_string()),
+    )]
+    #[case::bond_repeated_virtual(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 1]] :attrs "Ct0"}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Lhs(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoBond(StereoBondId(0)),
+                ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            },
+        ).to_string()),
+    )]
+    #[case::bond_oversized(
+        r#"{:atoms ["C" "C" "F" "Cl" "Br" "I" "N" "O" "S"] :bonds [[0 1 "2"]] :stereo-bonds [{:add {:site 0 :ligands [2 3 4 5 6 7 8] :attrs "*"}}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Rhs(
+            MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+                entity: Entity::StereoBond(StereoBondId(0)),
+                degree: 7,
+                maximum: 6,
+            },
+        ).to_string()),
     )]
     fn test_span_input_into_ir_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(

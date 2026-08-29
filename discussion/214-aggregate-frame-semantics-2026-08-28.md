@@ -697,7 +697,11 @@ checks.
   `ParticipantFrameMismatch` diagnostic implemented here are not part of the final integrity
   contract. Compatible removal-local frames are accepted and transported through their unique
   alignment with the owning lhs or `Add` frame; a non-compatible structured frame remains
-  `IncidenceMismatch`. Doc 215 owns unwinding this part of S0c before S0e.
+  `IncidenceMismatch`. Doc 215 also removed `ReactionIntegrityError::Lhs` and the invalid-lhs case
+  after molecule closure made that failure unreachable, then removed the defensive post-publication
+  reaction checks and diagnostics that only those checks could produce. The retained S0c contract
+  is private reaction storage, checked/asserted construction, local stereo validation, reference
+  validation, and structured-incidence validation. Doc 215 completed this unwinding before S0e.
 - **S0d — reaction-span and low-level carrier audit** (`umol-graph-ir/src/ir/stereo.rs`, family
   modules, `ir/reaction_span.rs`): restrict raw frame-bearing collection construction, conversions,
   and mutation to their actual graph-IR assembly role, and verify that checked/asserted span
@@ -726,11 +730,11 @@ At S0d, all independent Rust aggregate constructors are locally green and malfor
 oversized frames cannot enter an immutable public aggregate through those constructors. The
 inherited transport ledger remains.
 
-The post-S0d admission audit found that the broader closed-container contract is not yet minimal or
-fully closed. Doc [215](215-integrity-minimization-2026-08-28.md) owns the dative and entity-count
-corrections, aromatic/multicenter mutation closure, defensive-check removal, and reaction-span
-construction and derived-standardization semantics. Complete doc 215 before S0e; S0e-S2 rely on
-its corrected integrity domain and error surface.
+The post-S0d admission audit found that the broader closed-container contract was not yet minimal or
+fully closed. Doc [215](215-integrity-minimization-2026-08-28.md) completed the dative and
+entity-count corrections, aromatic/multicenter mutation closure, defensive-check removal, and
+reaction-span construction and derived-standardization semantics before S0e. S0e-S2 use that
+corrected integrity domain and error surface.
 
 #### External publication boundaries
 
@@ -740,7 +744,17 @@ its corrected integrity domain and error surface.
   frames and reject repeated/oversized atom, bond, reaction-add, and span frames plus reaction
   removal structured-incidence mismatches with exact parser diagnostics; accept compatible
   reordered removal frames without normalizing them during construction. **Breaking; parsed reaction
-  failure propagation without expanding the inherited red ledger.** [dep: S0c, S0d]
+  failure propagation without expanding the inherited red ledger.** [dep: S0c, S0d] **Done.**
+  Parsed reactions now publish through `Reaction::try_new` and translate its exact diagnostic to
+  `ParseError::InvalidValue`; typed `IntoIr` and macro paths retain asserted publication. Focused
+  molecule, reaction-add, and reaction-span tables cover repeated virtual ligands and frames above
+  `MAX_DEGREE` for both stereo entity kinds, including side-specific span diagnostics. Existing
+  valid-frame roundtrips remain green, and a typed reaction roundtrip proves that a compatible
+  reordered aromatic removal keeps its recorded local frame. DSL removal syntax denotes its source
+  entity and therefore reconstructs the source incidence; incompatible removal incidence is not a
+  representable parsed surface value and remains covered by the checked Rust reaction constructor.
+  The 4 molecule cases, 46 reaction-input cases, 10 span-error cases, and 8 typed reaction
+  roundtrips passed.
 - **S0f — TableIR and format raise** (`umol-io/src/table_ir/raise.rs`, SMILES and CTfile ingestion):
   retain `Molecule::try_from_entries` as the final gate, test that the current `#T`/`#C` paths never
   synthesize repeated frames, and add a semantic case where unavailable repeated-virtual completion
