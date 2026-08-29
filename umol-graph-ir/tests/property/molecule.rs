@@ -25,6 +25,8 @@ mod iterators;
 mod meet_pushout;
 #[path = "molecule/metadata.rs"]
 mod metadata;
+#[path = "molecule/publication.rs"]
+mod publication;
 #[path = "molecule/references.rs"]
 mod references;
 #[path = "molecule/remapping.rs"]

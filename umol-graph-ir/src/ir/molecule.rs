@@ -353,24 +353,22 @@ impl Molecule {
         let bond_data: Vec<BondForm> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
-        let molecule = Self {
+        Self::try_from_arcs(
             graph,
-            atoms: Arc::new(atoms),
-            bonds: Arc::new(bond_data),
-            dative_bonds: DativeBonds::new(dative),
-            aromatic_systems: AromaticSystems::new(aromatic),
-            multicenter_bonds: MulticenterBonds::new(multicenter),
-            noncovalent_bonds: NoncovalentBonds::new(noncovalent),
-            stereo_atoms: StereoAtoms::new(stereo_atoms),
-            stereo_bonds: StereoBonds::new(stereo_bonds),
+            Arc::new(atoms),
+            Arc::new(bond_data),
+            DativeBonds::new(dative),
+            AromaticSystems::new(aromatic),
+            MulticenterBonds::new(multicenter),
+            NoncovalentBonds::new(noncovalent),
+            StereoAtoms::new(stereo_atoms),
+            StereoBonds::new(stereo_bonds),
             constraints,
-        };
-        molecule.check_integrity()?;
-        Ok(molecule)
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn from_arcs(
+    fn try_from_arcs(
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
@@ -381,8 +379,8 @@ impl Molecule {
         stereo_atoms: StereoAtoms,
         stereo_bonds: StereoBonds,
         constraints: Constraints,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, MoleculeIntegrityError> {
+        let molecule = Self {
             graph,
             atoms,
             bonds,
@@ -393,7 +391,9 @@ impl Molecule {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        }
+        };
+        molecule.check_integrity()?;
+        Ok(molecule)
     }
 
     /// AtomId/BondId-typed adapter exposing the pure-graph algorithms.

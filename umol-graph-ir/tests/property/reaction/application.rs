@@ -602,6 +602,25 @@ proptest! {
         prop_assert_eq!(actual, expected);
     }
 
+    /// A concrete application publishes an integral product molecule and a derivation whose
+    /// recovered reaction satisfies reaction integrity.
+    #[test]
+    fn test_reaction_apply_integrity_preservation(
+        (reaction, host, correspondence) in reaction_application_strategy(),
+    ) {
+        let derivation = reaction.apply_at(&host, &correspondence).map_err(|error| {
+            TestCaseError::fail(format!("generated application failed: {error}"))
+        })?;
+        let published = derivation.rhs().clone();
+        let recovered = derivation.to_reaction();
+
+        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(
+            Reaction::try_new(recovered.lhs().clone(), recovered.deltas().clone()),
+            Ok(recovered),
+        );
+    }
+
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]

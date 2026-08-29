@@ -38,6 +38,10 @@ proptest! {
         b in reaction_strategy(),
     ) {
         for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
+            prop_assert_eq!(
+                Reaction::try_new(composite.lhs().clone(), composite.deltas().clone()),
+                Ok(composite.clone()),
+            );
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite
@@ -112,6 +116,10 @@ proptest! {
         b in overlay_reaction_strategy(),
     ) {
         for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
+            prop_assert_eq!(
+                Reaction::try_new(composite.lhs().clone(), composite.deltas().clone()),
+                Ok(composite.clone()),
+            );
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite

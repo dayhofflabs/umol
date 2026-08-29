@@ -425,6 +425,22 @@ proptest! {
         ..Config::default()
     })]
 
+    /// Both projections of every published span satisfy molecule integrity, and converting the span
+    /// to its operational reaction satisfies reaction integrity.
+    #[test]
+    fn test_reaction_span_integrity_preservation(span in reaction_span_strategy()) {
+        let lhs = span.lhs();
+        let rhs = span.rhs();
+        let reaction = span.to_reaction();
+
+        prop_assert_eq!(lhs.edit().try_build(), Ok(lhs));
+        prop_assert_eq!(rhs.edit().try_build(), Ok(rhs));
+        prop_assert_eq!(
+            Reaction::try_new(reaction.lhs().clone(), reaction.deltas().clone()),
+            Ok(reaction),
+        );
+    }
+
     /// Cross-validate the two span constructions: the direct `superimpose` (Strategy A) reproduces
     /// the span the delta path (`to_reaction_span`) builds. Recover `(L, R, C)` from the delta-path
     /// span and reassemble; a mismatch flags a diff-completeness or frame gap between the paths.

@@ -796,7 +796,30 @@ corrected integrity domain and error surface.
   resolution/transform modules): inventory every publisher in the table above, route construction
   through the checked/asserted pairs, and add preservation properties rather than repeating local
   checks. **Breaking; migrate every stale producer without expanding the inherited red ledger.**
-  [dep: S0c, S0d]
+  [dep: S0c, S0d] **Done.** The audit grouped every listed publisher by its terminal aggregate
+  gate. Entry construction, raw carrier restriction, and checked mutation remain owned by S0b-S0d;
+  DSL, format, and Python ingress remain owned by S0e-S0g. Molecule editors, extraction, splitting,
+  fragments, reaction application, resolution, and chemistry transforms publish through
+  `try_build` / `build`; combination and canonicalization publish through
+  `try_from_entries` / `from_entries`; pushout/glue uses `try_from_entries`. Reaction derivation,
+  composition, reversal, span conversion, and canonicalization use `Reaction::try_new` / `new`;
+  span superimposition, conversion, remapping, and canonicalization use
+  `ReactionSpan::try_from_entries` / `from_entries`.
+
+  Dense molecule remapping was the sole stale path: it assembled a public molecule through the
+  private raw-arc constructor. Arc assembly is now a checked `try_from_arcs` boundary shared by
+  entry construction and editor publication, and trusted remapping asserts that the pure
+  renumbering preserves integrity. No operation acquired a defensive input check.
+
+  Five molecule properties republish remapping, extraction, combination, splitting, and successful
+  edit application exactly through the checked editor gate. Reaction application and span
+  properties republish product molecules, derived reactions, and both span projections; both
+  composition properties republish every composite through `Reaction::try_new`. Four chemistry
+  properties cover aromatization, charge delocalization, both kekulization algorithms, and full
+  resolution. The seven focused graph-IR integrity properties, two composition properties, and four
+  graph properties passed. The Python-3.13 workspace all-target check and strict all-target clippy
+  for graph IR with properties, graph with properties, and Python passed. The slow inherited-ledger
+  suites remain deferred to their designated closure checkpoints.
 
 At S0h, Rust, DSL, TableIR/format, and Python boundaries enforce the same rejection, while transient
 editors remain permitted and fail only when publishing. The inherited transport ledger remains.

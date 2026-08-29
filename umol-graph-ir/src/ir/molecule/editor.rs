@@ -1560,7 +1560,7 @@ impl MoleculeEditor {
 
     /// Publish the editor's current state after checking molecule integrity.
     pub fn try_build(self) -> Result<Molecule, MoleculeIntegrityError> {
-        let molecule = Molecule::from_arcs(
+        Molecule::try_from_arcs(
             self.graph,
             self.atoms,
             self.bonds,
@@ -1571,9 +1571,7 @@ impl MoleculeEditor {
             StereoAtoms::from_arc(self.stereo_atoms.into_arc()),
             StereoBonds::from_arc(self.stereo_bonds.into_arc()),
             self.constraints,
-        );
-        molecule.check_integrity()?;
-        Ok(molecule)
+        )
     }
 
     /// Publish editor state whose molecule integrity is established by the producer.

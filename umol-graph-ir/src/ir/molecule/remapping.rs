@@ -192,18 +192,21 @@ impl Molecule {
             .map(|constraint| constraint.remap(&id_remapping))
             .collect();
 
-        Some(Self::from_arcs(
-            graph,
-            Arc::new(atoms),
-            Arc::new(bonds),
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            stereo_atoms,
-            stereo_bonds,
-            constraints,
-        ))
+        Some(
+            Self::try_from_arcs(
+                graph,
+                Arc::new(atoms),
+                Arc::new(bonds),
+                dative_bonds,
+                aromatic_systems,
+                multicenter_bonds,
+                noncovalent_bonds,
+                stereo_atoms,
+                stereo_bonds,
+                constraints,
+            )
+            .expect("dense molecule remapping preserves representation integrity"),
+        )
     }
 }
 
