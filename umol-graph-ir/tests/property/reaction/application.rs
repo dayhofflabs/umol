@@ -71,7 +71,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative localized-bond update lowers against the matched host bond.
@@ -113,7 +113,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative dative-bond update lowers against the matched host relation.
@@ -159,7 +159,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative aromatic-system update lowers against the matched host relation.
@@ -218,7 +218,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative multicenter-bond update lowers against the matched host relation.
@@ -277,7 +277,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
@@ -323,7 +323,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative stereo-atom update lowers against the matched host configuration and
@@ -393,7 +393,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative stereo-bond update lowers against the matched host configuration and
@@ -463,7 +463,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// Delta normalization preserves exact application at an explicit occurrence in a generated,

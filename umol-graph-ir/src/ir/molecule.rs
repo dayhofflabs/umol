@@ -408,102 +408,6 @@ impl Molecule {
         &self.graph
     }
 
-    /// Complete semantic equality in the current id and participant frame.
-    ///
-    /// Topology, relation participants, and stereo sites/ligands must have the same stored ids;
-    /// entity forms and molecule constraints compare by normal form.
-    pub fn equiv(&self, other: &Self) -> bool {
-        if self.graph != other.graph
-            || self.atoms.len() != other.atoms.len()
-            || self.bonds.len() != other.bonds.len()
-            || self.dative_bonds.count() != other.dative_bonds.count()
-            || self.aromatic_systems.count() != other.aromatic_systems.count()
-            || self.multicenter_bonds.count() != other.multicenter_bonds.count()
-            || self.noncovalent_bonds.count() != other.noncovalent_bonds.count()
-            || self.stereo_atoms.count() != other.stereo_atoms.count()
-            || self.stereo_bonds.count() != other.stereo_bonds.count()
-        {
-            return false;
-        }
-        if !self
-            .atoms
-            .iter()
-            .zip(other.atoms.iter())
-            .all(|(left, right)| left.normalized_eq(right))
-            || !self
-                .bonds
-                .iter()
-                .zip(other.bonds.iter())
-                .all(|(left, right)| left.normalized_eq(right))
-        {
-            return false;
-        }
-        for id in self.dative_bonds.ids() {
-            if self.dative_bonds.acceptor_node(id) != other.dative_bonds.acceptor_node(id)
-                || self.dative_bonds.donor_nodes(id) != other.dative_bonds.donor_nodes(id)
-                || !self
-                    .dative_bonds
-                    .attributes(id)
-                    .normalized_eq(other.dative_bonds.attributes(id))
-            {
-                return false;
-            }
-        }
-        for id in self.aromatic_systems.ids() {
-            if self.aromatic_systems.atom_nodes(id) != other.aromatic_systems.atom_nodes(id)
-                || !self
-                    .aromatic_systems
-                    .attributes(id)
-                    .normalized_eq(other.aromatic_systems.attributes(id))
-            {
-                return false;
-            }
-        }
-        for id in self.multicenter_bonds.ids() {
-            if self.multicenter_bonds.atom_nodes(id) != other.multicenter_bonds.atom_nodes(id)
-                || !self
-                    .multicenter_bonds
-                    .attributes(id)
-                    .normalized_eq(other.multicenter_bonds.attributes(id))
-            {
-                return false;
-            }
-        }
-        for id in self.noncovalent_bonds.ids() {
-            if self.noncovalent_bonds.atoms(id) != other.noncovalent_bonds.atoms(id)
-                || !self
-                    .noncovalent_bonds
-                    .attributes(id)
-                    .normalized_eq(other.noncovalent_bonds.attributes(id))
-            {
-                return false;
-            }
-        }
-        for id in self.stereo_atoms.ids() {
-            if self.stereo_atoms.site(id) != other.stereo_atoms.site(id)
-                || self.stereo_atoms.ligands(id) != other.stereo_atoms.ligands(id)
-                || !self
-                    .stereo_atoms
-                    .attributes(id)
-                    .normalized_eq(other.stereo_atoms.attributes(id))
-            {
-                return false;
-            }
-        }
-        for id in self.stereo_bonds.ids() {
-            if self.stereo_bonds.site(id) != other.stereo_bonds.site(id)
-                || self.stereo_bonds.ligands(id) != other.stereo_bonds.ligands(id)
-                || !self
-                    .stereo_bonds
-                    .attributes(id)
-                    .normalized_eq(other.stereo_bonds.attributes(id))
-            {
-                return false;
-            }
-        }
-        self.constraints.normalized_eq(&other.constraints)
-    }
-
     /// Complete semantic equality under a total correspondence from `self` to `other`.
     ///
     /// The correspondence supplies the target id and participant frame. It must cover the actual
@@ -2530,6 +2434,25 @@ impl Molecule {
                 stereo_bond: id, ..
             } => stereo_bond(*id, &[]),
         }
+    }
+}
+
+impl Normalize for Molecule {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for attributes in Arc::make_mut(&mut self.atoms) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        for attributes in Arc::make_mut(&mut self.bonds) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        self.dative_bonds = mem::take(&mut self.dative_bonds).normalize()?;
+        self.aromatic_systems = mem::take(&mut self.aromatic_systems).normalize()?;
+        self.multicenter_bonds = mem::take(&mut self.multicenter_bonds).normalize()?;
+        self.noncovalent_bonds = mem::take(&mut self.noncovalent_bonds).normalize()?;
+        self.stereo_atoms = mem::take(&mut self.stereo_atoms).normalize()?;
+        self.stereo_bonds = mem::take(&mut self.stereo_bonds).normalize()?;
+        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        Ok(self)
     }
 }
 

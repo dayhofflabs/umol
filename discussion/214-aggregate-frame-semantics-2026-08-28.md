@@ -964,8 +964,7 @@ editors remain permitted and fail only when publishing. The inherited transport 
   above. Focused reframing tests (95), normalization tests (263), and permutation tests (48) pass;
   the graph-IR all-target property build and strict graph-IR/umol-perm Clippy pass. The Python
   caller compiles and its focused `normalized_eq` test passes under the repository Python 3.13
-  environment. The pre-existing unused `std::iter` warning in `umol-py/src/reaction.rs` remains;
-  the inherited red ledger was not rerun or changed.
+  environment. The inherited red ledger was not rerun or changed.
 
 At S0l, no general graph-IR operation or public helper interprets an equal-value occurrence
 permutation as observable stereo state. The isolated private canonicalization candidate product
@@ -980,6 +979,14 @@ ledger remains.
   provided `normalized_eq`. Cover empty/nonempty families, shared storage, idempotence, contradiction
   propagation, and agreement of `normalized_eq` with structural equality on normalized values.
   **Breaking; inherited red ledger unchanged after molecule callers migrate.** [dep: S0l]
+  **Done.** `Molecule` now implements consuming reduction over both inherent form vectors, all six
+  overlay stores, and the molecule constraint store while leaving graph topology, ids, and stored
+  participant frames unchanged. The inherent `equiv` method is removed and its callers use the
+  provided `normalized_eq`. Exact unit coverage includes empty and populated aggregates, shared
+  copy-on-write storage, idempotence, and contradictions from both inherent and overlay payloads;
+  the three focused molecule equality properties agree with the settled laws. Focused unit and
+  reaction-span caller tests and strict graph-IR Clippy pass. The comparison property target retains
+  only its listed `test_molecule_equiv_under_reframed` failure, which remains assigned to S0o.
 - **S0n — aggregate molecule reframing** (`ir/molecule.rs`, relation family modules): implement
   `FrameTransport` and consuming `Reframe for Molecule` from the normalized molecule. Assemble each
   dense family action into one `OverlayFrameActions`, apply that same complete action to all six

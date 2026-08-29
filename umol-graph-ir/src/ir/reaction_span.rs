@@ -4668,7 +4668,7 @@ mod tests {
         assert_eq!(reaction.lhs(), &source.lhs());
         assert_eq!(roundtrip.atoms(), &[EntitySpan::Unchanged(lhs_atom)]);
         assert_eq!(roundtrip.lhs(), source.lhs());
-        assert!(roundtrip.rhs().equiv(&source_rhs));
+        assert!(roundtrip.rhs().normalized_eq(&source_rhs));
         assert_eq!(roundtrip.to_reaction(), reaction);
     }
 

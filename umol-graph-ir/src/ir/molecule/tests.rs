@@ -32,6 +32,7 @@ use super::super::dative::DativeBondForm;
 use super::super::edit::{AddBond, AtomFieldChange, AtomHandle, BondHandle, Edit, Edits};
 use super::super::electrons::ElectronCountsForm;
 use super::super::entity::Entity;
+use super::super::error::Contradiction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -49,6 +50,7 @@ use super::super::stereo::{
     StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
     Stereogenicity,
 };
+use super::super::traits::Normalize;
 use super::transact::TransactionError;
 use super::{
     DescriptionLevel, Molecule, MoleculeApplyError, MoleculeEntries, MoleculeIntegrityError,
@@ -1418,14 +1420,116 @@ fn equiv_under_molecules(
 }
 
 #[rstest]
-fn test_molecule_equiv_entity_data(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+fn test_molecule_normalize(#[from(equiv_molecule_entries)] mut entries: MoleculeEntries) {
+    entries.dative[0].0.swap(0, 1);
+    entries.aromatic[0].0.swap(0, 2);
+    entries.multicenter[0].0.swap(0, 2);
+    entries.noncovalent[0].0 = AtomId(3);
+    entries.noncovalent[0].1 = AtomId(0);
+    entries.stereo_atoms[0].1.swap(0, 1);
+    entries.stereo_bonds[0].1.swap(0, 1);
+
+    let mut expected_entries = entries.clone();
+    expected_entries.aromatic[0].1.charge = NumForm::Lit(0);
+    expected_entries.multicenter[0].1.charge = NumForm::Lit(0);
+    let expected = Molecule::from_entries(expected_entries);
+
+    entries.atoms[0].charge = NumForm::lit_set([1_i64]);
+    entries.bonds[0].2.order = NumForm::lit_set([1_i64]);
+    entries.dative[0].2.order = NumForm::lit_set([1_i64]);
+    entries.aromatic[0].1.charge = NumForm::lit_set([0_i64]);
+    entries.multicenter[0].1.charge = NumForm::lit_set([0_i64]);
+    entries.stereo_atoms[0].2 =
+        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::lit_set([1]));
+    entries.stereo_bonds[0].2 =
+        StereoBondForm::new(StereoKind::CisTrans, StereoCoset::lit_set([1]));
+    let duplicate = entries
+        .constraints
+        .iter()
+        .next()
+        .expect("fixture contains one molecule constraint")
+        .clone();
+    entries.constraints.push(duplicate);
+
+    assert_eq!(Molecule::from_entries(entries).normalize(), Ok(expected));
+}
+
+#[rstest]
+fn test_molecule_normalize_identity() {
+    let molecule = Molecule::default();
+
+    assert_eq!(molecule.clone().normalize(), Ok(molecule));
+}
+
+#[rstest]
+fn test_molecule_normalize_shared_storage(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+) {
+    let mut expected_entries = entries.clone();
+    expected_entries.aromatic[0].1.charge = NumForm::Lit(0);
+    let expected = Molecule::from_entries(expected_entries);
+
+    entries.atoms[0].charge = NumForm::lit_set([1_i64]);
+    entries.aromatic[0].1.charge = NumForm::lit_set([0_i64]);
+    let source = Molecule::from_entries(entries);
+    let snapshot = source.clone();
+    let shared = source.clone();
+    assert!(Arc::ptr_eq(&source.atoms, &shared.atoms));
+
+    let normalized = shared.normalize().expect("the molecule is satisfiable");
+
+    assert_eq!(source, snapshot);
+    assert_eq!(normalized, expected);
+}
+
+#[rstest]
+fn test_molecule_normalize_idempotence(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+) {
+    entries.atoms[0].charge = NumForm::lit_set([1_i64]);
+    let once = Molecule::from_entries(entries)
+        .normalize()
+        .expect("the molecule is satisfiable");
+
+    assert_eq!(once.clone().normalize(), Ok(once));
+}
+
+#[rstest]
+#[case::atom(|entries: &mut MoleculeEntries| {
+    entries.atoms[0].charge = NumForm::lit_set(Vec::<i64>::new());
+})]
+#[case::aromatic_system(|entries: &mut MoleculeEntries| {
+    entries.aromatic[0].1.charge = NumForm::lit_set(Vec::<i64>::new());
+})]
+#[case::stereo_atom(|entries: &mut MoleculeEntries| {
+    entries.stereo_atoms[0].2 = StereoAtomForm::new(
+        StereoKind::Tetrahedral,
+        StereoCoset::lit_set(Vec::<u32>::new()),
+    );
+})]
+fn test_molecule_normalize_error(
+    #[from(equiv_molecule_entries)] mut entries: MoleculeEntries,
+    #[case] contradict: fn(&mut MoleculeEntries),
+) {
+    contradict(&mut entries);
+
+    assert_eq!(
+        Molecule::from_entries(entries).normalize(),
+        Err(Contradiction),
+    );
+}
+
+#[rstest]
+fn test_molecule_normalized_eq_entity_data(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
     let base = Molecule::from_entries(entries.clone());
 
     let mut canonical_encoding = entries.clone();
     canonical_encoding.atoms[0].charge = NumForm::lit_set([1]);
     let canonical_encoding = Molecule::from_entries(canonical_encoding);
     assert_ne!(base, canonical_encoding);
-    assert!(base.equiv(&canonical_encoding));
+    assert!(base.normalized_eq(&canonical_encoding));
 
     let mut differences = Vec::new();
 
@@ -1471,14 +1575,16 @@ fn test_molecule_equiv_entity_data(#[from(equiv_molecule_entries)] entries: Mole
     assert_eq!(
         differences
             .iter()
-            .map(|other| base.equiv(other))
+            .map(|other| base.normalized_eq(other))
             .collect::<Vec<_>>(),
         vec![false; 9],
     );
 }
 
 #[rstest]
-fn test_molecule_equiv_relation_frames(#[from(equiv_molecule_entries)] entries: MoleculeEntries) {
+fn test_molecule_normalized_eq_relation_frames(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
     let base = Molecule::from_entries(entries.clone());
     let mut differences = Vec::new();
 
@@ -1530,14 +1636,14 @@ fn test_molecule_equiv_relation_frames(#[from(equiv_molecule_entries)] entries: 
     assert_eq!(
         differences
             .iter()
-            .map(|other| base.equiv(other))
+            .map(|other| base.normalized_eq(other))
             .collect::<Vec<_>>(),
         vec![false; 8],
     );
 }
 
 #[rstest]
-fn test_molecule_equiv_structure_and_counts(
+fn test_molecule_normalized_eq_structure_and_counts(
     #[from(equiv_molecule_entries)] entries: MoleculeEntries,
 ) {
     let base = Molecule::from_entries(entries.clone());
@@ -1585,7 +1691,7 @@ fn test_molecule_equiv_structure_and_counts(
     assert_eq!(
         differences
             .iter()
-            .map(|other| base.equiv(other))
+            .map(|other| base.normalized_eq(other))
             .collect::<Vec<_>>(),
         vec![false; 9],
     );
@@ -1598,7 +1704,7 @@ fn test_molecule_equiv_under_non_identity(
     let (left, right, correspondence) = case;
 
     assert!(correspondence.is_total());
-    assert!(!left.equiv(&right));
+    assert!(!left.normalized_eq(&right));
     assert!(left.equiv_under(&right, &correspondence));
     assert!(right.equiv_under(&left, &correspondence.reverse()));
 }

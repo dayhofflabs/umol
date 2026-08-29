@@ -1,6 +1,6 @@
 //! Molecule comparison properties.
 //!
-//! The identity-frame laws for `equiv`, the correspondence laws for
+//! The identity-frame laws for `normalized_eq`, the correspondence laws for
 //! `equiv_under`, and agreement with `==` on normalized graph-IR values deliberately use
 //! overlapping molecule domains. They establish distinct relations: semantic
 //! equivalence in a shared frame, semantic equivalence under an explicit frame
@@ -61,16 +61,16 @@ proptest! {
         ..Config::default()
     })]
     #[test]
-    fn test_molecule_equiv_reflexive(molecule in molecule_with_constraints_strategy()) {
-        prop_assert!(molecule.equiv(&molecule));
+    fn test_molecule_normalized_eq_reflexive(molecule in molecule_with_constraints_strategy()) {
+        prop_assert!(molecule.normalized_eq(&molecule));
     }
 
     #[test]
-    fn test_molecule_equiv_symmetric(
+    fn test_molecule_normalized_eq_symmetric(
         left in molecule_with_constraints_strategy(),
         right in molecule_with_constraints_strategy(),
     ) {
-        prop_assert_eq!(left.equiv(&right), right.equiv(&left));
+        prop_assert_eq!(left.normalized_eq(&right), right.normalized_eq(&left));
     }
 
     #[test]
@@ -117,15 +117,15 @@ proptest! {
     }
 
     #[test]
-    fn test_molecule_equiv_agrees_with_equality_for_normalized_molecules(
+    fn test_molecule_normalized_eq_agrees_with_equality_for_normalized_molecules(
         left in molecule_strategy(),
         right in molecule_strategy(),
     ) {
-        prop_assert_eq!(left.equiv(&right), left == right);
+        prop_assert_eq!(left.normalized_eq(&right), left == right);
     }
 
     #[test]
-    fn test_molecule_equiv_under_identity_reduces_to_equiv(
+    fn test_molecule_equiv_under_identity_reduces_to_normalized_eq(
         molecule in molecule_with_constraints_strategy(),
     ) {
         let correspondence = identity_correspondence(&molecule);
@@ -136,7 +136,7 @@ proptest! {
 
         prop_assert_eq!(
             molecule.equiv_under(&other, &correspondence),
-            molecule.equiv(&other),
+            molecule.normalized_eq(&other),
         );
     }
 
@@ -148,7 +148,7 @@ proptest! {
 
         prop_assert_eq!(
             left.equiv_under(&right, &correspondence),
-            left.equiv(&right),
+            left.normalized_eq(&right),
         );
     }
 
