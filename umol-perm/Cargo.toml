@@ -13,7 +13,7 @@ keywords = [
     "cheminformatics",
     "stereochemistry",
 ]
-description = "Pure permutation and coset algebra for umol stereochemistry."
+description = "Permutation and stereochemical coset algebra for umol."
 
 [lib]
 bench = false

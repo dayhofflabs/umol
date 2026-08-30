@@ -21,6 +21,8 @@ mod delta;
 mod edit;
 #[path = "property/entity.rs"]
 mod entity;
+#[path = "property/frame.rs"]
+mod frame;
 #[path = "property/lattice.rs"]
 mod lattice;
 #[path = "property/molecule.rs"]

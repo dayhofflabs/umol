@@ -750,6 +750,9 @@ mod tests {
     fn test_molecule_spec_stereo_atom() {
         // a tetrahedral center: three atom ligands plus an implicit hydrogen borne by the site
         let spec = atoms([Element::C, Element::F, Element::Cl, Element::Br])
+            + bond(0_u32, 1_u32, BondForm::from_order(1))
+            + bond(0_u32, 2_u32, BondForm::from_order(1))
+            + bond(0_u32, 3_u32, BondForm::from_order(1))
             + stereo_atom(
                 0_u32,
                 [
@@ -782,6 +785,8 @@ mod tests {
         // atoms by ligand position (0–1 → first atom, 2–3 → second)
         let spec = atoms([Element::C, Element::C, Element::F, Element::Cl])
             + named_bond("db", 0_u32, 1_u32, BondForm::from_order(2))
+            + bond(0_u32, 2_u32, BondForm::from_order(1))
+            + bond(1_u32, 3_u32, BondForm::from_order(1))
             + stereo_bond(
                 "db",
                 [

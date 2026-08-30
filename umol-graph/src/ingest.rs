@@ -1567,7 +1567,7 @@ mod tests {
             &ResolveConfig::default(),
         )
         .unwrap();
-        let system = reaction.lhs.aromatic_system(AromaticSystemId(0));
+        let system = reaction.lhs().aromatic_system(AromaticSystemId(0));
 
         assert_eq!(
             system.atom_ids().collect::<Vec<_>>(),
@@ -1580,10 +1580,10 @@ mod tests {
             &ElectronCountsForm::Lit(expected_electrons)
         );
         assert_eq!(
-            reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),
+            reaction.lhs().aromatic_systems().ids().collect::<Vec<_>>(),
             vec![AromaticSystemId(0)]
         );
-        assert_eq!(reaction.deltas, Deltas::new());
+        assert_eq!(reaction.deltas(), &Deltas::new());
     }
 
     #[rstest]
@@ -1611,7 +1611,7 @@ mod tests {
 
         assert_eq!(
             reaction
-                .lhs
+                .lhs()
                 .atoms()
                 .iter()
                 .map(|atom| atom.attributes.constraints.aromatic_valence().cloned())
@@ -1620,7 +1620,7 @@ mod tests {
         );
         assert_eq!(
             reaction
-                .lhs
+                .lhs()
                 .bonds()
                 .iter()
                 .map(|bond| bond.attributes.constraints.aromatic())
@@ -1628,10 +1628,10 @@ mod tests {
             vec![BooleanForm::Lit(true); 5]
         );
         assert_eq!(
-            reaction.lhs.aromatic_systems().ids().collect::<Vec<_>>(),
+            reaction.lhs().aromatic_systems().ids().collect::<Vec<_>>(),
             Vec::<AromaticSystemId>::new()
         );
-        assert_eq!(reaction.deltas, Deltas::new());
+        assert_eq!(reaction.deltas(), &Deltas::new());
     }
 
     #[rstest]

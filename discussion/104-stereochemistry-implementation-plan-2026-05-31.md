@@ -10,6 +10,15 @@ relative variables, and deeper perception were outside the A–E deliverable and
 remain in the geometry, symmetry, and variable documents. Design record:
 [103-stereochemistry-overlay-and-ports-2026-05-28.md](103-stereochemistry-overlay-and-ports-2026-05-28.md).
 
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only the portions below that allow
+one `StereoLigand` value to occur repeatedly in a stereo frame, materialize multiple equal virtual
+slots, or add same-kind virtual occurrence permutations to stereo symmetry. Stored frames are now
+pairwise-distinct and bounded by `umol_perm::MAX_DEGREE`. `#T`/`#C`, prochirality, topicity, and the
+implemented stereo architecture otherwise remain historical context; an implicit-hydrogen case that
+needs distinct positions uses explicit H atoms.
+
 The full staged plan for the stereo deliverable. Design and decisions live in doc 103 (molecule-
 level semantics, the `:stereo-atoms`/`:stereo-bonds` DSL, `#T`/`#C`, config algebra, contract D1/D2/D3, port trajectory,
 superseded directions); this doc is the plan to build it, grounded against the real `relation.rs`

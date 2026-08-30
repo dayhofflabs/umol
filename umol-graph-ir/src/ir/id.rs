@@ -1,6 +1,7 @@
 //! Graph-IR indices into atom, bond, and relation tables.
 
 use std::fmt;
+use std::ops::{Add, Sub};
 
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::{EdgeId, NodeId, RelationId};
@@ -24,6 +25,23 @@ macro_rules! define_id {
             impl fmt::Display for $name {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                     write!(f, "{}", self.0)
+                }
+            }
+
+            /// Dense positional offset, for renumbering a dense id space.
+            impl Add<usize> for $name {
+                type Output = Self;
+
+                fn add(self, offset: usize) -> Self {
+                    Self(self.0 + offset as u32)
+                }
+            }
+
+            impl Sub<usize> for $name {
+                type Output = Self;
+
+                fn sub(self, offset: usize) -> Self {
+                    Self(self.0 - offset as u32)
                 }
             }
         )+

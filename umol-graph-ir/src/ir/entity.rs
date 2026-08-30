@@ -60,8 +60,8 @@ impl Entity {
         EntityKind::from(self)
     }
 
-    /// Numeric index within entity kind.
-    pub fn id_index(self) -> usize {
+    /// The entity's ID within its kind-specific ID space.
+    pub fn kind_id(self) -> usize {
         match self {
             Entity::Atom(i) => i.index(),
             Entity::Bond(i) => i.index(),
@@ -76,17 +76,17 @@ impl Entity {
 }
 
 impl EntityKind {
-    /// Reconstruct entity of this kind with the given id index.
-    pub fn with_id(self, id: u32) -> Entity {
+    /// Reconstruct an entity of this kind with the given kind ID.
+    pub fn with_id(self, kind_id: u32) -> Entity {
         match self {
-            EntityKind::Atom => Entity::Atom(AtomId(id)),
-            EntityKind::Bond => Entity::Bond(BondId(id)),
-            EntityKind::DativeBond => Entity::DativeBond(DativeBondId(id)),
-            EntityKind::AromaticSystem => Entity::AromaticSystem(AromaticSystemId(id)),
-            EntityKind::MulticenterBond => Entity::MulticenterBond(MulticenterBondId(id)),
-            EntityKind::NoncovalentBond => Entity::NoncovalentBond(NoncovalentBondId(id)),
-            EntityKind::StereoAtom => Entity::StereoAtom(StereoAtomId(id)),
-            EntityKind::StereoBond => Entity::StereoBond(StereoBondId(id)),
+            EntityKind::Atom => Entity::Atom(AtomId(kind_id)),
+            EntityKind::Bond => Entity::Bond(BondId(kind_id)),
+            EntityKind::DativeBond => Entity::DativeBond(DativeBondId(kind_id)),
+            EntityKind::AromaticSystem => Entity::AromaticSystem(AromaticSystemId(kind_id)),
+            EntityKind::MulticenterBond => Entity::MulticenterBond(MulticenterBondId(kind_id)),
+            EntityKind::NoncovalentBond => Entity::NoncovalentBond(NoncovalentBondId(kind_id)),
+            EntityKind::StereoAtom => Entity::StereoAtom(StereoAtomId(kind_id)),
+            EntityKind::StereoBond => Entity::StereoBond(StereoBondId(kind_id)),
         }
     }
 }
@@ -139,6 +139,19 @@ mod tests {
     #[case::stereo_bond(EntityKind::StereoBond, "stereo bond")]
     fn test_entity_kind_display(#[case] kind: EntityKind, #[case] expected: &str) {
         assert_eq!(kind.to_string(), expected);
+    }
+
+    #[rstest]
+    #[case::atom(Entity::Atom(AtomId(1)), 1)]
+    #[case::bond(Entity::Bond(BondId(2)), 2)]
+    #[case::dative_bond(Entity::DativeBond(DativeBondId(3)), 3)]
+    #[case::aromatic_system(Entity::AromaticSystem(AromaticSystemId(4)), 4)]
+    #[case::multicenter_bond(Entity::MulticenterBond(MulticenterBondId(5)), 5)]
+    #[case::noncovalent_bond(Entity::NoncovalentBond(NoncovalentBondId(6)), 6)]
+    #[case::stereo_atom(Entity::StereoAtom(StereoAtomId(7)), 7)]
+    #[case::stereo_bond(Entity::StereoBond(StereoBondId(8)), 8)]
+    fn test_entity_kind_id(#[case] entity: Entity, #[case] expected: usize) {
+        assert_eq!(entity.kind_id(), expected);
     }
 
     #[rstest]

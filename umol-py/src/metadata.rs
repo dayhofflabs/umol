@@ -16,7 +16,7 @@ use crate::convert::{hash_rust, variant_repr};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::error::metadata_error;
 
-/// A typed numerical identifier for one of the eight molecule entity families.
+/// A typed numerical identifier for one of the eight molecule entity kinds.
 #[pyclass(frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Entity {

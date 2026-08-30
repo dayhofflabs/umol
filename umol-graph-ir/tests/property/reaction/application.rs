@@ -1,4 +1,5 @@
-//! Property tests for reaction application, including host-relative updates and stereo-frame transport.
+//! Property tests for reaction application, including host-relative updates and rule-to-host
+//! overlay-frame transport.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -32,7 +33,7 @@ proptest! {
     // These eight host-refinement properties deliberately have parallel shapes.
     // Each exercises the lowering path for a distinct entity delta; keeping them
     // separate makes a violation of host-relative old-value semantics local to
-    // the affected entity family.
+    // the affected entity kind.
 
     /// A pattern-relative atom update lowers against the matched host atom, including independent
     /// unpaired-electron components and keyed constraint set / replace / remove operations.
@@ -71,7 +72,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative localized-bond update lowers against the matched host bond.
@@ -113,7 +114,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative dative-bond update lowers against the matched host relation.
@@ -159,7 +160,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative aromatic-system update lowers against the matched host relation.
@@ -218,7 +219,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative multicenter-bond update lowers against the matched host relation.
@@ -277,7 +278,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative noncovalent-bond update lowers against the matched host relation.
@@ -297,19 +298,19 @@ proptest! {
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
+                noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),
         );
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), host_bond)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], host_bond)],
             ..Default::default()
         });
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), expected_bond)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], expected_bond)],
             ..Default::default()
         });
         let products: Vec<Molecule> = reaction
@@ -323,7 +324,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative stereo-atom update lowers against the matched host configuration and
@@ -356,9 +357,15 @@ proptest! {
             AtomForm::from_element(Element::O),
             AtomForm::from_element(Element::F),
         ];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+        ];
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
+                bonds: bonds.clone(),
                 stereo_atoms: vec![(AtomId(0), ligands.clone(), pattern_atom.clone())],
                 ..Default::default()
             }),
@@ -366,11 +373,13 @@ proptest! {
         );
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: atoms.clone(),
+            bonds: bonds.clone(),
             stereo_atoms: vec![(AtomId(0), ligands.clone(), host_atom)],
             ..Default::default()
         });
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms,
+            bonds,
             stereo_atoms: vec![(AtomId(0), ligands, expected_atom)],
             ..Default::default()
         });
@@ -385,7 +394,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// A pattern-relative stereo-bond update lowers against the matched host configuration and
@@ -397,10 +406,10 @@ proptest! {
         update in stereo_bond_application_update_strategy(),
     ) {
         let ligands = vec![
-            StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-            StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
             StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
             StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
         ];
         let pattern_bond = StereoBondForm::new(
             StereoKind::CisTrans,
@@ -418,7 +427,11 @@ proptest! {
             AtomForm::from_element(Element::O),
             AtomForm::from_element(Element::F),
         ];
-        let bonds = vec![(AtomId(0), AtomId(1), BondForm::from_order(2))];
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(2)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+        ];
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: atoms.clone(),
@@ -451,7 +464,7 @@ proptest! {
             .collect();
 
         prop_assert_eq!(products.len(), 1);
-        prop_assert!(products[0].equiv(&expected));
+        prop_assert!(products[0].normalized_eq(&expected));
     }
 
     /// Delta normalization preserves exact application at an explicit occurrence in a generated,
@@ -512,7 +525,7 @@ proptest! {
     ) {
         let mut expected = Vec::new();
         for correspondence in reaction
-            .lhs
+            .lhs()
             .substructure_matches(&host, MATCH_CONFIG)
             .expect("generated patterns carry no molecule-scope constraints")
         {
@@ -566,7 +579,7 @@ proptest! {
         reaction in materializable_reaction_strategy(),
         extra in molecule_strategy(),
     ) {
-        let reactants = vec![reaction.lhs.clone(), extra];
+        let reactants = vec![reaction.lhs().clone(), extra];
         let (host, _) = Molecule::combine_all(&reactants);
         let expected = reaction
             .apply(&host, MATCH_CONFIG)
@@ -590,6 +603,25 @@ proptest! {
         prop_assert_eq!(actual, expected);
     }
 
+    /// A concrete application publishes an integral product molecule and a derivation whose
+    /// recovered reaction satisfies reaction integrity.
+    #[test]
+    fn test_reaction_apply_integrity_preservation(
+        (reaction, host, correspondence) in reaction_application_strategy(),
+    ) {
+        let derivation = reaction.apply_at(&host, &correspondence).map_err(|error| {
+            TestCaseError::fail(format!("generated application failed: {error}"))
+        })?;
+        let published = derivation.rhs().clone();
+        let recovered = derivation.to_reaction();
+
+        prop_assert_eq!(published.edit().try_build(), Ok(published));
+        prop_assert_eq!(
+            Reaction::try_new(recovered.lhs().clone(), recovered.deltas().clone()),
+            Ok(recovered),
+        );
+    }
+
     /// Applying a reaction at the identity occurrence of its own `lhs` reproduces the span's
     /// `right()` — the `transact`-apply path agrees with the span projection.
     #[test]
@@ -600,7 +632,7 @@ proptest! {
         let right = span.rhs();
         prop_assert!(reaction
             .apply(
-                &reaction.lhs,
+                reaction.lhs(),
                 MATCH_CONFIG,
             )
             .unwrap()
@@ -617,7 +649,7 @@ proptest! {
         let right = span.rhs();
         prop_assert!(reaction
             .apply(
-                &reaction.lhs,
+                reaction.lhs(),
                 MATCH_CONFIG,
             )
             .unwrap()
@@ -668,7 +700,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame.clone(),
-                StereoAtomForm::new(StereoKind::Tetrahedral, old).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, old).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -678,7 +710,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 host_frame,
-                StereoAtomForm::new(StereoKind::Tetrahedral, new).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, new).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -735,7 +767,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&rule_frame),
-                StereoAtomForm::new(StereoKind::Tetrahedral, coset).apply(permutation),
+                StereoAtomForm::new(StereoKind::Tetrahedral, coset).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -806,7 +838,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame.clone(),
-                StereoBondForm::new(StereoKind::CisTrans, old).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, old).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -816,7 +848,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 host_frame,
-                StereoBondForm::new(StereoKind::CisTrans, new).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, new).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -878,7 +910,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&rule_frame),
-                StereoBondForm::new(StereoKind::CisTrans, coset).apply(permutation),
+                StereoBondForm::new(StereoKind::CisTrans, coset).apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });

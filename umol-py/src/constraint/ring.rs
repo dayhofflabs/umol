@@ -1,4 +1,4 @@
-//! Ring scope and membership constraint payloads used by atom and bond families.
+//! Ring scope and membership constraint payloads used by atom and bond kinds.
 
 use pyo3::prelude::*;
 use umol_graph_ir::ir::{

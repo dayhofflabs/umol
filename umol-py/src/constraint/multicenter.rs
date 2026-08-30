@@ -2,7 +2,7 @@
 
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyKeyError};
+use pyo3::exceptions::{PyIndexError, PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use umol_graph_ir::ir::{
@@ -502,8 +502,8 @@ pub(crate) enum MulticenterBondConstraintsBacking {
 
 /// A live handle onto one multicenter bond's constraints, backed by either a
 /// molecule-bond or a standalone `MulticenterBondForm`. Reads borrow the constraints
-/// and read only the item they need (no whole-container clone); mutators write through
-/// to the bond in place, without a clone-and-writeback.
+/// and read only the item they need. Mutators on a molecule-backed view publish atomically through
+/// the molecule integrity gate; standalone forms mutate directly.
 #[pyclass]
 pub struct MulticenterBondConstraintsView {
     pub(crate) backing: MulticenterBondConstraintsBacking,
@@ -540,12 +540,17 @@ impl MulticenterBondConstraintsView {
         f: impl FnOnce(&mut GraphIrMulticenterBondConstraintsForm) -> R,
     ) -> PyResult<R> {
         match &self.backing {
-            MulticenterBondConstraintsBacking::Molecule { owner, id } => Ok(f(&mut owner
-                .borrow_mut(py)
-                .to_rust_mut()
-                .multicenter_bond_mut(*id)
-                .attributes
-                .constraints)),
+            MulticenterBondConstraintsBacking::Molecule { owner, id } => {
+                let mut output = None;
+                owner
+                    .borrow_mut(py)
+                    .to_rust_mut()
+                    .try_modify_multicenter_bond(*id, |bond| {
+                        output = Some(f(&mut bond.constraints));
+                    })
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                Ok(output.expect("a successful checked mutation invokes its callback"))
+            }
             MulticenterBondConstraintsBacking::MulticenterBond(bond) => {
                 Ok(f(&mut bond.borrow_mut(py).to_rust_mut()?.constraints))
             }

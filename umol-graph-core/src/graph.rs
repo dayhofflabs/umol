@@ -3,12 +3,14 @@
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! it and produce a `Compaction` for reindexing external data.
+//! it and produce a [`crate::compaction::GraphCompaction`] for reindexing external data.
 
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::ops::{Add, Sub};
 use std::sync::Arc;
 
+use crate::compaction::GraphCompaction;
 use crate::correspondence::{Correspondence, GraphCorrespondence};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -35,6 +37,23 @@ impl From<usize> for NodeId {
     }
 }
 
+/// Dense positional offset, for renumbering a dense id space.
+impl Add<usize> for NodeId {
+    type Output = Self;
+
+    fn add(self, offset: usize) -> Self {
+        Self(self.0 + offset as u32)
+    }
+}
+
+impl Sub<usize> for NodeId {
+    type Output = Self;
+
+    fn sub(self, offset: usize) -> Self {
+        Self(self.0 - offset as u32)
+    }
+}
+
 impl EdgeId {
     pub fn index(self) -> usize {
         self.0 as usize
@@ -44,6 +63,23 @@ impl EdgeId {
 impl From<usize> for EdgeId {
     fn from(index: usize) -> Self {
         Self(index as u32)
+    }
+}
+
+/// Dense positional offset, for renumbering a dense id space.
+impl Add<usize> for EdgeId {
+    type Output = Self;
+
+    fn add(self, offset: usize) -> Self {
+        Self(self.0 + offset as u32)
+    }
+}
+
+impl Sub<usize> for EdgeId {
+    type Output = Self;
+
+    fn sub(self, offset: usize) -> Self {
+        Self(self.0 - offset as u32)
     }
 }
 
@@ -226,9 +262,9 @@ impl Graph {
 
     /// SqPO-style removal: delete `nodes` and `edges`, sweeping along every edge incident to a
     /// removed node (deletion in unknown context). Always succeeds; incident edges the caller did
-    /// not list are dropped too. Returns the [`Compaction`] renumbering. For the DPO discipline that
+    /// not list are dropped too. Returns the [`GraphCompaction`] renumbering. For the DPO discipline that
     /// rejects a stranded edge instead of sweeping it, use [`Graph::try_remove`].
-    pub fn remove_cascading(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Compaction {
+    pub fn remove_cascading(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> GraphCompaction {
         let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
         removed_nodes.sort_unstable();
         removed_nodes.dedup();
@@ -265,14 +301,17 @@ impl Graph {
             &kept_edges,
         ));
 
-        Compaction::new(removed_nodes, removed_edge_set)
+        GraphCompaction::new(
+            removed_nodes.into_iter().map(NodeId).collect(),
+            removed_edge_set.into_iter().map(EdgeId).collect(),
+        )
     }
 
     /// DPO-style removal: delete exactly `nodes` and `edges`, or `None` when that would strand an
     /// edge — the **dangling condition**: a removed node incident to an edge the caller did not list
     /// for removal. On success the result equals [`Self::remove_cascading`] (the check guarantees
     /// there is nothing extra to sweep), so it is the pushout-complement of a matched deletion.
-    pub fn try_remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Option<Compaction> {
+    pub fn try_remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Option<GraphCompaction> {
         let removed_edges: HashSet<EdgeId> = edges.iter().copied().collect();
         for &node in nodes {
             if self
@@ -286,11 +325,11 @@ impl Graph {
         Some(self.remove_cascading(nodes, edges))
     }
 
-    pub fn remove_node_cascading(&mut self, id: NodeId) -> Compaction {
+    pub fn remove_node_cascading(&mut self, id: NodeId) -> GraphCompaction {
         self.remove_cascading(&[id], &[])
     }
 
-    pub fn remove_edge_cascading(&mut self, id: EdgeId) -> Compaction {
+    pub fn remove_edge_cascading(&mut self, id: EdgeId) -> GraphCompaction {
         self.remove_cascading(&[], &[id])
     }
 
@@ -559,125 +598,6 @@ impl SubdividedGraph {
 impl Default for Graph {
     fn default() -> Self {
         Self::new(0, &[])
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Compaction {
-    removed_nodes: Vec<u32>,
-    removed_edges: Vec<u32>,
-}
-
-impl Compaction {
-    pub fn new(mut removed_nodes: Vec<u32>, mut removed_edges: Vec<u32>) -> Self {
-        removed_nodes.sort_unstable();
-        removed_nodes.dedup();
-        removed_edges.sort_unstable();
-        removed_edges.dedup();
-        Self {
-            removed_nodes,
-            removed_edges,
-        }
-    }
-
-    pub fn compact_node(&self, old: NodeId) -> Option<NodeId> {
-        if self.removed_nodes.binary_search(&old.0).is_ok() {
-            return None;
-        }
-        let shift = self.removed_nodes.partition_point(|&r| r < old.0);
-        Some(NodeId(old.0 - shift as u32))
-    }
-
-    pub fn compact_edge(&self, old: EdgeId) -> Option<EdgeId> {
-        if self.removed_edges.binary_search(&old.0).is_ok() {
-            return None;
-        }
-        let shift = self.removed_edges.partition_point(|&r| r < old.0);
-        Some(EdgeId(old.0 - shift as u32))
-    }
-
-    pub fn uncompact_node(&self, post: NodeId) -> NodeId {
-        NodeId(uncompact_dense(&self.removed_nodes, post.0))
-    }
-
-    pub fn uncompact_edge(&self, post: EdgeId) -> EdgeId {
-        EdgeId(uncompact_dense(&self.removed_edges, post.0))
-    }
-}
-
-// Inverse dense shift: re-add removed ids at or below the post index (fixpoint).
-fn uncompact_dense(removed: &[u32], post: u32) -> u32 {
-    let mut old = post;
-    loop {
-        let next = post + removed.partition_point(|&r| r <= old) as u32;
-        if next == old {
-            return old;
-        }
-        old = next;
-    }
-}
-
-/// Compact a node-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn compact_node_vec<T: Clone>(compaction: &Compaction, data: &[T]) -> Vec<T> {
-    data.iter()
-        .enumerate()
-        .filter(|(i, _)| compaction.compact_node(NodeId(*i as u32)).is_some())
-        .map(|(_, v)| v.clone())
-        .collect()
-}
-
-/// Compact an edge-indexed data column to the post-removal layout (drop removed, keep order).
-pub fn compact_edge_vec<T: Clone>(compaction: &Compaction, data: &[T]) -> Vec<T> {
-    data.iter()
-        .enumerate()
-        .filter(|(i, _)| compaction.compact_edge(EdgeId(*i as u32)).is_some())
-        .map(|(_, v)| v.clone())
-        .collect()
-}
-
-/// General relabeling of node/edge ids: a **total** map old→new (no drops —
-/// removal is `Compaction`). Indexed by old id, so `map_node(NodeId(i))`
-/// is `nodes[i]`. The map may be an injection into a larger id space (e.g. a
-/// composition's merged frame), so it is not necessarily a bijection.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Remapping {
-    nodes: Vec<NodeId>,
-    edges: Vec<EdgeId>,
-}
-
-impl Remapping {
-    pub fn new(nodes: Vec<NodeId>, edges: Vec<EdgeId>) -> Self {
-        Self { nodes, edges }
-    }
-
-    /// Return the image of `old`, or `None` when it lies outside the node source range.
-    pub fn try_map_node(&self, old: NodeId) -> Option<NodeId> {
-        self.nodes.get(old.0 as usize).copied()
-    }
-
-    /// Return the image of `old`, or `None` when it lies outside the edge source range.
-    pub fn try_map_edge(&self, old: EdgeId) -> Option<EdgeId> {
-        self.edges.get(old.0 as usize).copied()
-    }
-
-    /// Return the image of `old`.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `old` lies outside the node source range defined at construction.
-    pub fn map_node(&self, old: NodeId) -> NodeId {
-        self.try_map_node(old)
-            .expect("node id outside remapping source range")
-    }
-
-    /// Return the image of `old`.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `old` lies outside the edge source range defined at construction.
-    pub fn map_edge(&self, old: EdgeId) -> EdgeId {
-        self.try_map_edge(old)
-            .expect("edge id outside remapping source range")
     }
 }
 
@@ -1071,8 +991,8 @@ mod tests {
 
         assert_eq!(g.node_count(), 2);
         assert_eq!(g.edge_count(), 0);
-        assert_eq!(compaction.removed_nodes, vec![1]);
-        assert_eq!(compaction.removed_edges, vec![0, 1]);
+        assert_eq!(compaction.nodes().removed(), [NodeId(1)]);
+        assert_eq!(compaction.edges().removed(), [EdgeId(0), EdgeId(1)]);
 
         // node 0 stays 0, node 2 becomes 1
         assert_eq!(compaction.compact_node(NodeId(0)), Some(NodeId(0)));
@@ -1088,8 +1008,8 @@ mod tests {
 
         assert_eq!(g.node_count(), 2);
         assert_eq!(g.edge_count(), 1);
-        assert_eq!(compaction.removed_nodes, vec![0]);
-        assert_eq!(compaction.removed_edges, vec![0, 2]);
+        assert_eq!(compaction.nodes().removed(), [NodeId(0)]);
+        assert_eq!(compaction.edges().removed(), [EdgeId(0), EdgeId(2)]);
 
         // surviving edge (old 1) maps to new 0
         assert_eq!(compaction.compact_edge(EdgeId(0)), None);
@@ -1108,8 +1028,8 @@ mod tests {
 
         assert_eq!(g.node_count(), 3);
         assert_eq!(g.edge_count(), 2);
-        assert_eq!(compaction.removed_nodes, Vec::<u32>::new());
-        assert_eq!(compaction.removed_edges, vec![1]);
+        assert_eq!(compaction.nodes().removed(), []);
+        assert_eq!(compaction.edges().removed(), [EdgeId(1)]);
 
         assert_eq!(compaction.compact_edge(EdgeId(0)), Some(EdgeId(0)));
         assert_eq!(compaction.compact_edge(EdgeId(1)), None);
@@ -1117,73 +1037,6 @@ mod tests {
 
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
-    }
-
-    #[fixture]
-    fn remapping() -> Remapping {
-        Remapping::new(
-            vec![NodeId(2), NodeId(0), NodeId(5)],
-            vec![EdgeId(3), EdgeId(1)],
-        )
-    }
-
-    #[rstest]
-    #[case::first(NodeId(0), Some(NodeId(2)))]
-    #[case::last(NodeId(2), Some(NodeId(5)))]
-    #[case::uncovered(NodeId(3), None)]
-    fn test_remapping_try_map_node(
-        remapping: Remapping,
-        #[case] old: NodeId,
-        #[case] expected: Option<NodeId>,
-    ) {
-        assert_eq!(remapping.try_map_node(old), expected);
-    }
-
-    #[rstest]
-    #[case::first(EdgeId(0), Some(EdgeId(3)))]
-    #[case::last(EdgeId(1), Some(EdgeId(1)))]
-    #[case::uncovered(EdgeId(2), None)]
-    fn test_remapping_try_map_edge(
-        remapping: Remapping,
-        #[case] old: EdgeId,
-        #[case] expected: Option<EdgeId>,
-    ) {
-        assert_eq!(remapping.try_map_edge(old), expected);
-    }
-
-    #[rstest]
-    #[case::first(NodeId(0), NodeId(2))]
-    #[case::middle(NodeId(1), NodeId(0))]
-    #[case::last(NodeId(2), NodeId(5))]
-    fn test_remapping_map_node(
-        remapping: Remapping,
-        #[case] old: NodeId,
-        #[case] expected: NodeId,
-    ) {
-        assert_eq!(remapping.map_node(old), expected);
-    }
-
-    #[rstest]
-    #[should_panic(expected = "node id outside remapping source range")]
-    fn test_remapping_map_node_error(remapping: Remapping) {
-        remapping.map_node(NodeId(3));
-    }
-
-    #[rstest]
-    #[case::relabel(EdgeId(0), EdgeId(3))]
-    #[case::fixed(EdgeId(1), EdgeId(1))]
-    fn test_remapping_map_edge(
-        remapping: Remapping,
-        #[case] old: EdgeId,
-        #[case] expected: EdgeId,
-    ) {
-        assert_eq!(remapping.map_edge(old), expected);
-    }
-
-    #[rstest]
-    #[should_panic(expected = "edge id outside remapping source range")]
-    fn test_remapping_map_edge_error(remapping: Remapping) {
-        remapping.map_edge(EdgeId(2));
     }
 
     #[test]
@@ -1253,35 +1106,5 @@ mod tests {
         // graph is left untouched on rejection.
         assert_eq!(g.node_count(), 4);
         assert_eq!(g.edge_count(), 3);
-    }
-
-    #[rstest]
-    #[case::identity(NodeId(0), vec![], Some(NodeId(0)))]
-    #[case::before_removed(NodeId(0), vec![2], Some(NodeId(0)))]
-    #[case::removed(NodeId(2), vec![2], None)]
-    #[case::after_removed(NodeId(3), vec![2], Some(NodeId(2)))]
-    #[case::multi_removed(NodeId(5), vec![1, 3], Some(NodeId(3)))]
-    fn test_compaction_node(
-        #[case] old: NodeId,
-        #[case] removed: Vec<u32>,
-        #[case] expected: Option<NodeId>,
-    ) {
-        let compaction = Compaction::new(removed, vec![]);
-        assert_eq!(compaction.compact_node(old), expected);
-    }
-
-    #[rstest]
-    #[case::identity(NodeId(0), vec![], NodeId(0))]
-    #[case::before_gap(NodeId(0), vec![2], NodeId(0))]
-    #[case::at_gap(NodeId(2), vec![2], NodeId(3))]
-    #[case::after_gap(NodeId(3), vec![2], NodeId(4))]
-    #[case::multi_removed(NodeId(3), vec![1, 3], NodeId(5))]
-    fn test_uncompaction_node(
-        #[case] post: NodeId,
-        #[case] removed: Vec<u32>,
-        #[case] expected: NodeId,
-    ) {
-        let compaction = Compaction::new(removed, vec![]);
-        assert_eq!(compaction.uncompact_node(post), expected);
     }
 }

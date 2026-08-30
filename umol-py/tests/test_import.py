@@ -55,7 +55,6 @@ PUBLIC_EXPORTS = frozenset(
     BondViews
     BooleanForm
     CanonicalizeConfig
-    CanonicalizeLevel
     ChemistryModel
     CisTransConfiguration
     CisTransStereo
@@ -352,16 +351,8 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.Molecule.canonicalize_by,
-            "(self, /, level, *, stereo_model=None, config=None)",
-        ),
-        (
             umol.Molecule.canonical_eq,
             "(self, /, other, *, stereo_model=None, config=None)",
-        ),
-        (
-            umol.Molecule.canonical_eq_by,
-            "(self, /, other, level, *, stereo_model=None, config=None)",
         ),
         (
             umol.Molecule.substructure_matches,
@@ -393,16 +384,8 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.Reaction.canonicalize_by,
-            "(self, /, level, *, stereo_model=None, config=None)",
-        ),
-        (
             umol.Reaction.canonical_eq,
             "(self, /, other, *, stereo_model=None, config=None)",
-        ),
-        (
-            umol.Reaction.canonical_eq_by,
-            "(self, /, other, level, *, stereo_model=None, config=None)",
         ),
         (
             umol.ReactionSpan.canonicalize,
@@ -413,16 +396,8 @@ def test_deferred_member(owner, name):
             "(self, /, *, stereo_model=None, config=None)",
         ),
         (
-            umol.ReactionSpan.canonicalize_by,
-            "(self, /, level, *, stereo_model=None, config=None)",
-        ),
-        (
             umol.ReactionSpan.canonical_eq,
             "(self, /, other, *, stereo_model=None, config=None)",
-        ),
-        (
-            umol.ReactionSpan.canonical_eq_by,
-            "(self, /, other, level, *, stereo_model=None, config=None)",
         ),
         (umol.Transaction.rollback, "(self, /, editor)"),
     ],

@@ -5,8 +5,8 @@ use std::ptr;
 
 use proptest::prelude::*;
 use umol_perm::{
-    ClassKey, Coset, Orientation, OrientedPermutation, OrientedPermutationGroup, Permutation,
-    PermutationGroup,
+    ClassKey, Coset, DynPermutation, Orientation, OrientedPermutation, OrientedPermutationGroup,
+    Permutation, PermutationGroup,
 };
 
 fn factorial(n: usize) -> usize {
@@ -26,11 +26,11 @@ fn permutation_image() -> impl Strategy<Value = Vec<usize>> {
     (0usize..=6).prop_flat_map(|degree| Just((0..degree).collect::<Vec<_>>()).prop_shuffle())
 }
 
-fn repeated_orderings() -> impl Strategy<Value = (Vec<u8>, Vec<u8>)> {
-    prop::collection::vec(0u8..3, 0..=6).prop_flat_map(|source| {
-        Just(source.clone())
-            .prop_shuffle()
-            .prop_map(move |target| (source.clone(), target))
+fn dyn_permutation(degree: usize) -> impl Strategy<Value = DynPermutation> {
+    prop::collection::vec(any::<u64>(), degree).prop_map(move |keys| {
+        let mut image: Vec<usize> = (0..degree).collect();
+        image.sort_by_key(|&position| (keys[position], position));
+        DynPermutation::try_from(image).expect("sorted positions form a permutation")
     })
 }
 
@@ -142,6 +142,48 @@ fn coset_generators() -> impl Strategy<Value = (ClassKey, Vec<Permutation>)> {
 
 proptest! {
     #[test]
+    fn test_dyn_permutation_laws(
+        (left, middle, right) in (0usize..64).prop_flat_map(|degree| (
+            dyn_permutation(degree),
+            dyn_permutation(degree),
+            dyn_permutation(degree),
+        )),
+    ) {
+        let identity = DynPermutation::identity(left.degree());
+        let values: Vec<usize> = (0..left.degree()).collect();
+
+        prop_assert_eq!(left.compose(&identity), Some(left.clone()));
+        prop_assert_eq!(identity.compose(&left), Some(left.clone()));
+        prop_assert_eq!(left.compose(&left.inverse()), Some(identity.clone()));
+        prop_assert_eq!(left.inverse().compose(&left), Some(identity));
+        prop_assert_eq!(
+            left.compose(&middle).and_then(|action| action.compose(&right)),
+            middle
+                .compose(&right)
+                .and_then(|action| left.compose(&action)),
+        );
+
+        let sequential = left
+            .act(&values)
+            .and_then(|first| middle.act(&first));
+        let composed = left
+            .compose(&middle)
+            .and_then(|action| action.act(&values));
+        prop_assert_eq!(sequential, composed);
+    }
+
+    #[test]
+    fn test_dyn_permutation_between_roundtrip(
+        action in (0usize..64).prop_flat_map(dyn_permutation),
+    ) {
+        let from: Vec<usize> = (0..action.degree()).collect();
+        let to = action.act(&from).expect("generated action has the frame degree");
+        let recovered = DynPermutation::between(&from, &to);
+
+        prop_assert_eq!(recovered, Some(action));
+    }
+
+    #[test]
     fn test_permutation_cycle_round_trip(p in permutation()) {
         prop_assert_eq!(Permutation::from_cycles(p.degree(), &p.cycles()), Ok(p));
     }
@@ -199,23 +241,6 @@ proptest! {
         let target = p.act(&source);
         prop_assert_eq!(Permutation::between(&source, &target), Some(p));
         prop_assert_eq!(Permutation::between(&target, &source), Some(p.inverse()));
-    }
-
-    #[test]
-    fn test_permutation_between_all((source, target) in repeated_orderings()) {
-        let mut actual = Permutation::between_all(&source, &target);
-        let mut expected = (0..factorial(source.len()))
-            .map(|rank| Permutation::unrank(source.len(), rank))
-            .filter(|permutation| permutation.act(&source) == target)
-            .collect::<Vec<_>>();
-        actual.sort_unstable();
-        expected.sort_unstable();
-
-        prop_assert_eq!(&actual, &expected);
-        prop_assert_eq!(
-            Permutation::between(&source, &target),
-            (actual.len() == 1).then(|| actual[0])
-        );
     }
 
     #[test]

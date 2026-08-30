@@ -1,8 +1,8 @@
 //! Dense molecule-remapping properties.
 //!
-//! The generated domain contains every entity family, position-sensitive aromatic and
-//! multicenter data, stereo frames, and constraints that reference every id family. Both generated
-//! correspondences are complete non-identity cyclic permutations in every family. The success
+//! The generated domain contains every entity kind, position-sensitive aromatic and multicenter
+//! data, stereo frames, and constraints that reference every id kind. Both generated
+//! correspondences are complete nonidentity cyclic permutations in every component. The success
 //! properties use the asserted producer route; independently supplied coverage failures remain in
 //! the exact unit suite for `try_remap`.
 
@@ -19,11 +19,11 @@ where
     Correspondence::from_images(&(0..count).map(Id::from).collect::<Vec<_>>(), count)
 }
 
-fn crossing<Id>(count: usize, seed: u64, family: u32) -> Correspondence<Id>
+fn crossing<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
 where
     Id: Copy + Ord + From<usize>,
 {
-    let shift = 1 + seed.rotate_right(family * 8) as usize % (count - 1);
+    let shift = 1 + seed.rotate_right(entity_kind * 8) as usize % (count - 1);
     let images = (0..count)
         .map(|left| Id::from((left + shift) % count))
         .collect::<Vec<_>>();
@@ -89,6 +89,13 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
             (AtomId(3), AtomId(4), BondForm::from_order(4)),
             (AtomId(4), AtomId(5), BondForm::from_order(5)),
             (AtomId(0), AtomId(5), BondForm::from_order(6)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            (AtomId(2), AtomId(5), BondForm::from_order(1)),
         ],
         dative: vec![
             (
@@ -149,18 +156,15 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
         ],
         noncovalent: vec![
             (
-                AtomId(0),
-                AtomId(3),
+                [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             ),
             (
-                AtomId(1),
-                AtomId(4),
+                [AtomId(1), AtomId(4)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
             ),
             (
-                AtomId(2),
-                AtomId(5),
+                [AtomId(2), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
             ),
         ],
@@ -184,17 +188,17 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
         stereo_bonds: vec![
             (
                 BondId(0),
-                ligands([5, 2, 0, 1]),
+                ligands([5, 2, 4, 3]),
                 StereoBondForm::new(StereoKind::CisTrans, 0u32),
             ),
             (
                 BondId(1),
-                ligands([0, 3, 1, 2]),
+                ligands([0, 4, 3, 5]),
                 StereoBondForm::new(StereoKind::CisTrans, 1u32),
             ),
             (
                 BondId(2),
-                ligands([1, 4, 2, 3]),
+                ligands([1, 5, 4, 0]),
                 StereoBondForm::new(StereoKind::CisTrans, 0u32),
             ),
         ],
@@ -248,12 +252,12 @@ proptest! {
     })]
 
     #[test]
-    fn test_molecule_remap_equiv_under(
+    fn test_molecule_remap_framed_eq_under(
         (source, correspondence, _) in remapping_scenario_strategy(),
     ) {
         let remapped = source.remap(&correspondence);
 
-        prop_assert!(source.equiv_under(&remapped, &correspondence));
+        prop_assert!(source.framed_eq_under(&remapped, &correspondence));
     }
 
     #[test]
@@ -285,12 +289,4 @@ proptest! {
         prop_assert_eq!(sequential, direct);
     }
 
-    #[test]
-    fn test_molecule_remap_integrity(
-        (source, correspondence, _) in remapping_scenario_strategy(),
-    ) {
-        let remapped = source.remap(&correspondence);
-
-        prop_assert_eq!(remapped.check_integrity(), Ok(()));
-    }
 }

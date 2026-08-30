@@ -1,6 +1,6 @@
-//! A partial bijection between two `Molecule` id spaces, per entity family.
+//! A partial bijection between two `Molecule` id spaces, per entity kind.
 //!
-//! The atom part is a `Correspondence<AtomId>`; the seven other families each carry a
+//! The atom part is a `Correspondence<AtomId>`; the seven other entity kinds each carry a
 //! `Correspondence` over their entity id. Valueless — pairing only; adding values and a direction
 //! lifts it to a reaction span.
 
@@ -19,8 +19,8 @@ use super::molecule::Molecule;
 use super::molecule::MoleculeEntries;
 use super::remap::IdRemapping;
 
-/// A per-entity partial bijection between two molecules: atoms + bonds + the six overlay families.
-/// The matched/unmatched reads of each family are those of its `Correspondence`.
+/// A per-entity partial bijection between two molecules: atoms, bonds, and the six overlay kinds.
+/// The matched/unmatched reads of each component are those of its `Correspondence`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeCorrespondence {
     atoms: Correspondence<AtomId>,
@@ -34,7 +34,7 @@ pub struct MoleculeCorrespondence {
 }
 
 impl MoleculeCorrespondence {
-    /// A correspondence from its eight per-family correspondences (the fully materialized form).
+    /// A correspondence from its eight per-entity-kind correspondences (the fully materialized form).
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         atoms: Correspondence<AtomId>,
@@ -77,7 +77,7 @@ impl MoleculeCorrespondence {
         let multicenter_bonds = induced_multicenter_bonds(lhs, rhs, &atoms)?;
         let noncovalent_bonds = induced_noncovalent_bonds(lhs, rhs, &atoms)?;
 
-        let stereo_atoms = induce_family(
+        let stereo_atoms = induce_by_key(
             lhs.stereo_atoms().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     map_atom(&atoms, stereo.site_id()),
@@ -97,7 +97,7 @@ impl MoleculeCorrespondence {
             rhs.stereo_atoms().count(),
         )?;
 
-        let stereo_bonds = induce_family(
+        let stereo_bonds = induce_by_key(
             lhs.stereo_bonds().iter().filter_map(|stereo| {
                 let (Some(site), Some(ligands)) = (
                     bonds.right_of(stereo.site_id()),
@@ -129,7 +129,7 @@ impl MoleculeCorrespondence {
         ))
     }
 
-    /// Relational composition, per entity family: `self` (lhs↔middle) followed by `other`
+    /// Relational composition, per entity kind: `self` (lhs↔middle) followed by `other`
     /// (middle↔rhs), yielding a lhs↔rhs correspondence.
     pub fn compose(&self, other: &MoleculeCorrespondence) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
@@ -152,7 +152,7 @@ impl MoleculeCorrespondence {
             .reduce(|left, right| left.compose(&right))
     }
 
-    /// The inverse correspondence (rhs↔lhs), per entity family: each family's `reverse`.
+    /// The inverse correspondence (rhs↔lhs), per entity kind: each component's `reverse`.
     pub fn reverse(&self) -> MoleculeCorrespondence {
         MoleculeCorrespondence::new(
             self.atoms.reverse(),
@@ -212,7 +212,7 @@ impl MoleculeCorrespondence {
         }
     }
 
-    /// Whether every id in all eight entity families on the left is matched.
+    /// Whether every id of all eight entity kinds on the left is matched.
     pub fn is_total_on_left(&self) -> bool {
         self.atoms.is_total_on_left()
             && self.bonds.is_total_on_left()
@@ -224,7 +224,7 @@ impl MoleculeCorrespondence {
             && self.stereo_bonds.is_total_on_left()
     }
 
-    /// Whether every id in all eight entity families on the right is matched.
+    /// Whether every id of all eight entity kinds on the right is matched.
     pub fn is_total_on_right(&self) -> bool {
         self.atoms.is_total_on_right()
             && self.bonds.is_total_on_right()
@@ -236,12 +236,197 @@ impl MoleculeCorrespondence {
             && self.stereo_bonds.is_total_on_right()
     }
 
-    /// Whether every id in all eight entity families is matched on both sides.
+    /// Whether every id of all eight entity kinds is matched on both sides.
     pub fn is_total(&self) -> bool {
         self.is_total_on_left() && self.is_total_on_right()
     }
 
-    /// This correspondence as an [`IdRemapping`], or `None` unless every entity family is total on
+    /// Whether this correspondence actually relates `lhs` to `rhs`: every component's declared counts
+    /// match the molecules, and every matched pair's participants map onto its counterpart's under
+    /// the atom correspondence.
+    ///
+    /// A structural property of the correspondence, asked once. It is not a value comparison — no
+    /// payload is read — so an operation that compares values under a correspondence establishes
+    /// this first and then only compares values.
+    pub fn is_compatible(&self, lhs: &Molecule, rhs: &Molecule) -> bool {
+        let correspondence = self;
+        let counts = [
+            (
+                correspondence.atoms().left_count(),
+                lhs.atoms().count(),
+                correspondence.atoms().right_count(),
+                rhs.atoms().count(),
+            ),
+            (
+                correspondence.bonds().left_count(),
+                lhs.bonds().count(),
+                correspondence.bonds().right_count(),
+                rhs.bonds().count(),
+            ),
+            (
+                correspondence.dative_bonds().left_count(),
+                lhs.dative_bonds().count(),
+                correspondence.dative_bonds().right_count(),
+                rhs.dative_bonds().count(),
+            ),
+            (
+                correspondence.aromatic_systems().left_count(),
+                lhs.aromatic_systems().count(),
+                correspondence.aromatic_systems().right_count(),
+                rhs.aromatic_systems().count(),
+            ),
+            (
+                correspondence.multicenter_bonds().left_count(),
+                lhs.multicenter_bonds().count(),
+                correspondence.multicenter_bonds().right_count(),
+                rhs.multicenter_bonds().count(),
+            ),
+            (
+                correspondence.noncovalent_bonds().left_count(),
+                lhs.noncovalent_bonds().count(),
+                correspondence.noncovalent_bonds().right_count(),
+                rhs.noncovalent_bonds().count(),
+            ),
+            (
+                correspondence.stereo_atoms().left_count(),
+                lhs.stereo_atoms().count(),
+                correspondence.stereo_atoms().right_count(),
+                rhs.stereo_atoms().count(),
+            ),
+            (
+                correspondence.stereo_bonds().left_count(),
+                lhs.stereo_bonds().count(),
+                correspondence.stereo_bonds().right_count(),
+                rhs.stereo_bonds().count(),
+            ),
+        ];
+        if counts.into_iter().any(
+            |(declared_left, actual_left, declared_right, actual_right)| {
+                declared_left != actual_left || declared_right != actual_right
+            },
+        ) {
+            return false;
+        }
+
+        let atoms = correspondence.atoms();
+        let same_atom_set = |left: Vec<AtomId>, mut right: Vec<AtomId>| {
+            let Some(mut mapped): Option<Vec<_>> =
+                left.into_iter().map(|atom| atoms.right_of(atom)).collect()
+            else {
+                return false;
+            };
+            mapped.sort_unstable();
+            right.sort_unstable();
+            mapped == right
+        };
+        let same_ligand_set = |left: Vec<StereoLigand>, mut right: Vec<StereoLigand>| {
+            let Some(mut mapped): Option<Vec<_>> = left
+                .into_iter()
+                .map(|ligand| {
+                    atoms
+                        .right_of(ligand.atom_id)
+                        .map(|atom| StereoLigand::new(atom, ligand.kind))
+                })
+                .collect()
+            else {
+                return false;
+            };
+            mapped.sort_unstable();
+            right.sort_unstable();
+            mapped == right
+        };
+
+        if !correspondence
+            .bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.bond(left).atom_ids().to_vec(),
+                    rhs.bond(right).atom_ids().to_vec(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .dative_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.dative_bond(left);
+                let rhs = rhs.dative_bond(right);
+                atoms.right_of(lhs.acceptor_id()) == Some(rhs.acceptor_id())
+                    && same_atom_set(lhs.donor_ids().collect(), rhs.donor_ids().collect())
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .aromatic_systems()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.aromatic_system(left).atom_ids().collect(),
+                    rhs.aromatic_system(right).atom_ids().collect(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .multicenter_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.multicenter_bond(left).atom_ids().collect(),
+                    rhs.multicenter_bond(right).atom_ids().collect(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .noncovalent_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                same_atom_set(
+                    lhs.noncovalent_bond(left).atom_ids().to_vec(),
+                    rhs.noncovalent_bond(right).atom_ids().to_vec(),
+                )
+            })
+        {
+            return false;
+        }
+        if !correspondence
+            .stereo_atoms()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.stereo_atom(left);
+                let rhs = rhs.stereo_atom(right);
+                atoms.right_of(lhs.site_id()) == Some(rhs.site_id())
+                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+            })
+        {
+            return false;
+        }
+        correspondence
+            .stereo_bonds()
+            .matched_pairs()
+            .iter()
+            .all(|&(left, right)| {
+                let lhs = lhs.stereo_bond(left);
+                let rhs = rhs.stereo_bond(right);
+                correspondence.bonds().right_of(lhs.site_id()) == Some(rhs.site_id())
+                    && same_ligand_set(lhs.ligand_frame(), rhs.ligand_frame())
+            })
+    }
+
+    /// This correspondence as an [`IdRemapping`], or `None` unless every entity kind is total on
     /// the left. Each left id then maps to its matched right id.
     pub fn to_remapping(&self) -> Option<IdRemapping> {
         if !self.is_total_on_left() {
@@ -271,7 +456,7 @@ impl MoleculeCorrespondence {
         ))
     }
 
-    /// The atom correspondence — the spine the other families are induced from.
+    /// The atom correspondence — the spine the other entity correspondences are induced from.
     pub fn atoms(&self) -> &Correspondence<AtomId> {
         &self.atoms
     }
@@ -319,7 +504,7 @@ pub(crate) fn induced_bonds(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<BondId>> {
-    induce_family(
+    induce_by_key(
         left.bonds().iter().filter_map(|bond| {
             let [first, second] = bond.atom_ids();
             Some((
@@ -343,7 +528,7 @@ pub(crate) fn induced_dative_bonds(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<DativeBondId>> {
-    induce_family(
+    induce_by_key(
         left.dative_bonds().iter().filter_map(|dative| {
             let (Some(acceptor), Some(donors)) = (
                 map_atom(atoms, dative.acceptor_id()),
@@ -371,7 +556,7 @@ pub(crate) fn induced_aromatic_systems(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<AromaticSystemId>> {
-    induce_family(
+    induce_by_key(
         left.aromatic_systems().iter().filter_map(|aromatic| {
             Some((
                 aromatic.id,
@@ -394,7 +579,7 @@ pub(crate) fn induced_multicenter_bonds(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<MulticenterBondId>> {
-    induce_family(
+    induce_by_key(
         left.multicenter_bonds().iter().filter_map(|multicenter| {
             Some((
                 multicenter.id,
@@ -417,7 +602,7 @@ pub(crate) fn induced_noncovalent_bonds(
     right: &Molecule,
     atoms: &Correspondence<AtomId>,
 ) -> Option<Correspondence<NoncovalentBondId>> {
-    induce_family(
+    induce_by_key(
         left.noncovalent_bonds().iter().filter_map(|noncovalent| {
             let [first, second] = noncovalent.atom_ids();
             Some((
@@ -461,7 +646,7 @@ pub(crate) fn map_ligands(
         .collect()
 }
 
-fn induce_family<Id, Key>(
+fn induce_by_key<Id, Key>(
     left: impl IntoIterator<Item = (Id, Key)>,
     left_count: usize,
     right: impl IntoIterator<Item = (Id, Key)>,
@@ -529,7 +714,7 @@ mod tests {
 
     #[fixture]
     fn correspondence() -> MoleculeCorrespondence {
-        // distinct pairs per family so a mis-wired accessor is caught.
+        // distinct pairs per entity kind so a mis-wired accessor is caught.
         MoleculeCorrespondence::new(
             Correspondence::new(vec![(AtomId(0), AtomId(1))], 2, 2)
                 .expect("correspondence producer preserves partial-bijection invariants"),

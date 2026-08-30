@@ -34,6 +34,7 @@ impl ClassKey {
     fn build(self) -> CosetSpace {
         // Each arm gives (parent P, symmetry R, decomposition). P is the group of realizable
         // arrangements: Sₙ for the geometry classes, the partition group D₄ for cis/trans.
+        let is_partitioned = matches!(self, ClassKey::CisTrans | ClassKey::Axial);
         let (parent, group, decomposition) = match self {
             ClassKey::Symmetric(n) => (
                 PermutationGroup::symmetric(n as usize),
@@ -132,7 +133,7 @@ impl ClassKey {
             | ClassKey::Cyclic(n)
             | ClassKey::Dihedral(n) => Permutation::identity(n as usize),
         };
-        CosetSpace::new(parent, group, decomposition, improper)
+        CosetSpace::new(parent, is_partitioned, group, decomposition, improper)
     }
 
     /// The interned coset space for this class, built once and leaked for

@@ -3,17 +3,16 @@
 use std::collections::HashSet;
 use std::iter;
 
-use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
 use umol_perm::{OrientedPermutationGroup, Permutation};
 
 use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandPosition};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::Molecule;
 use super::super::stereo::{
-    coset_apply_permutation, StereoAtomForm, StereoBondForm, StereoKind, Stereogenicity, Topicity,
+    StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds, StereoKind, Stereogenicity, Topicity,
 };
 use super::super::symmetry::StereoSymmetry;
-use super::super::traits::Lattice;
+use super::super::traits::{FrameTransport, Lattice};
 use super::atom::AtomView;
 use super::bond::BondView;
 use super::constraints::{StereoAtomConstraintsView, StereoBondConstraintsView};
@@ -23,20 +22,15 @@ use crate::ir::{
     StereoBondConstraintForm, StereoBondConstraintKey, StereoBondConstraintsForm, StereoCoset,
 };
 
-type StereoAtomSet =
-    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>;
-type StereoBondSet =
-    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>;
-
 /// Namespace accessor for stereo-atom views on a `Molecule`.
 #[derive(Clone, Copy)]
 pub struct StereoAtomViews<'a> {
     molecule: &'a Molecule,
-    stereo_atoms: &'a StereoAtomSet,
+    stereo_atoms: &'a StereoAtoms,
 }
 
 impl<'a> StereoAtomViews<'a> {
-    pub(crate) fn new(molecule: &'a Molecule, stereo_atoms: &'a StereoAtomSet) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, stereo_atoms: &'a StereoAtoms) -> Self {
         Self {
             molecule,
             stereo_atoms,
@@ -48,73 +42,64 @@ impl<'a> StereoAtomViews<'a> {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoAtomId> {
-        self.stereo_atoms.relation_ids().map(StereoAtomId::from)
+        self.stereo_atoms.ids()
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = StereoAtomView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        set.relation_ids().map(move |rid| StereoAtomView {
-            id: StereoAtomId::from(rid),
-            site: set.participants_1(rid)[0],
-            ligands: set.participants_2(rid),
-            attributes: set.data(rid),
+        set.ids().map(move |id| StereoAtomView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
             molecule,
         })
     }
 
     pub fn contains(&self, id: StereoAtomId) -> bool {
-        self.stereo_atoms.contains(RelationId::from(id))
+        self.stereo_atoms.contains(id)
     }
 
     pub fn get(&self, id: StereoAtomId) -> Option<StereoAtomView<'a>> {
         if !self.contains(id) {
             return None;
         }
-        let rid = RelationId::from(id);
         Some(StereoAtomView {
             id,
-            site: self.stereo_atoms.participants_1(rid)[0],
-            ligands: self.stereo_atoms.participants_2(rid),
-            attributes: self.stereo_atoms.data(rid),
+            site: self.stereo_atoms.site(id),
+            ligands: self.stereo_atoms.ligands(id),
+            attributes: self.stereo_atoms.attributes(id),
             molecule: self.molecule,
         })
     }
 
     /// Ids of stereo atoms incident on `atom` (site or ligand).
     pub fn incident_ids(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomId> + 'a {
-        self.stereo_atoms
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| StereoAtomId::from(rid))
+        self.stereo_atoms.incident_ids(atom)
     }
 
-    /// Id of the stereo atom on `site` with exactly this ligand multiset, if any. Ligands are a
-    /// multiset (virtual ligands repeat); their frame order is not matched.
+    /// Id of the stereo atom on `site` with exactly this ligand set, if any. The frame order is not
+    /// matched.
     pub fn of_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
-        self.stereo_atoms
-            .find_by_participants(&[NodeId::from(site)], ligands)
-            .map(StereoAtomId::from)
+        self.stereo_atoms.coincident_id(site, ligands)
     }
 
     /// Any stereo atom is incident on `atom` (site or ligand).
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.stereo_atoms.has_incident(NodeId::from(atom))
+        self.stereo_atoms.has_incident(atom)
     }
 
     /// Views of stereo atoms incident on `atom` (site or ligand).
     pub fn incident(&self, atom: AtomId) -> impl ExactSizeIterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        self.incident_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoAtomView {
-                id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
-                molecule,
-            }
+        self.incident_ids(atom).map(move |id| StereoAtomView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
+            molecule,
         })
     }
 
@@ -125,10 +110,8 @@ impl<'a> StereoAtomViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident(NodeId::from(atom))
-            .iter()
-            .filter(move |&&rid| set.participants_2(rid).contains(&ligand))
-            .map(|&rid| StereoAtomId::from(rid))
+        set.incident_ids(atom)
+            .filter(move |&id| set.ligands(id).contains(&ligand))
     }
 
     /// Any stereo atom is incident, in which `atom` is ligand.
@@ -138,9 +121,8 @@ impl<'a> StereoAtomViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident(NodeId::from(atom))
-            .iter()
-            .any(|&rid| set.participants_2(rid).contains(&ligand))
+        set.incident_ids(atom)
+            .any(|id| set.ligands(id).contains(&ligand))
     }
 
     /// Views of stereo atoms incident, in which `atom` is ligand.
@@ -150,50 +132,38 @@ impl<'a> StereoAtomViews<'a> {
     ) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        self.incident_as_ligand_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoAtomView {
+        self.incident_as_ligand_ids(atom)
+            .map(move |id| StereoAtomView {
                 id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
+                site: set.site(id),
+                ligands: set.ligands(id),
+                attributes: set.attributes(id),
                 molecule,
-            }
-        })
+            })
     }
 
     /// Id of the stereo atom sited on `atom`, if any.
     pub fn at_id(&self, atom: AtomId) -> Option<StereoAtomId> {
         let set = self.stereo_atoms;
-        let site = NodeId::from(atom);
-        set.incident(site)
-            .iter()
-            .find(move |&&rid| set.participants_1(rid).contains(&site))
-            .map(|&rid| StereoAtomId::from(rid))
+        set.incident_ids(atom).find(move |&id| set.site(id) == atom)
     }
 
     /// Whether a stereo atom is sited on `atom`.
     pub fn is_at(&self, atom: AtomId) -> bool {
         let set = self.stereo_atoms;
-        let site = NodeId::from(atom);
-        set.incident(site)
-            .iter()
-            .any(move |&rid| set.participants_1(rid).contains(&site))
+        set.incident_ids(atom).any(move |id| set.site(id) == atom)
     }
 
     /// View of the stereo atom sited on `atom`, if any.
     pub fn at(&self, atom: AtomId) -> Option<StereoAtomView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_atoms;
-        self.at_id(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoAtomView {
-                id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
-                molecule,
-            }
+        self.at_id(atom).map(move |id| StereoAtomView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
+            molecule,
         })
     }
 }
@@ -202,7 +172,7 @@ impl<'a> StereoAtomViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct StereoAtomView<'a> {
     pub id: StereoAtomId,
-    site: NodeId,
+    site: AtomId,
     ligands: &'a [StereoLigand],
     pub attributes: &'a StereoAtomForm,
     molecule: &'a Molecule,
@@ -237,7 +207,7 @@ impl<'a> StereoAtomView<'a> {
 
     /// ID of the stereo site atom.
     pub fn site_id(&self) -> AtomId {
-        AtomId::from(self.site)
+        self.site
     }
 
     /// View of the stereo site atom.
@@ -308,19 +278,20 @@ impl<'a> StereoAtomView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    pub fn permutation_for(
-        &self,
-        ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<Permutation> {
-        permutation_for_ligands(self.ligands, ligands)
-    }
-
+    /// The stored configuration read against `ligands`, which must hold the same distinct
+    /// participants as the stored frame.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
-        let permutation = self.permutation_for(ligands)?;
-        coset_apply_permutation(self.coset(), permutation, self.kind())
+        let requested: Vec<StereoLigand> = ligands.into_iter().collect();
+        let action = Permutation::between(self.ligands, &requested)?;
+        self.attributes
+            .configuration
+            .clone()
+            .reframe_by(&action)?
+            .coset()
+            .cloned()
     }
 
     /// Site atom followed by the distinct ligand atoms — the relation's atom
@@ -344,11 +315,11 @@ impl<'a> StereoAtomView<'a> {
 #[derive(Clone, Copy)]
 pub struct StereoBondViews<'a> {
     molecule: &'a Molecule,
-    stereo_bonds: &'a StereoBondSet,
+    stereo_bonds: &'a StereoBonds,
 }
 
 impl<'a> StereoBondViews<'a> {
-    pub(crate) fn new(molecule: &'a Molecule, stereo_bonds: &'a StereoBondSet) -> Self {
+    pub(crate) fn new(molecule: &'a Molecule, stereo_bonds: &'a StereoBonds) -> Self {
         Self {
             molecule,
             stereo_bonds,
@@ -360,43 +331,40 @@ impl<'a> StereoBondViews<'a> {
     }
 
     pub fn ids(&self) -> impl ExactSizeIterator<Item = StereoBondId> {
-        self.stereo_bonds.relation_ids().map(StereoBondId::from)
+        self.stereo_bonds.ids()
     }
 
-    /// Id of the stereo bond on `site` with exactly this ligand multiset, if any. Ligands are a
-    /// multiset (virtual ligands repeat); their frame order is not matched.
+    /// Id of the stereo bond on `site` with exactly this ligand set, if any. The frame order is not
+    /// matched.
     pub fn of_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
-        self.stereo_bonds
-            .find_by_participants(&[EdgeId::from(site)], ligands)
-            .map(StereoBondId::from)
+        self.stereo_bonds.coincident_id(site, ligands)
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = StereoBondView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        set.relation_ids().map(move |rid| StereoBondView {
-            id: StereoBondId::from(rid),
-            site: set.participants_1(rid)[0],
-            ligands: set.participants_2(rid),
-            attributes: set.data(rid),
+        set.ids().map(move |id| StereoBondView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
             molecule,
         })
     }
 
     pub fn contains(&self, id: StereoBondId) -> bool {
-        self.stereo_bonds.contains(RelationId::from(id))
+        self.stereo_bonds.contains(id)
     }
 
     pub fn get(&self, id: StereoBondId) -> Option<StereoBondView<'a>> {
         if !self.contains(id) {
             return None;
         }
-        let rid = RelationId::from(id);
         Some(StereoBondView {
             id,
-            site: self.stereo_bonds.participants_1(rid)[0],
-            ligands: self.stereo_bonds.participants_2(rid),
-            attributes: self.stereo_bonds.data(rid),
+            site: self.stereo_bonds.site(id),
+            ligands: self.stereo_bonds.ligands(id),
+            attributes: self.stereo_bonds.attributes(id),
             molecule: self.molecule,
         })
     }
@@ -405,11 +373,7 @@ impl<'a> StereoBondViews<'a> {
     /// site is an edge, so node incidence covers only ligands; site-endpoint
     /// membership is unioned in (and deduped) explicitly.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
-        let ligand_ids = self
-            .stereo_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| StereoBondId::from(rid));
+        let ligand_ids = self.stereo_bonds.incident_ids(atom);
         let mut seen = HashSet::new();
         self.incident_as_site_ids(atom)
             .chain(ligand_ids)
@@ -418,23 +382,19 @@ impl<'a> StereoBondViews<'a> {
 
     /// Any stereo bond is incident on `atom` (site endpoint or ligand).
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.stereo_bonds.has_incident(NodeId::from(atom)) || self.has_incident_as_site(atom)
+        self.stereo_bonds.has_incident(atom) || self.has_incident_as_site(atom)
     }
 
     /// Views of stereo bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoBondView {
-                id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-
-                attributes: set.data(rid),
-                molecule,
-            }
+        self.incident_ids(atom).map(move |id| StereoBondView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
+            molecule,
         })
     }
 
@@ -445,10 +405,8 @@ impl<'a> StereoBondViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident(NodeId::from(atom))
-            .iter()
-            .filter(move |&&rid| set.participants_2(rid).contains(&ligand))
-            .map(|&rid| StereoBondId::from(rid))
+        set.incident_ids(atom)
+            .filter(move |&id| set.ligands(id).contains(&ligand))
     }
 
     /// Any stereo bond is incident, in which `atom` is ligand.
@@ -458,9 +416,8 @@ impl<'a> StereoBondViews<'a> {
             atom_id: atom,
             kind: StereoLigandKind::Atom,
         };
-        set.incident(NodeId::from(atom))
-            .iter()
-            .any(|&rid| set.participants_2(rid).contains(&ligand))
+        set.incident_ids(atom)
+            .any(|id| set.ligands(id).contains(&ligand))
     }
 
     /// Views of stereo bonds incident, in which `atom` is ligand.
@@ -470,16 +427,14 @@ impl<'a> StereoBondViews<'a> {
     ) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_as_ligand_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoBondView {
+        self.incident_as_ligand_ids(atom)
+            .map(move |id| StereoBondView {
                 id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
+                site: set.site(id),
+                ligands: set.ligands(id),
+                attributes: set.attributes(id),
                 molecule,
-            }
-        })
+            })
     }
 
     /// Ids of stereo bonds, in which `atom` is a site endpoint.
@@ -487,8 +442,7 @@ impl<'a> StereoBondViews<'a> {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
-            .flat_map(move |n| set.incident_edge(EdgeId::from(n.bond_id())).iter().copied())
-            .map(StereoBondId::from)
+            .flat_map(move |n| set.incident_bond_ids(n.bond_id()))
     }
 
     /// Any stereo bond, in which `atom` is a site endpoint.
@@ -496,51 +450,43 @@ impl<'a> StereoBondViews<'a> {
         let set = self.stereo_bonds;
         self.molecule
             .neighbors(atom)
-            .any(move |n| set.has_incident_edge(EdgeId::from(n.bond_id())))
+            .any(move |n| set.has_incident_bond(n.bond_id()))
     }
 
     /// Views of stereo bonds, in which `atom` is a site endpoint.
     pub fn incident_as_site(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.incident_as_site_ids(atom).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoBondView {
+        self.incident_as_site_ids(atom)
+            .map(move |id| StereoBondView {
                 id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
+                site: set.site(id),
+                ligands: set.ligands(id),
+                attributes: set.attributes(id),
                 molecule,
-            }
-        })
+            })
     }
 
     /// Id of the stereo bond sited on `bond`, if any.
     pub fn at_id(&self, bond: BondId) -> Option<StereoBondId> {
-        self.stereo_bonds
-            .incident_edge(EdgeId::from(bond))
-            .first()
-            .map(|&rid| StereoBondId::from(rid))
+        self.stereo_bonds.incident_bond_ids(bond).next()
     }
 
     /// Whether a stereo bond is sited on `bond`.
     pub fn is_at(&self, bond: BondId) -> bool {
-        self.stereo_bonds.has_incident_edge(EdgeId::from(bond))
+        self.stereo_bonds.has_incident_bond(bond)
     }
 
     /// View of the stereo bond sited on `bond`, if any.
     pub fn at(&self, bond: BondId) -> Option<StereoBondView<'a>> {
         let molecule = self.molecule;
         let set = self.stereo_bonds;
-        self.at_id(bond).map(move |id| {
-            let rid = RelationId::from(id);
-            StereoBondView {
-                id,
-                site: set.participants_1(rid)[0],
-                ligands: set.participants_2(rid),
-                attributes: set.data(rid),
-                molecule,
-            }
+        self.at_id(bond).map(move |id| StereoBondView {
+            id,
+            site: set.site(id),
+            ligands: set.ligands(id),
+            attributes: set.attributes(id),
+            molecule,
         })
     }
 }
@@ -549,7 +495,7 @@ impl<'a> StereoBondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct StereoBondView<'a> {
     pub id: StereoBondId,
-    site: EdgeId,
+    site: BondId,
     ligands: &'a [StereoLigand],
     pub attributes: &'a StereoBondForm,
     molecule: &'a Molecule,
@@ -584,7 +530,7 @@ impl<'a> StereoBondView<'a> {
 
     /// ID of the stereo site bond.
     pub fn site_id(&self) -> BondId {
-        BondId::from(self.site)
+        self.site
     }
 
     /// View of the stereo site bond.
@@ -655,19 +601,20 @@ impl<'a> StereoBondView<'a> {
         self.lone_pair_ligands().count()
     }
 
-    pub fn permutation_for(
-        &self,
-        ligands: impl IntoIterator<Item = StereoLigand>,
-    ) -> Option<Permutation> {
-        permutation_for_ligands(self.ligands, ligands)
-    }
-
+    /// The stored configuration read against `ligands`, which must hold the same distinct
+    /// participants as the stored frame.
     pub fn coset_for(
         &self,
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCoset> {
-        let permutation = self.permutation_for(ligands)?;
-        coset_apply_permutation(self.coset(), permutation, self.kind())
+        let requested: Vec<StereoLigand> = ligands.into_iter().collect();
+        let action = Permutation::between(self.ligands, &requested)?;
+        self.attributes
+            .configuration
+            .clone()
+            .reframe_by(&action)?
+            .coset()
+            .cloned()
     }
 
     /// The site bond's two atoms followed by the distinct ligand atoms — the
@@ -778,14 +725,6 @@ macro_rules! stereo_view_queries {
 stereo_view_queries!(StereoAtomView);
 stereo_view_queries!(StereoBondView);
 
-fn permutation_for_ligands(
-    current: &[StereoLigand],
-    ligands: impl IntoIterator<Item = StereoLigand>,
-) -> Option<Permutation> {
-    let requested: Vec<StereoLigand> = ligands.into_iter().collect();
-    Permutation::between(current, &requested)
-}
-
 // Derivation layer beneath the stereo facades. No projection is defined for
 // the stereo constraint kinds: they are model assertions about the overlay
 // entity, so the derived side is vacuous under both modes.
@@ -826,26 +765,6 @@ pub(crate) fn stereo_bond_derived_constraint(
     None
 }
 
-/// Mutable borrowed view of a stereo atom: its id, site atom + ligand frame
-/// (owned) and mutable data. Molecule-scope peer of `StereoAtomView`.
-#[derive(Debug)]
-pub struct StereoAtomViewMut<'a> {
-    pub id: StereoAtomId,
-    pub site: AtomId,
-    pub ligands: Vec<StereoLigand>,
-    pub attributes: &'a mut StereoAtomForm,
-}
-
-/// Mutable borrowed view of a stereo bond: its id, site bond + ligand frame
-/// (owned) and mutable data. Molecule-scope peer of `StereoBondView`.
-#[derive(Debug)]
-pub struct StereoBondViewMut<'a> {
-    pub id: StereoBondId,
-    pub site: BondId,
-    pub ligands: Vec<StereoLigand>,
-    pub attributes: &'a mut StereoBondForm,
-}
-
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
 // builder storage so old-state checks compare without cloning; callers clone
 // only what they keep (the `attributes`).
@@ -884,7 +803,6 @@ mod tests {
     use rstest::*;
     use umol_chem::element::Element;
     use umol_graph_core::AutomorphismAlgorithm;
-    use umol_perm::Permutation;
 
     use super::super::assert_exact_size_by;
     use crate::ir::atom::AtomForm;
@@ -907,6 +825,12 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(2)),
                 (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(5), BondForm::from_order(1)),
+                (AtomId(3), AtomId(1), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -940,6 +864,9 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(2)),
                 (AtomId(4), AtomId(5), BondForm::from_order(1)),
+                (AtomId(0), AtomId(4), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(1)),
+                (AtomId(3), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -1324,40 +1251,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_permutation_for(molecule: Molecule) {
-        let view = molecule.stereo_atom(StereoAtomId(0));
-        let ligands = vec![
-            StereoLigand {
-                atom_id: AtomId(1),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(2),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(3),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(4),
-                kind: StereoLigandKind::Atom,
-            },
-        ];
-        assert_eq!(
-            view.permutation_for(ligands.clone()),
-            Some(Permutation::identity(4)),
-        );
-
-        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(
-            view.permutation_for(reordered),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_atom_view_permutation_for_none(molecule: Molecule) {
+    fn test_stereo_atom_view_coset_for_none(molecule: Molecule) {
         let view = molecule.stereo_atom(StereoAtomId(0));
         let ligands = [
             StereoLigand {
@@ -1377,13 +1271,13 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(view.permutation_for(ligands[..3].iter().copied()), None);
+        assert_eq!(view.coset_for(ligands[..3].iter().copied()), None);
         assert_eq!(
-            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            view.coset_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
             None,
         );
         assert_eq!(
-            view.permutation_for([
+            view.coset_for([
                 ligands[0],
                 ligands[1],
                 ligands[2],
@@ -1702,40 +1596,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bond_view_permutation_for(molecule: Molecule) {
-        let view = molecule.stereo_bond(StereoBondId(0));
-        let ligands = vec![
-            StereoLigand {
-                atom_id: AtomId(4),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(5),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(0),
-                kind: StereoLigandKind::Atom,
-            },
-            StereoLigand {
-                atom_id: AtomId(1),
-                kind: StereoLigandKind::Atom,
-            },
-        ];
-        assert_eq!(
-            view.permutation_for(ligands.clone()),
-            Some(Permutation::identity(4)),
-        );
-
-        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
-        assert_eq!(
-            view.permutation_for(reordered),
-            Some(Permutation::from_image(&[1, 0, 2, 3])),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_bond_view_permutation_for_none(molecule: Molecule) {
+    fn test_stereo_bond_view_coset_for_none(molecule: Molecule) {
         let view = molecule.stereo_bond(StereoBondId(0));
         let ligands = [
             StereoLigand {
@@ -1755,13 +1616,13 @@ mod tests {
                 kind: StereoLigandKind::Atom,
             },
         ];
-        assert_eq!(view.permutation_for(ligands[..1].iter().copied()), None);
+        assert_eq!(view.coset_for(ligands[..1].iter().copied()), None);
         assert_eq!(
-            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            view.coset_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
             None,
         );
         assert_eq!(
-            view.permutation_for([
+            view.coset_for([
                 ligands[0],
                 ligands[1],
                 ligands[2],

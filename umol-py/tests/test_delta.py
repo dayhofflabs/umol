@@ -1918,7 +1918,7 @@ def test_deltas_normalize_error():
     assert source == snapshot
 
 
-def test_deltas_equiv():
+def test_deltas_normalized_eq():
     lhs = Deltas(
         [
             Delta.Bond(
@@ -1961,4 +1961,4 @@ def test_deltas_equiv():
     )
 
     assert lhs != rhs
-    assert lhs.equiv(rhs) is True
+    assert lhs.normalized_eq(rhs) is True

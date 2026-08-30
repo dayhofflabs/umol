@@ -49,9 +49,8 @@ pub use noncovalent::{
 };
 pub use ring::{RingAtomView, RingBondView, RingView, RingViews};
 pub use stereo::{
-    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViewMut,
-    StereoAtomViews, StereoBondEditorView, StereoBondEditorViewMut, StereoBondView,
-    StereoBondViewMut, StereoBondViews,
+    StereoAtomEditorView, StereoAtomEditorViewMut, StereoAtomView, StereoAtomViews,
+    StereoBondEditorView, StereoBondEditorViewMut, StereoBondView, StereoBondViews,
 };
 
 #[cfg(test)]

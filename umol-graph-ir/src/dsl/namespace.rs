@@ -30,7 +30,7 @@ pub struct MoleculeContext {
     metadata: MoleculeMetadata,
     atoms: EntityCounter<AtomId>,
     bonds: EntityRegistry<BondId, [AtomId; 2]>,
-    dative_bonds: EntityRegistry<DativeBondId, (BTreeSet<AtomId>, AtomId)>,
+    dative_bonds: EntityRegistry<DativeBondId, (Vec<AtomId>, AtomId)>,
     aromatic_systems: EntityRegistry<AromaticSystemId, BTreeSet<AtomId>>,
     multicenter_bonds: EntityRegistry<MulticenterBondId, BTreeSet<AtomId>>,
     noncovalent_bonds: EntityRegistry<NoncovalentBondId, [AtomId; 2]>,
@@ -211,7 +211,7 @@ impl MoleculeContext {
         self.set_keyword(Entity::DativeBond(id), keyword)?;
         Ok(self
             .dative_bonds
-            .register((donors.iter().copied().collect(), acceptor)))
+            .register((atom_multiset(donors), acceptor)))
     }
 
     pub(crate) fn register_aromatic_system(
@@ -257,7 +257,7 @@ impl MoleculeContext {
     ) -> Result<StereoAtomId, ParseError> {
         let id = self.stereo_atoms.next_id();
         self.set_keyword(Entity::StereoAtom(id), keyword)?;
-        Ok(self.stereo_atoms.register((site, ligand_multiset(ligands))))
+        Ok(self.stereo_atoms.register((site, ligand_set_key(ligands))))
     }
 
     pub(crate) fn register_stereo_bond(
@@ -268,7 +268,7 @@ impl MoleculeContext {
     ) -> Result<StereoBondId, ParseError> {
         let id = self.stereo_bonds.next_id();
         self.set_keyword(Entity::StereoBond(id), keyword)?;
-        Ok(self.stereo_bonds.register((site, ligand_multiset(ligands))))
+        Ok(self.stereo_bonds.register((site, ligand_set_key(ligands))))
     }
 
     pub(crate) fn atom_count(&self) -> usize {
@@ -383,7 +383,7 @@ impl MoleculeContext {
         acceptor: AtomId,
     ) -> Option<DativeBondId> {
         self.dative_bonds
-            .find_by_participants(&(donors.iter().copied().collect(), acceptor))
+            .find_by_participants(&(atom_multiset(donors), acceptor))
     }
 
     pub(crate) fn find_aromatic_system_by_participants(
@@ -417,7 +417,7 @@ impl MoleculeContext {
         ligands: &[StereoLigand],
     ) -> Option<StereoAtomId> {
         self.stereo_atoms
-            .find_by_participants(&(site, ligand_multiset(ligands)))
+            .find_by_participants(&(site, ligand_set_key(ligands)))
     }
 
     pub(crate) fn find_stereo_bond_by_participants(
@@ -426,7 +426,7 @@ impl MoleculeContext {
         ligands: &[StereoLigand],
     ) -> Option<StereoBondId> {
         self.stereo_bonds
-            .find_by_participants(&(site, ligand_multiset(ligands)))
+            .find_by_participants(&(site, ligand_set_key(ligands)))
     }
 
     pub(crate) fn register_atom_alias(
@@ -657,9 +657,14 @@ fn atom_pair_key(a: AtomId, b: AtomId) -> [AtomId; 2] {
     }
 }
 
-/// The canonical key of a stereo element's ligand frame: the ligand sorted multiset
-/// (can have duplicate virtual ligands).
-fn ligand_multiset(ligands: &[StereoLigand]) -> Vec<StereoLigand> {
+fn atom_multiset(atoms: &[AtomId]) -> Vec<AtomId> {
+    let mut atoms = atoms.to_vec();
+    atoms.sort_unstable();
+    atoms
+}
+
+/// The canonical key of a stereo element's ligand frame: its distinct ligands in sorted order.
+fn ligand_set_key(ligands: &[StereoLigand]) -> Vec<StereoLigand> {
     let mut ligands = ligands.to_vec();
     ligands.sort_unstable();
     ligands
@@ -993,6 +998,7 @@ mod tests {
 
     #[rstest]
     #[case::donors_reordered(&[AtomId(2), AtomId(1)], AtomId(0), Some(DativeBondId(0)))]
+    #[case::donor_repeated(&[AtomId(1), AtomId(1), AtomId(2)], AtomId(0), None)]
     #[case::wrong_acceptor(&[AtomId(1), AtomId(2)], AtomId(3), None)]
     #[case::wrong_donors(&[AtomId(1), AtomId(3)], AtomId(0), None)]
     fn test_molecule_context_find_dative_bond_by_participants(

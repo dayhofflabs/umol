@@ -1,21 +1,26 @@
 //! Molecule-scope constraints, the `Constraint` combinator tree, and the
 //! molecule-level `Constraints` store.
 
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use umol_perm::{DynPermutation, Permutation};
+
 use super::super::edit::{CascadedConstraints, ModifiedConstraint, RemovedConstraint};
+use super::super::entity::{Entity, EntityKind};
 use super::super::error::Contradiction;
+use super::super::frame::OverlaysFrameAction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::StereoKind;
-use super::super::traits::{Lattice, Normalize};
+use super::super::traits::{FrameTransport, Lattice, Normalize};
 use super::aromatic::AromaticSystemConstraintForm;
 use super::atom::AtomConstraintForm;
 use super::bond::BondConstraintForm;
@@ -24,6 +29,183 @@ use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::relational::RelationalConstraint;
 use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
+
+pub(crate) trait ConstraintFrameActions {
+    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation>;
+    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation>;
+    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation>;
+    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation>;
+    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation>;
+    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation>;
+}
+
+#[derive(Default)]
+pub(crate) struct ConstraintFrameActionMap {
+    dative_bonds: HashMap<DativeBondId, DynPermutation>,
+    aromatic_systems: HashMap<AromaticSystemId, DynPermutation>,
+    multicenter_bonds: HashMap<MulticenterBondId, DynPermutation>,
+    noncovalent_bonds: HashMap<NoncovalentBondId, DynPermutation>,
+    stereo_atoms: HashMap<StereoAtomId, Permutation>,
+    stereo_bonds: HashMap<StereoBondId, Permutation>,
+}
+
+impl ConstraintFrameActionMap {
+    pub(crate) fn insert_dative_bond(&mut self, id: DativeBondId, action: DynPermutation) {
+        self.dative_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_aromatic_system(&mut self, id: AromaticSystemId, action: DynPermutation) {
+        self.aromatic_systems.insert(id, action);
+    }
+
+    pub(crate) fn insert_multicenter_bond(
+        &mut self,
+        id: MulticenterBondId,
+        action: DynPermutation,
+    ) {
+        self.multicenter_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_noncovalent_bond(
+        &mut self,
+        id: NoncovalentBondId,
+        action: DynPermutation,
+    ) {
+        self.noncovalent_bonds.insert(id, action);
+    }
+
+    pub(crate) fn insert_stereo_atom(&mut self, id: StereoAtomId, action: Permutation) {
+        self.stereo_atoms.insert(id, action);
+    }
+
+    pub(crate) fn insert_stereo_bond(&mut self, id: StereoBondId, action: Permutation) {
+        self.stereo_bonds.insert(id, action);
+    }
+}
+
+impl ConstraintFrameActions for ConstraintFrameActionMap {
+    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation> {
+        self.dative_bonds.get(&id)
+    }
+
+    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation> {
+        self.aromatic_systems.get(&id)
+    }
+
+    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation> {
+        self.multicenter_bonds.get(&id)
+    }
+
+    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation> {
+        self.noncovalent_bonds.get(&id)
+    }
+
+    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation> {
+        self.stereo_atoms.get(&id)
+    }
+
+    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation> {
+        self.stereo_bonds.get(&id)
+    }
+}
+
+impl ConstraintFrameActions for OverlaysFrameAction {
+    fn dative_bond_action(&self, id: DativeBondId) -> Option<&DynPermutation> {
+        self.dative_bonds().action(id)
+    }
+
+    fn aromatic_system_action(&self, id: AromaticSystemId) -> Option<&DynPermutation> {
+        self.aromatic_systems().action(id)
+    }
+
+    fn multicenter_bond_action(&self, id: MulticenterBondId) -> Option<&DynPermutation> {
+        self.multicenter_bonds().action(id)
+    }
+
+    fn noncovalent_bond_action(&self, id: NoncovalentBondId) -> Option<&DynPermutation> {
+        self.noncovalent_bonds().action(id)
+    }
+
+    fn stereo_atom_action(&self, id: StereoAtomId) -> Option<&Permutation> {
+        self.stereo_atoms().action(id)
+    }
+
+    fn stereo_bond_action(&self, id: StereoBondId) -> Option<&Permutation> {
+        self.stereo_bonds().action(id)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct ConstraintFrameActionDomain {
+    dative_bonds: HashSet<DativeBondId>,
+    aromatic_systems: HashSet<AromaticSystemId>,
+    multicenter_bonds: HashSet<MulticenterBondId>,
+    noncovalent_bonds: HashSet<NoncovalentBondId>,
+    stereo_atoms: HashSet<StereoAtomId>,
+    stereo_bonds: HashSet<StereoBondId>,
+}
+
+impl ConstraintFrameActionDomain {
+    pub(crate) fn insert_dative_bond(&mut self, id: DativeBondId) {
+        self.dative_bonds.insert(id);
+    }
+
+    pub(crate) fn insert_aromatic_system(&mut self, id: AromaticSystemId) {
+        self.aromatic_systems.insert(id);
+    }
+
+    pub(crate) fn insert_multicenter_bond(&mut self, id: MulticenterBondId) {
+        self.multicenter_bonds.insert(id);
+    }
+
+    pub(crate) fn insert_noncovalent_bond(&mut self, id: NoncovalentBondId) {
+        self.noncovalent_bonds.insert(id);
+    }
+
+    pub(crate) fn insert_stereo_atom(&mut self, id: StereoAtomId) {
+        self.stereo_atoms.insert(id);
+    }
+
+    pub(crate) fn insert_stereo_bond(&mut self, id: StereoBondId) {
+        self.stereo_bonds.insert(id);
+    }
+
+    pub(crate) fn contains_dative_bond(&self, id: DativeBondId) -> bool {
+        self.dative_bonds.contains(&id)
+    }
+
+    pub(crate) fn contains_aromatic_system(&self, id: AromaticSystemId) -> bool {
+        self.aromatic_systems.contains(&id)
+    }
+
+    pub(crate) fn contains_multicenter_bond(&self, id: MulticenterBondId) -> bool {
+        self.multicenter_bonds.contains(&id)
+    }
+
+    pub(crate) fn contains_noncovalent_bond(&self, id: NoncovalentBondId) -> bool {
+        self.noncovalent_bonds.contains(&id)
+    }
+
+    pub(crate) fn contains_stereo_atom(&self, id: StereoAtomId) -> bool {
+        self.stereo_atoms.contains(&id)
+    }
+
+    pub(crate) fn contains_stereo_bond(&self, id: StereoBondId) -> bool {
+        self.stereo_bonds.contains(&id)
+    }
+
+    pub(crate) fn count(&self, entity_kind: EntityKind) -> usize {
+        match entity_kind {
+            EntityKind::Atom | EntityKind::Bond => 0,
+            EntityKind::DativeBond => self.dative_bonds.len(),
+            EntityKind::AromaticSystem => self.aromatic_systems.len(),
+            EntityKind::MulticenterBond => self.multicenter_bonds.len(),
+            EntityKind::NoncovalentBond => self.noncovalent_bonds.len(),
+            EntityKind::StereoAtom => self.stereo_atoms.len(),
+            EntityKind::StereoBond => self.stereo_bonds.len(),
+        }
+    }
+}
 
 /// Tree node type: per-entity leaf, molecule-scope leaf, relational leaf, or
 /// combinator. The bare entity-leaf forms appear only inside a combinator
@@ -76,7 +258,7 @@ impl Constraint {
         }
     }
 
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         match self {
             Constraint::Atom(id, c) => {
                 let i = compaction.compact_atom(id)?;
@@ -169,6 +351,162 @@ impl Constraint {
             Constraint::Not(x) => Constraint::Not(Box::new(x.remap(map))),
         }
     }
+
+    pub(crate) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+        match self {
+            Self::DativeBond(id, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_dative_bond(*id)
+            }
+            Self::AromaticSystem(id, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_aromatic_system(*id)
+            }
+            Self::MulticenterBond(id, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_multicenter_bond(*id)
+            }
+            Self::NoncovalentBond(id, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_noncovalent_bond(*id)
+            }
+            Self::StereoAtom(id, _, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_stereo_atom(*id)
+            }
+            Self::StereoBond(id, _, constraint) if constraint.uses_participant_frame() => {
+                domain.insert_stereo_bond(*id)
+            }
+            Self::Relational(constraint) => constraint.collect_frame_action_domain(domain),
+            Self::And(constraints) | Self::Or(constraints) => {
+                for constraint in constraints {
+                    constraint.collect_frame_action_domain(domain);
+                }
+            }
+            Self::Not(constraint) => constraint.collect_frame_action_domain(domain),
+            Self::Atom(..)
+            | Self::Bond(..)
+            | Self::DativeBond(..)
+            | Self::AromaticSystem(..)
+            | Self::MulticenterBond(..)
+            | Self::NoncovalentBond(..)
+            | Self::StereoAtom(..)
+            | Self::StereoBond(..)
+            | Self::Molecule(..) => {}
+        }
+    }
+
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
+            Self::DativeBond(id, constraint) => {
+                if constraint.uses_participant_frame() {
+                    let action = actions
+                        .dative_bond_action(id)
+                        .ok_or(Entity::DativeBond(id))?;
+                    Self::DativeBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::DativeBond(id))?,
+                    )
+                } else {
+                    Self::DativeBond(id, constraint)
+                }
+            }
+            Self::AromaticSystem(id, constraint) => {
+                if constraint.uses_participant_frame() {
+                    let action = actions
+                        .aromatic_system_action(id)
+                        .ok_or(Entity::AromaticSystem(id))?;
+                    Self::AromaticSystem(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::AromaticSystem(id))?,
+                    )
+                } else {
+                    Self::AromaticSystem(id, constraint)
+                }
+            }
+            Self::MulticenterBond(id, constraint) => {
+                if constraint.uses_participant_frame() {
+                    let action = actions
+                        .multicenter_bond_action(id)
+                        .ok_or(Entity::MulticenterBond(id))?;
+                    Self::MulticenterBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::MulticenterBond(id))?,
+                    )
+                } else {
+                    Self::MulticenterBond(id, constraint)
+                }
+            }
+            Self::NoncovalentBond(id, constraint) => {
+                if constraint.uses_participant_frame() {
+                    let action = actions
+                        .noncovalent_bond_action(id)
+                        .ok_or(Entity::NoncovalentBond(id))?;
+                    Self::NoncovalentBond(
+                        id,
+                        constraint
+                            .reframe_by(action)
+                            .ok_or(Entity::NoncovalentBond(id))?,
+                    )
+                } else {
+                    Self::NoncovalentBond(id, constraint)
+                }
+            }
+            Self::StereoAtom(id, kind, constraint) => {
+                if !constraint.uses_participant_frame() {
+                    Self::StereoAtom(id, kind, constraint)
+                } else {
+                    let entity = Entity::StereoAtom(id);
+                    let action = actions.stereo_atom_action(id).ok_or(entity)?;
+                    if !kind.class_key().space().allows(*action) {
+                        return Err(entity);
+                    }
+                    Self::StereoAtom(id, kind, constraint.reframe_by(action).ok_or(entity)?)
+                }
+            }
+            Self::StereoBond(id, kind, constraint) => {
+                if !constraint.uses_participant_frame() {
+                    Self::StereoBond(id, kind, constraint)
+                } else {
+                    let entity = Entity::StereoBond(id);
+                    let action = actions.stereo_bond_action(id).ok_or(entity)?;
+                    if !kind.class_key().space().allows(*action) {
+                        return Err(entity);
+                    }
+                    Self::StereoBond(id, kind, constraint.reframe_by(action).ok_or(entity)?)
+                }
+            }
+            Self::Relational(constraint) => {
+                Self::Relational(constraint.reframe_by_actions(actions)?)
+            }
+            Self::And(constraints) => Self::And(
+                constraints
+                    .into_iter()
+                    .map(|constraint| constraint.reframe_by_actions(actions))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            Self::Or(constraints) => Self::Or(
+                constraints
+                    .into_iter()
+                    .map(|constraint| constraint.reframe_by_actions(actions))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+            Self::Not(constraint) => Self::Not(Box::new(constraint.reframe_by_actions(actions)?)),
+            invariant @ (Self::Atom(..) | Self::Bond(..) | Self::Molecule(..)) => invariant,
+        })
+    }
+}
+
+impl FrameTransport for Constraint {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        self.reframe_by_actions(actions).ok()
+    }
 }
 
 impl Normalize for Constraint {
@@ -215,6 +553,34 @@ impl Normalize for Constraints {
     /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(Self(normalize_logical_constraints(self.0, true)?))
+    }
+}
+
+impl FrameTransport for Constraints {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        self.reframe_by_actions(actions).ok()
+    }
+}
+
+impl Constraints {
+    pub(crate) fn frame_action_domain(&self) -> ConstraintFrameActionDomain {
+        let mut domain = ConstraintFrameActionDomain::default();
+        for constraint in &self.0 {
+            constraint.collect_frame_action_domain(&mut domain);
+        }
+        domain
+    }
+
+    pub(crate) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        self.into_iter()
+            .map(|constraint| constraint.reframe_by_actions(actions))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Self)
     }
 }
 
@@ -290,7 +656,7 @@ impl Constraints {
 
     /// Remap entity indices. Entries that reference a removed entity (directly
     /// or via a combinator subtree) are dropped.
-    pub fn compact(&mut self, compaction: &IdCompaction) {
+    pub fn compact(&mut self, compaction: &MoleculeCompaction) {
         self.0 = mem::take(&mut self.0)
             .into_iter()
             .filter_map(|c| c.compact(compaction))
@@ -299,7 +665,7 @@ impl Constraints {
 
     /// Remap entity indices and return the patch needed to restore or inspect
     /// constraints that were dropped or rewritten by the compaction.
-    pub fn compact_with_update(&mut self, compaction: &IdCompaction) -> CascadedConstraints {
+    pub fn compact_with_update(&mut self, compaction: &MoleculeCompaction) -> CascadedConstraints {
         let mut update = CascadedConstraints::default();
         let mut next = Vec::new();
         for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
@@ -395,7 +761,7 @@ impl MoleculeConstraint {
         }
     }
 
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => {
                 let atoms = compact_atom_subset(atoms, compaction)?;
@@ -483,7 +849,7 @@ impl Normalize for MoleculeConstraint {
 /// constraint is dropped (returns outer `None`).
 fn compact_atom_subset(
     atoms: Option<Vec<AtomId>>,
-    compaction: &IdCompaction,
+    compaction: &MoleculeCompaction,
 ) -> Option<Option<Vec<AtomId>>> {
     match atoms {
         None => Some(None),
@@ -498,7 +864,7 @@ fn compact_atom_subset(
 /// Remap an `Option<Vec<BondId>>`. Same semantics as `compact_atom_subset`.
 fn compact_bond_subset(
     bonds: Option<Vec<BondId>>,
-    compaction: &IdCompaction,
+    compaction: &MoleculeCompaction,
 ) -> Option<Option<Vec<BondId>>> {
     match bonds {
         None => Some(None),
@@ -527,20 +893,117 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Compaction, RelationId};
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_perm::{DynPermutation, Permutation};
 
     use super::*;
     use crate::ir::constraint::RingScope;
+    use crate::ir::frame::{
+        AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+        NoncovalentBondsFrameAction, StereoAtomsFrameAction, StereoBondsFrameAction,
+    };
     use crate::ir::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoLigandPosition,
     };
     use crate::ir::num::{ArithExpr, NumForm};
     use crate::ir::spin::UnpairedElectronsForm;
-    use crate::ir::BooleanForm;
+    use crate::ir::{
+        BooleanForm, StereoLigandPair, Stereogenicity, StereogenicityForm, Topicity, TopicityForm,
+        TopicityRelationForm,
+    };
 
-    fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdCompaction {
-        IdCompaction::new(
-            Compaction::new(removed_nodes, removed_edges),
+    #[fixture]
+    fn overlays_frame_action() -> OverlaysFrameAction {
+        OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            StereoAtomsFrameAction::from_vec(vec![Permutation::from_image(&[1, 0, 2, 3])])
+                .expect("action is admissible"),
+            StereoBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+        )
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::frame_invariant(
+        Constraints::from(vec![Constraint::And(vec![
+            Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
+            Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintForm::electron_count(6)),
+            Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintForm::electron_count(2)),
+            Constraint::NoncovalentBond(NoncovalentBondId(0), NoncovalentBondConstraintForm::intramolecular(true)),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+            ),
+        ])]),
+        [false, false, false, false, false, false],
+    )]
+    #[case::frame_relative(
+        Constraints::from(vec![Constraint::Not(Box::new(Constraint::And(vec![
+            Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::valence(4)),
+                    Box::new(AtomConstraintForm::degree(2)),
+                ],
+            }),
+            Constraint::StereoAtom(
+                StereoAtomId(0),
+                StereoKind::Tetrahedral,
+                StereoAtomConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                    relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+                }),
+            ),
+            Constraint::StereoBond(
+                StereoBondId(0),
+                StereoKind::CisTrans,
+                StereoBondConstraintForm::Topicity(TopicityForm {
+                    pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+                    relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+                }),
+            ),
+        ])))]),
+        [false, false, false, true, true, true],
+    )]
+    fn test_constraints_frame_action_domain(
+        #[case] constraints: Constraints,
+        #[case] expected: [bool; 6],
+    ) {
+        let domain = constraints.frame_action_domain();
+
+        assert_eq!(domain.contains_dative_bond(DativeBondId(0)), expected[0]);
+        assert_eq!(domain.contains_aromatic_system(AromaticSystemId(0)), expected[1]);
+        assert_eq!(domain.contains_multicenter_bond(MulticenterBondId(0)), expected[2]);
+        assert_eq!(domain.contains_noncovalent_bond(NoncovalentBondId(0)), expected[3]);
+        assert_eq!(domain.contains_stereo_atom(StereoAtomId(0)), expected[4]);
+        assert_eq!(domain.contains_stereo_bond(StereoBondId(0)), expected[5]);
+        assert_eq!(domain.count(EntityKind::DativeBond), usize::from(expected[0]));
+        assert_eq!(domain.count(EntityKind::AromaticSystem), usize::from(expected[1]));
+        assert_eq!(domain.count(EntityKind::MulticenterBond), usize::from(expected[2]));
+        assert_eq!(domain.count(EntityKind::NoncovalentBond), usize::from(expected[3]));
+        assert_eq!(domain.count(EntityKind::StereoAtom), usize::from(expected[4]));
+        assert_eq!(domain.count(EntityKind::StereoBond), usize::from(expected[5]));
+    }
+
+    fn id_compaction(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> MoleculeCompaction {
+        MoleculeCompaction::new(
+            GraphCompaction::new(
+                removed_nodes.into_iter().map(NodeId).collect(),
+                removed_edges.into_iter().map(EdgeId).collect(),
+            ),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -557,16 +1020,21 @@ mod tests {
         removed_noncovalent: Vec<u32>,
         removed_stereo_atoms: Vec<u32>,
         removed_stereo_bonds: Vec<u32>,
-    ) -> IdCompaction {
-        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
-        IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
-            rel(removed_dative),
-            rel(removed_aromatic),
-            rel(removed_multicenter),
-            rel(removed_noncovalent),
-            rel(removed_stereo_atoms),
-            rel(removed_stereo_bonds),
+    ) -> MoleculeCompaction {
+        MoleculeCompaction::new(
+            GraphCompaction::new(Vec::new(), Vec::new()),
+            removed_dative.into_iter().map(DativeBondId).collect(),
+            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            removed_multicenter
+                .into_iter()
+                .map(MulticenterBondId)
+                .collect(),
+            removed_noncovalent
+                .into_iter()
+                .map(NoncovalentBondId)
+                .collect(),
+            removed_stereo_atoms.into_iter().map(StereoAtomId).collect(),
+            removed_stereo_bonds.into_iter().map(StereoBondId).collect(),
         )
     }
 
@@ -678,6 +1146,102 @@ mod tests {
         #[case] expected: Result<Constraint, Contradiction>,
     ) {
         assert_eq!(input.normalize(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::dative_bond(
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(true)),
+    )]
+    #[case::aromatic_system(
+        Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintForm::electron_count(6)),
+        Constraint::AromaticSystem(AromaticSystemId(0), AromaticSystemConstraintForm::electron_count(6)),
+    )]
+    #[case::multicenter_bond(
+        Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintForm::electron_count(2)),
+        Constraint::MulticenterBond(MulticenterBondId(0), MulticenterBondConstraintForm::electron_count(2)),
+    )]
+    #[case::noncovalent_bond(
+        Constraint::NoncovalentBond(NoncovalentBondId(1), NoncovalentBondConstraintForm::intramolecular(true)),
+        Constraint::NoncovalentBond(NoncovalentBondId(1), NoncovalentBondConstraintForm::intramolecular(true)),
+    )]
+    #[case::stereo_atom_stereogenicity(
+        Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral, StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral, StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    )]
+    #[case::stereo_bond_stereogenicity(
+        Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+        Constraint::StereoBond(StereoBondId(0), StereoKind::CisTrans, StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic))),
+    )]
+    #[case::recursive_relational(
+        Constraint::Not(Box::new(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        ))),
+        Constraint::Not(Box::new(Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        ))),
+    )]
+    #[case::stereo_atom_topicity(
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Undetermined,
+            }),
+        ),
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Topicity(TopicityForm {
+                pair: StereoLigandPair::new(StereoLigandPosition(1), StereoLigandPosition(2)),
+                relation: TopicityRelationForm::Undetermined,
+            }),
+        ),
+    )]
+    fn test_constraint_reframe_by(
+        #[case] input: Constraint,
+        #[case] expected: Constraint,
+        overlays_frame_action: OverlaysFrameAction,
+    ) {
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_constraints_reframe_by(overlays_frame_action: OverlaysFrameAction) {
+        let input = Constraints::from(vec![Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                ],
+            },
+        )]);
+        let expected = Constraints::from(vec![Constraint::Relational(
+            RelationalConstraint::NoncovalentBondEndsSatisfy {
+                bond: NoncovalentBondId(0),
+                predicates: [
+                    Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                    Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                ],
+            },
+        )]);
+
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
     }
 
     #[rustfmt::skip]
@@ -812,7 +1376,7 @@ mod tests {
     )]
     fn test_constraint_compact(
         #[case] c: Constraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<Constraint>,
     ) {
         assert_eq!(c.compact(&compaction), expected);
@@ -1021,7 +1585,7 @@ mod tests {
     )]
     fn test_constraints_compact(
         #[case] items: Vec<Constraint>,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Vec<Constraint>,
     ) {
         let mut cs = Constraints::new();
@@ -1255,7 +1819,7 @@ mod tests {
     )]
     fn test_molecule_constraint_compact(
         #[case] c: MoleculeConstraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<MoleculeConstraint>,
     ) {
         assert_eq!(c.compact(&compaction), expected);

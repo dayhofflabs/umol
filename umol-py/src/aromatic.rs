@@ -3,7 +3,7 @@
 use std::str::FromStr;
 use std::vec::IntoIter;
 
-use pyo3::exceptions::{PyIndexError, PyTypeError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 use umol_graph_ir::ir::{
@@ -361,13 +361,13 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) {
+    fn set_electrons(&self, py: Python<'_>, value: ElectronCountsLike) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .aromatic_system_mut(self.id)
-            .attributes
-            .electrons = value.to_rust(py);
+            .try_modify_aromatic_system(self.id, |system| system.electrons = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     #[getter]
@@ -380,13 +380,13 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_charge(&self, py: Python<'_>, value: NumLike) {
+    fn set_charge(&self, py: Python<'_>, value: NumLike) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .aromatic_system_mut(self.id)
-            .attributes
-            .charge = value.to_rust(py);
+            .try_modify_aromatic_system(self.id, |system| system.charge = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     #[getter]
@@ -402,13 +402,17 @@ impl AromaticSystemView {
     }
 
     #[setter]
-    fn set_unpaired_electrons(&self, py: Python<'_>, value: PyRef<'_, UnpairedElectronsForm>) {
+    fn set_unpaired_electrons(
+        &self,
+        py: Python<'_>,
+        value: PyRef<'_, UnpairedElectronsForm>,
+    ) -> PyResult<()> {
+        let value = value.to_rust(py);
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .aromatic_system_mut(self.id)
-            .attributes
-            .unpaired_electrons = value.to_rust(py);
+            .try_modify_aromatic_system(self.id, |system| system.unpaired_electrons = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The system's constraints as a live handle onto the molecule: reads borrow the
@@ -431,13 +435,12 @@ impl AromaticSystemView {
         py: Python<'_>,
         value: AromaticSystemConstraintsLike,
     ) -> PyResult<()> {
+        let value = value.to_rust(py)?;
         self.owner
             .borrow_mut(py)
             .to_rust_mut()
-            .aromatic_system_mut(self.id)
-            .attributes
-            .constraints = value.to_rust(py)?;
-        Ok(())
+            .try_modify_aromatic_system(self.id, |system| system.constraints = value)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The value fields as a dict keyed by field name; values are Python objects —
@@ -534,8 +537,11 @@ impl AromaticSystemViews {
     ) -> PyResult<()> {
         let mut molecule = self.owner.borrow_mut(py);
         let id = resolve_aromatic_system_index(molecule.to_rust(), index)?;
-        *molecule.to_rust_mut().aromatic_system_mut(id).attributes = system.to_rust().clone();
-        Ok(())
+        let system = system.to_rust().clone();
+        molecule
+            .to_rust_mut()
+            .try_modify_aromatic_system(id, |candidate| *candidate = system)
+            .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
     /// The aromatic system whose member atom set equals `atoms`, or `None`.
@@ -859,7 +865,8 @@ mod tests {
                 view.electrons(py).unwrap().to_rust(),
                 GraphIrElectronCountsForm::Lit(vec![1, 1, 1, 1, 1, 1])
             );
-            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2, 2, 2, 2]));
+            view.set_electrons(py, ElectronCountsLike::Lit(vec![2, 2, 2, 2, 2, 2]))
+                .unwrap();
             let fresh = AromaticSystemView {
                 owner,
                 id: GraphIrAromaticSystemId(0),
@@ -879,7 +886,7 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrAromaticSystemId(0),
             };
-            view.set_charge(py, NumLike::Lit(-1));
+            view.set_charge(py, NumLike::Lit(-1)).unwrap();
             let fresh = AromaticSystemView {
                 owner,
                 id: GraphIrAromaticSystemId(0),
@@ -905,7 +912,8 @@ mod tests {
                 owner: owner.clone_ref(py),
                 id: GraphIrAromaticSystemId(0),
             };
-            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow());
+            view.set_unpaired_electrons(py, unpaired_electrons.bind(py).borrow())
+                .unwrap();
             let fresh = AromaticSystemView {
                 owner,
                 id: GraphIrAromaticSystemId(0),

@@ -22,6 +22,8 @@ use crate::strategies::{
 
 #[path = "span/canonicalize.rs"]
 mod canonicalize;
+#[path = "span/reframe.rs"]
+mod reframe;
 #[path = "span/remapping.rs"]
 mod remapping;
 
@@ -129,9 +131,7 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
                 .collect(),
             noncovalent: noncovalent
                 .into_iter()
-                .map(|(first, second, attributes)| {
-                    (reverse_atom(first), reverse_atom(second), attributes)
-                })
+                .map(|(atoms, attributes)| (atoms.map(reverse_atom), attributes))
                 .collect(),
             stereo_atoms: stereo_atoms
                 .into_iter()
@@ -261,10 +261,9 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                 },
             ));
             let noncovalent = lhs_anchored(entries.noncovalent.into_iter().filter_map(
-                |(first, second, attributes)| {
-                    let presence =
-                        intersection_presence([presence_of_atom(first), presence_of_atom(second)])?;
-                    Some(((first, second, attributes), presence))
+                |(atoms, attributes)| {
+                    let presence = intersection_presence(atoms.into_iter().map(presence_of_atom))?;
+                    Some(((atoms, attributes), presence))
                 },
             ));
             let stereo_atoms = lhs_anchored(entries.stereo_atoms.into_iter().filter_map(
@@ -325,8 +324,8 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                     .collect(),
                 noncovalent: noncovalent
                     .into_iter()
-                    .map(|((first, second, attributes), presence)| {
-                        (first, second, entity_span(attributes, presence))
+                    .map(|((atoms, attributes), presence)| {
+                        (atoms, entity_span(attributes, presence))
                     })
                     .collect(),
                 stereo_atoms: stereo_atoms
@@ -367,14 +366,14 @@ where
     correspondence.left_count() + correspondence.right_count() - correspondence.matched_pair_count()
 }
 
-fn dense_permutation<Id>(count: usize, seed: u64, family: u32) -> Correspondence<Id>
+fn dense_permutation<Id>(count: usize, seed: u64, entity_kind: u32) -> Correspondence<Id>
 where
     Id: Copy + Ord + From<usize>,
 {
     if count == 0 {
         return Correspondence::empty();
     }
-    let mut state = seed ^ (u64::from(family) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let mut state = seed ^ (u64::from(entity_kind) + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     let mut images = (0..count).collect::<Vec<_>>();
     for index in (1..count).rev() {
         state ^= state << 13;
@@ -425,6 +424,22 @@ proptest! {
         ..Config::default()
     })]
 
+    /// Both projections of every published span satisfy molecule integrity, and converting the span
+    /// to its operational reaction satisfies reaction integrity.
+    #[test]
+    fn test_reaction_span_integrity_preservation(span in reaction_span_strategy()) {
+        let lhs = span.lhs();
+        let rhs = span.rhs();
+        let reaction = span.to_reaction();
+
+        prop_assert_eq!(lhs.edit().try_build(), Ok(lhs));
+        prop_assert_eq!(rhs.edit().try_build(), Ok(rhs));
+        prop_assert_eq!(
+            Reaction::try_new(reaction.lhs().clone(), reaction.deltas().clone()),
+            Ok(reaction),
+        );
+    }
+
     /// Cross-validate the two span constructions: the direct `superimpose` (Strategy A) reproduces
     /// the span the delta path (`to_reaction_span`) builds. Recover `(L, R, C)` from the delta-path
     /// span and reassemble; a mismatch flags a diff-completeness or frame gap between the paths.
@@ -460,7 +475,7 @@ proptest! {
     }
 
     /// Cross-validate the two span constructions with overlays present: the direct `superimpose`
-    /// reassembles the delta-path span across all overlay families, not just atoms/bonds.
+    /// reassembles the delta-path span across all overlay kinds, not just atoms/bonds.
     #[test]
     fn test_reaction_span_superimpose_matches_delta_path_overlay(
         reaction in overlay_reaction_strategy(),
@@ -473,7 +488,7 @@ proptest! {
     }
 
     /// Reaction → span → reaction is an exact idempotent delta normal form that retains the lhs and
-    /// materialized span, including all entity families.
+    /// materialized span, including all entity kinds.
     #[test]
     fn test_reaction_span_roundtrip(reaction in materializable_reaction_strategy()) {
         let span = reaction
@@ -485,7 +500,7 @@ proptest! {
             .expect("reaction derived from a constructed span materializes");
         let normalized_twice = normalized_span.to_reaction();
 
-        prop_assert_eq!(&normalized.lhs, &reaction.lhs);
+        prop_assert_eq!(normalized.lhs(), reaction.lhs());
         prop_assert_eq!(normalized_span, span);
         prop_assert_eq!(normalized_twice, normalized);
     }
@@ -511,7 +526,7 @@ proptest! {
             sides.projected_rhs_atoms,
         ).expect("reaction-frame normalization preserves unique entity incidence");
         prop_assert!(projected_to_source.is_total());
-        prop_assert!(projected_rhs.equiv_under(&sides.rhs, &projected_to_source));
+        prop_assert!(projected_rhs.framed_eq_under(&sides.rhs, &projected_to_source));
     }
 
     /// Independently generated, structurally valid span entries converge through direct
@@ -523,7 +538,6 @@ proptest! {
         let direct = ReactionSpan::try_from_entries(entries).map_err(|error| {
             TestCaseError::fail(format!("generated entries were invalid: {error}"))
         })?;
-        prop_assert_eq!(direct.check_integrity(), Ok(()));
         let parsed = direct.to_string().parse::<ReactionSpan>().map_err(|error| {
             TestCaseError::fail(format!("rendered span did not parse: {error}"))
         })?;

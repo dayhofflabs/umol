@@ -19,14 +19,17 @@
 //!   `AllAtoms`, `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraintForm` to a
 //!   role position, quantified over the matching participants.
 
+use super::super::entity::Entity;
 use super::super::error::Contradiction;
+use super::super::frame::OverlaysFrameAction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::Normalize;
+use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::traits::{FrameTransport, Normalize};
 use super::atom::AtomConstraintForm;
+use super::molecule::{ConstraintFrameActionDomain, ConstraintFrameActions};
 
 /// Cross-entity constraint relating one overlay entity (dative bond, aromatic
 /// system, multicenter bond, noncovalent bond, stereo atom, stereo bond) to
@@ -207,7 +210,7 @@ pub enum RelationalConstraint {
 impl RelationalConstraint {
     /// Remap all indices this constraint carries. Returns `None` if any
     /// referenced entity has been removed by the remapping.
-    pub fn compact(self, compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, compaction: &MoleculeCompaction) -> Option<Self> {
         Some(match self {
             Self::DativeBondDonors { bond, atoms } => {
                 let bond = compaction.compact_dative_bond(bond)?;
@@ -565,6 +568,100 @@ impl RelationalConstraint {
     }
 }
 
+impl FrameTransport for RelationalConstraint {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(self, actions: &Self::Action) -> Option<Self> {
+        self.reframe_by_actions(actions).ok()
+    }
+}
+
+impl RelationalConstraint {
+    pub(super) fn reframe_by_actions(
+        self,
+        actions: &impl ConstraintFrameActions,
+    ) -> Result<Self, Entity> {
+        Ok(match self {
+            Self::NoncovalentBondEndsSatisfy { bond, predicates } => {
+                let entity = Entity::NoncovalentBond(bond);
+                let action = actions.noncovalent_bond_action(bond).ok_or(entity)?;
+                let predicates: [Box<AtomConstraintForm>; 2] = action
+                    .act(&predicates)
+                    .ok_or(entity)?
+                    .try_into()
+                    .map_err(|_| entity)?;
+                Self::NoncovalentBondEndsSatisfy { bond, predicates }
+            }
+            invariant @ (Self::DativeBondDonors { .. }
+            | Self::DativeBondDonor { .. }
+            | Self::DativeBondContainsAllDonors { .. }
+            | Self::DativeBondAllDonors { .. }
+            | Self::DativeBondAnyDonor { .. }
+            | Self::DativeBondAcceptor { .. }
+            | Self::DativeBondAcceptorSatisfies { .. }
+            | Self::DativeBondParallels { .. }
+            | Self::AromaticSystemAtoms { .. }
+            | Self::AromaticSystemContains { .. }
+            | Self::AromaticSystemContainsAll { .. }
+            | Self::AromaticSystemAllAtoms { .. }
+            | Self::AromaticSystemAnyAtom { .. }
+            | Self::MulticenterBondAtoms { .. }
+            | Self::MulticenterBondContains { .. }
+            | Self::MulticenterBondContainsAll { .. }
+            | Self::MulticenterBondAllAtoms { .. }
+            | Self::MulticenterBondAnyAtom { .. }
+            | Self::NoncovalentBondEnds { .. }
+            | Self::NoncovalentBondContains { .. }
+            | Self::StereoAtomSite { .. }
+            | Self::StereoAtomContains { .. }
+            | Self::StereoAtomLigands { .. }
+            | Self::StereoAtomAllLigands { .. }
+            | Self::StereoAtomAnyLigand { .. }
+            | Self::StereoBondSite { .. }
+            | Self::StereoBondContains { .. }
+            | Self::StereoBondLigands { .. }
+            | Self::StereoBondAllLigands { .. }
+            | Self::StereoBondAnyLigand { .. }) => invariant,
+        })
+    }
+
+    pub(super) fn collect_frame_action_domain(&self, domain: &mut ConstraintFrameActionDomain) {
+        match self {
+            Self::NoncovalentBondEndsSatisfy { bond, .. } => domain.insert_noncovalent_bond(*bond),
+            Self::DativeBondDonors { .. }
+            | Self::DativeBondDonor { .. }
+            | Self::DativeBondContainsAllDonors { .. }
+            | Self::DativeBondAllDonors { .. }
+            | Self::DativeBondAnyDonor { .. }
+            | Self::DativeBondAcceptor { .. }
+            | Self::DativeBondAcceptorSatisfies { .. }
+            | Self::DativeBondParallels { .. }
+            | Self::AromaticSystemAtoms { .. }
+            | Self::AromaticSystemContains { .. }
+            | Self::AromaticSystemContainsAll { .. }
+            | Self::AromaticSystemAllAtoms { .. }
+            | Self::AromaticSystemAnyAtom { .. }
+            | Self::MulticenterBondAtoms { .. }
+            | Self::MulticenterBondContains { .. }
+            | Self::MulticenterBondContainsAll { .. }
+            | Self::MulticenterBondAllAtoms { .. }
+            | Self::MulticenterBondAnyAtom { .. }
+            | Self::NoncovalentBondEnds { .. }
+            | Self::NoncovalentBondContains { .. }
+            | Self::StereoAtomSite { .. }
+            | Self::StereoAtomContains { .. }
+            | Self::StereoAtomLigands { .. }
+            | Self::StereoAtomAllLigands { .. }
+            | Self::StereoAtomAnyLigand { .. }
+            | Self::StereoBondSite { .. }
+            | Self::StereoBondContains { .. }
+            | Self::StereoBondLigands { .. }
+            | Self::StereoBondAllLigands { .. }
+            | Self::StereoBondAnyLigand { .. } => {}
+        }
+    }
+}
+
 impl Normalize for RelationalConstraint {
     /// Normalize any inner `AtomConstraintForm` predicate and canonicalize atom sets.
     fn normalize(self) -> Result<Self, Contradiction> {
@@ -695,10 +792,30 @@ impl Normalize for RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::{Compaction, RelationId};
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
+    use umol_perm::DynPermutation;
 
     use super::*;
+    use crate::ir::frame::{
+        AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+        NoncovalentBondsFrameAction, StereoAtomsFrameAction, StereoBondsFrameAction,
+    };
     use crate::ir::num::NumForm;
+
+    #[fixture]
+    fn overlays_frame_action() -> OverlaysFrameAction {
+        OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![
+                DynPermutation::try_from(vec![1, 0]).expect("action is a permutation")
+            ])
+            .expect("action is admissible"),
+            StereoAtomsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            StereoBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+        )
+    }
 
     #[allow(clippy::too_many_arguments)]
     fn remapping(
@@ -710,16 +827,24 @@ mod tests {
         removed_noncovalent: Vec<u32>,
         removed_stereo_atom: Vec<u32>,
         removed_stereo_bond: Vec<u32>,
-    ) -> IdCompaction {
-        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
-        IdCompaction::new(
-            Compaction::new(removed_nodes, removed_edges),
-            rel(removed_dative),
-            rel(removed_aromatic),
-            rel(removed_multicenter),
-            rel(removed_noncovalent),
-            rel(removed_stereo_atom),
-            rel(removed_stereo_bond),
+    ) -> MoleculeCompaction {
+        MoleculeCompaction::new(
+            GraphCompaction::new(
+                removed_nodes.into_iter().map(NodeId).collect(),
+                removed_edges.into_iter().map(EdgeId).collect(),
+            ),
+            removed_dative.into_iter().map(DativeBondId).collect(),
+            removed_aromatic.into_iter().map(AromaticSystemId).collect(),
+            removed_multicenter
+                .into_iter()
+                .map(MulticenterBondId)
+                .collect(),
+            removed_noncovalent
+                .into_iter()
+                .map(NoncovalentBondId)
+                .collect(),
+            removed_stereo_atom.into_iter().map(StereoAtomId).collect(),
+            removed_stereo_bond.into_iter().map(StereoBondId).collect(),
         )
     }
 
@@ -729,7 +854,7 @@ mod tests {
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
     /// the removed position shift down by one.
-    fn one_atom_one_dative() -> IdCompaction {
+    fn one_atom_one_dative() -> MoleculeCompaction {
         remapping(
             vec![1],
             vec![],
@@ -743,7 +868,7 @@ mod tests {
     }
 
     /// Drop bond 0; preserve other entities.
-    fn drop_bond0() -> IdCompaction {
+    fn drop_bond0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![0],
@@ -757,7 +882,7 @@ mod tests {
     }
 
     /// Drop aromatic system 0.
-    fn drop_aromatic0() -> IdCompaction {
+    fn drop_aromatic0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -771,7 +896,7 @@ mod tests {
     }
 
     /// Drop multicenter bond 0.
-    fn drop_multicenter0() -> IdCompaction {
+    fn drop_multicenter0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -785,7 +910,7 @@ mod tests {
     }
 
     /// Drop noncovalent bond 0.
-    fn drop_noncovalent0() -> IdCompaction {
+    fn drop_noncovalent0() -> MoleculeCompaction {
         remapping(
             vec![],
             vec![],
@@ -910,7 +1035,7 @@ mod tests {
         Some(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: val_pred() }))]
     fn test_relational_constraint_compact(
         #[case] input: RelationalConstraint,
-        #[case] compaction: IdCompaction,
+        #[case] compaction: MoleculeCompaction,
         #[case] expected: Option<RelationalConstraint>,
     ) {
         assert_eq!(input.compact(&compaction), expected);
@@ -948,5 +1073,62 @@ mod tests {
     #[case::aromatic_contains(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) })]
     fn test_relational_constraint_normalize_identity(#[case] input: RelationalConstraint) {
         assert_eq!(input.clone().normalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::endpoint_predicates(
+        RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+            ],
+        },
+        RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            ],
+        },
+    )]
+    #[case::membership(
+        RelationalConstraint::NoncovalentBondContains {
+            bond: NoncovalentBondId(0),
+            atom: AtomId(3),
+        },
+        RelationalConstraint::NoncovalentBondContains {
+            bond: NoncovalentBondId(0),
+            atom: AtomId(3),
+        },
+    )]
+    fn test_relational_constraint_reframe_by(
+        #[case] input: RelationalConstraint,
+        #[case] expected: RelationalConstraint,
+        overlays_frame_action: OverlaysFrameAction,
+    ) {
+        assert_eq!(input.reframe_by(&overlays_frame_action), Some(expected));
+    }
+
+    #[rstest]
+    fn test_relational_constraint_reframe_by_error() {
+        let action = OverlaysFrameAction::new(
+            DativeBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            AromaticSystemsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            MulticenterBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            NoncovalentBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            StereoAtomsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+            StereoBondsFrameAction::from_vec(vec![]).expect("actions are admissible"),
+        );
+        let input = RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondId(0),
+            predicates: [
+                Box::new(AtomConstraintForm::Valence(NumForm::Lit(4))),
+                Box::new(AtomConstraintForm::Degree(NumForm::Lit(2))),
+            ],
+        };
+
+        assert_eq!(input.reframe_by(&action), None);
     }
 }

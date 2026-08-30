@@ -6,8 +6,8 @@ use umol_graph_core::{RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgo
 use umol_graph_ir::ir::{
     ApplyError, ApplyPreconditionError, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
     Contradiction, DativeBondDelta, Entity, MulticenterBondDelta, NoncovalentBondDelta, React,
-    StereoAtomDelta, StereoBondDelta, SubstructureMatchAlgorithm, SubstructureMatchConfig,
-    TransactionError,
+    ReactionIntegrityError, StereoAtomDelta, StereoBondDelta, SubstructureMatchAlgorithm,
+    SubstructureMatchConfig, TransactionError,
 };
 
 use crate::strategies::*;
@@ -18,25 +18,30 @@ const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
     relevant_cycle_algorithm: RelevantCycleEnumerationAlgorithm::Vismara,
 };
 
-fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPreconditionError)> {
+fn unavailable_entity_strategy() -> impl Strategy<
+    Value = (
+        Result<Reaction, ReactionIntegrityError>,
+        ReactionIntegrityError,
+    ),
+> {
     prop_oneof![
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::Atom(AtomDelta::Remove {
                         id: AtomId(id),
                         attributes: AtomForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::Bond(BondDelta::Remove {
                         id: BondId(id),
@@ -44,14 +49,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: BondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Bond(BondId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Remove {
                         id: DativeBondId(id),
@@ -60,14 +65,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: DativeBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::DativeBond(DativeBondId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Remove {
                         id: AromaticSystemId(id),
@@ -75,14 +80,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: AromaticSystemForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::AromaticSystem(AromaticSystemId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Remove {
                         id: MulticenterBondId(id),
@@ -90,14 +95,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: MulticenterBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::MulticenterBond(MulticenterBondId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id: NoncovalentBondId(id),
@@ -105,14 +110,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: NoncovalentBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::NoncovalentBond(NoncovalentBondId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
                         id: StereoAtomId(id),
@@ -121,14 +126,14 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: StereoAtomForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::StereoAtom(StereoAtomId(id)),
                 },
             )
         }),
         (0u32..64).prop_map(|id| {
             (
-                Reaction::new(
+                Reaction::try_new(
                     Molecule::default(),
                     Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
                         id: StereoBondId(id),
@@ -137,7 +142,7 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
                         attributes: StereoBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::StereoBond(StereoBondId(id)),
                 },
             )
@@ -145,7 +150,12 @@ fn unavailable_entity_strategy() -> impl Strategy<Value = (Reaction, ApplyPrecon
     ]
 }
 
-fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyPreconditionError)> {
+fn unavailable_participant_strategy() -> impl Strategy<
+    Value = (
+        Result<Reaction, ReactionIntegrityError>,
+        ReactionIntegrityError,
+    ),
+> {
     (1u32..64).prop_flat_map(|missing| {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C)],
@@ -153,7 +163,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
         });
         prop_oneof![
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::Bond(BondDelta::Add {
                         id: BondId(0),
@@ -161,12 +171,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: BondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::DativeBond(DativeBondDelta::Add {
                         id: DativeBondId(0),
@@ -175,12 +185,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: DativeBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::AromaticSystem(AromaticSystemDelta::Add {
                         id: AromaticSystemId(0),
@@ -188,12 +198,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: AromaticSystemForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::MulticenterBond(MulticenterBondDelta::Add {
                         id: MulticenterBondId(0),
@@ -201,12 +211,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: MulticenterBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Add {
                         id: NoncovalentBondId(0),
@@ -214,12 +224,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: NoncovalentBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::Constraint(ConstraintDelta::Add(
                         Constraint::Molecule(MoleculeConstraint::UnpairedElectronCoupling {
@@ -228,12 +238,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         }),
                     ))]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
                         id: StereoAtomId(0),
@@ -242,12 +252,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: StereoAtomForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs.clone(),
                     Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Add {
                         id: StereoAtomId(0),
@@ -256,12 +266,12 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: StereoAtomForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Atom(AtomId(missing)),
                 },
             )),
             Just((
-                Reaction::new(
+                Reaction::try_new(
                     lhs,
                     Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Add {
                         id: StereoBondId(0),
@@ -270,7 +280,7 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
                         attributes: StereoBondForm::default(),
                     })]),
                 ),
-                ApplyPreconditionError::InvalidReactionReference {
+                ReactionIntegrityError::InvalidReference {
                     entity: Entity::Bond(BondId(missing)),
                 },
             )),
@@ -278,10 +288,15 @@ fn unavailable_participant_strategy() -> impl Strategy<Value = (Reaction, ApplyP
     })
 }
 
-fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPreconditionError)> {
+fn incompatible_incidence_strategy() -> impl Strategy<
+    Value = (
+        Result<Reaction, ReactionIntegrityError>,
+        ReactionIntegrityError,
+    ),
+> {
     prop_oneof![
         Just((
-            Reaction::new(
+            Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::default(),)],
@@ -294,12 +309,12 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
                     attributes: DativeBondForm::default(),
                 })]),
             ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::DativeBond(DativeBondId(0)),
             },
         )),
         Just((
-            Reaction::new(
+            Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     aromatic: vec![(vec![AtomId(0), AtomId(1)], AromaticSystemForm::default(),)],
@@ -311,12 +326,12 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
                     attributes: AromaticSystemForm::default(),
                 })]),
             ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::AromaticSystem(AromaticSystemId(0)),
             },
         )),
         Just((
-            Reaction::new(
+            Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
                     multicenter: vec![
@@ -330,15 +345,15 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
                     attributes: MulticenterBondForm::default(),
                 })]),
             ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::MulticenterBond(MulticenterBondId(0)),
             },
         )),
         Just((
-            Reaction::new(
+            Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
-                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default(),)],
+                    noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default(),)],
                     ..Default::default()
                 }),
                 Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
@@ -347,42 +362,21 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
                     attributes: NoncovalentBondForm::default(),
                 })]),
             ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
             },
         )),
         Just((
-            Reaction::new(
-                Molecule::from_entries(MoleculeEntries {
-                    atoms: vec![AtomForm::from_element(Element::C); 5],
-                    stereo_atoms: vec![(
-                        AtomId(0),
-                        (1..=4)
-                            .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
-                            .collect(),
-                        StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                    )],
-                    ..Default::default()
-                }),
-                Deltas::from_iter([Delta::StereoAtom(StereoAtomDelta::Remove {
-                    id: StereoAtomId(0),
-                    site: AtomId(0),
-                    ligands: [2, 1, 3, 4]
-                        .into_iter()
-                        .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
-                        .collect(),
-                    attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
-                })]),
-            ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
-                entity: Entity::StereoAtom(StereoAtomId(0)),
-            },
-        )),
-        Just((
-            Reaction::new(
+            Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 6],
-                    bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                    bonds: vec![
+                        (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                        (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                        (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                        (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                        (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                    ],
                     stereo_bonds: vec![(
                         BondId(0),
                         (2..=5)
@@ -395,14 +389,14 @@ fn incompatible_incidence_strategy() -> impl Strategy<Value = (Reaction, ApplyPr
                 Deltas::from_iter([Delta::StereoBond(StereoBondDelta::Remove {
                     id: StereoBondId(0),
                     site: BondId(0),
-                    ligands: [3, 2, 4, 5]
+                    ligands: [2, 4, 3, 5]
                         .into_iter()
                         .map(|atom| { StereoLigand::new(AtomId(atom), StereoLigandKind::Atom) })
                         .collect(),
                     attributes: StereoBondForm::new(StereoKind::CisTrans, 0u32),
                 })]),
             ),
-            ApplyPreconditionError::ReactionIncidenceMismatch {
+            ReactionIntegrityError::IncidenceMismatch {
                 entity: Entity::StereoBond(StereoBondId(0)),
             },
         )),
@@ -414,9 +408,12 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
         let ligands: Vec<StereoLigand> = (1..=kind.degree() as u32)
             .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
             .collect();
-        Reaction::new(
+        Reaction::try_new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); kind.degree() + 1],
+                bonds: (1..=kind.degree() as u32)
+                    .map(|atom| (AtomId(0), AtomId(atom), BondForm::from_order(1)))
+                    .collect(),
                 stereo_atoms: vec![(AtomId(0), ligands, StereoAtomForm::new(kind, 0u32))],
                 ..Default::default()
             }),
@@ -428,13 +425,20 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
                 },
             })]),
         )
+        .expect("generated stereo-atom update is representation-valid")
     });
     let stereo_bond = (0u32..16).prop_map(|offset| {
         let kind = StereoKind::CisTrans;
-        Reaction::new(
+        Reaction::try_new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 6],
-                bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))],
+                bonds: vec![
+                    (AtomId(0), AtomId(1), BondForm::from_order(2)),
+                    (AtomId(0), AtomId(2), BondForm::from_order(1)),
+                    (AtomId(0), AtomId(3), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(4), BondForm::from_order(1)),
+                    (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                ],
                 stereo_bonds: vec![(
                     BondId(0),
                     (2..=5)
@@ -452,6 +456,7 @@ fn malformed_update_strategy() -> impl Strategy<Value = Reaction> {
                 },
             })]),
         )
+        .expect("generated stereo-bond update is representation-valid")
     });
 
     prop_oneof![
@@ -470,24 +475,24 @@ proptest! {
     })]
 
     #[test]
-    fn test_reaction_check_preconditions_entity_reference_error(
-        (reaction, expected) in unavailable_entity_strategy(),
+    fn test_reaction_try_new_entity_reference_error(
+        (actual, expected) in unavailable_entity_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
+        prop_assert_eq!(actual, Err(expected));
     }
 
     #[test]
-    fn test_reaction_check_preconditions_participant_reference_error(
-        (reaction, expected) in unavailable_participant_strategy(),
+    fn test_reaction_try_new_participant_reference_error(
+        (actual, expected) in unavailable_participant_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
+        prop_assert_eq!(actual, Err(expected));
     }
 
     #[test]
-    fn test_reaction_check_preconditions_incidence_error(
-        (reaction, expected) in incompatible_incidence_strategy(),
+    fn test_reaction_try_new_incidence_error(
+        (actual, expected) in incompatible_incidence_strategy(),
     ) {
-        prop_assert_eq!(reaction.check_preconditions(), Err(expected));
+        prop_assert_eq!(actual, Err(expected));
     }
 
     #[test]
@@ -510,30 +515,21 @@ proptest! {
     }
 
     #[test]
-    fn test_react_react_precondition_error(
-        (reaction, expected) in unavailable_entity_strategy(),
-    ) {
-        prop_assert_eq!(
-            Molecule::default().react(&reaction, MATCH_CONFIG).unwrap_err(),
-            expected,
-        );
-    }
-
-    #[test]
     #[ignore = "re-enable when matching evaluates molecule-scope pattern constraints"]
     fn test_reaction_apply_error(host_atom_count in 1usize..=8) {
         let constraint = Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(0)]),
             sum: NumForm::Lit(0),
         });
-        let reaction = Reaction::new(
+        let reaction = Reaction::try_new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 constraints: Constraints::from(constraint.clone()),
                 ..Default::default()
             }),
             Deltas::from_iter([Delta::Constraint(ConstraintDelta::Remove(constraint))]),
-        );
+        )
+        .expect("generated constraint removal is representation-valid");
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); host_atom_count],
             ..Default::default()

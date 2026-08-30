@@ -11,7 +11,7 @@ use super::error::{Contradiction, NoJoin};
 use super::num::NumForm;
 use super::operators::MemOp;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{AsLit, Equiv, Lattice, Normalize};
+use super::traits::{AsLit, Lattice, Normalize};
 
 /// Atom form: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -155,7 +155,7 @@ impl AtomForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.equiv(new))
+                .is_none_or(|old| !old.normalized_eq(new))
             {
                 constraints.set(new.clone());
             }
@@ -166,13 +166,15 @@ impl AtomForm {
             }
         }
         AtomUpdate {
-            element: (!self.element.equiv(&other.element)).then(|| other.element.clone()),
-            isotope_mass: (!self.isotope_mass.equiv(&other.isotope_mass))
+            element: (!self.element.normalized_eq(&other.element)).then(|| other.element.clone()),
+            isotope_mass: (!self.isotope_mass.normalized_eq(&other.isotope_mass))
                 .then(|| other.isotope_mass.clone()),
-            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
-            implicit_hydrogens: (!self.implicit_hydrogens.equiv(&other.implicit_hydrogens))
-                .then(|| other.implicit_hydrogens.clone()),
-            lone_pairs: (!self.lone_pairs.equiv(&other.lone_pairs))
+            charge: (!self.charge.normalized_eq(&other.charge)).then(|| other.charge.clone()),
+            implicit_hydrogens: (!self
+                .implicit_hydrogens
+                .normalized_eq(&other.implicit_hydrogens))
+            .then(|| other.implicit_hydrogens.clone()),
+            lone_pairs: (!self.lone_pairs.normalized_eq(&other.lone_pairs))
                 .then(|| other.lone_pairs.clone()),
             unpaired_electrons: self
                 .unpaired_electrons

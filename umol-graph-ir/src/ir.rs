@@ -16,6 +16,7 @@ pub(crate) mod edit;
 pub(crate) mod electrons;
 pub(crate) mod entity;
 pub(crate) mod error;
+pub(crate) mod frame;
 pub(crate) mod id;
 pub(crate) mod incidence;
 pub(crate) mod ligand;
@@ -36,13 +37,13 @@ pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod view;
 
-pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate};
+pub use aromatic::{AromaticSystemForm, AromaticSystemUpdate, AromaticSystems};
 pub use atom::{AtomFieldKind, AtomForm, AtomUpdate, ElementForm, IsotopeMass, IsotopeMassForm};
 pub use bond::{BondForm, BondUpdate};
 pub use boolean::BooleanForm;
 pub use canonicalize::{
-    Canonicalize, CanonicalizeContext, CanonicalizeLevel, MoleculeCanonicalizeError,
-    ReactionCanonicalizeError, ReactionSpanCanonicalizeError,
+    Canonicalize, CanonicalizeContext, MoleculeCanonicalizeError, ReactionCanonicalizeError,
+    ReactionSpanCanonicalizeError,
 };
 pub use coloring::{ConstitutionColoring, MoleculeColoring, MoleculeColoringFeatures};
 pub use constraint::{
@@ -61,7 +62,7 @@ pub use constraint::{
     TopicityRelationForm,
 };
 pub use correspondence::MoleculeCorrespondence;
-pub use dative::{DativeBondForm, DativeBondUpdate};
+pub use dative::{DativeBondForm, DativeBondUpdate, DativeBonds};
 pub use delta::{
     AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta, ConstraintSpan, DativeBondDelta,
     Delta, Deltas, EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta,
@@ -83,6 +84,11 @@ pub use edit::{
 pub use electrons::ElectronCountsForm;
 pub use entity::{Entity, EntityKind};
 pub use error::{ApplyError, ApplyPreconditionError, Contradiction, MoleculeApplyError, NoJoin};
+pub use frame::{
+    AromaticSystemsFrameAction, DativeBondsFrameAction, MulticenterBondsFrameAction,
+    NoncovalentBondsFrameAction, OverlaysFrameAction, StereoAtomsFrameAction,
+    StereoBondsFrameAction,
+};
 pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandPosition,
@@ -95,9 +101,10 @@ pub use molecule::{
     spec, AtomArg, Fragment, Molecule, MoleculeBuilder, MoleculeEditor, MoleculeEntries,
     MoleculeIntegrityError, MoleculeSpec, MoleculeSpecTerm, Port, PortArg,
 };
-pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate};
+pub use multicenter::{MulticenterBondForm, MulticenterBondUpdate, MulticenterBonds};
 pub use noncovalent::{
     NoncovalentBondForm, NoncovalentBondKind, NoncovalentBondKindForm, NoncovalentBondUpdate,
+    NoncovalentBonds,
 };
 pub use num::{ArithExpr, NumForm, PredExpr};
 pub use operators::{MemOp, RelOp};
@@ -106,24 +113,24 @@ pub use reaction::{
     ReactionProductsIter,
 };
 pub use reaction_span::{ReactionSpan, ReactionSpanEntries, ReactionSpanIntegrityError};
-pub use remap::{IdCompaction, IdRemapping, UndoCompaction};
+pub use remap::{IdRemapping, MoleculeCompaction, UndoCompaction};
 pub use ring::{
     RingConfig, RingConnection, RingGraph, RingId, RingModel, RingRelation, RingSet, RingSetKind,
 };
 pub use spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
 pub use stereo::{
     CisTransConfiguration, CisTransStereo, CisTransStereoForm, StereoAtomForm, StereoAtomUpdate,
-    StereoBondForm, StereoBondUpdate, StereoConfiguration, StereoConfigurationForm,
-    StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm, Stereogenicity,
-    TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
+    StereoAtoms, StereoBondForm, StereoBondUpdate, StereoBonds, StereoConfiguration,
+    StereoConfigurationForm, StereoConfigurationUpdate, StereoCoset, StereoKind, StereoTerm,
+    Stereogenicity, TetrahedralConfiguration, TetrahedralStereo, TetrahedralStereoForm, Topicity,
 };
 pub use substructure::{
     SubstructureMatchAlgorithm, SubstructureMatchConfig, SubstructureMatchError,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
-    AsLit, BiRelationEquiv, EntityPatch, Equiv, FromIr, IntoIr, Lattice, Normalize, Normalized,
-    RelationEquiv, TryFromIr, TryIntoIr,
+    AsLit, EntityPatch, FrameTransport, FromIr, IntoIr, Lattice, Normalize, Reframe, TryFromIr,
+    TryIntoIr,
 };
 pub use view::{
     AromaticSystemConstraintsView, AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews,
@@ -132,7 +139,6 @@ pub use view::{
     DativeBondViews, MulticenterBondConstraintsView, MulticenterBondView, MulticenterBondViewMut,
     MulticenterBondViews, NeighborView, NoncovalentBondConstraintsView, NoncovalentBondView,
     NoncovalentBondViewMut, NoncovalentBondViews, RingAtomView, RingBondView, RingView, RingViews,
-    StereoAtomConstraintsView, StereoAtomView, StereoAtomViewMut, StereoAtomViews,
-    StereoBondConstraintsView, StereoBondView, StereoBondViewMut, StereoBondViews,
-    StereoLigandView,
+    StereoAtomConstraintsView, StereoAtomView, StereoAtomViews, StereoBondConstraintsView,
+    StereoBondView, StereoBondViews, StereoLigandView,
 };

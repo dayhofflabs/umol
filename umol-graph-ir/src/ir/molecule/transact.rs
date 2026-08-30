@@ -17,7 +17,11 @@ use std::hash::Hash;
 
 use thiserror::Error;
 
-use super::super::constraint::{Constraint, Constraints};
+use super::super::constraint::{
+    AromaticSystemConstraintForm, AtomConstraintForm, BondConstraintForm, Constraint, Constraints,
+    DativeBondConstraintForm, MulticenterBondConstraintForm, NoncovalentBondConstraintForm,
+    StereoAtomConstraintForm, StereoBondConstraintForm,
+};
 use super::super::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
@@ -34,9 +38,9 @@ use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use super::super::ligand::StereoLigand;
-use super::super::remap::{IdCompaction, UndoCompaction};
-use super::super::traits::Equiv;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
+use super::super::remap::{MoleculeCompaction, UndoCompaction};
+use super::super::traits::Normalize;
 use super::MoleculeEditor;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -326,7 +330,7 @@ impl ApplicationState {
 
     fn stereo_ligands(
         &self,
-        ligands: Vec<(AtomHandle, super::super::ligand::StereoLigandKind)>,
+        ligands: Vec<(AtomHandle, StereoLigandKind)>,
     ) -> Result<Vec<StereoLigand>, TransactionError> {
         ligands
             .into_iter()
@@ -347,7 +351,7 @@ impl ApplicationState {
         )
     }
 
-    fn compact(&mut self, compaction: &IdCompaction) {
+    fn compact(&mut self, compaction: &MoleculeCompaction) {
         self.atoms.compact(|id| compaction.compact_atom(id));
         self.bonds.compact(|id| compaction.compact_bond(id));
         self.dative_bonds
@@ -520,8 +524,8 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = IdCompaction::relations(
-                    ids.iter().map(|&id| id.into()).collect(),
+                let forward = MoleculeCompaction::relations(
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -559,9 +563,9 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -598,10 +602,10 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -633,11 +637,11 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                 );
@@ -672,12 +676,12 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                 );
                 self.remove_stereo_atoms(&ids);
@@ -711,13 +715,13 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&id| id.into()).collect(),
+                    ids.clone(),
                 );
                 self.remove_stereo_bonds(&ids);
                 state.compact(&forward);
@@ -856,7 +860,7 @@ impl MoleculeEditor {
                 let compaction = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
-                    IdCompaction::empty()
+                    MoleculeCompaction::empty()
                 };
                 state.compact(&compaction);
                 let mut constraints = pre_constraints;
@@ -937,8 +941,8 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::DativeBond)?;
-                let forward = IdCompaction::relations(
-                    ids.iter().map(|&i| i.into()).collect(),
+                let forward = MoleculeCompaction::relations(
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1000,9 +1004,9 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::AromaticSystem)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1063,10 +1067,10 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::MulticenterBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
@@ -1121,11 +1125,11 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::NoncovalentBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                     Vec::new(),
                 );
@@ -1184,12 +1188,12 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoAtom)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                     Vec::new(),
                 );
                 let mut pre_constraints = self.constraints().clone();
@@ -1247,13 +1251,13 @@ impl MoleculeEditor {
                     ids.push(id);
                 }
                 ensure_unique(&ids, EntityKind::StereoBond)?;
-                let forward = IdCompaction::relations(
+                let forward = MoleculeCompaction::relations(
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
                     Vec::new(),
-                    ids.iter().map(|&i| i.into()).collect(),
+                    ids.clone(),
                 );
                 let mut pre_constraints = self.constraints().clone();
                 self.remove_stereo_bonds(&ids);
@@ -1529,37 +1533,37 @@ impl MoleculeEditor {
         let atom = self.atom_mut(id);
         match change {
             AtomFieldChange::Element { old, new } => {
-                if !atom.attributes.element.equiv(&old) {
+                if !atom.attributes.element.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.element = new;
             }
             AtomFieldChange::IsotopeMass { old, new } => {
-                if !atom.attributes.isotope_mass.equiv(&old) {
+                if !atom.attributes.isotope_mass.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.isotope_mass = new;
             }
             AtomFieldChange::Charge { old, new } => {
-                if !atom.attributes.charge.equiv(&old) {
+                if !atom.attributes.charge.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.charge = new;
             }
             AtomFieldChange::ImplicitHydrogens { old, new } => {
-                if !atom.attributes.implicit_hydrogens.equiv(&old) {
+                if !atom.attributes.implicit_hydrogens.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.implicit_hydrogens = new;
             }
             AtomFieldChange::LonePairs { old, new } => {
-                if !atom.attributes.lone_pairs.equiv(&old) {
+                if !atom.attributes.lone_pairs.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.lone_pairs = new;
             }
             AtomFieldChange::UnpairedElectrons { old, new } => {
-                if !atom.attributes.unpaired_electrons.equiv(&old) {
+                if !atom.attributes.unpaired_electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 atom.attributes.unpaired_electrons = new;
@@ -1576,19 +1580,19 @@ impl MoleculeEditor {
         let bond = self.bond_mut(id);
         match change {
             BondFieldChange::Order { old, new } => {
-                if !bond.attributes.order.equiv(&old) {
+                if !bond.attributes.order.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.order = new;
             }
             BondFieldChange::Charge { old, new } => {
-                if !bond.attributes.charge.equiv(&old) {
+                if !bond.attributes.charge.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.charge = new;
             }
             BondFieldChange::UnpairedElectrons { old, new } => {
-                if !bond.attributes.unpaired_electrons.equiv(&old) {
+                if !bond.attributes.unpaired_electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 bond.attributes.unpaired_electrons = new;
@@ -1605,7 +1609,7 @@ impl MoleculeEditor {
         let dat = self.dative_bond_mut(id);
         match change {
             DativeBondFieldChange::Order { old, new } => {
-                if !dat.attributes.order.equiv(&old) {
+                if !dat.attributes.order.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 dat.attributes.order = new;
@@ -1622,19 +1626,19 @@ impl MoleculeEditor {
         let ar = self.aromatic_system_mut(id);
         match change {
             AromaticSystemFieldChange::Electrons { old, new } => {
-                if !ar.attributes.electrons.equiv(&old) {
+                if !ar.attributes.electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.electrons = new;
             }
             AromaticSystemFieldChange::Charge { old, new } => {
-                if !ar.attributes.charge.equiv(&old) {
+                if !ar.attributes.charge.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.charge = new;
             }
             AromaticSystemFieldChange::UnpairedElectrons { old, new } => {
-                if !ar.attributes.unpaired_electrons.equiv(&old) {
+                if !ar.attributes.unpaired_electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 ar.attributes.unpaired_electrons = new;
@@ -1651,19 +1655,19 @@ impl MoleculeEditor {
         let mc = self.multicenter_bond_mut(id);
         match change {
             MulticenterBondFieldChange::Electrons { old, new } => {
-                if !mc.attributes.electrons.equiv(&old) {
+                if !mc.attributes.electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.electrons = new;
             }
             MulticenterBondFieldChange::Charge { old, new } => {
-                if !mc.attributes.charge.equiv(&old) {
+                if !mc.attributes.charge.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.charge = new;
             }
             MulticenterBondFieldChange::UnpairedElectrons { old, new } => {
-                if !mc.attributes.unpaired_electrons.equiv(&old) {
+                if !mc.attributes.unpaired_electrons.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 mc.attributes.unpaired_electrons = new;
@@ -1680,7 +1684,7 @@ impl MoleculeEditor {
         let nc = self.noncovalent_bond_mut(id);
         match change {
             NoncovalentBondFieldChange::Kind { old, new } => {
-                if !nc.attributes.kind.equiv(&old) {
+                if !nc.attributes.kind.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 nc.attributes.kind = new;
@@ -1697,7 +1701,7 @@ impl MoleculeEditor {
         let sa = self.stereo_atom_mut(id);
         match change {
             StereoAtomFieldChange::Configuration { old, new } => {
-                if !sa.attributes.configuration.equiv(&old) {
+                if !sa.attributes.configuration.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sa.attributes.configuration = new;
@@ -1714,7 +1718,7 @@ impl MoleculeEditor {
         let sb = self.stereo_bond_mut(id);
         match change {
             StereoBondFieldChange::Configuration { old, new } => {
-                if !sb.attributes.configuration.equiv(&old) {
+                if !sb.attributes.configuration.normalized_eq(&old) {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 sb.attributes.configuration = new;
@@ -1726,8 +1730,8 @@ impl MoleculeEditor {
     fn apply_modify_atom_constraint(
         &mut self,
         id: AtomId,
-        old: Option<super::super::constraint::AtomConstraintForm>,
-        new: Option<super::super::constraint::AtomConstraintForm>,
+        old: Option<AtomConstraintForm>,
+        new: Option<AtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1741,8 +1745,8 @@ impl MoleculeEditor {
     fn apply_modify_bond_constraint(
         &mut self,
         id: BondId,
-        old: Option<super::super::constraint::BondConstraintForm>,
-        new: Option<super::super::constraint::BondConstraintForm>,
+        old: Option<BondConstraintForm>,
+        new: Option<BondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1756,8 +1760,8 @@ impl MoleculeEditor {
     fn apply_modify_dative_bond_constraint(
         &mut self,
         id: DativeBondId,
-        old: Option<super::super::constraint::DativeBondConstraintForm>,
-        new: Option<super::super::constraint::DativeBondConstraintForm>,
+        old: Option<DativeBondConstraintForm>,
+        new: Option<DativeBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1771,8 +1775,8 @@ impl MoleculeEditor {
     fn apply_modify_aromatic_system_constraint(
         &mut self,
         id: AromaticSystemId,
-        old: Option<super::super::constraint::AromaticSystemConstraintForm>,
-        new: Option<super::super::constraint::AromaticSystemConstraintForm>,
+        old: Option<AromaticSystemConstraintForm>,
+        new: Option<AromaticSystemConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1786,8 +1790,8 @@ impl MoleculeEditor {
     fn apply_modify_multicenter_bond_constraint(
         &mut self,
         id: MulticenterBondId,
-        old: Option<super::super::constraint::MulticenterBondConstraintForm>,
-        new: Option<super::super::constraint::MulticenterBondConstraintForm>,
+        old: Option<MulticenterBondConstraintForm>,
+        new: Option<MulticenterBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1801,8 +1805,8 @@ impl MoleculeEditor {
     fn apply_modify_noncovalent_bond_constraint(
         &mut self,
         id: NoncovalentBondId,
-        old: Option<super::super::constraint::NoncovalentBondConstraintForm>,
-        new: Option<super::super::constraint::NoncovalentBondConstraintForm>,
+        old: Option<NoncovalentBondConstraintForm>,
+        new: Option<NoncovalentBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1816,8 +1820,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_atom_constraint(
         &mut self,
         id: StereoAtomId,
-        old: Option<super::super::constraint::StereoAtomConstraintForm>,
-        new: Option<super::super::constraint::StereoAtomConstraintForm>,
+        old: Option<StereoAtomConstraintForm>,
+        new: Option<StereoAtomConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -1831,8 +1835,8 @@ impl MoleculeEditor {
     fn apply_modify_stereo_bond_constraint(
         &mut self,
         id: StereoBondId,
-        old: Option<super::super::constraint::StereoBondConstraintForm>,
-        new: Option<super::super::constraint::StereoBondConstraintForm>,
+        old: Option<StereoBondConstraintForm>,
+        new: Option<StereoBondConstraintForm>,
     ) -> Result<(), TransactionError> {
         // A key mismatch (old/new different kinds) and an old-value mismatch both surface as
         // `compare_and_set`'s `Contradiction` → `OldStateMismatch`.
@@ -3832,17 +3836,16 @@ mod tests {
                     StereoLigand::new(second, StereoLigandKind::Atom),
                     StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
                     StereoLigand::new(first, StereoLigandKind::LonePair),
-                    StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
                 ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                StereoAtomForm::default(),
             );
             editor.add_stereo_bond(
                 bond,
                 vec![
-                    StereoLigand::new(first, StereoLigandKind::Atom),
                     StereoLigand::new(first, StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(second, StereoLigandKind::Atom),
+                    StereoLigand::new(first, StereoLigandKind::LonePair),
                     StereoLigand::new(second, StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(second, StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
             );
@@ -3981,12 +3984,8 @@ mod tests {
                                     AtomHandle::Id(AtomId(index * 2)),
                                     StereoLigandKind::LonePair,
                                 ),
-                                (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::ImplicitHydrogen,
-                                ),
                             ],
-                            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                            StereoAtomForm::default(),
                         )
                     })
                     .collect(),
@@ -4004,18 +4003,21 @@ mod tests {
                             )),
                             BondHandle::Id(BondId(index)),
                             vec![
-                                (AtomHandle::Id(AtomId(index * 2)), StereoLigandKind::Atom),
                                 (
                                     AtomHandle::Id(AtomId(index * 2)),
                                     StereoLigandKind::ImplicitHydrogen,
                                 ),
                                 (
-                                    AtomHandle::Id(AtomId(index * 2 + 1)),
-                                    StereoLigandKind::Atom,
+                                    AtomHandle::Id(AtomId(index * 2)),
+                                    StereoLigandKind::LonePair,
                                 ),
                                 (
                                     AtomHandle::Id(AtomId(index * 2 + 1)),
                                     StereoLigandKind::ImplicitHydrogen,
+                                ),
+                                (
+                                    AtomHandle::Id(AtomId(index * 2 + 1)),
+                                    StereoLigandKind::LonePair,
                                 ),
                             ],
                             StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
@@ -4130,12 +4132,8 @@ mod tests {
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(1)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
                         ],
-                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                        StereoAtomForm::default(),
                     ),
                     (
                         StereoAtomHandle::Id(StereoAtomId(0)),
@@ -4147,12 +4145,8 @@ mod tests {
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
                             (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
-                            (
-                                AtomHandle::Id(AtomId(1)),
-                                StereoLigandKind::ImplicitHydrogen,
-                            ),
                         ],
-                        StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(1)),
+                        StereoAtomForm::default(),
                     ),
                 ],
             },
@@ -4162,16 +4156,16 @@ mod tests {
                         StereoBondHandle::Id(StereoBondId(0)),
                         BondHandle::Id(BondId(0)),
                         vec![
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                             (
                                 AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
                                 AtomHandle::Id(AtomId(1)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
                         ],
                         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                     ),
@@ -4179,16 +4173,16 @@ mod tests {
                         StereoBondHandle::Id(StereoBondId(0)),
                         BondHandle::Id(BondId(0)),
                         vec![
-                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::Atom),
                             (
                                 AtomHandle::Id(AtomId(0)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
-                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::Atom),
+                            (AtomHandle::Id(AtomId(0)), StereoLigandKind::LonePair),
                             (
                                 AtomHandle::Id(AtomId(1)),
                                 StereoLigandKind::ImplicitHydrogen,
                             ),
+                            (AtomHandle::Id(AtomId(1)), StereoLigandKind::LonePair),
                         ],
                         StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
                     ),
@@ -5170,7 +5164,7 @@ mod tests {
                     atoms: Vec::new(),
                     attributes: AromaticSystemForm::default(),
                 }],
-                undo_compaction: IdCompaction::empty().undo_compaction(),
+                undo_compaction: MoleculeCompaction::empty().undo_compaction(),
                 cascade: CascadedConstraints::default(),
             }],
         };
@@ -5183,7 +5177,7 @@ mod tests {
 
     #[rstest]
     fn test_transaction_rollback_compaction_dimension(mut one_atom: MoleculeEditor) {
-        let compaction = IdCompaction::empty();
+        let compaction = MoleculeCompaction::empty();
         let transaction = Transaction {
             undo: vec![Undo::RestoreRemovedTopology {
                 atoms: vec![RemovedAtom {

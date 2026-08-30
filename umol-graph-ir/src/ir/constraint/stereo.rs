@@ -14,9 +14,9 @@ use umol_perm::{Orientation, Permutation};
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
 use super::super::id::StereoLigandPosition;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::{Stereogenicity, Topicity};
-use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
+use super::super::traits::{AsLit, Lattice, Normalize};
 
 /// Stereo atom and bond constraints.
 macro_rules! stereo_constraint {
@@ -71,13 +71,20 @@ macro_rules! stereo_constraint {
             }
 
             /// Frame-relative ligand positions carry no atom ids, so compact is a no-op.
-            pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+            pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
                 Some(self)
             }
 
             /// Frame-relative ligand positions carry no atom ids, so remap is a no-op.
             pub(crate) fn remap(self, _map: &IdRemapping) -> Self {
                 self
+            }
+
+            pub(crate) fn uses_participant_frame(&self) -> bool {
+                match self {
+                    Self::LigandSymmetry(_) | Self::Fluxionality(_) | Self::Topicity(_) => true,
+                    Self::Stereogenicity(_) => false,
+                }
             }
         }
 
@@ -268,7 +275,7 @@ macro_rules! stereo_constraint {
                 }
             }
 
-            /// Transactional write at one key: verify the current value `equiv` `old` (both
+            /// Transactional write at one key: verify the current value `normalized_eq` `old` (both
             /// absent matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address
             /// the same key. `Err` on a key or old-value mismatch; the store is unchanged when it
             /// errors. The delta apply/undo primitive.
@@ -290,7 +297,7 @@ macro_rules! stereo_constraint {
                 };
                 let matches = match (self.get(key), old.as_ref()) {
                     (None, None) => true,
-                    (Some(current), Some(old)) => current.equiv(old),
+                    (Some(current), Some(old)) => current.normalized_eq(old),
                     _ => false,
                 };
                 if !matches {
@@ -348,7 +355,7 @@ macro_rules! stereo_constraint {
             }
 
             /// No-op: frame-relative ligand positions carry no entity index.
-            pub fn compact(self, _compaction: &IdCompaction) -> Self {
+            pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
                 self
             }
         }
@@ -881,6 +888,80 @@ mod tests {
     use rstest::*;
 
     use super::*;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoAtomConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::fluxionality(
+        StereoAtomConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            active: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::topicity(
+        StereoAtomConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+        }),
+        true,
+    )]
+    #[case::stereogenicity(
+        StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        false,
+    )]
+    fn test_stereo_atom_constraint_form_uses_participant_frame(
+        #[case] constraint: StereoAtomConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ligand_symmetry(
+        StereoBondConstraintForm::LigandSymmetry(LigandSymmetryForm {
+            permutation: OrientedLigandPermutation {
+                permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            invariant: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::fluxionality(
+        StereoBondConstraintForm::Fluxionality(FluxionalityForm {
+            permutation: LigandPermutation(Permutation::from_image(&[1, 0, 2, 3])),
+            active: BooleanForm::Lit(true),
+        }),
+        true,
+    )]
+    #[case::topicity(
+        StereoBondConstraintForm::Topicity(TopicityForm {
+            pair: StereoLigandPair::new(StereoLigandPosition(0), StereoLigandPosition(1)),
+            relation: TopicityRelationForm::Lit(Topicity::Homotopic),
+        }),
+        true,
+    )]
+    #[case::stereogenicity(
+        StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(Stereogenicity::Stereogenic)),
+        false,
+    )]
+    fn test_stereo_bond_constraint_form_uses_participant_frame(
+        #[case] constraint: StereoBondConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
 
     #[rstest]
     #[case::equal(

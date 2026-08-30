@@ -31,7 +31,15 @@ content lookups), molecule-backed constraint views, `mol.stereo_{atoms,bonds}` a
 this doc: stereo overlay handle-identity/interning (114) and any reaction-side stereo binding.
 Date: 2026-07-09
 Relates: 137 (atom slice — the template being mirrored), 139 (mutability/hashing/equality
-balance), 114 (interning — where stereo/handle-identity deferrals live)
+balance), 114 (interning — where stereo/handle-identity deferrals live),
+[214](214-aggregate-frame-semantics-2026-08-28.md)
+
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only the claim below that a stereo
+lookup sequence may contain repeated virtual ligands. Sequence input remains required because the
+order is the stereo frame; current integrity makes the values pairwise-distinct and bounds the frame
+by `umol_perm::MAX_DEGREE`. The completed Python entity-binding work is otherwise unchanged.
 
 ## Scope and order
 

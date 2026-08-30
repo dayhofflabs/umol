@@ -252,6 +252,14 @@ def test_aromaticsystemview_set_electrons():
     assert mol.aromatic_systems[0].electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
 
 
+def test_aromaticsystemview_set_electrons_error():
+    mol = benzene()
+    before = str(mol)
+    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 6"):
+        mol.aromatic_systems[0].electrons = [2]
+    assert str(mol) == before
+
+
 def test_aromaticsystemview_set_charge():
     mol = benzene()
     mol.aromatic_systems[0].charge = -1
@@ -318,6 +326,14 @@ def test_aromaticsystemviews_setitem():
     # value replaced, members preserved
     assert view.electrons == ElectronCountsForm.Lit([2, 2, 2, 2, 2, 2])
     assert view.atom_ids == (0, 1, 2, 3, 4, 5)
+
+
+def test_aromaticsystemviews_setitem_error():
+    mol = benzene()
+    before = str(mol)
+    with pytest.raises(ValueError, match="electron-count vector has length 1, expected 6"):
+        mol.aromatic_systems[0] = AromaticSystemForm([2])
+    assert str(mol) == before
 
 
 def test_aromaticsystemviews_setitem_out_of_range():

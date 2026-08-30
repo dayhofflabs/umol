@@ -85,6 +85,10 @@ name = "concrete"
 harness = false
 
 [[bench]]
+name = "reaction"
+harness = false
+
+[[bench]]
 name = "canonicalize"
 harness = false
 

@@ -394,10 +394,10 @@ impl<'a> BondConstraintsView<'a> {
     }
 }
 
-/// Generates the chained constraint view of a family without ring context:
+/// Generates the chained constraint view of an entity kind without ring context:
 /// the keyed core and the comparisons; the container's positional read API
-/// (`iter`/`is_empty`/`len`) is included, and family typed getters follow in
-/// per-family impl blocks.
+/// (`iter`/`is_empty`/`len`) is included, and kind-specific getters follow in
+/// per-kind impl blocks.
 macro_rules! constraints_view {
     ($view:ident, $entity:literal, $id:ty, $form:ty, $key:ty, $container:ty,
      $asserted:path, $derived:path) => {
@@ -420,7 +420,7 @@ macro_rules! constraints_view {
             }
 
             /// The derived side of `key`, obtained by projection from present
-            /// relations only; vacuous on absence and wherever the family
+            /// relations only; vacuous on absence and wherever the entity kind
             /// defines no projection.
             pub fn derived(&self, key: $key) -> Option<$form> {
                 $derived(self.molecule, self.id, key, false)
@@ -556,7 +556,7 @@ constraints_view!(
     stereo_bond_derived_constraint
 );
 
-// The stored containers' typed read API, inherited per family with its
+// The stored containers' typed read API, inherited per entity kind with its
 // meanings intact: every getter reads the asserted side.
 
 impl<'a> DativeBondConstraintsView<'a> {
@@ -584,7 +584,7 @@ impl<'a> DativeBondConstraintsView<'a> {
 
 impl<'a> AromaticSystemConstraintsView<'a> {
     /// The asserted side of `key` under resolution's closed-world claim; the
-    /// family has no absence cell, so the reading equals the assertion.
+    /// entity kind has no absence cell, so the reading equals the assertion.
     pub fn asserted_complete(
         &self,
         key: AromaticSystemConstraintKey,
@@ -599,7 +599,7 @@ impl<'a> AromaticSystemConstraintsView<'a> {
 
 impl<'a> MulticenterBondConstraintsView<'a> {
     /// The asserted side of `key` under resolution's closed-world claim; the
-    /// family has no absence cell, so the reading equals the assertion.
+    /// entity kind has no absence cell, so the reading equals the assertion.
     pub fn asserted_complete(
         &self,
         key: MulticenterBondConstraintKey,
@@ -614,7 +614,7 @@ impl<'a> MulticenterBondConstraintsView<'a> {
 
 impl<'a> NoncovalentBondConstraintsView<'a> {
     /// The asserted side of `key` under resolution's closed-world claim; the
-    /// family has no absence cell, so the reading equals the assertion.
+    /// entity kind has no absence cell, so the reading equals the assertion.
     pub fn asserted_complete(
         &self,
         key: NoncovalentBondConstraintKey,
@@ -629,7 +629,7 @@ impl<'a> NoncovalentBondConstraintsView<'a> {
 
 impl<'a> StereoAtomConstraintsView<'a> {
     /// The asserted side of `key` under resolution's closed-world claim; the
-    /// family has no absence cell, so the reading equals the assertion.
+    /// entity kind has no absence cell, so the reading equals the assertion.
     pub fn asserted_complete(
         &self,
         key: StereoAtomConstraintKey,
@@ -664,7 +664,7 @@ impl<'a> StereoAtomConstraintsView<'a> {
 
 impl<'a> StereoBondConstraintsView<'a> {
     /// The asserted side of `key` under resolution's closed-world claim; the
-    /// family has no absence cell, so the reading equals the assertion.
+    /// entity kind has no absence cell, so the reading equals the assertion.
     pub fn asserted_complete(
         &self,
         key: StereoBondConstraintKey,
@@ -1543,8 +1543,8 @@ mod tests {
                 (AtomId(0), AtomId(2), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(2)),
                 (AtomId(3), AtomId(1), BondForm::from_order(1)),
-                (AtomId(0), AtomId(4), BondForm::from_order(1)),
-                (AtomId(1), AtomId(5), BondForm::from_order(1)),
+                (AtomId(2), AtomId(4), BondForm::from_order(1)),
+                (AtomId(3), AtomId(5), BondForm::from_order(1)),
             ],
             stereo_bonds: vec![(
                 BondId(1),
@@ -2057,9 +2057,7 @@ mod tests {
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+            noncovalent: vec![([AtomId(0), AtomId(1)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2073,9 +2071,7 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(2),
+            noncovalent: vec![([AtomId(0), AtomId(2)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2111,8 +2107,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2145,7 +2140,7 @@ mod tests {
                 AtomForm::from_element(Element::O),
                 AtomForm::from_element(Element::O),
             ],
-            noncovalent: vec![(AtomId(0), AtomId(1), form)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], form)],
             ..Default::default()
         });
         assert_eq!(

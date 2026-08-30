@@ -6,7 +6,27 @@ Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [113](113-ast-canonical-equality-and-lattice-2026-06-14.md),
 [117](117-entity-model-extensibility-2026-06-20.md),
 [185](185-python-reaction-span-2026-08-04.md),
-[188](188-inchi-migration-2026-08-09.md)
+[188](188-inchi-migration-2026-08-09.md),
+[208](208-canonicalization-scaling-2026-08-24.md),
+[214](214-aggregate-frame-semantics-2026-08-28.md),
+[216](216-canonicalization-performance-2026-08-30.md)
+
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes the portions of this completed
+record that accept repeated virtual ligands, select an orbit representative among their occurrence
+permutations, or carry kindless stereo frames above `umol_perm::MAX_DEGREE` through a separate
+position-order fallback. Current design rejects those frames at publication and uses one bounded
+frame action. The graph-canonicalization implementation and all unrelated completed scope remain
+historical and implemented as recorded below.
+
+### Completion addendum — 2026-08-29
+
+Doc 214 is complete. It also supersedes this record's public description-level selectors,
+level-parameterized canonicalization methods, and `Equiv` / `equiv_under` terminology. The current
+public pipeline is complete-only `Normalize` -> `Reframe` -> `Canonicalize`, with
+`normalized_eq`, `framed_eq`, and `canonical_eq` as its equality ladder. The historical design and
+implementation account below remains unchanged.
 
 `Molecule` does not provide a canonical representation with respect to entity renumbering.
 `Graph::canonical_key` and canonical labels are available in

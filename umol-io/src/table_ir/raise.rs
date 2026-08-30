@@ -3,6 +3,11 @@
 //! Implements `TryIntoIr<Molecule> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
 //! raise applies fixed IO ground semantics for resolution.
+//!
+//! TableIR currently raises tetrahedral (`#T`) and cis/trans (`#C`) assertions as constraints; it
+//! has no explicit stereo participant-frame field. Any future field that supplies such a frame
+//! must remain part of the entries assembled here and publish through `Molecule::try_from_entries`,
+//! which is the authoritative format-ingress integrity boundary.
 
 use std::any::Any;
 use std::collections::HashSet;
@@ -80,7 +85,7 @@ impl TryIntoIr<Molecule> for &TableMolecule {
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
-                noncovalent_bonds.push((a_idx, b_idx, NoncovalentBondForm::from_kind(kind)));
+                noncovalent_bonds.push(([a_idx, b_idx], NoncovalentBondForm::from_kind(kind)));
             } else if let Some(donation) = b.donation {
                 let (donor, acceptor) = match donation {
                     TableBondDonation::Donating => (a_idx, b_idx),
@@ -502,12 +507,67 @@ mod tests {
             entity: Entity::Atom(AtomId(1)),
         })
     )]
+    #[case::repeated_virtual_tetrahedral_completion(
+        Smiles::parse_bytes(b"[C@H2](F)Cl").unwrap().into_table_ir(),
+        RaiseError::TetrahedralLigandCount { atom: 0, count: 2 }
+    )]
     fn test_table_molecule_try_into_ir_error(
         #[case] molecule: TableMolecule,
         #[case] expected: RaiseError,
     ) {
         let actual: Result<Molecule, RaiseError> = (&molecule).try_into_ir(&());
         assert_eq!(actual, Err(expected));
+    }
+
+    #[rstest]
+    #[case::tetrahedral("C[C@H](N)O", Entity::Atom(AtomId(1)))]
+    #[case::cis_trans("F/C=C/F", Entity::Bond(BondId(1)))]
+    fn test_table_molecule_try_into_ir_stereo(#[case] input: &str, #[case] entity: Entity) {
+        let smiles = Smiles::parse(input).unwrap();
+        let molecule: Molecule = smiles.as_table_ir().try_into_ir(&()).unwrap();
+
+        assert_eq!(molecule.stereo_atoms().count(), 0);
+        assert_eq!(molecule.stereo_bonds().count(), 0);
+        match entity {
+            Entity::Atom(id) => assert!(molecule
+                .atom(id)
+                .attributes
+                .constraints
+                .tetrahedral_stereo()
+                .is_some()),
+            Entity::Bond(id) => assert!(molecule
+                .bond(id)
+                .attributes
+                .constraints
+                .cis_trans_stereo()
+                .is_some()),
+            _ => unreachable!("stereo constraints are raised only on atoms and bonds"),
+        }
+    }
+
+    #[rstest]
+    #[case::tetrahedral(CHIRAL_PARITY_MOL, Entity::Atom(AtomId(0)))]
+    #[case::cis_trans(CIS_TRANS_EITHER_MOL, Entity::Bond(BondId(1)))]
+    fn test_parse_mol_to_ir_stereo(#[case] input: &str, #[case] entity: Entity) {
+        let molecule = parse_mol_to_ir(input).unwrap();
+
+        assert_eq!(molecule.stereo_atoms().count(), 0);
+        assert_eq!(molecule.stereo_bonds().count(), 0);
+        match entity {
+            Entity::Atom(id) => assert!(molecule
+                .atom(id)
+                .attributes
+                .constraints
+                .tetrahedral_stereo()
+                .is_some()),
+            Entity::Bond(id) => assert!(molecule
+                .bond(id)
+                .attributes
+                .constraints
+                .cis_trans_stereo()
+                .is_some()),
+            _ => unreachable!("stereo constraints are raised only on atoms and bonds"),
+        }
     }
 
     #[rstest]

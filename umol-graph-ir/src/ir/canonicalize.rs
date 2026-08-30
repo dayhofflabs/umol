@@ -6,8 +6,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, FactorOrdering, Graph, NodeId,
-    ParticipantPosition, RelationId, SubdivisionNodeSource, Unordered,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId,
+    SubdivisionNodeSource, UnionFind,
 };
 use umol_perm::{Orientation, Permutation};
 
@@ -19,14 +19,13 @@ use super::constraint::{
     Constraint, DativeBondConstraintForm, LigandPermutation, MoleculeConstraint,
     MulticenterBondConstraintForm, MulticenterValenceForm, NoncovalentBondConstraintForm,
     OrientedLigandPermutation, RelationalConstraint, RingMembershipForm, RingScope,
-    StereoAtomConstraintForm, StereoAtomConstraintsForm, StereoBondConstraintForm,
-    StereoBondConstraintsForm, StereoLigandPair, StereogenicityForm, TopicityForm,
+    StereoAtomConstraintForm, StereoBondConstraintForm, StereoLigandPair, StereogenicityForm,
     TopicityRelationForm,
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::delta::{
-    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas,
-    EntitySpan, MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+    AromaticSystemDelta, AtomDelta, BondDelta, ConstraintSpan, DativeBondDelta, Delta, EntitySpan,
+    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 use super::electrons::ElectronCountsForm;
 use super::entity::{Entity, EntityKind};
@@ -37,18 +36,18 @@ use super::id::{
 };
 use super::incidence::{Incidence, IncidenceGraph, IncidenceLevel};
 use super::ligand::{StereoLigand, StereoLigandKind};
-use super::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
+use super::molecule::Molecule;
 use super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
 use super::num::{ArithExpr, NumForm, PredExpr};
 use super::operators::{MemOp, RelOp};
-use super::reaction::{Reaction, ReactionIntegrityError};
-use super::reaction_span::{ReactionSpan, ReactionSpanIntegrityError};
+use super::reaction::Reaction;
+use super::reaction_span::ReactionSpan;
 use super::spin::UnpairedElectronsForm;
 use super::stereo::{
     CisTransStereoForm, StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset,
     StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoForm, Topicity,
 };
-use super::traits::Normalize;
+use super::traits::{FrameTransport, Normalize, Reframe};
 
 /// Semantic and operational inputs to aggregate canonicalization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,30 +58,254 @@ pub struct CanonicalizeContext {
     pub automorphism_algorithm: AutomorphismAlgorithm,
 }
 
-/// Level used to select or compare an aggregate's entity frame.
-///
-/// The variants form a nested hierarchy. [`Topology`](Self::Topology) contains atoms and localized
-/// bonds. [`Constitution`](Self::Constitution) additionally contains dative bonds, aromatic
-/// systems, multicenter bonds, and noncovalent bonds. [`Structure`](Self::Structure) additionally
-/// contains stereo atoms and stereo bonds. [`Full`](Self::Full) additionally uses normalized
-/// constraints to select among tied structure frames. In entity-domain terminology, topology is
-/// AB, non-stereo is DAMN, stereo is SS, constitution is topology plus non-stereo, and overlays are
-/// non-stereo plus stereo.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CanonicalizeLevel {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum DescriptionLevel {
     Topology,
     Constitution,
     Structure,
     Full,
 }
 
+fn canonicalize_level_with_constraints(
+    base: DescriptionLevel,
+    has_inline_constraints: bool,
+) -> DescriptionLevel {
+    if has_inline_constraints {
+        DescriptionLevel::Full
+    } else {
+        base
+    }
+}
+
+fn entity_span_canonicalize_level<T>(
+    span: &EntitySpan<T>,
+    base: DescriptionLevel,
+    has_inline_constraints: impl Fn(&T) -> bool,
+) -> DescriptionLevel {
+    let has_inline_constraints = match span {
+        EntitySpan::Unchanged(attributes)
+        | EntitySpan::Added(attributes)
+        | EntitySpan::Removed(attributes) => has_inline_constraints(attributes),
+        EntitySpan::Modified { lhs, rhs } => {
+            has_inline_constraints(lhs) || has_inline_constraints(rhs)
+        }
+    };
+    canonicalize_level_with_constraints(base, has_inline_constraints)
+}
+
+fn delta_canonicalize_level(delta: &Delta) -> DescriptionLevel {
+    match delta {
+        Delta::Atom(AtomDelta::Add { attributes, .. } | AtomDelta::Remove { attributes, .. }) => {
+            canonicalize_level_with_constraints(
+                DescriptionLevel::Topology,
+                !attributes.constraints.is_empty(),
+            )
+        }
+        Delta::Atom(AtomDelta::ModifyField { .. }) => DescriptionLevel::Topology,
+        Delta::Atom(AtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::Bond(BondDelta::Add { attributes, .. } | BondDelta::Remove { attributes, .. }) => {
+            canonicalize_level_with_constraints(
+                DescriptionLevel::Topology,
+                !attributes.constraints.is_empty(),
+            )
+        }
+        Delta::Bond(BondDelta::ModifyField { .. }) => DescriptionLevel::Topology,
+        Delta::Bond(BondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::DativeBond(
+            DativeBondDelta::Add { attributes, .. } | DativeBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::DativeBond(DativeBondDelta::ModifyField { .. }) => DescriptionLevel::Constitution,
+        Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::AromaticSystem(
+            AromaticSystemDelta::Add { attributes, .. }
+            | AromaticSystemDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
+        Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. }) => {
+            DescriptionLevel::Full
+        }
+        Delta::MulticenterBond(
+            MulticenterBondDelta::Add { attributes, .. }
+            | MulticenterBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::MulticenterBond(MulticenterBondDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
+        Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. }) => {
+            DescriptionLevel::Full
+        }
+        Delta::NoncovalentBond(
+            NoncovalentBondDelta::Add { attributes, .. }
+            | NoncovalentBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Constitution,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField { .. }) => {
+            DescriptionLevel::Constitution
+        }
+        Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
+            DescriptionLevel::Full
+        }
+        Delta::StereoAtom(
+            StereoAtomDelta::Add { attributes, .. } | StereoAtomDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Structure,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::StereoAtom(StereoAtomDelta::ModifyField { .. }) => DescriptionLevel::Structure,
+        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::StereoBond(
+            StereoBondDelta::Add { attributes, .. } | StereoBondDelta::Remove { attributes, .. },
+        ) => canonicalize_level_with_constraints(
+            DescriptionLevel::Structure,
+            !attributes.constraints.is_empty(),
+        ),
+        Delta::StereoBond(StereoBondDelta::ModifyField { .. }) => DescriptionLevel::Structure,
+        Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => DescriptionLevel::Full,
+        Delta::Constraint(_) => DescriptionLevel::Full,
+    }
+}
+
+fn molecule_canonicalize_level(molecule: &Molecule) -> DescriptionLevel {
+    let has_inline_constraints = molecule
+        .atoms()
+        .iter()
+        .any(|atom| !atom.attributes.constraints.is_empty())
+        || molecule
+            .bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .dative_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .aromatic_systems()
+            .iter()
+            .any(|system| !system.attributes.constraints.is_empty())
+        || molecule
+            .multicenter_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .noncovalent_bonds()
+            .iter()
+            .any(|bond| !bond.attributes.constraints.is_empty())
+        || molecule
+            .stereo_atoms()
+            .iter()
+            .any(|stereo| !stereo.attributes.constraints.is_empty())
+        || molecule
+            .stereo_bonds()
+            .iter()
+            .any(|stereo| !stereo.attributes.constraints.is_empty());
+
+    if has_inline_constraints || molecule.has_constraints() {
+        DescriptionLevel::Full
+    } else if molecule.has_stereo_atoms() || molecule.has_stereo_bonds() {
+        DescriptionLevel::Structure
+    } else if molecule.has_dative_bonds()
+        || molecule.has_aromatic_systems()
+        || molecule.has_multicenter_bonds()
+        || molecule.has_noncovalent_bonds()
+    {
+        DescriptionLevel::Constitution
+    } else {
+        DescriptionLevel::Topology
+    }
+}
+
+fn reaction_canonicalize_level(reaction: &Reaction) -> DescriptionLevel {
+    reaction.deltas().iter().fold(
+        molecule_canonicalize_level(reaction.lhs()),
+        |level, delta| level.max(delta_canonicalize_level(delta)),
+    )
+}
+
+fn reaction_span_canonicalize_level(span: &ReactionSpan) -> DescriptionLevel {
+    if !span.constraints().is_empty() {
+        return DescriptionLevel::Full;
+    }
+
+    let mut level = DescriptionLevel::Topology;
+    for entity in span.atoms() {
+        level = level.max(entity_span_canonicalize_level(
+            entity,
+            DescriptionLevel::Topology,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for entity in span.bonds() {
+        level = level.max(entity_span_canonicalize_level(
+            entity,
+            DescriptionLevel::Topology,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.dative_bonds().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.dative_bonds().attributes(id),
+            DescriptionLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.aromatic_systems().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.aromatic_systems().attributes(id),
+            DescriptionLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.multicenter_bonds().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.multicenter_bonds().attributes(id),
+            DescriptionLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.noncovalent_bonds().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.noncovalent_bonds().attributes(id),
+            DescriptionLevel::Constitution,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.stereo_atoms().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.stereo_atoms().attributes(id),
+            DescriptionLevel::Structure,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    for id in span.stereo_bonds().ids() {
+        level = level.max(entity_span_canonicalize_level(
+            span.stereo_bonds().attributes(id),
+            DescriptionLevel::Structure,
+            |attributes| !attributes.constraints.is_empty(),
+        ));
+    }
+    level
+}
+
 /// Canonical entity-frame selection for complete indexed graph-IR aggregates.
 ///
-/// Unlike [`Normalize`], canonicalization may change entity ids and participant frames. It
-/// preserves the represented aggregate, transports every reference and position-sensitive value,
-/// and normalizes carried forms in the selected frame. Construction of the canonical form is
-/// fallible; canonical equality totalizes those failures according to the aggregate's semantic
-/// contract.
+/// Canonicalization extends [`Reframe`]: normalization is the fixed-frame prefix, reframing adds
+/// participant-frame selection, and canonicalization additionally selects entity ids. It preserves
+/// the represented aggregate, transports every reference and position-sensitive value, and
+/// normalizes carried forms in the selected frame. Construction of the canonical form is fallible;
+/// canonical equality totalizes those failures according to the aggregate's semantic contract.
 ///
 /// # Semantic properties
 ///
@@ -90,70 +313,47 @@ pub enum CanonicalizeLevel {
 ///
 /// - successful complete canonicalization is exactly idempotent and invariant under valid dense
 ///   entity remapping;
-/// - `canonical_eq` and each `canonical_eq_by` relation are reflexive, symmetric, and transitive
-///   under their documented failure totalization;
+/// - `canonical_eq` is reflexive, symmetric, and transitive under its documented failure
+///   totalization;
 /// - successful canonical hashes are invariant under valid dense entity remapping, and canonical
-///   equality implies equal canonical hashes when both hash operations succeed;
-/// - [`CanonicalizeLevel::Full`] is identical to the corresponding unqualified operation;
-/// - `canonical_eq_by` is invariant under valid dense entity remapping at every level.
+///   equality implies equal canonical hashes when both hash operations succeed.
 ///
-/// A level-specific transformation returns a complete aggregate, but features excluded from frame
-/// selection have no promised ordering. Therefore only its selected-layer equality, not the
-/// complete returned representation, is invariant under remapping.
-///
-/// For a fixed umol release, level, and context, canonicalization is deterministic. During the 0.x
-/// series, the typed comparison schema and resulting representatives may change between releases.
-/// Returned canonical forms are ordinary IR values without schema-version provenance and must not
-/// be used as persistent cross-release identifiers.
-pub trait Canonicalize: Sized {
+/// For a fixed umol release and context, canonicalization is deterministic. During the 0.x series,
+/// the typed comparison schema and resulting representatives may change between releases. Returned
+/// canonical forms are ordinary IR values without schema-version provenance and must not be used as
+/// persistent cross-release identifiers.
+pub trait Canonicalize: Reframe {
     type Error;
 
     /// Construct the complete canonical form.
     ///
     /// # Errors
     ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when intrinsic normalization is unsatisfiable.
+    /// Returns the aggregate-specific canonicalization error when intrinsic normalization is
+    /// unsatisfiable.
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error>;
 
     /// Construct the complete canonical form and its source-to-canonical correspondence.
     ///
     /// The correspondence maps every entity id in the input frame to its id in the returned
-    /// canonical frame. Each of its eight entity-family components is total on both sides and
+    /// canonical frame. Each of its eight entity-kind components is total on both sides and
     /// therefore represents a dense bijection. For [`Reaction`], the two frames are the complete
     /// union frames of the materialized input and returned reaction spans.
     ///
     /// # Errors
     ///
-    /// Returns the same aggregate-specific integrity or intrinsic-normalization error as
-    /// [`Self::canonicalize`]. A [`Reaction`] also reports failure to materialize its reaction
-    /// span.
+    /// Returns the same aggregate-specific intrinsic-normalization error as
+    /// [`Self::canonicalize`]. A [`Reaction`] also reports failure to materialize its reaction span.
     ///
     /// # Semantic properties
     ///
-    /// Discarding the correspondence yields exactly [`Self::canonicalize`] under the same
-    /// context. Transporting the input through the correspondence preserves its represented
-    /// aggregate in the returned canonical frame.
+    /// Discarding the correspondence yields exactly [`Self::canonicalize`] under the same context.
+    /// Remapping the input through the correspondence and then applying [`Reframe::reframe`]
+    /// reconstructs the returned canonical value.
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
-
-    /// Construct a complete normalized aggregate whose selected structural layer is canonical.
-    ///
-    /// Features excluded by `level` are preserved but do not break ties in the selected frame.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonicalize`].
-    ///
-    /// # Errors
-    ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when normalization of any carried value is unsatisfiable, including a
-    /// value excluded from frame selection.
-    fn canonicalize_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<Self, Self::Error>;
 
     /// Hash the complete canonical form.
     ///
@@ -177,48 +377,11 @@ pub trait Canonicalize: Sized {
             .map(|canonical| hash_value(&canonical))
     }
 
-    /// Hash the canonical comparison key at the selected structural layer.
-    ///
-    /// Excluded features do not contribute to the hash. The returned value uses Rust's
-    /// [`DefaultHasher`], may collide, and is not a persistent identifier.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_hash`].
-    ///
-    /// # Errors
-    ///
-    /// Returns the aggregate-specific integrity error for malformed representation state and
-    /// [`Contradiction`] when normalization of selected data is unsatisfiable. At reduced levels,
-    /// contradictions confined to excluded features do not affect the hash. A [`Reaction`] may
-    /// also report failure to materialize its selected reaction span.
-    ///
-    /// # Semantic properties
-    ///
-    /// When two values compare equal through [`Self::canonical_eq_by`] and both hashes succeed,
-    /// their canonical hashes at that level are equal. The hash is invariant under valid dense
-    /// entity remapping at every level.
-    fn canonical_hash_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<u64, Self::Error>
-    where
-        Self: Hash;
-
     /// Compare complete canonical forms.
     ///
     /// Structural identity short-circuits the operation. Otherwise, two intrinsic contradictions
-    /// compare equal, while an integrity failure never makes distinct inputs equal.
+    /// compare equal.
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool;
-
-    /// Compare canonical forms at the selected structural layer.
-    ///
-    /// Contradictions in features excluded by `level` do not affect this relation.
-    /// [`CanonicalizeLevel::Full`] is identical to [`Self::canonical_eq`].
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> bool;
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -532,10 +695,15 @@ fn normalized_entity_span_key<T>(
         EntitySpan::Unchanged(value) => (SpanTagPosition::UNCHANGED, vec![value_key(value)?]),
         EntitySpan::Added(value) => (SpanTagPosition::ADDED, vec![value_key(value)?]),
         EntitySpan::Removed(value) => (SpanTagPosition::REMOVED, vec![value_key(value)?]),
-        EntitySpan::Modified { lhs, rhs } => (
-            SpanTagPosition::MODIFIED,
-            vec![value_key(lhs)?, value_key(rhs)?],
-        ),
+        EntitySpan::Modified { lhs, rhs } => {
+            let lhs = value_key(lhs)?;
+            let rhs = value_key(rhs)?;
+            if lhs == rhs {
+                (SpanTagPosition::UNCHANGED, vec![lhs])
+            } else {
+                (SpanTagPosition::MODIFIED, vec![lhs, rhs])
+            }
+        }
     };
     Ok(CanonicalKeyValue::Span(SpanKey { position, values }))
 }
@@ -1533,7 +1701,7 @@ fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradicti
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum InitialClassKey {
+enum InitialColorKey {
     Entity {
         position: EntityBlockPosition,
         value: CanonicalKeyValue,
@@ -1541,7 +1709,7 @@ enum InitialClassKey {
     Incidence(CanonicalKeyValue),
 }
 
-impl Ord for InitialClassKey {
+impl Ord for InitialColorKey {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (
@@ -1563,55 +1731,59 @@ impl Ord for InitialClassKey {
     }
 }
 
-impl PartialOrd for InitialClassKey {
+impl PartialOrd for InitialColorKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct InitialClasses {
+struct InitialColors {
     entities: Vec<u32>,
     incidences: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum AutomorphismClass {
+enum AutomorphismColor {
     Entity(u32),
     Incidence(u32),
 }
 
+/// Colored simple-graph encoding of an incidence graph for automorphism operations.
+///
+/// Source entity nodes keep their ids. Role- or value-bearing incidence edges are represented by
+/// colored occurrence nodes; single-role endpoints remain direct unless parallel incidences require
+/// subdivision.
 #[derive(Clone, Debug)]
 struct AutomorphismAdapter {
-    // Source entity nodes retain their ids. Role- or value-bearing incidence edges become colored
-    // occurrence nodes; single-role endpoints remain direct unless duplicates require subdivision.
     graph: Graph,
-    classes: Vec<AutomorphismClass>,
+    colors: Vec<AutomorphismColor>,
     node_sources: Vec<SubdivisionNodeSource>,
     incidence_nodes: Vec<Option<NodeId>>,
     source_node_count: usize,
 }
 
+/// Automorphism data over both the source-entity and complete adapter-node domains.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ProjectedAutomorphismOutput {
-    orbits: Vec<NodeId>,
-    // Backend canonical labels are branch-order hints, not the canonical molecule numbering.
-    canonical_labels: Vec<NodeId>,
-    generators: Vec<Vec<NodeId>>,
+struct AutomorphismAdapterOutput {
+    source_orbits: Vec<NodeId>,
+    /// Source entity nodes in backend canonical-label order, used only to order search branches.
+    source_canonical_labels: Vec<NodeId>,
+    source_generators: Vec<Vec<NodeId>>,
 }
 
 impl AutomorphismAdapter {
     /// Construct the exact graph adapter used by canonicalization.
-    fn new(incidence_graph: &IncidenceGraph, initial_classes: &InitialClasses) -> Self {
+    fn new(incidence_graph: &IncidenceGraph, initial_colors: &InitialColors) -> Self {
         let source = incidence_graph.graph();
-        debug_assert_eq!(initial_classes.entities.len(), source.node_count());
-        debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
+        debug_assert_eq!(initial_colors.entities.len(), source.node_count());
+        debug_assert_eq!(initial_colors.incidences.len(), source.edge_count());
 
-        let mut classes = initial_classes
+        let mut colors = initial_colors
             .entities
             .iter()
             .copied()
-            .map(AutomorphismClass::Entity)
+            .map(AutomorphismColor::Entity)
             .collect::<Vec<_>>();
         let mut node_sources = source
             .node_ids()
@@ -1650,8 +1822,8 @@ impl AutomorphismAdapter {
             let occurrence = NodeId(node_sources.len() as u32);
             node_sources.push(SubdivisionNodeSource::Edge(edge));
             incidence_nodes[edge.index()] = Some(occurrence);
-            classes.push(AutomorphismClass::Incidence(
-                initial_classes.incidences[edge.index()],
+            colors.push(AutomorphismColor::Incidence(
+                initial_colors.incidences[edge.index()],
             ));
             push_edge([endpoints[0], occurrence]);
             push_edge([occurrence, endpoints[1]]);
@@ -1661,7 +1833,7 @@ impl AutomorphismAdapter {
 
         Self {
             graph,
-            classes,
+            colors,
             node_sources,
             incidence_nodes,
             source_node_count: source.node_count(),
@@ -1672,8 +1844,8 @@ impl AutomorphismAdapter {
         &self.graph
     }
 
-    fn class(&self, node: NodeId) -> AutomorphismClass {
-        self.classes[node.index()]
+    fn color(&self, node: NodeId) -> AutomorphismColor {
+        self.colors[node.index()]
     }
 
     fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
@@ -1691,29 +1863,29 @@ impl AutomorphismAdapter {
         &self,
         partition: &OrderedPartition,
         algorithm: AutomorphismAlgorithm,
-    ) -> ProjectedAutomorphismOutput {
+    ) -> AutomorphismAdapterOutput {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
-        // exact adapter class here keeps orbit pruning restricted to true automorphisms.
+        // exact adapter color here keeps orbit pruning restricted to true automorphisms.
         let output = self.graph().automorphisms(
-            |node| (self.class(node), cell_indices[node.index()]),
+            |node| (self.color(node), cell_indices[node.index()]),
             algorithm,
         );
 
         self.project_automorphisms(&output)
     }
 
-    fn project_automorphisms(&self, output: &AutomorphismOutput) -> ProjectedAutomorphismOutput {
+    fn project_automorphisms(&self, output: &AutomorphismOutput) -> AutomorphismAdapterOutput {
         let source_node = |node| match self.node_source(node) {
             SubdivisionNodeSource::Node(source) => source,
             SubdivisionNodeSource::Edge(_) => {
-                unreachable!("disjoint classes preserve the adapter node domain")
+                unreachable!("disjoint colors preserve the adapter node domain")
             }
         };
-        let orbits = (0..self.source_node_count)
+        let source_orbits = (0..self.source_node_count)
             .map(|index| source_node(output.orbit_of(NodeId(index as u32))))
             .collect();
-        let canonical_labels = output
+        let source_canonical_labels = output
             .canonical_labels()
             .iter()
             .filter_map(|&node| match self.node_source(node) {
@@ -1721,7 +1893,7 @@ impl AutomorphismAdapter {
                 SubdivisionNodeSource::Edge(_) => None,
             })
             .collect();
-        let generators = output
+        let source_generators = output
             .generators()
             .iter()
             .map(|generator| {
@@ -1732,13 +1904,119 @@ impl AutomorphismAdapter {
                     .collect()
             })
             .collect();
-
-        ProjectedAutomorphismOutput {
-            orbits,
-            canonical_labels,
-            generators,
+        AutomorphismAdapterOutput {
+            source_orbits,
+            source_canonical_labels,
+            source_generators,
         }
     }
+}
+
+fn generator_preserves_stereo(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
+    let frame_action = |source: Vec<StereoLigand>, target: Vec<StereoLigand>| {
+        let mapped = source
+            .into_iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, &target)
+    };
+    let configuration_preserved = |source: &StereoConfigurationForm,
+                                   target: &StereoConfigurationForm,
+                                   action: Permutation| {
+        source
+            .clone()
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(target))
+    };
+
+    for source in molecule.stereo_atoms().iter() {
+        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id)) else {
+            return false;
+        };
+        let target = molecule.stereo_atom(target_id);
+        if entity_image(Entity::Atom(source.site_id())) != Entity::Atom(target.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+            return false;
+        };
+        if !configuration_preserved(
+            &source.attributes.configuration,
+            &target.attributes.configuration,
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    for source in molecule.stereo_bonds().iter() {
+        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source.id)) else {
+            return false;
+        };
+        let target = molecule.stereo_bond(target_id);
+        if entity_image(Entity::Bond(source.site_id())) != Entity::Bond(target.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+            return false;
+        };
+        if !configuration_preserved(
+            &source.attributes.configuration,
+            &target.attributes.configuration,
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn retain_stereo_preserving_generators(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    if molecule.stereo_atoms().count() == 0 && molecule.stereo_bonds().count() == 0 {
+        return;
+    }
+    generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
+}
+
+fn source_orbits_from_generators(
+    source_node_count: usize,
+    generators: &[Vec<NodeId>],
+) -> Vec<NodeId> {
+    let mut sets = UnionFind::new(source_node_count);
+    for generator in generators {
+        debug_assert_eq!(generator.len(), source_node_count);
+        for (source, image) in generator.iter().enumerate() {
+            sets.union(source, image.index());
+        }
+    }
+
+    let roots = (0..source_node_count)
+        .map(|source| sets.find(source))
+        .collect::<Vec<_>>();
+    let mut representatives = vec![usize::MAX; source_node_count];
+    for (source, root) in roots.iter().copied().enumerate() {
+        representatives[root] = representatives[root].min(source);
+    }
+    roots
+        .into_iter()
+        .map(|root| NodeId(representatives[root] as u32))
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1841,7 +2119,7 @@ type BranchOrdering = fn(
     &AutomorphismAdapter,
     &OrderedPartition,
     AutomorphismAlgorithm,
-    Option<&ProjectedAutomorphismOutput>,
+    Option<&AutomorphismAdapterOutput>,
     &mut [NodeId],
 );
 
@@ -1849,16 +2127,16 @@ fn backend_canonical_branch_order(
     adapter: &AutomorphismAdapter,
     partition: &OrderedPartition,
     algorithm: AutomorphismAlgorithm,
-    automorphisms: Option<&ProjectedAutomorphismOutput>,
+    automorphisms: Option<&AutomorphismAdapterOutput>,
     candidates: &mut [NodeId],
 ) {
     let labels = automorphisms.map_or_else(
         || {
             adapter
                 .automorphisms_for_partition(partition, algorithm)
-                .canonical_labels
+                .source_canonical_labels
         },
-        |output| output.canonical_labels.clone(),
+        |output| output.source_canonical_labels.clone(),
     );
     let mut ranks = vec![0; adapter.source_node_count];
     for (rank, node) in labels.iter().enumerate() {
@@ -1870,15 +2148,18 @@ fn backend_canonical_branch_order(
 #[derive(Clone, Copy, Debug)]
 struct CanonicalSearchOptions {
     automorphism_pruning: bool,
-    prefix_pruning: bool,
     branch_order: BranchOrdering,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg(test)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalSearchStats {
+    initial_residual_cell_sizes: Vec<usize>,
     refinement_calls: usize,
+    branch_order_calls: usize,
+    backend_calls: usize,
     visited_leaves: usize,
-    prefix_pruned_branches: usize,
+    leaf_comparisons: usize,
     orbit_pruned_branches: usize,
 }
 
@@ -1891,6 +2172,7 @@ struct CanonicalCandidate<K> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanonicalSearchResult<K> {
     candidate: CanonicalCandidate<K>,
+    #[cfg(test)]
     stats: CanonicalSearchStats,
 }
 
@@ -1898,25 +2180,84 @@ struct CanonicalSearchResult<K> {
 ///
 /// Adapter colors are opaque equality labels and do not order the partition. Automorphism pruning
 /// requires the leaf key to be invariant under adapter automorphisms.
-/// Prefix pruning requires `prefix_worse` to reject only partitions whose every leaf is greater
-/// than the current best key.
-fn canonical_search<K, Descriptor, LeafCandidate, PrefixWorse>(
+fn canonical_search<K, Descriptor, LeafCandidate>(
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
     Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+{
+    canonical_search_impl(
+        adapter,
+        partition_descriptors,
+        algorithm,
+        options,
+        leaf_candidate,
+        false,
+        &|_| {},
+    )
+}
+
+fn canonical_search_with_generator_filter<K, Descriptor, LeafCandidate, FilterGenerators>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    canonical_search_impl(
+        adapter,
+        partition_descriptors,
+        algorithm,
+        options,
+        leaf_candidate,
+        true,
+        filter_generators,
+    )
+}
+
+fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
     let mut best = None;
+    #[cfg(test)]
     let mut stats = CanonicalSearchStats {
+        initial_residual_cell_sizes: initial
+            .cells
+            .iter()
+            .filter(|cell| {
+                cell.len() > 1
+                    && cell
+                        .first()
+                        .is_some_and(|node| node.index() < adapter.source_node_count)
+            })
+            .map(Vec::len)
+            .collect(),
         refinement_calls: 1,
         ..Default::default()
     };
@@ -1927,62 +2268,79 @@ where
         algorithm,
         options,
         leaf_candidate,
-        prefix_worse,
+        apply_generator_filter,
+        filter_generators,
         &mut best,
+        #[cfg(test)]
         &mut stats,
     );
 
     CanonicalSearchResult {
         candidate: best.expect("every finite partition has a discrete entity refinement"),
+        #[cfg(test)]
         stats,
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search_partition<K, LeafCandidate, PrefixWorse>(
+fn search_partition<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
     best: &mut Option<CanonicalCandidate<K>>,
-    stats: &mut CanonicalSearchStats,
+    #[cfg(test)] stats: &mut CanonicalSearchStats,
 ) where
     K: Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    if options.prefix_pruning
-        && best
-            .as_ref()
-            .is_some_and(|best| prefix_worse(&partition, best))
-    {
-        stats.prefix_pruned_branches += 1;
-        return;
-    }
-
     let Some(cell_index) = partition.first_non_singleton_entity_cell(adapter.source_node_count)
     else {
-        stats.visited_leaves += 1;
+        #[cfg(test)]
+        {
+            stats.visited_leaves += 1;
+        }
         let entity_order = partition.entity_order(adapter.source_node_count);
         let candidate = leaf_candidate(&entity_order);
-        if best.as_ref().is_none_or(|best| candidate.key < best.key) {
+        let improves = if let Some(best) = best.as_ref() {
+            #[cfg(test)]
+            {
+                stats.leaf_comparisons += 1;
+            }
+            candidate.key < best.key
+        } else {
+            true
+        };
+        if improves {
             *best = Some(candidate);
         }
         return;
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = options
-        .automorphism_pruning
-        .then(|| adapter.automorphisms_for_partition(&partition, algorithm));
+    let automorphisms = (options.automorphism_pruning || apply_generator_filter).then(|| {
+        #[cfg(test)]
+        {
+            stats.backend_calls += 1;
+        }
+        let mut output = adapter.automorphisms_for_partition(&partition, algorithm);
+        if apply_generator_filter {
+            filter_generators(&mut output.source_generators);
+            output.source_orbits =
+                source_orbits_from_generators(adapter.source_node_count, &output.source_generators);
+        }
+        output
+    });
 
     if options.automorphism_pruning {
         let orbits = &automorphisms
             .as_ref()
             .expect("automorphisms requested for orbit pruning")
-            .orbits;
+            .source_orbits;
         let mut representatives = BTreeMap::<NodeId, NodeId>::new();
         for candidate in candidates {
             representatives
@@ -1990,10 +2348,19 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
                 .and_modify(|representative| *representative = (*representative).min(candidate))
                 .or_insert(candidate);
         }
-        stats.orbit_pruned_branches += partition.cells[cell_index].len() - representatives.len();
+        #[cfg(test)]
+        {
+            stats.orbit_pruned_branches +=
+                partition.cells[cell_index].len() - representatives.len();
+        }
         candidates = representatives.into_values().collect();
     }
 
+    #[cfg(test)]
+    {
+        stats.branch_order_calls += 1;
+        stats.backend_calls += usize::from(automorphisms.is_none());
+    }
     (options.branch_order)(
         adapter,
         &partition,
@@ -2003,7 +2370,10 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
     );
 
     for candidate in candidates {
-        stats.refinement_calls += 1;
+        #[cfg(test)]
+        {
+            stats.refinement_calls += 1;
+        }
         let child = partition
             .individualize(cell_index, candidate)
             .refine(adapter.graph());
@@ -2013,26 +2383,28 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
             algorithm,
             options,
             leaf_candidate,
-            prefix_worse,
+            apply_generator_filter,
+            filter_generators,
             best,
+            #[cfg(test)]
             stats,
         );
     }
 }
 
-/// Construct the normalized entity and incidence keys used for initial classes.
-fn initial_class_keys(
+/// Construct the normalized entity and incidence keys used for initial colors.
+fn initial_color_keys(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
-) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
+) -> Result<(Vec<InitialColorKey>, Vec<InitialColorKey>), Contradiction> {
     let entity_keys = incidence_graph
         .graph()
         .node_ids()
-        .map(|node| entity_class_key(molecule, incidence_graph.entity(node)))
+        .map(|node| entity_color_key(molecule, incidence_graph.entity(node)))
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
+        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((entity_keys, incidence_keys))
@@ -2041,9 +2413,9 @@ fn initial_class_keys(
 /// Construct topology-level partition descriptors for the exact adapter.
 fn partition_descriptors(
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
-    incidence_keys: &[InitialClassKey],
-) -> Vec<InitialClassKey> {
+    entity_keys: &[InitialColorKey],
+    incidence_keys: &[InitialColorKey],
+) -> Vec<InitialColorKey> {
     adapter
         .node_sources
         .iter()
@@ -2062,9 +2434,9 @@ fn partition_descriptors(
 /// Construct constitution-level partition descriptors for the exact adapter.
 fn constitution_partition_descriptors(
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     incidence_graph: &IncidenceGraph,
-) -> Vec<InitialClassKey> {
+) -> Vec<InitialColorKey> {
     adapter
         .node_sources
         .iter()
@@ -2079,9 +2451,9 @@ fn constitution_partition_descriptors(
                     Incidence::MulticenterParticipant(_)
                     | Incidence::MulticenterParticipantSpan(_) => variant(4, []),
                     incidence => incidence_key(incidence)
-                        .expect("initial classes established incidence normalization"),
+                        .expect("initial colors established incidence normalization"),
                 };
-                InitialClassKey::Incidence(value)
+                InitialColorKey::Incidence(value)
             }
         })
         .collect()
@@ -2089,9 +2461,9 @@ fn constitution_partition_descriptors(
 
 fn constitution_entity_classes(molecule: &Molecule) -> Result<Vec<u32>, Contradiction> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
     let classes = partition.cell_indices(adapter.graph().node_count());
@@ -2103,7 +2475,7 @@ fn stereo_frame_permutations(kind: StereoKind) -> impl Iterator<Item = Permutati
     let count = (1..=degree).product::<usize>().max(1);
     (0..count)
         .map(move |rank| Permutation::unrank(degree, rank))
-        .filter(move |permutation| kind.class_key().space().reindex(0, *permutation).is_some())
+        .filter(move |permutation| kind.class_key().space().allows(*permutation))
 }
 
 fn stereo_refinement_descriptor(
@@ -2134,6 +2506,7 @@ fn stereo_refinement_descriptor(
             .map(|permutation| {
                 configuration
                     .apply(permutation)
+                    .ok_or(Contradiction)?
                     .normalize()
                     .map(|configuration| descriptor(permutation.act(ligand_classes), configuration))
             })
@@ -2148,9 +2521,9 @@ fn structure_partition_descriptors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     entity_classes: &[u32],
-) -> Result<Vec<InitialClassKey>, Contradiction> {
+) -> Result<Vec<InitialColorKey>, Contradiction> {
     let entity_class = |entity: Entity| entity_classes[incidence_graph.node_of(entity).index()];
 
     adapter
@@ -2159,7 +2532,7 @@ fn structure_partition_descriptors(
         .map(|source| match *source {
             SubdivisionNodeSource::Node(node) => {
                 let entity = incidence_graph.entity(node);
-                let InitialClassKey::Entity { position, .. } = entity_keys[node.index()] else {
+                let InitialColorKey::Entity { position, .. } = entity_keys[node.index()] else {
                     unreachable!("entity key corresponds to an entity node")
                 };
                 let value = match entity {
@@ -2199,7 +2572,7 @@ fn structure_partition_descriptors(
                     }
                     _ => product([CanonicalKeyValue::Unsigned(entity_class(entity).into())]),
                 };
-                Ok(InitialClassKey::Entity { position, value })
+                Ok(InitialColorKey::Entity { position, value })
             }
             SubdivisionNodeSource::Edge(edge) => {
                 let value = match incidence_graph.incidence(edge) {
@@ -2208,7 +2581,7 @@ fn structure_partition_descriptors(
                     Incidence::MulticenterParticipant(_) => variant(4, []),
                     incidence => incidence_key(incidence)?,
                 };
-                Ok(InitialClassKey::Incidence(value))
+                Ok(InitialColorKey::Incidence(value))
             }
         })
         .collect()
@@ -2288,7 +2661,7 @@ fn structure_partition(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     para_stereo: bool,
 ) -> Result<(OrderedPartition, usize), Contradiction> {
     let constitution_classes = constitution_entity_classes(molecule)?;
@@ -2337,25 +2710,25 @@ fn structure_partition(
     }
 }
 
-/// Assign dense ordered classes to normalized entity and incidence keys.
-fn rank_initial_classes(
-    entity_keys: &[InitialClassKey],
-    incidence_keys: &[InitialClassKey],
-) -> InitialClasses {
+/// Assign dense ordered colors to normalized entity and incidence keys.
+fn rank_initial_colors(
+    entity_keys: &[InitialColorKey],
+    incidence_keys: &[InitialColorKey],
+) -> InitialColors {
     let keys = entity_keys
         .iter()
         .chain(incidence_keys.iter())
         .cloned()
         .collect::<BTreeSet<_>>();
-    let classes = keys
+    let colors = keys
         .into_iter()
         .enumerate()
-        .map(|(class, key)| (key, class as u32))
+        .map(|(color, key)| (key, color as u32))
         .collect::<BTreeMap<_, _>>();
 
-    InitialClasses {
-        entities: entity_keys.iter().map(|key| classes[key]).collect(),
-        incidences: incidence_keys.iter().map(|key| classes[key]).collect(),
+    InitialColors {
+        entities: entity_keys.iter().map(|key| colors[key]).collect(),
+        incidences: incidence_keys.iter().map(|key| colors[key]).collect(),
     }
 }
 
@@ -2396,7 +2769,7 @@ fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradi
     ])
 }
 
-fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassKey, Contradiction> {
+fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => {
             let attributes = molecule.atom(id).attributes;
@@ -2505,13 +2878,13 @@ fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassK
         }
     };
 
-    Ok(InitialClassKey::Entity { position, value })
+    Ok(InitialColorKey::Entity { position, value })
 }
 
-fn reaction_span_entity_class_key(
+fn reaction_span_entity_color_key(
     span: &ReactionSpan,
     entity: Entity,
-) -> Result<InitialClassKey, Contradiction> {
+) -> Result<InitialColorKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => (
             EntityBlockPosition::ATOM,
@@ -2531,116 +2904,78 @@ fn reaction_span_entity_class_key(
         ),
         Entity::DativeBond(id) => (
             EntityBlockPosition::DATIVE_BOND,
-            normalized_entity_span_key(
-                span.dative_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        num_form_key(attributes.order.normalized()?.as_ref()),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.dative_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    num_form_key(attributes.order.normalized()?.as_ref()),
+                )]))
+            })?,
         ),
         Entity::AromaticSystem(id) => (
             EntityBlockPosition::AROMATIC_SYSTEM,
-            normalized_entity_span_key(
-                span.aromatic_systems().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([
-                        (2, num_form_key(attributes.charge.normalized()?.as_ref())),
-                        (
-                            3,
-                            unpaired_electrons_form_key(
-                                attributes.unpaired_electrons.normalized()?.as_ref(),
-                            ),
+            normalized_entity_span_key(span.aromatic_systems().attributes(id), |attributes| {
+                Ok(positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
                         ),
-                    ]))
-                },
-            )?,
+                    ),
+                ]))
+            })?,
         ),
         Entity::MulticenterBond(id) => (
             EntityBlockPosition::MULTICENTER_BOND,
-            normalized_entity_span_key(
-                span.multicenter_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([
-                        (2, num_form_key(attributes.charge.normalized()?.as_ref())),
-                        (
-                            3,
-                            unpaired_electrons_form_key(
-                                attributes.unpaired_electrons.normalized()?.as_ref(),
-                            ),
+            normalized_entity_span_key(span.multicenter_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([
+                    (2, num_form_key(attributes.charge.normalized()?.as_ref())),
+                    (
+                        3,
+                        unpaired_electrons_form_key(
+                            attributes.unpaired_electrons.normalized()?.as_ref(),
                         ),
-                    ]))
-                },
-            )?,
+                    ),
+                ]))
+            })?,
         ),
         Entity::NoncovalentBond(id) => (
             EntityBlockPosition::NONCOVALENT_BOND,
-            normalized_entity_span_key(
-                span.noncovalent_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        1,
-                        noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.noncovalent_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    1,
+                    noncovalent_bond_kind_form_key(attributes.kind.normalized()?.as_ref()),
+                )]))
+            })?,
         ),
         Entity::StereoAtom(id) => (
             EntityBlockPosition::STEREO_ATOM,
-            normalized_entity_span_key(
-                span.stereo_atoms().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        option(attributes.configuration.kind().map(stereo_kind_key)),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.stereo_atoms().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]))
+            })?,
         ),
         Entity::StereoBond(id) => (
             EntityBlockPosition::STEREO_BOND,
-            normalized_entity_span_key(
-                span.stereo_bonds().data(RelationId::from(id)),
-                |attributes| {
-                    Ok(positioned_product([(
-                        2,
-                        option(attributes.configuration.kind().map(stereo_kind_key)),
-                    )]))
-                },
-            )?,
+            normalized_entity_span_key(span.stereo_bonds().attributes(id), |attributes| {
+                Ok(positioned_product([(
+                    2,
+                    option(attributes.configuration.kind().map(stereo_kind_key)),
+                )]))
+            })?,
         ),
     };
-    Ok(InitialClassKey::Entity { position, value })
+    Ok(InitialColorKey::Entity { position, value })
 }
 
-fn topology_candidate(
+fn topology_bond_key_rows(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    atom_images: &[usize],
+) -> Result<Vec<(CanonicalKeyValue, BondId, NodeId)>, Contradiction> {
     let bond_count = incidence_graph.entity_count(EntityKind::Bond);
-    let mut atom_images = vec![0_usize; atom_count];
-    let mut atom_order = Vec::with_capacity(atom_count);
-
-    for &node in order {
-        if let Entity::Atom(id) = incidence_graph.entity(node) {
-            atom_images[id.index()] = atom_order.len();
-            atom_order.push(id);
-        }
-    }
-
-    debug_assert_eq!(atom_order.len(), atom_count);
-
-    let atoms = atom_order
-        .iter()
-        .copied()
-        .map(|id| {
-            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
     let mut bonds = molecule
         .bonds()
         .iter()
@@ -2665,6 +3000,35 @@ fn topology_candidate(
         .collect::<Result<Vec<_>, Contradiction>>()?;
     debug_assert_eq!(bonds.len(), bond_count);
     bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    Ok(bonds)
+}
+
+fn topology_candidate(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let mut atom_images = vec![0_usize; atom_count];
+    let mut atom_order = Vec::with_capacity(atom_count);
+
+    for &node in order {
+        if let Entity::Atom(id) = incidence_graph.entity(node) {
+            atom_images[id.index()] = atom_order.len();
+            atom_order.push(id);
+        }
+    }
+
+    debug_assert_eq!(atom_order.len(), atom_count);
+
+    let atoms = atom_order
+        .iter()
+        .copied()
+        .map(|id| {
+            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?;
 
     let mut entity_order = atom_order
         .into_iter()
@@ -2899,7 +3263,6 @@ fn constitution_candidate(
 struct CanonicalStereoFrame {
     ligands: Vec<StereoLigand>,
     configuration: StereoConfigurationForm,
-    permutations: Vec<Permutation>,
 }
 
 fn canonical_kinded_stereo_frame(
@@ -2914,20 +3277,19 @@ fn canonical_kinded_stereo_frame(
     }
 
     let mut minimum: Option<(Vec<StereoLigand>, StereoConfigurationForm)> = None;
-    let mut permutations = Vec::new();
     for permutation in stereo_frame_permutations(kind) {
         let candidate = (
             permutation.act(ligands),
-            configuration.apply(permutation).normalize()?,
+            configuration
+                .apply(permutation)
+                .ok_or(Contradiction)?
+                .normalize()?,
         );
         match minimum.as_ref().map(|value| candidate.cmp(value)) {
             None | Some(Ordering::Less) => {
                 minimum = Some(candidate);
-                permutations.clear();
-                permutations.push(permutation);
             }
-            Some(Ordering::Equal) => permutations.push(permutation),
-            Some(Ordering::Greater) => {}
+            Some(Ordering::Equal | Ordering::Greater) => {}
         }
     }
 
@@ -2935,7 +3297,6 @@ fn canonical_kinded_stereo_frame(
         minimum.map(|(ligands, configuration)| CanonicalStereoFrame {
             ligands,
             configuration,
-            permutations,
         }),
     )
 }
@@ -2973,10 +3334,10 @@ fn structure_candidate(
         |ligands: Vec<StereoLigand>,
          configuration: &StereoConfigurationForm|
          -> Result<(Vec<StereoLigand>, StereoConfigurationForm), Contradiction> {
-            let ligands = remap_ligands(ligands);
+            let mut ligands = remap_ligands(ligands);
             match configuration {
                 StereoConfigurationForm::Undetermined => {
-                    let (ligands, _) = sort_ligand_frame(&ligands);
+                    ligands.sort_unstable();
                     Ok((ligands, StereoConfigurationForm::Undetermined))
                 }
                 StereoConfigurationForm::Kinded(..) => {
@@ -3081,9 +3442,8 @@ fn complete_candidate(
     let mut candidate = structure_candidate(molecule, incidence_graph, order)?;
     let correspondence =
         correspondence_from_order(molecule, incidence_graph, &candidate.entity_order);
-    let remapped = molecule.remap(&correspondence);
-    let (constraints, complete) = canonicalize_complete_stereo_frames(remapped)?;
-    candidate.key.constraints = constraints;
+    let complete = molecule.remap(&correspondence).reframe()?;
+    candidate.key.constraints = constraint_blocks(&complete);
     Ok((candidate, complete))
 }
 
@@ -3142,7 +3502,7 @@ fn correspondence_from_order(
     let mut images = molecule_counts(molecule).map(|count| (0..count).collect::<Vec<_>>());
     let mut next = [0; 8];
     for &node in order {
-        let (family, source) = match incidence_graph.entity(node) {
+        let (entity_kind, kind_id) = match incidence_graph.entity(node) {
             Entity::Atom(id) => (0, id.index()),
             Entity::Bond(id) => (1, id.index()),
             Entity::DativeBond(id) => (2, id.index()),
@@ -3152,8 +3512,8 @@ fn correspondence_from_order(
             Entity::StereoAtom(id) => (6, id.index()),
             Entity::StereoBond(id) => (7, id.index()),
         };
-        images[family][source] = next[family];
-        next[family] += 1;
+        images[entity_kind][kind_id] = next[entity_kind];
+        next[entity_kind] += 1;
     }
     molecule_correspondence(&images)
 }
@@ -3168,976 +3528,115 @@ fn lhs_anchored_correspondence_from_order(
     let mut added = counts.map(|_| Vec::new());
     for &node in order {
         let entity = incidence_graph.entity(node);
-        let (family, source, lhs_present) = match entity {
+        let (entity_kind, kind_id, lhs_present) = match entity {
             Entity::Atom(id) => (0, id.index(), span.atoms()[id.index()].lhs().is_some()),
             Entity::Bond(id) => (1, id.index(), span.bonds()[id.index()].lhs().is_some()),
             Entity::DativeBond(id) => (
                 2,
                 id.index(),
-                span.dative_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.dative_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::AromaticSystem(id) => (
                 3,
                 id.index(),
-                span.aromatic_systems()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.aromatic_systems().attributes(id).lhs().is_some(),
             ),
             Entity::MulticenterBond(id) => (
                 4,
                 id.index(),
-                span.multicenter_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.multicenter_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::NoncovalentBond(id) => (
                 5,
                 id.index(),
-                span.noncovalent_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.noncovalent_bonds().attributes(id).lhs().is_some(),
             ),
             Entity::StereoAtom(id) => (
                 6,
                 id.index(),
-                span.stereo_atoms()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.stereo_atoms().attributes(id).lhs().is_some(),
             ),
             Entity::StereoBond(id) => (
                 7,
                 id.index(),
-                span.stereo_bonds()
-                    .data(RelationId::from(id))
-                    .lhs()
-                    .is_some(),
+                span.stereo_bonds().attributes(id).lhs().is_some(),
             ),
         };
         if lhs_present {
-            lhs[family].push(source);
+            lhs[entity_kind].push(kind_id);
         } else {
-            added[family].push(source);
+            added[entity_kind].push(kind_id);
         }
     }
-    for family in 0..counts.len() {
-        let mut present = lhs[family]
+    for entity_kind in 0..counts.len() {
+        let mut present = lhs[entity_kind]
             .iter()
-            .chain(added[family].iter())
+            .chain(added[entity_kind].iter())
             .copied()
             .collect::<BTreeSet<_>>();
-        for source in 0..counts[family] {
-            if present.insert(source) {
-                if reaction_span_lhs_present(span, family, source) {
-                    lhs[family].push(source);
+        for kind_id in 0..counts[entity_kind] {
+            if present.insert(kind_id) {
+                if reaction_span_lhs_present(span, entity_kind, kind_id) {
+                    lhs[entity_kind].push(kind_id);
                 } else {
-                    added[family].push(source);
+                    added[entity_kind].push(kind_id);
                 }
             }
         }
     }
     let mut images = counts.map(|count| vec![0; count]);
-    for family in 0..images.len() {
-        for (image, source) in lhs[family]
+    for entity_kind in 0..images.len() {
+        for (image, kind_id) in lhs[entity_kind]
             .iter()
-            .chain(added[family].iter())
+            .chain(added[entity_kind].iter())
             .copied()
             .enumerate()
         {
-            images[family][source] = image;
+            images[entity_kind][kind_id] = image;
         }
     }
     molecule_correspondence(&images)
 }
 
-fn reaction_span_lhs_present(span: &ReactionSpan, family: usize, source: usize) -> bool {
-    match family {
-        0 => span.atoms()[source].lhs().is_some(),
-        1 => span.bonds()[source].lhs().is_some(),
+fn reaction_span_lhs_present(span: &ReactionSpan, entity_kind: usize, kind_id: usize) -> bool {
+    match entity_kind {
+        0 => span.atoms()[kind_id].lhs().is_some(),
+        1 => span.bonds()[kind_id].lhs().is_some(),
         2 => span
             .dative_bonds()
-            .data(RelationId(source as u32))
+            .attributes(DativeBondId(kind_id as u32))
             .lhs()
             .is_some(),
         3 => span
             .aromatic_systems()
-            .data(RelationId(source as u32))
+            .attributes(AromaticSystemId(kind_id as u32))
             .lhs()
             .is_some(),
         4 => span
             .multicenter_bonds()
-            .data(RelationId(source as u32))
+            .attributes(MulticenterBondId(kind_id as u32))
             .lhs()
             .is_some(),
         5 => span
             .noncovalent_bonds()
-            .data(RelationId(source as u32))
+            .attributes(NoncovalentBondId(kind_id as u32))
             .lhs()
             .is_some(),
         6 => span
             .stereo_atoms()
-            .data(RelationId(source as u32))
+            .attributes(StereoAtomId(kind_id as u32))
             .lhs()
             .is_some(),
         7 => span
             .stereo_bonds()
-            .data(RelationId(source as u32))
+            .attributes(StereoBondId(kind_id as u32))
             .lhs()
             .is_some(),
-        _ => unreachable!("reaction-span entity family index is in range"),
+        _ => unreachable!("reaction-span entity-kind index is in range"),
     }
 }
 
-fn apply_position_order<T: Clone>(values: &[T], order: &[ParticipantPosition]) -> Option<Vec<T>> {
-    if values.len() != order.len() {
-        return None;
-    }
-    let mut seen = vec![false; order.len()];
-    let mut reordered = Vec::with_capacity(order.len());
-    for position in order {
-        let index = position.index();
-        if index >= order.len() || seen[index] {
-            return None;
-        }
-        seen[index] = true;
-        reordered.push(values[index].clone());
-    }
-    Some(reordered)
-}
-
-fn inverse_position_order(order: &[ParticipantPosition]) -> Option<Vec<ParticipantPosition>> {
-    let mut inverse = vec![ParticipantPosition(0); order.len()];
-    let mut seen = vec![false; order.len()];
-    for (new, old) in order.iter().enumerate() {
-        let old = old.index();
-        if old >= order.len() || seen[old] {
-            return None;
-        }
-        seen[old] = true;
-        inverse[old] = ParticipantPosition(new as u32);
-    }
-    Some(inverse)
-}
-
-fn permutation_from_position_order(order: &[ParticipantPosition]) -> Option<Permutation> {
-    let image = order
-        .iter()
-        .map(|position| position.index())
-        .collect::<Vec<_>>();
-    Permutation::try_from(image.as_slice()).ok()
-}
-
-fn position_order_from_permutation(permutation: Permutation) -> Vec<ParticipantPosition> {
-    (0..permutation.degree())
-        .map(|position| ParticipantPosition(permutation.apply(position) as u32))
-        .collect()
-}
-
-/// Sort a structural ligand multiset and return the position order carrying the original frame
-/// into the sorted frame. Equal occurrences retain their input order; their exchange remains a
-/// structural automorphism rather than becoming an arbitrary tie-break here.
-fn sort_ligand_frame(ligands: &[StereoLigand]) -> (Vec<StereoLigand>, Vec<ParticipantPosition>) {
-    let mut sorted = ligands.to_vec();
-    let order = Unordered::canonicalize_positions(&mut sorted);
-    (sorted, order)
-}
-
-fn reframe_stereo_atom_constraint_by_order(
-    constraint: StereoAtomConstraintForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoAtomConstraintForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return StereoAtomForm {
-            configuration: StereoConfigurationForm::Undetermined,
-            constraints: constraint.into(),
-        }
-        .transform_frame_by(permutation)?
-        .constraints
-        .into_iter()
-        .next();
-    }
-    let inverse = inverse_position_order(order)?;
-    Some(match constraint {
-        StereoAtomConstraintForm::Topicity(topicity) => {
-            StereoAtomConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(
-                    inverse.get(topicity.pair.first().index())?.index().into(),
-                    inverse.get(topicity.pair.second().index())?.index().into(),
-                ),
-                relation: topicity.relation,
-            })
-        }
-        StereoAtomConstraintForm::Stereogenicity(stereogenicity) => {
-            StereoAtomConstraintForm::Stereogenicity(stereogenicity)
-        }
-        StereoAtomConstraintForm::LigandSymmetry(_) | StereoAtomConstraintForm::Fluxionality(_) => {
-            return None
-        }
-    })
-}
-
-fn reframe_stereo_bond_constraint_by_order(
-    constraint: StereoBondConstraintForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoBondConstraintForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return StereoBondForm {
-            configuration: StereoConfigurationForm::Undetermined,
-            constraints: constraint.into(),
-        }
-        .transform_frame_by(permutation)?
-        .constraints
-        .into_iter()
-        .next();
-    }
-    let inverse = inverse_position_order(order)?;
-    Some(match constraint {
-        StereoBondConstraintForm::Topicity(topicity) => {
-            StereoBondConstraintForm::Topicity(TopicityForm {
-                pair: StereoLigandPair::new(
-                    inverse.get(topicity.pair.first().index())?.index().into(),
-                    inverse.get(topicity.pair.second().index())?.index().into(),
-                ),
-                relation: topicity.relation,
-            })
-        }
-        StereoBondConstraintForm::Stereogenicity(stereogenicity) => {
-            StereoBondConstraintForm::Stereogenicity(stereogenicity)
-        }
-        StereoBondConstraintForm::LigandSymmetry(_) | StereoBondConstraintForm::Fluxionality(_) => {
-            return None
-        }
-    })
-}
-
-fn reframe_stereo_atom_form_by_order(
-    form: &StereoAtomForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoAtomForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return form.transform_frame_by(permutation);
-    }
-    if form.configuration != StereoConfigurationForm::Undetermined {
-        return None;
-    }
-    Some(StereoAtomForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: form
-            .constraints
-            .iter()
-            .cloned()
-            .map(|constraint| reframe_stereo_atom_constraint_by_order(constraint, order))
-            .collect::<Option<StereoAtomConstraintsForm>>()?,
-    })
-}
-
-fn reframe_stereo_bond_form_by_order(
-    form: &StereoBondForm,
-    order: &[ParticipantPosition],
-) -> Option<StereoBondForm> {
-    if let Some(permutation) = permutation_from_position_order(order) {
-        return form.transform_frame_by(permutation);
-    }
-    if form.configuration != StereoConfigurationForm::Undetermined {
-        return None;
-    }
-    Some(StereoBondForm {
-        configuration: StereoConfigurationForm::Undetermined,
-        constraints: form
-            .constraints
-            .iter()
-            .cloned()
-            .map(|constraint| reframe_stereo_bond_constraint_by_order(constraint, order))
-            .collect::<Option<StereoBondConstraintsForm>>()?,
-    })
-}
-
-fn reframe_stereo_atom_span_by_order(
-    span: &EntitySpan<StereoAtomForm>,
-    order: &[ParticipantPosition],
-) -> Option<EntitySpan<StereoAtomForm>> {
-    Some(match span {
-        EntitySpan::Unchanged(value) => {
-            EntitySpan::Unchanged(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Added(value) => {
-            EntitySpan::Added(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Removed(value) => {
-            EntitySpan::Removed(reframe_stereo_atom_form_by_order(value, order)?)
-        }
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: reframe_stereo_atom_form_by_order(lhs, order)?,
-            rhs: reframe_stereo_atom_form_by_order(rhs, order)?,
-        },
-    })
-}
-
-fn reframe_stereo_bond_span_by_order(
-    span: &EntitySpan<StereoBondForm>,
-    order: &[ParticipantPosition],
-) -> Option<EntitySpan<StereoBondForm>> {
-    Some(match span {
-        EntitySpan::Unchanged(value) => {
-            EntitySpan::Unchanged(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Added(value) => {
-            EntitySpan::Added(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Removed(value) => {
-            EntitySpan::Removed(reframe_stereo_bond_form_by_order(value, order)?)
-        }
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: reframe_stereo_bond_form_by_order(lhs, order)?,
-            rhs: reframe_stereo_bond_form_by_order(rhs, order)?,
-        },
-    })
-}
-
-fn reframe_molecule_constraint_by_order(
-    constraint: Constraint,
-    entity: Entity,
-    order: &[ParticipantPosition],
-) -> Option<Constraint> {
-    Some(match constraint {
-        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
-            Constraint::StereoAtom(
-                id,
-                kind,
-                reframe_stereo_atom_constraint_by_order(constraint, order)?,
-            )
-        }
-        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
-            Constraint::StereoBond(
-                id,
-                kind,
-                reframe_stereo_bond_constraint_by_order(constraint, order)?,
-            )
-        }
-        Constraint::And(constraints) => Constraint::And(
-            constraints
-                .into_iter()
-                .map(|constraint| reframe_molecule_constraint_by_order(constraint, entity, order))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Or(constraints) => Constraint::Or(
-            constraints
-                .into_iter()
-                .map(|constraint| reframe_molecule_constraint_by_order(constraint, entity, order))
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Not(constraint) => Constraint::Not(Box::new(
-            reframe_molecule_constraint_by_order(*constraint, entity, order)?,
-        )),
-        constraint => constraint,
-    })
-}
-
-fn molecule_entries(molecule: &Molecule) -> MoleculeEntries {
-    MoleculeEntries {
-        atoms: molecule
-            .atoms()
-            .iter()
-            .map(|atom| atom.attributes.clone())
-            .collect(),
-        bonds: molecule
-            .bonds()
-            .iter()
-            .map(|bond| {
-                let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
-            })
-            .collect(),
-        dative: molecule
-            .dative_bonds()
-            .iter()
-            .map(|bond| {
-                (
-                    bond.donor_ids().collect(),
-                    bond.acceptor_id(),
-                    bond.attributes.clone(),
-                )
-            })
-            .collect(),
-        aromatic: molecule
-            .aromatic_systems()
-            .iter()
-            .map(|system| (system.atom_ids().collect(), system.attributes.clone()))
-            .collect(),
-        multicenter: molecule
-            .multicenter_bonds()
-            .iter()
-            .map(|bond| (bond.atom_ids().collect(), bond.attributes.clone()))
-            .collect(),
-        noncovalent: molecule
-            .noncovalent_bonds()
-            .iter()
-            .map(|bond| {
-                let [first, second] = bond.atom_ids();
-                (first, second, bond.attributes.clone())
-            })
-            .collect(),
-        stereo_atoms: molecule
-            .stereo_atoms()
-            .iter()
-            .map(|stereo| {
-                (
-                    stereo.site_id(),
-                    stereo.ligand_frame(),
-                    stereo.attributes.clone(),
-                )
-            })
-            .collect(),
-        stereo_bonds: molecule
-            .stereo_bonds()
-            .iter()
-            .map(|stereo| {
-                (
-                    stereo.site_id(),
-                    stereo.ligand_frame(),
-                    stereo.attributes.clone(),
-                )
-            })
-            .collect(),
-        constraints: molecule.constraints().clone(),
-    }
-}
-
-fn reframe_reaction_span_stereo_atom_by_order(
-    span: &ReactionSpan,
-    id: StereoAtomId,
-    order: &[ParticipantPosition],
-) -> Option<ReactionSpan> {
-    let mut entries = span.entries();
-    let (_, ligands, attributes) = &mut entries.stereo_atoms[id.index()];
-    *attributes = reframe_stereo_atom_span_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|span| {
-            let reframe = |constraint| {
-                reframe_molecule_constraint_by_order(constraint, Entity::StereoAtom(id), order)
-            };
-            Some(match span {
-                ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(reframe(value)?),
-                ConstraintSpan::Added(value) => ConstraintSpan::Added(reframe(value)?),
-                ConstraintSpan::Removed(value) => ConstraintSpan::Removed(reframe(value)?),
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    ReactionSpan::try_from_entries(entries).ok()
-}
-
-fn reframe_reaction_span_stereo_bond_by_order(
-    span: &ReactionSpan,
-    id: StereoBondId,
-    order: &[ParticipantPosition],
-) -> Option<ReactionSpan> {
-    let mut entries = span.entries();
-    let (_, ligands, attributes) = &mut entries.stereo_bonds[id.index()];
-    *attributes = reframe_stereo_bond_span_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|span| {
-            let reframe = |constraint| {
-                reframe_molecule_constraint_by_order(constraint, Entity::StereoBond(id), order)
-            };
-            Some(match span {
-                ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(reframe(value)?),
-                ConstraintSpan::Added(value) => ConstraintSpan::Added(reframe(value)?),
-                ConstraintSpan::Removed(value) => ConstraintSpan::Removed(reframe(value)?),
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    ReactionSpan::try_from_entries(entries).ok()
-}
-
-fn canonicalize_reaction_span_stereo_frames(
-    mut span: ReactionSpan,
-) -> Result<ReactionSpan, Contradiction> {
-    for index in 0..span.stereo_atoms().count() {
-        let id = StereoAtomId(index as u32);
-        let relation = RelationId(index as u32);
-        let ligands = span.stereo_atoms().participants_2(relation).to_vec();
-        let mut best = None;
-        for permutation in all_span_frame_permutations(
-            &ligands,
-            span.stereo_atoms()
-                .data(relation)
-                .lhs()
-                .map(|form| &form.configuration),
-            span.stereo_atoms()
-                .data(relation)
-                .rhs()
-                .map(|form| &form.configuration),
-        )? {
-            let order = position_order_from_permutation(permutation);
-            let candidate = reframe_reaction_span_stereo_atom_by_order(&span, id, &order)
-                .expect("integrity established a valid stereo-atom frame action");
-            let key = stereo_atom_span_frame_key(&candidate, id)?;
-            if best.as_ref().is_none_or(|(best_key, _)| key < *best_key) {
-                best = Some((key, candidate));
-            }
-        }
-        span = best
-            .expect("every valid stereo frame has an identity action")
-            .1;
-    }
-    for index in 0..span.stereo_bonds().count() {
-        let id = StereoBondId(index as u32);
-        let relation = RelationId(index as u32);
-        let ligands = span.stereo_bonds().participants_2(relation).to_vec();
-        let mut best = None;
-        for permutation in all_span_frame_permutations(
-            &ligands,
-            span.stereo_bonds()
-                .data(relation)
-                .lhs()
-                .map(|form| &form.configuration),
-            span.stereo_bonds()
-                .data(relation)
-                .rhs()
-                .map(|form| &form.configuration),
-        )? {
-            let order = position_order_from_permutation(permutation);
-            let candidate = reframe_reaction_span_stereo_bond_by_order(&span, id, &order)
-                .expect("integrity established a valid stereo-bond frame action");
-            let key = stereo_bond_span_frame_key(&candidate, id)?;
-            if best.as_ref().is_none_or(|(best_key, _)| key < *best_key) {
-                best = Some((key, candidate));
-            }
-        }
-        span = best
-            .expect("every valid stereo frame has an identity action")
-            .1;
-    }
-    Ok(span)
-}
-
-fn all_span_frame_permutations(
-    ligands: &[StereoLigand],
-    lhs: Option<&StereoConfigurationForm>,
-    rhs: Option<&StereoConfigurationForm>,
-) -> Result<Vec<Permutation>, Contradiction> {
-    let mut permutations = stereo_frame_permutations_for(lhs, ligands.len())?;
-    permutations
-        .retain(|permutation| stereo_frame_permutation_allowed(rhs, ligands.len(), *permutation));
-    Ok(permutations)
-}
-
-fn stereo_frame_permutations_for(
-    configuration: Option<&StereoConfigurationForm>,
-    degree: usize,
-) -> Result<Vec<Permutation>, Contradiction> {
-    let count = (1..=degree).product::<usize>().max(1);
-    Ok((0..count)
-        .map(|rank| Permutation::unrank(degree, rank))
-        .filter(|&permutation| stereo_frame_permutation_allowed(configuration, degree, permutation))
-        .collect())
-}
-
-fn stereo_frame_permutation_allowed(
-    configuration: Option<&StereoConfigurationForm>,
-    degree: usize,
-    permutation: Permutation,
-) -> bool {
-    match configuration {
-        None | Some(StereoConfigurationForm::Undetermined) => permutation.degree() == degree,
-        Some(StereoConfigurationForm::Kinded(kind, _)) => {
-            kind.degree() == degree && kind.class_key().space().reindex(0, permutation).is_some()
-        }
-    }
-}
-
-fn stereo_atom_span_frame_key(
-    span: &ReactionSpan,
-    id: StereoAtomId,
-) -> Result<CanonicalKeyValue, Contradiction> {
-    let relation = RelationId::from(id);
-    Ok(product([
-        sequence(
-            span.stereo_atoms()
-                .participants_2(relation)
-                .iter()
-                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-        ),
-        normalized_entity_span_key(span.stereo_atoms().data(relation), |form| {
-            Ok(stereo_configuration_form_key(
-                form.configuration.normalized()?.as_ref(),
-            ))
-        })?,
-    ]))
-}
-
-fn stereo_bond_span_frame_key(
-    span: &ReactionSpan,
-    id: StereoBondId,
-) -> Result<CanonicalKeyValue, Contradiction> {
-    let relation = RelationId::from(id);
-    Ok(product([
-        sequence(
-            span.stereo_bonds()
-                .participants_2(relation)
-                .iter()
-                .map(|ligand| stereo_ligand_key(ligand.atom_id.0, ligand.kind)),
-        ),
-        normalized_entity_span_key(span.stereo_bonds().data(relation), |form| {
-            Ok(stereo_configuration_form_key(
-                form.configuration.normalized()?.as_ref(),
-            ))
-        })?,
-    ]))
-}
-
-fn reframe_stereo_atom(molecule: &Molecule, id: StereoAtomId, frame: Permutation) -> Molecule {
-    reframe_stereo_atom_by_order(molecule, id, &position_order_from_permutation(frame))
-        .expect("canonicalization generates a valid stereo-atom frame action")
-}
-
-fn reframe_stereo_atom_by_order(
-    molecule: &Molecule,
-    id: StereoAtomId,
-    order: &[ParticipantPosition],
-) -> Option<Molecule> {
-    let mut entries = molecule_entries(molecule);
-    let (_, ligands, attributes) = &mut entries.stereo_atoms[id.index()];
-    *attributes = reframe_stereo_atom_form_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|constraint| {
-            reframe_molecule_constraint_by_order(constraint, Entity::StereoAtom(id), order)
-        })
-        .collect::<Option<Vec<_>>>()?
-        .into();
-    Some(Molecule::from_entries(entries))
-}
-
-fn reframe_stereo_bond(molecule: &Molecule, id: StereoBondId, frame: Permutation) -> Molecule {
-    reframe_stereo_bond_by_order(molecule, id, &position_order_from_permutation(frame))
-        .expect("canonicalization generates a valid stereo-bond frame action")
-}
-
-fn reframe_stereo_bond_by_order(
-    molecule: &Molecule,
-    id: StereoBondId,
-    order: &[ParticipantPosition],
-) -> Option<Molecule> {
-    let mut entries = molecule_entries(molecule);
-    let (_, ligands, attributes) = &mut entries.stereo_bonds[id.index()];
-    *attributes = reframe_stereo_bond_form_by_order(attributes, order)?;
-    *ligands = apply_position_order(ligands, order)?;
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(|constraint| {
-            reframe_molecule_constraint_by_order(constraint, Entity::StereoBond(id), order)
-        })
-        .collect::<Option<Vec<_>>>()?
-        .into();
-    Some(Molecule::from_entries(entries))
-}
-
-fn canonicalize_stereo_frames(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
-    let stereo_atom_count = molecule.stereo_atoms().count();
-    for index in 0..stereo_atom_count {
-        let id = StereoAtomId(index as u32);
-        let (ligands, configuration) = {
-            let stereo = molecule
-                .stereo_atoms()
-                .get(id)
-                .expect("dense stereo-atom id is in range");
-            (
-                stereo.ligand_frame(),
-                stereo.attributes.configuration.clone(),
-            )
-        };
-        molecule = match configuration {
-            StereoConfigurationForm::Undetermined => {
-                let (_, order) = sort_ligand_frame(&ligands);
-                reframe_stereo_atom_by_order(&molecule, id, &order)
-                    .expect("integrity established a valid kindless stereo-atom frame")
-            }
-            StereoConfigurationForm::Kinded(..) => {
-                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
-                    .expect("integrity established the kinded stereo-atom frame degree");
-                reframe_stereo_atom(&molecule, id, frame.permutations[0])
-            }
-        };
-    }
-
-    let stereo_bond_count = molecule.stereo_bonds().count();
-    for index in 0..stereo_bond_count {
-        let id = StereoBondId(index as u32);
-        let (ligands, configuration) = {
-            let stereo = molecule
-                .stereo_bonds()
-                .get(id)
-                .expect("dense stereo-bond id is in range");
-            (
-                stereo.ligand_frame(),
-                stereo.attributes.configuration.clone(),
-            )
-        };
-        molecule = match configuration {
-            StereoConfigurationForm::Undetermined => {
-                let (_, order) = sort_ligand_frame(&ligands);
-                reframe_stereo_bond_by_order(&molecule, id, &order)
-                    .expect("integrity established a valid kindless stereo-bond frame")
-            }
-            StereoConfigurationForm::Kinded(..) => {
-                let frame = canonical_kinded_stereo_frame(&ligands, &configuration)?
-                    .expect("integrity established the kinded stereo-bond frame degree");
-                reframe_stereo_bond(&molecule, id, frame.permutations[0])
-            }
-        };
-    }
-
-    Ok(molecule)
-}
-
-fn canonicalize_complete_stereo_frames(
-    molecule: Molecule,
-) -> Result<(Vec<ConstraintBlockKey>, Molecule), Contradiction> {
-    let mut candidates = vec![molecule];
-    let stereo_atom_count = candidates[0].stereo_atoms().count();
-    for index in 0..stereo_atom_count {
-        let id = StereoAtomId(index as u32);
-        let mut next = Vec::new();
-        for molecule in candidates {
-            let stereo = molecule
-                .stereo_atoms()
-                .get(id)
-                .expect("dense stereo-atom id is in range");
-            let ligands = stereo.ligand_frame();
-            let configuration = stereo.attributes.configuration.clone();
-            let permutations = match configuration {
-                StereoConfigurationForm::Undetermined => {
-                    let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
-                }
-                StereoConfigurationForm::Kinded(..) => {
-                    canonical_kinded_stereo_frame(&ligands, &configuration)?
-                        .expect("integrity established the kinded stereo-atom frame degree")
-                        .permutations
-                }
-            };
-            next.extend(
-                permutations
-                    .into_iter()
-                    .map(|frame| reframe_stereo_atom(&molecule, id, frame)),
-            );
-        }
-        candidates = next;
-    }
-
-    let stereo_bond_count = candidates[0].stereo_bonds().count();
-    for index in 0..stereo_bond_count {
-        let id = StereoBondId(index as u32);
-        let mut next = Vec::new();
-        for molecule in candidates {
-            let stereo = molecule
-                .stereo_bonds()
-                .get(id)
-                .expect("dense stereo-bond id is in range");
-            let ligands = stereo.ligand_frame();
-            let configuration = stereo.attributes.configuration.clone();
-            let permutations = match configuration {
-                StereoConfigurationForm::Undetermined => {
-                    let (sorted, _) = sort_ligand_frame(&ligands);
-                    Permutation::between_all(&ligands, &sorted)
-                }
-                StereoConfigurationForm::Kinded(..) => {
-                    canonical_kinded_stereo_frame(&ligands, &configuration)?
-                        .expect("integrity established the kinded stereo-bond frame degree")
-                        .permutations
-                }
-            };
-            next.extend(
-                permutations
-                    .into_iter()
-                    .map(|frame| reframe_stereo_bond(&molecule, id, frame)),
-            );
-        }
-        candidates = next;
-    }
-
-    candidates
-        .into_iter()
-        .map(|molecule| {
-            let molecule = normalize_molecule(molecule)?;
-            Ok((constraint_blocks(&molecule), molecule))
-        })
-        .collect::<Result<Vec<_>, Contradiction>>()?
-        .into_iter()
-        .min_by(|lhs, rhs| lhs.0.cmp(&rhs.0))
-        .ok_or(Contradiction)
-}
-
-fn normalize_molecule(mut molecule: Molecule) -> Result<Molecule, Contradiction> {
-    let mut atoms = molecule
-        .atoms()
-        .iter()
-        .map(|atom| atom.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_atoms(|_| atoms.next().expect("one normalized form per atom"));
-
-    let mut bonds = molecule
-        .bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_bonds(|_| bonds.next().expect("one normalized form per bond"));
-
-    let mut dative_bonds = molecule
-        .dative_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_dative_bonds(|_| {
-        dative_bonds
-            .next()
-            .expect("one normalized form per dative bond")
-    });
-
-    let mut aromatic_systems = molecule
-        .aromatic_systems()
-        .iter()
-        .map(|system| system.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_aromatic_systems(|_| {
-        aromatic_systems
-            .next()
-            .expect("one normalized form per aromatic system")
-    });
-
-    let mut multicenter_bonds = molecule
-        .multicenter_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_multicenter_bonds(|_| {
-        multicenter_bonds
-            .next()
-            .expect("one normalized form per multicenter bond")
-    });
-
-    let mut noncovalent_bonds = molecule
-        .noncovalent_bonds()
-        .iter()
-        .map(|bond| bond.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_noncovalent_bonds(|_| {
-        noncovalent_bonds
-            .next()
-            .expect("one normalized form per noncovalent bond")
-    });
-
-    let mut stereo_atoms = molecule
-        .stereo_atoms()
-        .iter()
-        .map(|stereo| stereo.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_stereo_atoms(|_| {
-        stereo_atoms
-            .next()
-            .expect("one normalized form per stereo atom")
-    });
-
-    let mut stereo_bonds = molecule
-        .stereo_bonds()
-        .iter()
-        .map(|stereo| stereo.attributes.clone().normalize())
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter();
-    molecule.modify_stereo_bonds(|_| {
-        stereo_bonds
-            .next()
-            .expect("one normalized form per stereo bond")
-    });
-
-    let constraints = molecule.constraints().clone().normalize()?;
-    *molecule.constraints_mut() = constraints;
-    Ok(molecule)
-}
-
-fn normalize_entity_span<T: Normalize>(
-    span: EntitySpan<T>,
-) -> Result<EntitySpan<T>, Contradiction> {
-    Ok(match span {
-        EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value.normalize()?),
-        EntitySpan::Added(value) => EntitySpan::Added(value.normalize()?),
-        EntitySpan::Removed(value) => EntitySpan::Removed(value.normalize()?),
-        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified {
-            lhs: lhs.normalize()?,
-            rhs: rhs.normalize()?,
-        },
-    })
-}
-
-fn normalize_constraint_span(span: ConstraintSpan) -> Result<ConstraintSpan, Contradiction> {
-    Ok(match span {
-        ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(value.normalize()?),
-        ConstraintSpan::Added(value) => ConstraintSpan::Added(value.normalize()?),
-        ConstraintSpan::Removed(value) => ConstraintSpan::Removed(value.normalize()?),
-    })
-}
-
-fn normalize_reaction_span(span: ReactionSpan) -> Result<ReactionSpan, Contradiction> {
-    let mut entries = span.entries();
-    entries.atoms = entries
-        .atoms
-        .into_iter()
-        .map(normalize_entity_span)
-        .collect::<Result<_, _>>()?;
-    for (_, _, value) in &mut entries.bonds {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.dative {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, value) in &mut entries.aromatic {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, value) in &mut entries.multicenter {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.noncovalent {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.stereo_atoms {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    for (_, _, value) in &mut entries.stereo_bonds {
-        *value = normalize_entity_span(value.clone())?;
-    }
-    entries.constraints = entries
-        .constraints
-        .into_iter()
-        .map(normalize_constraint_span)
-        .collect::<Result<_, _>>()?;
-    entries.constraints.sort();
-    entries.constraints.dedup();
-    Ok(ReactionSpan::from_entries(entries))
-}
-
+#[cfg(test)]
 fn canonicalize_topology(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4147,7 +3646,6 @@ fn canonicalize_topology(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4159,32 +3657,30 @@ fn canonicalize_topology_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
     let leaf_candidate = |order: &[NodeId]| {
         topology_candidate(molecule, &incidence_graph, order)
-            .expect("initial classes established topology normalization")
+            .expect("initial colors established topology normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = normalize_molecule(molecule.remap(&correspondence))?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
+#[cfg(test)]
 fn canonicalize_constitution(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4194,7 +3690,6 @@ fn canonicalize_constitution(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4206,32 +3701,30 @@ fn canonicalize_constitution_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
         constitution_candidate(molecule, &incidence_graph, order)
-            .expect("initial classes established constitution normalization")
+            .expect("initial colors established constitution normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = normalize_molecule(molecule.remap(&correspondence))?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
+#[cfg(test)]
 fn canonicalize_structure(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4241,7 +3734,6 @@ fn canonicalize_structure(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4251,18 +3743,12 @@ fn canonicalize_structure(
 fn canonicalize_structure_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
-    mut options: CanonicalSearchOptions,
+    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
-    // A structure-frame automorphism acts on both entity ids and stereo configurations. The graph
-    // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
-    // whose coupled frame action changes the leaf key. Keep full stereo search exhaustive within
-    // each refined cell until orbit representatives carry that covariant action as well.
-    options.automorphism_pruning = false;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -4275,23 +3761,25 @@ fn canonicalize_structure_with_options(
         structure_candidate(molecule, &incidence_graph, order)
             .expect("structure descriptors established entity normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
-    let selected = canonical_search(
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
+    };
+    let selected = canonical_search_with_generator_filter(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
+        &filter_generators,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
 
-    let canonical = canonicalize_stereo_frames(molecule.remap(&correspondence))?;
-    let canonical = normalize_molecule(canonical)?;
+    let canonical = molecule.remap(&correspondence).reframe()?;
     Ok((canonical, correspondence))
 }
 
+#[cfg(test)]
 fn canonicalize_full(
     molecule: &Molecule,
     context: &CanonicalizeContext,
@@ -4301,7 +3789,6 @@ fn canonicalize_full(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4313,13 +3800,12 @@ fn canonicalize_full_with_options(
     context: &CanonicalizeContext,
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
-    let normalized = normalize_molecule(molecule.clone())?;
+    let normalized = molecule.clone().normalize()?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -4333,7 +3819,6 @@ fn canonicalize_full_with_options(
             .expect("structure descriptors established complete normalization")
             .0
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let selected = canonical_search(
         &adapter,
         &descriptors,
@@ -4343,7 +3828,6 @@ fn canonicalize_full_with_options(
             ..options
         },
         &leaf_candidate,
-        &no_prefix,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -4354,37 +3838,34 @@ fn canonicalize_full_with_options(
 
 fn canonical_key_by(
     molecule: &Molecule,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
-    molecule.check_integrity()?;
-    if level == CanonicalizeLevel::Full {
-        let normalized = normalize_molecule(molecule.clone())?;
+    if level == DescriptionLevel::Full {
+        let normalized = molecule.clone().normalize()?;
         return canonical_key_by_full(&normalized, context);
     }
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure => IncidenceLevel::Full,
-        CanonicalizeLevel::Full => unreachable!("handled before incidence construction"),
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure => IncidenceLevel::Full,
+        DescriptionLevel::Full => unreachable!("handled before incidence construction"),
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let options = CanonicalSearchOptions {
-        automorphism_pruning: level != CanonicalizeLevel::Structure,
-        prefix_pruning: false,
+        automorphism_pruning: level != DescriptionLevel::Structure,
         branch_order: backend_canonical_branch_order,
     };
 
     let key = match level {
-        CanonicalizeLevel::Topology => {
+        DescriptionLevel::Topology => {
             let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
-                    .expect("initial classes established topology normalization")
+                    .expect("initial colors established topology normalization")
             };
             canonical_search(
                 &adapter,
@@ -4392,17 +3873,16 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
             )
             .candidate
             .key
         }
-        CanonicalizeLevel::Constitution => {
+        DescriptionLevel::Constitution => {
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             let leaf_candidate = |order: &[NodeId]| {
                 constitution_candidate(molecule, &incidence_graph, order)
-                    .expect("initial classes established constitution normalization")
+                    .expect("initial colors established constitution normalization")
             };
             canonical_search(
                 &adapter,
@@ -4410,12 +3890,11 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
             )
             .candidate
             .key
         }
-        CanonicalizeLevel::Structure => {
+        DescriptionLevel::Structure => {
             let (partition, _) = structure_partition(
                 molecule,
                 &incidence_graph,
@@ -4434,12 +3913,11 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
             )
             .candidate
             .key
         }
-        CanonicalizeLevel::Full => unreachable!("handled before selected-layer search"),
+        DescriptionLevel::Full => unreachable!("handled before selected-layer search"),
     };
     Ok(key)
 }
@@ -4449,9 +3927,9 @@ fn canonical_key_by_full(
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -4465,18 +3943,15 @@ fn canonical_key_by_full(
             .expect("normalized structure descriptors established complete normalization")
             .0
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     Ok(canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     )
     .candidate
     .key)
@@ -4485,22 +3960,22 @@ fn canonical_key_by_full(
 fn reaction_span_entity_keys(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
-) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
+) -> Result<(Vec<InitialColorKey>, Vec<InitialColorKey>), Contradiction> {
     let entity_keys = incidence_graph
         .graph()
         .node_ids()
-        .map(|node| reaction_span_entity_class_key(span, incidence_graph.entity(node)))
+        .map(|node| reaction_span_entity_color_key(span, incidence_graph.entity(node)))
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
+        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((entity_keys, incidence_keys))
 }
 
 fn reaction_span_comparison_key(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
 ) -> Result<CanonicalComparisonKey, Contradiction> {
     let entries = span.entries();
     let atoms = entries
@@ -4536,7 +4011,7 @@ fn reaction_span_comparison_key(
 
     if matches!(
         level,
-        CanonicalizeLevel::Constitution | CanonicalizeLevel::Structure | CanonicalizeLevel::Full
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full
     ) {
         let dative = entries
             .dative
@@ -4586,7 +4061,7 @@ fn reaction_span_comparison_key(
         let noncovalent = entries
             .noncovalent
             .iter()
-            .map(|(first, second, span)| {
+            .map(|([first, second], span)| {
                 normalized_entity_span_key(span, |attributes| {
                     Ok(product([
                         product([
@@ -4616,10 +4091,7 @@ fn reaction_span_comparison_key(
         );
     }
 
-    if matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    ) {
+    if matches!(level, DescriptionLevel::Structure | DescriptionLevel::Full) {
         let stereo_atoms = entries
             .stereo_atoms
             .iter()
@@ -4670,7 +4142,7 @@ fn reaction_span_comparison_key(
         );
     }
 
-    let constraints = if level == CanonicalizeLevel::Full {
+    let constraints = if level == DescriptionLevel::Full {
         let mut blocks = Vec::new();
         macro_rules! inline_span_block {
             ($position:expr, $entries:expr, $constraints:expr, $key:expr) => {{
@@ -4752,10 +4224,9 @@ fn reaction_span_comparison_key(
             ConstraintBlockPosition::NONCOVALENT_BOND,
             entries.noncovalent,
             |entry: &(
-                AtomId,
-                AtomId,
+                [AtomId; 2],
                 EntitySpan<super::noncovalent::NoncovalentBondForm>
-            )| constraint_key_span(&entry.2, |form| form
+            )| constraint_key_span(&entry.1, |form| form
                 .constraints
                 .iter()
                 .map(noncovalent_bond_constraint_form_key)),
@@ -4874,81 +4345,64 @@ fn constraint_span_key(span: &ConstraintSpan) -> CanonicalKeyValue {
     }
 }
 
+fn canonicalize_molecule_with_correspondence_by_effective(
+    molecule: &Molecule,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+    let options = CanonicalSearchOptions {
+        automorphism_pruning: matches!(
+            level,
+            DescriptionLevel::Topology
+                | DescriptionLevel::Constitution
+                | DescriptionLevel::Structure
+        ),
+        branch_order: backend_canonical_branch_order,
+    };
+    match level {
+        DescriptionLevel::Topology => {
+            canonicalize_topology_with_options(molecule, context, options)
+        }
+        DescriptionLevel::Constitution => {
+            canonicalize_constitution_with_options(molecule, context, options)
+        }
+        DescriptionLevel::Structure => {
+            canonicalize_structure_with_options(molecule, context, options)
+        }
+        DescriptionLevel::Full => canonicalize_full_with_options(molecule, context, options),
+    }
+}
+
+fn canonicalize_molecule_by_effective(
+    molecule: &Molecule,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<Molecule, MoleculeCanonicalizeError> {
+    canonicalize_molecule_with_correspondence_by_effective(molecule, level, context)
+        .map(|(canonical, _)| canonical)
+}
+
 impl Canonicalize for Molecule {
     type Error = MoleculeCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_full(&self, context)
+        let level = molecule_canonicalize_level(&self);
+        canonicalize_molecule_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        canonicalize_full_with_options(
-            &self,
-            context,
-            CanonicalSearchOptions {
-                automorphism_pruning: false,
-                prefix_pruning: false,
-                branch_order: backend_canonical_branch_order,
-            },
-        )
-    }
-
-    fn canonicalize_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<Self, Self::Error> {
-        match level {
-            CanonicalizeLevel::Topology => canonicalize_topology(&self, context),
-            CanonicalizeLevel::Constitution => canonicalize_constitution(&self, context),
-            CanonicalizeLevel::Structure => canonicalize_structure(&self, context),
-            CanonicalizeLevel::Full => canonicalize_full(&self, context),
-        }
-    }
-
-    fn canonical_hash_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_hash(context);
-        }
-        canonical_key_by(&self, level, context).map(|key| hash_value(&key))
+        let level = molecule_canonicalize_level(&self);
+        canonicalize_molecule_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
-        match (
-            canonical_key_by(self, CanonicalizeLevel::Full, context),
-            canonical_key_by(other, CanonicalizeLevel::Full, context),
-        ) {
-            (Ok(left), Ok(right)) => left == right,
-            (
-                Err(MoleculeCanonicalizeError::Contradiction(_)),
-                Err(MoleculeCanonicalizeError::Contradiction(_)),
-            ) => true,
-            _ => false,
-        }
-    }
-
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> bool {
-        if self == other {
-            return true;
-        }
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_eq(other, context);
-        }
+        let level = molecule_canonicalize_level(self).max(molecule_canonicalize_level(other));
         match (
             canonical_key_by(self, level, context),
             canonical_key_by(other, level, context),
@@ -4966,9 +4420,6 @@ impl Canonicalize for Molecule {
 /// Failure to construct a canonical [`Molecule`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum MoleculeCanonicalizeError {
-    /// The molecule does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] MoleculeIntegrityError),
     /// Intrinsic normalization of a carried value reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
@@ -4977,9 +4428,6 @@ pub enum MoleculeCanonicalizeError {
 /// Failure to construct a canonical [`ReactionSpan`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionSpanCanonicalizeError {
-    /// The span does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] ReactionSpanIntegrityError),
     /// Intrinsic normalization of a carried value reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
@@ -4987,98 +4435,79 @@ pub enum ReactionSpanCanonicalizeError {
 
 fn reaction_span_canonical_candidate(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = match level {
-        CanonicalizeLevel::Topology => {
+        DescriptionLevel::Topology => {
             partition_descriptors(&adapter, &entity_keys, &incidence_keys)
         }
-        CanonicalizeLevel::Constitution
-        | CanonicalizeLevel::Structure
-        | CanonicalizeLevel::Full => {
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
             constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph)
         }
     };
     let leaf_candidate = |order: &[NodeId]| {
         let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
         let remapped = span.remap(&correspondence);
-        let remapped = if matches!(
-            level,
-            CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-        ) {
-            canonicalize_reaction_span_stereo_frames(remapped)
-                .expect("initial classes established stereo normalization")
-        } else {
-            remapped
-        };
+        let action = remapped.representative_action();
+        let reframed = remapped
+            .reframe_by(&action)
+            .expect("integrity established compatible reaction-span frame actions");
         CanonicalCandidate {
-            key: reaction_span_comparison_key(&remapped, level)
-                .expect("initial classes established span normalization"),
+            key: reaction_span_comparison_key(&reframed, level)
+                .expect("initial colors established span normalization"),
             entity_order: order.to_vec(),
         }
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     Ok(canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     )
     .candidate)
 }
 
 fn reaction_span_from_candidate(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     candidate: &CanonicalCandidate<CanonicalComparisonKey>,
 ) -> Result<ReactionSpan, Contradiction> {
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let correspondence =
         lhs_anchored_correspondence_from_order(span, &incidence_graph, &candidate.entity_order);
-    let remapped = span.remap(&correspondence);
-    if matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    ) {
-        Ok(canonicalize_reaction_span_stereo_frames(remapped)?)
-    } else {
-        Ok(remapped)
-    }
+    span.remap(&correspondence).reframe()
 }
 
 fn canonicalize_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
-    span.check_integrity()?;
     Ok(canonicalize_checked_reaction_span_by(span, level, context)?)
 }
 
 fn canonicalize_checked_reaction_span_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<ReactionSpan, Contradiction> {
     Ok(canonicalize_checked_reaction_span_with_correspondence_by(span, level, context)?.0)
@@ -5086,15 +4515,15 @@ fn canonicalize_checked_reaction_span_by(
 
 fn canonicalize_checked_reaction_span_with_correspondence_by(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<(ReactionSpan, MoleculeCorrespondence), Contradiction> {
-    let normalized = normalize_reaction_span(span.clone())?;
+    let normalized = span.clone().normalize()?;
     let candidate = reaction_span_canonical_candidate(&normalized, level, context)?;
     let incidence_level = match level {
-        CanonicalizeLevel::Topology => IncidenceLevel::Topology,
-        CanonicalizeLevel::Constitution => IncidenceLevel::Constitution,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full => IncidenceLevel::Full,
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
     };
     let incidence_graph = normalized.incidence_graph(incidence_level);
     let correspondence = lhs_anchored_correspondence_from_order(
@@ -5110,84 +4539,56 @@ fn canonicalize_checked_reaction_span_with_correspondence_by(
 
 fn canonical_reaction_span_key(
     span: &ReactionSpan,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, ReactionSpanCanonicalizeError> {
-    span.check_integrity()?;
-    if level == CanonicalizeLevel::Full {
-        let normalized = normalize_reaction_span(span.clone())?;
+    if level == DescriptionLevel::Full {
+        let normalized = span.clone().normalize()?;
         return Ok(reaction_span_canonical_candidate(&normalized, level, context)?.key);
     }
     Ok(reaction_span_canonical_candidate(span, level, context)?.key)
+}
+
+fn canonicalize_reaction_span_by_effective(
+    span: &ReactionSpan,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<ReactionSpan, ReactionSpanCanonicalizeError> {
+    canonicalize_reaction_span_by(span, level, context)
+}
+
+fn canonicalize_reaction_span_with_correspondence_by_effective(
+    span: &ReactionSpan,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<(ReactionSpan, MoleculeCorrespondence), ReactionSpanCanonicalizeError> {
+    Ok(canonicalize_checked_reaction_span_with_correspondence_by(
+        span, level, context,
+    )?)
 }
 
 impl Canonicalize for ReactionSpan {
     type Error = ReactionSpanCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_span_by(&self, CanonicalizeLevel::Full, context)
+        let level = reaction_span_canonicalize_level(&self);
+        canonicalize_reaction_span_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        self.check_integrity()?;
-        Ok(canonicalize_checked_reaction_span_with_correspondence_by(
-            &self,
-            CanonicalizeLevel::Full,
-            context,
-        )?)
-    }
-
-    fn canonicalize_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<Self, Self::Error> {
-        canonicalize_reaction_span_by(&self, level, context)
-    }
-
-    fn canonical_hash_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_hash(context);
-        }
-        canonical_reaction_span_key(&self, level, context).map(|key| hash_value(&key))
+        let level = reaction_span_canonicalize_level(&self);
+        canonicalize_reaction_span_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
-        match (
-            canonical_reaction_span_key(self, CanonicalizeLevel::Full, context),
-            canonical_reaction_span_key(other, CanonicalizeLevel::Full, context),
-        ) {
-            (Ok(left), Ok(right)) => left == right,
-            (
-                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
-                Err(ReactionSpanCanonicalizeError::Contradiction(_)),
-            ) => true,
-            _ => false,
-        }
-    }
-
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> bool {
-        if self == other {
-            return true;
-        }
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_eq(other, context);
-        }
+        let level =
+            reaction_span_canonicalize_level(self).max(reaction_span_canonicalize_level(other));
         match (
             canonical_reaction_span_key(self, level, context),
             canonical_reaction_span_key(other, level, context),
@@ -5205,146 +4606,69 @@ impl Canonicalize for ReactionSpan {
 /// Failure to construct a canonical [`Reaction`].
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ReactionCanonicalizeError {
-    /// The reaction does not satisfy its representation-integrity contract.
-    #[error(transparent)]
-    Integrity(#[from] ReactionIntegrityError),
     /// Intrinsic normalization or span materialization reached a contradiction.
     #[error(transparent)]
     Contradiction(#[from] Contradiction),
 }
 
-fn reaction_delta_is_selected(delta: &Delta, level: CanonicalizeLevel) -> bool {
-    let includes_non_stereo = level != CanonicalizeLevel::Topology;
-    let includes_stereo = matches!(
-        level,
-        CanonicalizeLevel::Structure | CanonicalizeLevel::Full
-    );
-    let includes_constraints = level == CanonicalizeLevel::Full;
-    match delta {
-        Delta::Atom(AtomDelta::ModifyConstraint { .. })
-        | Delta::Bond(BondDelta::ModifyConstraint { .. })
-        | Delta::Constraint(_) => includes_constraints,
-        Delta::Atom(_) | Delta::Bond(_) => true,
-        Delta::DativeBond(DativeBondDelta::ModifyConstraint { .. })
-        | Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint { .. })
-        | Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint { .. })
-        | Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint { .. }) => {
-            includes_non_stereo && includes_constraints
-        }
-        Delta::DativeBond(_)
-        | Delta::AromaticSystem(_)
-        | Delta::MulticenterBond(_)
-        | Delta::NoncovalentBond(_) => includes_non_stereo,
-        Delta::StereoAtom(StereoAtomDelta::ModifyConstraint { .. })
-        | Delta::StereoBond(StereoBondDelta::ModifyConstraint { .. }) => {
-            includes_stereo && includes_constraints
-        }
-        Delta::StereoAtom(_) | Delta::StereoBond(_) => includes_stereo,
-    }
-}
-
-fn project_reaction(reaction: &Reaction, level: CanonicalizeLevel) -> Reaction {
-    let deltas = reaction
-        .deltas
-        .iter()
-        .filter(|delta| reaction_delta_is_selected(delta, level))
-        .cloned()
-        .collect::<Deltas>();
-    Reaction::new(reaction.lhs.clone(), deltas)
-}
-
 fn canonicalize_reaction_by(
     reaction: &Reaction,
-    level: CanonicalizeLevel,
+    level: DescriptionLevel,
     context: &CanonicalizeContext,
 ) -> Result<Reaction, ReactionCanonicalizeError> {
-    reaction.check_integrity()?;
     let span = reaction.to_reaction_span()?;
     Ok(canonicalize_checked_reaction_span_by(&span, level, context)?.to_reaction())
+}
+
+fn canonicalize_reaction_by_effective(
+    reaction: &Reaction,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<Reaction, ReactionCanonicalizeError> {
+    canonicalize_reaction_by(reaction, level, context)
+}
+
+fn canonicalize_reaction_with_correspondence_by_effective(
+    reaction: &Reaction,
+    level: DescriptionLevel,
+    context: &CanonicalizeContext,
+) -> Result<(Reaction, MoleculeCorrespondence), ReactionCanonicalizeError> {
+    let span = reaction.to_reaction_span()?;
+    let (canonical, correspondence) =
+        canonicalize_checked_reaction_span_with_correspondence_by(&span, level, context)?;
+    Ok((canonical.to_reaction(), correspondence))
 }
 
 impl Canonicalize for Reaction {
     type Error = ReactionCanonicalizeError;
 
     fn canonicalize(self, context: &CanonicalizeContext) -> Result<Self, Self::Error> {
-        canonicalize_reaction_by(&self, CanonicalizeLevel::Full, context)
+        let level = reaction_canonicalize_level(&self);
+        canonicalize_reaction_by_effective(&self, level, context)
     }
 
     fn canonicalize_with_correspondence(
         self,
         context: &CanonicalizeContext,
     ) -> Result<(Self, MoleculeCorrespondence), Self::Error> {
-        self.check_integrity()?;
-        let span = self.to_reaction_span()?;
-        let (canonical, correspondence) =
-            canonicalize_checked_reaction_span_with_correspondence_by(
-                &span,
-                CanonicalizeLevel::Full,
-                context,
-            )?;
-        Ok((canonical.to_reaction(), correspondence))
-    }
-
-    fn canonicalize_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<Self, Self::Error> {
-        canonicalize_reaction_by(&self, level, context)
-    }
-
-    fn canonical_hash_by(
-        self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> Result<u64, Self::Error> {
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_hash(context);
-        }
-        self.check_integrity()?;
-        let span = project_reaction(&self, level).to_reaction_span()?;
-        let key = reaction_span_canonical_candidate(&span, level, context)?.key;
-        Ok(hash_value(&key))
+        let level = reaction_canonicalize_level(&self);
+        canonicalize_reaction_with_correspondence_by_effective(&self, level, context)
     }
 
     fn canonical_eq(&self, other: &Self, context: &CanonicalizeContext) -> bool {
         if self == other {
             return true;
         }
+        let level = reaction_canonicalize_level(self).max(reaction_canonicalize_level(other));
         match (
-            canonicalize_reaction_by(self, CanonicalizeLevel::Full, context),
-            canonicalize_reaction_by(other, CanonicalizeLevel::Full, context),
+            canonicalize_reaction_by_effective(self, level, context),
+            canonicalize_reaction_by_effective(other, level, context),
         ) {
             (Ok(left), Ok(right)) => left == right,
             (
                 Err(ReactionCanonicalizeError::Contradiction(_)),
                 Err(ReactionCanonicalizeError::Contradiction(_)),
             ) => true,
-            _ => false,
-        }
-    }
-
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: CanonicalizeLevel,
-        context: &CanonicalizeContext,
-    ) -> bool {
-        if self == other {
-            return true;
-        }
-        if level == CanonicalizeLevel::Full {
-            return self.canonical_eq(other, context);
-        }
-        if self.check_integrity().is_err() || other.check_integrity().is_err() {
-            return false;
-        }
-        match (
-            project_reaction(self, level).to_reaction_span(),
-            project_reaction(other, level).to_reaction_span(),
-        ) {
-            (Ok(left), Ok(right)) => left.canonical_eq_by(&right, level, context),
-            (Err(_), Err(_)) => true,
             _ => false,
         }
     }

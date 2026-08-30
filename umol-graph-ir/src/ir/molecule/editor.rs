@@ -11,16 +11,17 @@ use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::{
-    compact_edge_vec, compact_node_vec, BiRelationData, Compaction, EdgeId, FactorOrdering,
-    FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, ParticipantPosition,
-    RelationData, RelationId, RelationParticipant, Unordered, VarRelationSet,
+    compact_edge_vec, compact_node_vec, Compaction, EdgeId, FixedRelationSet,
+    FixedVarBirelationSet, Graph, GraphCompaction, NodeId, RelationId, RelationParticipant,
+    VarRelationSet,
 };
+use umol_perm::{DynPermutation, Permutation};
 
-use super::super::aromatic::AromaticSystemForm;
+use super::super::aromatic::{AromaticSystemForm, AromaticSystems};
 use super::super::atom::AtomForm;
 use super::super::bond::BondForm;
 use super::super::constraint::{Constraint, Constraints};
-use super::super::dative::DativeBondForm;
+use super::super::dative::{DativeBondForm, DativeBonds};
 use super::super::edit::{
     AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
     AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, RemovedAromaticSystem, RemovedAtom,
@@ -32,11 +33,11 @@ use super::super::id::{
     StereoAtomId, StereoBondId,
 };
 use super::super::ligand::StereoLigand;
-use super::super::multicenter::MulticenterBondForm;
-use super::super::noncovalent::NoncovalentBondForm;
-use super::super::remap::{IdCompaction, UndoCompaction};
-use super::super::stereo::{StereoAtomForm, StereoBondForm};
-use super::super::traits::{BiRelationEquiv, RelationEquiv};
+use super::super::multicenter::{MulticenterBondForm, MulticenterBonds};
+use super::super::noncovalent::{NoncovalentBondForm, NoncovalentBonds};
+use super::super::remap::{MoleculeCompaction, UndoCompaction};
+use super::super::stereo::{StereoAtomForm, StereoAtoms, StereoBondForm, StereoBonds};
+use super::super::traits::{FrameTransport, Normalize};
 use super::super::view::{
     AromaticSystemEditorView, AromaticSystemEditorViewMut, AtomEditorView, AtomEditorViewMut,
     BondEditorView, BondEditorViewMut, DativeBondEditorView, DativeBondEditorViewMut,
@@ -47,16 +48,15 @@ use super::super::view::{
 use super::{Molecule, MoleculeIntegrityError};
 
 #[derive(Clone)]
-enum FixedSetStorage<P, O, D, const N: usize> {
-    Shared(Arc<FixedRelationSet<P, O, D, N>>),
+enum FixedSetStorage<P, D, const N: usize> {
+    Shared(Arc<FixedRelationSet<P, D, N>>),
     Mutable(Vec<([P; N], D)>),
 }
 
-impl<P, O, D, const N: usize> FixedSetStorage<P, O, D, N>
+impl<P, D, const N: usize> FixedSetStorage<P, D, N>
 where
     P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants: [P; N], data: D) -> u32 {
         self.materialize();
@@ -88,7 +88,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<FixedRelationSet<P, O, D, N>> {
+    fn into_arc(self) -> Arc<FixedRelationSet<P, D, N>> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
@@ -116,41 +116,50 @@ where
         }
     }
 
-    /// The permutation reindexing `query` into relation `i`'s stored participant order (`σ[k]` = the
-    /// position in `query` of the participant equal to `stored[k]`), or `None` when the sets differ.
-    /// Direct alignment to the stored order — mutable storage is not kept canonical.
-    fn participant_permutation(&self, i: usize, query: &[P]) -> Option<Vec<ParticipantPosition>> {
+    /// Whether relation `i` coincides with `query` — multiset equality of the participants.
+    ///
+    /// The known-id sibling of a coincidence search, and the same operation graph-core exposes as
+    /// `is_coincident`. Mutable storage is not kept canonical, so both sides are sorted.
+    fn is_coincident(&self, i: usize, query: &[P]) -> bool {
         let stored = self.participants(i);
-        if stored.len() != query.len() {
-            return None;
+        stored.len() == query.len() && {
+            let mut stored_sorted = stored.to_vec();
+            stored_sorted.sort_unstable();
+            let mut query_sorted = query.to_vec();
+            query_sorted.sort_unstable();
+            stored_sorted == query_sorted
         }
-        stored
-            .iter()
-            .map(|s| {
-                query
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect()
     }
 
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(arc.compact(compaction)))
+                let (compacted, removed) = arc.compact(compaction);
+                (FixedSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedSetStorage::Mutable(vec) => {
-                let compacted: Vec<([P; N], D)> = vec
-                    .into_iter()
-                    .filter_map(|(mut participants, d)| {
-                        for participant in &mut participants {
-                            *participant = (*participant).compact(compaction)?;
-                        }
-                        Some((participants, d))
-                    })
-                    .collect();
-                FixedSetStorage::Mutable(compacted)
+                let mut removed = Vec::new();
+                let mut compacted: Vec<([P; N], D)> = Vec::with_capacity(vec.len());
+                for (index, (mut participants, d)) in vec.into_iter().enumerate() {
+                    let survives = participants
+                        .iter_mut()
+                        .all(|participant| match (*participant).compact(compaction) {
+                            Some(mapped) => {
+                                *participant = mapped;
+                                true
+                            }
+                            None => false,
+                        });
+                    if survives {
+                        compacted.push((participants, d));
+                    } else {
+                        removed.push(RelationId(index as u32));
+                    }
+                }
+                (
+                    FixedSetStorage::Mutable(compacted),
+                    Compaction::new(removed),
+                )
             }
         }
     }
@@ -188,16 +197,15 @@ where
 }
 
 #[derive(Clone)]
-enum VarSetStorage<P, O, D> {
-    Shared(Arc<VarRelationSet<P, O, D>>),
+enum VarSetStorage<P, D> {
+    Shared(Arc<VarRelationSet<P, D>>),
     Mutable(Vec<(Vec<P>, D)>),
 }
 
-impl<P, O, D> VarSetStorage<P, O, D>
+impl<P, D> VarSetStorage<P, D>
 where
     P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants: Vec<P>, data: D) -> u32 {
         self.materialize();
@@ -228,7 +236,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<VarRelationSet<P, O, D>> {
+    fn into_arc(self) -> Arc<VarRelationSet<P, D>> {
         match self {
             VarSetStorage::Shared(arc) => arc,
             VarSetStorage::Mutable(vec) => Arc::new(VarRelationSet::new(vec)),
@@ -249,6 +257,21 @@ where
         }
     }
 
+    /// Whether relation `i` coincides with `query` — multiset equality of the participants.
+    ///
+    /// The known-id sibling of a coincidence search, and the same operation graph-core exposes as
+    /// `is_coincident`. Mutable storage is not kept canonical, so both sides are sorted.
+    fn is_coincident(&self, i: usize, query: &[P]) -> bool {
+        let stored = self.participants(i);
+        stored.len() == query.len() && {
+            let mut stored_sorted = stored.to_vec();
+            stored_sorted.sort_unstable();
+            let mut query_sorted = query.to_vec();
+            query_sorted.sort_unstable();
+            stored_sorted == query_sorted
+        }
+    }
+
     fn data(&self, i: usize) -> D {
         match self {
             VarSetStorage::Shared(arc) => arc.data(RelationId(i as u32)).clone(),
@@ -256,40 +279,26 @@ where
         }
     }
 
-    /// The permutation reindexing `query` into relation `i`'s stored participant order (`σ[k]` = the
-    /// position in `query` of the participant equal to `stored[k]`), or `None` when the sets differ.
-    /// Direct alignment to the stored order — mutable storage is not kept canonical.
-    fn participant_permutation(&self, i: usize, query: &[P]) -> Option<Vec<ParticipantPosition>> {
-        let stored = self.participants(i);
-        if stored.len() != query.len() {
-            return None;
-        }
-        stored
-            .iter()
-            .map(|s| {
-                query
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect()
-    }
-
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
-            VarSetStorage::Shared(arc) => VarSetStorage::Shared(Arc::new(arc.compact(compaction))),
+            VarSetStorage::Shared(arc) => {
+                let (compacted, removed) = arc.compact(compaction);
+                (VarSetStorage::Shared(Arc::new(compacted)), removed)
+            }
             VarSetStorage::Mutable(vec) => {
-                let compacted: Vec<(Vec<P>, D)> = vec
-                    .into_iter()
-                    .filter_map(|(participants, d)| {
-                        let mapped: Option<Vec<P>> = participants
-                            .into_iter()
-                            .map(|p| p.compact(compaction))
-                            .collect();
-                        mapped.map(|p| (p, d))
-                    })
-                    .collect();
-                VarSetStorage::Mutable(compacted)
+                let mut removed = Vec::new();
+                let mut compacted: Vec<(Vec<P>, D)> = Vec::with_capacity(vec.len());
+                for (index, (participants, d)) in vec.into_iter().enumerate() {
+                    let mapped: Option<Vec<P>> = participants
+                        .into_iter()
+                        .map(|p| p.compact(compaction))
+                        .collect();
+                    match mapped {
+                        Some(participants) => compacted.push((participants, d)),
+                        None => removed.push(RelationId(index as u32)),
+                    }
+                }
+                (VarSetStorage::Mutable(compacted), Compaction::new(removed))
             }
         }
     }
@@ -329,18 +338,16 @@ where
 /// Builder storage for a fixed-arity-first-factor / var-second-factor birelation:
 /// shared until first mutation, then a `Vec` of entries.
 #[derive(Clone)]
-enum FixedVarSetStorage<L1, O1, const N1: usize, L2, O2, D> {
-    Shared(Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>>),
+enum FixedVarSetStorage<L1, const N1: usize, L2, D> {
+    Shared(Arc<FixedVarBirelationSet<L1, N1, L2, D>>),
     Mutable(Vec<([L1; N1], Vec<L2>, D)>),
 }
 
-impl<L1, O1, const N1: usize, L2, O2, D> FixedVarSetStorage<L1, O1, N1, L2, O2, D>
+impl<L1, const N1: usize, L2, D> FixedVarSetStorage<L1, N1, L2, D>
 where
     L1: RelationParticipant,
-    O1: FactorOrdering,
     L2: RelationParticipant,
-    O2: FactorOrdering,
-    D: BiRelationData + Clone,
+    D: Clone,
 {
     fn push(&mut self, participants_1: [L1; N1], participants_2: Vec<L2>, data: D) -> u32 {
         self.materialize();
@@ -367,7 +374,7 @@ where
         }
     }
 
-    fn into_arc(self) -> Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>> {
+    fn into_arc(self) -> Arc<FixedVarBirelationSet<L1, N1, L2, D>> {
         match self {
             FixedVarSetStorage::Shared(arc) => arc,
             FixedVarSetStorage::Mutable(vec) => Arc::new(FixedVarBirelationSet::new(vec)),
@@ -406,58 +413,60 @@ where
     /// order (`σ[k]` = the position in the query of the participant equal to `stored[k]`), or `None`
     /// when either factor's sets differ. Direct alignment — mutable storage is not kept canonical.
     #[allow(clippy::type_complexity)]
-    fn participant_permutation(
-        &self,
-        i: usize,
-        query_1: &[L1],
-        query_2: &[L2],
-    ) -> Option<(Vec<ParticipantPosition>, Vec<ParticipantPosition>)> {
-        let stored_1 = self.participants_1(i);
-        let stored_2 = self.participants_2(i);
-        if stored_1.len() != query_1.len() || stored_2.len() != query_2.len() {
-            return None;
+    /// Whether relation `i` coincides with `query_1` / `query_2` — multiset equality of each factor.
+    ///
+    /// The known-id sibling of a coincidence search, and the same operation graph-core exposes as
+    /// `is_coincident`. Mutable storage is not kept canonical, so both sides are sorted.
+    fn is_coincident(&self, i: usize, query_1: &[L1], query_2: &[L2]) -> bool {
+        let (stored_1, stored_2) = (self.participants_1(i), self.participants_2(i));
+        stored_1.len() == query_1.len() && stored_2.len() == query_2.len() && {
+            let mut s1 = stored_1.to_vec();
+            s1.sort_unstable();
+            let mut q1 = query_1.to_vec();
+            q1.sort_unstable();
+            let mut s2 = stored_2.to_vec();
+            s2.sort_unstable();
+            let mut q2 = query_2.to_vec();
+            q2.sort_unstable();
+            s1 == q1 && s2 == q2
         }
-        let sigma_1: Vec<ParticipantPosition> = stored_1
-            .iter()
-            .map(|s| {
-                query_1
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect::<Option<_>>()?;
-        let sigma_2: Vec<ParticipantPosition> = stored_2
-            .iter()
-            .map(|s| {
-                query_2
-                    .iter()
-                    .position(|q| q == s)
-                    .map(|p| ParticipantPosition(p as u32))
-            })
-            .collect::<Option<_>>()?;
-        Some((sigma_1, sigma_2))
     }
 
-    fn compact(self, compaction: &Compaction) -> Self {
+    fn compact(self, compaction: &GraphCompaction) -> (Self, Compaction<RelationId>) {
         match self {
             FixedVarSetStorage::Shared(arc) => {
-                FixedVarSetStorage::Shared(Arc::new(arc.compact(compaction)))
+                let (compacted, removed) = arc.compact(compaction);
+                (FixedVarSetStorage::Shared(Arc::new(compacted)), removed)
             }
             FixedVarSetStorage::Mutable(vec) => {
-                let compacted: Vec<([L1; N1], Vec<L2>, D)> = vec
-                    .into_iter()
-                    .filter_map(|(mut participants_1, participants_2, d)| {
-                        for participant in &mut participants_1 {
-                            *participant = (*participant).compact(compaction)?;
+                let mut removed = Vec::new();
+                let mut compacted: Vec<([L1; N1], Vec<L2>, D)> = Vec::with_capacity(vec.len());
+                for (index, (mut participants_1, participants_2, d)) in vec.into_iter().enumerate()
+                {
+                    let f1 = participants_1.iter_mut().all(|participant| {
+                        match (*participant).compact(compaction) {
+                            Some(mapped) => {
+                                *participant = mapped;
+                                true
+                            }
+                            None => false,
                         }
-                        let participants_2: Option<Vec<L2>> = participants_2
-                            .into_iter()
-                            .map(|p| p.compact(compaction))
-                            .collect();
-                        Some((participants_1, participants_2?, d))
-                    })
-                    .collect();
-                FixedVarSetStorage::Mutable(compacted)
+                    });
+                    let f2: Option<Vec<L2>> = participants_2
+                        .into_iter()
+                        .map(|p| p.compact(compaction))
+                        .collect();
+                    match (f1, f2) {
+                        (true, Some(participants_2)) => {
+                            compacted.push((participants_1, participants_2, d))
+                        }
+                        _ => removed.push(RelationId(index as u32)),
+                    }
+                }
+                (
+                    FixedVarSetStorage::Mutable(compacted),
+                    Compaction::new(removed),
+                )
             }
         }
     }
@@ -489,14 +498,12 @@ where
     }
 }
 
-fn arc_entries<L1, O1, const N1: usize, L2, O2, D>(
-    arc: &FixedVarBirelationSet<L1, O1, N1, L2, O2, D>,
+fn arc_entries<L1, const N1: usize, L2, D>(
+    arc: &FixedVarBirelationSet<L1, N1, L2, D>,
 ) -> Vec<([L1; N1], Vec<L2>, D)>
 where
     L1: RelationParticipant,
-    O1: FactorOrdering,
     L2: RelationParticipant,
-    O2: FactorOrdering,
     D: Clone,
 {
     (0..arc.count())
@@ -509,36 +516,6 @@ where
             )
         })
         .collect()
-}
-
-/// Indices of birelations whose first or second factor maps to `None` under
-/// `compaction` (i.e. dropped by the structural removal).
-fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
-    storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
-    compaction: &Compaction,
-) -> Vec<RelationId>
-where
-    L1: RelationParticipant,
-    O1: FactorOrdering,
-    L2: RelationParticipant,
-    O2: FactorOrdering,
-    D: BiRelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        let f1_gone = storage
-            .participants_1(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none());
-        let f2_gone = storage
-            .participants_2(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none());
-        if f1_gone || f2_gone {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
 }
 
 /// Un-map a surviving birelation's factors back to the pre-removal coordinate
@@ -560,50 +537,6 @@ where
             .map(|p| p.uncompact(graph))
             .collect(),
     )
-}
-
-fn fixed_relation_removed<P, O, D, const N: usize>(
-    storage: &FixedSetStorage<P, O, D, N>,
-    compaction: &Compaction,
-) -> Vec<RelationId>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        if storage
-            .participants(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none())
-        {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
-}
-
-fn var_relation_removed<P, O, D>(
-    storage: &VarSetStorage<P, O, D>,
-    compaction: &Compaction,
-) -> Vec<RelationId>
-where
-    P: RelationParticipant,
-    O: FactorOrdering,
-    D: RelationData + Clone,
-{
-    let mut removed = Vec::new();
-    for i in 0..storage.count() {
-        if storage
-            .participants(i)
-            .iter()
-            .any(|&p| p.compact(compaction).is_none())
-        {
-            removed.push(RelationId(i as u32));
-        }
-    }
-    removed
 }
 
 fn restore_var_participants<P: RelationParticipant>(
@@ -631,12 +564,12 @@ pub struct MoleculeEditor {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-    aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemForm>,
-    multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondForm>,
-    noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondForm, 2>,
-    stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-    stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
+    dative_bonds: FixedVarSetStorage<NodeId, 1, NodeId, DativeBondForm>,
+    aromatic_systems: VarSetStorage<NodeId, AromaticSystemForm>,
+    multicenter_bonds: VarSetStorage<NodeId, MulticenterBondForm>,
+    noncovalent_bonds: FixedSetStorage<NodeId, NoncovalentBondForm, 2>,
+    stereo_atoms: FixedVarSetStorage<NodeId, 1, StereoLigand, StereoAtomForm>,
+    stereo_bonds: FixedVarSetStorage<EdgeId, 1, StereoLigand, StereoBondForm>,
     constraints: Constraints,
 }
 
@@ -646,30 +579,24 @@ impl MoleculeEditor {
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
-        dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-        >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-        stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-        >,
-        stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
-        >,
+        dative_bonds: DativeBonds,
+        aromatic_systems: AromaticSystems,
+        multicenter_bonds: MulticenterBonds,
+        noncovalent_bonds: NoncovalentBonds,
+        stereo_atoms: StereoAtoms,
+        stereo_bonds: StereoBonds,
         constraints: Constraints,
     ) -> Self {
         Self {
             graph,
             atoms,
             bonds,
-            dative_bonds: FixedVarSetStorage::Shared(dative_bonds),
-            aromatic_systems: VarSetStorage::Shared(aromatic_systems),
-            multicenter_bonds: VarSetStorage::Shared(multicenter_bonds),
-            noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds),
-            stereo_atoms: FixedVarSetStorage::Shared(stereo_atoms),
-            stereo_bonds: FixedVarSetStorage::Shared(stereo_bonds),
+            dative_bonds: FixedVarSetStorage::Shared(dative_bonds.into_arc()),
+            aromatic_systems: VarSetStorage::Shared(aromatic_systems.into_arc()),
+            multicenter_bonds: VarSetStorage::Shared(multicenter_bonds.into_arc()),
+            noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds.into_arc()),
+            stereo_atoms: FixedVarSetStorage::Shared(stereo_atoms.into_arc()),
+            stereo_bonds: FixedVarSetStorage::Shared(stereo_bonds.into_arc()),
             constraints,
         }
     }
@@ -985,11 +912,19 @@ impl MoleculeEditor {
         atoms: [AtomId; 2],
         attributes: &NoncovalentBondForm,
     ) -> bool {
+        let stored: Vec<AtomId> = self
+            .noncovalent_bonds
+            .participants(id.index())
+            .iter()
+            .map(|&node| AtomId::from(node))
+            .collect();
         self.noncovalent_bonds
-            .participant_permutation(id.index(), &atoms.map(NodeId::from))
-            .is_some_and(|sigma| {
-                attributes.equiv_under(&self.noncovalent_bonds.data(id.index()), &sigma)
-            })
+            .is_coincident(id.index(), &atoms.map(NodeId::from))
+            && DynPermutation::between(&atoms, &stored)
+                .and_then(|action| attributes.clone().reframe_by(&action))
+                .is_some_and(|restated| {
+                    restated.normalized_eq(&self.noncovalent_bonds.data(id.index()))
+                })
     }
 
     /// `true` iff aromatic system `id` structurally equals `(atoms, attributes)`.
@@ -999,12 +934,18 @@ impl MoleculeEditor {
         atoms: &[AtomId],
         attributes: &AromaticSystemForm,
     ) -> bool {
-        let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.aromatic_systems
-            .participant_permutation(id.index(), &nodes)
-            .is_some_and(|sigma| {
-                attributes.equiv_under(&self.aromatic_systems.data(id.index()), &sigma)
-            })
+        let stored: Vec<AtomId> = self
+            .aromatic_systems
+            .participants(id.index())
+            .iter()
+            .map(|&node| AtomId::from(node))
+            .collect();
+        self.aromatic_systems.is_coincident(
+            id.index(),
+            &atoms.iter().map(|&a| NodeId::from(a)).collect::<Vec<_>>(),
+        ) && DynPermutation::between(atoms, &stored)
+            .and_then(|action| attributes.clone().reframe_by(&action))
+            .is_some_and(|restated| restated.normalized_eq(&self.aromatic_systems.data(id.index())))
     }
 
     /// `true` iff multicenter bond `id` structurally equals `(atoms, attributes)`.
@@ -1014,11 +955,19 @@ impl MoleculeEditor {
         atoms: &[AtomId],
         attributes: &MulticenterBondForm,
     ) -> bool {
-        let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.multicenter_bonds
-            .participant_permutation(id.index(), &nodes)
-            .is_some_and(|sigma| {
-                attributes.equiv_under(&self.multicenter_bonds.data(id.index()), &sigma)
+        let stored: Vec<AtomId> = self
+            .multicenter_bonds
+            .participants(id.index())
+            .iter()
+            .map(|&node| AtomId::from(node))
+            .collect();
+        self.multicenter_bonds.is_coincident(
+            id.index(),
+            &atoms.iter().map(|&a| NodeId::from(a)).collect::<Vec<_>>(),
+        ) && DynPermutation::between(atoms, &stored)
+            .and_then(|action| attributes.clone().reframe_by(&action))
+            .is_some_and(|restated| {
+                restated.normalized_eq(&self.multicenter_bonds.data(id.index()))
             })
     }
 
@@ -1031,12 +980,18 @@ impl MoleculeEditor {
         donors: &[AtomId],
         attributes: &DativeBondForm,
     ) -> bool {
+        let stored: Vec<AtomId> = self
+            .dative_bonds
+            .participants_2(id.index())
+            .iter()
+            .map(|&node| AtomId::from(node))
+            .collect();
         let donor_nodes: Vec<NodeId> = donors.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
-            .participant_permutation(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
-            .is_some_and(|(s1, s2)| {
-                attributes.equiv_under(&self.dative_bonds.data(id.index()), &s1, &s2)
-            })
+            .is_coincident(id.index(), &[NodeId::from(acceptor)], &donor_nodes)
+            && DynPermutation::between(donors, &stored)
+                .and_then(|action| attributes.clone().reframe_by(&action))
+                .is_some_and(|restated| restated.normalized_eq(&self.dative_bonds.data(id.index())))
     }
 
     /// `true` iff stereo atom `id` structurally equals `(site, ligands, attributes)`.
@@ -1047,11 +1002,11 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: &StereoAtomForm,
     ) -> bool {
-        self.stereo_atoms
-            .participant_permutation(id.index(), &[NodeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| {
-                attributes.equiv_under(&self.stereo_atoms.data(id.index()), &s1, &s2)
-            })
+        let stored = self.stereo_atoms.participants_2(id.index());
+        AtomId::from(self.stereo_atoms.participants_1(id.index())[0]) == site
+            && Permutation::between(ligands, &stored)
+                .and_then(|action| attributes.clone().reframe_by(&action))
+                .is_some_and(|restated| restated.normalized_eq(&self.stereo_atoms.data(id.index())))
     }
 
     /// `true` iff stereo bond `id` structurally equals `(site, ligands, attributes)`.
@@ -1062,11 +1017,11 @@ impl MoleculeEditor {
         ligands: &[StereoLigand],
         attributes: &StereoBondForm,
     ) -> bool {
-        self.stereo_bonds
-            .participant_permutation(id.index(), &[EdgeId::from(site)], ligands)
-            .is_some_and(|(s1, s2)| {
-                attributes.equiv_under(&self.stereo_bonds.data(id.index()), &s1, &s2)
-            })
+        let stored = self.stereo_bonds.participants_2(id.index());
+        BondId::from(self.stereo_bonds.participants_1(id.index())[0]) == site
+            && Permutation::between(ligands, &stored)
+                .and_then(|action| attributes.clone().reframe_by(&action))
+                .is_some_and(|restated| restated.normalized_eq(&self.stereo_bonds.data(id.index())))
     }
 
     pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomEditorViewMut<'_> {
@@ -1148,16 +1103,15 @@ impl MoleculeEditor {
     pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.dative_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
-            raw,
+        let compaction = MoleculeCompaction::relations(
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove aromatic-system overlays directly from the editor.
@@ -1167,16 +1121,15 @@ impl MoleculeEditor {
     pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.aromatic_systems.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove multicenter-bond overlays directly from the editor.
@@ -1186,16 +1139,15 @@ impl MoleculeEditor {
     pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.multicenter_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove noncovalent-bond overlays directly from the editor.
@@ -1205,16 +1157,15 @@ impl MoleculeEditor {
     pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.noncovalent_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove stereo-atom overlays directly from the editor.
@@ -1224,16 +1175,15 @@ impl MoleculeEditor {
     pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_atoms.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
             Vec::new(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     /// Remove stereo-bond overlays directly from the editor.
@@ -1243,16 +1193,15 @@ impl MoleculeEditor {
     pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
         let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
         self.stereo_bonds.remove_relations(&raw);
-        let id_compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::relations(
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            raw,
+            ids.to_vec(),
         );
-        self.constraints.compact(&id_compaction);
+        self.constraints.compact(&compaction);
     }
 
     // -- Topological removal --------------------------------------------------
@@ -1262,10 +1211,10 @@ impl MoleculeEditor {
     /// This is the low-level dense topology-removal primitive. It removes the
     /// requested atoms and bonds, cascades relations whose participants were
     /// removed, compacts molecule-level constraints, and returns the forward
-    /// `IdCompaction` for downstream id holders. It does not build rollback
+    /// `MoleculeCompaction` for downstream id holders. It does not build rollback
     /// data; checked transactions capture the removed payloads before calling
     /// this method.
-    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdCompaction {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> MoleculeCompaction {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let compaction = self.graph.remove_cascading(&nodes, &edges);
@@ -1275,60 +1224,84 @@ impl MoleculeEditor {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let removed_dative = birelation_removed(&self.dative_bonds, &compaction);
-        let removed_aromatic = var_relation_removed(&self.aromatic_systems, &compaction);
-        let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &compaction);
-        let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &compaction);
-        let removed_stereo_atoms = birelation_removed(&self.stereo_atoms, &compaction);
-        let removed_stereo_bonds = birelation_removed(&self.stereo_bonds, &compaction);
-
+        // Each entity set reports the relation ids its own compaction consumed, so the drop is
+        // discovered once rather than traversed separately. A stereo element whose site or any
+        // ligand atom or bond was removed drops out the same way (cascade), and the reported ids
+        // feed `MoleculeCompaction` so rollback (`restore_topology`) can reinsert them.
         let dative = mem::replace(
             &mut self.dative_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.dative_bonds = dative.compact(&compaction);
+        let (dative, removed_dative) = dative.compact(&compaction);
+        self.dative_bonds = dative;
 
         let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.aromatic_systems = aromatic.compact(&compaction);
+        let (aromatic, removed_aromatic) = aromatic.compact(&compaction);
+        self.aromatic_systems = aromatic;
 
         let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
-        self.multicenter_bonds = multicenter.compact(&compaction);
+        let (multicenter, removed_multicenter) = multicenter.compact(&compaction);
+        self.multicenter_bonds = multicenter;
 
         let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
-        self.noncovalent_bonds = noncovalent.compact(&compaction);
+        let (noncovalent, removed_noncovalent) = noncovalent.compact(&compaction);
+        self.noncovalent_bonds = noncovalent;
 
-        // Forward-compact stereo overlays: a stereo element whose site or any
-        // ligand atom/bond was removed drops out (cascade). The dropped ids
-        // (computed above) feed `IdCompaction` so rollback (`restore_topology`)
-        // can reinsert them.
         let stereo_atoms = mem::replace(
             &mut self.stereo_atoms,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_atoms = stereo_atoms.compact(&compaction);
+        let (stereo_atoms, removed_stereo_atoms) = stereo_atoms.compact(&compaction);
+        self.stereo_atoms = stereo_atoms;
+
         let stereo_bonds = mem::replace(
             &mut self.stereo_bonds,
             FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
-        self.stereo_bonds = stereo_bonds.compact(&compaction);
+        let (stereo_bonds, removed_stereo_bonds) = stereo_bonds.compact(&compaction);
+        self.stereo_bonds = stereo_bonds;
 
-        let id_compaction = IdCompaction::new(
+        let id_compaction = MoleculeCompaction::new(
             compaction,
-            removed_dative,
-            removed_aromatic,
-            removed_multicenter,
-            removed_noncovalent,
-            removed_stereo_atoms,
-            removed_stereo_bonds,
+            removed_dative
+                .removed()
+                .iter()
+                .map(|&id| DativeBondId::from(id))
+                .collect(),
+            removed_aromatic
+                .removed()
+                .iter()
+                .map(|&id| AromaticSystemId::from(id))
+                .collect(),
+            removed_multicenter
+                .removed()
+                .iter()
+                .map(|&id| MulticenterBondId::from(id))
+                .collect(),
+            removed_noncovalent
+                .removed()
+                .iter()
+                .map(|&id| NoncovalentBondId::from(id))
+                .collect(),
+            removed_stereo_atoms
+                .removed()
+                .iter()
+                .map(|&id| StereoAtomId::from(id))
+                .collect(),
+            removed_stereo_bonds
+                .removed()
+                .iter()
+                .map(|&id| StereoBondId::from(id))
+                .collect(),
         );
         self.constraints.compact(&id_compaction);
         id_compaction
@@ -1582,20 +1555,18 @@ impl MoleculeEditor {
 
     /// Publish the editor's current state after checking molecule integrity.
     pub fn try_build(self) -> Result<Molecule, MoleculeIntegrityError> {
-        let molecule = Molecule::from_arcs(
+        Molecule::try_from_arcs(
             self.graph,
             self.atoms,
             self.bonds,
-            self.dative_bonds.into_arc(),
-            self.aromatic_systems.into_arc(),
-            self.multicenter_bonds.into_arc(),
-            self.noncovalent_bonds.into_arc(),
-            self.stereo_atoms.into_arc(),
-            self.stereo_bonds.into_arc(),
+            DativeBonds::from_arc(self.dative_bonds.into_arc()),
+            AromaticSystems::from_arc(self.aromatic_systems.into_arc()),
+            MulticenterBonds::from_arc(self.multicenter_bonds.into_arc()),
+            NoncovalentBonds::from_arc(self.noncovalent_bonds.into_arc()),
+            StereoAtoms::from_arc(self.stereo_atoms.into_arc()),
+            StereoBonds::from_arc(self.stereo_bonds.into_arc()),
             self.constraints,
-        );
-        molecule.check_integrity()?;
-        Ok(molecule)
+        )
     }
 
     /// Publish editor state whose molecule integrity is established by the producer.
@@ -1616,11 +1587,15 @@ mod tests {
 
     use rstest::*;
     use umol_chem::element::Element;
+    use umol_perm::Permutation;
 
     use super::*;
     use crate::ir::atom::AtomForm;
     use crate::ir::bond::BondForm;
     use crate::ir::dative::DativeBondForm;
+    use crate::ir::ligand::StereoLigandKind;
+    use crate::ir::noncovalent::NoncovalentBondKind;
+    use crate::ir::stereo::StereoKind;
     use crate::mol_dsl;
 
     #[derive(Debug)]
@@ -1637,20 +1612,12 @@ mod tests {
         }
     }
 
-    impl RelationData for CloneCounted {
-        fn on_permutation(&mut self, _: &[ParticipantPosition]) {}
-    }
-
-    impl BiRelationData for CloneCounted {
-        fn on_permutation(&mut self, _: &[ParticipantPosition], _: &[ParticipantPosition]) {}
-    }
-
     #[rstest]
     #[case::unique(false, 0)]
     #[case::shared(true, 1)]
     fn test_fixed_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<FixedRelationSet<NodeId, Unordered, CloneCounted, 2>> =
+        let relation_set: Arc<FixedRelationSet<NodeId, CloneCounted, 2>> =
             Arc::new(FixedRelationSet::new(vec![(
                 [NodeId(0), NodeId(1)],
                 CloneCounted {
@@ -1670,7 +1637,7 @@ mod tests {
     #[case::shared(true, 1)]
     fn test_var_set_storage_materialize(#[case] shared: bool, #[case] expected_clones: usize) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<VarRelationSet<NodeId, Unordered, CloneCounted>> =
+        let relation_set: Arc<VarRelationSet<NodeId, CloneCounted>> =
             Arc::new(VarRelationSet::new(vec![(
                 vec![NodeId(0), NodeId(1)],
                 CloneCounted {
@@ -1693,15 +1660,14 @@ mod tests {
         #[case] expected_clones: usize,
     ) {
         let count = Arc::new(AtomicUsize::new(0));
-        let relation_set: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, CloneCounted>,
-        > = Arc::new(FixedVarBirelationSet::new(vec![(
-            [NodeId(0)],
-            vec![NodeId(1), NodeId(2)],
-            CloneCounted {
-                count: Arc::clone(&count),
-            },
-        )]));
+        let relation_set: Arc<FixedVarBirelationSet<NodeId, 1, NodeId, CloneCounted>> =
+            Arc::new(FixedVarBirelationSet::new(vec![(
+                [NodeId(0)],
+                vec![NodeId(1), NodeId(2)],
+                CloneCounted {
+                    count: Arc::clone(&count),
+                },
+            )]));
         let _shared = shared.then(|| Arc::clone(&relation_set));
         let mut storage = FixedVarSetStorage::Shared(relation_set);
 
@@ -1719,6 +1685,298 @@ mod tests {
         b.add_bond(AtomId(0), AtomId(1), BondForm::from_order(1));
         b.add_bond(AtomId(1), AtomId(2), BondForm::from_order(2));
         b
+    }
+
+    /// Aromatic systems, where the alignment is genuinely used: `on_permutation` reindexes the
+    /// electron counts and `is_permutation_invariant` is false for a determinate vector.
+    ///
+    /// Classes rather than generated inputs — the methods are crate-visible and the property target
+    /// cannot reach them.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_frame(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 30], true)]
+    #[case::reordered_frame_carrying_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![30, 10, 20], true)]
+    #[case::reordered_frame_keeping_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![10, 20, 30], false)]
+    #[case::different_counts(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 99], false)]
+    #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
+    #[case::wrong_arity(vec![AtomId(0), AtomId(1)], vec![10, 20], false)]
+    fn test_molecule_editor_aromatic_system_equiv(
+        #[case] atoms: Vec<AtomId>,
+        #[case] electrons: Vec<i64>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..4 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_aromatic_system(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        );
+        let offered = AromaticSystemForm::from_electrons(electrons);
+
+        assert_eq!(editor.aromatic_system_equiv(AromaticSystemId(0), &atoms, &offered), expected);
+    }
+
+    /// Multicenter bonds mirror aromatic systems: one frame-bearing factor with a position-indexed
+    /// electron vector, so the alignment is used and the two readings agree.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_frame(vec![AtomId(0), AtomId(1), AtomId(2)], vec![10, 20, 30], true)]
+    #[case::reordered_frame_carrying_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![30, 10, 20], true)]
+    #[case::reordered_frame_keeping_its_counts(vec![AtomId(2), AtomId(0), AtomId(1)], vec![10, 20, 30], false)]
+    #[case::multiset_differs(vec![AtomId(0), AtomId(1), AtomId(3)], vec![10, 20, 30], false)]
+    fn test_molecule_editor_multicenter_bond_equiv(
+        #[case] atoms: Vec<AtomId>,
+        #[case] electrons: Vec<i64>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..4 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_multicenter_bond(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondForm::from_electrons(vec![10, 20, 30]),
+        );
+        let offered = MulticenterBondForm::from_electrons(electrons);
+
+        assert_eq!(editor.multicenter_bond_equiv(MulticenterBondId(0), &atoms, &offered), expected);
+    }
+
+    /// Noncovalent bonds and dative bonds carry frame-invariant payloads, so the alignment cannot
+    /// change the answer and the two readings agree on identity of participants alone.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_frame([AtomId(0), AtomId(1)], true)]
+    #[case::reversed_frame([AtomId(1), AtomId(0)], true)]
+    #[case::different_pair([AtomId(0), AtomId(2)], false)]
+    fn test_molecule_editor_noncovalent_bond_equiv(
+        #[case] atoms: [AtomId; 2],
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..3 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_noncovalent_bond(
+            [AtomId(0), AtomId(1)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        );
+        let offered = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
+
+        assert_eq!(editor.noncovalent_bond_equiv(NoncovalentBondId(0), atoms, &offered), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_frame(AtomId(0), vec![AtomId(1), AtomId(2)], true)]
+    #[case::reordered_donors(AtomId(0), vec![AtomId(2), AtomId(1)], true)]
+    #[case::different_acceptor(AtomId(1), vec![AtomId(1), AtomId(2)], false)]
+    #[case::different_donors(AtomId(0), vec![AtomId(1), AtomId(3)], false)]
+    fn test_molecule_editor_dative_bond_equiv(
+        #[case] acceptor: AtomId,
+        #[case] donors: Vec<AtomId>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..4 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_dative_bond(
+            vec![AtomId(1), AtomId(2)],
+            AtomId(0),
+            DativeBondForm::from_order(1),
+        );
+        let offered = DativeBondForm::from_order(1);
+
+        assert_eq!(editor.dative_bond_equiv(DativeBondId(0), acceptor, &donors, &offered), expected);
+    }
+
+    /// The editor's structural equality must reject a different atom set even when the payload
+    /// carries through unread — which is what an undetermined electron vector does.
+    ///
+    /// Without deriving the participant action, two undetermined forms compare equal even when
+    /// the offered and stored atom sets differ.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_atoms(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
+    #[case::reordered_atoms(vec![AtomId(2), AtomId(0), AtomId(1)], true)]
+    #[case::different_atoms(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
+    #[case::wrong_arity(vec![AtomId(0), AtomId(1)], false)]
+    fn test_molecule_editor_aromatic_system_equiv_undetermined_electrons(
+        #[case] atoms: Vec<AtomId>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..4 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_aromatic_system(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            AromaticSystemForm::default(),
+        );
+
+        assert_eq!(
+            editor.aromatic_system_equiv(
+                AromaticSystemId(0),
+                &atoms,
+                &AromaticSystemForm::default(),
+            ),
+            expected,
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_atoms(vec![AtomId(0), AtomId(1), AtomId(2)], true)]
+    #[case::different_atoms(vec![AtomId(0), AtomId(1), AtomId(3)], false)]
+    fn test_molecule_editor_multicenter_bond_equiv_undetermined_electrons(
+        #[case] atoms: Vec<AtomId>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..4 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        editor.add_multicenter_bond(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            MulticenterBondForm::default(),
+        );
+
+        assert_eq!(
+            editor.multicenter_bond_equiv(
+                MulticenterBondId(0),
+                &atoms,
+                &MulticenterBondForm::default(),
+            ),
+            expected,
+        );
+    }
+
+    /// A tetrahedral centre over four distinct ligands, stored in one frame.
+    #[fixture]
+    fn stereo_editor() -> MoleculeEditor {
+        let mut b = Molecule::default().edit();
+        b.add_atom(AtomForm::from_element(Element::C));
+        for element in [Element::F, Element::Cl, Element::Br, Element::I] {
+            b.add_atom(AtomForm::from_element(element));
+        }
+        for ligand in 1..=4 {
+            b.add_bond(AtomId(0), AtomId(ligand), BondForm::from_order(1));
+        }
+        b.add_stereo_atom(
+            AtomId(0),
+            (1..=4)
+                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+        );
+        b
+    }
+
+    /// A coset is read against its ligand frame, so the offered configuration is restated into the
+    /// stored frame before comparison and the same index under a transposed frame denotes the
+    /// opposite arrangement.
+    ///
+    /// Classes rather than generated inputs — the methods are crate-visible and the property target
+    /// cannot reach them.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored_frame([1, 2, 3, 4], 0, true)]
+    #[case::stored_frame_other_coset([1, 2, 3, 4], 1, false)]
+    #[case::transposed_frame_same_coset([2, 1, 3, 4], 0, false)]
+    #[case::transposed_frame_other_coset([2, 1, 3, 4], 1, true)]
+    #[case::multiset_differs([1, 2, 3, 5], 0, false)]
+    fn test_molecule_editor_stereo_atom_equiv(
+        stereo_editor: MoleculeEditor,
+        #[case] ligands: [u32; 4],
+        #[case] coset: u32,
+        #[case] expected: bool,
+    ) {
+        let offered: Vec<StereoLigand> = ligands
+            .into_iter()
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let attributes = StereoAtomForm::new(StereoKind::Tetrahedral, coset);
+
+        assert_eq!(
+            stereo_editor.stereo_atom_equiv(StereoAtomId(0), AtomId(0), &offered, &attributes),
+            expected,
+        );
+    }
+
+    /// The stereo equality check must transport the configuration into the stored ligand frame.
+    ///
+    /// A coset is read against a frame, so the same index under a swapped frame denotes the
+    /// opposite arrangement. Presenting the stored entry's own configuration against a transposed
+    /// frame therefore describes a different stereocentre, and the check must say so.
+    ///
+    #[rstest]
+    fn test_molecule_editor_stereo_atom_equiv_reordered_frame(stereo_editor: MoleculeEditor) {
+        let stored: Vec<StereoLigand> = (1..=4)
+            .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
+            .collect();
+        let configuration = StereoAtomForm::new(StereoKind::Tetrahedral, 0u32);
+
+        assert!(
+            stereo_editor.stereo_atom_equiv(StereoAtomId(0), AtomId(0), &stored, &configuration),
+            "the stored frame with its own configuration is equivalent to itself",
+        );
+
+        let transposed = Permutation::from_image(&[1, 0, 2, 3]);
+        assert!(
+            !stereo_editor.stereo_atom_equiv(
+                StereoAtomId(0),
+                AtomId(0),
+                &transposed.act(&stored),
+                &configuration,
+            ),
+            "coset 0 against a transposed frame is the opposite arrangement, not the stored one",
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stored(BondId(0), vec![2, 3, 4, 5], true)]
+    #[case::within_endpoint(BondId(0), vec![3, 2, 4, 5], true)]
+    #[case::endpoint_block_swap(BondId(0), vec![4, 5, 2, 3], true)]
+    #[case::across_endpoints(BondId(0), vec![2, 4, 3, 5], false)]
+    #[case::different_ligand(BondId(0), vec![2, 3, 4, 6], false)]
+    #[case::different_site(BondId(1), vec![2, 3, 4, 5], false)]
+    fn test_molecule_editor_stereo_bond_equiv(
+        #[case] site: BondId,
+        #[case] ligand_ids: Vec<u32>,
+        #[case] expected: bool,
+    ) {
+        let mut editor = Molecule::default().edit();
+        for _ in 0..7 {
+            editor.add_atom(AtomForm::from_element(Element::C));
+        }
+        for (first, second) in [(0, 1), (0, 2), (0, 3), (1, 4), (1, 5)] {
+            editor.add_bond(AtomId(first), AtomId(second), BondForm::from_order(1));
+        }
+        editor.add_stereo_bond(
+            BondId(0),
+            [2, 3, 4, 5]
+                .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                .to_vec(),
+            StereoBondForm::default(),
+        );
+        let ligands = ligand_ids
+            .into_iter()
+            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            editor.stereo_bond_equiv(
+                StereoBondId(0),
+                site,
+                &ligands,
+                &StereoBondForm::default(),
+            ),
+            expected,
+        );
     }
 
     #[rstest]
@@ -1786,8 +2044,8 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = IdCompaction::relations(
-            vec![removed.id.into()],
+        let undo = MoleculeCompaction::relations(
+            vec![removed.id],
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1852,7 +2110,7 @@ mod tests {
             r#"{:atoms ["C" "C" "C" "F" "Cl"]
                 :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
                 :stereo-atoms [{:site 0 :ligands [1 3 4 [:h 0]] :attrs "Th1"}]
-                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 2 [:h 2]] :attrs "Ct1"}]}"#
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] [:h 2] [:lp 2]] :attrs "Ct1"}]}"#
         );
         assert_eq!(molecule.edit().build(), molecule);
     }
@@ -1892,8 +2150,8 @@ mod tests {
         #[case] expected: Vec<BondId>,
     ) {
         let molecule = mol_dsl!(
-            r#"{:atoms ["C" "C" "C" "C"]
-                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            r#"{:atoms ["C" "C" "C" "C" "C" "C"]
+                :bonds [[4 5 "1"] [1 2 "2"] [0 1 "1"] [2 3 "1"]]
                 :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
         );
         let mut editor = molecule.edit();

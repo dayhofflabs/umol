@@ -15,7 +15,7 @@ use umol_utils::solution::Solution;
 
 /// Connectivity definitions.
 /// - `allow_disconnected`: allow disconnected atom / bond graph
-/// - `allow_disconnected_<family>`: allow straddling relations of that family
+/// - `allow_disconnected_<kind>`: allow straddling relations of that entity kind
 ///   (`false` = its atoms must share one bond component).
 ///
 /// The defaults permit a disconnected molecule and straddling dative / multicenter / noncovalent bonds
@@ -314,8 +314,7 @@ mod tests {
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(2),
+                [AtomId(0), AtomId(2)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: Constraints::new(),

@@ -1,8 +1,6 @@
 //! Stereo ligand representation: a ligand occupying a coordination position of a stereo site.
 
-use umol_graph_core::{
-    Compaction, NodeId, ParticipantAnchor, ParticipantRefs, RelationParticipant, Remapping,
-};
+use umol_graph_core::{GraphCompaction, NodeId, ParticipantRefs, RelationParticipant, Remapping};
 
 use super::id::AtomId;
 
@@ -28,14 +26,14 @@ impl StereoLigand {
 }
 
 impl RelationParticipant for StereoLigand {
-    fn compact(self, compaction: &Compaction) -> Option<Self> {
+    fn compact(self, compaction: &GraphCompaction) -> Option<Self> {
         Some(Self {
             atom_id: AtomId::from(compaction.compact_node(NodeId::from(self.atom_id))?),
             kind: self.kind,
         })
     }
 
-    fn uncompact(self, compaction: &Compaction) -> Self {
+    fn uncompact(self, compaction: &GraphCompaction) -> Self {
         Self {
             atom_id: AtomId::from(compaction.uncompact_node(NodeId::from(self.atom_id))),
             kind: self.kind,
@@ -54,10 +52,6 @@ impl RelationParticipant for StereoLigand {
             node: Some(NodeId::from(self.atom_id)),
             edge: None,
         }
-    }
-
-    fn anchor(self) -> Option<ParticipantAnchor> {
-        Some(ParticipantAnchor::Node(NodeId::from(self.atom_id)))
     }
 }
 
@@ -90,7 +84,7 @@ mod tests {
     #[rstest]
     fn test_stereo_ligand_compact() {
         // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
-        let compaction = Compaction::new(vec![1], Vec::new());
+        let compaction = GraphCompaction::new(vec![NodeId(1)], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
         assert_eq!(
             ligand.compact(&compaction),
@@ -103,14 +97,14 @@ mod tests {
 
     #[rstest]
     fn test_stereo_ligand_compact_removed() {
-        let compaction = Compaction::new(vec![3], Vec::new());
+        let compaction = GraphCompaction::new(vec![NodeId(3)], Vec::new());
         let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
         assert_eq!(ligand.compact(&compaction), None);
     }
 
     #[rstest]
     fn test_stereo_ligand_uncompact() {
-        let compaction = Compaction::new(vec![1], Vec::new());
+        let compaction = GraphCompaction::new(vec![NodeId(1)], Vec::new());
         let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
         assert_eq!(
             ligand.uncompact(&compaction),

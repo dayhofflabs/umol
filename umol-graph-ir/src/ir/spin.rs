@@ -4,7 +4,7 @@ use umol_chem::spin::{SpinState, UnpairedElectrons};
 use umol_graph_ir_macros::{Lattice, Normalize};
 
 use super::num::NumForm;
-use super::traits::{AsLit, Equiv};
+use super::traits::{AsLit, Normalize};
 
 /// Unpaired-electron count and multiplicity as independent `NumForm` fields.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Normalize)]
@@ -36,8 +36,8 @@ impl UnpairedElectronsForm {
     /// Derive the minimal normalized component update carrying `self` to `other`.
     pub fn difference_to(&self, other: &Self) -> UnpairedElectronsUpdate {
         UnpairedElectronsUpdate {
-            count: (!self.count.equiv(&other.count)).then(|| other.count.clone()),
-            multiplicity: (!self.multiplicity.equiv(&other.multiplicity))
+            count: (!self.count.normalized_eq(&other.count)).then(|| other.count.clone()),
+            multiplicity: (!self.multiplicity.normalized_eq(&other.multiplicity))
                 .then(|| other.multiplicity.clone()),
         }
     }

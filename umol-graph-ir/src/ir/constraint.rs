@@ -36,6 +36,9 @@ pub use atom::{
 pub use bond::{BondConstraintForm, BondConstraintKey, BondConstraintsForm};
 pub use dative::{DativeBondConstraintForm, DativeBondConstraintKey, DativeBondConstraintsForm};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint};
+pub(crate) use molecule::{
+    ConstraintFrameActionDomain, ConstraintFrameActionMap, ConstraintFrameActions,
+};
 pub use multicenter::{
     MulticenterBondConstraintForm, MulticenterBondConstraintKey, MulticenterBondConstraintsForm,
 };

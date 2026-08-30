@@ -3,6 +3,8 @@ import re
 import pytest
 
 from umol import (
+    AromaticSystemDelta,
+    AromaticSystemForm,
     AromaticityFailurePolicy,
     AromaticityModel,
     AromaticityRule,
@@ -10,7 +12,6 @@ from umol import (
     AtomForm,
     AtomDelta,
     AtomFieldChange,
-    CanonicalizeLevel,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
@@ -46,6 +47,14 @@ from umol import (
     ValenceTable,
     NumForm,
 )
+
+
+@pytest.fixture
+def aromatic_lhs():
+    return Molecule.from_entries(
+        [AtomForm(Element("C")), AtomForm(Element("N"))],
+        aromatic_systems=[([0, 1], AromaticSystemForm([1, 2]))],
+    )
 
 
 def test_reaction_composition_config_default():
@@ -235,6 +244,61 @@ def test_reaction_constructor():
     assert populated.deltas == Deltas(
         [Delta.Atom(AtomDelta.Add(id=1, attributes=AtomForm(Element("O"))))]
     )
+
+
+def test_reaction_constructor_integrity(aromatic_lhs):
+    removal = Delta.AromaticSystem(
+        AromaticSystemDelta.Remove(
+            id=0,
+            atoms=[0],
+            attributes=AromaticSystemForm([1]),
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "reaction incidence does not match source entity "
+            "AromaticSystem(AromaticSystemId(0))"
+        ),
+    ):
+        Reaction(aromatic_lhs, Deltas([removal]))
+
+
+def test_reaction_constructor_reordered_removal(aromatic_lhs):
+    removal = Delta.AromaticSystem(
+        AromaticSystemDelta.Remove(
+            id=0,
+            atoms=[1, 0],
+            attributes=AromaticSystemForm([2, 1]),
+        )
+    )
+
+    reaction = Reaction(aromatic_lhs, Deltas([removal]))
+
+    assert reaction.deltas == Deltas([removal])
+
+
+def test_reaction_snapshot_integrity_after_component_mutation(aromatic_lhs):
+    reaction = Reaction(aromatic_lhs)
+    reaction.deltas.append(
+        Delta.AromaticSystem(
+            AromaticSystemDelta.Remove(
+                id=0,
+                atoms=[0],
+                attributes=AromaticSystemForm([1]),
+            )
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "reaction incidence does not match source entity "
+            "AromaticSystem(AromaticSystemId(0))"
+        ),
+    ):
+        reaction.render()
 
 
 def test_reaction_constructor_snapshot():
@@ -467,10 +531,11 @@ def test_reaction_parse_keyword_error():
         ),
         pytest.param(
             '{:lhs {:atoms ["C" "F" "Cl" "Br" "I"] '
-            ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
-            ':attrs "Th1"}]} '
-            ':deltas [{:stereo-atom {:add '
-            '{:id :delta :site 0 :ligands [1 2 3 4] :attrs "Th2"}}}]}',
+            ':bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] '
+                ':stereo-atoms [{:id :lhs :site 0 :ligands [1 2 3 4] '
+                ':attrs "Th1"}]} '
+                ':deltas [{:stereo-atom {:add '
+                '{:id :delta :site 0 :ligands [1 2 3 4] :attrs "Th0"}}}]}',
             Entity.StereoAtom(0),
             Entity.StereoAtom(1),
             id="stereo-atom",
@@ -478,11 +543,13 @@ def test_reaction_parse_keyword_error():
         pytest.param(
             '{:lhs {:atoms ["C" "C" "C" "C"] '
             ':bonds [{:id :first :atoms [0 1] :attrs "2"} '
-            '{:id :second :atoms [2 3] :attrs "2"}] '
-            ':stereo-bonds [{:id :lhs :site :first '
-            ':ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]} '
-            ':deltas [{:stereo-bond {:add '
-            '{:id :delta :site :second :ligands [0 [:h 2] 1 [:h 3]] :attrs "Ct2"}}}]}',
+            '{:id :second :atoms [2 3] :attrs "2"} '
+            '{:atoms [0 2] :attrs "1"} '
+            '{:atoms [1 3] :attrs "1"}] '
+                ':stereo-bonds [{:id :lhs :site :first '
+                ':ligands [2 [:h 0] 3 [:h 1]] :attrs "Ct1"}]} '
+                ':deltas [{:stereo-bond {:add '
+                '{:id :delta :site :second :ligands [0 [:h 2] 1 [:h 3]] :attrs "Ct0"}}}]}',
             Entity.StereoBond(0),
             Entity.StereoBond(1),
             id="stereo-bond",
@@ -1090,8 +1157,6 @@ def test_reaction_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(CanonicalizeLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, CanonicalizeLevel.Full)
 
 
 def test_reaction_canonicalize_with_correspondence():
@@ -1106,17 +1171,6 @@ def test_reaction_canonicalize_with_correspondence():
     assert isinstance(correspondence, MoleculeCorrespondence)
     assert correspondence.is_total()
     assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
-
-
-def test_reaction_canonicalize_by():
-    plain = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
-    constrained = Reaction.parse('{:lhs {:atoms ["C#v4"]} :deltas []}')
-
-    assert plain.canonical_eq_by(
-        constrained,
-        CanonicalizeLevel.Structure,
-    )
-    assert not plain.canonical_eq(constrained)
 
 
 def test_reaction_canonicalize_error():

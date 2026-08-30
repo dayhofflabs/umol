@@ -1,17 +1,33 @@
 //! Molecule comparison properties.
 //!
-//! The identity-frame laws for `equiv`, the correspondence laws for
-//! `equiv_under`, and agreement with `==` on normalized graph-IR values deliberately use
-//! overlapping molecule domains. They establish distinct relations: semantic
-//! equivalence in a shared frame, semantic equivalence under an explicit frame
-//! mapping, and a normal-form oracle, respectively.
+//! The identity-frame laws for `normalized_eq`, the correspondence laws for `framed_eq_under`,
+//! and the complete comparison ladder deliberately use overlapping molecule domains. They
+//! establish distinct relations: normalized equality in a shared frame, framed equality under an
+//! explicit entity-id mapping, and canonical equality after entity-id renumbering. Successful and
+//! intrinsically contradictory inputs have separate relation-law properties because only the
+//! successful domain produces a canonical correspondence witness.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_core::Correspondence;
-use umol_graph_ir::ir::MoleculeCorrespondence;
+use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
+use umol_graph_ir::ir::{
+    AromaticSystemId, AtomId, BondId, Canonicalize, CanonicalizeContext, Contradiction,
+    DativeBondId, Molecule, MoleculeCanonicalizeError, MoleculeCorrespondence, MoleculeEntries,
+    MulticenterBondId, NoncovalentBondId, Normalize, NumForm, Reframe, StereoAtomId, StereoBondId,
+};
 
-use crate::strategies::*;
+use crate::strategies::{
+    atom_form_strategy, intrinsic_contradiction_scenario_strategy, molecule_strategy,
+    molecule_with_constraints_strategy, standardization_scenario_strategy,
+    stereo_reframed_molecule_pair_strategy,
+};
+
+fn context() -> CanonicalizeContext {
+    CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+    }
+}
 
 fn identity_correspondence(molecule: &Molecule) -> MoleculeCorrespondence {
     fn identity<Id>(count: usize) -> Correspondence<Id>
@@ -61,20 +77,20 @@ proptest! {
         ..Config::default()
     })]
     #[test]
-    fn test_molecule_equiv_reflexive(molecule in molecule_with_constraints_strategy()) {
-        prop_assert!(molecule.equiv(&molecule));
+    fn test_molecule_normalized_eq_reflexive(molecule in molecule_with_constraints_strategy()) {
+        prop_assert!(molecule.normalized_eq(&molecule));
     }
 
     #[test]
-    fn test_molecule_equiv_symmetric(
+    fn test_molecule_normalized_eq_symmetric(
         left in molecule_with_constraints_strategy(),
         right in molecule_with_constraints_strategy(),
     ) {
-        prop_assert_eq!(left.equiv(&right), right.equiv(&left));
+        prop_assert_eq!(left.normalized_eq(&right), right.normalized_eq(&left));
     }
 
     #[test]
-    fn test_molecule_equiv_under_transitive(
+    fn test_molecule_framed_eq_under_composition(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
     ) {
         let count = atoms.len();
@@ -111,21 +127,21 @@ proptest! {
         let first_second = correspondence(&first_order, &second_order);
         let second_third = correspondence(&second_order, &third_order);
 
-        prop_assert!(first.equiv_under(&second, &first_second));
-        prop_assert!(second.equiv_under(&third, &second_third));
-        prop_assert!(first.equiv_under(&third, &first_second.compose(&second_third)));
+        prop_assert!(first.framed_eq_under(&second, &first_second));
+        prop_assert!(second.framed_eq_under(&third, &second_third));
+        prop_assert!(first.framed_eq_under(&third, &first_second.compose(&second_third)));
     }
 
     #[test]
-    fn test_molecule_equiv_agrees_with_equality_for_normalized_molecules(
+    fn test_molecule_normalized_eq_agrees_with_equality_for_normalized_molecules(
         left in molecule_strategy(),
         right in molecule_strategy(),
     ) {
-        prop_assert_eq!(left.equiv(&right), left == right);
+        prop_assert_eq!(left.normalized_eq(&right), left == right);
     }
 
     #[test]
-    fn test_molecule_equiv_under_identity_reduces_to_equiv(
+    fn test_molecule_framed_eq_under_identity(
         molecule in molecule_with_constraints_strategy(),
     ) {
         let correspondence = identity_correspondence(&molecule);
@@ -135,13 +151,25 @@ proptest! {
         }
 
         prop_assert_eq!(
-            molecule.equiv_under(&other, &correspondence),
-            molecule.equiv(&other),
+            molecule.framed_eq_under(&other, &correspondence),
+            molecule.framed_eq(&other),
         );
     }
 
     #[test]
-    fn test_molecule_equiv_under_symmetric_under_reverse(
+    fn test_molecule_framed_eq_under_participant_frame(
+        (left, right) in stereo_reframed_molecule_pair_strategy(),
+    ) {
+        let correspondence = identity_correspondence(&left);
+
+        prop_assert_eq!(
+            left.framed_eq_under(&right, &correspondence),
+            left.framed_eq(&right),
+        );
+    }
+
+    #[test]
+    fn test_molecule_framed_eq_under_inverse_correspondence(
         atoms in prop::collection::vec(atom_form_strategy(), 0..=5),
         change_mapped_atom in any::<bool>(),
     ) {
@@ -169,9 +197,84 @@ proptest! {
             Correspondence::from_images(&[], 0),
         );
 
-        let forward = left.equiv_under(&right, &correspondence);
-        let reverse = right.equiv_under(&left, &correspondence.reverse());
+        let forward = left.framed_eq_under(&right, &correspondence);
+        let reverse = right.framed_eq_under(&left, &correspondence.reverse());
         prop_assert_eq!(forward, reverse);
         prop_assert_eq!(forward, !change_mapped_atom || count == 0);
+    }
+
+    #[test]
+    fn test_molecule_canonical_eq_standardization(
+        scenario in standardization_scenario_strategy(),
+    ) {
+        let context = context();
+        let source = scenario.molecule;
+        let identical = source.clone();
+        let normalized = source.clone().normalize().map_err(|_| {
+            TestCaseError::fail("generated molecule is intrinsically contradictory")
+        })?;
+        let normalized_again = normalized.clone().normalize().map_err(|_| {
+            TestCaseError::fail("normalized molecule became contradictory")
+        })?;
+        let reframed = source.clone().reframe().map_err(|_| {
+            TestCaseError::fail("generated molecule is intrinsically contradictory")
+        })?;
+        let canonical = source.clone().canonicalize(&context).map_err(|error| {
+            TestCaseError::fail(format!("generated molecule did not canonicalize: {error}"))
+        })?;
+        let renumbered = source.remap(&scenario.correspondence);
+
+        prop_assert_eq!(&source, &identical);
+        prop_assert!(source.normalized_eq(&identical));
+        prop_assert!(source.framed_eq(&identical));
+        prop_assert!(source.canonical_eq(&identical, &context));
+
+        prop_assert!(source.normalized_eq(&normalized));
+        prop_assert_eq!(
+            source.normalized_eq(&normalized),
+            normalized.normalized_eq(&source),
+        );
+        prop_assert!(normalized.normalized_eq(&normalized_again));
+        prop_assert!(source.normalized_eq(&normalized_again));
+        prop_assert!(source.framed_eq(&normalized));
+        prop_assert!(normalized.framed_eq(&reframed));
+        prop_assert!(source.framed_eq(&reframed));
+        prop_assert_eq!(
+            source.framed_eq(&reframed),
+            reframed.framed_eq(&source),
+        );
+
+        prop_assert!(source.canonical_eq(&reframed, &context));
+        prop_assert_eq!(
+            source.canonical_eq(&reframed, &context),
+            reframed.canonical_eq(&source, &context),
+        );
+        prop_assert!(reframed.canonical_eq(&renumbered, &context));
+        prop_assert!(source.canonical_eq(&renumbered, &context));
+        prop_assert!(renumbered.canonical_eq(&canonical, &context));
+    }
+
+    #[test]
+    fn test_molecule_canonical_eq_contradiction(
+        scenario in intrinsic_contradiction_scenario_strategy(),
+    ) {
+        let context = context();
+        let [first, second, third] = scenario.molecules;
+
+        prop_assert_ne!(&first, &second);
+        prop_assert_ne!(&second, &third);
+        prop_assert!(first.normalized_eq(&second));
+        prop_assert!(second.normalized_eq(&third));
+        prop_assert!(first.normalized_eq(&third));
+        prop_assert!(first.framed_eq(&second));
+        prop_assert!(second.framed_eq(&third));
+        prop_assert!(first.framed_eq(&third));
+        prop_assert!(first.canonical_eq(&second, &context));
+        prop_assert!(second.canonical_eq(&third, &context));
+        prop_assert!(first.canonical_eq(&third, &context));
+        prop_assert_eq!(
+            first.canonicalize_with_correspondence(&context),
+            Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
+        );
     }
 }

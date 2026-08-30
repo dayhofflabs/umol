@@ -9,9 +9,9 @@ use smallvec::SmallVec;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::TetrahedralStereoForm;
-use super::super::traits::{AsLit, Equiv, Lattice, Normalize};
+use super::super::traits::{AsLit, Lattice, Normalize};
 
 /// Atom-scope constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -132,7 +132,7 @@ impl AtomConstraintForm {
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -466,7 +466,7 @@ impl AtomConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value equals `old` (by `equiv`;
+    /// Transactional write at one key: verify the current value equals `old` (by `normalized_eq`;
     /// both absent is a match), then apply `new` (`Some` sets, `None` removes).
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors.
     pub fn compare_and_set(
@@ -487,7 +487,7 @@ impl AtomConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {
@@ -545,7 +545,7 @@ impl AtomConstraintsForm {
     }
 
     /// No-op: no `AtomConstraintForm` variant carries an entity index.
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -1065,7 +1065,7 @@ impl AsLit for MulticenterValenceForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::num::ArithExpr;
@@ -1795,8 +1795,8 @@ mod tests {
             AtomConstraintForm::valence(4),
             AtomConstraintForm::degree(3),
         ]);
-        let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1, 2], vec![0]),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(vec![NodeId(0), NodeId(1), NodeId(2)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

@@ -38,11 +38,15 @@ proptest! {
         b in reaction_strategy(),
     ) {
         for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
+            prop_assert_eq!(
+                Reaction::try_new(composite.lhs().clone(), composite.deltas().clone()),
+                Ok(composite.clone()),
+            );
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite
                     .apply(
-                        &composite.lhs,
+                        composite.lhs(),
                         MATCH_CONFIG,
                     )
                     .unwrap()
@@ -58,7 +62,7 @@ proptest! {
         a in reaction_strategy(),
         b in reaction_strategy(),
     ) {
-        let host = a.lhs.clone();
+        let host = a.lhs().clone();
         let composites = a.compose(&b, COMPOSITION_ALGORITHM);
         let composed: Vec<Molecule> = composites
             .iter()
@@ -112,11 +116,15 @@ proptest! {
         b in overlay_reaction_strategy(),
     ) {
         for composite in a.compose(&b, COMPOSITION_ALGORITHM) {
+            prop_assert_eq!(
+                Reaction::try_new(composite.lhs().clone(), composite.deltas().clone()),
+                Ok(composite.clone()),
+            );
             if let Ok(span) = composite.to_reaction_span() {
                 let right = span.rhs();
                 prop_assert!(composite
                     .apply(
-                        &composite.lhs,
+                        composite.lhs(),
                         MATCH_CONFIG,
                     )
                     .unwrap()
@@ -132,7 +140,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        let host = a.lhs.clone();
+        let host = a.lhs().clone();
         let composed: Vec<Molecule> = a
             .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
@@ -185,7 +193,7 @@ proptest! {
         a in overlay_reaction_strategy(),
         b in overlay_reaction_strategy(),
     ) {
-        let host = a.lhs.clone();
+        let host = a.lhs().clone();
         let composed: Vec<Molecule> = a
             .compose(&b, COMPOSITION_ALGORITHM)
             .iter()
@@ -256,10 +264,13 @@ proptest! {
             a.compose(&b, COMPOSITION_ALGORITHM)
         );
         if let (Ok(a_deltas), Ok(b_deltas)) =
-            (a.deltas.clone().normalize(), b.deltas.clone().normalize())
+            (
+                a.deltas().clone().normalize(),
+                b.deltas().clone().normalize(),
+            )
         {
-            let ac = Reaction::new(a.lhs.clone(), a_deltas);
-            let bc = Reaction::new(b.lhs.clone(), b_deltas);
+            let ac = Reaction::new(a.lhs().clone(), a_deltas);
+            let bc = Reaction::new(b.lhs().clone(), b_deltas);
             prop_assert_eq!(
                 a.compose(&b, COMPOSITION_ALGORITHM),
                 ac.compose(&bc, COMPOSITION_ALGORITHM)
@@ -275,11 +286,11 @@ proptest! {
     ) {
         for c in a.compose(&b, COMPOSITION_ALGORITHM) {
             let normalized = c
-                .deltas
+                .deltas()
                 .clone()
                 .normalize()
                 .map_err(|e| TestCaseError::fail(format!("composite deltas not normalized: {e:?}")))?;
-            prop_assert_eq!(normalized, c.deltas);
+            prop_assert_eq!(&normalized, c.deltas());
         }
     }
 
@@ -291,7 +302,7 @@ proptest! {
         b in overlay_reaction_strategy(),
     ) {
         for c in a.compose(&b, COMPOSITION_ALGORITHM) {
-            let m = &c.lhs;
+            let m = c.lhs();
 
             let mut dative: Vec<(Vec<AtomId>, AtomId)> = m
                 .dative_bonds()

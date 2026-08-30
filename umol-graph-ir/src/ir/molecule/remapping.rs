@@ -1,9 +1,12 @@
 use std::sync::Arc;
 
-use umol_graph_core::{
-    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Remapping, VarRelationSet,
-};
+use umol_graph_core::{EdgeId, Graph, NodeId, Remapping};
 
+use super::super::aromatic::AromaticSystems;
+use super::super::dative::DativeBonds;
+use super::super::multicenter::MulticenterBonds;
+use super::super::noncovalent::NoncovalentBonds;
+use super::super::stereo::{StereoAtoms, StereoBonds};
 use super::Molecule;
 use crate::ir::{Constraints, MoleculeCorrespondence};
 
@@ -11,16 +14,15 @@ impl Molecule {
     /// Relabel this molecule into the dense target id spaces described by `correspondence`.
     ///
     /// The correspondence must describe every entity in this molecule and be total on both sides
-    /// for all eight entity families. The operation transports topology, relation participants,
+    /// for all eight entity kinds. The operation transports topology, relation participants,
     /// position-sensitive relation data, stereo frames, entity forms, and constraint references.
     /// It does not validate chemistry, normalize attributes, repair references, compact tables, or
     /// remove entities.
     ///
     /// # Panics
     ///
-    /// Panics when this molecule fails its representation-integrity contract or `correspondence`
-    /// does not describe a complete dense renumbering of it. Use [`Self::try_remap`] for
-    /// independently supplied values.
+    /// Panics when `correspondence` does not describe a complete dense renumbering of this
+    /// molecule. Use [`Self::try_remap`] for an independently supplied correspondence.
     ///
     /// # Semantic properties
     ///
@@ -28,19 +30,15 @@ impl Molecule {
     /// inverse remapping recovers the original molecule, and sequential remapping agrees with
     /// correspondence composition.
     pub fn remap(&self, correspondence: &MoleculeCorrespondence) -> Self {
-        self.try_remap(correspondence).expect(
-            "molecule remapping requires an integrity-valid source and a complete dense correspondence",
-        )
+        self.try_remap(correspondence)
+            .expect("molecule remapping requires a complete dense correspondence")
     }
 
     /// Checked form of [`Self::remap`].
     ///
-    /// Returns `None` when this molecule fails its representation-integrity contract, when the
-    /// correspondence's source counts differ from the molecule's entity counts, or when any entity
-    /// family is not a bijection onto a dense target id space.
+    /// Returns `None` when the correspondence's source counts differ from the molecule's entity
+    /// counts or when any entity-kind correspondence is not a bijection onto a dense target id space.
     pub fn try_remap(&self, correspondence: &MoleculeCorrespondence) -> Option<Self> {
-        self.check_integrity().ok()?;
-
         let counts_match = [
             (correspondence.atoms().left_count(), self.atoms.len()),
             (correspondence.bonds().left_count(), self.bonds.len()),
@@ -129,7 +127,7 @@ impl Molecule {
         )?;
         let graph = Graph::new(atoms.len(), &edges);
 
-        let dative_bonds = FixedVarBirelationSet::new(reorder(
+        let dative_bonds = DativeBonds::new(reorder(
             self.dative_bonds.remap(&graph_remapping).into_entries(),
             correspondence.dative_bonds().right_count(),
             correspondence
@@ -138,7 +136,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let aromatic_systems = VarRelationSet::new(reorder(
+        let aromatic_systems = AromaticSystems::new(reorder(
             self.aromatic_systems.remap(&graph_remapping).into_entries(),
             correspondence.aromatic_systems().right_count(),
             correspondence
@@ -147,7 +145,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let multicenter_bonds = VarRelationSet::new(reorder(
+        let multicenter_bonds = MulticenterBonds::new(reorder(
             self.multicenter_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -158,7 +156,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let noncovalent_bonds = FixedRelationSet::new(reorder(
+        let noncovalent_bonds = NoncovalentBonds::new(reorder(
             self.noncovalent_bonds
                 .remap(&graph_remapping)
                 .into_entries(),
@@ -169,7 +167,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_atoms = FixedVarBirelationSet::new(reorder(
+        let stereo_atoms = StereoAtoms::new(reorder(
             self.stereo_atoms.remap(&graph_remapping).into_entries(),
             correspondence.stereo_atoms().right_count(),
             correspondence
@@ -178,7 +176,7 @@ impl Molecule {
                 .iter()
                 .map(|&(left, right)| (left.index(), right.index())),
         )?);
-        let stereo_bonds = FixedVarBirelationSet::new(reorder(
+        let stereo_bonds = StereoBonds::new(reorder(
             self.stereo_bonds.remap(&graph_remapping).into_entries(),
             correspondence.stereo_bonds().right_count(),
             correspondence
@@ -194,18 +192,21 @@ impl Molecule {
             .map(|constraint| constraint.remap(&id_remapping))
             .collect();
 
-        Some(Self::from_arcs(
-            graph,
-            Arc::new(atoms),
-            Arc::new(bonds),
-            Arc::new(dative_bonds),
-            Arc::new(aromatic_systems),
-            Arc::new(multicenter_bonds),
-            Arc::new(noncovalent_bonds),
-            Arc::new(stereo_atoms),
-            Arc::new(stereo_bonds),
-            constraints,
-        ))
+        Some(
+            Self::try_from_arcs(
+                graph,
+                Arc::new(atoms),
+                Arc::new(bonds),
+                dative_bonds,
+                aromatic_systems,
+                multicenter_bonds,
+                noncovalent_bonds,
+                stereo_atoms,
+                stereo_bonds,
+                constraints,
+            )
+            .expect("dense molecule remapping preserves representation integrity"),
+        )
     }
 }
 

@@ -8,9 +8,9 @@ use super::super::boolean::BooleanForm;
 use super::super::constraint::ring::{RingMembershipForm, RingScope};
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
 use super::super::stereo::CisTransStereoForm;
-use super::super::traits::{Equiv, Lattice, Normalize};
+use super::super::traits::{Lattice, Normalize};
 
 /// Localized bond constraint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,7 +55,7 @@ impl BondConstraintForm {
     }
 
     /// Value-only payload: no entity ids to compact, so this never drops.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
@@ -219,7 +219,7 @@ impl BondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
+    /// Transactional write at one key: verify the current value `normalized_eq` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -241,7 +241,7 @@ impl BondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {
@@ -298,7 +298,7 @@ impl BondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -465,7 +465,7 @@ impl From<Vec<BondConstraintForm>> for BondConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
     use crate::ir::stereo::{StereoCoset, StereoTerm};
@@ -758,8 +758,11 @@ mod tests {
             BondConstraintForm::Aromatic(BooleanForm::Lit(true)),
             BondConstraintForm::ring_membership(RingScope::Size(6), 1),
         ]);
-        let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1, 2], vec![0, 1]),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(
+                vec![NodeId(0), NodeId(1), NodeId(2)],
+                vec![EdgeId(0), EdgeId(1)],
+            ),
             Vec::new(),
             Vec::new(),
             Vec::new(),

@@ -447,27 +447,6 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn test_validator_validate_invariants_error() {
-        let mut molecule = Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            ..Default::default()
-        });
-        molecule
-            .constraints_mut()
-            .push(Constraint::Atom(AtomId(1), AtomConstraintForm::valence(0)));
-        let model = ChemistryModel::default();
-
-        assert_eq!(
-            Validator::new(&model).validate_invariants(&molecule),
-            Err(ValidateError::Constraint(
-                ConstraintInvariantsError::InvalidReference {
-                    entity: Entity::Atom(AtomId(1)),
-                }
-            ))
-        );
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::ground(

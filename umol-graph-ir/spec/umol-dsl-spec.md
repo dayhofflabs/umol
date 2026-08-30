@@ -1134,7 +1134,7 @@ edits; it does not validate chemical semantics against a host molecule.
 **Removal preconditions and batching.** Atom-only and bond-only singleton removals use their
 singular entity forms. **`:topology :remove`** is the inseparable operation for simultaneous atom and
 bond removal, allowing one pre-removal snapshot and one compaction after cascading removal.
-Overlay removals use the plural family key and retain a vector of complete removal records: the
+Overlay removals use the plural overlay key and retain a vector of complete removal records: the
 entity handle, its participants, and its full form. The recorded values are checked during
 application and retained for exact rollback. These semantic batches **MUST NOT** be lowered to a
 sequence of independent removals.
@@ -1217,7 +1217,7 @@ constraint-delta ::=
   | { :remove constraint-entry }
 ```
 
-**`:lhs`** is a **`molecule-map`** (**§4**); **`atom-entry`** / **`bond-entry`** are the **§4** entry forms (a bare spec, an **`[id spec]`** / **`[a b spec]`** vector, or the **`{:id … :atoms … :attrs …}`** map); **`constraint-entry`** is a single **§7.12** constraint (a per-entity narrow leaf, a relational leaf, a molecule-scope leaf, or a combinator). **`atom-ref`** / **`bond-ref`** are **§7.12** refs. The **overlay** deltas reuse the same pieces per family: their **entries** are the **§4** overlay entry maps, their **`:modify`** **partials** are the **§7.7–7.11** compact strings, and their **refs** (**`dative-bond-ref`** … **`stereo-bond-ref`**) are **§7.12** refs. **`:lhs`** and **`:deltas`** are **REQUIRED**; **`:atom-aliases`** is **OPTIONAL**.
+**`:lhs`** is a **`molecule-map`** (**§4**); **`atom-entry`** / **`bond-entry`** are the **§4** entry forms (a bare spec, an **`[id spec]`** / **`[a b spec]`** vector, or the **`{:id … :atoms … :attrs …}`** map); **`constraint-entry`** is a single **§7.12** constraint (a per-entity narrow leaf, a relational leaf, a molecule-scope leaf, or a combinator). **`atom-ref`** / **`bond-ref`** are **§7.12** refs. The **overlay** deltas reuse the same pieces per overlay kind: their **entries** are the **§4** overlay entry maps, their **`:modify`** **partials** are the **§7.7–7.11** compact strings, and their **refs** (**`dative-bond-ref`** … **`stereo-bond-ref`**) are **§7.12** refs. **`:lhs`** and **`:deltas`** are **REQUIRED**; **`:atom-aliases`** is **OPTIONAL**.
 
 **Reference id spaces.** A delta **`:remove`** / **`:modify`** target names an **existing lhs** entity, resolved in the **lhs id space** (positional index into **`:lhs`**'s **`:atoms`** / **`:bonds`**, or its declared **`:id`**). A created atom (**`:atom :add`**) **extends** the namespace; **bond endpoints** (in a **`:bond :add`**) and every **ref inside a `:constraint`** delta resolve against the **union** of lhs entities and reaction-created entities (lhs ∪ created). The same integer index that addresses an lhs entity in the lhs id space addresses a created entity once allocated: created atoms take indices continuing past the lhs atom count, in delta order.
 
@@ -1225,9 +1225,9 @@ constraint-delta ::=
 
 **Create vs. edit.** **`:remove`** and **`:modify`** **MUST** target an **lhs** entity; removing or modifying an entity **created in the same reaction** is an error (collapse the creation into its final state instead). **`:add`** introduces a new entity.
 
-**`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.4**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:modify`** edits to the **same** entity (of any family) **coalesce** on serialization into a **single** **`:modify`** with one merged partial. The overlay partials work the same way over their own strings (**§7.7–7.11**).
+**`:modify` payload.** The **`partial-atom-string`** (**`partial-bond-string`**) is a compact **atom-string** (**bond-string**, **§7.3** / **§7.4**) carrying **only** the changes: a field left **`undetermined`** (e.g. an omitted element) keeps the lhs value; a field with a definite value **overwrites** it; a constraint predicate **sets** that constraint; an **undetermined** predicate written as **`#tag*`** **removes** it (**§7.1** — the same vacuous form that is elided on a full render is, on a **`:modify`** partial, the explicit **removal marker**). Consecutive **`:modify`** edits to the **same** entity (of any kind) **coalesce** on serialization into a **single** **`:modify`** with one merged partial. The overlay partials work the same way over their own strings (**§7.7–7.11**).
 
-**Overlay deltas.** The six overlay families — **`:dative-bond`**, **`:aromatic-system`**, **`:multicenter-bond`**, **`:noncovalent-bond`**, **`:stereo-atom`**, **`:stereo-bond`** — take **singular** delta keys, matching **`:atom`** / **`:bond`** (the **plural** **`:dative-bonds`** … keys name the **`:lhs`** molecule-map **collections**, **§4**, not deltas). Each shares the atom/bond delta shape: **`:add`** an entry, **`:remove`** a ref, **`:modify`** an **`[ref partial]`** pair. A **`:remove`** / **`:modify`** target resolves in the **lhs id space** of that family; **`:add`** allocates the next id of the family and (like a created atom) participants resolve against the lhs ∪ created union.
+**Overlay deltas.** The six overlay kinds — **`:dative-bond`**, **`:aromatic-system`**, **`:multicenter-bond`**, **`:noncovalent-bond`**, **`:stereo-atom`**, **`:stereo-bond`** — take **singular** delta keys, matching **`:atom`** / **`:bond`** (the **plural** **`:dative-bonds`** … keys name the **`:lhs`** molecule-map **collections**, **§4**, not deltas). Each shares the atom/bond delta shape: **`:add`** an entry, **`:remove`** a ref, **`:modify`** an **`[ref partial]`** pair. A **`:remove`** / **`:modify`** target resolves in the **lhs id space** for that kind; **`:add`** allocates the next id of that kind and (like a created atom) participants resolve against the lhs ∪ created union.
 
 **Stereo `:modify` partial.** The **`partial-stereo-string`** is the modify-variant of the stereo-string (**§7.11**): the **`coset`** is **optional** (omitted = unchanged — it keeps the lhs coset), but the **`class`** **MUST** be present once a coset or predicate appears, since the predicates render and parse against it. So **`"*"`** alone (undetermined, no predicates), or **`"Th"`** / **`"Th1"`** / **`"Th#o(0,1)="`** — but **`"*#o…"`** (a predicate with no class) is a parse error.
 
@@ -1268,7 +1268,7 @@ bond-span ::=
 
 (* The six overlay spans mirror bond-span: a bare §4 entry (Unchanged), or an :add / :remove /   *)
 (* :modify wrapper. :modify restates the entry map with a two-element [left right] :attrs pair    *)
-(* (participants once). <x>-value is the family's :attrs string (§7.7–7.11).                     *)
+(* (participants once). <x>-value is the overlay kind's :attrs string (§7.7–7.11).               *)
 dative-bond-span      ::= dative-bond-entry      | { :add dative-bond-entry }      | { :remove dative-bond-entry }      | { :modify dative-bond-modify }
 aromatic-system-span  ::= aromatic-system-entry  | { :add aromatic-system-entry }  | { :remove aromatic-system-entry }  | { :modify aromatic-system-modify }
 multicenter-bond-span ::= multicenter-bond-entry | { :add multicenter-bond-entry } | { :remove multicenter-bond-entry } | { :modify multicenter-bond-modify }

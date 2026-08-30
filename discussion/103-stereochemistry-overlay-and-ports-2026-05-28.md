@@ -8,6 +8,15 @@ Status: **Active / decision record.** Synthesis of the design conversation that 
 model to build now, the maximal port model to keep in view, the contract steps to take
 now, the forward-compat requirements, and the `umol-port` spike.
 
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes only this document's statements
+that permit the same `StereoLigand` value to occupy more than one frame position, including the
+duplicate implicit-hydrogen examples and the claim that distinctness is neither required nor
+asserted. Current design requires every stored stereo frame to be pairwise-distinct and no longer
+treats equal virtual-ligand occurrences as separately addressable slots. The prochirality, topicity,
+and arrangement-record discussion below remains as historical design context.
+
 ## Decision summary
 
 - **Ship a stereochemistry overlay on the existing atom/bond graph now.** Stereo lives at

@@ -6,10 +6,12 @@
 //! components, cycle enumeration, maximum independent set).
 
 pub mod algorithms;
+pub(crate) mod compaction;
 pub(crate) mod correspondence;
 pub(crate) mod digraph;
 pub(crate) mod graph;
 pub(crate) mod relation;
+pub(crate) mod remapping;
 pub(crate) mod rewriting;
 pub(crate) mod union_find;
 
@@ -44,17 +46,15 @@ pub use algorithms::subgraph_isomorphism::{
 };
 pub use algorithms::topological_sort::TopologicalSortAlgorithm;
 pub use algorithms::traversal::TraversalAlgorithm;
+pub use compaction::{compact_edge_vec, compact_node_vec, Compaction, GraphCompaction};
 pub use correspondence::{Correspondence, CorrespondenceError, GraphCorrespondence};
 pub use digraph::DiGraph;
-pub use graph::{
-    compact_edge_vec, compact_node_vec, Compaction, EdgeId, Graph, Neighbor, NodeId, Remapping,
-    SubdividedGraph, SubdivisionNodeSource,
-};
+pub use graph::{EdgeId, Graph, Neighbor, NodeId, SubdividedGraph, SubdivisionNodeSource};
 pub use relation::{
-    BiRelationData, FactorOrdering, FixedFixedBirelationSet, FixedRelationSet,
-    FixedVarBirelationSet, Ordered, ParticipantAnchor, ParticipantPosition, ParticipantRefs,
-    RelationData, RelationId, RelationParticipant, RelationPullback, RelationPushout, Unordered,
+    FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, ParticipantPosition,
+    ParticipantRefs, RelationId, RelationParticipant, RelationPullback, RelationPushout,
     VarRelationSet, VarVarBirelationSet,
 };
+pub use remapping::Remapping;
 pub use rewriting::{Pullback, Pushout, PushoutComplement};
 pub use union_find::UnionFind;

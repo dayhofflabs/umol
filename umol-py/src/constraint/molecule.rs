@@ -21,6 +21,7 @@ use super::multicenter::MulticenterBondConstraintForm;
 use super::noncovalent::NoncovalentBondConstraintForm;
 use super::stereo::{StereoAtomConstraintForm, StereoBondConstraintForm};
 use crate::convert::{into_py_variant, variant_repr};
+use crate::error::molecule_integrity_error;
 use crate::lattice::impl_py_normalize;
 use crate::molecule::Molecule;
 use crate::num::NumForm;
@@ -472,13 +473,19 @@ impl ConstraintsView {
         f(molecule.to_rust().constraints())
     }
 
-    /// Mutate the molecule's constraint store in place through `f`.
+    /// Mutate the molecule's constraint store transactionally through `f`.
     pub(crate) fn with_mut<R>(
         &self,
         py: Python<'_>,
         f: impl FnOnce(&mut GraphIrConstraints) -> R,
-    ) -> R {
-        f(self.owner.borrow_mut(py).to_rust_mut().constraints_mut())
+    ) -> PyResult<R> {
+        let mut result = None;
+        self.owner
+            .borrow_mut(py)
+            .to_rust_mut()
+            .try_modify_constraints(|constraints| result = Some(f(constraints)))
+            .map_err(molecule_integrity_error)?;
+        Ok(result.expect("the checked mutation callback always runs"))
     }
 }
 
@@ -490,20 +497,19 @@ impl ConstraintsView {
     }
 
     /// Append one constraint to the molecule, preserving existing entries and duplicates.
-    fn append(&self, py: Python<'_>, constraint: Py<Constraint>) {
+    fn append(&self, py: Python<'_>, constraint: Py<Constraint>) -> PyResult<()> {
         let constraint = constraint.bind(py).borrow().to_rust(py);
-        self.with_mut(py, |constraints| constraints.push(constraint));
+        self.with_mut(py, |constraints| constraints.push(constraint))
     }
 
-    fn clear(&self, py: Python<'_>) {
-        self.with_mut(py, GraphIrConstraints::clear);
+    fn clear(&self, py: Python<'_>) -> PyResult<()> {
+        self.with_mut(py, GraphIrConstraints::clear)
     }
 
     /// Append another container, live view, or iterable after snapshotting the RHS.
     fn update(&self, py: Python<'_>, other: ConstraintsUpdate) -> PyResult<()> {
         let resolved = other.resolve(py)?;
-        self.with_mut(py, |constraints| resolved.apply(constraints));
-        Ok(())
+        self.with_mut(py, |constraints| resolved.apply(constraints))
     }
 
     fn __len__(&self, py: Python<'_>) -> PyResult<usize> {
@@ -1039,9 +1045,10 @@ mod tests {
     use rstest::rstest;
     use umol_graph_ir::ir::{
         AromaticSystemConstraintForm as GraphIrAromaticSystemConstraintForm,
-        AtomConstraintForm as GraphIrAtomConstraintForm,
+        AtomConstraintForm as GraphIrAtomConstraintForm, AtomForm as GraphIrAtomForm,
         BondConstraintForm as GraphIrBondConstraintForm,
         DativeBondConstraintForm as GraphIrDativeBondConstraintForm, Molecule as GraphIrMolecule,
+        MoleculeEntries as GraphIrMoleculeEntries,
         MulticenterBondConstraintForm as GraphIrMulticenterBondConstraintForm,
         NoncovalentBondConstraintForm as GraphIrNoncovalentBondConstraintForm,
         NumForm as GraphIrNumForm, StereoAtomConstraintForm as GraphIrStereoAtomConstraintForm,
@@ -1052,6 +1059,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::error::InvalidStructureError;
 
     #[rstest]
     #[case::donors(GraphIrRelationalConstraint::DativeBondDonors {
@@ -1434,7 +1442,9 @@ match node:
             GraphIrConstraint::Or(Vec::new()),
         ]);
         let mut molecule = GraphIrMolecule::new();
-        *molecule.constraints_mut() = expected.clone();
+        molecule
+            .try_modify_constraints(|constraints| *constraints = expected.clone())
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1553,7 +1563,9 @@ match node:
             )
             .unwrap();
             let mut molecule = GraphIrMolecule::new();
-            molecule.constraints_mut().push(from_view.clone());
+            molecule
+                .try_modify_constraints(|constraints| constraints.push(from_view.clone()))
+                .unwrap();
             let view = Py::new(
                 py,
                 ConstraintsView::new(Py::new(py, Molecule::from_rust(molecule)).unwrap()),
@@ -1704,11 +1716,11 @@ match node:
     fn test_constraints_view_repr() {
         let mut molecule = GraphIrMolecule::new();
         molecule
-            .constraints_mut()
-            .push(GraphIrConstraint::And(Vec::new()));
-        molecule
-            .constraints_mut()
-            .push(GraphIrConstraint::Or(Vec::new()));
+            .try_modify_constraints(|constraints| {
+                constraints.push(GraphIrConstraint::And(Vec::new()));
+                constraints.push(GraphIrConstraint::Or(Vec::new()));
+            })
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1723,7 +1735,9 @@ match node:
         let constraint =
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
         let mut molecule = GraphIrMolecule::new();
-        molecule.constraints_mut().push(constraint.clone());
+        molecule
+            .try_modify_constraints(|constraints| constraints.push(constraint.clone()))
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1731,7 +1745,7 @@ match node:
             let value =
                 into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
 
-            view.append(py, value);
+            view.append(py, value).unwrap();
 
             assert_eq!(
                 owner.bind(py).borrow().to_rust().constraints().as_slice(),
@@ -1741,17 +1755,37 @@ match node:
     }
 
     #[rstest]
+    fn test_constraints_view_append_integrity_error() {
+        let constraint =
+            GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
+
+        Python::attach(|py| {
+            let owner = Py::new(py, Molecule::from_rust(GraphIrMolecule::new())).unwrap();
+            let view = ConstraintsView::new(owner.clone_ref(py));
+            let value =
+                into_py_variant(py, Constraint::from_rust(py, &constraint).unwrap()).unwrap();
+
+            let error = view.append(py, value).unwrap_err();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert!(owner.bind(py).borrow().to_rust().constraints().is_empty());
+        });
+    }
+
+    #[rstest]
     fn test_constraints_view_clear() {
         let mut molecule = GraphIrMolecule::new();
         molecule
-            .constraints_mut()
-            .push(GraphIrConstraint::And(Vec::new()));
+            .try_modify_constraints(|constraints| {
+                constraints.push(GraphIrConstraint::And(Vec::new()));
+            })
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
             let view = ConstraintsView::new(owner.clone_ref(py));
 
-            view.clear(py);
+            view.clear(py).unwrap();
 
             assert_eq!(
                 owner.bind(py).borrow().to_rust().constraints(),
@@ -1768,7 +1802,9 @@ match node:
         let from_entries =
             GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
         let mut target_molecule = GraphIrMolecule::new();
-        target_molecule.constraints_mut().push(initial.clone());
+        target_molecule
+            .try_modify_constraints(|constraints| constraints.push(initial.clone()))
+            .unwrap();
 
         Python::attach(|py| {
             let target_owner = Py::new(py, Molecule::from_rust(target_molecule)).unwrap();
@@ -1779,7 +1815,9 @@ match node:
             )
             .unwrap();
             let mut source_molecule = GraphIrMolecule::new();
-            source_molecule.constraints_mut().push(from_view.clone());
+            source_molecule
+                .try_modify_constraints(|constraints| constraints.push(from_view.clone()))
+                .unwrap();
             let source_view = Py::new(
                 py,
                 ConstraintsView::new(Py::new(py, Molecule::from_rust(source_molecule)).unwrap()),
@@ -1814,7 +1852,9 @@ match node:
     fn test_constraints_view_update_self() {
         let entry = GraphIrConstraint::Or(Vec::new());
         let mut molecule = GraphIrMolecule::new();
-        molecule.constraints_mut().push(entry.clone());
+        molecule
+            .try_modify_constraints(|constraints| constraints.push(entry.clone()))
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1842,8 +1882,10 @@ match node:
             owner
                 .borrow_mut(py)
                 .to_rust_mut()
-                .constraints_mut()
-                .push(GraphIrConstraint::And(Vec::new()));
+                .try_modify_constraints(|constraints| {
+                    constraints.push(GraphIrConstraint::And(Vec::new()));
+                })
+                .unwrap();
 
             assert_eq!(view.__len__(py).unwrap(), 1);
         });
@@ -1858,14 +1900,21 @@ match node:
         GraphIrMoleculeConstraint::Connected { atoms: None },
     ))]
     fn test_constraints_view_getitem(#[case] index: isize, #[case] expected: GraphIrConstraint) {
-        let mut molecule = GraphIrMolecule::new();
-        molecule.constraints_mut().push(GraphIrConstraint::Atom(
-            GraphIrAtomId(1),
-            GraphIrAtomConstraintForm::degree(2),
-        ));
-        molecule.constraints_mut().push(GraphIrConstraint::Molecule(
-            GraphIrMoleculeConstraint::Connected { atoms: None },
-        ));
+        let mut molecule = GraphIrMolecule::from_entries(GraphIrMoleculeEntries {
+            atoms: vec![GraphIrAtomForm::default(), GraphIrAtomForm::default()],
+            ..Default::default()
+        });
+        molecule
+            .try_modify_constraints(|constraints| {
+                constraints.push(GraphIrConstraint::Atom(
+                    GraphIrAtomId(1),
+                    GraphIrAtomConstraintForm::degree(2),
+                ));
+                constraints.push(GraphIrConstraint::Molecule(
+                    GraphIrMoleculeConstraint::Connected { atoms: None },
+                ));
+            })
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1881,8 +1930,10 @@ match node:
     fn test_constraints_view_getitem_error(#[case] index: isize) {
         let mut molecule = GraphIrMolecule::new();
         molecule
-            .constraints_mut()
-            .push(GraphIrConstraint::And(Vec::new()));
+            .try_modify_constraints(|constraints| {
+                constraints.push(GraphIrConstraint::And(Vec::new()));
+            })
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1900,8 +1951,12 @@ match node:
         let first = GraphIrConstraint::And(Vec::new());
         let second = GraphIrConstraint::Or(Vec::new());
         let mut molecule = GraphIrMolecule::new();
-        molecule.constraints_mut().push(first.clone());
-        molecule.constraints_mut().push(second.clone());
+        molecule
+            .try_modify_constraints(|constraints| {
+                constraints.push(first.clone());
+                constraints.push(second.clone());
+            })
+            .unwrap();
 
         Python::attach(|py| {
             let owner = Py::new(py, Molecule::from_rust(molecule)).unwrap();
@@ -1910,10 +1965,12 @@ match node:
             owner
                 .borrow_mut(py)
                 .to_rust_mut()
-                .constraints_mut()
-                .push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
-                    Vec::new(),
-                ))));
+                .try_modify_constraints(|constraints| {
+                    constraints.push(GraphIrConstraint::Not(Box::new(GraphIrConstraint::And(
+                        Vec::new(),
+                    ))));
+                })
+                .unwrap();
 
             assert_eq!(
                 iter.__next__().unwrap().bind(py).borrow().to_rust(py),

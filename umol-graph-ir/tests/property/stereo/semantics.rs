@@ -116,48 +116,4 @@ proptest! {
         );
     }
 
-    #[test]
-    fn test_stereo_atom_form_transform_frame(
-        args in stereo_atom_form_strategy().prop_flat_map(|form| {
-            let kind = form.configuration.kind().expect("strategy generates a kinded form");
-            (Just(form), stereo_frame_permutation_strategy(kind))
-        }),
-    ) {
-        let (form, permutation) = args;
-        let kind = form.configuration.kind().expect("strategy generates a kinded form");
-        let before: Vec<StereoLigand> = (0..kind.degree() as u32)
-            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-            .collect();
-        let after = permutation.act(&before);
-        let transformed = form.transform_frame(&before, &after);
-
-        prop_assert_eq!(transformed, form.transform_frame_by(permutation));
-        prop_assert_eq!(
-            form.transform_frame_by(permutation)
-                .and_then(|form| form.transform_frame_by(permutation.inverse())),
-            Some(form),
-        );
-    }
-
-    #[test]
-    fn test_stereo_bond_form_transform_frame(
-        args in stereo_bond_form_strategy().prop_flat_map(|form| (
-            Just(form),
-            stereo_frame_permutation_strategy(StereoKind::CisTrans),
-        )),
-    ) {
-        let (form, permutation) = args;
-        let before: Vec<StereoLigand> = (0..StereoKind::CisTrans.degree() as u32)
-            .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
-            .collect();
-        let after = permutation.act(&before);
-        let transformed = form.transform_frame(&before, &after);
-
-        prop_assert_eq!(transformed, form.transform_frame_by(permutation));
-        prop_assert_eq!(
-            form.transform_frame_by(permutation)
-                .and_then(|form| form.transform_frame_by(permutation.inverse())),
-            Some(form),
-        );
-    }
 }

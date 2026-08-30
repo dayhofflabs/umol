@@ -10,7 +10,7 @@ use proptest::prelude::*;
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemId, AtomDelta, AtomFieldChange, AtomId, BondDelta,
     BondFieldChange, BondId, Constraint, ConstraintDelta, DativeBondDelta, DativeBondId, Delta,
-    Deltas, EntityPatch, Equiv, MoleculeConstraint, MulticenterBondDelta, MulticenterBondId,
+    Deltas, EntityPatch, MoleculeConstraint, MulticenterBondDelta, MulticenterBondId,
     NoncovalentBondDelta, NoncovalentBondId, Normalize, NumForm, StereoAtomDelta, StereoAtomId,
     StereoBondDelta, StereoBondId,
 };
@@ -270,7 +270,7 @@ proptest! {
 
     #[test]
     fn test_delta_inverse(reaction in comprehensive_reaction_strategy()) {
-        for delta in reaction.deltas.iter() {
+        for delta in reaction.deltas().iter() {
             prop_assert_eq!(delta.clone().inverse().inverse(), delta.clone());
         }
     }
@@ -294,7 +294,7 @@ proptest! {
     #[test]
     fn test_atom_form_difference_to(lhs in atom_form_strategy(), rhs in atom_form_strategy()) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -325,7 +325,7 @@ proptest! {
     #[test]
     fn test_bond_form_difference_to(lhs in bond_form_strategy(), rhs in bond_form_strategy()) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -350,7 +350,7 @@ proptest! {
         rhs in dative_bond_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -375,7 +375,7 @@ proptest! {
         rhs in aromatic_system_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -400,7 +400,7 @@ proptest! {
         rhs in multicenter_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -425,7 +425,7 @@ proptest! {
         rhs in noncovalent_bond_patch_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -434,7 +434,7 @@ proptest! {
         rhs in stereo_atom_form_strategy(),
     ) {
         let diff = StereoAtomDelta::diff(StereoAtomId(0), &lhs, &rhs);
-        prop_assert!(apply_stereo_atom_diff(lhs, diff).equiv(&rhs));
+        prop_assert!(apply_stereo_atom_diff(lhs, diff).normalized_eq(&rhs));
     }
 
     #[test]
@@ -450,7 +450,7 @@ proptest! {
         rhs in stereo_atom_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 
     #[test]
@@ -459,7 +459,7 @@ proptest! {
         rhs in stereo_bond_form_strategy(),
     ) {
         let diff = StereoBondDelta::diff(StereoBondId(0), &lhs, &rhs);
-        prop_assert!(apply_stereo_bond_diff(lhs, diff).equiv(&rhs));
+        prop_assert!(apply_stereo_bond_diff(lhs, diff).normalized_eq(&rhs));
     }
 
     #[test]
@@ -475,6 +475,6 @@ proptest! {
         rhs in stereo_bond_form_strategy(),
     ) {
         let update = lhs.difference_to(&rhs);
-        prop_assert!(lhs.update(&update).equiv(&rhs));
+        prop_assert!(lhs.update(&update).normalized_eq(&rhs));
     }
 }

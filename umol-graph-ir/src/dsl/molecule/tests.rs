@@ -10,6 +10,7 @@ use crate::ir::atom::AtomForm;
 use crate::ir::boolean::BooleanForm;
 use crate::ir::constraint::{BondConstraintForm, Constraint, MoleculeConstraint};
 use crate::ir::electrons::ElectronCountsForm;
+use crate::ir::molecule::MoleculeIntegrityError;
 use crate::ir::num::NumForm;
 use crate::ir::spin::UnpairedElectronsForm;
 use crate::mol_dsl;
@@ -29,7 +30,7 @@ fn populated_molecule_dsl() -> MoleculeDsl {
         :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
         :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
         :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-        :stereo-bonds [{:id :sb :site 0 :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
+        :stereo-bonds [{:id :sb :site 0 :ligands [2 3 [:h 1] [:lp 1]] :attrs "Ct1"}]
         :atom-aliases [:x "O"]
     }"#
     .parse()
@@ -836,6 +837,50 @@ fn test_molecule_dsl_from_edn_error(#[case] source: &str) {
     let edn = read_string(source).unwrap();
     let err = MoleculeDsl::from_edn(&edn).unwrap_err();
     assert!(matches!(err, DeError::Custom(_)), "expected Custom, got {:?}", err);
+}
+
+#[rustfmt::skip]
+#[rstest]
+#[case::atom_repeated_virtual(
+    r##"{:atoms ["C" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:h 0]] :attrs "Th0"}]}"##,
+    MoleculeIntegrityError::DuplicateStereoLigand {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+    },
+)]
+#[case::atom_oversized(
+    r##"{:atoms ["C" "F" "Cl" "Br" "I" "N" "O" "S"] :stereo-atoms [{:site 0 :ligands [1 2 3 4 5 6 7] :attrs "*"}]}"##,
+    MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        entity: Entity::StereoAtom(StereoAtomId(0)),
+        degree: 7,
+        maximum: 6,
+    },
+)]
+#[case::bond_repeated_virtual(
+    r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 1]] :attrs "Ct0"}]}"##,
+    MoleculeIntegrityError::DuplicateStereoLigand {
+        entity: Entity::StereoBond(StereoBondId(0)),
+        ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    },
+)]
+#[case::bond_oversized(
+    r##"{:atoms ["C" "C" "F" "Cl" "Br" "I" "N" "O" "S"] :bonds [[0 1 "2"]] :stereo-bonds [{:site 0 :ligands [2 3 4 5 6 7 8] :attrs "*"}]}"##,
+    MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+        entity: Entity::StereoBond(StereoBondId(0)),
+        degree: 7,
+        maximum: 6,
+    },
+)]
+fn test_molecule_input_into_ir(
+    #[case] source: &str,
+    #[case] expected: MoleculeIntegrityError,
+) {
+    let input = parse_molecule_input(&read_string(source).unwrap()).unwrap();
+
+    assert_eq!(
+        input.into_ir().unwrap_err(),
+        ParseError::InvalidValue(expected.to_string()),
+    );
 }
 
 /// `Molecule::to_edn` emits canonical EDN with positional refs only,

@@ -45,7 +45,7 @@ proptest! {
             stereo_atoms: vec![(
                 AtomId(0),
                 permutation.act(&left_frame),
-                left_form.apply(permutation),
+                left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -75,6 +75,7 @@ proptest! {
         ];
         let bonds: Vec<(AtomId, AtomId, BondForm)> = (1..=4)
             .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+            .chain([(AtomId(0), AtomId(5), BondForm::from_order(1))])
             .collect();
         let left_frame: Vec<StereoLigand> = (1..=4)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -91,12 +92,12 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_atoms: vec![(AtomId(0), right_frame, left_form.apply(permutation))],
+            stereo_atoms: vec![(AtomId(0), right_frame, left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
             Correspondence::from_images(&(0..6u32).map(NodeId).collect::<Vec<_>>(), 6),
-            Correspondence::from_images(&(0..4u32).map(EdgeId).collect::<Vec<_>>(), 4),
+            Correspondence::from_images(&(0..5u32).map(EdgeId).collect::<Vec<_>>(), 5),
         );
 
         prop_assert!(left.meet_pushout(&right, &overlap).is_none());
@@ -138,7 +139,7 @@ proptest! {
             stereo_bonds: vec![(
                 BondId(0),
                 permutation.act(&left_frame),
-                left_form.apply(permutation),
+                left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"),
             )],
             ..Default::default()
         });
@@ -173,6 +174,8 @@ proptest! {
             (AtomId(0), AtomId(3), BondForm::from_order(1)),
             (AtomId(1), AtomId(4), BondForm::from_order(1)),
             (AtomId(1), AtomId(5), BondForm::from_order(1)),
+            (AtomId(0), AtomId(6), BondForm::from_order(1)),
+            (AtomId(1), AtomId(6), BondForm::from_order(1)),
         ];
         let left_frame: Vec<StereoLigand> = (2..=5)
             .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
@@ -189,12 +192,12 @@ proptest! {
         let right = Molecule::from_entries(MoleculeEntries {
             atoms,
             bonds,
-            stereo_bonds: vec![(BondId(0), right_frame, left_form.apply(permutation))],
+            stereo_bonds: vec![(BondId(0), right_frame, left_form.apply(permutation).expect("the permutation is a parent-group action of the form's kind"))],
             ..Default::default()
         });
         let overlap = GraphCorrespondence::new(
             Correspondence::from_images(&(0..7u32).map(NodeId).collect::<Vec<_>>(), 7),
-            Correspondence::from_images(&(0..5u32).map(EdgeId).collect::<Vec<_>>(), 5),
+            Correspondence::from_images(&(0..7u32).map(EdgeId).collect::<Vec<_>>(), 7),
         );
 
         prop_assert!(left.meet_pushout(&right, &overlap).is_none());

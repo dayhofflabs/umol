@@ -1,13 +1,359 @@
-//! Aromatic system form.
+//! Aromatic systems: the molecule's collection and one system's attribute form.
 
-use umol_graph_core::{ParticipantPosition, RelationData};
+use std::sync::Arc;
+
+use umol_graph_core::{NodeId, ParticipantPosition, RelationId, Remapping, VarRelationSet};
 use umol_graph_ir_macros::{Lattice, Normalize};
+use umol_perm::DynPermutation;
 
 use super::constraint::{AromaticSystemConstraintForm, AromaticSystemConstraintsForm};
+use super::delta::EntitySpan;
 use super::electrons::ElectronCountsForm;
+use super::error::Contradiction;
+use super::frame::AromaticSystemsFrameAction;
+use super::id::{AromaticSystemId, AtomId};
 use super::num::NumForm;
 use super::spin::{UnpairedElectronsForm, UnpairedElectronsUpdate};
-use super::traits::{Equiv, Lattice};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
+
+/// The molecule's aromatic systems.
+///
+/// The atoms bear the participant frame: the per-member electron counts of
+/// [`AromaticSystemForm`] are read against it, position by position. Values are issued by checked
+/// molecule construction and trusted graph-IR transformations; raw assembly is not a public
+/// construction path.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AromaticSystems(Arc<VarRelationSet<NodeId, AromaticSystemForm>>);
+
+impl AromaticSystems {
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, AromaticSystemForm)>) -> Self {
+        Self(Arc::new(VarRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(atoms, attributes)| {
+                    (atoms.into_iter().map(NodeId::from).collect(), attributes)
+                })
+                .collect(),
+        )))
+    }
+
+    pub(crate) fn from_arc(set: Arc<VarRelationSet<NodeId, AromaticSystemForm>>) -> Self {
+        Self(set)
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: AromaticSystemId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
+        self.0.ids().map(AromaticSystemId::from)
+    }
+
+    /// The atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: AromaticSystemId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+    }
+
+    pub fn attributes(&self, id: AromaticSystemId) -> &AromaticSystemForm {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_mut(&mut self, id: AromaticSystemId) -> &mut AromaticSystemForm {
+        Arc::make_mut(&mut self.0).data_mut(RelationId::from(id))
+    }
+
+    /// Ids of the systems `atom` belongs to. Systems are atom-disjoint, so there is at most one.
+    pub fn incident_ids(
+        &self,
+        atom: AtomId,
+    ) -> impl ExactSizeIterator<Item = AromaticSystemId> + '_ {
+        self.0
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&id| AromaticSystemId::from(id))
+    }
+
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.0.has_incident(NodeId::from(atom))
+    }
+
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, AromaticSystemForm)> {
+        Arc::try_unwrap(self.0)
+            .unwrap_or_else(|shared| (*shared).clone())
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, attributes)| (atoms.into_iter().map(AtomId::from).collect(), attributes))
+            .collect()
+    }
+
+    /// The atoms of `id` as graph nodes, for graph-core interop that is not yet typed in graph-IR
+    /// ids. The public accessor is [`Self::atoms`].
+    pub(crate) fn atom_nodes(&self, id: AromaticSystemId) -> &[NodeId] {
+        self.0.participants(RelationId::from(id))
+    }
+
+    pub(crate) fn attributes_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut AromaticSystemForm> {
+        Arc::make_mut(&mut self.0)
+            .iter_mut()
+            .map(|(_, _, attributes)| attributes)
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(Arc::new(self.0.remap(remapping)))
+    }
+
+    pub(crate) fn into_arc(self) -> Arc<VarRelationSet<NodeId, AromaticSystemForm>> {
+        self.0
+    }
+
+    /// Glue `right`, relabelled into this molecule's id space, onto `self`: coinciding systems meet,
+    /// non-coinciding systems are carried. `None` when a coincident meet is bottom.
+    pub(crate) fn glue(&self, right: &Self, remapping: &Remapping) -> Option<Self> {
+        self.0
+            .pushout(
+                &right.remap(remapping).0,
+                // Aromatic systems anchor on their atoms: the node index.
+                |set, atoms| atoms.first().and_then(|&node| set.coincident(node, atoms)),
+                |(left_atoms, left), (right_atoms, right)| {
+                    let left_atoms: Vec<AtomId> =
+                        left_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    let right_atoms: Vec<AtomId> =
+                        right_atoms.iter().map(|&atom| AtomId::from(atom)).collect();
+                    let action = DynPermutation::between(&right_atoms, &left_atoms)?;
+                    right.clone().reframe_by(&action)?.meet(left)
+                },
+            )
+            .map(|merged| Self(Arc::new(merged.object)))
+    }
+
+    /// Whether system `id` is the one over `atoms` — the known-id sibling of
+    /// [`coincident_id`](Self::coincident_id).
+    pub fn is_coincident(&self, id: AromaticSystemId, atoms: &[AtomId]) -> bool {
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        self.0.is_coincident(RelationId::from(id), &query)
+    }
+
+    /// Id of the system coinciding with `atoms` — the one whose atoms equal them as a multiset.
+    ///
+    /// The identity question, distinct from lookup: an aromatic system's uniqueness key is any
+    /// member atom, which names it from a part; this names it from the whole.
+    pub fn coincident_id(&self, atoms: &[AtomId]) -> Option<AromaticSystemId> {
+        // Aromatic systems anchor on their atoms, so the node index is the one to scan.
+        let query: Vec<NodeId> = atoms.iter().map(|&atom| NodeId::from(atom)).collect();
+        let anchor = *query.first()?;
+        self.0
+            .coincident(anchor, &query)
+            .map(AromaticSystemId::from)
+    }
+}
+
+impl Normalize for AromaticSystems {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for attributes in self.attributes_iter_mut() {
+            *attributes = attributes.clone().normalize()?;
+        }
+        Ok(self)
+    }
+}
+
+impl FrameTransport for AromaticSystems {
+    type Action = AromaticSystemsFrameAction;
+
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        let set = Arc::make_mut(&mut self.0);
+        for relation_id in set.ids().collect::<Vec<_>>() {
+            let action = actions.action(AromaticSystemId::from(relation_id))?;
+            if action.degree() != set.participants(relation_id).len() {
+                return None;
+            }
+            *set.data_mut(relation_id) = set.data(relation_id).clone().reframe_by(action)?;
+            set.permute_with(relation_id, &participant_order(action));
+        }
+        Some(self)
+    }
+}
+
+impl Reframe for AromaticSystems {
+    fn representative_action(&self) -> Self::Action {
+        let actions = self
+            .ids()
+            .map(|id| aromatic_system_representative_action(self.atoms(id).collect()))
+            .collect();
+        AromaticSystemsFrameAction::from_vec(actions)
+            .expect("every dynamic permutation is an aromatic-system action")
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_aromatic_systems_with(self, |_, _| {})
+    }
+}
+
+pub(crate) fn reframe_aromatic_systems_with(
+    mut aromatic_systems: AromaticSystems,
+    mut visit: impl FnMut(AromaticSystemId, &DynPermutation),
+) -> Result<AromaticSystems, Contradiction> {
+    let set = Arc::make_mut(&mut aromatic_systems.0);
+    for relation_id in set.ids().collect::<Vec<_>>() {
+        let id = AromaticSystemId::from(relation_id);
+        let stored = set
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = aromatic_system_representative_action(stored);
+        let attributes = set.data(relation_id).clone().normalize()?;
+        *set.data_mut(relation_id) = attributes
+            .reframe_by(&action)
+            .ok_or(Contradiction)?
+            .normalize()?;
+        set.permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(aromatic_systems)
+}
+
+/// The reaction span's aromatic systems, one [`EntitySpan`] per entity against a single participant frame.
+///
+/// The `Molecule` peer is [`AromaticSystems`]. The surface is deliberately duplicated rather than shared
+/// through a payload parameter: a type parameter on the molecule-level aggregates would complicate
+/// the primary carrier to serve this one. Values are issued by
+/// [`ReactionSpan`](super::reaction_span::ReactionSpan).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AromaticSystemSpans(VarRelationSet<NodeId, EntitySpan<AromaticSystemForm>>);
+
+impl AromaticSystemSpans {
+    pub(crate) fn into_entries(self) -> Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)> {
+        self.0
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, span)| (atoms.into_iter().map(AtomId::from).collect(), span))
+            .collect()
+    }
+
+    pub(crate) fn new(entries: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)>) -> Self {
+        Self(VarRelationSet::new(
+            entries
+                .into_iter()
+                .map(|(atoms, span)| (atoms.into_iter().map(NodeId::from).collect(), span))
+                .collect(),
+        ))
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.count()
+    }
+
+    pub fn contains(&self, id: AromaticSystemId) -> bool {
+        self.0.contains(RelationId::from(id))
+    }
+
+    pub fn ids(&self) -> impl ExactSizeIterator<Item = AromaticSystemId> {
+        self.0.ids().map(AromaticSystemId::from)
+    }
+
+    /// The atoms of `id`, in their stored frame.
+    pub fn atoms(&self, id: AromaticSystemId) -> impl ExactSizeIterator<Item = AtomId> + '_ {
+        self.0
+            .participants(RelationId::from(id))
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+    }
+
+    pub fn attributes(&self, id: AromaticSystemId) -> &EntitySpan<AromaticSystemForm> {
+        self.0.data(RelationId::from(id))
+    }
+
+    pub(crate) fn remap(&self, remapping: &Remapping) -> Self {
+        Self(self.0.remap(remapping))
+    }
+}
+
+impl Normalize for AromaticSystemSpans {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for id in self.0.ids().collect::<Vec<_>>() {
+            *self.0.data_mut(id) = self.0.data(id).clone().normalize()?;
+        }
+        Ok(self)
+    }
+}
+
+impl FrameTransport for AromaticSystemSpans {
+    type Action = AromaticSystemsFrameAction;
+
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        for relation_id in self.0.ids().collect::<Vec<_>>() {
+            let action = actions.action(AromaticSystemId::from(relation_id))?;
+            if action.degree() != self.0.participants(relation_id).len() {
+                return None;
+            }
+            *self.0.data_mut(relation_id) = self.0.data(relation_id).clone().reframe_by(action)?;
+            self.0.permute_with(relation_id, &participant_order(action));
+        }
+        Some(self)
+    }
+}
+
+impl Reframe for AromaticSystemSpans {
+    fn representative_action(&self) -> Self::Action {
+        let actions = self
+            .ids()
+            .map(|id| aromatic_system_representative_action(self.atoms(id).collect()))
+            .collect();
+        AromaticSystemsFrameAction::from_vec(actions)
+            .expect("every dynamic permutation is an aromatic-system action")
+    }
+
+    fn reframe(self) -> Result<Self, Contradiction> {
+        reframe_aromatic_system_spans_with(self, |_, _| {})
+    }
+}
+
+pub(crate) fn reframe_aromatic_system_spans_with(
+    mut aromatic_systems: AromaticSystemSpans,
+    mut visit: impl FnMut(AromaticSystemId, &DynPermutation),
+) -> Result<AromaticSystemSpans, Contradiction> {
+    for relation_id in aromatic_systems.0.ids().collect::<Vec<_>>() {
+        let id = AromaticSystemId::from(relation_id);
+        let stored = aromatic_systems
+            .0
+            .participants(relation_id)
+            .iter()
+            .map(|&atom| AtomId::from(atom))
+            .collect();
+        let action = aromatic_system_representative_action(stored);
+        let span = aromatic_systems.0.data(relation_id).clone().normalize()?;
+        *aromatic_systems.0.data_mut(relation_id) =
+            span.reframe_by(&action).ok_or(Contradiction)?.normalize()?;
+        aromatic_systems
+            .0
+            .permute_with(relation_id, &participant_order(&action));
+        visit(id, &action);
+    }
+    Ok(aromatic_systems)
+}
+
+pub(crate) fn aromatic_system_representative_action(frame: Vec<AtomId>) -> DynPermutation {
+    let mut image: Vec<usize> = (0..frame.len()).collect();
+    image.sort_unstable_by_key(|&position| frame[position]);
+    DynPermutation::try_from(image).expect("sorted positions form a permutation")
+}
+
+fn participant_order(action: &DynPermutation) -> Vec<ParticipantPosition> {
+    action
+        .image()
+        .iter()
+        .map(|&position| ParticipantPosition(position as u32))
+        .collect()
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Normalize, Lattice)]
 pub struct AromaticSystemForm {
@@ -31,17 +377,6 @@ pub struct AromaticSystemUpdate {
 impl From<&str> for AromaticSystemForm {
     fn from(s: &str) -> Self {
         s.parse().expect("invalid aromatic system string")
-    }
-}
-
-impl RelationData for AromaticSystemForm {
-    /// The per-member electron counts are positional, so they follow a participant reorder.
-    fn on_permutation(&mut self, order: &[ParticipantPosition]) {
-        self.electrons.permute(order);
-    }
-
-    fn is_permutation_invariant(&self) -> bool {
-        self.electrons.is_undetermined()
     }
 }
 
@@ -139,7 +474,7 @@ impl AromaticSystemForm {
             if self
                 .constraints
                 .get(new.key())
-                .is_none_or(|old| !old.equiv(new))
+                .is_none_or(|old| !old.normalized_eq(new))
             {
                 constraints.set(new.clone());
             }
@@ -150,8 +485,9 @@ impl AromaticSystemForm {
             }
         }
         AromaticSystemUpdate {
-            electrons: (!self.electrons.equiv(&other.electrons)).then(|| other.electrons.clone()),
-            charge: (!self.charge.equiv(&other.charge)).then(|| other.charge.clone()),
+            electrons: (!self.electrons.normalized_eq(&other.electrons))
+                .then(|| other.electrons.clone()),
+            charge: (!self.charge.normalized_eq(&other.charge)).then(|| other.charge.clone()),
             unpaired_electrons: self
                 .unpaired_electrons
                 .difference_to(&other.unpaired_electrons),
@@ -166,6 +502,25 @@ impl AromaticSystemForm {
     }
 }
 
+impl FrameTransport for AromaticSystemForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        let Self {
+            electrons,
+            charge,
+            unpaired_electrons,
+            constraints,
+        } = self;
+        Some(Self {
+            electrons: electrons.reframe_by(action)?,
+            charge,
+            unpaired_electrons,
+            constraints: constraints.reframe_by(action)?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -174,6 +529,295 @@ mod tests {
     use super::*;
     use crate::ir::error::Contradiction;
     use crate::ir::traits::Normalize;
+
+    /// A coincidence whose two sides hold the same atoms in different frames, with nonuniform
+    /// electron counts stating the same per-atom fact. The glue must carry the right vector into
+    /// the left frame before meeting; meeting the two vectors position-by-position without that
+    /// compares different atoms' counts and yields bottom.
+    ///
+    /// Both sides state 1 -> 20, 4 -> 30, 7 -> 10. The left uses an unsorted stored frame and the
+    /// right uses the sorted frame supplied below.
+    #[rstest]
+    fn test_aromatic_systems_glue_differing_frames() {
+        let mut left = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        Arc::make_mut(&mut left.0).permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        // The permute moves participants and leaves the payload, so the left frame now reads
+        // 7 -> 20, 1 -> 30, 4 -> 10 positionally — which is a different fact from the right's.
+        Arc::make_mut(&mut left.0)
+            .iter_mut()
+            .for_each(|(_, _, attributes)| {
+                *attributes = AromaticSystemForm::from_electrons(vec![10, 20, 30])
+            });
+        assert_eq!(
+            left.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+            "left states 7 -> 10, 1 -> 20, 4 -> 30",
+        );
+
+        let right = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        assert_eq!(
+            right.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            "right states the same fact in sorted order",
+        );
+
+        let glued = left
+            .glue(
+                &right,
+                &Remapping::new((0..8).map(NodeId).collect(), vec![]),
+            )
+            .expect("the sides agree once the right vector is carried into the left frame");
+
+        assert_eq!(glued.count(), 1);
+        assert_eq!(
+            glued.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+        assert_eq!(
+            glued.attributes(AromaticSystemId(0)),
+            &AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        );
+    }
+
+    /// Both sides of a `Modified` span are read against one participant list, so one action carries
+    /// both. Selection never consults the payload here, so the two sides cannot disagree about it.
+    #[rstest]
+    fn test_aromatic_system_spans_reframe() {
+        let mut spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21, 31]),
+            },
+        )]);
+        spans.0.permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+
+        let source = spans.clone();
+        let (reframed, actions) = spans
+            .reframe_with_action()
+            .expect("the forms are satisfiable");
+
+        assert_eq!(
+            reframed.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(
+            reframed.attributes(AromaticSystemId(0)),
+            &EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+                rhs: AromaticSystemForm::from_electrons(vec![21, 31, 11]),
+            },
+        );
+        assert_eq!(
+            actions.action(AromaticSystemId(0)),
+            Some(&DynPermutation::try_from(vec![1, 2, 0]).expect("expected action is valid")),
+        );
+        assert_eq!(source.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_spans_normalize() {
+        let spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::default().with_charge(NumForm::lit_set([0])),
+                rhs: AromaticSystemForm::default().with_charge(0),
+            },
+        )]);
+
+        let normalized = spans.normalize().expect("the forms are satisfiable");
+
+        assert_eq!(
+            normalized.attributes(AromaticSystemId(0)),
+            &EntitySpan::Unchanged(AromaticSystemForm::default().with_charge(0)),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_spans_reframe_identity() {
+        let spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        let once = spans.reframe().expect("the forms are satisfiable");
+        let twice = once.clone().reframe().expect("the forms are satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    /// A side that declines the frame change takes the whole span with it: one action serves both,
+    /// so there is no partial result to keep. Here the rhs electron vector disagrees in length with
+    /// the participant frame.
+    #[rstest]
+    fn test_aromatic_system_spans_reframe_error() {
+        let spans = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        assert_eq!(spans.reframe(), Err(Contradiction));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_spans_framed_eq() {
+        let mut unsorted = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![10, 20]),
+                rhs: AromaticSystemForm::from_electrons(vec![11, 21]),
+            },
+        )]);
+        unsorted.0.permute_with(
+            RelationId(0),
+            &[ParticipantPosition(1), ParticipantPosition(0)],
+        );
+        // The permute leaves the payload where it was, so the stored frame now reads
+        // atom 4 -> 10, atom 1 -> 20; the selected presentation states the same fact sorted.
+        let selected = AromaticSystemSpans::new(vec![(
+            vec![AtomId(1), AtomId(4)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::from_electrons(vec![20, 10]),
+                rhs: AromaticSystemForm::from_electrons(vec![21, 11]),
+            },
+        )]);
+
+        assert!(unsorted.framed_eq(&selected));
+        assert!(unsorted != selected);
+    }
+
+    /// Storage sorts an `Unordered` factor on construction, so the stored frame is permuted first
+    /// to model the frame-preserving storage S5 introduces.
+    #[fixture]
+    fn unsorted_system() -> AromaticSystems {
+        let mut systems = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        Arc::make_mut(&mut systems.0).permute_with(
+            RelationId(0),
+            &[
+                ParticipantPosition(2),
+                ParticipantPosition(0),
+                ParticipantPosition(1),
+            ],
+        );
+        systems
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe(unsorted_system: AromaticSystems) {
+        assert_eq!(
+            unsorted_system
+                .atoms(AromaticSystemId(0))
+                .collect::<Vec<_>>(),
+            vec![AtomId(7), AtomId(1), AtomId(4)],
+        );
+
+        let reframed = unsorted_system.reframe().expect("the form is satisfiable");
+
+        assert_eq!(
+            reframed.atoms(AromaticSystemId(0)).collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+        );
+        assert_eq!(
+            reframed.attributes(AromaticSystemId(0)),
+            &AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe_identity(unsorted_system: AromaticSystems) {
+        let once = unsorted_system.reframe().expect("the form is satisfiable");
+        let twice = once.clone().reframe().expect("the form is satisfiable");
+        assert_eq!(twice, once);
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_reframe_with_action(unsorted_system: AromaticSystems) {
+        let (reframed, actions) = unsorted_system
+            .clone()
+            .reframe_with_action()
+            .expect("the form is satisfiable");
+
+        let action = actions
+            .action(AromaticSystemId(0))
+            .expect("the dense action covers the system");
+        assert_eq!(action.image(), [1, 2, 0]);
+        assert_eq!(unsorted_system.reframe_by(&actions), Some(reframed));
+    }
+
+    #[rstest]
+    fn test_reframe_aromatic_systems_with(unsorted_system: AromaticSystems) {
+        let mut visited = None;
+        let reframed = reframe_aromatic_systems_with(unsorted_system.clone(), |id, action| {
+            visited = Some((id, action.clone()));
+        })
+        .expect("the form is satisfiable");
+
+        assert_eq!(
+            visited,
+            Some((
+                AromaticSystemId(0),
+                DynPermutation::try_from(vec![1, 2, 0]).expect("the expected action is valid"),
+            )),
+        );
+        assert_eq!(unsorted_system.reframe(), Ok(reframed));
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_normalize() {
+        let systems = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(2)],
+            AromaticSystemForm::default().with_charge(NumForm::lit_set([0])),
+        )]);
+
+        let normalized = systems.normalize().expect("the form is satisfiable");
+
+        assert_eq!(
+            normalized.attributes(AromaticSystemId(0)),
+            &AromaticSystemForm::default().with_charge(0),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_systems_framed_eq(unsorted_system: AromaticSystems) {
+        let selected = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![20, 30, 10]),
+        )]);
+        assert!(unsorted_system.framed_eq(&selected));
+        assert!(!unsorted_system.eq(&selected));
+
+        let different = AromaticSystems::new(vec![(
+            vec![AtomId(1), AtomId(4), AtomId(7)],
+            AromaticSystemForm::from_electrons(vec![10, 20, 30]),
+        )]);
+        assert!(!unsorted_system.framed_eq(&different));
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -306,6 +950,40 @@ mod tests {
             system.difference_to(&other),
             AromaticSystemUpdate::default()
         );
+    }
+
+    #[rstest]
+    #[case::positioned(
+        AromaticSystemForm::from_electrons(vec![10, 20, 30]).with_charge(-1),
+        vec![2, 0, 1],
+        Some(AromaticSystemForm::from_electrons(vec![30, 10, 20]).with_charge(-1)),
+    )]
+    #[case::positioned_degree(
+        AromaticSystemForm::from_electrons(vec![10, 20]),
+        vec![2, 0, 1],
+        None,
+    )]
+    #[case::dimensionless(
+        AromaticSystemForm::default(),
+        vec![3, 1, 0, 2],
+        Some(AromaticSystemForm::default()),
+    )]
+    #[case::frame_invariant_constraint(
+        AromaticSystemForm::default()
+            .with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        vec![1, 0],
+        Some(
+            AromaticSystemForm::default()
+                .with_constraint(AromaticSystemConstraintForm::electron_count(6)),
+        ),
+    )]
+    fn test_aromatic_system_form_reframe_by(
+        #[case] input: AromaticSystemForm,
+        #[case] image: Vec<usize>,
+        #[case] expected: Option<AromaticSystemForm>,
+    ) {
+        let action = DynPermutation::try_from(image).expect("case is a permutation");
+        assert_eq!(input.reframe_by(&action), expected);
     }
 
     #[rstest]

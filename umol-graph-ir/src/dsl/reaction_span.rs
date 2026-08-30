@@ -141,17 +141,12 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             dative: span
                 .dative_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.dative_bonds()
-                            .participants_2(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        AtomId::from(span.dative_bonds().participants_1(id)[0]),
-                        map_span(span.dative_bonds().data(id), |bond| {
+                        span.dative_bonds().donors(id).collect(),
+                        span.dative_bonds().acceptor(id),
+                        map_span(span.dative_bonds().attributes(id), |bond| {
                             DativeBondDsl::from_ir(bond, &context.dative_bond).0
                         }),
                     )
@@ -159,16 +154,11 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             aromatic: span
                 .aromatic_systems()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.aromatic_systems()
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        map_span(span.aromatic_systems().data(id), |system| {
+                        span.aromatic_systems().atoms(id).collect(),
+                        map_span(span.aromatic_systems().attributes(id), |system| {
                             AromaticSystemDsl::from_ir(system, &context.aromatic_system).0
                         }),
                     )
@@ -176,16 +166,11 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             multicenter: span
                 .multicenter_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.multicenter_bonds()
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        map_span(span.multicenter_bonds().data(id), |bond| {
+                        span.multicenter_bonds().atoms(id).collect(),
+                        map_span(span.multicenter_bonds().attributes(id), |bond| {
                             MulticenterBondDsl::from_ir(bond, &context.multicenter_bond).0
                         }),
                     )
@@ -193,13 +178,11 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             noncovalent: span
                 .noncovalent_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
-                    let [first, second] = *span.noncovalent_bonds().participants(id);
                     (
-                        AtomId::from(first),
-                        AtomId::from(second),
-                        map_span(span.noncovalent_bonds().data(id), |bond| {
+                        span.noncovalent_bonds().atoms(id),
+                        map_span(span.noncovalent_bonds().attributes(id), |bond| {
                             NoncovalentBondDsl::from_ir(bond, &context.noncovalent_bond).0
                         }),
                     )
@@ -207,12 +190,12 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             stereo_atoms: span
                 .stereo_atoms()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        AtomId::from(span.stereo_atoms().participants_1(id)[0]),
-                        span.stereo_atoms().participants_2(id).to_vec(),
-                        map_span(span.stereo_atoms().data(id), |stereo| {
+                        span.stereo_atoms().site(id),
+                        span.stereo_atoms().ligands(id).to_vec(),
+                        map_span(span.stereo_atoms().attributes(id), |stereo| {
                             StereoAtomDsl::from_ir(stereo, &context.stereo_atom).0
                         }),
                     )
@@ -220,12 +203,12 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             stereo_bonds: span
                 .stereo_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        BondId::from(span.stereo_bonds().participants_1(id)[0]),
-                        span.stereo_bonds().participants_2(id).to_vec(),
-                        map_span(span.stereo_bonds().data(id), |stereo| {
+                        span.stereo_bonds().site(id),
+                        span.stereo_bonds().ligands(id).to_vec(),
+                        map_span(span.stereo_bonds().attributes(id), |stereo| {
                             StereoBondDsl::from_ir(stereo, &context.stereo_bond).0
                         }),
                     )
@@ -269,17 +252,12 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             dative: span
                 .dative_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.dative_bonds()
-                            .participants_2(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        AtomId::from(span.dative_bonds().participants_1(id)[0]),
-                        map_span(span.dative_bonds().data(id), |bond| {
+                        span.dative_bonds().donors(id).collect(),
+                        span.dative_bonds().acceptor(id),
+                        map_span(span.dative_bonds().attributes(id), |bond| {
                             DativeBondDsl(bond.clone()).into_ir(&context.dative_bond)
                         }),
                     )
@@ -287,16 +265,11 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             aromatic: span
                 .aromatic_systems()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.aromatic_systems()
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        map_span(span.aromatic_systems().data(id), |system| {
+                        span.aromatic_systems().atoms(id).collect(),
+                        map_span(span.aromatic_systems().attributes(id), |system| {
                             AromaticSystemDsl(system.clone()).into_ir(&context.aromatic_system)
                         }),
                     )
@@ -304,16 +277,11 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             multicenter: span
                 .multicenter_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        span.multicenter_bonds()
-                            .participants(id)
-                            .iter()
-                            .copied()
-                            .map(AtomId::from)
-                            .collect(),
-                        map_span(span.multicenter_bonds().data(id), |bond| {
+                        span.multicenter_bonds().atoms(id).collect(),
+                        map_span(span.multicenter_bonds().attributes(id), |bond| {
                             MulticenterBondDsl(bond.clone()).into_ir(&context.multicenter_bond)
                         }),
                     )
@@ -321,13 +289,11 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             noncovalent: span
                 .noncovalent_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
-                    let [first, second] = *span.noncovalent_bonds().participants(id);
                     (
-                        AtomId::from(first),
-                        AtomId::from(second),
-                        map_span(span.noncovalent_bonds().data(id), |bond| {
+                        span.noncovalent_bonds().atoms(id),
+                        map_span(span.noncovalent_bonds().attributes(id), |bond| {
                             NoncovalentBondDsl(bond.clone()).into_ir(&context.noncovalent_bond)
                         }),
                     )
@@ -335,12 +301,12 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             stereo_atoms: span
                 .stereo_atoms()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        AtomId::from(span.stereo_atoms().participants_1(id)[0]),
-                        span.stereo_atoms().participants_2(id).to_vec(),
-                        map_span(span.stereo_atoms().data(id), |stereo| {
+                        span.stereo_atoms().site(id),
+                        span.stereo_atoms().ligands(id).to_vec(),
+                        map_span(span.stereo_atoms().attributes(id), |stereo| {
                             StereoAtomDsl(stereo.clone()).into_ir(&context.stereo_atom)
                         }),
                     )
@@ -348,12 +314,12 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .collect(),
             stereo_bonds: span
                 .stereo_bonds()
-                .relation_ids()
+                .ids()
                 .map(|id| {
                     (
-                        BondId::from(span.stereo_bonds().participants_1(id)[0]),
-                        span.stereo_bonds().participants_2(id).to_vec(),
-                        map_span(span.stereo_bonds().data(id), |stereo| {
+                        span.stereo_bonds().site(id),
+                        span.stereo_bonds().ligands(id).to_vec(),
+                        map_span(span.stereo_bonds().attributes(id), |stereo| {
                             StereoBondDsl(stereo.clone()).into_ir(&context.stereo_bond)
                         }),
                     )
@@ -1131,7 +1097,7 @@ impl SpanInput {
             let a = first.resolve(&context)?;
             let b = second.resolve(&context)?;
             context.register_noncovalent_bond(keyword, a, b)?;
-            noncovalent.push((a, b, span));
+            noncovalent.push(([a, b], span));
         }
 
         let mut stereo_atoms = Vec::with_capacity(self.stereo_atoms.len());
@@ -1468,19 +1434,15 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let dative = span.dative_bonds();
     let dative_bonds: Vec<Edn<'static>> = dative
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let acceptor = AtomId::from(dative.participants_1(rid)[0]);
-            let donors: Vec<AtomId> = dative
-                .participants_2(rid)
-                .iter()
-                .map(|&n| AtomId::from(n))
-                .collect();
+            let acceptor = dative.acceptor(rid);
+            let donors: Vec<AtomId> = dative.donors(rid).collect();
             render_dative_span_entry(
                 DativeBondId(rid.index() as u32),
                 &donors,
                 acceptor,
-                dative.data(rid),
+                dative.attributes(rid),
                 meta,
             )
         })
@@ -1494,17 +1456,13 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let aromatic = span.aromatic_systems();
     let aromatic_systems: Vec<Edn<'static>> = aromatic
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let atoms: Vec<AtomId> = aromatic
-                .participants(rid)
-                .iter()
-                .map(|&n| AtomId::from(n))
-                .collect();
+            let atoms: Vec<AtomId> = aromatic.atoms(rid).collect();
             render_aromatic_span_entry(
                 AromaticSystemId(rid.index() as u32),
                 &atoms,
-                aromatic.data(rid),
+                aromatic.attributes(rid),
                 meta,
             )
         })
@@ -1518,17 +1476,13 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let multicenter = span.multicenter_bonds();
     let multicenter_bonds: Vec<Edn<'static>> = multicenter
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let atoms: Vec<AtomId> = multicenter
-                .participants(rid)
-                .iter()
-                .map(|&n| AtomId::from(n))
-                .collect();
+            let atoms: Vec<AtomId> = multicenter.atoms(rid).collect();
             render_multicenter_span_entry(
                 MulticenterBondId(rid.index() as u32),
                 &atoms,
-                multicenter.data(rid),
+                multicenter.attributes(rid),
                 meta,
             )
         })
@@ -1542,13 +1496,13 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let noncovalent = span.noncovalent_bonds();
     let noncovalent_bonds: Vec<Edn<'static>> = noncovalent
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let [a, b] = noncovalent.participants(rid);
+            let [a, b] = noncovalent.atoms(rid);
             render_noncovalent_span_entry(
                 NoncovalentBondId(rid.index() as u32),
-                [AtomId::from(*a), AtomId::from(*b)],
-                noncovalent.data(rid),
+                [a, b],
+                noncovalent.attributes(rid),
                 meta,
             )
         })
@@ -1562,14 +1516,14 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let stereo_a = span.stereo_atoms();
     let stereo_atoms: Vec<Edn<'static>> = stereo_a
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let site = AtomId::from(stereo_a.participants_1(rid)[0]);
+            let site = stereo_a.site(rid);
             render_stereo_atom_span_entry(
                 StereoAtomId(rid.index() as u32),
                 site,
-                stereo_a.participants_2(rid),
-                stereo_a.data(rid),
+                stereo_a.ligands(rid),
+                stereo_a.attributes(rid),
                 meta,
             )
         })
@@ -1583,14 +1537,14 @@ fn render_span_edn(span: &ReactionSpan, meta: &MoleculeMetadata) -> Edn<'static>
 
     let stereo_b = span.stereo_bonds();
     let stereo_bonds: Vec<Edn<'static>> = stereo_b
-        .relation_ids()
+        .ids()
         .map(|rid| {
-            let site = BondId::from(stereo_b.participants_1(rid)[0]);
+            let site = stereo_b.site(rid);
             render_stereo_bond_span_entry(
                 StereoBondId(rid.index() as u32),
                 site,
-                stereo_b.participants_2(rid),
-                stereo_b.data(rid),
+                stereo_b.ligands(rid),
+                stereo_b.attributes(rid),
                 meta,
             )
         })
@@ -1683,10 +1637,10 @@ mod tests {
     use crate::ir::delta::{AtomDelta, BondDelta, ConstraintDelta, Delta, Deltas};
     use crate::ir::edit::BondFieldChange;
     use crate::ir::ligand::StereoLigandKind;
-    use crate::ir::molecule::{Molecule, MoleculeEntries};
+    use crate::ir::molecule::{Molecule, MoleculeEntries, MoleculeIntegrityError};
     use crate::ir::num::NumForm;
     use crate::ir::reaction::Reaction;
-    use crate::ir::MoleculeCorrespondence;
+    use crate::ir::{MoleculeCorrespondence, ReactionSpanIntegrityError};
 
     #[fixture]
     fn populated_reaction_span_dsl() -> ReactionSpanDsl {
@@ -1703,7 +1657,7 @@ mod tests {
             :multicenter-bonds [{:id :m :atoms [0 1] :attrs "*#e2"}]
             :noncovalent-bonds [{:id :n :atoms [0 1] :attrs "Hbd"}]
             :stereo-atoms [{:id :sa :site 0 :ligands [1 2 3 4] :attrs "Th1"}]
-            :stereo-bonds [{:id :sb :site :b :ligands [2 3 4 [:h 1]] :attrs "Ct1"}]
+            :stereo-bonds [{:id :sb :site :b :ligands [2 3 [:h 1] [:lp 1]] :attrs "Ct1"}]
             :atom-aliases [:x "O"]
         }"#
         .parse()
@@ -2199,6 +2153,17 @@ mod tests {
             metadata
         },
     )]
+    #[case::equivalent_modified(
+        r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#,
+        ReactionSpan::from_entries(ReactionSpanEntries {
+            atoms: vec![EntitySpan::Modified {
+                lhs: AtomForm::from_element(Element::C).with_charge(1_i64),
+                rhs: AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([1])),
+            }],
+            ..Default::default()
+        }),
+        MoleculeMetadata::new(),
+    )]
     #[case::dative_overlay(
         r#"{:atoms ["C" "N"] :dative-bonds [{:id :d1 :donors [0] :acceptor 1 :attrs "1#R"}]}"#,
         ReactionSpan::from_entries(ReactionSpanEntries {
@@ -2236,23 +2201,6 @@ mod tests {
     }
 
     #[rstest]
-    fn test_span_input_into_ir_normalizes_canonical_modified() {
-        let (span, metadata) =
-            parse_span_input(&read_string(r#"{:atoms [{:modify ["C#c1" "C#c{1}"]}]}"#).unwrap())
-                .unwrap()
-                .into_ir()
-                .unwrap();
-
-        assert_eq!(
-            span.atoms(),
-            &[EntitySpan::Unchanged(
-                AtomForm::from_element(Element::C).with_charge(1_i64),
-            )],
-        );
-        assert_eq!(metadata, MoleculeMetadata::new());
-    }
-
-    #[rstest]
     #[case::atom(r#"{:atoms [[:a "C"]]}"#, Entity::Atom(AtomId(0)), "a")]
     #[case::bond(
         r#"{:atoms ["C" "C"] :bonds [{:id :b :atoms [0 1] :attrs :single}]}"#,
@@ -2280,7 +2228,7 @@ mod tests {
         "n"
     )]
     #[case::stereo_atom(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s :site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
         Entity::StereoAtom(StereoAtomId(0)),
         "s",
     )]
@@ -2353,6 +2301,44 @@ mod tests {
         ParseError::InvalidValue(
             "reaction span lhs is not a valid molecule representation: molecule references unavailable bond 2".to_string()
         ),
+    )]
+    #[case::atom_repeated_virtual(
+        r#"{:atoms ["C" "F" "Cl"] :bonds [[0 1 "1"] [0 2 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:h 0] [:h 0]] :attrs "Th0"}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Lhs(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                ligand: StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+            },
+        ).to_string()),
+    )]
+    #[case::atom_oversized(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I" "N" "O" "S"] :stereo-atoms [{:add {:site 0 :ligands [1 2 3 4 5 6 7] :attrs "*"}}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Rhs(
+            MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+                entity: Entity::StereoAtom(StereoAtomId(0)),
+                degree: 7,
+                maximum: 6,
+            },
+        ).to_string()),
+    )]
+    #[case::bond_repeated_virtual(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 1]] :attrs "Ct0"}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Lhs(
+            MoleculeIntegrityError::DuplicateStereoLigand {
+                entity: Entity::StereoBond(StereoBondId(0)),
+                ligand: StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+            },
+        ).to_string()),
+    )]
+    #[case::bond_oversized(
+        r#"{:atoms ["C" "C" "F" "Cl" "Br" "I" "N" "O" "S"] :bonds [[0 1 "2"]] :stereo-bonds [{:add {:site 0 :ligands [2 3 4 5 6 7 8] :attrs "*"}}]}"#,
+        ParseError::InvalidValue(ReactionSpanIntegrityError::Rhs(
+            MoleculeIntegrityError::StereoFrameDegreeTooLarge {
+                entity: Entity::StereoBond(StereoBondId(0)),
+                degree: 7,
+                maximum: 6,
+            },
+        ).to_string()),
     )]
     fn test_span_input_into_ir_error(#[case] input: &str, #[case] expected: ParseError) {
         assert_eq!(

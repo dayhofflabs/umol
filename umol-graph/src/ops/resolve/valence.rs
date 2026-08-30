@@ -6,6 +6,7 @@ use umol_graph_ir::ir::{AtomConstraintKey, Molecule};
 use umol_utils::solution::Solution;
 
 use crate::ops::model::{ValenceCandidateSource, ValenceModel};
+use crate::ops::resolve::ResolveState;
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 use crate::ops::validate::{
     DerivedKind, IncidenceConstraintInvariantsContradiction, IncidenceConstraintInvariantsValidator,
@@ -51,7 +52,7 @@ impl<'a> ValenceResolver<'a> {
     pub fn admit(
         &self,
         molecule: &Molecule,
-    ) -> Result<Solution<super::ResolveState, ValenceContradiction>, ValenceError> {
+    ) -> Result<Solution<ResolveState, ValenceContradiction>, ValenceError> {
         for atom in molecule.atoms().ids() {
             for key in [
                 AtomConstraintKey::Valence,
@@ -69,7 +70,7 @@ impl<'a> ValenceResolver<'a> {
                 {
                     Solution::Determined(()) => {}
                     Solution::Underdetermined(()) => {
-                        return Ok(Solution::Underdetermined(super::ResolveState::default()));
+                        return Ok(Solution::Underdetermined(ResolveState::default()));
                     }
                     Solution::Contradictory(contradiction) => {
                         return Ok(Solution::Contradictory(contradiction.into()));
@@ -85,7 +86,7 @@ impl<'a> ValenceResolver<'a> {
                 .admit(molecule)
                 .map_contradiction(ValenceContradiction::from),
         };
-        Ok(completions.map(|completions| super::ResolveState {
+        Ok(completions.map(|completions| ResolveState {
             completions,
             systems: Vec::new(),
             tie_breaks: Vec::new(),
@@ -103,7 +104,6 @@ mod tests {
     use umol_graph_ir::ir::{AtomConstraintForm, AtomId};
     use umol_graph_ir::{atom_dsl, mol_dsl};
 
-    use super::super::ResolveState;
     use super::*;
     use crate::ops::valence::{AtomCompletions, AtomTypeRegistry, ValenceTable};
 

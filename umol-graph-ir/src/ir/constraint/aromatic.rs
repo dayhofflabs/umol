@@ -5,10 +5,12 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use umol_perm::DynPermutation;
+
 use super::super::error::{Contradiction, NoJoin};
 use super::super::num::NumForm;
-use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::{Equiv, Lattice, Normalize};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemForm` via
 /// `AromaticSystemConstraintsForm`.
@@ -38,7 +40,7 @@ impl AromaticSystemConstraintForm {
         }
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         // Value-only: no indices to compact.
         Some(self)
     }
@@ -47,6 +49,12 @@ impl AromaticSystemConstraintForm {
     pub fn remap(self, _map: &IdRemapping) -> Self {
         self
     }
+
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::ElectronCount(_) => false,
+        }
+    }
 }
 
 impl Normalize for AromaticSystemConstraintForm {
@@ -54,6 +62,16 @@ impl Normalize for AromaticSystemConstraintForm {
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::ElectronCount(v) => Self::ElectronCount(v.normalize()?),
+        })
+    }
+}
+
+impl FrameTransport for AromaticSystemConstraintForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, _action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::ElectronCount(value) => Self::ElectronCount(value),
         })
     }
 }
@@ -147,7 +165,7 @@ impl AromaticSystemConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
+    /// Transactional write at one key: verify the current value `normalized_eq` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -169,7 +187,7 @@ impl AromaticSystemConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {
@@ -229,7 +247,7 @@ impl AromaticSystemConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -246,6 +264,22 @@ impl Normalize for AromaticSystemConstraintsForm {
             .collect::<Result<Vec<AromaticSystemConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
+    }
+}
+
+impl FrameTransport for AromaticSystemConstraintsForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if !self
+            .iter()
+            .any(AromaticSystemConstraintForm::uses_participant_frame)
+        {
+            return Some(self);
+        }
+        self.into_iter()
+            .map(|constraint| constraint.reframe_by(action))
+            .collect()
     }
 }
 
@@ -383,7 +417,7 @@ impl From<Vec<AromaticSystemConstraintForm>> for AromaticSystemConstraintsForm {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::{EdgeId, GraphCompaction, NodeId};
 
     use super::*;
 
@@ -432,6 +466,35 @@ mod tests {
         #[case] expected: Result<AromaticSystemConstraintForm, Contradiction>,
     ) {
         assert_eq!(constraint.normalize(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(AromaticSystemConstraintForm::electron_count(6), false)]
+    fn test_aromatic_system_constraint_form_uses_participant_frame(
+        #[case] constraint: AromaticSystemConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(AromaticSystemConstraintForm::electron_count(6))]
+    fn test_aromatic_system_constraint_form_reframe_by(
+        #[case] constraint: AromaticSystemConstraintForm,
+    ) {
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraint.clone().reframe_by(&action), Some(constraint));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_form_reframe_by() {
+        let constraints = AromaticSystemConstraintsForm::from(vec![
+            AromaticSystemConstraintForm::electron_count(6),
+        ]);
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraints.clone().reframe_by(&action), Some(constraints),);
     }
 
     #[rstest]
@@ -645,8 +708,8 @@ mod tests {
     fn test_aromatic_system_constraints_form_compact() {
         let cs =
             AromaticSystemConstraintsForm::from(AromaticSystemConstraintForm::electron_count(6));
-        let compaction = IdCompaction::new(
-            Compaction::new(vec![0, 1], vec![0]),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(vec![NodeId(0), NodeId(1)], vec![EdgeId(0)]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

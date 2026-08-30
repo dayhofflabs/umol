@@ -1,6 +1,6 @@
 //! Shared generation of Python methods for form lattice and normalization operations.
 
-pub(crate) use umol_graph_ir::ir::{Equiv, Lattice, Normalize};
+pub(crate) use umol_graph_ir::ir::{Lattice, Normalize};
 
 pub(crate) use crate::error::contradiction_error;
 
@@ -19,11 +19,11 @@ macro_rules! impl_py_normalize {
             }
 
             /// Compare normal forms while leaving structural equality unchanged.
-            fn equiv(&self, py: Python<'_>, other: &$py_type) -> PyResult<bool> {
+            fn normalized_eq(&self, py: Python<'_>, other: &$py_type) -> PyResult<bool> {
                 let to_rust = $to_rust;
                 let lhs: $rust_type = to_rust(self, py)?;
                 let rhs: $rust_type = to_rust(other, py)?;
-                Ok($crate::lattice::Equiv::equiv(&lhs, &rhs))
+                Ok($crate::lattice::Normalize::normalized_eq(&lhs, &rhs))
             }
         }
     };

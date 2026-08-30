@@ -28,8 +28,8 @@ use crate::dative::{DativeBondForm, DativeBondViews};
 use crate::defaults::MoleculeDefaults;
 use crate::edit::Edits;
 use crate::error::{
-    fingerprint_error, metadata_error, molecule_apply_error, parse_error, smiles_input_error,
-    InvalidStructureError,
+    fingerprint_error, metadata_error, molecule_apply_error, molecule_integrity_error, parse_error,
+    smiles_input_error, InvalidStructureError,
 };
 use crate::fingerprint::config::{
     HashedFingerprintConfig, PatternFingerprintConfig, StructuralFingerprintConfig,
@@ -131,7 +131,7 @@ impl Molecule {
     /// index, a list of `StereoLigand`s in frame order, and a `StereoAtomForm` / `StereoBondForm`.
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
-    #[allow(clippy::too_many_arguments)] // one argument per entity family — the full molecule surface
+    #[allow(clippy::too_many_arguments)] // one argument per entity kind — the full molecule surface
     fn from_entries(
         py: Python<'_>,
         atoms: Vec<Py<AtomForm>>,
@@ -190,8 +190,7 @@ impl Molecule {
             .iter()
             .map(|([first, second], bond)| {
                 (
-                    GraphIrAtomId(*first),
-                    GraphIrAtomId(*second),
+                    [GraphIrAtomId(*first), GraphIrAtomId(*second)],
                     bond.bind(py).borrow().to_rust().clone(),
                 )
             })
@@ -374,7 +373,7 @@ impl Molecule {
         reaction: &Reaction,
         config: Option<ReactionApplicationConfig>,
     ) -> PyResult<Py<ReactionProductsIter>> {
-        let reaction = reaction.to_rust(py);
+        let reaction = reaction.to_rust(py)?;
         let products = GraphIrReact::react(
             self.to_rust(),
             &reaction,
@@ -409,7 +408,7 @@ impl Molecule {
             .iter()
             .map(|molecule| molecule.bind(py).borrow().to_rust().clone())
             .collect::<Vec<_>>();
-        let reaction = reaction.to_rust(py);
+        let reaction = reaction.to_rust(py)?;
         let products = GraphIrReact::react(
             reactants.as_slice(),
             &reaction,
@@ -559,12 +558,14 @@ impl Molecule {
     #[setter]
     fn set_constraints(slf: Py<Self>, py: Python<'_>, value: ConstraintsLike) -> PyResult<()> {
         let constraints = value.to_rust(py)?;
-        *slf.borrow_mut(py).to_rust_mut().constraints_mut() = constraints;
-        Ok(())
+        slf.borrow_mut(py)
+            .to_rust_mut()
+            .try_modify_constraints(|current| *current = constraints)
+            .map_err(molecule_integrity_error)
     }
 
     pub(crate) fn __repr__(&self) -> String {
-        // Atoms and bonds always; the other entity families (dative bonds, aromatic systems,
+        // Atoms and bonds always; the other entity kinds (dative bonds, aromatic systems,
         // multicenter bonds, noncovalent bonds, stereo atoms, stereo bonds) only when present,
         // so a plain covalent molecule stays uncluttered. Names match the `from_entries` kwargs.
         let mut parts = vec![
@@ -628,7 +629,8 @@ mod tests {
     };
     use umol_graph_ir::ir::{
         AromaticSystemForm as GraphIrAromaticSystemForm,
-        AromaticSystemId as GraphIrAromaticSystemId, AtomFieldChange as GraphIrAtomFieldChange,
+        AromaticSystemId as GraphIrAromaticSystemId,
+        AtomConstraintForm as GraphIrAtomConstraintForm, AtomFieldChange as GraphIrAtomFieldChange,
         AtomForm as GraphIrAtomForm, AtomHandle as GraphIrAtomHandle,
         AtomUpdate as GraphIrAtomUpdate, BondForm as GraphIrBondForm,
         Constraint as GraphIrConstraint, Constraints as GraphIrConstraints,
@@ -1577,7 +1579,8 @@ mod tests {
             let view = Molecule::constraints(molecule.clone_ref(py));
             let constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
-            view.with_mut(py, |constraints| constraints.push(constraint.clone()));
+            view.with_mut(py, |constraints| constraints.push(constraint.clone()))
+                .unwrap();
 
             assert_eq!(
                 molecule
@@ -1620,6 +1623,35 @@ mod tests {
                     .as_slice(),
                 &[constraint]
             );
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_set_constraints_integrity_error() {
+        Python::attach(|py| {
+            let molecule = Py::new(py, Molecule::new()).unwrap();
+            let invalid =
+                GraphIrConstraint::Atom(GraphIrAtomId(0), GraphIrAtomConstraintForm::degree(1));
+            let constraints = Py::new(
+                py,
+                Constraints::from_rust(GraphIrConstraints::from(vec![invalid])),
+            )
+            .unwrap();
+
+            let error = Molecule::set_constraints(
+                molecule.clone_ref(py),
+                py,
+                ConstraintsLike::Container(constraints),
+            )
+            .unwrap_err();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert!(molecule
+                .bind(py)
+                .borrow()
+                .to_rust()
+                .constraints()
+                .is_empty());
         });
     }
 
@@ -1671,9 +1703,7 @@ mod tests {
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),
             ],
-            noncovalent: vec![(
-                GraphIrAtomId(0),
-                GraphIrAtomId(1),
+            noncovalent: vec![([GraphIrAtomId(0), GraphIrAtomId(1)],
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()

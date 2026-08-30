@@ -36,7 +36,7 @@ pub enum IncidenceLevel {
 ///
 /// The total order uses the frozen aggregate-canonicalization schema rather
 /// than enum declaration order. For normalized values, it agrees with the
-/// typed incidence keys used to form canonicalization classes.
+/// typed incidence keys used to form canonicalization colors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Incidence {
     BondEndpoint,
@@ -172,7 +172,7 @@ impl IncidenceGraph {
     pub fn node_of(&self, entity: Entity) -> NodeId {
         let block = entity.kind() as usize;
         let offset: u32 = self.entity_counts[..block].iter().sum();
-        NodeId(offset + entity.id_index() as u32)
+        NodeId(offset + entity.kind_id() as u32)
     }
 
     /// The typed participant occurrence represented by `edge`.
@@ -400,25 +400,24 @@ impl ReactionSpan {
         }
 
         if constitution {
-            for id in self.dative_bonds().relation_ids() {
-                for &donor in self.dative_bonds().participants_2(id) {
+            for id in self.dative_bonds().ids() {
+                for donor in self.dative_bonds().donors(id) {
                     push(node, donor.0, Incidence::DativeDonor);
                 }
                 push(
                     node,
-                    self.dative_bonds().participants_1(id)[0].0,
+                    self.dative_bonds().acceptor(id).0,
                     Incidence::DativeAcceptor,
                 );
                 node += 1;
             }
-            for id in self.aromatic_systems().relation_ids() {
-                for (position, &atom) in self.aromatic_systems().participants(id).iter().enumerate()
-                {
+            for id in self.aromatic_systems().ids() {
+                for (position, atom) in self.aromatic_systems().atoms(id).enumerate() {
                     push(
                         node,
                         atom.0,
                         Incidence::AromaticParticipantSpan(electron_span(
-                            self.aromatic_systems().data(id),
+                            self.aromatic_systems().attributes(id),
                             position,
                             |value| &value.electrons,
                         )),
@@ -426,15 +425,13 @@ impl ReactionSpan {
                 }
                 node += 1;
             }
-            for id in self.multicenter_bonds().relation_ids() {
-                for (position, &atom) in
-                    self.multicenter_bonds().participants(id).iter().enumerate()
-                {
+            for id in self.multicenter_bonds().ids() {
+                for (position, atom) in self.multicenter_bonds().atoms(id).enumerate() {
                     push(
                         node,
                         atom.0,
                         Incidence::MulticenterParticipantSpan(electron_span(
-                            self.multicenter_bonds().data(id),
+                            self.multicenter_bonds().attributes(id),
                             position,
                             |value| &value.electrons,
                         )),
@@ -442,8 +439,8 @@ impl ReactionSpan {
                 }
                 node += 1;
             }
-            for id in self.noncovalent_bonds().relation_ids() {
-                for &atom in self.noncovalent_bonds().participants(id) {
+            for id in self.noncovalent_bonds().ids() {
+                for atom in self.noncovalent_bonds().atoms(id) {
                     push(node, atom.0, Incidence::NoncovalentEndpoint);
                 }
                 node += 1;
@@ -451,24 +448,20 @@ impl ReactionSpan {
         }
 
         if stereo {
-            for id in self.stereo_atoms().relation_ids() {
-                push(
-                    node,
-                    self.stereo_atoms().participants_1(id)[0].0,
-                    Incidence::StereoSite,
-                );
-                for ligand in self.stereo_atoms().participants_2(id) {
+            for id in self.stereo_atoms().ids() {
+                push(node, self.stereo_atoms().site(id).0, Incidence::StereoSite);
+                for ligand in self.stereo_atoms().ligands(id) {
                     push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
                 }
                 node += 1;
             }
-            for id in self.stereo_bonds().relation_ids() {
+            for id in self.stereo_bonds().ids() {
                 push(
                     node,
-                    atom_count as u32 + self.stereo_bonds().participants_1(id)[0].0,
+                    atom_count as u32 + self.stereo_bonds().site(id).0,
                     Incidence::StereoSite,
                 );
-                for ligand in self.stereo_bonds().participants_2(id) {
+                for ligand in self.stereo_bonds().ligands(id) {
                     push(node, ligand.atom_id.0, Incidence::StereoLigand(ligand.kind));
                 }
                 node += 1;
@@ -546,8 +539,7 @@ mod tests {
                 MulticenterBondForm::from_electrons(vec![2, 0, 1]),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(5),
+                [AtomId(0), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             stereo_atoms: vec![(
@@ -564,8 +556,8 @@ mod tests {
                 BondId(1),
                 vec![
                     StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::LonePair),
                 ],
                 StereoBondForm::new(StereoKind::CisTrans, StereoCoset::Lit(1)),
@@ -714,11 +706,11 @@ mod tests {
                 ),
                 (EdgeId(21), Incidence::StereoSite),
                 (EdgeId(22), Incidence::StereoLigand(StereoLigandKind::Atom),),
-                (EdgeId(23), Incidence::StereoLigand(StereoLigandKind::Atom),),
                 (
-                    EdgeId(24),
+                    EdgeId(23),
                     Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
                 ),
+                (EdgeId(24), Incidence::StereoLigand(StereoLigandKind::Atom),),
                 (
                     EdgeId(25),
                     Incidence::StereoLigand(StereoLigandKind::LonePair),
@@ -765,12 +757,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::repeated_virtual_ligand_anchor(
+    #[case::mixed_virtual_ligand_anchor(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::F),
                 AtomForm::from_element(Element::Cl),
+            ],
+            bonds: vec![
+                (AtomId(0), AtomId(1), BondForm::from_order(1)),
+                (AtomId(0), AtomId(2), BondForm::from_order(1)),
             ],
             stereo_atoms: vec![(
                 AtomId(0),
@@ -778,29 +774,33 @@ mod tests {
                     StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
-                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
                 ],
                 StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
             )],
             ..Default::default()
         }),
         vec![
-            ([NodeId(0), NodeId(3)], Incidence::StereoSite),
+            ([NodeId(0), NodeId(3)], Incidence::BondEndpoint),
+            ([NodeId(1), NodeId(3)], Incidence::BondEndpoint),
+            ([NodeId(0), NodeId(4)], Incidence::BondEndpoint),
+            ([NodeId(2), NodeId(4)], Incidence::BondEndpoint),
+            ([NodeId(0), NodeId(5)], Incidence::StereoSite),
             (
-                [NodeId(1), NodeId(3)],
+                [NodeId(1), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::Atom),
             ),
             (
-                [NodeId(2), NodeId(3)],
+                [NodeId(2), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::Atom),
             ),
             (
-                [NodeId(0), NodeId(3)],
+                [NodeId(0), NodeId(5)],
                 Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
             ),
             (
-                [NodeId(0), NodeId(3)],
-                Incidence::StereoLigand(StereoLigandKind::ImplicitHydrogen),
+                [NodeId(0), NodeId(5)],
+                Incidence::StereoLigand(StereoLigandKind::LonePair),
             ),
         ],
     )]

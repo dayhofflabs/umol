@@ -91,7 +91,6 @@ fn consumed_transaction_error() -> PyErr {
 #[cfg(test)]
 mod tests {
     use pyo3::exceptions::PyRuntimeError;
-    use pyo3::prelude::*;
     use rstest::{fixture, rstest};
     use umol_chem::element::Element as ChemElement;
     use umol_graph_ir::ir::{

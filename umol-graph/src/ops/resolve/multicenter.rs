@@ -218,9 +218,10 @@ mod tests {
             panic!("fixture must produce a determined edit plan");
         };
         molecule
-            .multicenter_bond_mut(MulticenterBondId(1))
-            .attributes
-            .charge = NumForm::Lit(9);
+            .try_modify_multicenter_bond(MulticenterBondId(1), |bond| {
+                bond.charge = NumForm::Lit(9);
+            })
+            .expect("changing charge preserves molecule integrity");
         let expected = molecule.clone();
         let mut editor = molecule.edit();
         assert_eq!(

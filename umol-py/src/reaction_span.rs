@@ -7,8 +7,8 @@ use pyo3::prelude::*;
 use umol_graph_ir::dsl::ReactionSpanDsl as GraphIrReactionSpanDsl;
 use umol_graph_ir::ir::{
     AtomId as GraphIrAtomId, BondId as GraphIrBondId, Constraint as GraphIrConstraint,
-    ConstraintSpan as GraphIrConstraintSpan, EntitySpan as GraphIrEntitySpan, Equiv, FromIr,
-    IntoIr, Normalize, ReactionSpan as GraphIrReactionSpan,
+    ConstraintSpan as GraphIrConstraintSpan, EntitySpan as GraphIrEntitySpan, FromIr, IntoIr,
+    Normalize, ReactionSpan as GraphIrReactionSpan,
     ReactionSpanEntries as GraphIrReactionSpanEntries,
 };
 
@@ -39,7 +39,7 @@ fn constraint_spans(
     rhs: Option<GraphIrConstraint>,
 ) -> PyResult<Vec<GraphIrConstraintSpan>> {
     match (lhs, rhs) {
-        (Some(lhs), Some(rhs)) if lhs.equiv(&rhs) => {
+        (Some(lhs), Some(rhs)) if lhs.normalized_eq(&rhs) => {
             Ok(vec![GraphIrConstraintSpan::Unchanged(lhs)])
         }
         (Some(lhs), Some(rhs)) => Ok(vec![
@@ -124,7 +124,7 @@ impl ReactionSpan {
     /// on each side form a structurally intact molecule. Chemistry is not validated.
     #[staticmethod]
     #[pyo3(signature = (atoms, *, bonds=Vec::new(), dative_bonds=Vec::new(), aromatic_systems=Vec::new(), multicenter_bonds=Vec::new(), noncovalent_bonds=Vec::new(), stereo_atoms=Vec::new(), stereo_bonds=Vec::new(), constraints=Vec::new()))]
-    #[allow(clippy::too_many_arguments)] // one argument per entity family
+    #[allow(clippy::too_many_arguments)] // one argument per entity kind
     fn from_entries(
         py: Python<'_>,
         atoms: Vec<SpanPair<AtomForm>>,
@@ -200,8 +200,7 @@ impl ReactionSpan {
             .into_iter()
             .map(|([first, second], (lhs, rhs))| {
                 Ok((
-                    GraphIrAtomId(first),
-                    GraphIrAtomId(second),
+                    [GraphIrAtomId(first), GraphIrAtomId(second)],
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                         rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
@@ -548,22 +547,19 @@ mod tests {
                 ),
                 GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::LonePair),
                 GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
-                GraphIrStereoLigand::new(
-                    GraphIrAtomId(0),
-                    GraphIrStereoLigandKind::ImplicitHydrogen,
-                ),
+                GraphIrStereoLigand::new(GraphIrAtomId(2), GraphIrStereoLigandKind::Atom),
             ];
             let stereo_bond_ligands = vec![
-                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::Atom),
-                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::Atom),
                 GraphIrStereoLigand::new(
                     GraphIrAtomId(0),
                     GraphIrStereoLigandKind::ImplicitHydrogen,
                 ),
+                GraphIrStereoLigand::new(GraphIrAtomId(0), GraphIrStereoLigandKind::LonePair),
                 GraphIrStereoLigand::new(
                     GraphIrAtomId(1),
                     GraphIrStereoLigandKind::ImplicitHydrogen,
                 ),
+                GraphIrStereoLigand::new(GraphIrAtomId(1), GraphIrStereoLigandKind::LonePair),
             ];
             let unchanged_constraint =
                 GraphIrConstraint::Molecule(GraphIrMoleculeConstraint::Connected { atoms: None });
@@ -597,21 +593,31 @@ mod tests {
                     ),
                     (
                         Some(Py::new(py, AtomForm::from_rust(removed_atom.clone())).unwrap()),
-                        None,
+                        Some(Py::new(py, AtomForm::from_rust(removed_atom.clone())).unwrap()),
                     ),
                     (
                         None,
                         Some(Py::new(py, AtomForm::from_rust(added_atom.clone())).unwrap()),
                     ),
                 ],
-                vec![(
-                    0,
-                    1,
+                vec![
                     (
-                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
-                        Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        0,
+                        1,
+                        (
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        ),
                     ),
-                )],
+                    (
+                        0,
+                        2,
+                        (
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                            Some(Py::new(py, BondForm::from_rust(unchanged_bond.clone())).unwrap()),
+                        ),
+                    ),
+                ],
                 vec![(
                     vec![1],
                     0,
@@ -761,14 +767,21 @@ mod tests {
                             lhs: modified_lhs,
                             rhs: modified_rhs,
                         },
-                        GraphIrEntitySpan::Removed(removed_atom),
+                        GraphIrEntitySpan::Unchanged(removed_atom),
                         GraphIrEntitySpan::Added(added_atom),
                     ],
-                    bonds: vec![(
-                        GraphIrAtomId(0),
-                        GraphIrAtomId(1),
-                        GraphIrEntitySpan::Unchanged(unchanged_bond),
-                    )],
+                    bonds: vec![
+                        (
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(1),
+                            GraphIrEntitySpan::Unchanged(unchanged_bond.clone()),
+                        ),
+                        (
+                            GraphIrAtomId(0),
+                            GraphIrAtomId(2),
+                            GraphIrEntitySpan::Unchanged(unchanged_bond),
+                        ),
+                    ],
                     dative: vec![(
                         vec![GraphIrAtomId(1)],
                         GraphIrAtomId(0),
@@ -786,8 +799,7 @@ mod tests {
                         GraphIrEntitySpan::Removed(removed_multicenter),
                     )],
                     noncovalent: vec![(
-                        GraphIrAtomId(0),
-                        GraphIrAtomId(1),
+                        [GraphIrAtomId(0), GraphIrAtomId(1)],
                         GraphIrEntitySpan::Unchanged(unchanged_noncovalent),
                     )],
                     stereo_atoms: vec![(
@@ -1017,7 +1029,8 @@ mod tests {
                 ReactionSpan::from_rust(span)
                     .to_reaction(py)
                     .unwrap()
-                    .to_rust(py),
+                    .to_rust(py)
+                    .unwrap(),
                 expected
             );
         });

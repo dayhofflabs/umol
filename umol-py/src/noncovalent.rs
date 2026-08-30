@@ -1329,8 +1329,7 @@ mod tests {
                 GraphIrAtomForm::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
-                GraphIrAtomId(0),
-                GraphIrAtomId(1),
+                [GraphIrAtomId(0), GraphIrAtomId(1)],
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -1517,8 +1516,7 @@ mod tests {
                 GraphIrAtomForm::from_element(ChemElement::O),
             ],
             noncovalent: vec![(
-                GraphIrAtomId(0),
-                GraphIrAtomId(1),
+                [GraphIrAtomId(0), GraphIrAtomId(1)],
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()

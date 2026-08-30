@@ -1,19 +1,21 @@
 //! Reaction canonicalization properties.
 //!
 //! Materializable reactions and independently renumbered reaction spans exercise exact canonical
-//! forms, equality, canonical hashes, normalization, reversal, and covariant application. Named
-//! defects separately cover integrity failure, discontinuous deltas, and intrinsically
-//! contradictory forms. Nauty is currently the only canonical-labeling selector; frozen canonical
-//! fixtures, rather than a tautological second case, remain the compatibility target for future
-//! algorithms.
+//! forms, the complete normalization/reframe/canonicalize law matrix, equality, canonical hashes,
+//! reversal, and covariant application. Named defects separately cover discontinuous deltas and
+//! intrinsically contradictory forms. Nauty is currently the only canonical-labeling selector;
+//! frozen canonical fixtures, rather than a tautological second case, remain the compatibility
+//! target for future algorithms.
+
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::{
-    AtomDelta, Canonicalize, CanonicalizeContext, CanonicalizeLevel, Contradiction, Delta, Deltas,
-    Entity, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, NumForm, Reaction,
-    ReactionCanonicalizeError, ReactionDerivation, ReactionIntegrityError, ReactionSpan,
+    Canonicalize, CanonicalizeContext, Contradiction, Deltas, EntitySpan, Molecule,
+    MoleculeCorrespondence, MoleculeEntries, Normalize, NumForm, Reaction,
+    ReactionCanonicalizeError, ReactionDerivation, ReactionSpan, Reframe,
 };
 
 use super::span::reaction_span_scenario_strategy;
@@ -30,6 +32,12 @@ fn context() -> CanonicalizeContext {
         para_stereo: false,
         automorphism_algorithm: AutomorphismAlgorithm::Nauty,
     }
+}
+
+fn structural_hash<T: Hash>(value: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn is_present<T>(value: &EntitySpan<T>, side: Side) -> bool {
@@ -159,28 +167,12 @@ fn product_correspondence(
     )
     .expect("corresponding products have a bijective atom transport");
     MoleculeCorrespondence::induce(source.rhs(), canonical.rhs(), atoms)
-        .expect("product atom transport induces all entity families")
+        .expect("product atom transport induces all entity kinds")
 }
 
 fn canonicalization_error_strategy() -> impl Strategy<Value = (Reaction, ReactionCanonicalizeError)>
 {
     prop_oneof![
-        (0u32..64).prop_map(|id| {
-            (
-                Reaction::new(
-                    Molecule::default(),
-                    [Delta::Atom(AtomDelta::Remove {
-                        id: AtomId(id),
-                        attributes: AtomForm::default(),
-                    })]
-                    .into_iter()
-                    .collect(),
-                ),
-                ReactionCanonicalizeError::Integrity(ReactionIntegrityError::InvalidReference {
-                    entity: Entity::Atom(AtomId(id)),
-                }),
-            )
-        }),
         discontinuous_atom_update_reaction_strategy().prop_map(|reaction| {
             (
                 reaction,
@@ -219,42 +211,86 @@ proptest! {
         let canonical = reaction.clone().canonicalize(&context).map_err(|error| {
             TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
         })?;
+        let (with_correspondence, correspondence) = reaction
+            .clone()
+            .canonicalize_with_correspondence(&context)
+            .map_err(|error| {
+                TestCaseError::fail(format!(
+                    "generated reaction did not canonicalize with a correspondence: {error}"
+                ))
+            })?;
+        let reconstructed = reaction
+            .to_reaction_span()
+            .map_err(|_| TestCaseError::fail("generated reaction did not materialize"))?
+            .remap(&correspondence)
+            .reframe()
+            .map_err(|_| {
+                TestCaseError::fail("canonical correspondence produced a contradiction")
+            })?
+            .to_reaction();
 
-        prop_assert_eq!(canonical.check_integrity(), Ok(()));
-        prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical));
+        prop_assert_eq!(
+            Reaction::try_new(canonical.lhs().clone(), canonical.deltas().clone()),
+            Ok(canonical.clone()),
+        );
+        prop_assert_eq!(&with_correspondence, &canonical);
+        prop_assert_eq!(reconstructed, canonical);
     }
 
     #[test]
-    fn test_reaction_canonicalize_by(scenario in reaction_span_scenario_strategy()) {
+    fn test_reaction_canonicalize_standardization(
+        scenario in standardization_scenario_strategy(),
+    ) {
         let context = context();
-        let source = scenario.span.to_reaction();
-        let renumbered = scenario.span.remap(&scenario.first).to_reaction();
+        let source = scenario.reaction;
+        let identical = source.clone();
+        let normalized = source.clone().normalize().map_err(|_| {
+            TestCaseError::fail("generated reaction is intrinsically contradictory")
+        })?;
+        let normalized_again = normalized.clone().normalize().map_err(|_| {
+            TestCaseError::fail("normalized reaction became contradictory")
+        })?;
+        let reframed = source.clone().reframe().map_err(|_| {
+            TestCaseError::fail("generated reaction is intrinsically contradictory")
+        })?;
+        let canonical = source.clone().canonicalize(&context).map_err(|error| {
+            TestCaseError::fail(format!("generated reaction did not canonicalize: {error}"))
+        })?;
+        let renumbered = scenario.span.remap(&scenario.correspondence).to_reaction();
 
-        for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
-        ] {
-            let left = source.clone().canonicalize_by(level, &context);
-            let right = renumbered.clone().canonicalize_by(level, &context);
-            match (left, right) {
-                (Ok(left), Ok(right)) => {
-                    prop_assert!(left.canonical_eq_by(&right, level, &context));
-                    if level == CanonicalizeLevel::Full {
-                        prop_assert_eq!(left, right);
-                    }
-                }
-                (Err(left), Err(right)) => prop_assert_eq!(left, right),
-                (left, right) => {
-                    prop_assert!(false, "canonicalization mismatch: {left:?} != {right:?}")
-                }
-            }
-        }
+        prop_assert_eq!(normalized.clone().normalize(), Ok(normalized.clone()));
+        prop_assert_eq!(reframed.clone().reframe(), Ok(reframed.clone()));
+        prop_assert_eq!(canonical.clone().canonicalize(&context), Ok(canonical.clone()));
+        prop_assert_eq!(normalized.clone().reframe(), Ok(reframed.clone()));
+        prop_assert_eq!(reframed.clone().normalize(), Ok(reframed.clone()));
+        prop_assert_eq!(normalized.clone().canonicalize(&context), Ok(canonical.clone()));
+        prop_assert_eq!(reframed.clone().canonicalize(&context), Ok(canonical.clone()));
+        prop_assert_eq!(canonical.clone().normalize(), Ok(canonical.clone()));
+        prop_assert_eq!(canonical.clone().reframe(), Ok(canonical.clone()));
+
+        prop_assert_eq!(&source, &identical);
+        prop_assert!(source.normalized_eq(&identical));
+        prop_assert!(source.framed_eq(&identical));
+        prop_assert!(source.canonical_eq(&identical, &context));
+        prop_assert!(source.normalized_eq(&normalized));
         prop_assert_eq!(
-            source.clone().canonicalize_by(CanonicalizeLevel::Full, &context),
-            source.canonicalize(&context),
+            source.normalized_eq(&normalized),
+            normalized.normalized_eq(&source),
         );
+        prop_assert!(normalized.normalized_eq(&normalized_again));
+        prop_assert!(source.normalized_eq(&normalized_again));
+        prop_assert!(source.framed_eq(&normalized));
+        prop_assert!(normalized.framed_eq(&reframed));
+        prop_assert!(source.framed_eq(&reframed));
+        prop_assert_eq!(source.framed_eq(&reframed), reframed.framed_eq(&source));
+        prop_assert!(source.canonical_eq(&reframed, &context));
+        prop_assert_eq!(
+            source.canonical_eq(&reframed, &context),
+            reframed.canonical_eq(&source, &context),
+        );
+        prop_assert!(reframed.canonical_eq(&renumbered, &context));
+        prop_assert!(source.canonical_eq(&renumbered, &context));
+        prop_assert!(renumbered.canonical_eq(&canonical, &context));
     }
 
     #[test]
@@ -267,48 +303,12 @@ proptest! {
             source.clone().canonical_hash(&context),
             renumbered.clone().canonical_hash(&context),
         );
-        for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
-        ] {
+        if let Ok(canonical) = source.clone().canonicalize(&context) {
             prop_assert_eq!(
-                source.clone().canonical_hash_by(level, &context),
-                renumbered.clone().canonical_hash_by(level, &context),
+                source.canonical_hash(&context),
+                Ok(structural_hash(&canonical)),
             );
         }
-        prop_assert_eq!(
-            source
-                .clone()
-                .canonical_hash_by(CanonicalizeLevel::Full, &context),
-            source.canonical_hash(&context),
-        );
-    }
-
-    #[test]
-    fn test_reaction_canonical_eq_by(scenario in reaction_span_scenario_strategy()) {
-        let context = context();
-        let source = scenario.span.to_reaction();
-        let renumbered = scenario.span.remap(&scenario.first).to_reaction();
-
-        for level in [
-            CanonicalizeLevel::Topology,
-            CanonicalizeLevel::Constitution,
-            CanonicalizeLevel::Structure,
-            CanonicalizeLevel::Full,
-        ] {
-            prop_assert!(source.canonical_eq_by(&source, level, &context));
-            prop_assert!(source.canonical_eq_by(&renumbered, level, &context));
-            prop_assert_eq!(
-                source.canonical_eq_by(&renumbered, level, &context),
-                renumbered.canonical_eq_by(&source, level, &context),
-            );
-        }
-        prop_assert_eq!(
-            source.canonical_eq_by(&renumbered, CanonicalizeLevel::Full, &context),
-            source.canonical_eq(&renumbered, &context),
-        );
     }
 
     #[test]
@@ -361,8 +361,9 @@ proptest! {
             .to_reaction_span()
             .expect("canonical reaction materializes");
         let lhs_atoms = projected_atom_correspondence(&source_span, union.atoms(), Side::Left);
-        let lhs_action = MoleculeCorrespondence::induce(&reaction.lhs, &canonical.lhs, lhs_atoms)
-            .expect("canonical union action induces its lhs action");
+        let lhs_action =
+            MoleculeCorrespondence::induce(reaction.lhs(), canonical.lhs(), lhs_atoms)
+                .expect("canonical union action induces its lhs action");
         let canonical_match = lhs_action.reverse().compose(&correspondence);
         let source_application = reaction.apply_at(&host, &correspondence);
         let canonical_application = canonical.apply_at(&host, &canonical_match);
@@ -383,7 +384,7 @@ proptest! {
                     &right,
                 );
                 prop_assert!(products.is_total());
-                prop_assert!(left.rhs().equiv_under(right.rhs(), &products));
+                prop_assert!(left.rhs().framed_eq_under(right.rhs(), &products));
             }
             (left, right) => prop_assert!(false, "application mismatch: {left:?} != {right:?}"),
         }
@@ -394,5 +395,29 @@ proptest! {
         (reaction, expected) in canonicalization_error_strategy(),
     ) {
         prop_assert_eq!(reaction.canonicalize(&context()), Err(expected));
+    }
+
+    #[test]
+    fn test_reaction_canonical_eq_contradiction(
+        scenario in intrinsic_contradiction_scenario_strategy(),
+    ) {
+        let context = context();
+        let [first, second, third] = scenario.reactions;
+
+        prop_assert_ne!(&first, &second);
+        prop_assert_ne!(&second, &third);
+        prop_assert!(first.normalized_eq(&second));
+        prop_assert!(second.normalized_eq(&third));
+        prop_assert!(first.normalized_eq(&third));
+        prop_assert!(first.framed_eq(&second));
+        prop_assert!(second.framed_eq(&third));
+        prop_assert!(first.framed_eq(&third));
+        prop_assert!(first.canonical_eq(&second, &context));
+        prop_assert!(second.canonical_eq(&third, &context));
+        prop_assert!(first.canonical_eq(&third, &context));
+        prop_assert_eq!(
+            first.canonicalize_with_correspondence(&context),
+            Err(ReactionCanonicalizeError::Contradiction(Contradiction)),
+        );
     }
 }

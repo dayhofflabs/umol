@@ -11,9 +11,9 @@ use std::ops::ControlFlow;
 
 use thiserror::Error;
 use umol_graph_core::{
-    Correspondence, ParticipantPosition, RelationData, RelevantCycleEnumerationAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
+use umol_perm::{DynPermutation, Permutation};
 
 use super::atom::AtomForm;
 use super::bond::BondForm;
@@ -27,8 +27,7 @@ use super::id::{AtomId, BondId};
 use super::incidence::{Incidence, IncidenceLevel};
 use super::molecule::Molecule;
 use super::ring::{RingConfig, RingModel, RingSet, RingSetKind};
-use super::stereo::coset_matches;
-use super::traits::Lattice;
+use super::traits::{FrameTransport, Lattice};
 
 /// Strategy for `substructure_matches`, each composing over a
 /// [`SubgraphIsomorphismAlgorithm`].
@@ -175,7 +174,7 @@ impl Molecule {
 
     /// Per pattern×host entity constraint-satisfaction tables, evaluated once
     /// per run through the hosts' constraint readings under the closure; `None`
-    /// when no pattern entity of that family carries constraints (the common
+    /// when no pattern entity of that kind carries constraints (the common
     /// element/bond-pattern case, which then skips all derivation).
     fn constraint_tables(
         &self,
@@ -366,7 +365,7 @@ impl Molecule {
     /// Post-verify a topology occurrence's overlays against the atom correspondence, returning the
     /// injective pattern→host [`MoleculeCorrespondence`] or `None` if any pattern overlay has no
     /// matching host overlay. Each N-ary / special overlay is located by **exact participant set**
-    /// via the per-family inducer (which already checks dative donor/acceptor roles); the pattern
+    /// via the per-kind inducer (which already checks dative donor/acceptor roles); the pattern
     /// overlay's predicate is then required to match the located host overlay's, and every pattern
     /// overlay must be matched. Stereo overlays are matched by the bespoke coset filter.
     fn verify_overlays(
@@ -399,14 +398,23 @@ impl Molecule {
             let p_view = pattern.aromatic_system(p);
             let h_view = host.aromatic_system(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(
-                p_view.attributes,
-                h_view.attributes,
-                &pat_atoms,
-                &host_atoms,
-                &atoms,
-            ) {
+            // The host frame named in the pattern's own atom ids, so the pattern form can be
+            // restated into it before the two are compared.
+            let host_frame: Vec<AtomId> = h_view
+                .atom_ids()
+                .map(|host_atom| {
+                    atoms
+                        .left_of(host_atom)
+                        .expect("host overlay atom is matched")
+                })
+                .collect();
+            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
+            if !p_view
+                .attributes
+                .clone()
+                .reframe_by(&action)?
+                .matches(h_view.attributes)
+            {
                 return None;
             }
         }
@@ -419,14 +427,23 @@ impl Molecule {
             let p_view = pattern.multicenter_bond(p);
             let h_view = host.multicenter_bond(h);
             let pat_atoms: Vec<AtomId> = p_view.atom_ids().collect();
-            let host_atoms: Vec<AtomId> = h_view.atom_ids().collect();
-            if !overlay_matches(
-                p_view.attributes,
-                h_view.attributes,
-                &pat_atoms,
-                &host_atoms,
-                &atoms,
-            ) {
+            // The host frame named in the pattern's own atom ids, so the pattern form can be
+            // restated into it before the two are compared.
+            let host_frame: Vec<AtomId> = h_view
+                .atom_ids()
+                .map(|host_atom| {
+                    atoms
+                        .left_of(host_atom)
+                        .expect("host overlay atom is matched")
+                })
+                .collect();
+            let action = DynPermutation::between(&pat_atoms, &host_frame)?;
+            if !p_view
+                .attributes
+                .clone()
+                .reframe_by(&action)?
+                .matches(h_view.attributes)
+            {
                 return None;
             }
         }
@@ -445,33 +462,21 @@ impl Molecule {
             }
         }
 
-        // Stereo: a pattern stereo overlay matches iff the corresponding host site
-        // bears a stereo element of the same class whose coset, reindexed from the
-        // host ligand frame into the pattern's frame (via the atom correspondence),
-        // is admitted by the pattern coset. An `Undetermined` pattern coset admits
-        // both handednesses. TODO: a pattern that asserts stereo via `#T`/`#C` atom
-        // /bond constraints rather than a `:stereo-atoms`/`:stereo-bonds` overlay is
-        // not handled here — that needs the pattern run through stereo perception
-        // (but not grounding, so no valence resolution).
+        // Stereo: a pattern stereo overlay matches iff the corresponding host site bears a stereo
+        // element whose form, restated into the pattern's ligand frame (via the atom
+        // correspondence), the pattern form admits. The comparison is over the whole form, so the
+        // kind, the configuration and every frame-relative constraint are one question; an
+        // `Undetermined` pattern configuration admits both handednesses.
         let mut stereo_atom = Vec::new();
         for sp in pattern.stereo_atoms().iter() {
             let host_site =
                 map_atom(&atoms, sp.site_id()).expect("a matched pattern atom is matched");
-            // `incident` returns stereo atoms where `host_site` is the site *or* a ligand; select the
-            // one it is the site of (≤1 by the site-uniqueness invariant), not merely the first.
-            let sh = host
-                .stereo_atoms()
-                .incident(host_site)
-                .find(|sh| sh.site_id() == host_site)?;
-            if sp.kind() != sh.kind() {
-                return None;
-            }
+            let sh = host.atom(host_site).stereo_atom()?;
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let host_coset = sh.coset_for(frame)?;
-            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
-                return None;
-            }
+            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes.clone().reframe_by(&action)?;
+            sp.attributes.matches(&restated).then_some(())?;
             stereo_atom.push((sp.id, sh.id));
         }
         let stereo_atoms = Correspondence::new(
@@ -487,15 +492,11 @@ impl Molecule {
                 .right_of(sp.site_id())
                 .expect("a matched pattern bond is matched");
             let sh = host.bond(host_site).stereo_bond()?;
-            if sp.kind() != sh.kind() {
-                return None;
-            }
             let frame = map_ligands(&atoms, sp.ligand_frame())
                 .expect("matched pattern ligands are matched");
-            let host_coset = sh.coset_for(frame)?;
-            if !coset_matches(sp.coset(), &host_coset, sp.kind()) {
-                return None;
-            }
+            let action = Permutation::between(&sh.ligand_frame(), &frame)?;
+            let restated = sh.attributes.clone().reframe_by(&action)?;
+            sp.attributes.matches(&restated).then_some(())?;
             stereo_bond.push((sp.id, sh.id));
         }
         let stereo_bonds = Correspondence::new(
@@ -557,35 +558,6 @@ fn bond_fields_match(pattern: &BondForm, host: &BondForm) -> bool {
 /// participant order and `matches` compares the count vector whole, so the pattern payload is first
 /// reindexed into the host's member order (via the atom correspondence) with
 /// [`RelationData::on_permutation`].
-fn overlay_matches<D: Lattice + RelationData>(
-    pattern_form: &D,
-    host_form: &D,
-    pattern_atoms: &[AtomId],
-    host_atoms: &[AtomId],
-    atoms: &Correspondence<AtomId>,
-) -> bool {
-    if pattern_form.is_permutation_invariant() {
-        return pattern_form.matches(host_form);
-    }
-    let order: Vec<ParticipantPosition> = host_atoms
-        .iter()
-        .map(|&host_atom| {
-            let pattern_atom = atoms
-                .left_of(host_atom)
-                .expect("host overlay atom is matched");
-            ParticipantPosition(
-                pattern_atoms
-                    .iter()
-                    .position(|&a| a == pattern_atom)
-                    .expect("host member maps to a pattern member") as u32,
-            )
-        })
-        .collect();
-    let mut probe = pattern_form.clone();
-    probe.on_permutation(&order);
-    probe.matches(host_form)
-}
-
 #[cfg(test)]
 mod tests {
     use std::ops::ControlFlow;
@@ -928,9 +900,24 @@ mod tests {
         mol_dsl!(r#"{:atoms ["C #h1" "Br" "Cl" "F"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"#),
         vec![]
     )]
+    #[case::stereo_constraint_agrees(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
+    )]
+    #[case::stereo_constraint_contradicts(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)/"}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        vec![]
+    )]
+    #[case::stereo_constraint_absent_in_host(
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1"}]}"##),
+        mol_dsl!(r##"{:atoms ["C #h1" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 [:h 0]] :attrs "Th1#o(0,1)="}]}"##),
+        vec![]
+    )]
     #[case::stereo_bond(
-        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :attrs "Ct1"}]}"#),
-        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :attrs "Ct1"}]}"#),
+        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"] [2 0 "1"] [2 1 "1"] [3 4 "1"] [3 5 "1"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :attrs "Ct1"}]}"#),
+        mol_dsl!(r#"{:atoms ["F" "Cl" "C" "N" "Br" "I"] :bonds [[2 3 "2"] [2 0 "1"] [2 1 "1"] [3 4 "1"] [3 5 "1"]] :stereo-bonds [{:site 0 :ligands [0 1 4 5] :attrs "Ct1"}]}"#),
         vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4), AtomId(5)]]
     )]
     fn test_molecule_substructure_matches(

@@ -24,6 +24,7 @@ use super::dative::DativeBondView;
 use super::multicenter::MulticenterBondView;
 use super::neighbor::NeighborView;
 use super::noncovalent::NoncovalentBondView;
+use super::ring::{atom_ring_degree, atom_ring_membership, atom_ring_valence};
 use super::stereo::StereoAtomView;
 use crate::ir::{
     AromaticValenceForm, AtomConstraintForm, AtomConstraintKey, MulticenterValenceForm,
@@ -589,21 +590,21 @@ pub(crate) fn atom_derived_constraint(
         )),
         AtomConstraintKey::RingDegree => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
-            Some(AtomConstraintForm::ring_degree(
-                super::ring::atom_ring_degree(molecule, rings, atom),
-            ))
+            Some(AtomConstraintForm::ring_degree(atom_ring_degree(
+                molecule, rings, atom,
+            )))
         }
         AtomConstraintKey::RingValence => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
-            Some(AtomConstraintForm::ring_valence(
-                super::ring::atom_ring_valence(molecule, rings, atom),
-            ))
+            Some(AtomConstraintForm::ring_valence(atom_ring_valence(
+                molecule, rings, atom,
+            )))
         }
         AtomConstraintKey::RingMembership(scope) => {
             let rings = rings.expect("ring constraint key requires ring context (with_rings)");
             Some(AtomConstraintForm::ring_membership(
                 scope,
-                super::ring::atom_ring_membership(rings, atom, scope),
+                atom_ring_membership(rings, atom, scope),
             ))
         }
     }
@@ -677,8 +678,7 @@ mod tests {
                 MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(3),
+                [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()

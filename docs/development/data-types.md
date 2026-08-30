@@ -11,6 +11,34 @@ The central rule is that an aggregate constructor establishes that its input can
 does not establish every useful property of the resulting value. Semantic properties are lazy and
 must be requested through named operations.
 
+### Closed containers and the minimum eager contract
+
+`Molecule`, `Reaction`, and `ReactionSpan` are closed containers. Every value obtainable through
+their public construction, conversion, mutation, and transformation surfaces satisfies the type's
+tier-1 representation-integrity contract. Their independently assembled entry and delta types are
+open carriers: they may be incomplete or inconsistent until a checked or asserted aggregate
+constructor accepts them.
+
+The closed-container contract is deliberately the smallest eager validation surface that makes the
+stored representation coherent and mutually interpretable. An operation on a closed value may rely
+on that contract instead of repeatedly checking references, collection shapes, participant frames,
+and other representation invariants inside the type's implementation. Every publisher must either
+invoke the authoritative integrity gate or establish preservation of the complete contract by
+construction.
+
+Closed does not mean fully validated. A coherent value may still violate model-independent physical
+invariants, fail a selected chemistry model, be unsatisfiable, fail to match a host, or violate an
+operation-specific precondition. Those questions remain lazy and are checked by the named operation
+that first requires them. Do not enlarge a closed container's eager contract merely to save a later
+operation-specific check, and do not defer a representation invariant when doing so would force most
+operations on the type to rediscover whether its stored fields have a coherent interpretation.
+
+Use this tradeoff when defining other aggregate types: eagerly establish exactly the invariants
+needed for all operations to interpret the value consistently, then leave properties needed by only
+some operations to their explicit validation or execution boundaries. The current check-by-check
+inventory and the concrete failure prevented by each check are maintained in
+[Representation integrity](integrity.md).
+
 An invariant is therefore enforced by the first operation that requires it, not by the earliest
 operation capable of checking it. A caller may request an explicit validator earlier. If it does
 not, a later conversion or operation reports the failure when that invariant becomes a precondition
@@ -55,20 +83,30 @@ kind-dependent domain needed to interpret their representation. A checked constr
 error for a violation; an asserted constructor may panic when its documented producer contract is
 broken.
 
-The fixed relation semantics of every entity family are part of molecule integrity. No entity may
-contain the same actual atom more than once. This excludes localized and noncovalent self-loops,
-repeated dative donors or an acceptor also used as a donor, repeated aromatic and multicenter
-participants, repeated actual-atom stereo ligands, and a stereo-atom site reused as an actual-atom
-ligand. Stereo virtual ligands anchored at the same atom are ligand occurrences rather than repeated
-atom participants and remain valid.
+The fixed relation semantics of every entity kind are part of molecule integrity. Each entity's
+actual-atom participant relation is simple, even when storage divides it into distinguished
+factors. This excludes localized and noncovalent self-loops, repeated dative participants across
+the donors and acceptor, repeated aromatic and multicenter participants, repeated actual-atom
+stereo ligands, and a stereo-atom site reused as an actual-atom ligand. Virtual ligands are not
+actual-atom participants, but an identical virtual ligand occurrence may not repeat within one
+stereo frame. An implicit hydrogen and a lone pair anchored at the same atom remain distinct
+ligands.
 
-The same contract supplies the cross-entity uniqueness needed to interpret each relation family:
-localized bonds have unique unordered endpoint pairs; dative `(acceptor, donor)` incidences are
-unique; aromatic systems are atom-disjoint; multicenter participant sets are unique; noncovalent
-bonds have unique unordered endpoint pairs regardless of interaction kind; and stereo-atom and
-stereo-bond sites are unique within their families. These are not deferred semantic judgments. They
-define the stored relation represented by each entity family and are established whenever a
-`Molecule` is published.
+Stereo ligand frames also carry site-relative incidence. An actual ligand of a stereo atom must be
+a covalent graph neighbor of the site, while an implicit hydrogen or lone pair is borne by the site
+itself. A stereo-bond frame consists of two consecutive two-ligand endpoint blocks. Each block's
+actual ligands must be adjacent to its endpoint and cannot be the opposite site endpoint; its
+virtual ligands must be borne by that endpoint. Exchanging the two complete endpoint blocks is
+valid, but moving one ligand across the endpoint boundary is not.
+
+The same contract supplies the cross-entity uniqueness needed to interpret each relation-valued
+entity kind:
+localized bonds have unique unordered endpoint pairs; dative bonds have unique complete
+`(acceptor, donor multiset)` keys while distinct keys may share incidences; aromatic systems are
+atom-disjoint; multicenter participant sets are unique; noncovalent bonds have unique unordered
+endpoint pairs regardless of interaction kind; and stereo-atom and stereo-bond sites are unique
+within their kinds. These are not deferred semantic judgments. They define the stored relation
+represented by each entity kind and are established whenever a `Molecule` is published.
 
 For stereo, a ligand-frame length different from the declared kind's degree and a concrete coset
 outside that kind's coset space are representation-integrity failures. The same applies to an
@@ -92,9 +130,10 @@ them. It must not turn an earlier-tier failure into a chemistry contradiction.
 
 ### Invoking an integrity check
 
-Representation integrity has one authoritative implementation in the crate that owns the graph IR. It
-is exposed as `check_integrity` with a corresponding `*IntegrityError`; there is no `*Checker`
-object. An integrity check returns `Result<(), *IntegrityError>`, never `Solution`,
+Representation integrity has one authoritative implementation in the crate that owns the graph IR.
+It is the crate-private `check_integrity` operation with a corresponding public `*IntegrityError`;
+there is no public validator or `*Checker` object. An integrity check returns
+`Result<(), *IntegrityError>`, never `Solution`,
 `Underdetermined`, or `Contradictory`. It includes stored entity and constraint references, parallel
 collection shapes such as participant and electron-count lengths, fixed entity-relation semantics,
 and kind-dependent data needed to interpret a value such as stereo frame arity, coset domains, and
@@ -113,17 +152,18 @@ Every path that publishes an aggregate IR value uses that same implementation:
    state. The integrity gate is at the operation that publishes a `Molecule`, not at every
    primitive mutation. A trusted internal producer may take the asserted route only when its
    construction establishes the complete invariant.
-4. A public operation that requires interpretable representation, including aggregate
-   canonicalization, invokes the same check defensively if unchecked or compromised values can
-   reach it. It returns a typed integrity error and never turns the failure into a chemistry
-   contradiction or indexing panic.
+4. An operation accepting a published aggregate relies on the closed-container contract and does
+   not invoke the check defensively. Trusted remapping, canonicalization, projection, reversal, and
+   application publishers establish preservation by construction and property tests.
 
 For `Molecule`, this places the same gate behind direct checked entry construction, molecule-DSL
 raise, TableIR raise, Python construction from entries, and finalization of builders and editors.
-Reaction code uses it whenever it materializes a molecule side or projection; it does not grow a
-reaction-specific copy of molecule integrity. A route that already establishes the contract may use
-the asserted constructor, but the asserted and checked routes must share the implementation and the
-set of accepted values.
+The public aromatic-system and multicenter-bond mutation operations use a private candidate and
+commit only after the same gate succeeds; their raw whole-form mutation kernels remain crate-private.
+Reaction code uses the molecule constructor whenever it materializes a molecule side or projection;
+it does not grow a reaction-specific copy of molecule integrity. A route that already establishes
+the contract may use the asserted constructor, but the asserted and checked routes must share the
+implementation and the set of accepted values.
 
 Do not run a semantic validator at these boundaries. DSL and external-format raise may preserve an
 atom `#T` or bond `#C` assertion before a stereo entity has been perceived or resolved. Validating
@@ -132,17 +172,23 @@ an operation order. Source-format checks such as wedge, directional-bond, or chi
 interpretation likewise stay in the source-format layer; only the resulting graph IR's representation
 is checked by the shared integrity gate.
 
-Canonicalization is a transformation of a representation-integrity-valid value. It does not repair,
-preserve as opaque data, or select a canonical form for malformed representation state. If an
-unchecked or compromised value reaches a public canonicalization operation, the operation reports a
-typed integrity error and does not panic. Canonicalization otherwise preserves tier-2 and tier-3
-invalid states; an intrinsic lattice `Contradiction` remains distinct from malformed storage.
+Those assertions must eventually be realized against an integrity-valid stereo frame. They do not
+create distinguishable occurrences of an equal virtual ligand. If perception could satisfy `#T` or
+`#C` only by repeating an implicit hydrogen or lone pair, it perceives no such stereo entity and
+follows the operation's existing absence policy. Any boundary that supplies an explicit repeated or
+oversized frame instead rejects it during raise; it must not normalize, deduplicate, or choose an
+arbitrary coset for malformed input.
+
+Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
+repair or revalidate malformed representation state, and its error types contain no unreachable
+integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization
+or reaction-span materialization may still report `Contradiction`.
 
 ## Representation ownership and crate layering
 
 An operation belongs with the crate that owns the representation when its correctness requires
 coordinated access to that representation's complete internal shape. For `Molecule` and the
-reaction representations, this includes operations that must keep all entity families, participant frames,
+reaction representations, this includes operations that must keep all entity sets, participant frames,
 typed ids, and references inside constraints synchronized while rebuilding or remapping the value.
 Such operations belong in `umol-graph-ir`; moving them to `umol-graph` because a higher-level model
 currently contains one of their inputs would invite the higher layer to reconstruct graph-IR internals.
@@ -196,6 +242,13 @@ An asserted constructor such as `from_entries` and a checked constructor such as
 contract is reported. The asserted form is for producers that establish the invariant by
 construction; the checked form is for untrusted or independently assembled input.
 
+Flat aggregate entries preserve each entity kind's relation structure. A unipartite relation has
+one participant collection paired with its attributes: variable-degree aromatic systems and
+multicenter bonds use `Vec<AtomId>`, while fixed-degree noncovalent bonds use `[AtomId; 2]`.
+Bipartite or site-bearing entities keep their distinguished factors separate, as in dative bonds
+and stereo entities. Do not flatten a unipartite fixed relation into separate participant tuple
+fields merely because its degree is two.
+
 ### Conversion
 
 A conversion preserves every source state representable by its target, including semantically
@@ -234,6 +287,12 @@ an equal addition/removal pair. Materializing the normalized delta against an LH
 continuity: adding an already-present canonical constraint or removing an absent one is a
 `Contradiction`, not an idempotent no-op. This matches old/new continuity for entity changes and
 keeps addition and removal as meaningful inverses.
+
+An equivalent `Modified` reaction-span entry is another raw/normal distinction. The tag carries no
+assertion beyond its two side values. If those values are equal under `normalized_eq`, the entry is
+semantically a no-op and normalizes to `Unchanged`. Checked and asserted span construction preserve
+the explicitly supplied raw tag. `ReactionSpan::normalize` collapses it, and reframing and
+canonicalization inherit the collapse because normalization is their first pipeline step.
 
 This does not license silent normalization in an operation that promises faithful representation
 conversion. Instead, classify the operation accurately:
@@ -279,11 +338,13 @@ ordinary conversion must not perform one as an incidental implementation step.
 ## Identity and constraints
 
 Derived `==` compares the stored IR structure exactly, including constraints, ids, ordering, and
-non-normal value encodings. `equiv` compares normalized forms in the current frame;
-`equiv_under` performs the same comparison after an explicit entity or participant-frame mapping.
-Aggregate `canonical_eq` compares complete canonical IR values after selecting the canonical frame.
-All three semantic comparisons include constraints. This distinction matters for patterns, where
-constraints are not redundant with the structural description.
+non-normal value encodings. `normalized_eq` compares normal forms in the current participant and
+entity-id frame. `framed_eq` additionally selects participant frames, while
+`framed_eq_under` first applies an explicitly supplied entity-id correspondence and then performs
+framed equality. Aggregate `canonical_eq` compares complete canonical IR values after selecting
+participant frames and entity ids. Every semantic comparison includes constraints. This
+distinction matters for patterns, where constraints are not redundant with the structural
+description.
 
 Entity and molecular structural identity is established from inherent fields and structural
 incidence. Constraints restrict the states admitted by an entity or molecule but do not establish
@@ -315,50 +376,53 @@ transports position-sensitive relation data, carries stereo cosets through stere
 permutations, and normalizes every carried value in the selected frame. It does not perceive,
 resolve, strip, repair, or validate chemistry.
 
-The equality operations form three levels:
+The equality operations form the same nested quotient pipeline:
 
 - `==` compares the exact stored representation;
-- `equiv` compares normalized values in the current frame, while `equiv_under` applies an explicitly
-  supplied correspondence or participant order before that comparison; and
+- `normalized_eq` compares normal forms in the current participant and entity-id frame;
+- `framed_eq` compares after selecting participant frames, while `framed_eq_under` first applies an
+  explicitly supplied entity-id correspondence and then performs framed equality; and
 - `canonical_eq` compares complete aggregate canonical forms under a shared context, selecting the
-  frame rather than receiving it from the caller.
+  participant frames and entity ids rather than receiving an id witness from the caller.
 
-For inputs in the aggregate operation domain, `canonical_eq` holds exactly when canonicalization
-produces the same complete IR value. Equivalently, an admissible remapping exists under which
-`equiv_under` holds. `equiv_under` is therefore the explicit-map member of the `equiv` family, not a
-fourth equality relation.
+For integrity-valid inputs whose complete canonicalization succeeds, `canonical_eq` holds exactly
+when an admissible total dense correspondence exists under which `framed_eq_under` holds. Two
+intrinsic contradictions still compare equal under canonical equality's failure-totalization rule,
+but that convention does not require a correspondence witness. `framed_eq_under` is the explicit
+entity-id-witness form of `framed_eq`, not another quotient level.
 
 The context-bearing trait has the semantic shape
 
 ```rust
-pub trait Canonicalize: Sized {
+pub trait Canonicalize: Reframe {
     type Error;
 
     fn canonicalize(
         self,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
-    fn canonicalize_by(
+    fn canonicalize_with_correspondence(
         self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
-    ) -> Result<Self, Self::Error>;
+        context: &CanonicalizeContext,
+    ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
+
+    fn canonical_hash(
+        self,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error>;
 
     fn canonical_eq(
         &self,
         other: &Self,
-        context: &CanonicalizationContext,
-    ) -> bool;
-
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: CanonicalizationLevel,
-        context: &CanonicalizationContext,
+        context: &CanonicalizeContext,
     ) -> bool;
 }
 ```
+
+`canonicalize_with_correspondence` returns the entity-id-renumbering witness, not the participant
+frame action. Applying that correspondence and then `reframe` reconstructs the canonical value;
+remapping alone need not do so.
 
 Use one concrete context for `Molecule`, `ReactionSpan`, and `Reaction` unless an
 implementation establishes a real need for distinct context types. Canonical-form construction is
@@ -367,6 +431,12 @@ canonicalized inputs compare by structural equality, and two intrinsic contradic
 equal because both denote the empty semantic value. One contradiction and one successful form do
 not compare equal. Integrity failures never make distinct inputs equal; callers that need the
 diagnostic invoke `canonicalize` directly.
+
+The public operation is complete-only. Callers cannot select topology, constitution, or structure
+as a reduced comparison surface, and a molecule does not publish a description-level query.
+Canonicalization may use a private effective structural prefix to avoid constructing empty search
+domains, but every present entity, inline constraint, and molecule-level constraint participates in
+the result and in `canonical_eq`.
 
 Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
 para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
@@ -380,33 +450,12 @@ cells, not merely an unchanged cell count or unchanged backend color integers. E
 round strictly increases the number of cells, so the finite incidence-node set supplies the
 termination bound. Do not expose an iteration cutoff that can change the canonical form.
 
-A parameterized operation may select a frame using only a coarser structural layer while returning
-the complete original molecule in that frame. Its guarantee is deliberately limited:
-
-- the selected structural layer is in canonical form;
-- the complete result is a remapping of the input and retains excluded features semantically,
-  while still normalizing their carried form values; and
-- the ordering of excluded features within an automorphism class of the selected layer is not
-  determined.
-
-An excluded feature must not break such a tie. Complete outputs from differently numbered inputs
-may therefore differ by an automorphism of the selected layer. `CanonicalizationLevel::Full` is not
-a coarser operation: it includes normalized constraints and is exactly equivalent to the
-unqualified operation. `canonicalize_by(Full, context)` equals `canonicalize(context)`, and
-`canonical_eq_by(other, Full, context)` equals `canonical_eq(other, context)`.
-
-Because `canonicalize_by` returns the complete normalized aggregate, an intrinsic contradiction in
-excluded data still makes that transformation fail. For `Topology`, `Constitution`, and `Structure`,
-`canonical_eq_by` compares only the selected layer and must not be implemented by comparing complete
-`canonicalize_by` results; contradictions outside the selected layer do not affect that reduced
-relation. `Full` has no excluded data and is identical to unqualified `canonical_eq`.
-
 Backend canonical labels are search inputs, not the numbering authority. The canonical frame
 is the minimum under the library's typed comparison order. Automorphism generators and orbits may
 prune equivalent branches, but changing the selected graph algorithm must not change the resulting
 canonical representative.
 
-For a fixed umol release, canonicalization is deterministic under a fixed level and context. The
+For a fixed umol release, canonicalization is deterministic under a fixed context. The
 returned canonical form is an ordinary IR value: it carries no canonicalization-schema version or
 producer provenance and is not a persistent identifier. During the 0.x series, the typed comparison
 schema and resulting canonical numbering may change between releases as the entity model and
@@ -429,11 +478,11 @@ explicit positions instead of inferring order from Rust declarations. During 0.x
 schema revision may change them together with this table and the corresponding exact tests.
 
 The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
-stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. The
-public cumulative canonicalization levels are `Topology`, `Constitution`, `Structure`, and `Full`.
-`Structure` is topology plus overlays and excludes constraints. `Full` appends normalized
-entity-level and molecule-level constraints and is identical to unqualified canonicalization.
-`NonStereo` names the middle entity domain; it is not another cumulative level.
+stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo, and
+structure is topology plus overlays. The private canonicalization implementation uses those
+prefixes to select the least search carrier containing the complete input; this is an optimization,
+not a public description-level operation. Complete canonicalization appends normalized entity-level
+and molecule-level constraints after the complete structure key.
 
 | Domain position | Structural domain | Entity slots |
 | ---: | --- | --- |
@@ -442,14 +491,14 @@ entity-level and molecule-level constraints and is identical to unqualified cano
 | 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
 
 An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
-this position and then by their dense row sequence. This hierarchy makes `Topology`, `Constitution`,
-and `Structure` exact domain prefixes while allowing a future entity kind to be appended within the
-domain to which it belongs. An absent block contributes no entry. `Full` adds the separate terminal
-constraint section. Extending an entity domain does not move that section or alter keys for
-molecules that lack the new kind.
+this position and then by their dense row sequence. This hierarchy makes topology, constitution,
+and structure exact internal domain prefixes while allowing a future entity kind to be appended
+within the domain to which it belongs. An absent block contributes no entry. The separate terminal
+constraint section follows every structural domain. Extending an entity domain does not move that
+section or alter keys for molecules that lack the new kind.
 
-Rows compare their components in the following local field order. Every entity family included at
-the selected structural level contributes all of its inherent fields; participant topology,
+Rows compare their components in the following local field order. Every present entity kind
+contributes all of its inherent fields; participant topology,
 participant-indexed values, and frame-dependent values occupy the listed structural components
 rather than being omitted. The dense row index is implicit in the row sequence. Inline constraints
 are excluded here and enter through the constraint section.
@@ -465,13 +514,13 @@ are excluded here and enter through the constraint section.
 | Stereo atom | site, ligand frame, configuration |
 | Stereo bond | site, ligand frame, configuration |
 
-Canonical-search initial classes retain these listed field positions even when participant data
+Canonical-search initial colors retain these listed field positions even when participant data
 is represented by incidence occurrences. Omitted participant-bearing fields are not renumbered: for
 example, a bond node uses positions 1 through 3 for order, charge, and unpaired electrons, while its
-endpoint pair is represented by two incidences. Entity-node classes contain only normalized,
+endpoint pair is represented by two incidences. Entity-node colors contain only normalized,
 constraint-free, frame-independent values. Aromatic and multicenter participant electron counts and
 stereo ligand kinds occur on their corresponding incidences; raw stereo configurations do not enter
-the initial node classes.
+the initial node colors.
 
 Typed incidences use the following order:
 
@@ -487,7 +536,7 @@ Typed incidences use the following order:
 | 7 | Stereo ligand, followed by its ligand kind |
 
 The public `Incidence` total order follows this table and agrees with the typed canonical key for
-normalized incidence values. Entity-node and incidence classes occupy disjoint key domains.
+normalized incidence values. Entity-node and incidence colors occupy disjoint key domains.
 
 Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
 donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand
@@ -581,7 +630,8 @@ constraint, or entity kind within its assigned domain can leave the key of every
 byte-for-byte equivalent at the typed-key level. This is a useful extension property, not a
 cross-release promise. A genuinely new structural category may instead require another domain;
 moving an existing entity kind between domains or inserting a domain changes both comparison order
-and cumulative-level semantics. The concrete Rust key storage remains private and may change.
+and the private structural-prefix semantics. The concrete Rust key storage remains private and may
+change.
 Exact ordering tests instantiate the current positions to detect accidental drift; an intentional
 schema revision updates those tests and this table together.
 
@@ -626,7 +676,7 @@ The resulting rules are:
 
 For molecule correspondences, an atom correspondence read from an external format is a normal input
 to induction over a supplied molecule pair. Count agreement and any structural uniqueness required
-to derive the remaining entity families are therefore operation preconditions, not defenses against
+to derive the remaining entity kinds are therefore operation preconditions, not defenses against
 deliberate tampering. A full correspondence produced for the same molecule pair by a conforming
 operation satisfies those checks by provenance. Reusing that result with the same unchanged pair
 cannot newly produce a contextual mismatch. Supplying an atom correspondence and molecule pair
@@ -669,12 +719,10 @@ instead because a removed id has no image.
 The facility has two coordinated levels:
 
 - `umol_graph_core::Remapping` maps node and edge ids used by graphs and relation participants. A
-  relation-set remapping must relabel each factor, canonicalize that factor according to its
-  `Ordered` or `Unordered` marker, and apply the induced position permutation to its `RelationData`.
-  Positional payloads therefore remain aligned with their participants. An ordered stereo ligand
-  frame retains its positions under a pure id remapping, so its induced position permutation is the
-  identity and its coset is unchanged.
-- `IdRemapping` maps all eight molecule entity-id families. It is used for graph-IR values that contain
+  relation-set remapping relabels each factor and leaves both the participant sequence and the
+  payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
+  stays aligned because nothing moved.
+- `IdRemapping` maps ids for all eight molecule entity kinds. It is used for graph-IR values that contain
   entity references, including constraints and deltas; it does not duplicate graph-core participant
   canonicalization.
 
@@ -682,40 +730,113 @@ A higher-level operation that moves molecular data into another namespace derive
 from the same correspondence or construction result: the graph-core mapping transports topology
 and relation participants, while the IR mapping transports references to owned entity rows. Do not
 manually sort remapped relation participants or permute their payloads at individual call sites;
-that behavior belongs to relation-set remapping through `RelationData`.
+that belongs to graph IR, which owns frame selection and transport.
 
 ### Participant frames and payload equivalence
 
-`RelationData::on_permutation` and `BiRelationData::on_permutation` are the sole primitive actions
-of participant-position permutations on relation payloads. `Equiv` and `BiEquiv` derive comparison
-from that action rather than defining a second remapping protocol:
+A relation set stores the participant sequence it is given. The participant multiset is the
+relation's identity; the stored sequence is the coordinate frame its payload is expressed in. Graph
+core never interprets that frame — it relabels ids and preserves sequence — so all frame semantics
+live in graph IR.
 
-- `equiv` compares two payloads expressed in the same participant frame;
-- `equiv_under` first expresses `self` in the other payload's frame and then performs the same
-  comparison;
-- when `is_permutation_invariant` is true, the frame change is observationally irrelevant and
-  `equiv_under` reduces to `equiv`.
+Published entity frames contain pairwise-distinct complete participant values. In particular, a
+stereo frame cannot repeat an equal `StereoLigand`, including an implicit hydrogen or lone pair with
+the same anchor and kind, and its length cannot exceed `umol_perm::MAX_DEGREE`. These integrity
+rules make the action between two compatible stored frames unique and keep every stereo action in
+the bounded `Permutation` representation.
 
-This frame action is part of normalized equivalence rather than a separate comparison relation. It
-records the dominant semantic case: most
-molecular relation payloads do not assign values to participant positions. Dative-bond order,
-noncovalent-bond kind, stereo configuration carried by an ordered ligand factor, and their
-constraints are position-independent. In the current model, the only position-sensitive payload
-fields are the per-participant electron counts of aromatic systems and multicenter bonds. Those two
-implementations permute their electron-count vectors; an undetermined electron-count value is
-itself permutation-invariant.
+Comparing two entries therefore has three independent parts, and a site chooses each:
 
-The graph-core traits nevertheless use a conservative default of `false` for
-`is_permutation_invariant`, and every payload implementation must supply its position action. This
-keeps a newly introduced position-sensitive payload from silently inheriting a no-op action. A
-separate marker-trait hierarchy or a default no-op action would encode the common case with less
-boilerplate but weaker review pressure and more public machinery.
+- **identity** — do the two hold the same structured participants under the entity kind's factor
+  semantics. Each ordinary factor is compared as a multiset; stereo-bond endpoint blocks may be
+  exchanged only as complete blocks. Graph-core coincidence supplies ordinary factor comparison
+  through `coincident`, `coincident_edge`, `is_coincident`, and `participants_match`; graph IR adds
+  the entity-kind structure that storage alone cannot express.
+- **frame transport** — restating one side's payload in the other's frame. Every entity frame has
+  distinct complete participant values, so equal structured incidence determines one action in the
+  entity kind's group. `DynPermutation::between` or `Permutation::between` derives that action, and
+  `FrameTransport::reframe_by` transports the payload.
+- **the value relation** — `normalized_eq`, `matches`, or `meet`, the caller's own.
 
-`Equiv` and `BiEquiv` therefore remain derived, blanket-implemented operations. Payload types do not
-override their comparison independently of `on_permutation` and normalized equality. Relation-set
-remapping applies the position action to stored data, while read-only comparisons and matching may
-apply it to a temporary value before using their own comparison relation. Graph core does not need
-a second payload-equivalence API.
+`FrameTransport::reframe_by` returning `Some` does not establish identity: a frame-invariant payload
+reads neither frame, and an undetermined electron-count vector has nothing to reorder. A site that
+needs both must ask for both.
+
+The six overlay kinds select and transport frames as follows:
+
+| Entity kind | Representative frame | Local action | Position-sensitive values |
+| --- | --- | --- | --- |
+| Dative bond | donors sorted by atom id; acceptor fixed | `DynPermutation` on donors | donor sequence; the current form and constraints are invariant |
+| Aromatic system | participants sorted by atom id | `DynPermutation` | participant electron counts |
+| Multicenter bond | participants sorted by atom id | `DynPermutation` | participant electron counts |
+| Noncovalent bond | endpoints sorted by atom id | degree-two `DynPermutation` | ordered predicate pairs in `NoncovalentBondEndsSatisfy`; the entity form is invariant |
+| Stereo atom | complete ligands sorted | bounded `Permutation` in the full ligand symmetric group | configuration, ligand-symmetry and fluxionality permutations, topicity positions, and stereo constraints |
+| Stereo bond | sort each two-ligand endpoint block, then order the blocks | bounded `Permutation` in `S_2 wr S_2` | configuration and every frame-relative stereo-bond constraint |
+
+The stereo-bond group may permute within each endpoint block and exchange the two complete blocks;
+it cannot move one ligand across the block boundary. Dative-bond order, noncovalent-bond kind,
+aromatic and multicenter charge and spin, and their inline constraints are currently
+frame-invariant. Their `FrameTransport` implementations destructure the complete form, so a new
+field must be classified explicitly rather than being silently left unframed.
+
+`FrameTransport` is the transport-only operation for a receiver and an independently supplied
+action. Entity forms, `EntitySpan<form>`, individual overlay delta payloads, and constraint values
+implement it because they can consume a compatible action but do not own enough participant data
+to select one. `Reframe` is implemented only by a frame-owning carrier. It extends `Normalize`,
+derives a representative action, and therefore represents the second prefix in the
+normalize–reframe–canonicalize pipeline.
+
+The associated action is complete for its receiver:
+
+| Carrier | `FrameTransport::Action` |
+| --- | --- |
+| One ordinary overlay form or form span | one `DynPermutation` |
+| One stereo form or form span | one bounded `Permutation` |
+| One entity-kind aggregate or `*Spans` peer | one typed local action per entity id |
+| `Molecule` or `ReactionSpan` | one six-component `OverlaysFrameAction` |
+| `Reaction` | one `OverlaysFrameAction` covering every lhs and `Add`-owned overlay id |
+| `Constraint`, `ConstraintSpan`, or `ConstraintDelta` | a covering `OverlaysFrameAction` |
+| `Deltas` without its reaction | none; removals may use local frames whose owners live on the reaction |
+
+Each entity-kind aggregate action and `OverlaysFrameAction` is an operation-issued witness with
+private construction. Identity and inverse preserve its exact typed id-and-degree domain, and
+composition is defined only for equal domains and degrees. Consumer compatibility is weaker and
+receiver-relative: a receiver requires coverage for every frame-relative value it contains, ignores
+irrelevant entries, and returns `None` for a missing degree, inadmissible subgroup action, or other
+observable incompatibility. A witness may therefore be reused with another compatible carrier; it
+is not bound to one object identity.
+
+`representative_action` is derived from the input's frame owners before normalization and remains
+total when later normalization finds an intrinsic contradiction or erases an entry.
+`reframe_with_action` returns that input-domain witness with the result. Plain aggregate `reframe`
+derives and immediately consumes local actions as it visits entries; it does not pre-emptively
+allocate the complete aggregate witness merely to discard it. Sparse action storage used for
+frame-relative constraints allocates no backing map for an empty domain.
+
+Each constraint form classifies its own participant-frame use through an exhaustive match. Each
+entity delta likewise classifies its fields exhaustively and delegates constraint payloads to that
+form-level decision. Aggregate domain collection and application delegate to those classifications
+rather than repeating variant lists, so adding a field, constraint form, or delta variant cannot be
+silently omitted from frame transport.
+
+A reaction removal may carry the source entity's structured incidence in another participant
+ordering. Its repeated sequence is an explicit local frame for the recorded payload. Construction
+preserves that frame; a consumer derives the unique local-to-source action, transports the payload,
+and then applies its value relation. For generic aggregate frame transport, let `q` be that
+local-to-owner action and `a` the action on the owning lhs or `Add` frame. The removal consumes the
+conjugate `q.compose(a).compose(q.inverse())`; this preserves its local-to-owner relation and the
+identity, inverse, and composition laws. Reaction normalization instead applies `q` directly to
+align the removal with its owner. Reframing normalizes first, so `q` is identity when it applies the
+selected owning action. Application-specific rule-to-host alignment may likewise move an already
+normalized removal directly into the host frame; that is not generic frame transport of a raw
+locally framed reaction. An incompatible distinguished factor or stereo-bond endpoint-block
+assignment changes structured incidence rather than producing a second frame of the same entity.
+Reaction integrity reports that case as `IncidenceMismatch`.
+
+Reaction application derives the unique action from each mapped rule frame to the host frame and
+transports every frame-relative field and constraint delta before matching. After the pattern
+`old` value matches, lowering records the realized host value as the transaction's `old`; it does
+not retain the rule pattern as if it were the concrete value being replaced.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public
@@ -728,7 +849,7 @@ supplied; `map_node`, `map_edge`, and participant-level remapping remain direct 
 A total mapping may target a sparse or larger ambient namespace, as when the rhs of a reaction is
 embedded into an lhs-anchored union. Such a mapping can transport relation entries and referenced
 values but cannot by itself produce a standalone `Molecule`, whose eight entity tables use dense
-ids. End-to-end molecule remapping is defined only when every entity-family mapping is a bijection
+ids. End-to-end molecule remapping is defined only when every entity-kind mapping is a bijection
 onto a dense target id space. An embedding into a union and a remapping of a standalone molecule are
 therefore related operations with different codomains.
 
@@ -737,8 +858,8 @@ therefore related operations with different codomains.
 A public end-to-end remapping operation on `Molecule` accepts a `MoleculeCorrespondence` that
 describes the complete old and new id spaces. The correspondence source counts must equal the
 molecule counts, and every component correspondence must be total on both sides. The operation
-returns `None` when these structural conditions do not hold or when the source molecule fails its
-representation-integrity contract. The asserted route panics under either condition.
+returns `None` when these independently supplied structural conditions do not hold. The asserted
+route panics under the same condition. The published source is already closed and is not rechecked.
 
 On success, it transports topology, every relation participant, position-sensitive relation data,
 stereo frames, entity forms, and every typed reference in constraints. It does not validate
@@ -747,9 +868,9 @@ entities. Identity remapping is exact; applying a remapping and its inverse reco
 and sequential remapping agrees with correspondence composition.
 
 Dense molecule remapping is semantics-preserving alpha-renaming. Its primary semantic law is
-`source.equiv_under(&remapped, &correspondence)`. Property tests must state this law directly in
+`source.framed_eq_under(&remapped, &correspondence)`. Property tests must state this law directly in
 addition to testing identity, inverse, composition, and referential integrity. Generated cases must
-include crossing permutations, all entity families, position-sensitive relation data and stereo
+include crossing permutations, all entity kinds, position-sensitive relation data and stereo
 frames, and constraints containing typed entity references; testing only reordered atom and bond
 tables is insufficient.
 
@@ -776,6 +897,8 @@ span must contain both objects of the span. Consequently:
 - `ReactionSpan::try_from_entries` checks the union namespace and the referential integrity of
   each projected side;
 - `ReactionSpan::from_entries` asserts the same invariant for trusted producers;
+- both entry constructors preserve an explicitly supplied `Modified` tag, including one whose
+  sides are `normalized_eq`;
 - parsing accepts only entries that construct an actual two-sided span;
 - `ReactionSpan::lhs`, `rhs`, `to_reaction`, and `correspondence` are infallible;
 - projection retains every entity and constraint present on the selected side and remaps its
@@ -783,7 +906,7 @@ span must contain both objects of the span. Consequently:
 
 Construction permits any dense union-frame ordering whose two projections satisfy the integrity
 contract. LHS anchoring is a normal-form property, not an additional construction invariant. In the
-LHS-anchored form, entries present on the LHS form each entity family's dense prefix and right-only
+LHS-anchored form, entries present on the LHS form each entity kind's dense prefix and right-only
 entries are appended. `ReactionSpan::to_reaction` reanchors an arbitrary valid union order into this
 form by assigning compact projected LHS ids first and fresh ids to additions. Aggregate
 canonicalization likewise always emits the LHS-anchored form because it carries no less information
@@ -795,6 +918,10 @@ lhs ids and rhs-only entities are appended. Consequently,
 supplied `rhs` under the induced total correspondence rather than necessarily structurally equal to
 it. A crossing source correspondence changes rhs entity order; neither a reaction's deltas nor the
 span membership columns encode that otherwise semantically irrelevant permutation.
+For a paired entity whose values are `normalized_eq`, `superimpose` emits `Unchanged` carrying the
+lhs value. This is permitted because `superimpose` derives a span rather than faithfully converting
+open entries: the choice retains exact lhs projection and the same semantic rhs-projection
+guarantee without eagerly normalizing the selected payload.
 `ReactionSpan::correspondence` relates the normalized projections and does not retain a source
 correspondence whose rhs frame differs. A span-to-reaction-to-span roundtrip is therefore exact only
 for an LHS-anchored span in the documented constraint normal form; for another valid union order it
@@ -806,8 +933,9 @@ counts must equal the span's table sizes and each component must be a total bije
 target id space. The operation transports both values of every `EntitySpan`, relation participants,
 position-sensitive relation data, stereo frames, and all constraint references. It does not
 normalize, repair, project, or reanchor the span implicitly. The asserted route panics when its
-documented producer contract is violated; the checked route returns `None` for an integrity-invalid
-source or unsuitable correspondence.
+documented producer contract is violated; the checked route returns `None` only for an unsuitable
+correspondence. The published source and remapped result are closed by construction and are not
+rechecked.
 
 Canonicalization derives an LHS-anchored correspondence and applies this ordinary remapping
 operation. It does not maintain a second canonicalization-only transport path. For

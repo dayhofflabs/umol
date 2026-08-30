@@ -23,7 +23,7 @@ use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{read_constraints_dsl, ConstraintDsl, ConstraintsDsl};
-use super::dative::DativeBondDsl;
+use super::dative::{expand_dative_keyword, DativeBondDsl};
 use super::edn_utils::{
     atoms_pair, atoms_vec, eof_err, missing, optional_id_keyword, parse_vec, read_map, read_vec,
     required_key, two_atom_refs, unexpected_byte_kind,
@@ -283,7 +283,7 @@ fn read_dative_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBondDsl, 
     let text: Cow<'_, str> = match byte {
         b':' => {
             let name = de.read_keyword_name()?;
-            let expanded = super::dative::expand_dative_keyword(name.as_ref())
+            let expanded = expand_dative_keyword(name.as_ref())
                 .ok_or_else(|| DeError::Custom(format!("unknown dative keyword :{}", name)))?;
             Cow::Borrowed(expanded)
         }
@@ -1236,13 +1236,13 @@ impl MoleculeInput {
         }
 
         // Noncovalent bonds.
-        let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondForm)> =
+        let mut noncovalent_list: Vec<([AtomId; 2], NoncovalentBondForm)> =
             Vec::with_capacity(noncovalent_entries.len());
         for entry in noncovalent_entries {
             let first = entry.first.resolve(&context)?;
             let second = entry.second.resolve(&context)?;
             context.register_noncovalent_bond(entry.keyword, first, second)?;
-            noncovalent_list.push((first, second, entry.bond.0));
+            noncovalent_list.push(([first, second], entry.bond.0));
         }
 
         // Stereo atoms.

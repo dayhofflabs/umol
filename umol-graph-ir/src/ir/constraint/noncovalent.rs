@@ -5,10 +5,12 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use umol_perm::DynPermutation;
+
 use super::super::boolean::BooleanForm;
 use super::super::error::{Contradiction, NoJoin};
-use super::super::remap::{IdCompaction, IdRemapping};
-use super::super::traits::{Equiv, Lattice, Normalize};
+use super::super::remap::{IdRemapping, MoleculeCompaction};
+use super::super::traits::{FrameTransport, Lattice, Normalize};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -39,13 +41,19 @@ impl NoncovalentBondConstraintForm {
     }
 
     /// Value-only: no indices to compact.
-    pub fn compact(self, _compaction: &IdCompaction) -> Option<Self> {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Option<Self> {
         Some(self)
     }
 
     /// Value-only: no indices to remap.
     pub fn remap(self, _map: &IdRemapping) -> Self {
         self
+    }
+
+    pub(crate) fn uses_participant_frame(&self) -> bool {
+        match self {
+            Self::Intramolecular(_) => false,
+        }
     }
 }
 
@@ -54,6 +62,16 @@ impl Normalize for NoncovalentBondConstraintForm {
     fn normalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
             Self::Intramolecular(b) => Self::Intramolecular(b.normalize()?),
+        })
+    }
+}
+
+impl FrameTransport for NoncovalentBondConstraintForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, _action: &Self::Action) -> Option<Self> {
+        Some(match self {
+            Self::Intramolecular(value) => Self::Intramolecular(value),
         })
     }
 }
@@ -151,7 +169,7 @@ impl NoncovalentBondConstraintsForm {
         }
     }
 
-    /// Transactional write at one key: verify the current value `equiv` `old` (both absent
+    /// Transactional write at one key: verify the current value `normalized_eq` `old` (both absent
     /// matches), then apply `new` (`Some` sets, `None` removes). `old`/`new` address the same key.
     /// `Err` on a key or old-value mismatch; the store is unchanged when it errors. The delta
     /// apply/undo primitive.
@@ -173,7 +191,7 @@ impl NoncovalentBondConstraintsForm {
         };
         let matches = match (self.get(key), old.as_ref()) {
             (None, None) => true,
-            (Some(current), Some(old)) => current.equiv(old),
+            (Some(current), Some(old)) => current.normalized_eq(old),
             _ => false,
         };
         if !matches {
@@ -233,7 +251,7 @@ impl NoncovalentBondConstraintsForm {
         self.0.iter()
     }
 
-    pub fn compact(self, _compaction: &IdCompaction) -> Self {
+    pub fn compact(self, _compaction: &MoleculeCompaction) -> Self {
         self
     }
 }
@@ -250,6 +268,22 @@ impl Normalize for NoncovalentBondConstraintsForm {
             .collect::<Result<Vec<NoncovalentBondConstraintForm>, _>>()?;
         entries.retain(|c| !c.is_undetermined());
         Ok(Self(entries))
+    }
+}
+
+impl FrameTransport for NoncovalentBondConstraintsForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        if !self
+            .iter()
+            .any(NoncovalentBondConstraintForm::uses_participant_frame)
+        {
+            return Some(self);
+        }
+        self.into_iter()
+            .map(|constraint| constraint.reframe_by(action))
+            .collect()
     }
 }
 
@@ -387,7 +421,7 @@ impl From<Vec<NoncovalentBondConstraintForm>> for NoncovalentBondConstraintsForm
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Compaction;
+    use umol_graph_core::GraphCompaction;
 
     use super::*;
 
@@ -437,6 +471,35 @@ mod tests {
         #[case] expected: Result<NoncovalentBondConstraintForm, Contradiction>,
     ) {
         assert_eq!(constraint.normalize(), expected);
+    }
+
+    #[rstest]
+    #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true), false)]
+    fn test_noncovalent_bond_constraint_form_uses_participant_frame(
+        #[case] constraint: NoncovalentBondConstraintForm,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.uses_participant_frame(), expected);
+    }
+
+    #[rstest]
+    #[case::intramolecular(NoncovalentBondConstraintForm::intramolecular(true))]
+    fn test_noncovalent_bond_constraint_form_reframe_by(
+        #[case] constraint: NoncovalentBondConstraintForm,
+    ) {
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraint.clone().reframe_by(&action), Some(constraint));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_form_reframe_by() {
+        let constraints = NoncovalentBondConstraintsForm::from(vec![
+            NoncovalentBondConstraintForm::intramolecular(true),
+        ]);
+        let action = DynPermutation::try_from(vec![1, 0]).expect("the action is a permutation");
+
+        assert_eq!(constraints.clone().reframe_by(&action), Some(constraints),);
     }
 
     #[rstest]
@@ -660,8 +723,8 @@ mod tests {
         let cs = NoncovalentBondConstraintsForm::from(
             NoncovalentBondConstraintForm::intramolecular(true),
         );
-        let compaction = IdCompaction::new(
-            Compaction::new(Vec::new(), Vec::new()),
+        let compaction = MoleculeCompaction::new(
+            GraphCompaction::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),

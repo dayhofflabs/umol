@@ -196,10 +196,14 @@ proptest! {
             ), "structural ref over wrong participants must not resolve");
         }
 
-        // The acceptor coinciding with a donor is never a real dative bond.
+        // Repeating a donor changes its factor multiset, which no real dative bond carries.
         for view in molecule.dative_bonds().iter() {
-            let donors = view.donor_ids().map(|a| AtomRef::Index(a.index())).collect();
-            let acceptor = AtomRef::Index(view.donor_ids().next().expect("≥ 1 donor").index());
+            let mut donors: Vec<_> = view
+                .donor_ids()
+                .map(|a| AtomRef::Index(a.index()))
+                .collect();
+            donors.push(donors[0].clone());
+            let acceptor = AtomRef::Index(view.acceptor_id().index());
             let wrong = DativeBondRef::Structural(DativeBondParticipants { donors, acceptor });
             prop_assert!(matches!(
                 wrong.resolve(&context),

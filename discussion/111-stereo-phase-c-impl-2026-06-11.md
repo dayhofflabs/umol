@@ -6,6 +6,14 @@ Status: **Complete.** All subphases C1–C4 done (C4f conformance suite closed o
 per-crate, per-module **API** breakdown; implementation bodies are settled at coding time. No code is written
 until explicitly authorized.
 
+## Supersession notice — 2026-08-28
+
+Doc [214](214-aggregate-frame-semantics-2026-08-28.md) supersedes the same-kind virtual-ligand block
+permutations and any repeat-valid frame assumptions in this completed implementation record. Current
+integrity requires pairwise-distinct, `MAX_DEGREE`-bounded stereo frames, and the repeat-specific
+symmetry machinery is scheduled for removal. The remaining Phase C implementation history is
+unchanged.
+
 Crates, in dependency order: **C1 umol-perm**, **C2 umol-graph-core**, **C3 umol-ast**, **C4 umol-graph**.
 Each subphase is one module.
 

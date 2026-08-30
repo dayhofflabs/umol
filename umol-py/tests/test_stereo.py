@@ -2,6 +2,7 @@ import pytest
 
 from umol import (
     AtomForm,
+    BondForm,
     CisTransConfiguration,
     CisTransStereo,
     CisTransStereoForm,
@@ -347,6 +348,7 @@ def stereo_atom_molecule():
     # a tetrahedral stereocenter on atom 0 with four atom ligands (atoms 1-4)
     return Molecule.from_entries(
         [AtomForm(Element("C")) for _ in range(5)],
+        bonds=[(0, i, BondForm(1)) for i in range(1, 5)],
         stereo_atoms=[
             (
                 0,
@@ -472,5 +474,5 @@ def test_stereoatomviews_setitem():
 
 def test_molecule_repr_stereo():
     assert repr(stereo_atom_molecule()) == (
-        "Molecule(atoms=5, bonds=0, stereo_atoms=1)"
+        "Molecule(atoms=5, bonds=4, stereo_atoms=1)"
     )

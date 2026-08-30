@@ -4,9 +4,10 @@
 use std::borrow::Cow;
 
 use umol_graph_core::ParticipantPosition;
+use umol_perm::DynPermutation;
 
 use super::error::{Contradiction, NoJoin};
-use super::traits::{AsLit, Lattice, Normalize};
+use super::traits::{AsLit, FrameTransport, Lattice, Normalize};
 
 /// Per-position electron counts as one atomic lattice value: undetermined, or a
 /// concrete vector. The vector is positional (cell = member atom), so it is
@@ -39,6 +40,17 @@ impl ElectronCountsForm {
             }
             let reordered: Vec<i64> = order.iter().map(|p| counts[p.index()]).collect();
             *counts = reordered;
+        }
+    }
+}
+
+impl FrameTransport for ElectronCountsForm {
+    type Action = DynPermutation;
+
+    fn reframe_by(self, action: &Self::Action) -> Option<Self> {
+        match self {
+            Self::Undetermined => Some(Self::Undetermined),
+            Self::Lit(counts) => action.act(&counts).map(Self::Lit),
         }
     }
 }
@@ -128,6 +140,31 @@ mod tests {
         #[case] expected: ElectronCountsForm,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::lit(
+        ElectronCountsForm::Lit(vec![10, 20, 30]),
+        vec![2, 0, 1],
+        Some(ElectronCountsForm::Lit(vec![30, 10, 20])),
+    )]
+    #[case::lit_degree(
+        ElectronCountsForm::Lit(vec![10, 20]),
+        vec![2, 0, 1],
+        None,
+    )]
+    #[case::undetermined(
+        ElectronCountsForm::Undetermined,
+        vec![2, 0, 1],
+        Some(ElectronCountsForm::Undetermined),
+    )]
+    fn test_electron_counts_form_reframe_by(
+        #[case] input: ElectronCountsForm,
+        #[case] image: Vec<usize>,
+        #[case] expected: Option<ElectronCountsForm>,
+    ) {
+        let action = DynPermutation::try_from(image).expect("case is a permutation");
+        assert_eq!(input.reframe_by(&action), expected);
     }
 
     #[rstest]

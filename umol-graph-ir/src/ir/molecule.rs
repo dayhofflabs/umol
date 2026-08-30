@@ -11,48 +11,51 @@ pub use fragment::{Fragment, Port, PortArg};
 pub use integrity::MoleculeIntegrityError;
 pub use spec::{AtomArg, MoleculeSpec, MoleculeSpecTerm};
 use umol_graph_core::{
-    Correspondence, EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
-    RelationId, RelationParticipant, Remapping, UnionFind, Unordered, VarRelationSet,
+    Correspondence, EdgeId, Graph, NodeId, RelationParticipant, Remapping, UnionFind,
 };
-use umol_perm::Permutation;
 
-use super::aromatic::AromaticSystemForm;
+use super::aromatic::{reframe_aromatic_systems_with, AromaticSystemForm, AromaticSystems};
 use super::atom::AtomForm;
 use super::bond::BondForm;
-use super::constraint::{Constraint, Constraints, MoleculeConstraint, RelationalConstraint};
+use super::constraint::{
+    Constraint, ConstraintFrameActionMap, Constraints, MoleculeConstraint, RelationalConstraint,
+};
 use super::correspondence::MoleculeCorrespondence;
-use super::dative::DativeBondForm;
+use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
 use super::edit::{AtomHandle, BondHandle, Edits};
-use super::entity::Entity;
+use super::entity::{Entity, EntityKind};
 use super::error::{Contradiction, MoleculeApplyError};
+use super::frame::OverlaysFrameAction;
 use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
-use super::multicenter::MulticenterBondForm;
-use super::noncovalent::NoncovalentBondForm;
+use super::multicenter::{reframe_multicenter_bonds_with, MulticenterBondForm, MulticenterBonds};
+use super::noncovalent::{reframe_noncovalent_bonds_with, NoncovalentBondForm, NoncovalentBonds};
 use super::remap::IdRemapping;
 use super::ring::{RingConfig, RingModel, RingSet};
-use super::stereo::{StereoAtomForm, StereoBondForm};
-use super::traits::{BiRelationEquiv, Equiv, Lattice, RelationEquiv};
+use super::stereo::{
+    reframe_stereo_atoms_with, reframe_stereo_bonds_with, StereoAtomForm, StereoAtoms,
+    StereoBondForm, StereoBonds,
+};
+use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 use super::view::{
     AromaticSystemView, AromaticSystemViewMut, AromaticSystemViews, AtomView, AtomViewMut,
     AtomViews, BondView, BondViewMut, BondViews, DativeBondView, DativeBondViewMut,
     DativeBondViews, GraphView, MulticenterBondView, MulticenterBondViewMut, MulticenterBondViews,
     NeighborView, NoncovalentBondView, NoncovalentBondViewMut, NoncovalentBondViews, RingViews,
-    StereoAtomView, StereoAtomViewMut, StereoAtomViews, StereoBondView, StereoBondViewMut,
-    StereoBondViews,
+    StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews,
 };
 
 mod build;
 mod editor;
 mod fragment;
-mod integrity;
+pub(crate) mod integrity;
 mod pushout;
 mod remapping;
 pub mod spec;
-pub(super) mod transact;
+pub(crate) mod transact;
 
 /// Molecule graph IR: atom-bond topology, overlays (typed hyperedges), and constraints.
 ///
@@ -63,14 +66,12 @@ pub struct Molecule {
     graph: Graph,
     atoms: Arc<Vec<AtomForm>>,
     bonds: Arc<Vec<BondForm>>,
-    dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>>,
-    aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-    multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-    noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-    stereo_atoms:
-        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>>,
-    stereo_bonds:
-        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>>,
+    dative_bonds: DativeBonds,
+    aromatic_systems: AromaticSystems,
+    multicenter_bonds: MulticenterBonds,
+    noncovalent_bonds: NoncovalentBonds,
+    stereo_atoms: StereoAtoms,
+    stereo_bonds: StereoBonds,
     constraints: Constraints,
 }
 
@@ -82,7 +83,7 @@ pub struct MoleculeEntries {
     pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>,
     pub aromatic: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     pub multicenter: Vec<(Vec<AtomId>, MulticenterBondForm)>,
-    pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)>,
+    pub noncovalent: Vec<([AtomId; 2], NoncovalentBondForm)>,
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     pub constraints: Constraints,
@@ -121,9 +122,8 @@ fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Enti
     for (atoms, _) in &entries.multicenter {
         require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
     }
-    for &(first, second, _) in &entries.noncovalent {
-        require_reference(&contains, Entity::Atom(first))?;
-        require_reference(&contains, Entity::Atom(second))?;
+    for (atoms, _) in &entries.noncovalent {
+        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
     }
     for (site, ligands, _) in &entries.stereo_atoms {
         require_reference(&contains, Entity::Atom(*site))?;
@@ -334,7 +334,7 @@ impl Molecule {
     }
 
     /// Checked form of [`Self::from_entries`]. Validates molecule representation integrity,
-    /// including the fixed simple-relation semantics of every entity family, but does not enforce
+    /// including the fixed simple-relation semantics of every entity kind, but does not enforce
     /// chemistry or constraint satisfiability.
     pub fn try_from_entries(entries: MoleculeEntries) -> Result<Self, MoleculeIntegrityError> {
         validate_entry_references(&entries)?;
@@ -357,90 +357,34 @@ impl Molecule {
         let bond_data: Vec<BondForm> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
-        let dative_bonds = FixedVarBirelationSet::new(
-            dative
-                .into_iter()
-                .map(|(donors, acceptor, d)| {
-                    (
-                        [NodeId::from(acceptor)],
-                        donors.into_iter().map(NodeId::from).collect(),
-                        d,
-                    )
-                })
-                .collect(),
-        );
-
-        let aromatic_systems = VarRelationSet::new(
-            aromatic
-                .into_iter()
-                .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
-                .collect(),
-        );
-
-        let multicenter_bonds = VarRelationSet::new(
-            multicenter
-                .into_iter()
-                .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
-                .collect(),
-        );
-
-        let noncovalent_bonds = FixedRelationSet::new(
-            noncovalent
-                .into_iter()
-                .map(|(a, b, d)| ([NodeId::from(a), NodeId::from(b)], d))
-                .collect(),
-        );
-
-        let stereo_atoms = FixedVarBirelationSet::new(
-            stereo_atoms
-                .into_iter()
-                .map(|(site, ligands, d)| ([NodeId::from(site)], ligands, d))
-                .collect(),
-        );
-
-        let stereo_bonds = FixedVarBirelationSet::new(
-            stereo_bonds
-                .into_iter()
-                .map(|(site, ligands, d)| ([EdgeId::from(site)], ligands, d))
-                .collect(),
-        );
-
-        let molecule = Self {
+        Self::try_from_arcs(
             graph,
-            atoms: Arc::new(atoms),
-            bonds: Arc::new(bond_data),
-            dative_bonds: Arc::new(dative_bonds),
-            aromatic_systems: Arc::new(aromatic_systems),
-            multicenter_bonds: Arc::new(multicenter_bonds),
-            noncovalent_bonds: Arc::new(noncovalent_bonds),
-            stereo_atoms: Arc::new(stereo_atoms),
-            stereo_bonds: Arc::new(stereo_bonds),
+            Arc::new(atoms),
+            Arc::new(bond_data),
+            DativeBonds::new(dative),
+            AromaticSystems::new(aromatic),
+            MulticenterBonds::new(multicenter),
+            NoncovalentBonds::new(noncovalent),
+            StereoAtoms::new(stereo_atoms),
+            StereoBonds::new(stereo_bonds),
             constraints,
-        };
-        molecule.check_integrity()?;
-        Ok(molecule)
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn from_arcs(
+    fn try_from_arcs(
         graph: Graph,
         atoms: Arc<Vec<AtomForm>>,
         bonds: Arc<Vec<BondForm>>,
-        dative_bonds: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondForm>,
-        >,
-        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemForm>>,
-        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondForm>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondForm, 2>>,
-        stereo_atoms: Arc<
-            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomForm>,
-        >,
-        stereo_bonds: Arc<
-            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondForm>,
-        >,
+        dative_bonds: DativeBonds,
+        aromatic_systems: AromaticSystems,
+        multicenter_bonds: MulticenterBonds,
+        noncovalent_bonds: NoncovalentBonds,
+        stereo_atoms: StereoAtoms,
+        stereo_bonds: StereoBonds,
         constraints: Constraints,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, MoleculeIntegrityError> {
+        let molecule = Self {
             graph,
             atoms,
             bonds,
@@ -451,7 +395,9 @@ impl Molecule {
             stereo_atoms,
             stereo_bonds,
             constraints,
-        }
+        };
+        molecule.check_integrity()?;
+        Ok(molecule)
     }
 
     /// AtomId/BondId-typed adapter exposing the pure-graph algorithms.
@@ -466,510 +412,22 @@ impl Molecule {
         &self.graph
     }
 
-    /// Complete semantic equality in the current id and participant frame.
+    /// Complete framed equality under a dense entity-id correspondence from `self` to `other`.
     ///
-    /// Topology, relation participants, and stereo sites/ligands must have the same stored ids;
-    /// entity forms and molecule constraints compare by normal form.
-    pub fn equiv(&self, other: &Self) -> bool {
-        if self.graph != other.graph
-            || self.atoms.len() != other.atoms.len()
-            || self.bonds.len() != other.bonds.len()
-            || self.dative_bonds.count() != other.dative_bonds.count()
-            || self.aromatic_systems.count() != other.aromatic_systems.count()
-            || self.multicenter_bonds.count() != other.multicenter_bonds.count()
-            || self.noncovalent_bonds.count() != other.noncovalent_bonds.count()
-            || self.stereo_atoms.count() != other.stereo_atoms.count()
-            || self.stereo_bonds.count() != other.stereo_bonds.count()
-        {
-            return false;
-        }
-        if !self
-            .atoms
-            .iter()
-            .zip(other.atoms.iter())
-            .all(|(left, right)| left.equiv(right))
-            || !self
-                .bonds
-                .iter()
-                .zip(other.bonds.iter())
-                .all(|(left, right)| left.equiv(right))
-        {
-            return false;
-        }
-        for id in self.dative_bonds.relation_ids() {
-            if self.dative_bonds.participants_1(id) != other.dative_bonds.participants_1(id)
-                || self.dative_bonds.participants_2(id) != other.dative_bonds.participants_2(id)
-                || !self
-                    .dative_bonds
-                    .data(id)
-                    .equiv(other.dative_bonds.data(id))
-            {
-                return false;
-            }
-        }
-        for id in self.aromatic_systems.relation_ids() {
-            if self.aromatic_systems.participants(id) != other.aromatic_systems.participants(id)
-                || !self
-                    .aromatic_systems
-                    .data(id)
-                    .equiv(other.aromatic_systems.data(id))
-            {
-                return false;
-            }
-        }
-        for id in self.multicenter_bonds.relation_ids() {
-            if self.multicenter_bonds.participants(id) != other.multicenter_bonds.participants(id)
-                || !self
-                    .multicenter_bonds
-                    .data(id)
-                    .equiv(other.multicenter_bonds.data(id))
-            {
-                return false;
-            }
-        }
-        for id in self.noncovalent_bonds.relation_ids() {
-            if self.noncovalent_bonds.participants(id) != other.noncovalent_bonds.participants(id)
-                || !self
-                    .noncovalent_bonds
-                    .data(id)
-                    .equiv(other.noncovalent_bonds.data(id))
-            {
-                return false;
-            }
-        }
-        for id in self.stereo_atoms.relation_ids() {
-            if self.stereo_atoms.participants_1(id) != other.stereo_atoms.participants_1(id)
-                || self.stereo_atoms.participants_2(id) != other.stereo_atoms.participants_2(id)
-                || !self
-                    .stereo_atoms
-                    .data(id)
-                    .equiv(other.stereo_atoms.data(id))
-            {
-                return false;
-            }
-        }
-        for id in self.stereo_bonds.relation_ids() {
-            if self.stereo_bonds.participants_1(id) != other.stereo_bonds.participants_1(id)
-                || self.stereo_bonds.participants_2(id) != other.stereo_bonds.participants_2(id)
-                || !self
-                    .stereo_bonds
-                    .data(id)
-                    .equiv(other.stereo_bonds.data(id))
-            {
-                return false;
-            }
-        }
-        self.constraints.equiv(&other.constraints)
-    }
-
-    /// Complete semantic equality under a total correspondence from `self` to `other`.
+    /// The correspondence is checked as a complete dense remapping of `self`. The remapped
+    /// molecule is then compared with `other` modulo participant frames. This returns `false`
+    /// when the correspondence has the wrong source domain, is partial, is not bijective onto a
+    /// dense target domain, or maps `self` to a molecule outside `other`'s framed-equality class.
     ///
-    /// The correspondence supplies the target id and participant frame. It must cover the actual
-    /// id spaces of both molecules, and every mapped topology edge, relation participant, stereo
-    /// site, and stereo ligand must agree with its matched entity. Stereo ligand frames may differ
-    /// by any admissible permutation, including alternatives caused by repeated equal ligands;
-    /// configuration and frame-relative inline and molecule-level constraints move together.
-    pub fn equiv_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
-        let counts_match = [
-            (
-                correspondence.atoms().left_count(),
-                self.atoms.len(),
-                correspondence.atoms().right_count(),
-                other.atoms.len(),
-            ),
-            (
-                correspondence.bonds().left_count(),
-                self.bonds.len(),
-                correspondence.bonds().right_count(),
-                other.bonds.len(),
-            ),
-            (
-                correspondence.dative_bonds().left_count(),
-                self.dative_bonds.count(),
-                correspondence.dative_bonds().right_count(),
-                other.dative_bonds.count(),
-            ),
-            (
-                correspondence.aromatic_systems().left_count(),
-                self.aromatic_systems.count(),
-                correspondence.aromatic_systems().right_count(),
-                other.aromatic_systems.count(),
-            ),
-            (
-                correspondence.multicenter_bonds().left_count(),
-                self.multicenter_bonds.count(),
-                correspondence.multicenter_bonds().right_count(),
-                other.multicenter_bonds.count(),
-            ),
-            (
-                correspondence.noncovalent_bonds().left_count(),
-                self.noncovalent_bonds.count(),
-                correspondence.noncovalent_bonds().right_count(),
-                other.noncovalent_bonds.count(),
-            ),
-            (
-                correspondence.stereo_atoms().left_count(),
-                self.stereo_atoms.count(),
-                correspondence.stereo_atoms().right_count(),
-                other.stereo_atoms.count(),
-            ),
-            (
-                correspondence.stereo_bonds().left_count(),
-                self.stereo_bonds.count(),
-                correspondence.stereo_bonds().right_count(),
-                other.stereo_bonds.count(),
-            ),
-        ]
-        .into_iter()
-        .all(|(mapped_left, actual_left, mapped_right, actual_right)| {
-            mapped_left == actual_left && mapped_right == actual_right
-        });
-        if !correspondence.is_total() || !counts_match {
-            return false;
-        }
-
-        for &(left, right) in correspondence.atoms().matched_pairs() {
-            let (Some(left_attributes), Some(right_attributes)) =
-                (self.atoms.get(left.index()), other.atoms.get(right.index()))
-            else {
-                return false;
-            };
-            if !left_attributes.equiv(right_attributes) {
-                return false;
-            }
-        }
-
-        for &(left, right) in correspondence.bonds().matched_pairs() {
-            let (Some(left_attributes), Some(right_attributes)) =
-                (self.bonds.get(left.index()), other.bonds.get(right.index()))
-            else {
-                return false;
-            };
-            let [first, second] = self.graph.edge_endpoints(EdgeId::from(left));
-            let (Some(mapped_first), Some(mapped_second)) = (
-                correspondence
-                    .atoms()
-                    .right_of(AtomId::from(first))
-                    .map(NodeId::from),
-                correspondence
-                    .atoms()
-                    .right_of(AtomId::from(second))
-                    .map(NodeId::from),
-            ) else {
-                return false;
-            };
-            let mut mapped_endpoints = [mapped_first, mapped_second];
-            mapped_endpoints.sort_unstable();
-            if other.graph.edge_endpoints(EdgeId::from(right)) != mapped_endpoints
-                || !left_attributes.equiv(right_attributes)
-            {
-                return false;
-            }
-        }
-
-        for &(left, right) in correspondence.dative_bonds().matched_pairs() {
-            if left.index() >= self.dative_bonds.count()
-                || right.index() >= other.dative_bonds.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_acceptor: Option<Vec<NodeId>> = self
-                .dative_bonds
-                .participants_1(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let mapped_donors: Option<Vec<NodeId>> = self
-                .dative_bonds
-                .participants_2(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let (Some(mapped_acceptor), Some(mapped_donors)) = (mapped_acceptor, mapped_donors)
-            else {
-                return false;
-            };
-            let Some((acceptor_order, donor_order)) = other.dative_bonds.participant_permutation(
-                right_id,
-                &mapped_acceptor,
-                &mapped_donors,
-            ) else {
-                return false;
-            };
-            if !self.dative_bonds.data(left_id).equiv_under(
-                other.dative_bonds.data(right_id),
-                &acceptor_order,
-                &donor_order,
-            ) {
-                return false;
-            }
-        }
-
-        for &(left, right) in correspondence.aromatic_systems().matched_pairs() {
-            if left.index() >= self.aromatic_systems.count()
-                || right.index() >= other.aromatic_systems.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
-                .aromatic_systems
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let Some(order) = mapped.and_then(|participants| {
-                other
-                    .aromatic_systems
-                    .participant_permutation(right_id, &participants)
-            }) else {
-                return false;
-            };
-            if !self
-                .aromatic_systems
-                .data(left_id)
-                .equiv_under(other.aromatic_systems.data(right_id), &order)
-            {
-                return false;
-            }
-        }
-
-        for &(left, right) in correspondence.multicenter_bonds().matched_pairs() {
-            if left.index() >= self.multicenter_bonds.count()
-                || right.index() >= other.multicenter_bonds.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
-                .multicenter_bonds
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let Some(order) = mapped.and_then(|participants| {
-                other
-                    .multicenter_bonds
-                    .participant_permutation(right_id, &participants)
-            }) else {
-                return false;
-            };
-            if !self
-                .multicenter_bonds
-                .data(left_id)
-                .equiv_under(other.multicenter_bonds.data(right_id), &order)
-            {
-                return false;
-            }
-        }
-
-        for &(left, right) in correspondence.noncovalent_bonds().matched_pairs() {
-            if left.index() >= self.noncovalent_bonds.count()
-                || right.index() >= other.noncovalent_bonds.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped: Option<Vec<NodeId>> = self
-                .noncovalent_bonds
-                .participants(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let Some(order) = mapped.and_then(|participants| {
-                other
-                    .noncovalent_bonds
-                    .participant_permutation(right_id, &participants)
-            }) else {
-                return false;
-            };
-            if !self
-                .noncovalent_bonds
-                .data(left_id)
-                .equiv_under(other.noncovalent_bonds.data(right_id), &order)
-            {
-                return false;
-            }
-        }
-
-        let mut stereo_frames = Vec::with_capacity(
-            correspondence.stereo_atoms().matched_pair_count()
-                + correspondence.stereo_bonds().matched_pair_count(),
-        );
-        for &(left, right) in correspondence.stereo_atoms().matched_pairs() {
-            if left.index() >= self.stereo_atoms.count()
-                || right.index() >= other.stereo_atoms.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_site: Option<Vec<NodeId>> = self
-                .stereo_atoms
-                .participants_1(left_id)
-                .iter()
-                .map(|&atom| {
-                    correspondence
-                        .atoms()
-                        .right_of(AtomId::from(atom))
-                        .map(NodeId::from)
-                })
-                .collect();
-            let mapped_ligands: Option<Vec<StereoLigand>> = self
-                .stereo_atoms
-                .participants_2(left_id)
-                .iter()
-                .map(|ligand| {
-                    correspondence
-                        .atoms()
-                        .right_of(ligand.atom_id)
-                        .map(|atom| StereoLigand::new(atom, ligand.kind))
-                })
-                .collect();
-            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
-                return false;
-            };
-            if mapped_site != other.stereo_atoms.participants_1(right_id) {
-                return false;
-            }
-            if mapped_ligands == other.stereo_atoms.participants_2(right_id)
-                && self
-                    .stereo_atoms
-                    .data(left_id)
-                    .equiv(other.stereo_atoms.data(right_id))
-            {
-                continue;
-            }
-            if mapped_ligands.len() > 6 {
-                return false;
-            }
-            let frames = Permutation::between_all(
-                &mapped_ligands,
-                other.stereo_atoms.participants_2(right_id),
-            )
-            .into_iter()
-            .filter(|&permutation| {
-                self.stereo_atoms
-                    .data(left_id)
-                    .transform_frame_by(permutation)
-                    .is_some_and(|attributes| attributes.equiv(other.stereo_atoms.data(right_id)))
-            })
-            .collect::<Vec<_>>();
-            if frames.is_empty() {
-                return false;
-            }
-            stereo_frames.push((Entity::StereoAtom(right), frames));
-        }
-
-        for &(left, right) in correspondence.stereo_bonds().matched_pairs() {
-            if left.index() >= self.stereo_bonds.count()
-                || right.index() >= other.stereo_bonds.count()
-            {
-                return false;
-            }
-            let left_id = RelationId::from(left);
-            let right_id = RelationId::from(right);
-            let mapped_site: Option<Vec<EdgeId>> = self
-                .stereo_bonds
-                .participants_1(left_id)
-                .iter()
-                .map(|&bond| {
-                    correspondence
-                        .bonds()
-                        .right_of(BondId::from(bond))
-                        .map(EdgeId::from)
-                })
-                .collect();
-            let mapped_ligands: Option<Vec<StereoLigand>> = self
-                .stereo_bonds
-                .participants_2(left_id)
-                .iter()
-                .map(|ligand| {
-                    correspondence
-                        .atoms()
-                        .right_of(ligand.atom_id)
-                        .map(|atom| StereoLigand::new(atom, ligand.kind))
-                })
-                .collect();
-            let (Some(mapped_site), Some(mapped_ligands)) = (mapped_site, mapped_ligands) else {
-                return false;
-            };
-            if mapped_site != other.stereo_bonds.participants_1(right_id) {
-                return false;
-            }
-            if mapped_ligands == other.stereo_bonds.participants_2(right_id)
-                && self
-                    .stereo_bonds
-                    .data(left_id)
-                    .equiv(other.stereo_bonds.data(right_id))
-            {
-                continue;
-            }
-            if mapped_ligands.len() > 6 {
-                return false;
-            }
-            let frames = Permutation::between_all(
-                &mapped_ligands,
-                other.stereo_bonds.participants_2(right_id),
-            )
-            .into_iter()
-            .filter(|&permutation| {
-                self.stereo_bonds
-                    .data(left_id)
-                    .transform_frame_by(permutation)
-                    .is_some_and(|attributes| attributes.equiv(other.stereo_bonds.data(right_id)))
-            })
-            .collect::<Vec<_>>();
-            if frames.is_empty() {
-                return false;
-            }
-            stereo_frames.push((Entity::StereoBond(right), frames));
-        }
-
-        let Some(remapping) = correspondence.to_remapping() else {
-            return false;
-        };
-        let mapped_constraints: Constraints = self
-            .constraints
-            .clone()
-            .into_iter()
-            .map(|constraint| constraint.remap(&remapping))
-            .collect();
-        constraints_equiv_under_stereo_frames(
-            mapped_constraints,
-            &other.constraints,
-            &stereo_frames,
-        )
+    /// Under the identity correspondence this is exactly [`Reframe::framed_eq`]. Reversing
+    /// a correspondence reverses the comparison, and sequential correspondences compose.
+    /// For integrity-valid molecules whose complete canonicalizations both succeed,
+    /// `canonical_eq` holds exactly when some admissible total correspondence makes this
+    /// comparison true. Equality totalization for two intrinsic contradictions does not require
+    /// such a witness.
+    pub fn framed_eq_under(&self, other: &Self, correspondence: &MoleculeCorrespondence) -> bool {
+        self.try_remap(correspondence)
+            .is_some_and(|remapped| remapped.framed_eq(other))
     }
 
     /// Neighbors of `atom`, ordered by ascending neighbor atom id.
@@ -1233,28 +691,28 @@ impl Molecule {
             && self.bonds.iter().all(|bond| bond.is_concrete())
             && self
                 .dative_bonds
-                .relation_ids()
-                .all(|id| self.dative_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.dative_bonds.attributes(id).is_concrete())
             && self
                 .aromatic_systems
-                .relation_ids()
-                .all(|id| self.aromatic_systems.data(id).is_concrete())
+                .ids()
+                .all(|id| self.aromatic_systems.attributes(id).is_concrete())
             && self
                 .multicenter_bonds
-                .relation_ids()
-                .all(|id| self.multicenter_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.multicenter_bonds.attributes(id).is_concrete())
             && self
                 .noncovalent_bonds
-                .relation_ids()
-                .all(|id| self.noncovalent_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.noncovalent_bonds.attributes(id).is_concrete())
             && self
                 .stereo_atoms
-                .relation_ids()
-                .all(|id| self.stereo_atoms.data(id).is_concrete())
+                .ids()
+                .all(|id| self.stereo_atoms.attributes(id).is_concrete())
             && self
                 .stereo_bonds
-                .relation_ids()
-                .all(|id| self.stereo_bonds.data(id).is_concrete())
+                .ids()
+                .all(|id| self.stereo_bonds.attributes(id).is_concrete())
     }
 
     /// Rings selected by `model` and computed using `config`.
@@ -1294,15 +752,9 @@ impl Molecule {
     }
 
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.dative_bonds);
-        let acceptor = AtomId::from(set.participants_1(rid)[0]);
-        let donors = set
-            .participants_2(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = set.data_mut(rid);
+        let acceptor = self.dative_bonds.acceptor(id);
+        let donors = self.dative_bonds.donors(id).collect();
+        let attributes = self.dative_bonds.attributes_mut(id);
         DativeBondViewMut {
             id,
             donors,
@@ -1313,20 +765,17 @@ impl Molecule {
 
     /// Replace every dative bond with `f(bond)` in place.
     pub fn modify_dative_bonds(&mut self, mut f: impl FnMut(DativeBondForm) -> DativeBondForm) {
-        for dative_bond in Arc::make_mut(&mut self.dative_bonds).data_iter_mut() {
+        for dative_bond in self.dative_bonds.attributes_iter_mut() {
             *dative_bond = f(mem::take(dative_bond));
         }
     }
 
-    pub fn aromatic_system_mut(&mut self, id: AromaticSystemId) -> AromaticSystemViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.aromatic_systems);
-        let atoms = set
-            .participants(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = set.data_mut(rid);
+    pub(crate) fn aromatic_system_mut(
+        &mut self,
+        id: AromaticSystemId,
+    ) -> AromaticSystemViewMut<'_> {
+        let atoms = self.aromatic_systems.atoms(id).collect();
+        let attributes = self.aromatic_systems.attributes_mut(id);
         AromaticSystemViewMut {
             id,
             atoms,
@@ -1335,24 +784,63 @@ impl Molecule {
     }
 
     /// Replace every aromatic system with `f(system)` in place.
-    pub fn modify_aromatic_systems(
+    pub(crate) fn modify_aromatic_systems(
         &mut self,
         mut f: impl FnMut(AromaticSystemForm) -> AromaticSystemForm,
     ) {
-        for aromatic_system in Arc::make_mut(&mut self.aromatic_systems).data_iter_mut() {
+        for aromatic_system in self.aromatic_systems.attributes_iter_mut() {
             *aromatic_system = f(mem::take(aromatic_system));
         }
     }
 
-    pub fn multicenter_bond_mut(&mut self, id: MulticenterBondId) -> MulticenterBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.multicenter_bonds);
-        let atoms = set
-            .participants(rid)
-            .iter()
-            .map(|&n| AtomId::from(n))
-            .collect();
-        let attributes = set.data_mut(rid);
+    /// Transactionally modify one aromatic-system form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_aromatic_system(
+        &mut self,
+        id: AromaticSystemId,
+        f: impl FnOnce(&mut AromaticSystemForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.aromatic_systems.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::AromaticSystem(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.aromatic_systems.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every aromatic-system form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_aromatic_systems(
+        &mut self,
+        mut f: impl FnMut(&mut AromaticSystemForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for aromatic_system in candidate.aromatic_systems.attributes_iter_mut() {
+                f(aromatic_system);
+            }
+        })
+    }
+
+    pub(crate) fn multicenter_bond_mut(
+        &mut self,
+        id: MulticenterBondId,
+    ) -> MulticenterBondViewMut<'_> {
+        let atoms = self.multicenter_bonds.atoms(id).collect();
+        let attributes = self.multicenter_bonds.attributes_mut(id);
         MulticenterBondViewMut {
             id,
             atoms,
@@ -1361,20 +849,60 @@ impl Molecule {
     }
 
     /// Replace every multicenter bond with `f(bond)` in place.
-    pub fn modify_multicenter_bonds(
+    pub(crate) fn modify_multicenter_bonds(
         &mut self,
         mut f: impl FnMut(MulticenterBondForm) -> MulticenterBondForm,
     ) {
-        for multicenter_bond in Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut() {
+        for multicenter_bond in self.multicenter_bonds.attributes_iter_mut() {
             *multicenter_bond = f(mem::take(multicenter_bond));
         }
     }
 
+    /// Transactionally modify one multicenter-bond form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_multicenter_bond(
+        &mut self,
+        id: MulticenterBondId,
+        f: impl FnOnce(&mut MulticenterBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.multicenter_bonds.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::MulticenterBond(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.multicenter_bonds.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every multicenter-bond form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_multicenter_bonds(
+        &mut self,
+        mut f: impl FnMut(&mut MulticenterBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for multicenter_bond in candidate.multicenter_bonds.attributes_iter_mut() {
+                f(multicenter_bond);
+            }
+        })
+    }
+
     pub fn noncovalent_bond_mut(&mut self, id: NoncovalentBondId) -> NoncovalentBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.noncovalent_bonds);
-        let atoms = (*set.participants(rid)).map(AtomId::from);
-        let attributes = set.data_mut(rid);
+        let atoms = self.noncovalent_bonds.atoms(id);
+        let attributes = self.noncovalent_bonds.attributes_mut(id);
         NoncovalentBondViewMut {
             id,
             atoms,
@@ -1387,59 +915,157 @@ impl Molecule {
         &mut self,
         mut f: impl FnMut(NoncovalentBondForm) -> NoncovalentBondForm,
     ) {
-        for noncovalent_bond in Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut() {
+        for noncovalent_bond in self.noncovalent_bonds.attributes_iter_mut() {
             *noncovalent_bond = f(mem::take(noncovalent_bond));
         }
     }
 
-    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.stereo_atoms);
-        let site = AtomId::from(set.participants_1(rid)[0]);
-        let ligands = set.participants_2(rid).to_vec();
-        let attributes = set.data_mut(rid);
-        StereoAtomViewMut {
-            id,
-            site,
-            ligands,
-            attributes,
-        }
+    pub(crate) fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomForm {
+        self.stereo_atoms.attributes_mut(id)
     }
 
     /// Replace every stereo atom with `f(stereo_atom)` in place.
-    pub fn modify_stereo_atoms(&mut self, mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm) {
-        for stereo_atom in Arc::make_mut(&mut self.stereo_atoms).data_iter_mut() {
+    pub(crate) fn modify_stereo_atoms(
+        &mut self,
+        mut f: impl FnMut(StereoAtomForm) -> StereoAtomForm,
+    ) {
+        for stereo_atom in self.stereo_atoms.attributes_iter_mut() {
             *stereo_atom = f(mem::take(stereo_atom));
         }
     }
 
-    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondViewMut<'_> {
-        let rid = RelationId::from(id);
-        let set = Arc::make_mut(&mut self.stereo_bonds);
-        let site = BondId::from(set.participants_1(rid)[0]);
-        let ligands = set.participants_2(rid).to_vec();
-        let attributes = set.data_mut(rid);
-        StereoBondViewMut {
-            id,
-            site,
-            ligands,
-            attributes,
+    /// Transactionally modify one stereo-atom form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_stereo_atom(
+        &mut self,
+        id: StereoAtomId,
+        f: impl FnOnce(&mut StereoAtomForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.stereo_atoms.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::StereoAtom(id),
+            });
         }
+        self.try_modify_checked(|candidate| f(candidate.stereo_atoms.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every stereo-atom form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_stereo_atoms(
+        &mut self,
+        mut f: impl FnMut(&mut StereoAtomForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for stereo_atom in candidate.stereo_atoms.attributes_iter_mut() {
+                f(stereo_atom);
+            }
+        })
+    }
+
+    pub(crate) fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondForm {
+        self.stereo_bonds.attributes_mut(id)
     }
 
     /// Replace every stereo bond with `f(stereo_bond)` in place.
-    pub fn modify_stereo_bonds(&mut self, mut f: impl FnMut(StereoBondForm) -> StereoBondForm) {
-        for stereo_bond in Arc::make_mut(&mut self.stereo_bonds).data_iter_mut() {
+    pub(crate) fn modify_stereo_bonds(
+        &mut self,
+        mut f: impl FnMut(StereoBondForm) -> StereoBondForm,
+    ) {
+        for stereo_bond in self.stereo_bonds.attributes_iter_mut() {
             *stereo_bond = f(mem::take(stereo_bond));
         }
+    }
+
+    /// Transactionally modify one stereo-bond form.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// it still satisfies molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MoleculeIntegrityError::InvalidReference`] if `id` is unavailable, or the exact
+    /// integrity error introduced by the callback. On error, this molecule is unchanged.
+    pub fn try_modify_stereo_bond(
+        &mut self,
+        id: StereoBondId,
+        f: impl FnOnce(&mut StereoBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        if !self.stereo_bonds.contains(id) {
+            return Err(MoleculeIntegrityError::InvalidReference {
+                entity: Entity::StereoBond(id),
+            });
+        }
+        self.try_modify_checked(|candidate| f(candidate.stereo_bonds.attributes_mut(id)))
+    }
+
+    /// Transactionally modify every stereo-bond form.
+    ///
+    /// The callback operates on forms in a private candidate. The candidate replaces this molecule
+    /// only if all modified forms still satisfy molecule representation integrity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_stereo_bonds(
+        &mut self,
+        mut f: impl FnMut(&mut StereoBondForm),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| {
+            for stereo_bond in candidate.stereo_bonds.attributes_iter_mut() {
+                f(stereo_bond);
+            }
+        })
     }
 
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
 
-    pub fn constraints_mut(&mut self) -> &mut Constraints {
+    #[cfg(test)]
+    pub(crate) fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    /// Transactionally modify the molecule-level constraint tree.
+    ///
+    /// The callback operates on a private candidate. The candidate replaces this molecule only if
+    /// all constraint references and stereo wrapper domains remain valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first molecule integrity error introduced by the callback. On error, this
+    /// molecule is unchanged.
+    pub fn try_modify_constraints(
+        &mut self,
+        f: impl FnOnce(&mut Constraints),
+    ) -> Result<(), MoleculeIntegrityError> {
+        self.try_modify_checked(|candidate| f(&mut candidate.constraints))
+    }
+
+    fn try_modify_checked(
+        &mut self,
+        f: impl FnOnce(&mut Self),
+    ) -> Result<(), MoleculeIntegrityError> {
+        let mut candidate = self.clone();
+        f(&mut candidate);
+        candidate.check_integrity()?;
+        *self = candidate;
+        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1532,11 +1158,10 @@ impl Molecule {
             let id = StereoAtomId::from(i);
             let kind = self
                 .stereo_atom_mut(id)
-                .attributes
                 .configuration
                 .kind()
                 .expect("molecule stereo atom has a concrete kind");
-            for c in self.stereo_atom_mut(id).attributes.constraints.take() {
+            for c in self.stereo_atom_mut(id).constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
@@ -1544,11 +1169,10 @@ impl Molecule {
             let id = StereoBondId::from(i);
             let kind = self
                 .stereo_bond_mut(id)
-                .attributes
                 .configuration
                 .kind()
                 .expect("molecule stereo bond has a concrete kind");
-            for c in self.stereo_bond_mut(id).attributes.constraints.take() {
+            for c in self.stereo_bond_mut(id).constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
@@ -1696,10 +1320,10 @@ impl Molecule {
                 // The carried kind is dropped here; kind/degree consistency
                 // against the element is the C4 validator's job.
                 Constraint::StereoAtom(id, _kind, inner) => {
-                    self.stereo_atom_mut(id).attributes.constraints.set(inner);
+                    self.stereo_atom_mut(id).constraints.set(inner);
                 }
                 Constraint::StereoBond(id, _kind, inner) => {
-                    self.stereo_bond_mut(id).attributes.constraints.set(inner);
+                    self.stereo_bond_mut(id).constraints.set(inner);
                 }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)
@@ -1716,12 +1340,12 @@ impl Molecule {
             self.graph.clone(),
             Arc::clone(&self.atoms),
             Arc::clone(&self.bonds),
-            Arc::clone(&self.dative_bonds),
-            Arc::clone(&self.aromatic_systems),
-            Arc::clone(&self.multicenter_bonds),
-            Arc::clone(&self.noncovalent_bonds),
-            Arc::clone(&self.stereo_atoms),
-            Arc::clone(&self.stereo_bonds),
+            self.dative_bonds.clone(),
+            self.aromatic_systems.clone(),
+            self.multicenter_bonds.clone(),
+            self.noncovalent_bonds.clone(),
+            self.stereo_atoms.clone(),
+            self.stereo_bonds.clone(),
             self.constraints.clone(),
         )
     }
@@ -1737,14 +1361,14 @@ impl Molecule {
     ///
     /// # Semantic properties
     ///
-    /// On success, the returned molecule passes [`Molecule::check_integrity`]. On either failure,
-    /// `self` remains unchanged and no partially modified molecule is returned.
+    /// On success, the returned molecule satisfies all molecule integrity requirements. On either
+    /// failure, `self` remains unchanged and no partially modified molecule is returned.
     pub fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError> {
         let editor = self.edit().apply(edits)?;
         Ok(editor.try_build()?)
     }
 
-    /// Combine molecules by disjoint concatenation. Input order determines each entity family's
+    /// Combine molecules by disjoint concatenation. Input order determines each entity kind's
     /// id ranges in the result. Returns one correspondence per input, in input order, mapping that
     /// molecule's ids into the combined molecule. Pure renumbering — no gluing, no chemistry.
     pub fn combine_all<'a>(
@@ -1839,35 +1463,37 @@ impl Molecule {
                 .extend(molecule.noncovalent_bonds().iter().map(|bond| {
                     let [first, second] = bond.atom_ids();
                     (
-                        shift_atom(first),
-                        shift_atom(second),
+                        [shift_atom(first), shift_atom(second)],
                         bond.attributes.clone(),
                     )
                 }));
-            for id in molecule.stereo_atoms.relation_ids() {
-                let site = shift_atom(AtomId::from(molecule.stereo_atoms.participants_1(id)[0]));
+            for id in molecule.stereo_atoms.ids() {
+                let site = shift_atom(molecule.stereo_atoms.site(id));
                 let ligands = molecule
                     .stereo_atoms
-                    .participants_2(id)
+                    .ligands(id)
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                entries
-                    .stereo_atoms
-                    .push((site, ligands, molecule.stereo_atoms.data(id).clone()));
+                entries.stereo_atoms.push((
+                    site,
+                    ligands,
+                    molecule.stereo_atoms.attributes(id).clone(),
+                ));
             }
-            for id in molecule.stereo_bonds.relation_ids() {
-                let site =
-                    BondId(molecule.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+            for id in molecule.stereo_bonds.ids() {
+                let site = BondId(molecule.stereo_bonds.site(id).0 + bond_offset as u32);
                 let ligands = molecule
                     .stereo_bonds
-                    .participants_2(id)
+                    .ligands(id)
                     .iter()
                     .map(|ligand| StereoLigand::new(shift_atom(ligand.atom_id), ligand.kind))
                     .collect();
-                entries
-                    .stereo_bonds
-                    .push((site, ligands, molecule.stereo_bonds.data(id).clone()));
+                entries.stereo_bonds.push((
+                    site,
+                    ligands,
+                    molecule.stereo_bonds.attributes(id).clone(),
+                ));
             }
 
             if !molecule.constraints.is_empty() {
@@ -2022,25 +1648,25 @@ impl Molecule {
                 .map(|index| EdgeId((bond_offset + index) as u32))
                 .collect(),
         );
-        for id in other.stereo_atoms.relation_ids() {
-            let site = shift_atom(AtomId::from(other.stereo_atoms.participants_1(id)[0]));
+        for id in other.stereo_atoms.ids() {
+            let site = shift_atom(other.stereo_atoms.site(id));
             let ligands = other
                 .stereo_atoms
-                .participants_2(id)
+                .ligands(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_atom(site, ligands, other.stereo_atoms.data(id).clone());
+            editor.add_stereo_atom(site, ligands, other.stereo_atoms.attributes(id).clone());
         }
-        for id in other.stereo_bonds.relation_ids() {
-            let site = BondId(other.stereo_bonds.participants_1(id)[0].0 + bond_offset as u32);
+        for id in other.stereo_bonds.ids() {
+            let site = BondId(other.stereo_bonds.site(id).0 + bond_offset as u32);
             let ligands = other
                 .stereo_bonds
-                .participants_2(id)
+                .ligands(id)
                 .iter()
                 .map(|ligand| ligand.remap(&ligand_remapping))
                 .collect();
-            editor.add_stereo_bond(site, ligands, other.stereo_bonds.data(id).clone());
+            editor.add_stereo_bond(site, ligands, other.stereo_bonds.attributes(id).clone());
         }
 
         if !other.constraints.is_empty() {
@@ -2131,18 +1757,16 @@ impl Molecule {
             let [a, b] = bond.atom_ids();
             uf.union(a.index(), b.index());
         }
-        for rid in self.stereo_atoms.relation_ids() {
-            let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
-            for ligand in self.stereo_atoms.participants_2(rid) {
+        for rid in self.stereo_atoms.ids() {
+            let site = self.stereo_atoms.site(rid);
+            for ligand in self.stereo_atoms.ligands(rid) {
                 uf.union(site.index(), ligand.atom_id.index());
             }
         }
-        for rid in self.stereo_bonds.relation_ids() {
-            let [a, b] = self
-                .bond(BondId(self.stereo_bonds.participants_1(rid)[0].0))
-                .atom_ids();
+        for rid in self.stereo_bonds.ids() {
+            let [a, b] = self.bond(BondId(self.stereo_bonds.site(rid).0)).atom_ids();
             uf.union(a.index(), b.index());
-            for ligand in self.stereo_bonds.participants_2(rid) {
+            for ligand in self.stereo_bonds.ligands(rid) {
                 uf.union(a.index(), ligand.atom_id.index());
             }
         }
@@ -2244,40 +1868,40 @@ impl Molecule {
                     }
                 }
                 let mut stereo_atom_pairs = Vec::new();
-                for rid in self.stereo_atoms.relation_ids() {
-                    let site = AtomId::from(self.stereo_atoms.participants_1(rid)[0]);
+                for rid in self.stereo_atoms.ids() {
+                    let site = self.stereo_atoms.site(rid);
                     if component_of(site) == component {
                         let ligands: Vec<StereoLigand> = self
                             .stereo_atoms
-                            .participants_2(rid)
+                            .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.remap(&compaction))
                             .collect();
                         let added = editor.add_stereo_atom(
                             compact(site),
                             ligands,
-                            self.stereo_atoms.data(rid).clone(),
+                            self.stereo_atoms.attributes(rid).clone(),
                         );
-                        stereo_atom_pairs.push((added, StereoAtomId::from(rid)));
+                        stereo_atom_pairs.push((added, rid));
                     }
                 }
                 let mut stereo_bond_pairs = Vec::new();
-                for rid in self.stereo_bonds.relation_ids() {
-                    let bond = BondId(self.stereo_bonds.participants_1(rid)[0].0);
+                for rid in self.stereo_bonds.ids() {
+                    let bond = BondId(self.stereo_bonds.site(rid).0);
                     let [a, _] = self.bond(bond).atom_ids();
                     if component_of(a) == component {
                         let ligands: Vec<StereoLigand> = self
                             .stereo_bonds
-                            .participants_2(rid)
+                            .ligands(rid)
                             .iter()
                             .map(|ligand| ligand.remap(&compaction))
                             .collect();
                         let added = editor.add_stereo_bond(
                             bond_compact[&bond],
                             ligands,
-                            self.stereo_bonds.data(rid).clone(),
+                            self.stereo_bonds.attributes(rid).clone(),
                         );
-                        stereo_bond_pairs.push((added, StereoBondId::from(rid)));
+                        stereo_bond_pairs.push((added, rid));
                     }
                 }
                 let entities = editor.build();
@@ -2520,7 +2144,133 @@ impl Molecule {
     }
 }
 
-/// The correspondence mapping one input family's ids to their offset ids in a combined family.
+impl Normalize for Molecule {
+    fn normalize(mut self) -> Result<Self, Contradiction> {
+        for attributes in Arc::make_mut(&mut self.atoms) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        for attributes in Arc::make_mut(&mut self.bonds) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        self.dative_bonds = mem::take(&mut self.dative_bonds).normalize()?;
+        self.aromatic_systems = mem::take(&mut self.aromatic_systems).normalize()?;
+        self.multicenter_bonds = mem::take(&mut self.multicenter_bonds).normalize()?;
+        self.noncovalent_bonds = mem::take(&mut self.noncovalent_bonds).normalize()?;
+        self.stereo_atoms = mem::take(&mut self.stereo_atoms).normalize()?;
+        self.stereo_bonds = mem::take(&mut self.stereo_bonds).normalize()?;
+        self.constraints = mem::take(&mut self.constraints).normalize()?;
+        Ok(self)
+    }
+}
+
+impl FrameTransport for Molecule {
+    type Action = OverlaysFrameAction;
+
+    fn reframe_by(mut self, actions: &Self::Action) -> Option<Self> {
+        self.dative_bonds = self.dative_bonds.reframe_by(actions.dative_bonds())?;
+        self.aromatic_systems = self
+            .aromatic_systems
+            .reframe_by(actions.aromatic_systems())?;
+        self.multicenter_bonds = self
+            .multicenter_bonds
+            .reframe_by(actions.multicenter_bonds())?;
+        self.noncovalent_bonds = self
+            .noncovalent_bonds
+            .reframe_by(actions.noncovalent_bonds())?;
+        self.stereo_atoms = self.stereo_atoms.reframe_by(actions.stereo_atoms())?;
+        self.stereo_bonds = self.stereo_bonds.reframe_by(actions.stereo_bonds())?;
+        self.constraints = self.constraints.reframe_by(actions)?;
+        Some(self)
+    }
+}
+
+impl Reframe for Molecule {
+    fn representative_action(&self) -> Self::Action {
+        OverlaysFrameAction::new(
+            self.dative_bonds.representative_action(),
+            self.aromatic_systems.representative_action(),
+            self.multicenter_bonds.representative_action(),
+            self.noncovalent_bonds.representative_action(),
+            self.stereo_atoms.representative_action(),
+            self.stereo_bonds.representative_action(),
+        )
+    }
+
+    fn reframe(mut self) -> Result<Self, Contradiction> {
+        let action_domain = self.constraints.frame_action_domain();
+        for attributes in Arc::make_mut(&mut self.atoms) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        for attributes in Arc::make_mut(&mut self.bonds) {
+            *attributes = mem::take(attributes).normalize()?;
+        }
+        self.constraints = mem::take(&mut self.constraints).normalize()?;
+
+        let mut actions = ConstraintFrameActionMap::default();
+        self.dative_bonds = if action_domain.count(EntityKind::DativeBond) == 0 {
+            mem::take(&mut self.dative_bonds).reframe()?
+        } else {
+            reframe_dative_bonds_with(mem::take(&mut self.dative_bonds), |id, action| {
+                if action_domain.contains_dative_bond(id) {
+                    actions.insert_dative_bond(id, action.clone());
+                }
+            })?
+        };
+        self.aromatic_systems = if action_domain.count(EntityKind::AromaticSystem) == 0 {
+            mem::take(&mut self.aromatic_systems).reframe()?
+        } else {
+            reframe_aromatic_systems_with(mem::take(&mut self.aromatic_systems), |id, action| {
+                if action_domain.contains_aromatic_system(id) {
+                    actions.insert_aromatic_system(id, action.clone());
+                }
+            })?
+        };
+        self.multicenter_bonds = if action_domain.count(EntityKind::MulticenterBond) == 0 {
+            mem::take(&mut self.multicenter_bonds).reframe()?
+        } else {
+            reframe_multicenter_bonds_with(mem::take(&mut self.multicenter_bonds), |id, action| {
+                if action_domain.contains_multicenter_bond(id) {
+                    actions.insert_multicenter_bond(id, action.clone());
+                }
+            })?
+        };
+        self.noncovalent_bonds = if action_domain.count(EntityKind::NoncovalentBond) == 0 {
+            mem::take(&mut self.noncovalent_bonds).reframe()?
+        } else {
+            reframe_noncovalent_bonds_with(mem::take(&mut self.noncovalent_bonds), |id, action| {
+                if action_domain.contains_noncovalent_bond(id) {
+                    actions.insert_noncovalent_bond(id, action.clone());
+                }
+            })?
+        };
+        self.stereo_atoms = if action_domain.count(EntityKind::StereoAtom) == 0 {
+            mem::take(&mut self.stereo_atoms).reframe()?
+        } else {
+            reframe_stereo_atoms_with(mem::take(&mut self.stereo_atoms), |id, action| {
+                if action_domain.contains_stereo_atom(id) {
+                    actions.insert_stereo_atom(id, action);
+                }
+            })?
+        };
+        self.stereo_bonds = if action_domain.count(EntityKind::StereoBond) == 0 {
+            mem::take(&mut self.stereo_bonds).reframe()?
+        } else {
+            reframe_stereo_bonds_with(mem::take(&mut self.stereo_bonds), |id, action| {
+                if action_domain.contains_stereo_bond(id) {
+                    actions.insert_stereo_bond(id, action);
+                }
+            })?
+        };
+        self.constraints = self
+            .constraints
+            .reframe_by_actions(&actions)
+            .map_err(|_| Contradiction)?
+            .normalize()?;
+        Ok(self)
+    }
+}
+
+/// The correspondence mapping one input entity set's ids to their offset ids in a combined set.
 fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     offset: usize,
     input_count: usize,
@@ -2530,7 +2280,7 @@ fn offset_correspondence<Id: Copy + Ord + From<usize>>(
     Correspondence::from_images(&images, combined_count)
 }
 
-/// The per-family offset map used to remap constraints into a combined molecule.
+/// The per-entity-kind offset map used to remap constraints into a combined molecule.
 fn offset_map<Id: Copy + Eq + Hash + From<usize>>(offset: usize, count: usize) -> HashMap<Id, Id> {
     (0..count)
         .map(|k| (Id::from(k), Id::from(offset + k)))
@@ -2547,7 +2297,7 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
     }
 }
 
-/// The per-family `original → compact` remapping a `split` component induces, read off its
+/// The per-entity-kind `original → compact` remapping a `split` component induces, read off its
 /// `component → original` correspondence.
 fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> IdRemapping {
     IdRemapping::new(
@@ -2600,71 +2350,6 @@ fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> I
             .map(|&(compact, original)| (original, compact))
             .collect(),
     )
-}
-
-fn transform_constraint_stereo_frame(
-    constraint: Constraint,
-    entity: Entity,
-    permutation: Permutation,
-) -> Option<Constraint> {
-    Some(match constraint {
-        Constraint::StereoAtom(id, kind, constraint) if entity == Entity::StereoAtom(id) => {
-            let form = StereoAtomForm {
-                configuration: Default::default(),
-                constraints: constraint.into(),
-            }
-            .transform_frame_by(permutation)?;
-            Constraint::StereoAtom(id, kind, form.constraints.into_iter().next()?)
-        }
-        Constraint::StereoBond(id, kind, constraint) if entity == Entity::StereoBond(id) => {
-            let form = StereoBondForm {
-                configuration: Default::default(),
-                constraints: constraint.into(),
-            }
-            .transform_frame_by(permutation)?;
-            Constraint::StereoBond(id, kind, form.constraints.into_iter().next()?)
-        }
-        Constraint::And(constraints) => Constraint::And(
-            constraints
-                .into_iter()
-                .map(|constraint| {
-                    transform_constraint_stereo_frame(constraint, entity, permutation)
-                })
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Or(constraints) => Constraint::Or(
-            constraints
-                .into_iter()
-                .map(|constraint| {
-                    transform_constraint_stereo_frame(constraint, entity, permutation)
-                })
-                .collect::<Option<Vec<_>>>()?,
-        ),
-        Constraint::Not(constraint) => Constraint::Not(Box::new(
-            transform_constraint_stereo_frame(*constraint, entity, permutation)?,
-        )),
-        constraint => constraint,
-    })
-}
-
-fn constraints_equiv_under_stereo_frames(
-    constraints: Constraints,
-    other: &Constraints,
-    frames: &[(Entity, Vec<Permutation>)],
-) -> bool {
-    let Some(((entity, permutations), remaining)) = frames.split_first() else {
-        return constraints.equiv(other);
-    };
-    permutations.iter().copied().any(|permutation| {
-        let transformed = constraints
-            .clone()
-            .into_iter()
-            .map(|constraint| transform_constraint_stereo_frame(constraint, *entity, permutation))
-            .collect::<Option<Constraints>>();
-        transformed.is_some_and(|constraints| {
-            constraints_equiv_under_stereo_frames(constraints, other, remaining)
-        })
-    })
 }
 
 #[cfg(test)]

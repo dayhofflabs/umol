@@ -36,7 +36,7 @@ use umol_perm::{Orientation as PermOrientation, Permutation as PermPermutation};
 
 use crate::convert::{hash_rust, into_py_variant, variant_repr};
 use crate::entity::EntityForm;
-use crate::error::parse_error;
+use crate::error::{molecule_integrity_error, parse_error};
 use crate::lattice::impl_py_lattice;
 use crate::molecule::Molecule;
 
@@ -1432,13 +1432,22 @@ macro_rules! stereo_view {
             }
 
             #[setter]
-            fn set_configuration(&self, py: Python<'_>, value: StereoConfigurationLike) {
-                self.owner
-                    .borrow_mut(py)
+            fn set_configuration(
+                &self,
+                py: Python<'_>,
+                value: StereoConfigurationLike,
+            ) -> PyResult<()> {
+                let configuration = value.to_rust(py);
+                let mut molecule = self.owner.borrow_mut(py);
+                if !molecule.to_rust().$namespace().contains(self.id) {
+                    return Err(PyIndexError::new_err($id_error));
+                }
+                molecule
                     .to_rust_mut()
-                    .$entity_mut(self.id)
-                    .attributes
-                    .configuration = value.to_rust(py);
+                    .$entity_mut(self.id, |attributes| {
+                        attributes.configuration = configuration;
+                    })
+                    .map_err(molecule_integrity_error)
             }
 
             /// The entity's constraints as a live handle onto the molecule: reads borrow the
@@ -1457,13 +1466,15 @@ macro_rules! stereo_view {
             /// from a value container or a live view.
             #[setter]
             fn set_constraints(&self, py: Python<'_>, value: $like) -> PyResult<()> {
-                self.owner
-                    .borrow_mut(py)
+                let constraints = value.to_rust(py)?;
+                let mut molecule = self.owner.borrow_mut(py);
+                if !molecule.to_rust().$namespace().contains(self.id) {
+                    return Err(PyIndexError::new_err($id_error));
+                }
+                molecule
                     .to_rust_mut()
-                    .$entity_mut(self.id)
-                    .attributes
-                    .constraints = value.to_rust(py)?;
-                Ok(())
+                    .$entity_mut(self.id, |attributes| attributes.constraints = constraints)
+                    .map_err(molecule_integrity_error)
             }
 
             /// The value fields as a dict: `configuration` plus a `constraints` list of the
@@ -1489,13 +1500,13 @@ macro_rules! stereo_view {
 }
 
 stereo_view! {
-    StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, stereo_atom_mut,
+    StereoAtomView, GraphIrStereoAtomView, GraphIrStereoAtomId, stereo_atoms, try_modify_stereo_atom,
     "stereo atom id out of range", StereoAtomConstraintForm, StereoAtomConstraintsView,
     StereoAtomConstraintsBacking, StereoAtomConstraintsLike,
 }
 
 stereo_view! {
-    StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, stereo_bond_mut,
+    StereoBondView, GraphIrStereoBondView, GraphIrStereoBondId, stereo_bonds, try_modify_stereo_bond,
     "stereo bond id out of range", StereoBondConstraintForm, StereoBondConstraintsView,
     StereoBondConstraintsBacking, StereoBondConstraintsLike,
 }
@@ -1566,8 +1577,11 @@ macro_rules! stereo_views {
             ) -> PyResult<()> {
                 let mut molecule = self.owner.borrow_mut(py);
                 let id = $resolve_index(molecule.to_rust(), index)?;
-                *molecule.to_rust_mut().$entity_mut(id).attributes = value.to_rust().clone();
-                Ok(())
+                let attributes = value.to_rust().clone();
+                molecule
+                    .to_rust_mut()
+                    .$entity_mut(id, |current| *current = attributes)
+                    .map_err(molecule_integrity_error)
             }
 
             /// The stereo entity sitting on the atom/bond with id `site`, or `None`. Keyed by
@@ -1646,12 +1660,12 @@ macro_rules! stereo_views {
 
 stereo_views! {
     StereoAtomViews, StereoAtomView, StereoAtomViewIter, GraphIrStereoAtomId, GraphIrAtomId, stereo_atoms,
-    stereo_atom_mut, StereoAtomForm, resolve_stereo_atom_index, "stereo atom id out of range",
+    try_modify_stereo_atom, StereoAtomForm, resolve_stereo_atom_index, "stereo atom id out of range",
 }
 
 stereo_views! {
     StereoBondViews, StereoBondView, StereoBondViewIter, GraphIrStereoBondId, GraphIrBondId, stereo_bonds,
-    stereo_bond_mut, StereoBondForm, resolve_stereo_bond_index, "stereo bond id out of range",
+    try_modify_stereo_bond, StereoBondForm, resolve_stereo_bond_index, "stereo bond id out of range",
 }
 
 #[cfg(test)]
@@ -1675,6 +1689,7 @@ mod tests {
 
     use super::*;
     use crate::boolean::{BooleanForm, BooleanLike};
+    use crate::error::InvalidStructureError;
 
     #[rstest]
     #[case(vec![0, 1, 2, 3])]
@@ -3256,6 +3271,15 @@ mod tests {
     fn stereo_atom_molecule(py: Python<'_>) -> Py<Molecule> {
         let molecule = GraphIrMolecule::from_entries(MoleculeEntries {
             atoms: vec![GraphIrAtomForm::from_element(ChemElement::C); 5],
+            bonds: (1..5)
+                .map(|ligand| {
+                    (
+                        GraphIrAtomId(0),
+                        GraphIrAtomId(ligand),
+                        GraphIrBondForm::from_order(1),
+                    )
+                })
+                .collect(),
             stereo_atoms: vec![(
                 GraphIrAtomId(0),
                 vec![
@@ -3413,7 +3437,8 @@ mod tests {
             view.set_configuration(
                 py,
                 StereoConfigurationLike::Tetrahedral(TetrahedralConfiguration::Cw),
-            );
+            )
+            .unwrap();
             assert_eq!(
                 view.configuration(py).unwrap().to_rust(py),
                 GraphIrStereoConfigurationForm::Kinded(
@@ -3421,6 +3446,27 @@ mod tests {
                     GraphIrStereoCoset::Lit(1)
                 )
             );
+        });
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_set_configuration_integrity_error() {
+        Python::attach(|py| {
+            let view = StereoAtomView {
+                owner: stereo_atom_molecule(py),
+                id: GraphIrStereoAtomId(0),
+            };
+            let before = view.configuration(py).unwrap().to_rust(py);
+
+            let error = view
+                .set_configuration(
+                    py,
+                    StereoConfigurationLike::CisTrans(CisTransConfiguration::Z),
+                )
+                .unwrap_err();
+
+            assert!(error.is_instance_of::<InvalidStructureError>(py));
+            assert_eq!(view.configuration(py).unwrap().to_rust(py), before);
         });
     }
 
