@@ -486,31 +486,37 @@ fn corpus() -> Vec<CorpusCase> {
             molecule: para_stereo_cascade(),
         },
     ];
-    corpus.extend(SCALING_CASES.map(|(name, source, expected_counts)| {
-        let molecule = MoleculeDsl::from_edn_str(source)
-            .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
-            .into_parts()
-            .0;
-        assert_eq!(
-            molecule_counts(&molecule),
-            expected_counts,
-            "benchmark case {name} changed shape"
-        );
-        assert!(
-            !molecule.has_constraints()
-                && molecule
-                    .atoms()
-                    .iter()
-                    .all(|atom| atom.attributes.constraints.is_empty())
-                && molecule
-                    .bonds()
-                    .iter()
-                    .all(|bond| bond.attributes.constraints.is_empty()),
-            "benchmark case {name} must remain feature-free"
-        );
-        CorpusCase { name, molecule }
-    }));
+    corpus.extend(retained_scaling_corpus());
     corpus
+}
+
+fn retained_scaling_corpus() -> Vec<CorpusCase> {
+    SCALING_CASES
+        .map(|(name, source, expected_counts)| {
+            let molecule = MoleculeDsl::from_edn_str(source)
+                .unwrap_or_else(|error| panic!("benchmark case {name} must parse: {error}"))
+                .into_parts()
+                .0;
+            assert_eq!(
+                molecule_counts(&molecule),
+                expected_counts,
+                "benchmark case {name} changed shape"
+            );
+            assert!(
+                !molecule.has_constraints()
+                    && molecule
+                        .atoms()
+                        .iter()
+                        .all(|atom| atom.attributes.constraints.is_empty())
+                    && molecule
+                        .bonds()
+                        .iter()
+                        .all(|bond| bond.attributes.constraints.is_empty()),
+                "benchmark case {name} must remain feature-free"
+            );
+            CorpusCase { name, molecule }
+        })
+        .into()
 }
 
 const LEVELS: [IncidenceLevel; 3] = [
@@ -637,6 +643,97 @@ fn bench_canonicalize(c: &mut Criterion) {
     }
 }
 
+fn bench_retained_scaling_cases(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = retained_scaling_corpus()
+        .into_iter()
+        .map(|case| {
+            let renumbered = case.molecule.remap(&reverse_correspondence(&case.molecule));
+            let additional_atom = Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::O)],
+                ..Default::default()
+            });
+            let (unequal, _) = Molecule::combine_all([&case.molecule, &additional_atom]);
+            assert!(case.molecule.canonical_eq(&renumbered, &context));
+            assert!(!case.molecule.canonical_eq(&unequal, &context));
+            (case, renumbered, unequal)
+        })
+        .collect::<Vec<_>>();
+
+    let mut group = c.benchmark_group("canonicalize/scaling/canonicalize");
+    for (case, _, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("retained scaling case canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/scaling/canonicalize_with_correspondence");
+    for (case, _, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize_with_correspondence(&context)
+                            .expect("retained scaling case canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/scaling/canonical_hash");
+    for (case, _, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter_batched(
+                || case.molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonical_hash(&context)
+                            .expect("retained scaling case canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/scaling/canonical_eq_equal");
+    for (case, renumbered, _) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).canonical_eq(black_box(renumbered), &context))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("canonicalize/scaling/canonical_eq_unequal");
+    for (case, _, unequal) in &cases {
+        group.bench_function(case.name, |b| {
+            b.iter(|| black_box(&case.molecule).canonical_eq(black_box(unequal), &context))
+        });
+    }
+    group.finish();
+}
+
 fn bench_reframe(c: &mut Criterion) {
     let corpus = reframing_corpus();
 
@@ -714,6 +811,7 @@ criterion_group!(
     bench_incidence_construction,
     bench_remapping,
     bench_canonicalize,
+    bench_retained_scaling_cases,
     bench_reframe,
 );
 criterion_main!(canonicalize);

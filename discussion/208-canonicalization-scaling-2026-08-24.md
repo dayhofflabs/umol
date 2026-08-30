@@ -505,7 +505,7 @@ incorrect lower-level or left-biased implementation. Reaction-span coverage also
 **Done.** Focused graph-IR tests pass for all aggregate dispatch, asymmetric equality, entity-span,
 and delta-level cases.
 
-#### S3b — Verify the reduction under renumbering and retained workloads
+#### S3b — Verify the reduction under renumbering and retained workloads **Done**
 
 **Module:** canonicalization property tests and `umol-graph-ir/benches/canonicalize.rs`.
 
@@ -522,6 +522,37 @@ results under renumbering. For binary equality, generate operands with different
 levels. Record search counters and complete-operation Criterion results in this document; do not
 assert wall-clock thresholds in tests. Use the result to decide whether a separate canonical-hash
 materialization optimization is justified.
+
+The focused molecule properties now distinguish feature-free values from constitution- and
+structure-bearing values rather than relying on the broad aggregate generator to sample those
+domains. Independently shuffled dense correspondences preserve the complete canonical aggregate
+and hash, and each operation-issued correspondence transports its own source to that aggregate.
+The adjacent topology/constitution, constitution/structure, and structure/full equality cases
+apply an independent dense renumbering to the higher-level operand and remain unequal in both
+operand orders.
+
+An optimized Criterion quick run on 2026-08-29 measured the complete public operations on the three
+retained scaling cases. The equal comparison uses a reverse dense renumbering; the unequal
+comparison adds one disconnected oxygen atom so that the inputs differ structurally.
+
+| Case | Canonicalize | With correspondence | Hash | Equal comparison | Unequal comparison |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `feature_free_connected` | 93.553-93.659 us | 92.947-93.440 us | 94.266-94.381 us | 182.20-184.26 us | 185.89-186.15 us |
+| `feature_free_disconnected` | 89.246-89.467 us | 89.678-91.409 us | 90.582-90.757 us | 175.49-176.36 us | 177.09-177.48 us |
+| `symmetry_heavy_radicals` | 45.994-46.327 us | 46.152-46.356 us | 46.828-46.906 us | 86.400-86.407 us | 88.773-88.973 us |
+
+The public feature-free path selects topology search and reproduces its private search accounting:
+
+| Case | Residual cells | Refinements | Branch orders | Backend | Leaves | Comparisons | Prefix-pruned | Orbit-pruned |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Connected | `[6, 2, 2, 6, 2, 2]` | 6 | 5 | 5 | 1 | 0 | 0 | 10 |
+| Disconnected | `[4, 4, 2, 4, 4]` | 6 | 5 | 5 | 1 | 0 | 0 | 10 |
+| Radicals | `[6, 2]` | 7 | 6 | 6 | 1 | 0 | 0 | 16 |
+
+Canonical hashing is within `0.6-1.5 us` of canonicalization on these cases. Its remaining cost is
+the shared canonical search rather than a distinct hashing or materialization bottleneck, so S3b
+does not introduce a separate canonical-hash optimization. The feature-free canonicalization range
+is now `45.994-93.659 us`, compared with the pre-dispatch full-search range of `3.728-15.84 ms`.
 
 **Dependency satisfied by:** completed doc 214.
 
