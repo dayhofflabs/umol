@@ -648,12 +648,12 @@ mod tests {
             EntityKind::NoncovalentBond => (
                 MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 2],
-                    noncovalent: vec![(AtomId(1), AtomId(0), NoncovalentBondForm::default())],
+                    noncovalent: vec![([AtomId(1), AtomId(0)], NoncovalentBondForm::default())],
                     ..Default::default()
                 },
                 MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 2],
-                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
+                    noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())],
                     constraints: Constraint::Relational(
                         RelationalConstraint::NoncovalentBondEndsSatisfy {
                             bond: NoncovalentBondId(0),

@@ -156,18 +156,15 @@ fn remapping_molecule(atom_charge: i64, aromatic: i64, multicenter: i64) -> Mole
         ],
         noncovalent: vec![
             (
-                AtomId(0),
-                AtomId(3),
+                [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             ),
             (
-                AtomId(1),
-                AtomId(4),
+                [AtomId(1), AtomId(4)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
             ),
             (
-                AtomId(2),
-                AtomId(5),
+                [AtomId(2), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
             ),
         ],

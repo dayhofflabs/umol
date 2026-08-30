@@ -539,8 +539,7 @@ mod tests {
                 MulticenterBondForm::from_electrons(vec![2, 0, 1]),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(5),
+                [AtomId(0), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             stereo_atoms: vec![(

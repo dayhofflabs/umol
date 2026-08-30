@@ -298,19 +298,19 @@ proptest! {
         let reaction = Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default())],
+                noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default())],
                 ..Default::default()
             }),
             Deltas::from_iter(noncovalent_deltas.into_iter().map(Delta::NoncovalentBond)),
         );
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), host_bond)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], host_bond)],
             ..Default::default()
         });
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), expected_bond)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], expected_bond)],
             ..Default::default()
         });
         let products: Vec<Molecule> = reaction

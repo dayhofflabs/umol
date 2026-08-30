@@ -353,7 +353,7 @@ fn incompatible_incidence_strategy() -> impl Strategy<
             Reaction::try_new(
                 Molecule::from_entries(MoleculeEntries {
                     atoms: vec![AtomForm::from_element(Element::C); 3],
-                    noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::default(),)],
+                    noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::default(),)],
                     ..Default::default()
                 }),
                 Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {

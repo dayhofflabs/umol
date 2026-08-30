@@ -190,8 +190,7 @@ impl Molecule {
             .iter()
             .map(|([first, second], bond)| {
                 (
-                    GraphIrAtomId(*first),
-                    GraphIrAtomId(*second),
+                    [GraphIrAtomId(*first), GraphIrAtomId(*second)],
                     bond.bind(py).borrow().to_rust().clone(),
                 )
             })
@@ -1704,9 +1703,7 @@ mod tests {
                 GraphIrAtomForm::from_element(ChemElement::O),
                 GraphIrAtomForm::from_element(ChemElement::O),
             ],
-            noncovalent: vec![(
-                GraphIrAtomId(0),
-                GraphIrAtomId(1),
+            noncovalent: vec![([GraphIrAtomId(0), GraphIrAtomId(1)],
                 GraphIrNoncovalentBondForm::from_kind(GraphIrNoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()

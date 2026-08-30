@@ -1708,7 +1708,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                     })
                     .collect();
                 let mut noncovalent_pairs = HashSet::new();
-                let noncovalent_triples: Vec<_> = noncovalents
+                let noncovalent_entries: Vec<_> = noncovalents
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
                         [a, b]
@@ -1719,7 +1719,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                                     [*b, *a]
                                 }) =>
                         {
-                            Some((*a, *b, data))
+                            Some(([*a, *b], data))
                         }
                         _ => None,
                     })
@@ -1730,7 +1730,7 @@ pub(crate) fn molecule_entries_strategy() -> impl Strategy<Value = MoleculeEntri
                     dative: dative_triples,
                     aromatic: aromatic_entries,
                     multicenter: multicenter_entries,
-                    noncovalent: noncovalent_triples,
+                    noncovalent: noncovalent_entries,
                     stereo_atoms,
                     stereo_bonds,
                     constraints: Constraints::new(),
@@ -2426,8 +2426,7 @@ pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = Stand
                 MulticenterBondForm::from_electrons(vec![8, 2, 6]),
             )],
             noncovalent: vec![(
-                AtomId(9),
-                AtomId(3),
+                [AtomId(9), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             stereo_atoms: vec![(
@@ -3296,8 +3295,7 @@ impl InvalidTransactionBatch {
         let noncovalent = (0..self.count)
             .map(|index| {
                 (
-                    AtomId((index * 2) as u32),
-                    AtomId((index * 2 + 1) as u32),
+                    [AtomId((index * 2) as u32), AtomId((index * 2 + 1) as u32)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )
             })
@@ -3707,8 +3705,7 @@ fn transaction_all_entities_molecule() -> Molecule {
             MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
-            AtomId(0),
-            AtomId(3),
+            [AtomId(0), AtomId(3)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
@@ -4185,8 +4182,7 @@ fn transaction_compaction_molecule(constraints: Constraints) -> Molecule {
         .iter()
         .map(|[a, b]| {
             (
-                AtomId(*a),
-                AtomId(*b),
+                [AtomId(*a), AtomId(*b)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )
         })
@@ -4489,8 +4485,7 @@ pub(crate) fn overlay_transaction_base() -> Molecule {
         .iter()
         .map(|[a, b]| {
             (
-                AtomId(*a),
-                AtomId(*b),
+                [AtomId(*a), AtomId(*b)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )
         })
@@ -4895,7 +4890,7 @@ fn overlay_molecule_strategy() -> impl Strategy<Value = Molecule> {
                 let noncovalent = noncovalents
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
-                        [a, b] if a != b => Some((*a, *b, data)),
+                        [a, b] if a != b => Some(([*a, *b], data)),
                         _ => None,
                     })
                     .collect();

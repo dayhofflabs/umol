@@ -3059,7 +3059,7 @@ mod tests {
         let expected_attributes = current.update(&update);
         let molecule = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::default(), AtomForm::default()],
-            noncovalent: vec![(AtomId(0), AtomId(1), current.clone())],
+            noncovalent: vec![([AtomId(0), AtomId(1)], current.clone())],
             ..Default::default()
         });
         let mut editor = molecule.edit();

@@ -213,8 +213,7 @@ fn overlay_heavy() -> Molecule {
             MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
-            AtomId(7),
-            AtomId(6),
+            [AtomId(7), AtomId(6)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(

@@ -478,16 +478,32 @@ over all targets with warnings denied.
 
 ### S3 — Lower empty description levels exactly
 
-#### S3a — Route aggregate operations through their effective level **Transferred to doc 214**
+#### S3a — Route aggregate operations through their effective level **Done**
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and aggregate canonicalization implementations.
 
 Doc 209 implemented private canonicalization-level inspection and aggregate dispatch. Completed doc
 [214](214-aggregate-frame-semantics-2026-08-28.md) supplies the molecule, reaction, and
-reaction-span frame semantics, complete-only public API, and exactness tests. This subitem has no
-independent implementation remaining in doc 208.
+reaction-span frame semantics and complete-only public API. The three aggregate roots now inspect
+all semantic content that can raise their private `DescriptionLevel`: molecule entities and
+constraints, the reaction left-hand side and every delta variant, and both sides of every reaction-
+span entry. Unary canonicalization, canonicalization with correspondence, and canonical hashing use
+that effective level. Binary canonical equality uses the greater effective level of its operands.
+
+Exact table cases cover all four levels for `Molecule`, `Reaction`, and `ReactionSpan`. They verify
+that effective dispatch agrees with forced `Full` canonicalization, correspondence transport
+reconstructs the canonical result, canonical hashing hashes that result, and level selection is
+renumbering-invariant where the aggregate admits direct remapping. A separate table uses
+asymmetric topology/constitution, constitution/structure, and structure/full operands for all
+three aggregate roots. Each pair is unequal in both operand orders at the greater level but would
+compare equal at the lower level, so the cases distinguish greater-level dispatch from an
+incorrect lower-level or left-biased implementation. Reaction-span coverage also includes a
+`Modified` entry whose right side alone raises the effective level.
 
 **Dependency satisfied by:** completed doc 214.
+
+**Done.** Focused graph-IR tests pass for all aggregate dispatch, asymmetric equality, entity-span,
+and delta-level cases.
 
 #### S3b — Verify the reduction under renumbering and retained workloads
 

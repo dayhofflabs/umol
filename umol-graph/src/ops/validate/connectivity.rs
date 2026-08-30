@@ -314,8 +314,7 @@ mod tests {
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(2),
+                [AtomId(0), AtomId(2)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: Constraints::new(),

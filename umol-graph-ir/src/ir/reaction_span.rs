@@ -87,7 +87,7 @@ pub struct ReactionSpanEntries {
     pub dative: Vec<(Vec<AtomId>, AtomId, EntitySpan<DativeBondForm>)>,
     pub aromatic: Vec<(Vec<AtomId>, EntitySpan<AromaticSystemForm>)>,
     pub multicenter: Vec<(Vec<AtomId>, EntitySpan<MulticenterBondForm>)>,
-    pub noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>,
+    pub noncovalent: Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)>,
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, EntitySpan<StereoAtomForm>)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, EntitySpan<StereoBondForm>)>,
     pub constraints: Vec<ConstraintSpan>,
@@ -573,9 +573,10 @@ fn validate_reaction_span_entries(
             validate(Entity::Atom(atom))?;
         }
     }
-    for (first, second, _) in &entries.noncovalent {
-        validate(Entity::Atom(*first))?;
-        validate(Entity::Atom(*second))?;
+    for (atoms, _) in &entries.noncovalent {
+        for &atom in atoms {
+            validate(Entity::Atom(atom))?;
+        }
     }
     for (site, ligands, _) in &entries.stereo_atoms {
         validate(Entity::Atom(*site))?;
@@ -894,15 +895,14 @@ impl ReactionSpan {
 
         // Noncovalent bonds
         let noncovalent_corr = correspondence.noncovalent_bonds();
-        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> = Vec::new();
+        let mut noncovalent: Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)> = Vec::new();
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             let rhs_attributes = noncovalent_corr
                 .right_of(view.id)
                 .map(|id| remapped_rhs_noncovalent.data(id.into()).clone());
             noncovalent.push((
-                a,
-                b,
+                [a, b],
                 EntitySpan::superimpose(Some(view.attributes.clone()), rhs_attributes).unwrap(),
             ));
         }
@@ -910,8 +910,7 @@ impl ReactionSpan {
             let relation_id = RelationId::from(r);
             let &[first, second] = remapped_rhs_noncovalent.participants(relation_id);
             noncovalent.push((
-                AtomId::from(first),
-                AtomId::from(second),
+                [AtomId::from(first), AtomId::from(second)],
                 EntitySpan::Added(remapped_rhs_noncovalent.data(relation_id).clone()),
             ));
         }
@@ -1222,8 +1221,10 @@ impl ReactionSpan {
                 .noncovalent_bonds
                 .ids()
                 .map(|id| {
-                    let [first, second] = self.noncovalent_bonds.atoms(id);
-                    (first, second, self.noncovalent_bonds.attributes(id).clone())
+                    (
+                        self.noncovalent_bonds.atoms(id),
+                        self.noncovalent_bonds.attributes(id).clone(),
+                    )
                 })
                 .collect(),
             stereo_atoms: self
@@ -1632,7 +1633,7 @@ impl ReactionSpan {
                 let id = NoncovalentBondId(index as u32);
                 let attributes = entity_side(self.noncovalent_bonds.attributes(id), side)?;
                 let [first, second] = self.noncovalent_bonds.atoms(id);
-                Some((atom_ids[&first], atom_ids[&second], attributes.clone()))
+                Some(([atom_ids[&first], atom_ids[&second]], attributes.clone()))
             })
             .collect();
         let remap_ligands = |ligands: &[StereoLigand]| {
@@ -2235,13 +2236,13 @@ impl Reaction {
             multicenter.push((participants, EntitySpan::Added(attributes)));
         }
 
-        let mut noncovalent: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> = Vec::new();
+        let mut noncovalent: Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)> = Vec::new();
         for view in lhs.noncovalent_bonds().iter() {
             let [a, b] = view.atom_ids();
             let first = AtomId(atom_index[&a] as u32);
             let second = AtomId(atom_index[&b] as u32);
             if let Some(attributes) = removed_noncovalent.get(&view.id) {
-                noncovalent.push((first, second, EntitySpan::Removed(attributes.clone())));
+                noncovalent.push(([first, second], EntitySpan::Removed(attributes.clone())));
             } else if let Some(changes) = noncovalent_changes.get(&view.id) {
                 let left = view.attributes.clone();
                 let mut right = left.clone();
@@ -2249,8 +2250,7 @@ impl Reaction {
                     apply_noncovalent_change(&mut right, change)?;
                 }
                 noncovalent.push((
-                    first,
-                    second,
+                    [first, second],
                     EntitySpan::Modified {
                         lhs: left,
                         rhs: right,
@@ -2258,16 +2258,14 @@ impl Reaction {
                 ));
             } else {
                 noncovalent.push((
-                    first,
-                    second,
+                    [first, second],
                     EntitySpan::Unchanged(view.attributes.clone()),
                 ));
             }
         }
         for ([a, b], attributes) in added_noncovalent.into_values() {
             noncovalent.push((
-                AtomId(atom_index[&a] as u32),
-                AtomId(atom_index[&b] as u32),
+                [AtomId(atom_index[&a] as u32), AtomId(atom_index[&b] as u32)],
                 EntitySpan::Added(attributes),
             ));
         }
@@ -2647,8 +2645,7 @@ mod tests {
                 EntitySpan::Unchanged(MulticenterBondForm::default()),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(4),
+                [AtomId(0), AtomId(4)],
                 EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             stereo_atoms: vec![(
@@ -2705,7 +2702,7 @@ mod tests {
                     vec![AtomId(0), AtomId(1), AtomId(3)],
                     MulticenterBondForm::default(),
                 )],
-                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default(),)],
+                noncovalent: vec![([AtomId(0), AtomId(3)], NoncovalentBondForm::default(),)],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
@@ -2757,7 +2754,7 @@ mod tests {
                     vec![AtomId(0), AtomId(1), AtomId(3)],
                     MulticenterBondForm::default(),
                 )],
-                noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default(),)],
+                noncovalent: vec![([AtomId(0), AtomId(3)], NoncovalentBondForm::default(),)],
                 stereo_atoms: vec![(
                     AtomId(0),
                     vec![
@@ -2832,8 +2829,7 @@ mod tests {
                 },
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 EntitySpan::Modified {
                     lhs: NoncovalentBondForm::default(),
                     rhs: NoncovalentBondForm::default(),
@@ -2971,8 +2967,7 @@ mod tests {
                 },
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 EntitySpan::Modified {
                     lhs: NoncovalentBondForm::default(),
                     rhs: NoncovalentBondForm::default(),
@@ -3028,8 +3023,7 @@ mod tests {
                 EntitySpan::Unchanged(MulticenterBondForm::default()),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             stereo_atoms: vec![(
@@ -3064,8 +3058,7 @@ mod tests {
                 EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
             ],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 EntitySpan::Modified {
                     lhs: NoncovalentBondForm::default(),
                     rhs: NoncovalentBondForm::default(),
@@ -3087,8 +3080,7 @@ mod tests {
                 EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
             ],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 EntitySpan::Modified {
                     lhs: NoncovalentBondForm::default(),
                     rhs: NoncovalentBondForm::default(),
@@ -3115,8 +3107,7 @@ mod tests {
                 EntitySpan::Unchanged(AtomForm::from_element(Element::N)),
             ],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             ..Default::default()
@@ -3486,9 +3477,7 @@ mod tests {
     #[case::noncovalent_union(
         ReactionSpanEntries {
             atoms: vec![EntitySpan::Unchanged(AtomForm::default())],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+            noncovalent: vec![([AtomId(0), AtomId(1)],
                 EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             ..Default::default()
@@ -3644,9 +3633,7 @@ mod tests {
                 EntitySpan::Unchanged(AtomForm::default()),
                 EntitySpan::Added(AtomForm::default()),
             ],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+            noncovalent: vec![([AtomId(0), AtomId(1)],
                 EntitySpan::Unchanged(NoncovalentBondForm::default()),
             )],
             ..Default::default()
@@ -4063,7 +4050,7 @@ mod tests {
                         vec![AtomId(0), AtomId(1), AtomId(2)],
                         MulticenterBondForm::default(),
                     )],
-                    noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::default(),)],
+                    noncovalent: vec![([AtomId(0), AtomId(2)], NoncovalentBondForm::default(),)],
                     stereo_atoms: vec![(
                         AtomId(2),
                         vec![
@@ -4269,13 +4256,11 @@ mod tests {
                 ],
                 noncovalent: vec![
                     (
-                        AtomId(0),
-                        AtomId(2),
+                        [AtomId(0), AtomId(2)],
                         EntitySpan::Removed(NoncovalentBondForm::default()),
                     ),
                     (
-                        AtomId(0),
-                        AtomId(4),
+                        [AtomId(0), AtomId(4)],
                         EntitySpan::Added(NoncovalentBondForm::default()),
                     ),
                 ],
@@ -4875,7 +4860,7 @@ mod tests {
     #[case::noncovalent_remove(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -4888,7 +4873,7 @@ mod tests {
     #[case::noncovalent_modify(Reaction::new(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -5132,7 +5117,7 @@ mod tests {
         Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-                noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+                noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
                 constraints: Constraints::new(),
                 ..Default::default()
             }),
@@ -5140,13 +5125,13 @@ mod tests {
         ),
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -5171,7 +5156,7 @@ mod tests {
         }),
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)],
-            noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
+            noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))],
             constraints: Constraints::new(),
             ..Default::default()
         }),
@@ -5246,7 +5231,7 @@ mod tests {
                 vec![AtomId(0), AtomId(1), AtomId(2)],
                 MulticenterBondForm::default(),
             )],
-            noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::default())],
+            noncovalent: vec![([AtomId(0), AtomId(2)], NoncovalentBondForm::default())],
             stereo_atoms: vec![(
                 AtomId(2),
                 vec![
@@ -5295,7 +5280,7 @@ mod tests {
                 vec![AtomId(0), AtomId(1), AtomId(3)],
                 MulticenterBondForm::default(),
             )],
-            noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default())],
+            noncovalent: vec![([AtomId(0), AtomId(3)], NoncovalentBondForm::default())],
             stereo_atoms: vec![(
                 AtomId(3),
                 vec![
@@ -5402,13 +5387,11 @@ mod tests {
                 ],
                 noncovalent: vec![
                     (
-                        AtomId(0),
-                        AtomId(2),
+                        [AtomId(0), AtomId(2)],
                         EntitySpan::Removed(NoncovalentBondForm::default()),
                     ),
                     (
-                        AtomId(0),
-                        AtomId(4),
+                        [AtomId(0), AtomId(4)],
                         EntitySpan::Added(NoncovalentBondForm::default()),
                     ),
                 ],

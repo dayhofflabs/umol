@@ -33,8 +33,7 @@ fn reaction_span() -> ReactionSpan {
             EntitySpan::Unchanged(MulticenterBondForm::default()),
         )],
         noncovalent: vec![(
-            AtomId(0),
-            AtomId(2),
+            [AtomId(0), AtomId(2)],
             EntitySpan::Unchanged(NoncovalentBondForm::default()),
         )],
         stereo_atoms: vec![(

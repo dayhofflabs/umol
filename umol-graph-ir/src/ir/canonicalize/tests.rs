@@ -245,18 +245,15 @@ fn initial_class_molecule() -> Molecule {
         ],
         noncovalent: vec![
             (
-                AtomId(0),
-                AtomId(5),
+                [AtomId(0), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             ),
             (
-                AtomId(1),
-                AtomId(5),
+                [AtomId(1), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             ),
             (
-                AtomId(2),
-                AtomId(5),
+                [AtomId(2), AtomId(5)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
             ),
         ],
@@ -1010,202 +1007,69 @@ fn test_delta_canonicalize_level(#[case] delta: Delta, #[case] expected: Descrip
 }
 
 #[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_molecule_canonicalize_level(#[case] expected: DescriptionLevel) {
-    let molecule = molecule_requiring_canonicalize_level(expected);
-
-    assert_eq!(molecule_canonicalize_level(&molecule), expected);
-
-    let remapped = molecule.remap(&reverse_correspondence(&molecule));
-    assert_eq!(molecule_canonicalize_level(&remapped), expected);
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_reaction_canonicalize_level(#[case] expected: DescriptionLevel) {
-    let reaction = reaction_requiring_canonicalize_level(expected);
-
-    assert_eq!(reaction_canonicalize_level(&reaction), expected);
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_reaction_span_canonicalize_level(#[case] expected: DescriptionLevel) {
-    let span = reaction_requiring_canonicalize_level(expected)
-        .to_reaction_span()
-        .expect("representative reaction materializes");
-
-    assert_eq!(reaction_span_canonicalize_level(&span), expected);
-
-    let images = reaction_span_counts(&span).map(|count| (0..count).rev().collect::<Vec<_>>());
-    let remapped = span.remap(&molecule_correspondence(&images));
-    assert_eq!(reaction_span_canonicalize_level(&remapped), expected);
-}
-
-#[rstest]
-fn test_reaction_span_canonicalize_level_modified_rhs() {
-    let span = ReactionSpan::from_entries(ReactionSpanEntries {
-        atoms: vec![EntitySpan::Modified {
-            lhs: AtomForm::from_element(Element::C),
-            rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
-        }],
+#[case::topology(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::C),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
         ..Default::default()
-    });
-
-    assert_eq!(
-        reaction_span_canonicalize_level(&span),
-        DescriptionLevel::Full
-    );
-}
-
-fn molecule_requiring_canonicalize_level(level: DescriptionLevel) -> Molecule {
-    match level {
-        DescriptionLevel::Topology => Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::O),
-                AtomForm::from_element(Element::C),
-            ],
-            bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            ..Default::default()
-        }),
-        DescriptionLevel::Constitution => Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::N),
-                AtomForm::from_element(Element::B),
-            ],
-            dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
-            ..Default::default()
-        }),
-        DescriptionLevel::Structure => Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C),
-                AtomForm::from_element(Element::H),
-                AtomForm::from_element(Element::F),
-                AtomForm::from_element(Element::Cl),
-                AtomForm::from_element(Element::Br),
-            ],
-            bonds: (1..=4)
-                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-                .collect(),
-            stereo_atoms: vec![(
-                AtomId(0),
-                vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-            )],
-            ..Default::default()
-        }),
-        DescriptionLevel::Full => Molecule::from_entries(MoleculeEntries {
-            atoms: vec![
-                AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
-                AtomForm::from_element(Element::C),
-            ],
-            ..Default::default()
-        }),
-    }
-}
-
-fn reaction_requiring_canonicalize_level(level: DescriptionLevel) -> Reaction {
-    match level {
-        DescriptionLevel::Topology => Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![
-                    AtomForm::from_element(Element::C).with_charge(0_i64),
-                    AtomForm::from_element(Element::O),
-                ],
-                ..Default::default()
-            }),
-            [Delta::Atom(AtomDelta::ModifyField {
-                id: AtomId(0),
-                change: AtomFieldChange::Charge {
-                    old: NumForm::Lit(0),
-                    new: NumForm::Lit(1),
-                },
-            })]
-            .into_iter()
+    }),
+    DescriptionLevel::Topology,
+)]
+#[case::constitution(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::B),
+        ],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+)]
+#[case::structure(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+        ],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
             .collect(),
-        ),
-        DescriptionLevel::Constitution => Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![
-                    AtomForm::from_element(Element::O),
-                    AtomForm::from_element(Element::H),
-                ],
-                ..Default::default()
-            }),
-            [Delta::NoncovalentBond(NoncovalentBondDelta::Add {
-                id: NoncovalentBondId(0),
-                atoms: [AtomId(0), AtomId(1)],
-                attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-            })]
-            .into_iter()
-            .collect(),
-        ),
-        DescriptionLevel::Structure => Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![
-                    AtomForm::from_element(Element::C),
-                    AtomForm::from_element(Element::H),
-                    AtomForm::from_element(Element::F),
-                    AtomForm::from_element(Element::Cl),
-                    AtomForm::from_element(Element::Br),
-                ],
-                bonds: (1..=4)
-                    .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-                    .collect(),
-                ..Default::default()
-            }),
-            [Delta::StereoAtom(StereoAtomDelta::Add {
-                id: StereoAtomId(0),
-                site: AtomId(0),
-                ligands: vec![
-                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                ],
-                attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
-            })]
-            .into_iter()
-            .collect(),
-        ),
-        DescriptionLevel::Full => Reaction::new(
-            Molecule::from_entries(MoleculeEntries {
-                atoms: vec![AtomForm::from_element(Element::C)],
-                ..Default::default()
-            }),
-            [Delta::Constraint(ConstraintDelta::Add(
-                Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
-            ))]
-            .into_iter()
-            .collect(),
-        ),
-    }
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_molecule_canonicalize_by_effective(
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+)]
+#[case::full(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+)]
+fn test_molecule_canonicalize_description_level(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
+    #[case] source: Molecule,
+    #[case] expected: DescriptionLevel,
 ) {
-    let source = molecule_requiring_canonicalize_level(level);
     let forced_full = canonicalize_full(&source, &canonicalize_context)
         .expect("representative molecule canonicalizes at Full");
     let canonical = source
@@ -1216,8 +1080,10 @@ fn test_molecule_canonicalize_by_effective(
         .clone()
         .canonicalize_with_correspondence(&canonicalize_context)
         .expect("representative molecule canonicalizes with a correspondence");
+    let remapped = source.remap(&reverse_correspondence(&source));
 
-    assert_eq!(molecule_canonicalize_level(&source), level);
+    assert_eq!(molecule_canonicalize_level(&source), expected);
+    assert_eq!(molecule_canonicalize_level(&remapped), expected);
     assert_eq!(canonical, forced_full);
     assert_eq!(with_correspondence, canonical);
     assert_eq!(
@@ -1231,15 +1097,96 @@ fn test_molecule_canonicalize_by_effective(
 }
 
 #[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_reaction_canonicalize_by_effective(
+#[case::topology(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(0_i64),
+                AtomForm::from_element(Element::O),
+            ],
+            ..Default::default()
+        }),
+        [Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Topology,
+)]
+#[case::constitution(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::H),
+            ],
+            ..Default::default()
+        }),
+        [Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Constitution,
+)]
+#[case::structure(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::H),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+            ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        }),
+        [Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Structure,
+)]
+#[case::full(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        }),
+        [Delta::Constraint(ConstraintDelta::Add(
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ))]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Full,
+)]
+fn test_reaction_canonicalize_description_level(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
+    #[case] source: Reaction,
+    #[case] expected: DescriptionLevel,
 ) {
-    let source = reaction_requiring_canonicalize_level(level);
     let forced_full =
         canonicalize_reaction_by(&source, DescriptionLevel::Full, &canonicalize_context)
             .expect("representative reaction canonicalizes at Full");
@@ -1259,7 +1206,7 @@ fn test_reaction_canonicalize_by_effective(
         .expect("canonical correspondence preserves compatible frames")
         .to_reaction();
 
-    assert_eq!(reaction_canonicalize_level(&source), level);
+    assert_eq!(reaction_canonicalize_level(&source), expected);
     assert_eq!(canonical, forced_full);
     assert_eq!(with_correspondence, canonical);
     assert_eq!(transported, canonical);
@@ -1270,15 +1217,97 @@ fn test_reaction_canonicalize_by_effective(
 }
 
 #[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_reaction_span_canonicalize_by_effective(
+#[case::topology(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C).with_charge(0_i64),
+                AtomForm::from_element(Element::O),
+            ],
+            ..Default::default()
+        }),
+        [Delta::Atom(AtomDelta::ModifyField {
+            id: AtomId(0),
+            change: AtomFieldChange::Charge {
+                old: NumForm::Lit(0),
+                new: NumForm::Lit(1),
+            },
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Topology,
+)]
+#[case::constitution(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::O),
+                AtomForm::from_element(Element::H),
+            ],
+            ..Default::default()
+        }),
+        [Delta::NoncovalentBond(NoncovalentBondDelta::Add {
+            id: NoncovalentBondId(0),
+            atoms: [AtomId(0), AtomId(1)],
+            attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Constitution,
+)]
+#[case::structure(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![
+                AtomForm::from_element(Element::C),
+                AtomForm::from_element(Element::H),
+                AtomForm::from_element(Element::F),
+                AtomForm::from_element(Element::Cl),
+                AtomForm::from_element(Element::Br),
+            ],
+            bonds: (1..=4)
+                .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+                .collect(),
+            ..Default::default()
+        }),
+        [Delta::StereoAtom(StereoAtomDelta::Add {
+            id: StereoAtomId(0),
+            site: AtomId(0),
+            ligands: vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        })]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Structure,
+)]
+#[case::full(
+    Reaction::new(
+        Molecule::from_entries(MoleculeEntries {
+            atoms: vec![AtomForm::from_element(Element::C)],
+            ..Default::default()
+        }),
+        [Delta::Constraint(ConstraintDelta::Add(
+            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
+        ))]
+        .into_iter()
+        .collect(),
+    ),
+    DescriptionLevel::Full,
+)]
+fn test_reaction_span_canonicalize_description_level(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
+    #[case] reaction: Reaction,
+    #[case] expected: DescriptionLevel,
 ) {
-    let source = reaction_requiring_canonicalize_level(level)
+    let source = reaction
         .to_reaction_span()
         .expect("representative reaction materializes");
     let forced_full =
@@ -1292,8 +1321,11 @@ fn test_reaction_span_canonicalize_by_effective(
         .clone()
         .canonicalize_with_correspondence(&canonicalize_context)
         .expect("representative span canonicalizes with a correspondence");
+    let images = reaction_span_counts(&source).map(|count| (0..count).rev().collect::<Vec<_>>());
+    let remapped = source.remap(&molecule_correspondence(&images));
 
-    assert_eq!(reaction_span_canonicalize_level(&source), level);
+    assert_eq!(reaction_span_canonicalize_level(&source), expected);
+    assert_eq!(reaction_span_canonicalize_level(&remapped), expected);
     assert_eq!(canonical, forced_full);
     assert_eq!(with_correspondence, canonical);
     assert_eq!(
@@ -1306,88 +1338,180 @@ fn test_reaction_span_canonicalize_by_effective(
     );
 }
 
-fn vacuously_constrained_molecule() -> Molecule {
+#[rstest]
+#[case::modified_rhs(
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![EntitySpan::Modified {
+            lhs: AtomForm::from_element(Element::C),
+            rhs: AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+        }],
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+)]
+fn test_reaction_span_canonicalize_level_modified(
+    #[case] span: ReactionSpan,
+    #[case] expected: DescriptionLevel,
+) {
+    assert_eq!(reaction_span_canonicalize_level(&span), expected);
+}
+
+#[rstest]
+#[case::constitution(
     Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)
-            .with_constraint(AtomConstraintForm::Valence(NumForm::Undetermined))],
+        atoms: vec![
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::B),
+        ],
         ..Default::default()
-    })
-}
-
-#[rstest]
-fn test_molecule_canonical_eq_uses_greater_effective_level(
-    canonicalize_context: CanonicalizeContext,
-) {
-    let plain = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::B),
+        ],
+        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
         ..Default::default()
-    });
-    let constrained = vacuously_constrained_molecule();
-
-    assert_eq!(
-        molecule_canonicalize_level(&plain),
-        DescriptionLevel::Topology
-    );
-    assert_eq!(
-        molecule_canonicalize_level(&constrained),
-        DescriptionLevel::Full
-    );
-    assert!(plain.canonical_eq(&constrained, &canonicalize_context));
-    assert!(constrained.canonical_eq(&plain, &canonicalize_context));
-}
-
-#[rstest]
-fn test_reaction_canonical_eq_uses_greater_effective_level(
+    }),
+    DescriptionLevel::Topology,
+    DescriptionLevel::Constitution,
+)]
+#[case::structure(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+        ],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+            .collect(),
+        noncovalent: vec![([AtomId(1), AtomId(2)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+        )],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+        ],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+            .collect(),
+        noncovalent: vec![([AtomId(1), AtomId(2)],
+            NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
+        )],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    DescriptionLevel::Structure,
+)]
+#[case::full(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+        ],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        )],
+        ..Default::default()
+    }),
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
+            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+        ],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    DescriptionLevel::Full,
+)]
+fn test_canonicalize_canonical_eq_description_level(
     canonicalize_context: CanonicalizeContext,
+    #[case] left: Molecule,
+    #[case] right: Molecule,
+    #[case] left_level: DescriptionLevel,
+    #[case] right_level: DescriptionLevel,
 ) {
-    let plain = Reaction::new(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            ..Default::default()
-        }),
-        Deltas::new(),
-    );
-    let constrained = Reaction::new(vacuously_constrained_molecule(), Deltas::new());
-
-    assert_eq!(
-        reaction_canonicalize_level(&plain),
-        DescriptionLevel::Topology
-    );
-    assert_eq!(
-        reaction_canonicalize_level(&constrained),
-        DescriptionLevel::Full
-    );
-    assert!(plain.canonical_eq(&constrained, &canonicalize_context));
-    assert!(constrained.canonical_eq(&plain, &canonicalize_context));
-}
-
-#[rstest]
-fn test_reaction_span_canonical_eq_uses_greater_effective_level(
-    canonicalize_context: CanonicalizeContext,
-) {
-    let plain = Reaction::new(
-        Molecule::from_entries(MoleculeEntries {
-            atoms: vec![AtomForm::from_element(Element::C)],
-            ..Default::default()
-        }),
-        Deltas::new(),
-    )
-    .to_reaction_span()
-    .expect("identity reaction materializes");
-    let constrained = Reaction::new(vacuously_constrained_molecule(), Deltas::new())
+    let left_reaction = Reaction::new(left.clone(), Deltas::new());
+    let right_reaction = Reaction::new(right.clone(), Deltas::new());
+    let left_span = left_reaction
+        .clone()
         .to_reaction_span()
-        .expect("constrained identity reaction materializes");
+        .expect("identity reaction materializes");
+    let right_span = right_reaction
+        .clone()
+        .to_reaction_span()
+        .expect("identity reaction materializes");
 
+    assert_eq!(molecule_canonicalize_level(&left), left_level);
+    assert_eq!(molecule_canonicalize_level(&right), right_level);
+    assert_eq!(reaction_canonicalize_level(&left_reaction), left_level);
+    assert_eq!(reaction_canonicalize_level(&right_reaction), right_level);
+    assert_eq!(reaction_span_canonicalize_level(&left_span), left_level);
+    assert_eq!(reaction_span_canonicalize_level(&right_span), right_level);
     assert_eq!(
-        reaction_span_canonicalize_level(&plain),
-        DescriptionLevel::Topology
+        (
+            left.canonical_eq(&right, &canonicalize_context),
+            left_reaction.canonical_eq(&right_reaction, &canonicalize_context),
+            left_span.canonical_eq(&right_span, &canonicalize_context),
+        ),
+        (false, false, false),
     );
     assert_eq!(
-        reaction_span_canonicalize_level(&constrained),
-        DescriptionLevel::Full
+        (
+            right.canonical_eq(&left, &canonicalize_context),
+            right_reaction.canonical_eq(&left_reaction, &canonicalize_context),
+            right_span.canonical_eq(&left_span, &canonicalize_context),
+        ),
+        (false, false, false),
     );
-    assert!(plain.canonical_eq(&constrained, &canonicalize_context));
-    assert!(constrained.canonical_eq(&plain, &canonicalize_context));
 }
 
 #[rstest]
@@ -2492,8 +2616,7 @@ fn encoding_entries() -> MoleculeEntries {
             MulticenterBondForm::from_electrons(vec![2, 0, 1]),
         )],
         noncovalent: vec![(
-            AtomId(2),
-            AtomId(3),
+            [AtomId(2), AtomId(3)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
@@ -2940,9 +3063,7 @@ fn test_topology_comparison_key_dense_remapping() {
 #[case::noncovalent_bond(
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 3],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(2),
+            noncovalent: vec![([AtomId(0), AtomId(2)],
                 NoncovalentBondForm::default(),
             )],
             ..Default::default()
@@ -3016,7 +3137,7 @@ fn test_constitution_comparison_key_dense_remapping() {
             MulticenterBondForm::new(ElectronCountsForm::Undetermined)
                 .with_charge(NumForm::RangeTo(2)),
         )],
-        noncovalent: vec![(AtomId(0), AtomId(3), NoncovalentBondForm::default())],
+        noncovalent: vec![([AtomId(0), AtomId(3)], NoncovalentBondForm::default())],
         ..Default::default()
     });
     let correspondence = molecule_correspondence(&[
@@ -3869,13 +3990,11 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
         ],
         noncovalent: vec![
             (
-                AtomId(1),
-                AtomId(2),
+                [AtomId(1), AtomId(2)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::Ionic),
             ),
             (
-                AtomId(0),
-                AtomId(3),
+                [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             ),
         ],
@@ -4208,13 +4327,11 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
                 atoms,
                 noncovalent: vec![
                     (
-                        AtomId(0),
-                        AtomId(1),
+                        [AtomId(0), AtomId(1)],
                         NoncovalentBondForm::new(NoncovalentBondKindForm::Undetermined),
                     ),
                     (
-                        AtomId(2),
-                        AtomId(3),
+                        [AtomId(2), AtomId(3)],
                         NoncovalentBondForm::new(NoncovalentBondKindForm::Undetermined),
                     ),
                 ],

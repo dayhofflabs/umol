@@ -24,13 +24,11 @@ use super::traits::{AsLit, FrameTransport, Lattice, Normalize, Reframe};
 pub struct NoncovalentBonds(Arc<FixedRelationSet<NodeId, NoncovalentBondForm, 2>>);
 
 impl NoncovalentBonds {
-    pub(crate) fn new(entries: Vec<(AtomId, AtomId, NoncovalentBondForm)>) -> Self {
+    pub(crate) fn new(entries: Vec<([AtomId; 2], NoncovalentBondForm)>) -> Self {
         Self(Arc::new(FixedRelationSet::new(
             entries
                 .into_iter()
-                .map(|(first, second, attributes)| {
-                    ([NodeId::from(first), NodeId::from(second)], attributes)
-                })
+                .map(|(atoms, attributes)| (atoms.map(NodeId::from), attributes))
                 .collect(),
         )))
     }
@@ -80,14 +78,12 @@ impl NoncovalentBonds {
         self.0.has_incident(NodeId::from(atom))
     }
 
-    pub(crate) fn into_entries(self) -> Vec<(AtomId, AtomId, NoncovalentBondForm)> {
+    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], NoncovalentBondForm)> {
         Arc::try_unwrap(self.0)
             .unwrap_or_else(|shared| (*shared).clone())
             .into_entries()
             .into_iter()
-            .map(|([first, second], attributes)| {
-                (AtomId::from(first), AtomId::from(second), attributes)
-            })
+            .map(|(atoms, attributes)| (atoms.map(AtomId::from), attributes))
             .collect()
     }
 
@@ -214,19 +210,19 @@ pub(crate) fn reframe_noncovalent_bonds_with(
 pub struct NoncovalentBondSpans(FixedRelationSet<NodeId, EntitySpan<NoncovalentBondForm>, 2>);
 
 impl NoncovalentBondSpans {
-    pub(crate) fn into_entries(self) -> Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)> {
+    pub(crate) fn into_entries(self) -> Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)> {
         self.0
             .into_entries()
             .into_iter()
-            .map(|([first, second], span)| (AtomId::from(first), AtomId::from(second), span))
+            .map(|(atoms, span)| (atoms.map(AtomId::from), span))
             .collect()
     }
 
-    pub(crate) fn new(entries: Vec<(AtomId, AtomId, EntitySpan<NoncovalentBondForm>)>) -> Self {
+    pub(crate) fn new(entries: Vec<([AtomId; 2], EntitySpan<NoncovalentBondForm>)>) -> Self {
         Self(FixedRelationSet::new(
             entries
                 .into_iter()
-                .map(|(first, second, span)| ([NodeId::from(first), NodeId::from(second)], span))
+                .map(|(atoms, span)| (atoms.map(NodeId::from), span))
                 .collect(),
         ))
     }
@@ -561,7 +557,8 @@ mod tests {
             lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
         };
-        let mut spans = NoncovalentBondSpans::new(vec![(AtomId(2), AtomId(5), span.clone())]);
+        let mut spans =
+            NoncovalentBondSpans::new(vec![([AtomId(2), AtomId(5)], span.clone())]);
         spans
             .0
             .permute_with(RelationId(0), &[ParticipantPosition(1), ParticipantPosition(0)]);
@@ -582,8 +579,7 @@ mod tests {
     fn test_noncovalent_bond_spans_normalize() {
         let form = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
         let spans = NoncovalentBondSpans::new(vec![(
-            AtomId(2),
-            AtomId(5),
+            [AtomId(2), AtomId(5)],
             EntitySpan::Modified {
                 lhs: form.clone(),
                 rhs: form.clone(),
@@ -601,8 +597,7 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_spans_reframe_identity() {
         let spans = NoncovalentBondSpans::new(vec![(
-            AtomId(2),
-            AtomId(5),
+            [AtomId(2), AtomId(5)],
             EntitySpan::Modified {
                 lhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 rhs: NoncovalentBondForm::from_kind(NoncovalentBondKind::HalogenBond),
@@ -618,8 +613,7 @@ mod tests {
     #[fixture]
     fn unsorted_bond() -> NoncovalentBonds {
         let mut bonds = NoncovalentBonds::new(vec![(
-            AtomId(2),
-            AtomId(5),
+            [AtomId(2), AtomId(5)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
         Arc::make_mut(&mut bonds.0).permute_with(
@@ -686,8 +680,7 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bonds_normalize() {
         let bonds = NoncovalentBonds::new(vec![(
-            AtomId(2),
-            AtomId(5),
+            [AtomId(2), AtomId(5)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
         let expected = bonds.clone();
@@ -698,15 +691,13 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bonds_framed_eq(unsorted_bond: NoncovalentBonds) {
         let selected = NoncovalentBonds::new(vec![(
-            AtomId(2),
-            AtomId(5),
+            [AtomId(2), AtomId(5)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
         assert!(unsorted_bond.framed_eq(&selected));
 
         let different = NoncovalentBonds::new(vec![(
-            AtomId(2),
-            AtomId(6),
+            [AtomId(2), AtomId(6)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )]);
         assert!(!unsorted_bond.framed_eq(&different));

@@ -3894,7 +3894,7 @@ fn reaction_span_comparison_key(
         let noncovalent = entries
             .noncovalent
             .iter()
-            .map(|(first, second, span)| {
+            .map(|([first, second], span)| {
                 normalized_entity_span_key(span, |attributes| {
                     Ok(product([
                         product([
@@ -4057,10 +4057,9 @@ fn reaction_span_comparison_key(
             ConstraintBlockPosition::NONCOVALENT_BOND,
             entries.noncovalent,
             |entry: &(
-                AtomId,
-                AtomId,
+                [AtomId; 2],
                 EntitySpan<super::noncovalent::NoncovalentBondForm>
-            )| constraint_key_span(&entry.2, |form| form
+            )| constraint_key_span(&entry.1, |form| form
                 .constraints
                 .iter()
                 .map(noncovalent_bond_constraint_form_key)),

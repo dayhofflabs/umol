@@ -83,7 +83,7 @@ pub struct MoleculeEntries {
     pub dative: Vec<(Vec<AtomId>, AtomId, DativeBondForm)>,
     pub aromatic: Vec<(Vec<AtomId>, AromaticSystemForm)>,
     pub multicenter: Vec<(Vec<AtomId>, MulticenterBondForm)>,
-    pub noncovalent: Vec<(AtomId, AtomId, NoncovalentBondForm)>,
+    pub noncovalent: Vec<([AtomId; 2], NoncovalentBondForm)>,
     pub stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomForm)>,
     pub stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondForm)>,
     pub constraints: Constraints,
@@ -122,9 +122,8 @@ fn validate_entry_references_inner(entries: &MoleculeEntries) -> Result<(), Enti
     for (atoms, _) in &entries.multicenter {
         require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
     }
-    for &(first, second, _) in &entries.noncovalent {
-        require_reference(&contains, Entity::Atom(first))?;
-        require_reference(&contains, Entity::Atom(second))?;
+    for (atoms, _) in &entries.noncovalent {
+        require_references(&contains, atoms.iter().copied().map(Entity::Atom))?;
     }
     for (site, ligands, _) in &entries.stereo_atoms {
         require_reference(&contains, Entity::Atom(*site))?;
@@ -1464,8 +1463,7 @@ impl Molecule {
                 .extend(molecule.noncovalent_bonds().iter().map(|bond| {
                     let [first, second] = bond.atom_ids();
                     (
-                        shift_atom(first),
-                        shift_atom(second),
+                        [shift_atom(first), shift_atom(second)],
                         bond.attributes.clone(),
                     )
                 }));

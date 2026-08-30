@@ -131,9 +131,7 @@ fn crossing_reaction_sides_strategy() -> impl Strategy<Value = ReactionSides> {
                 .collect(),
             noncovalent: noncovalent
                 .into_iter()
-                .map(|(first, second, attributes)| {
-                    (reverse_atom(first), reverse_atom(second), attributes)
-                })
+                .map(|(atoms, attributes)| (atoms.map(reverse_atom), attributes))
                 .collect(),
             stereo_atoms: stereo_atoms
                 .into_iter()
@@ -263,10 +261,9 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                 },
             ));
             let noncovalent = lhs_anchored(entries.noncovalent.into_iter().filter_map(
-                |(first, second, attributes)| {
-                    let presence =
-                        intersection_presence([presence_of_atom(first), presence_of_atom(second)])?;
-                    Some(((first, second, attributes), presence))
+                |(atoms, attributes)| {
+                    let presence = intersection_presence(atoms.into_iter().map(presence_of_atom))?;
+                    Some(((atoms, attributes), presence))
                 },
             ));
             let stereo_atoms = lhs_anchored(entries.stereo_atoms.into_iter().filter_map(
@@ -327,8 +324,8 @@ fn reaction_span_entries_strategy() -> impl Strategy<Value = ReactionSpanEntries
                     .collect(),
                 noncovalent: noncovalent
                     .into_iter()
-                    .map(|((first, second, attributes), presence)| {
-                        (first, second, entity_span(attributes, presence))
+                    .map(|((atoms, attributes), presence)| {
+                        (atoms, entity_span(attributes, presence))
                     })
                     .collect(),
                 stereo_atoms: stereo_atoms

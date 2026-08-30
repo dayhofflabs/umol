@@ -282,8 +282,7 @@ fn rich_molecule() -> Molecule {
             MulticenterBondForm::default(),
         )],
         noncovalent: vec![(
-            AtomId(0),
-            AtomId(3),
+            [AtomId(0), AtomId(3)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         ..Default::default()
@@ -321,8 +320,7 @@ fn equiv_molecule_entries() -> MoleculeEntries {
             MulticenterBondForm::from_electrons(vec![2, 1, 0]),
         )],
         noncovalent: vec![(
-            AtomId(0),
-            AtomId(3),
+            [AtomId(0), AtomId(3)],
             NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         stereo_atoms: vec![(
@@ -366,8 +364,7 @@ fn molecule_reframe_source(
         vec![AtomId(1), AtomId(2), AtomId(0)],
         MulticenterBondForm::from_electrons(vec![12, 14, 10]),
     );
-    entries.noncovalent[0].0 = AtomId(3);
-    entries.noncovalent[0].1 = AtomId(0);
+    entries.noncovalent[0].0 = [AtomId(3), AtomId(0)];
 
     entries.stereo_atoms[0].1 = vec![
         StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
@@ -485,7 +482,7 @@ fn test_molecule_try_from_entries(#[from(equiv_molecule_entries)] mut entries: M
     Entity::Atom(AtomId(4)),
 )]
 #[case::noncovalent_endpoint(
-    |entries: &mut MoleculeEntries| entries.noncovalent[0].0 = AtomId(4),
+    |entries: &mut MoleculeEntries| entries.noncovalent[0].0[0] = AtomId(4),
     Entity::Atom(AtomId(4)),
 )]
 #[case::stereo_atom_site(
@@ -610,7 +607,7 @@ fn test_molecule_try_from_entries_error(
     },
 )]
 #[case::noncovalent_self_loop(
-    |entries: &mut MoleculeEntries| entries.noncovalent[0].1 = AtomId(0),
+    |entries: &mut MoleculeEntries| entries.noncovalent[0].0[1] = AtomId(0),
     MoleculeIntegrityError::DuplicateParticipant {
         entity: Entity::NoncovalentBond(NoncovalentBondId(0)),
         atom: AtomId(0),
@@ -618,8 +615,7 @@ fn test_molecule_try_from_entries_error(
 )]
 #[case::noncovalent_bonds_parallel_distinct_kinds(
     |entries: &mut MoleculeEntries| entries.noncovalent.push((
-        AtomId(3),
-        AtomId(0),
+        [AtomId(3), AtomId(0)],
         NoncovalentBondForm::from_kind(NoncovalentBondKind::VanDerWaals),
     )),
     MoleculeIntegrityError::NoncovalentBondsParallel {
@@ -1216,7 +1212,7 @@ fn framed_eq_under_molecules(
         .noncovalent
         .iter()
         .cloned()
-        .map(|(first, second, attributes)| (map_atom(first), map_atom(second), attributes))
+        .map(|(atoms, attributes)| (atoms.map(map_atom), attributes))
         .collect();
     let right_stereo_atoms = entries
         .stereo_atoms
@@ -1277,8 +1273,7 @@ fn test_molecule_normalize(#[from(equiv_molecule_entries)] mut entries: Molecule
     entries.dative[0].0.swap(0, 1);
     entries.aromatic[0].0.swap(0, 2);
     entries.multicenter[0].0.swap(0, 2);
-    entries.noncovalent[0].0 = AtomId(3);
-    entries.noncovalent[0].1 = AtomId(0);
+    entries.noncovalent[0].0 = [AtomId(3), AtomId(0)];
     entries.stereo_atoms[0].1.swap(0, 1);
     entries.stereo_bonds[0].1.swap(0, 1);
 
@@ -1651,7 +1646,7 @@ fn test_molecule_normalized_eq_entity_data(
     differences.push(Molecule::from_entries(multicenter));
 
     let mut noncovalent = entries.clone();
-    noncovalent.noncovalent[0].2.kind = NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic);
+    noncovalent.noncovalent[0].1.kind = NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic);
     differences.push(Molecule::from_entries(noncovalent));
 
     let mut stereo_atom = entries.clone();
@@ -1698,7 +1693,7 @@ fn test_molecule_normalized_eq_relation_frames(
     differences.push(Molecule::from_entries(multicenter));
 
     let mut noncovalent = entries.clone();
-    noncovalent.noncovalent[0].1 = AtomId(2);
+    noncovalent.noncovalent[0].0[1] = AtomId(2);
     differences.push(Molecule::from_entries(noncovalent));
 
     let mut stereo_atom_site = entries.clone();
@@ -1990,7 +1985,7 @@ fn test_molecule_framed_eq_under_participant_mismatch_error(#[case] entity: Enti
             }
             Entity::NoncovalentBond(_) => {
                 entries.noncovalent =
-                    vec![(AtomId(2), atom(4, 5), NoncovalentBondForm::default())]
+                    vec![([AtomId(2), atom(4, 5)], NoncovalentBondForm::default())]
             }
             Entity::DativeBond(_) => {
                 entries.dative = vec![(

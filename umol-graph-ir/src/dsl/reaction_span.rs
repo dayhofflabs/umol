@@ -180,10 +180,8 @@ impl FromIr<ReactionSpan> for ReactionSpanDsl {
                 .noncovalent_bonds()
                 .ids()
                 .map(|id| {
-                    let [first, second] = span.noncovalent_bonds().atoms(id);
                     (
-                        first,
-                        second,
+                        span.noncovalent_bonds().atoms(id),
                         map_span(span.noncovalent_bonds().attributes(id), |bond| {
                             NoncovalentBondDsl::from_ir(bond, &context.noncovalent_bond).0
                         }),
@@ -293,10 +291,8 @@ impl IntoIr<ReactionSpan> for ReactionSpanDsl {
                 .noncovalent_bonds()
                 .ids()
                 .map(|id| {
-                    let [first, second] = span.noncovalent_bonds().atoms(id);
                     (
-                        first,
-                        second,
+                        span.noncovalent_bonds().atoms(id),
                         map_span(span.noncovalent_bonds().attributes(id), |bond| {
                             NoncovalentBondDsl(bond.clone()).into_ir(&context.noncovalent_bond)
                         }),
@@ -1101,7 +1097,7 @@ impl SpanInput {
             let a = first.resolve(&context)?;
             let b = second.resolve(&context)?;
             context.register_noncovalent_bond(keyword, a, b)?;
-            noncovalent.push((a, b, span));
+            noncovalent.push(([a, b], span));
         }
 
         let mut stereo_atoms = Vec::with_capacity(self.stereo_atoms.len());

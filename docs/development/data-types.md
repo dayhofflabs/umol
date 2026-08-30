@@ -242,6 +242,13 @@ An asserted constructor such as `from_entries` and a checked constructor such as
 contract is reported. The asserted form is for producers that establish the invariant by
 construction; the checked form is for untrusted or independently assembled input.
 
+Flat aggregate entries preserve each entity kind's relation structure. A unipartite relation has
+one participant collection paired with its attributes: variable-degree aromatic systems and
+multicenter bonds use `Vec<AtomId>`, while fixed-degree noncovalent bonds use `[AtomId; 2]`.
+Bipartite or site-bearing entities keep their distinguished factors separate, as in dative bonds
+and stereo entities. Do not flatten a unipartite fixed relation into separate participant tuple
+fields merely because its degree is two.
+
 ### Conversion
 
 A conversion preserves every source state representable by its target, including semantically

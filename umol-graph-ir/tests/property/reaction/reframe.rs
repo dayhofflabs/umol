@@ -190,7 +190,7 @@ fn removal_frame_reaction_strategy() -> BoxedStrategy<RemovalFrameScenario> {
             let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
             let lhs = Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C); 2],
-                noncovalent: vec![(owner_atoms[0], owner_atoms[1], attributes.clone())],
+                noncovalent: vec![([owner_atoms[0], owner_atoms[1]], attributes.clone())],
                 ..Default::default()
             });
             RemovalFrameScenario {

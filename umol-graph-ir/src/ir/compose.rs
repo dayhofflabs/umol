@@ -283,9 +283,7 @@ mod tests {
     // The composite carries the noncovalent bond (class ①) and fuses the order to 1→3.
     #[case::carry(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -302,9 +300,7 @@ mod tests {
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -317,9 +313,7 @@ mod tests {
     // Remove delta onto composite noncovalent id 0.
     #[case::remove_carried(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -343,9 +337,7 @@ mod tests {
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -365,9 +357,7 @@ mod tests {
     // overlap-region overlay corresponds (no fresh id), so B's modify re-anchors onto A's bond.
     #[case::correspondence(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -376,9 +366,7 @@ mod tests {
             })]),
         ),
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
@@ -391,9 +379,7 @@ mod tests {
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
@@ -422,9 +408,7 @@ mod tests {
             })]),
         ),
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], noncovalent: vec![(
-                    AtomId(0),
-                    AtomId(1),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(2))], noncovalent: vec![([AtomId(0), AtomId(1)],
                     NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
                 )], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
@@ -465,7 +449,7 @@ mod tests {
     // changes across the shared atoms.
     #[case::overlay_modify(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
                 id: NoncovalentBondId(0),
                 change: NoncovalentBondFieldChange::Kind {
@@ -483,7 +467,7 @@ mod tests {
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),
@@ -503,7 +487,7 @@ mod tests {
     // hydrogen bond in its lhs and removes it.
     #[case::overlay_remove(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                 id: NoncovalentBondId(0),
                 atoms: [AtomId(0), AtomId(1)],
@@ -519,7 +503,7 @@ mod tests {
         ),
         CommonSubgraphEnumerationAlgorithm::ModularProductBacktracking,
         vec![Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::C), AtomForm::from_element(Element::N)], bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
                 Delta::Bond(BondDelta::ModifyField {
                     id: BondId(0),

@@ -2782,7 +2782,7 @@ mod tests {
                 let attributes = NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond);
                 entries
                     .noncovalent
-                    .push((AtomId(0), AtomId(1), attributes.clone()));
+                    .push(([AtomId(0), AtomId(1)], attributes.clone()));
                 (
                     Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
                         id: NoncovalentBondId(0),
@@ -3502,11 +3502,9 @@ mod tests {
             }
             EntityKind::NoncovalentBond => {
                 if existing {
-                    entries.noncovalent.push((
-                        AtomId(0),
-                        AtomId(1),
-                        NoncovalentBondForm::default(),
-                    ));
+                    entries
+                        .noncovalent
+                        .push(([AtomId(0), AtomId(1)], NoncovalentBondForm::default()));
                 }
                 (
                     Entity::NoncovalentBond(NoncovalentBondId(0)),
@@ -3793,8 +3791,7 @@ mod tests {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -4229,7 +4226,7 @@ mod tests {
     )]
     #[case::overlay_removed(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::from_iter([
                 Delta::Atom(AtomDelta::Remove { id: AtomId(0), attributes: AtomForm::from_element(Element::O) }),
                 Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
@@ -4239,7 +4236,7 @@ mod tests {
                 }),
             ]),
         ),
-        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0), AtomId(1)],
         Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O)], bonds: vec![], ..Default::default() }),
     )]
@@ -4430,8 +4427,7 @@ mod tests {
         let lhs = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: if removal {
@@ -4452,8 +4448,7 @@ mod tests {
         let host = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: if removal {
@@ -4466,8 +4461,7 @@ mod tests {
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: if removal {
@@ -4667,8 +4661,7 @@ mod tests {
         let expected = Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             noncovalent: vec![(
-                AtomId(1),
-                AtomId(0),
+                [AtomId(1), AtomId(0)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             constraints: Constraints::from(constraint),
@@ -4771,7 +4764,7 @@ mod tests {
                 attributes: AtomForm::from_element(Element::O),
             })]),
         ),
-        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::O)], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         vec![AtomId(0)],
         ApplyError::Dangling { host_atom: AtomId(0) },
     )]
@@ -4837,10 +4830,10 @@ mod tests {
     )]
     #[case::noncovalent_incidence(
         Reaction::new(
-            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(1), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+            Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![([AtomId(0), AtomId(1)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
             Deltas::new(),
         ),
-        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![(AtomId(0), AtomId(2), NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
+        Molecule::from_entries(MoleculeEntries { atoms: vec![AtomForm::from_element(Element::O); 3], noncovalent: vec![([AtomId(0), AtomId(2)], NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond))], constraints: Constraints::new(), ..Default::default() }),
         MoleculeCorrespondence::new(
             Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2)], 3),
             Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"), Correspondence::new(vec![], 0, 0).expect("correspondence producer preserves partial-bijection invariants"),

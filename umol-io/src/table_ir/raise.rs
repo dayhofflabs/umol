@@ -85,7 +85,7 @@ impl TryIntoIr<Molecule> for &TableMolecule {
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
-                noncovalent_bonds.push((a_idx, b_idx, NoncovalentBondForm::from_kind(kind)));
+                noncovalent_bonds.push(([a_idx, b_idx], NoncovalentBondForm::from_kind(kind)));
             } else if let Some(donation) = b.donation {
                 let (donor, acceptor) = match donation {
                     TableBondDonation::Donating => (a_idx, b_idx),

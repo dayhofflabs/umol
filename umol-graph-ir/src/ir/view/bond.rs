@@ -348,8 +348,7 @@ mod tests {
                 MulticenterBondForm::default(),
             )],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(3),
+                [AtomId(0), AtomId(3)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()

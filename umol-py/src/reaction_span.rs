@@ -200,8 +200,7 @@ impl ReactionSpan {
             .into_iter()
             .map(|([first, second], (lhs, rhs))| {
                 Ok((
-                    GraphIrAtomId(first),
-                    GraphIrAtomId(second),
+                    [GraphIrAtomId(first), GraphIrAtomId(second)],
                     entity_span(
                         lhs.map(|value| value.bind(py).borrow().to_rust().clone()),
                         rhs.map(|value| value.bind(py).borrow().to_rust().clone()),
@@ -800,8 +799,7 @@ mod tests {
                         GraphIrEntitySpan::Removed(removed_multicenter),
                     )],
                     noncovalent: vec![(
-                        GraphIrAtomId(0),
-                        GraphIrAtomId(1),
+                        [GraphIrAtomId(0), GraphIrAtomId(1)],
                         GraphIrEntitySpan::Unchanged(unchanged_noncovalent),
                     )],
                     stereo_atoms: vec![(

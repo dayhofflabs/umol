@@ -2057,9 +2057,7 @@ mod tests {
         Molecule::from_entries(MoleculeEntries {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+            noncovalent: vec![([AtomId(0), AtomId(1)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2073,9 +2071,7 @@ mod tests {
                 (AtomId(0), AtomId(1), BondForm::from_order(1)),
                 (AtomId(2), AtomId(3), BondForm::from_order(1)),
             ],
-            noncovalent: vec![(
-                AtomId(0),
-                AtomId(2),
+            noncovalent: vec![([AtomId(0), AtomId(2)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2111,8 +2107,7 @@ mod tests {
             atoms: vec![AtomForm::from_element(Element::C); 2],
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             noncovalent: vec![(
-                AtomId(0),
-                AtomId(1),
+                [AtomId(0), AtomId(1)],
                 NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
             ..Default::default()
@@ -2145,7 +2140,7 @@ mod tests {
                 AtomForm::from_element(Element::O),
                 AtomForm::from_element(Element::O),
             ],
-            noncovalent: vec![(AtomId(0), AtomId(1), form)],
+            noncovalent: vec![([AtomId(0), AtomId(1)], form)],
             ..Default::default()
         });
         assert_eq!(

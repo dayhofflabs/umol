@@ -1236,13 +1236,13 @@ impl MoleculeInput {
         }
 
         // Noncovalent bonds.
-        let mut noncovalent_list: Vec<(AtomId, AtomId, NoncovalentBondForm)> =
+        let mut noncovalent_list: Vec<([AtomId; 2], NoncovalentBondForm)> =
             Vec::with_capacity(noncovalent_entries.len());
         for entry in noncovalent_entries {
             let first = entry.first.resolve(&context)?;
             let second = entry.second.resolve(&context)?;
             context.register_noncovalent_bond(entry.keyword, first, second)?;
-            noncovalent_list.push((first, second, entry.bond.0));
+            noncovalent_list.push(([first, second], entry.bond.0));
         }
 
         // Stereo atoms.
