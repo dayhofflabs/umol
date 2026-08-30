@@ -46,13 +46,12 @@ use super::super::num::NumForm;
 use super::super::ring::{RingConfig, RingModel, RingSetKind};
 use super::super::spin::UnpairedElectronsForm;
 use super::super::stereo::{
-    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind,
-    Stereogenicity, Topicity,
+    StereoAtomForm, StereoBondForm, StereoConfigurationForm, StereoCoset, StereoKind, Topicity,
 };
 use super::super::traits::{FrameTransport, Normalize, Reframe};
 use super::transact::TransactionError;
 use super::{
-    AromaticSystems, DativeBonds, DescriptionLevel, Molecule, MoleculeApplyError, MoleculeEntries,
+    AromaticSystems, DativeBonds, Molecule, MoleculeApplyError, MoleculeEntries,
     MoleculeIntegrityError, MulticenterBonds, NoncovalentBonds, StereoAtoms, StereoBonds,
 };
 use crate::{mol_dsl, mol_dsl_concrete};
@@ -71,16 +70,6 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
     let mut out = Constraints::new();
     out.push(c);
     out
-}
-
-#[rstest]
-#[case::topology_constitution(DescriptionLevel::Topology, DescriptionLevel::Constitution)]
-#[case::constitution_structure(DescriptionLevel::Constitution, DescriptionLevel::Structure)]
-#[case::structure_full(DescriptionLevel::Structure, DescriptionLevel::Full)]
-fn test_description_level_order(#[case] lower: DescriptionLevel, #[case] upper: DescriptionLevel) {
-    assert!(lower < upper);
-    assert_eq!(lower.min(upper), lower);
-    assert_eq!(lower.max(upper), upper);
 }
 
 #[rstest]
@@ -132,225 +121,6 @@ fn test_molecule_from_entries() {
 #[rstest]
 fn test_molecule_builder() {
     assert_eq!(Molecule::builder().build(), Molecule::new());
-}
-
-#[rstest]
-#[case::topology(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::O),
-        ],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-        ..Default::default()
-    }),
-    DescriptionLevel::Topology,
-)]
-#[case::dative(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
-        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
-        ..Default::default()
-    }),
-    DescriptionLevel::Constitution,
-)]
-#[case::aromatic(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        aromatic: vec![(vec![AtomId(0), AtomId(1), AtomId(2)], AromaticSystemForm::default())],
-        ..Default::default()
-    }),
-    DescriptionLevel::Constitution,
-)]
-#[case::multicenter(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::B); 3],
-        multicenter: vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondForm::default(),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Constitution,
-)]
-#[case::noncovalent(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::H)],
-        noncovalent: vec![(
-            AtomId(0),
-            AtomId(1),
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Constitution,
-)]
-#[case::stereo_atom(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 5],
-        bonds: (1..=4)
-            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            (1..=4)
-                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                .collect(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Structure,
-)]
-#[case::stereo_bond(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 4],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(1), AtomId(2), BondForm::from_order(2)),
-            (AtomId(2), AtomId(3), BondForm::from_order(1)),
-        ],
-        stereo_bonds: vec![(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, 1u32),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Structure,
-)]
-#[case::inline_atom_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)
-            .with_constraint(AtomConstraintForm::valence(4_i64))],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_bond_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        bonds: vec![(
-            AtomId(0),
-            AtomId(1),
-            BondForm::from_order(1).with_constraint(BondConstraintForm::aromatic(true)),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_dative_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::N), AtomForm::from_element(Element::B)],
-        dative: vec![(
-            vec![AtomId(0)],
-            AtomId(1),
-            DativeBondForm::from_order(1).with_constraint(DativeBondConstraintForm::Aromatic(
-                BooleanForm::Lit(true),
-            )),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_aromatic_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        aromatic: vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemForm::default()
-                .with_constraint(AromaticSystemConstraintForm::electron_count(6_i64)),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_multicenter_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::B); 3],
-        multicenter: vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondForm::default()
-                .with_constraint(MulticenterBondConstraintForm::electron_count(2_i64)),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_noncovalent_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::O), AtomForm::from_element(Element::H)],
-        noncovalent: vec![(
-            AtomId(0),
-            AtomId(1),
-            NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
-                .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_stereo_atom_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 5],
-        bonds: (1..=4)
-            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            (1..=4)
-                .map(|id| StereoLigand::new(AtomId(id), StereoLigandKind::Atom))
-                .collect(),
-            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32).with_constraint(
-                StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                    Stereogenicity::Stereogenic,
-                )),
-            ),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::inline_stereo_bond_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 4],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(1), AtomId(2), BondForm::from_order(2)),
-            (AtomId(2), AtomId(3), BondForm::from_order(1)),
-        ],
-        stereo_bonds: vec![(
-            BondId(1),
-            vec![
-                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
-            ],
-            StereoBondForm::new(StereoKind::CisTrans, 1u32).with_constraint(
-                StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Lit(
-                    Stereogenicity::Stereogenic,
-                )),
-            ),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-#[case::molecule_constraint(
-    Molecule::from_entries(MoleculeEntries {
-        constraints: Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }).into(),
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-)]
-fn test_molecule_description_level(#[case] molecule: Molecule, #[case] expected: DescriptionLevel) {
-    assert_eq!(molecule.description_level(), expected);
 }
 
 #[rstest]

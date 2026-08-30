@@ -11,11 +11,11 @@ use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::dsl::MoleculeDsl;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AromaticSystemId, AtomConstraintForm, AtomForm, AtomId, BondForm, BondId,
-    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, DescriptionLevel,
-    IncidenceLevel, Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries,
-    MulticenterBondForm, MulticenterBondId, NoncovalentBondForm, NoncovalentBondId,
-    NoncovalentBondKind, NumForm, Reframe, StereoAtomForm, StereoAtomId, StereoBondForm,
-    StereoBondId, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, IncidenceLevel,
+    Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
+    MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
+    Reframe, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
+    StereoLigand, StereoLigandKind,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -520,14 +520,6 @@ const LEVELS: [IncidenceLevel; 3] = [
     IncidenceLevel::Full,
 ];
 
-const OPERATIONS: [(&str, DescriptionLevel, bool); 5] = [
-    ("topology", DescriptionLevel::Topology, false),
-    ("constitution", DescriptionLevel::Constitution, false),
-    ("structure", DescriptionLevel::Structure, false),
-    ("para_stereo_structure", DescriptionLevel::Structure, true),
-    ("full", DescriptionLevel::Full, true),
-];
-
 fn level_name(level: IncidenceLevel) -> &'static str {
     match level {
         IncidenceLevel::Topology => "topology",
@@ -605,12 +597,23 @@ fn bench_remapping(c: &mut Criterion) {
 fn bench_canonicalize(c: &mut Criterion) {
     let corpus = corpus();
 
-    for (operation, level, para_stereo) in OPERATIONS {
-        let context = CanonicalizeContext {
-            para_stereo,
-            automorphism_algorithm: ALGORITHM,
-        };
-        let mut group = c.benchmark_group(format!("canonicalize/operation/{operation}"));
+    for (name, context) in [
+        (
+            "without_para_stereo",
+            CanonicalizeContext {
+                para_stereo: false,
+                automorphism_algorithm: ALGORITHM,
+            },
+        ),
+        (
+            "with_para_stereo",
+            CanonicalizeContext {
+                para_stereo: true,
+                automorphism_algorithm: ALGORITHM,
+            },
+        ),
+    ] {
+        let mut group = c.benchmark_group(format!("canonicalize/complete/{name}"));
         for case in &corpus {
             let counts = molecule_counts(&case.molecule)
                 .into_iter()
@@ -623,7 +626,7 @@ fn bench_canonicalize(c: &mut Criterion) {
                     |molecule| {
                         black_box(
                             molecule
-                                .canonicalize_by(level, &context)
+                                .canonicalize(&context)
                                 .expect("benchmark corpus canonicalizes"),
                         )
                     },

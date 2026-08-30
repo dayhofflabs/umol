@@ -2582,7 +2582,6 @@ mod tests {
     use super::super::delta::Deltas;
     use super::super::edit::{BondFieldChange, NoncovalentBondFieldChange, StereoAtomFieldChange};
     use super::super::ligand::{StereoLigand, StereoLigandKind};
-    use super::super::molecule::DescriptionLevel;
     use super::super::noncovalent::{NoncovalentBondKind, NoncovalentBondKindForm};
     use super::super::num::NumForm;
     use super::super::stereo::{StereoConfigurationForm, StereoCoset, StereoKind};
@@ -3360,65 +3359,6 @@ mod tests {
             Ok(canonical.clone())
         );
         assert!(span.canonical_eq(&canonical, &canonicalize_context));
-    }
-
-    #[rstest]
-    #[case::topology(DescriptionLevel::Topology)]
-    #[case::constitution(DescriptionLevel::Constitution)]
-    #[case::structure(DescriptionLevel::Structure)]
-    #[case::full(DescriptionLevel::Full)]
-    fn test_reaction_span_canonicalize_by(
-        canonicalize_context: CanonicalizeContext,
-        #[case] level: DescriptionLevel,
-    ) {
-        let span = ReactionSpan::from_entries(ReactionSpanEntries {
-            atoms: vec![
-                EntitySpan::Added(AtomForm::from_element(Element::O)),
-                EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
-                EntitySpan::Removed(AtomForm::from_element(Element::N)),
-            ],
-            bonds: vec![(
-                AtomId(1),
-                AtomId(2),
-                EntitySpan::Removed(BondForm::from_order(1)),
-            )],
-            ..Default::default()
-        });
-
-        let canonical = span
-            .clone()
-            .canonicalize_by(level, &canonicalize_context)
-            .unwrap();
-
-        assert_eq!(
-            canonical
-                .clone()
-                .canonicalize_by(level, &canonicalize_context),
-            Ok(canonical.clone()),
-        );
-        assert!(span.canonical_eq_by(&canonical, level, &canonicalize_context));
-    }
-
-    #[rstest]
-    fn test_reaction_span_canonical_eq_by_contradiction(canonicalize_context: CanonicalizeContext) {
-        let mut constrained_atom = AtomForm::from_element(Element::C);
-        constrained_atom.constraints =
-            AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
-        let constrained = ReactionSpan::from_entries(ReactionSpanEntries {
-            atoms: vec![EntitySpan::Unchanged(constrained_atom)],
-            ..Default::default()
-        });
-        let plain = ReactionSpan::from_entries(ReactionSpanEntries {
-            atoms: vec![EntitySpan::Unchanged(AtomForm::from_element(Element::C))],
-            ..Default::default()
-        });
-
-        assert!(constrained.canonical_eq_by(
-            &plain,
-            DescriptionLevel::Structure,
-            &canonicalize_context,
-        ));
-        assert!(!constrained.canonical_eq(&plain, &canonicalize_context));
     }
 
     #[rstest]

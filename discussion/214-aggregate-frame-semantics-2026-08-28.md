@@ -1295,6 +1295,24 @@ require a new application-result witness in doc 204.
   public description-level selectors and level-parameterized aggregate canonicalization, retain
   private effective-level reduction, and expose only complete public canonicalization/equality/hash
   behavior. Migrate callers in the same subitem. **Breaking (red→green).** [dep: S0v]
+  **Done.** `DescriptionLevel` is now private canonicalization machinery, and the duplicate private
+  `CanonicalizeLevel` name is eliminated. `Molecule::description_level` and the graph-IR root export
+  are removed. `Canonicalize` now exposes only `canonicalize`,
+  `canonicalize_with_correspondence`, `canonical_hash`, and `canonical_eq`; its three aggregate
+  implementations retain private effective-description-level selection for exact complete
+  reduction. The reaction projection helpers and public transformation, equality, and hash paths
+  that existed only for caller-selected levels are removed.
+
+  Rust unit and property suites retain complete canonicalization, correspondence, remapping,
+  contradiction, equality, hash, and quotient-pipeline laws. Forced-level cases remain only inside
+  the canonicalization module as evidence for private effective-level reduction; the public
+  description-level unit/property surface and its dedicated property module are removed. The
+  benchmark now measures complete canonicalization with and without para-stereo refinement. All
+  261 focused canonicalization unit cases and all 20 focused canonicalization properties at 256
+  cases pass. All non-Python workspace targets compile, including the canonicalization benchmark,
+  and strict all-target Clippy passes for `umol-graph-ir` with the property feature and for
+  `umol-graph`. The Python bindings still reference the retired Rust surface and are assigned to
+  S1b.
 - **S1b — Python API retirement** (`umol-py`): remove Python description-level selection, migrate
   supported methods to the complete operation, and retain exact Rust/Python agreement. Use the
   Python 3.13 build gate. **Breaking (red→green).** [dep: S1a]

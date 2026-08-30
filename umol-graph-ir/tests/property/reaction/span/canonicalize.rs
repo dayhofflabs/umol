@@ -2,8 +2,8 @@
 //!
 //! Integrity-valid generated spans are compared with independently renumbered union frames. The
 //! properties cover the complete normalization/reframe/canonicalize fixpoint and absorption matrix,
-//! all level-specific equality and canonical-hash relations, LHS anchoring, reaction-normal-form
-//! convergence, integrity, and the documented weakened reversal law.
+//! complete equality and canonical-hash relations, LHS anchoring, reaction-normal-form convergence,
+//! integrity, and the documented weakened reversal law.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
 use umol_graph_ir::ir::{
-    Canonicalize, CanonicalizeContext, Contradiction, DescriptionLevel, Normalize, ReactionSpan,
+    Canonicalize, CanonicalizeContext, Contradiction, Normalize, ReactionSpan,
     ReactionSpanCanonicalizeError, Reframe,
 };
 
@@ -67,13 +67,6 @@ proptest! {
         let renumbered_canonical = renumbered.canonicalize(&context);
 
         prop_assert_eq!(&renumbered_canonical, &canonical);
-        prop_assert_eq!(
-            scenario
-                .span
-                .clone()
-                .canonicalize_by(DescriptionLevel::Full, &context),
-            canonical.clone(),
-        );
         if let Ok(canonical) = canonical {
             let (with_correspondence, correspondence) = scenario
                 .span
@@ -161,24 +154,6 @@ proptest! {
             scenario.span.clone().canonical_hash(&context),
             renumbered.clone().canonical_hash(&context),
         );
-        for level in [
-            DescriptionLevel::Topology,
-            DescriptionLevel::Constitution,
-            DescriptionLevel::Structure,
-            DescriptionLevel::Full,
-        ] {
-            prop_assert_eq!(
-                scenario.span.clone().canonical_hash_by(level, &context),
-                renumbered.clone().canonical_hash_by(level, &context),
-            );
-        }
-        prop_assert_eq!(
-            scenario
-                .span
-                .clone()
-                .canonical_hash_by(DescriptionLevel::Full, &context),
-            scenario.span.clone().canonical_hash(&context),
-        );
         if let Ok(canonical) = scenario.span.clone().canonicalize(&context) {
             prop_assert_eq!(
                 scenario.span.canonical_hash(&context),
@@ -205,42 +180,6 @@ proptest! {
             prop_assert!(renumbered.canonical_eq(&canonical, &context));
             prop_assert!(scenario.span.canonical_eq(&canonical, &context));
         }
-    }
-
-    #[test]
-    fn test_reaction_span_canonical_eq_by(
-        scenario in reaction_span_scenario_strategy(),
-    ) {
-        let context = context();
-        let renumbered = scenario.span.remap(&scenario.first);
-
-        for level in [
-            DescriptionLevel::Topology,
-            DescriptionLevel::Constitution,
-            DescriptionLevel::Structure,
-            DescriptionLevel::Full,
-        ] {
-            let canonical = scenario.span.clone().canonicalize_by(level, &context);
-
-            prop_assert!(scenario.span.canonical_eq_by(&scenario.span, level, &context));
-            prop_assert!(scenario.span.canonical_eq_by(&renumbered, level, &context));
-            prop_assert_eq!(
-                scenario.span.canonical_eq_by(&renumbered, level, &context),
-                renumbered.canonical_eq_by(&scenario.span, level, &context),
-            );
-            if let Ok(canonical) = canonical {
-                prop_assert!(renumbered.canonical_eq_by(&canonical, level, &context));
-                prop_assert!(scenario.span.canonical_eq_by(&canonical, level, &context));
-            }
-        }
-        prop_assert_eq!(
-            scenario.span.canonical_eq_by(
-                &renumbered,
-                DescriptionLevel::Full,
-                &context,
-            ),
-            scenario.span.canonical_eq(&renumbered, &context),
-        );
     }
 
     #[test]

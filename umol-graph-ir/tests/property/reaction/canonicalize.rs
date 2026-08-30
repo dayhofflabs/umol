@@ -13,8 +13,8 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::{AutomorphismAlgorithm, Correspondence};
 use umol_graph_ir::ir::{
-    Canonicalize, CanonicalizeContext, Contradiction, Deltas, DescriptionLevel, EntitySpan,
-    Molecule, MoleculeCorrespondence, MoleculeEntries, Normalize, NumForm, Reaction,
+    Canonicalize, CanonicalizeContext, Contradiction, Deltas, EntitySpan, Molecule,
+    MoleculeCorrespondence, MoleculeEntries, Normalize, NumForm, Reaction,
     ReactionCanonicalizeError, ReactionDerivation, ReactionSpan, Reframe,
 };
 
@@ -294,39 +294,6 @@ proptest! {
     }
 
     #[test]
-    fn test_reaction_canonicalize_by(scenario in reaction_span_scenario_strategy()) {
-        let context = context();
-        let source = scenario.span.to_reaction();
-        let renumbered = scenario.span.remap(&scenario.first).to_reaction();
-
-        for level in [
-            DescriptionLevel::Topology,
-            DescriptionLevel::Constitution,
-            DescriptionLevel::Structure,
-            DescriptionLevel::Full,
-        ] {
-            let left = source.clone().canonicalize_by(level, &context);
-            let right = renumbered.clone().canonicalize_by(level, &context);
-            match (left, right) {
-                (Ok(left), Ok(right)) => {
-                    prop_assert!(left.canonical_eq_by(&right, level, &context));
-                    if level == DescriptionLevel::Full {
-                        prop_assert_eq!(left, right);
-                    }
-                }
-                (Err(left), Err(right)) => prop_assert_eq!(left, right),
-                (left, right) => {
-                    prop_assert!(false, "canonicalization mismatch: {left:?} != {right:?}")
-                }
-            }
-        }
-        prop_assert_eq!(
-            source.clone().canonicalize_by(DescriptionLevel::Full, &context),
-            source.canonicalize(&context),
-        );
-    }
-
-    #[test]
     fn test_reaction_canonical_hash(scenario in reaction_span_scenario_strategy()) {
         let context = context();
         let source = scenario.span.to_reaction();
@@ -336,54 +303,12 @@ proptest! {
             source.clone().canonical_hash(&context),
             renumbered.clone().canonical_hash(&context),
         );
-        for level in [
-            DescriptionLevel::Topology,
-            DescriptionLevel::Constitution,
-            DescriptionLevel::Structure,
-            DescriptionLevel::Full,
-        ] {
-            prop_assert_eq!(
-                source.clone().canonical_hash_by(level, &context),
-                renumbered.clone().canonical_hash_by(level, &context),
-            );
-        }
-        prop_assert_eq!(
-            source
-                .clone()
-                .canonical_hash_by(DescriptionLevel::Full, &context),
-            source.clone().canonical_hash(&context),
-        );
         if let Ok(canonical) = source.clone().canonicalize(&context) {
             prop_assert_eq!(
                 source.canonical_hash(&context),
                 Ok(structural_hash(&canonical)),
             );
         }
-    }
-
-    #[test]
-    fn test_reaction_canonical_eq_by(scenario in reaction_span_scenario_strategy()) {
-        let context = context();
-        let source = scenario.span.to_reaction();
-        let renumbered = scenario.span.remap(&scenario.first).to_reaction();
-
-        for level in [
-            DescriptionLevel::Topology,
-            DescriptionLevel::Constitution,
-            DescriptionLevel::Structure,
-            DescriptionLevel::Full,
-        ] {
-            prop_assert!(source.canonical_eq_by(&source, level, &context));
-            prop_assert!(source.canonical_eq_by(&renumbered, level, &context));
-            prop_assert_eq!(
-                source.canonical_eq_by(&renumbered, level, &context),
-                renumbered.canonical_eq_by(&source, level, &context),
-            );
-        }
-        prop_assert_eq!(
-            source.canonical_eq_by(&renumbered, DescriptionLevel::Full, &context),
-            source.canonical_eq(&renumbered, &context),
-        );
     }
 
     #[test]

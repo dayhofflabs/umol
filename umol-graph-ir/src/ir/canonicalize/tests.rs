@@ -15,8 +15,8 @@ use super::*;
 use crate::ir::{
     AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomConstraintForm,
     AtomFieldChange, AtomForm, AtomId, BondFieldChange, BondForm, BondId, BooleanForm, Constraint,
-    ConstraintDelta, Constraints, DativeBondFieldChange, DativeBondForm, DativeBondId, Entity,
-    IncidenceLevel, MoleculeCorrespondence, MoleculeEntries, MulticenterBondFieldChange,
+    ConstraintDelta, Constraints, DativeBondFieldChange, DativeBondForm, DativeBondId, Deltas,
+    Entity, IncidenceLevel, MoleculeCorrespondence, MoleculeEntries, MulticenterBondFieldChange,
     MulticenterBondForm, MulticenterBondId, NoncovalentBondFieldChange, NoncovalentBondForm,
     NoncovalentBondId, ReactionSpanEntries, StereoAtomConstraintForm, StereoAtomFieldChange,
     StereoAtomForm, StereoAtomId, StereoBondConstraintForm, StereoBondFieldChange, StereoBondForm,
@@ -589,13 +589,10 @@ fn selected_structure_key(molecule: &Molecule) -> CanonicalComparisonKey {
 }
 
 #[rstest]
-#[case::topology_constitution(CanonicalizeLevel::Topology, CanonicalizeLevel::Constitution)]
-#[case::constitution_structure(CanonicalizeLevel::Constitution, CanonicalizeLevel::Structure)]
-#[case::structure_full(CanonicalizeLevel::Structure, CanonicalizeLevel::Full)]
-fn test_canonicalize_level_order(
-    #[case] lower: CanonicalizeLevel,
-    #[case] upper: CanonicalizeLevel,
-) {
+#[case::topology_constitution(DescriptionLevel::Topology, DescriptionLevel::Constitution)]
+#[case::constitution_structure(DescriptionLevel::Constitution, DescriptionLevel::Structure)]
+#[case::structure_full(DescriptionLevel::Structure, DescriptionLevel::Full)]
+fn test_description_level_order(#[case] lower: DescriptionLevel, #[case] upper: DescriptionLevel) {
     assert_eq!(lower.cmp(&upper), Ordering::Less);
     assert_eq!(lower.max(upper), upper);
 }
@@ -603,53 +600,53 @@ fn test_canonicalize_level_order(
 #[rstest]
 #[case::unchanged(
     EntitySpan::Unchanged(false),
-    CanonicalizeLevel::Topology,
-    CanonicalizeLevel::Topology
+    DescriptionLevel::Topology,
+    DescriptionLevel::Topology
 )]
 #[case::added(
     EntitySpan::Added(false),
-    CanonicalizeLevel::Constitution,
-    CanonicalizeLevel::Constitution
+    DescriptionLevel::Constitution,
+    DescriptionLevel::Constitution
 )]
 #[case::removed(
     EntitySpan::Removed(false),
-    CanonicalizeLevel::Structure,
-    CanonicalizeLevel::Structure
+    DescriptionLevel::Structure,
+    DescriptionLevel::Structure
 )]
 #[case::modified(
     EntitySpan::Modified { lhs: false, rhs: false },
-    CanonicalizeLevel::Constitution,
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::unchanged_constraint(
     EntitySpan::Unchanged(true),
-    CanonicalizeLevel::Topology,
-    CanonicalizeLevel::Full
+    DescriptionLevel::Topology,
+    DescriptionLevel::Full
 )]
 #[case::added_constraint(
     EntitySpan::Added(true),
-    CanonicalizeLevel::Constitution,
-    CanonicalizeLevel::Full
+    DescriptionLevel::Constitution,
+    DescriptionLevel::Full
 )]
 #[case::removed_constraint(
     EntitySpan::Removed(true),
-    CanonicalizeLevel::Structure,
-    CanonicalizeLevel::Full
+    DescriptionLevel::Structure,
+    DescriptionLevel::Full
 )]
 #[case::modified_lhs_constraint(
     EntitySpan::Modified { lhs: true, rhs: false },
-    CanonicalizeLevel::Topology,
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Topology,
+    DescriptionLevel::Full,
 )]
 #[case::modified_rhs_constraint(
     EntitySpan::Modified { lhs: false, rhs: true },
-    CanonicalizeLevel::Topology,
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Topology,
+    DescriptionLevel::Full,
 )]
 fn test_entity_span_canonicalize_level(
     #[case] span: EntitySpan<bool>,
-    #[case] base: CanonicalizeLevel,
-    #[case] expected: CanonicalizeLevel,
+    #[case] base: DescriptionLevel,
+    #[case] expected: DescriptionLevel,
 ) {
     assert_eq!(
         entity_span_canonicalize_level(&span, base, |has_inline_constraints| {
@@ -665,25 +662,25 @@ fn test_entity_span_canonicalize_level(
         id: AtomId(0),
         attributes: AtomForm::from_element(Element::C),
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::atom_remove(
     Delta::Atom(AtomDelta::Remove {
         id: AtomId(0),
         attributes: AtomForm::from_element(Element::C),
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::atom_modify_field(
     Delta::Atom(AtomDelta::ModifyField {
         id: AtomId(0),
         change: AtomFieldChange::Charge { old: NumForm::Lit(0), new: NumForm::Lit(1) },
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::atom_modify_constraint(
     Delta::Atom(AtomDelta::ModifyConstraint { id: AtomId(0), old: None, new: None }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::atom_inline_constraint(
     Delta::Atom(AtomDelta::Add {
@@ -691,7 +688,7 @@ fn test_entity_span_canonicalize_level(
         attributes: AtomForm::from_element(Element::C)
             .with_constraint(AtomConstraintForm::valence(4)),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::bond_add(
     Delta::Bond(BondDelta::Add {
@@ -699,7 +696,7 @@ fn test_entity_span_canonicalize_level(
         atoms: [AtomId(0), AtomId(1)],
         attributes: BondForm::from_order(1),
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::bond_remove(
     Delta::Bond(BondDelta::Remove {
@@ -707,18 +704,18 @@ fn test_entity_span_canonicalize_level(
         atoms: [AtomId(0), AtomId(1)],
         attributes: BondForm::from_order(1),
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::bond_modify_field(
     Delta::Bond(BondDelta::ModifyField {
         id: BondId(0),
         change: BondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
     }),
-    CanonicalizeLevel::Topology,
+    DescriptionLevel::Topology,
 )]
 #[case::bond_modify_constraint(
     Delta::Bond(BondDelta::ModifyConstraint { id: BondId(0), old: None, new: None }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::bond_inline_constraint(
     Delta::Bond(BondDelta::Add {
@@ -727,7 +724,7 @@ fn test_entity_span_canonicalize_level(
         attributes: BondForm::from_order(1)
             .with_constraint(BondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::dative_add(
     Delta::DativeBond(DativeBondDelta::Add {
@@ -736,7 +733,7 @@ fn test_entity_span_canonicalize_level(
         acceptor: AtomId(1),
         attributes: DativeBondForm::from_order(1),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::dative_remove(
     Delta::DativeBond(DativeBondDelta::Remove {
@@ -745,14 +742,14 @@ fn test_entity_span_canonicalize_level(
         acceptor: AtomId(1),
         attributes: DativeBondForm::from_order(1),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::dative_modify_field(
     Delta::DativeBond(DativeBondDelta::ModifyField {
         id: DativeBondId(0),
         change: DativeBondFieldChange::Order { old: NumForm::Lit(1), new: NumForm::Lit(2) },
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::dative_modify_constraint(
     Delta::DativeBond(DativeBondDelta::ModifyConstraint {
@@ -760,7 +757,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::dative_inline_constraint(
     Delta::DativeBond(DativeBondDelta::Add {
@@ -770,7 +767,7 @@ fn test_entity_span_canonicalize_level(
         attributes: DativeBondForm::from_order(1)
             .with_constraint(DativeBondConstraintForm::Aromatic(BooleanForm::Lit(true))),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::aromatic_add(
     Delta::AromaticSystem(AromaticSystemDelta::Add {
@@ -778,7 +775,7 @@ fn test_entity_span_canonicalize_level(
         atoms: vec![AtomId(0), AtomId(1)],
         attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::aromatic_remove(
     Delta::AromaticSystem(AromaticSystemDelta::Remove {
@@ -786,7 +783,7 @@ fn test_entity_span_canonicalize_level(
         atoms: vec![AtomId(0), AtomId(1)],
         attributes: AromaticSystemForm::from_electrons(vec![1, 1]),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::aromatic_modify_field(
     Delta::AromaticSystem(AromaticSystemDelta::ModifyField {
@@ -796,7 +793,7 @@ fn test_entity_span_canonicalize_level(
             new: NumForm::Lit(1),
         },
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::aromatic_modify_constraint(
     Delta::AromaticSystem(AromaticSystemDelta::ModifyConstraint {
@@ -804,7 +801,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::aromatic_inline_constraint(
     Delta::AromaticSystem(AromaticSystemDelta::Add {
@@ -813,7 +810,7 @@ fn test_entity_span_canonicalize_level(
         attributes: AromaticSystemForm::from_electrons(vec![1, 1])
             .with_constraint(AromaticSystemConstraintForm::electron_count(2)),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::multicenter_add(
     Delta::MulticenterBond(MulticenterBondDelta::Add {
@@ -821,7 +818,7 @@ fn test_entity_span_canonicalize_level(
         atoms: vec![AtomId(0), AtomId(1)],
         attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::multicenter_remove(
     Delta::MulticenterBond(MulticenterBondDelta::Remove {
@@ -829,7 +826,7 @@ fn test_entity_span_canonicalize_level(
         atoms: vec![AtomId(0), AtomId(1)],
         attributes: MulticenterBondForm::from_electrons(vec![1, 1]),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::multicenter_modify_field(
     Delta::MulticenterBond(MulticenterBondDelta::ModifyField {
@@ -839,7 +836,7 @@ fn test_entity_span_canonicalize_level(
             new: NumForm::Lit(1),
         },
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::multicenter_modify_constraint(
     Delta::MulticenterBond(MulticenterBondDelta::ModifyConstraint {
@@ -847,7 +844,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::multicenter_inline_constraint(
     Delta::MulticenterBond(MulticenterBondDelta::Add {
@@ -856,7 +853,7 @@ fn test_entity_span_canonicalize_level(
         attributes: MulticenterBondForm::from_electrons(vec![1, 1])
             .with_constraint(MulticenterBondConstraintForm::electron_count(2)),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::noncovalent_add(
     Delta::NoncovalentBond(NoncovalentBondDelta::Add {
@@ -864,7 +861,7 @@ fn test_entity_span_canonicalize_level(
         atoms: [AtomId(0), AtomId(1)],
         attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::noncovalent_remove(
     Delta::NoncovalentBond(NoncovalentBondDelta::Remove {
@@ -872,7 +869,7 @@ fn test_entity_span_canonicalize_level(
         atoms: [AtomId(0), AtomId(1)],
         attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::noncovalent_modify_field(
     Delta::NoncovalentBond(NoncovalentBondDelta::ModifyField {
@@ -882,7 +879,7 @@ fn test_entity_span_canonicalize_level(
             new: NoncovalentBondKindForm::Lit(NoncovalentBondKind::Ionic),
         },
     }),
-    CanonicalizeLevel::Constitution,
+    DescriptionLevel::Constitution,
 )]
 #[case::noncovalent_modify_constraint(
     Delta::NoncovalentBond(NoncovalentBondDelta::ModifyConstraint {
@@ -890,7 +887,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::noncovalent_inline_constraint(
     Delta::NoncovalentBond(NoncovalentBondDelta::Add {
@@ -899,7 +896,7 @@ fn test_entity_span_canonicalize_level(
         attributes: NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond)
             .with_constraint(NoncovalentBondConstraintForm::intramolecular(true)),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::stereo_atom_add(
     Delta::StereoAtom(StereoAtomDelta::Add {
@@ -908,7 +905,7 @@ fn test_entity_span_canonicalize_level(
         ligands: vec![],
         attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_atom_remove(
     Delta::StereoAtom(StereoAtomDelta::Remove {
@@ -917,7 +914,7 @@ fn test_entity_span_canonicalize_level(
         ligands: vec![],
         attributes: StereoAtomForm::new(StereoKind::Tetrahedral, 0_u32),
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_atom_modify_field(
     Delta::StereoAtom(StereoAtomDelta::ModifyField {
@@ -927,7 +924,7 @@ fn test_entity_span_canonicalize_level(
             new: StereoConfigurationForm::kinded(StereoKind::Tetrahedral, 1_u32),
         },
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_atom_modify_constraint(
     Delta::StereoAtom(StereoAtomDelta::ModifyConstraint {
@@ -936,7 +933,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::stereo_atom_inline_constraint(
     Delta::StereoAtom(StereoAtomDelta::Add {
@@ -949,7 +946,7 @@ fn test_entity_span_canonicalize_level(
             )),
         ),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::stereo_bond_add(
     Delta::StereoBond(StereoBondDelta::Add {
@@ -958,7 +955,7 @@ fn test_entity_span_canonicalize_level(
         ligands: vec![],
         attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_bond_remove(
     Delta::StereoBond(StereoBondDelta::Remove {
@@ -967,7 +964,7 @@ fn test_entity_span_canonicalize_level(
         ligands: vec![],
         attributes: StereoBondForm::new(StereoKind::CisTrans, 0_u32),
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_bond_modify_field(
     Delta::StereoBond(StereoBondDelta::ModifyField {
@@ -977,7 +974,7 @@ fn test_entity_span_canonicalize_level(
             new: StereoConfigurationForm::kinded(StereoKind::CisTrans, 1_u32),
         },
     }),
-    CanonicalizeLevel::Structure,
+    DescriptionLevel::Structure,
 )]
 #[case::stereo_bond_modify_constraint(
     Delta::StereoBond(StereoBondDelta::ModifyConstraint {
@@ -986,7 +983,7 @@ fn test_entity_span_canonicalize_level(
         old: None,
         new: None,
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::stereo_bond_inline_constraint(
     Delta::StereoBond(StereoBondDelta::Add {
@@ -999,25 +996,25 @@ fn test_entity_span_canonicalize_level(
             )),
         ),
     }),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
 #[case::constraint(
     Delta::Constraint(ConstraintDelta::Add(Constraint::Molecule(
         MoleculeConstraint::Connected { atoms: None },
     ))),
-    CanonicalizeLevel::Full,
+    DescriptionLevel::Full,
 )]
-fn test_delta_canonicalize_level(#[case] delta: Delta, #[case] expected: CanonicalizeLevel) {
+fn test_delta_canonicalize_level(#[case] delta: Delta, #[case] expected: DescriptionLevel) {
     assert_eq!(delta_canonicalize_level(&delta), expected);
     assert_eq!(delta_canonicalize_level(&delta.inverse()), expected);
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
-fn test_molecule_canonicalize_level(#[case] expected: CanonicalizeLevel) {
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
+fn test_molecule_canonicalize_level(#[case] expected: DescriptionLevel) {
     let molecule = molecule_requiring_canonicalize_level(expected);
 
     assert_eq!(molecule_canonicalize_level(&molecule), expected);
@@ -1027,22 +1024,22 @@ fn test_molecule_canonicalize_level(#[case] expected: CanonicalizeLevel) {
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
-fn test_reaction_canonicalize_level(#[case] expected: CanonicalizeLevel) {
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
+fn test_reaction_canonicalize_level(#[case] expected: DescriptionLevel) {
     let reaction = reaction_requiring_canonicalize_level(expected);
 
     assert_eq!(reaction_canonicalize_level(&reaction), expected);
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
-fn test_reaction_span_canonicalize_level(#[case] expected: CanonicalizeLevel) {
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
+fn test_reaction_span_canonicalize_level(#[case] expected: DescriptionLevel) {
     let span = reaction_requiring_canonicalize_level(expected)
         .to_reaction_span()
         .expect("representative reaction materializes");
@@ -1066,13 +1063,13 @@ fn test_reaction_span_canonicalize_level_modified_rhs() {
 
     assert_eq!(
         reaction_span_canonicalize_level(&span),
-        CanonicalizeLevel::Full
+        DescriptionLevel::Full
     );
 }
 
-fn molecule_requiring_canonicalize_level(level: CanonicalizeLevel) -> Molecule {
+fn molecule_requiring_canonicalize_level(level: DescriptionLevel) -> Molecule {
     match level {
-        CanonicalizeLevel::Topology => Molecule::from_entries(MoleculeEntries {
+        DescriptionLevel::Topology => Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::O),
                 AtomForm::from_element(Element::C),
@@ -1080,7 +1077,7 @@ fn molecule_requiring_canonicalize_level(level: CanonicalizeLevel) -> Molecule {
             bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
             ..Default::default()
         }),
-        CanonicalizeLevel::Constitution => Molecule::from_entries(MoleculeEntries {
+        DescriptionLevel::Constitution => Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::N),
                 AtomForm::from_element(Element::B),
@@ -1088,7 +1085,7 @@ fn molecule_requiring_canonicalize_level(level: CanonicalizeLevel) -> Molecule {
             dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
             ..Default::default()
         }),
-        CanonicalizeLevel::Structure => Molecule::from_entries(MoleculeEntries {
+        DescriptionLevel::Structure => Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C),
                 AtomForm::from_element(Element::H),
@@ -1111,7 +1108,7 @@ fn molecule_requiring_canonicalize_level(level: CanonicalizeLevel) -> Molecule {
             )],
             ..Default::default()
         }),
-        CanonicalizeLevel::Full => Molecule::from_entries(MoleculeEntries {
+        DescriptionLevel::Full => Molecule::from_entries(MoleculeEntries {
             atoms: vec![
                 AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4)),
                 AtomForm::from_element(Element::C),
@@ -1121,9 +1118,9 @@ fn molecule_requiring_canonicalize_level(level: CanonicalizeLevel) -> Molecule {
     }
 }
 
-fn reaction_requiring_canonicalize_level(level: CanonicalizeLevel) -> Reaction {
+fn reaction_requiring_canonicalize_level(level: DescriptionLevel) -> Reaction {
     match level {
-        CanonicalizeLevel::Topology => Reaction::new(
+        DescriptionLevel::Topology => Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C).with_charge(0_i64),
@@ -1141,7 +1138,7 @@ fn reaction_requiring_canonicalize_level(level: CanonicalizeLevel) -> Reaction {
             .into_iter()
             .collect(),
         ),
-        CanonicalizeLevel::Constitution => Reaction::new(
+        DescriptionLevel::Constitution => Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::O),
@@ -1157,7 +1154,7 @@ fn reaction_requiring_canonicalize_level(level: CanonicalizeLevel) -> Reaction {
             .into_iter()
             .collect(),
         ),
-        CanonicalizeLevel::Structure => Reaction::new(
+        DescriptionLevel::Structure => Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![
                     AtomForm::from_element(Element::C),
@@ -1185,7 +1182,7 @@ fn reaction_requiring_canonicalize_level(level: CanonicalizeLevel) -> Reaction {
             .into_iter()
             .collect(),
         ),
-        CanonicalizeLevel::Full => Reaction::new(
+        DescriptionLevel::Full => Reaction::new(
             Molecule::from_entries(MoleculeEntries {
                 atoms: vec![AtomForm::from_element(Element::C)],
                 ..Default::default()
@@ -1200,13 +1197,13 @@ fn reaction_requiring_canonicalize_level(level: CanonicalizeLevel) -> Reaction {
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_molecule_canonicalize_by_effective(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let source = molecule_requiring_canonicalize_level(level);
     let forced_full = canonicalize_full(&source, &canonicalize_context)
@@ -1234,13 +1231,13 @@ fn test_molecule_canonicalize_by_effective(
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_reaction_canonicalize_by_effective(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let source = reaction_requiring_canonicalize_level(level);
     let forced_full =
@@ -1273,13 +1270,13 @@ fn test_reaction_canonicalize_by_effective(
 }
 
 #[rstest]
-#[case::topology(CanonicalizeLevel::Topology)]
-#[case::constitution(CanonicalizeLevel::Constitution)]
-#[case::structure(CanonicalizeLevel::Structure)]
-#[case::full(CanonicalizeLevel::Full)]
+#[case::topology(DescriptionLevel::Topology)]
+#[case::constitution(DescriptionLevel::Constitution)]
+#[case::structure(DescriptionLevel::Structure)]
+#[case::full(DescriptionLevel::Full)]
 fn test_reaction_span_canonicalize_by_effective(
     canonicalize_context: CanonicalizeContext,
-    #[case] level: CanonicalizeLevel,
+    #[case] level: DescriptionLevel,
 ) {
     let source = reaction_requiring_canonicalize_level(level)
         .to_reaction_span()
@@ -1329,11 +1326,11 @@ fn test_molecule_canonical_eq_uses_greater_effective_level(
 
     assert_eq!(
         molecule_canonicalize_level(&plain),
-        CanonicalizeLevel::Topology
+        DescriptionLevel::Topology
     );
     assert_eq!(
         molecule_canonicalize_level(&constrained),
-        CanonicalizeLevel::Full
+        DescriptionLevel::Full
     );
     assert!(plain.canonical_eq(&constrained, &canonicalize_context));
     assert!(constrained.canonical_eq(&plain, &canonicalize_context));
@@ -1354,11 +1351,11 @@ fn test_reaction_canonical_eq_uses_greater_effective_level(
 
     assert_eq!(
         reaction_canonicalize_level(&plain),
-        CanonicalizeLevel::Topology
+        DescriptionLevel::Topology
     );
     assert_eq!(
         reaction_canonicalize_level(&constrained),
-        CanonicalizeLevel::Full
+        DescriptionLevel::Full
     );
     assert!(plain.canonical_eq(&constrained, &canonicalize_context));
     assert!(constrained.canonical_eq(&plain, &canonicalize_context));
@@ -1383,11 +1380,11 @@ fn test_reaction_span_canonical_eq_uses_greater_effective_level(
 
     assert_eq!(
         reaction_span_canonicalize_level(&plain),
-        CanonicalizeLevel::Topology
+        DescriptionLevel::Topology
     );
     assert_eq!(
         reaction_span_canonicalize_level(&constrained),
-        CanonicalizeLevel::Full
+        DescriptionLevel::Full
     );
     assert!(plain.canonical_eq(&constrained, &canonicalize_context));
     assert!(constrained.canonical_eq(&plain, &canonicalize_context));
@@ -1798,7 +1795,7 @@ fn test_molecule_canonicalize(canonicalize_context: CanonicalizeContext) {
  :bonds [[6 7 "3#c0#u0#s"]]}
 "#
 )]
-fn test_molecule_canonicalize_retained(
+fn test_canonicalize_molecule_by_effective_regression(
     canonicalize_context: CanonicalizeContext,
     #[case] source: &str,
 ) {
@@ -1811,9 +1808,7 @@ fn test_molecule_canonicalize_retained(
         DescriptionLevel::Structure,
         DescriptionLevel::Full,
     ] {
-        let canonical = source
-            .clone()
-            .canonicalize_by(level, &canonicalize_context)
+        let canonical = canonicalize_molecule_by_effective(&source, level, &canonicalize_context)
             .expect("retained molecule canonicalizes");
 
         assert_eq!(canonical, expected);
@@ -1879,37 +1874,6 @@ fn test_molecule_canonicalize_contradiction(canonicalize_context: CanonicalizeCo
         molecule.canonicalize(&canonicalize_context),
         Err(MoleculeCanonicalizeError::Contradiction(Contradiction)),
     );
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_molecule_canonicalize_by(
-    initial_class_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
-) {
-    let canonical = initial_class_molecule
-        .clone()
-        .canonicalize_by(level, &canonicalize_context)
-        .expect("fixed molecule canonicalizes at every level");
-
-    assert_eq!(
-        canonical
-            .clone()
-            .canonicalize_by(level, &canonicalize_context),
-        Ok(canonical),
-    );
-    if level == DescriptionLevel::Full {
-        assert_eq!(
-            initial_class_molecule
-                .clone()
-                .canonicalize_by(level, &canonicalize_context),
-            initial_class_molecule.canonicalize(&canonicalize_context),
-        );
-    }
 }
 
 #[rstest]
@@ -1981,27 +1945,7 @@ fn test_molecule_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
 }
 
 #[rstest]
-fn test_molecule_canonical_eq_by_topology(canonicalize_context: CanonicalizeContext) {
-    let left = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        ..Default::default()
-    });
-    let right = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        dative: vec![(vec![AtomId(0)], AtomId(1), DativeBondForm::from_order(1))],
-        ..Default::default()
-    });
-
-    assert!(left.canonical_eq_by(&right, DescriptionLevel::Topology, &canonicalize_context,));
-    assert!(!left.canonical_eq_by(
-        &right,
-        DescriptionLevel::Constitution,
-        &canonicalize_context,
-    ));
-}
-
-#[rstest]
-fn test_molecule_canonical_hash_by_topology(canonicalize_context: CanonicalizeContext) {
+fn test_canonical_key_by_topology(canonicalize_context: CanonicalizeContext) {
     let left = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C); 2],
         ..Default::default()
@@ -2013,44 +1957,21 @@ fn test_molecule_canonical_hash_by_topology(canonicalize_context: CanonicalizeCo
     });
 
     assert_eq!(
-        left.canonical_hash_by(DescriptionLevel::Topology, &canonicalize_context),
-        right.canonical_hash_by(DescriptionLevel::Topology, &canonicalize_context),
+        canonical_key_by(&left, DescriptionLevel::Topology, &canonicalize_context),
+        canonical_key_by(&right, DescriptionLevel::Topology, &canonicalize_context),
+    );
+    assert_ne!(
+        canonical_key_by(&left, DescriptionLevel::Constitution, &canonicalize_context,),
+        canonical_key_by(
+            &right,
+            DescriptionLevel::Constitution,
+            &canonicalize_context,
+        ),
     );
 }
 
 #[rstest]
-fn test_molecule_canonical_eq_by_constitution(
-    stereo_atom_canonicalization_molecule: Molecule,
-    canonicalize_context: CanonicalizeContext,
-) {
-    let constitution = Molecule::from_entries(MoleculeEntries {
-        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
-            .into_iter()
-            .map(AtomForm::from_element)
-            .collect(),
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-            (AtomId(0), AtomId(3), BondForm::from_order(1)),
-            (AtomId(0), AtomId(4), BondForm::from_order(1)),
-        ],
-        ..Default::default()
-    });
-
-    assert!(constitution.canonical_eq_by(
-        &stereo_atom_canonicalization_molecule,
-        DescriptionLevel::Constitution,
-        &canonicalize_context,
-    ));
-    assert!(!constitution.canonical_eq_by(
-        &stereo_atom_canonicalization_molecule,
-        DescriptionLevel::Structure,
-        &canonicalize_context,
-    ));
-}
-
-#[rstest]
-fn test_molecule_canonical_hash_by_constitution(
+fn test_canonical_key_by_constitution(
     stereo_atom_canonicalization_molecule: Molecule,
     canonicalize_context: CanonicalizeContext,
 ) {
@@ -2069,39 +1990,33 @@ fn test_molecule_canonical_hash_by_constitution(
     });
 
     assert_eq!(
-        constitution.canonical_hash_by(DescriptionLevel::Constitution, &canonicalize_context),
-        stereo_atom_canonicalization_molecule
-            .canonical_hash_by(DescriptionLevel::Constitution, &canonicalize_context),
+        canonical_key_by(
+            &constitution,
+            DescriptionLevel::Constitution,
+            &canonicalize_context,
+        ),
+        canonical_key_by(
+            &stereo_atom_canonicalization_molecule,
+            DescriptionLevel::Constitution,
+            &canonicalize_context,
+        ),
+    );
+    assert_ne!(
+        canonical_key_by(
+            &constitution,
+            DescriptionLevel::Structure,
+            &canonicalize_context,
+        ),
+        canonical_key_by(
+            &stereo_atom_canonicalization_molecule,
+            DescriptionLevel::Structure,
+            &canonicalize_context,
+        ),
     );
 }
 
 #[rstest]
-fn test_molecule_canonical_eq_by_structure(canonicalize_context: CanonicalizeContext) {
-    let plain = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-    let constrained = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C).with_constraint(AtomConstraintForm::valence(4))
-        ],
-        ..Default::default()
-    });
-
-    assert!(plain.canonical_eq_by(
-        &constrained,
-        DescriptionLevel::Structure,
-        &canonicalize_context,
-    ));
-    assert!(!plain.canonical_eq_by(&constrained, DescriptionLevel::Full, &canonicalize_context,));
-    assert_eq!(
-        plain.canonical_eq_by(&constrained, DescriptionLevel::Full, &canonicalize_context,),
-        plain.canonical_eq(&constrained, &canonicalize_context),
-    );
-}
-
-#[rstest]
-fn test_molecule_canonical_hash_by_structure(canonicalize_context: CanonicalizeContext) {
+fn test_canonical_key_by_structure(canonicalize_context: CanonicalizeContext) {
     let plain = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
         ..Default::default()
@@ -2114,8 +2029,16 @@ fn test_molecule_canonical_hash_by_structure(canonicalize_context: CanonicalizeC
     });
 
     assert_eq!(
-        plain.canonical_hash_by(DescriptionLevel::Structure, &canonicalize_context),
-        constrained.canonical_hash_by(DescriptionLevel::Structure, &canonicalize_context),
+        canonical_key_by(&plain, DescriptionLevel::Structure, &canonicalize_context),
+        canonical_key_by(
+            &constrained,
+            DescriptionLevel::Structure,
+            &canonicalize_context,
+        ),
+    );
+    assert_ne!(
+        canonical_key_by(&plain, DescriptionLevel::Full, &canonicalize_context),
+        canonical_key_by(&constrained, DescriptionLevel::Full, &canonicalize_context,),
     );
 }
 
@@ -2136,32 +2059,6 @@ fn reaction_canonicalization_fixture() -> Reaction {
         .into_iter()
         .collect(),
     )
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-#[case::full(DescriptionLevel::Full)]
-fn test_reaction_canonicalize_by(
-    canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
-) {
-    let source = reaction_canonicalization_fixture();
-    let expected = source
-        .to_reaction_span()
-        .expect("fixed reaction materializes")
-        .canonicalize_by(level, &canonicalize_context)
-        .expect("fixed span canonicalizes")
-        .to_reaction();
-
-    assert_eq!(
-        source.clone().canonicalize_by(level, &canonicalize_context),
-        Ok(expected.clone()),
-    );
-    if level == DescriptionLevel::Full {
-        assert_eq!(source.canonicalize(&canonicalize_context), Ok(expected),);
-    }
 }
 
 #[rstest]
@@ -2198,64 +2095,6 @@ fn test_reaction_canonical_eq(canonicalize_context: CanonicalizeContext) {
         .expect("fixed reaction canonicalizes");
 
     assert!(source.canonical_eq(&canonical, &canonicalize_context));
-    assert_eq!(
-        source.canonical_eq_by(&canonical, DescriptionLevel::Full, &canonicalize_context,),
-        source.canonical_eq(&canonical, &canonicalize_context),
-    );
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-fn test_reaction_canonical_eq_by(
-    canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
-) {
-    let lhs = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-    let identity = Reaction::new(lhs.clone(), Deltas::new());
-    let excluded_contradiction = Reaction::new(
-        lhs,
-        [Delta::Constraint(ConstraintDelta::Remove(
-            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
-        ))]
-        .into_iter()
-        .collect(),
-    );
-
-    assert!(excluded_contradiction.canonical_eq_by(&identity, level, &canonicalize_context,));
-    assert!(!excluded_contradiction.canonical_eq(&identity, &canonicalize_context));
-}
-
-#[rstest]
-#[case::topology(DescriptionLevel::Topology)]
-#[case::constitution(DescriptionLevel::Constitution)]
-#[case::structure(DescriptionLevel::Structure)]
-fn test_reaction_canonical_hash_by(
-    canonicalize_context: CanonicalizeContext,
-    #[case] level: DescriptionLevel,
-) {
-    let lhs = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-    let identity = Reaction::new(lhs.clone(), Deltas::new());
-    let excluded_contradiction = Reaction::new(
-        lhs,
-        [Delta::Constraint(ConstraintDelta::Remove(
-            Constraint::Molecule(MoleculeConstraint::Connected { atoms: None }),
-        ))]
-        .into_iter()
-        .collect(),
-    );
-
-    assert_eq!(
-        excluded_contradiction.canonical_hash_by(level, &canonicalize_context),
-        identity.canonical_hash_by(level, &canonicalize_context),
-    );
 }
 
 #[rstest]
@@ -2282,23 +2121,6 @@ fn test_reaction_canonical_eq_contradiction(canonicalize_context: CanonicalizeCo
     let right_contradiction = contradiction(3);
 
     assert!(left_contradiction.canonical_eq(&right_contradiction, &canonicalize_context));
-}
-
-#[rstest]
-fn test_molecule_canonical_eq_by_contradiction(canonicalize_context: CanonicalizeContext) {
-    let mut left = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-    left.atom_mut(AtomId(0)).attributes.constraints =
-        AtomConstraintForm::Valence(NumForm::lit_set(Vec::<i64>::new())).into();
-    let right = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C)],
-        ..Default::default()
-    });
-
-    assert!(left.canonical_eq_by(&right, DescriptionLevel::Structure, &canonicalize_context,));
-    assert!(!left.canonical_eq(&right, &canonicalize_context));
 }
 
 #[rstest]
