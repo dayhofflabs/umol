@@ -514,13 +514,13 @@ are excluded here and enter through the constraint section.
 | Stereo atom | site, ligand frame, configuration |
 | Stereo bond | site, ligand frame, configuration |
 
-Canonical-search initial classes retain these listed field positions even when participant data
+Canonical-search initial colors retain these listed field positions even when participant data
 is represented by incidence occurrences. Omitted participant-bearing fields are not renumbered: for
 example, a bond node uses positions 1 through 3 for order, charge, and unpaired electrons, while its
-endpoint pair is represented by two incidences. Entity-node classes contain only normalized,
+endpoint pair is represented by two incidences. Entity-node colors contain only normalized,
 constraint-free, frame-independent values. Aromatic and multicenter participant electron counts and
 stereo ligand kinds occur on their corresponding incidences; raw stereo configurations do not enter
-the initial node classes.
+the initial node colors.
 
 Typed incidences use the following order:
 
@@ -536,7 +536,7 @@ Typed incidences use the following order:
 | 7 | Stereo ligand, followed by its ligand kind |
 
 The public `Incidence` total order follows this table and agrees with the typed canonical key for
-normalized incidence values. Entity-node and incidence classes occupy disjoint key domains.
+normalized incidence values. Entity-node and incidence colors occupy disjoint key domains.
 
 Endpoint pairs and unordered participant sets are in their normalized participant order. Dative
 donors are ordered independently of the acceptor. A stereo ligand is the product `(atom id, ligand

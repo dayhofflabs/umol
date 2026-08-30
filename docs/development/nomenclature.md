@@ -318,6 +318,10 @@ series, its typed order and canonical representatives may change between release
 is therefore not a persistent identifier unless a future API supplies an explicitly versioned
 canonicalization profile.
 
+Automorphism **colors** are opaque equality labels supplied to the graph algorithm. Canonicalization
+uses `Color` in code for these labels and the normalized keys ranked into them. They are distinct
+from the cells or equivalence classes of a refined partition and from a stereo class.
+
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.

@@ -558,7 +558,7 @@ is now `45.994-93.659 us`, compared with the pre-dispatch full-search range of `
 
 ### S4 — Restore sound orbit pruning at structure level
 
-#### S4a — Preserve the backend occurrence-node action
+#### S4a — Preserve the backend occurrence-node action **Done**
 
 **Module:** the graph-IR automorphism adapter and canonicalization search internals.
 
@@ -572,6 +572,19 @@ This is an additive internal representation change with no public API change.
 **Tests and evidence:** Add adapter tests containing direct bonds, subdivided edge occurrences,
 stereo-atom ligand occurrences, and stereo-bond endpoint occurrences. Assert that projection agrees
 with the current source action while the retained action covers every occurrence node.
+
+`AutomorphismAdapterOutput` now keeps the source-domain projections as `source_orbits`,
+`source_canonical_labels`, and `source_generators`, and retains the backend permutations over the
+complete adapter graph as `adapter_generators`. Existing branch ordering and orbit pruning continue
+to consume only the source-domain fields. Graph-core already returns every generator image over
+its complete node domain, so no graph-core API change was required.
+
+The adapter table covers a direct bond with no occurrence nodes, a dative bond with subdivided
+donor and acceptor edges, a stereo atom with its site and four ligand occurrences, and a stereo bond
+whose site is the bond entity and whose four ligand occurrences are attached to the endpoint
+substituents. For every non-trivial case, each source generator equals the source-node prefix of its
+adapter generator, each adapter generator is a permutation of every adapter node, occurrence nodes
+remain in their exact incidence color, and at least one generator moves an occurrence node.
 
 **Depends on:** S0b and S3b.
 

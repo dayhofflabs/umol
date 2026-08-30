@@ -1700,7 +1700,7 @@ fn incidence_key(incidence: &Incidence) -> Result<CanonicalKeyValue, Contradicti
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum InitialClassKey {
+enum InitialColorKey {
     Entity {
         position: EntityBlockPosition,
         value: CanonicalKeyValue,
@@ -1708,7 +1708,7 @@ enum InitialClassKey {
     Incidence(CanonicalKeyValue),
 }
 
-impl Ord for InitialClassKey {
+impl Ord for InitialColorKey {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (
@@ -1730,55 +1730,60 @@ impl Ord for InitialClassKey {
     }
 }
 
-impl PartialOrd for InitialClassKey {
+impl PartialOrd for InitialColorKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct InitialClasses {
+struct InitialColors {
     entities: Vec<u32>,
     incidences: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum AutomorphismClass {
+enum AutomorphismColor {
     Entity(u32),
     Incidence(u32),
 }
 
+/// Colored simple-graph encoding of an incidence graph for automorphism operations.
+///
+/// Source entity nodes keep their ids. Role- or value-bearing incidence edges are represented by
+/// colored occurrence nodes; single-role endpoints remain direct unless parallel incidences require
+/// subdivision.
 #[derive(Clone, Debug)]
 struct AutomorphismAdapter {
-    // Source entity nodes retain their ids. Role- or value-bearing incidence edges become colored
-    // occurrence nodes; single-role endpoints remain direct unless duplicates require subdivision.
     graph: Graph,
-    classes: Vec<AutomorphismClass>,
+    colors: Vec<AutomorphismColor>,
     node_sources: Vec<SubdivisionNodeSource>,
     incidence_nodes: Vec<Option<NodeId>>,
     source_node_count: usize,
 }
 
+/// Automorphism data over both the source-entity and complete adapter-node domains.
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ProjectedAutomorphismOutput {
-    orbits: Vec<NodeId>,
-    // Backend canonical labels are branch-order hints, not the canonical molecule numbering.
-    canonical_labels: Vec<NodeId>,
-    generators: Vec<Vec<NodeId>>,
+struct AutomorphismAdapterOutput {
+    source_orbits: Vec<NodeId>,
+    /// Source entity nodes in backend canonical-label order, used only to order search branches.
+    source_canonical_labels: Vec<NodeId>,
+    source_generators: Vec<Vec<NodeId>>,
+    adapter_generators: Vec<Vec<NodeId>>,
 }
 
 impl AutomorphismAdapter {
     /// Construct the exact graph adapter used by canonicalization.
-    fn new(incidence_graph: &IncidenceGraph, initial_classes: &InitialClasses) -> Self {
+    fn new(incidence_graph: &IncidenceGraph, initial_colors: &InitialColors) -> Self {
         let source = incidence_graph.graph();
-        debug_assert_eq!(initial_classes.entities.len(), source.node_count());
-        debug_assert_eq!(initial_classes.incidences.len(), source.edge_count());
+        debug_assert_eq!(initial_colors.entities.len(), source.node_count());
+        debug_assert_eq!(initial_colors.incidences.len(), source.edge_count());
 
-        let mut classes = initial_classes
+        let mut colors = initial_colors
             .entities
             .iter()
             .copied()
-            .map(AutomorphismClass::Entity)
+            .map(AutomorphismColor::Entity)
             .collect::<Vec<_>>();
         let mut node_sources = source
             .node_ids()
@@ -1817,8 +1822,8 @@ impl AutomorphismAdapter {
             let occurrence = NodeId(node_sources.len() as u32);
             node_sources.push(SubdivisionNodeSource::Edge(edge));
             incidence_nodes[edge.index()] = Some(occurrence);
-            classes.push(AutomorphismClass::Incidence(
-                initial_classes.incidences[edge.index()],
+            colors.push(AutomorphismColor::Incidence(
+                initial_colors.incidences[edge.index()],
             ));
             push_edge([endpoints[0], occurrence]);
             push_edge([occurrence, endpoints[1]]);
@@ -1828,7 +1833,7 @@ impl AutomorphismAdapter {
 
         Self {
             graph,
-            classes,
+            colors,
             node_sources,
             incidence_nodes,
             source_node_count: source.node_count(),
@@ -1839,8 +1844,8 @@ impl AutomorphismAdapter {
         &self.graph
     }
 
-    fn class(&self, node: NodeId) -> AutomorphismClass {
-        self.classes[node.index()]
+    fn color(&self, node: NodeId) -> AutomorphismColor {
+        self.colors[node.index()]
     }
 
     fn node_source(&self, node: NodeId) -> SubdivisionNodeSource {
@@ -1858,29 +1863,29 @@ impl AutomorphismAdapter {
         &self,
         partition: &OrderedPartition,
         algorithm: AutomorphismAlgorithm,
-    ) -> ProjectedAutomorphismOutput {
+    ) -> AutomorphismAdapterOutput {
         let cell_indices = partition.cell_indices(self.graph().node_count());
         // Search partitions may deliberately coarsen covariant occurrence data. Retaining the
-        // exact adapter class here keeps orbit pruning restricted to true automorphisms.
+        // exact adapter color here keeps orbit pruning restricted to true automorphisms.
         let output = self.graph().automorphisms(
-            |node| (self.class(node), cell_indices[node.index()]),
+            |node| (self.color(node), cell_indices[node.index()]),
             algorithm,
         );
 
         self.project_automorphisms(&output)
     }
 
-    fn project_automorphisms(&self, output: &AutomorphismOutput) -> ProjectedAutomorphismOutput {
+    fn project_automorphisms(&self, output: &AutomorphismOutput) -> AutomorphismAdapterOutput {
         let source_node = |node| match self.node_source(node) {
             SubdivisionNodeSource::Node(source) => source,
             SubdivisionNodeSource::Edge(_) => {
-                unreachable!("disjoint classes preserve the adapter node domain")
+                unreachable!("disjoint colors preserve the adapter node domain")
             }
         };
-        let orbits = (0..self.source_node_count)
+        let source_orbits = (0..self.source_node_count)
             .map(|index| source_node(output.orbit_of(NodeId(index as u32))))
             .collect();
-        let canonical_labels = output
+        let source_canonical_labels = output
             .canonical_labels()
             .iter()
             .filter_map(|&node| match self.node_source(node) {
@@ -1888,7 +1893,7 @@ impl AutomorphismAdapter {
                 SubdivisionNodeSource::Edge(_) => None,
             })
             .collect();
-        let generators = output
+        let source_generators = output
             .generators()
             .iter()
             .map(|generator| {
@@ -1899,11 +1904,13 @@ impl AutomorphismAdapter {
                     .collect()
             })
             .collect();
+        let adapter_generators = output.generators().to_vec();
 
-        ProjectedAutomorphismOutput {
-            orbits,
-            canonical_labels,
-            generators,
+        AutomorphismAdapterOutput {
+            source_orbits,
+            source_canonical_labels,
+            source_generators,
+            adapter_generators,
         }
     }
 }
@@ -2008,7 +2015,7 @@ type BranchOrdering = fn(
     &AutomorphismAdapter,
     &OrderedPartition,
     AutomorphismAlgorithm,
-    Option<&ProjectedAutomorphismOutput>,
+    Option<&AutomorphismAdapterOutput>,
     &mut [NodeId],
 ) -> bool;
 
@@ -2016,7 +2023,7 @@ fn backend_canonical_branch_order(
     adapter: &AutomorphismAdapter,
     partition: &OrderedPartition,
     algorithm: AutomorphismAlgorithm,
-    automorphisms: Option<&ProjectedAutomorphismOutput>,
+    automorphisms: Option<&AutomorphismAdapterOutput>,
     candidates: &mut [NodeId],
 ) -> bool {
     let backend_called = automorphisms.is_none();
@@ -2024,9 +2031,9 @@ fn backend_canonical_branch_order(
         || {
             adapter
                 .automorphisms_for_partition(partition, algorithm)
-                .canonical_labels
+                .source_canonical_labels
         },
-        |output| output.canonical_labels.clone(),
+        |output| output.source_canonical_labels.clone(),
     );
     let mut ranks = vec![0; adapter.source_node_count];
     for (rank, node) in labels.iter().enumerate() {
@@ -2173,7 +2180,7 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
         let orbits = &automorphisms
             .as_ref()
             .expect("automorphisms requested for orbit pruning")
-            .orbits;
+            .source_orbits;
         let mut representatives = BTreeMap::<NodeId, NodeId>::new();
         for candidate in candidates {
             representatives
@@ -2213,19 +2220,19 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
     }
 }
 
-/// Construct the normalized entity and incidence keys used for initial classes.
-fn initial_class_keys(
+/// Construct the normalized entity and incidence keys used for initial colors.
+fn initial_color_keys(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
-) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
+) -> Result<(Vec<InitialColorKey>, Vec<InitialColorKey>), Contradiction> {
     let entity_keys = incidence_graph
         .graph()
         .node_ids()
-        .map(|node| entity_class_key(molecule, incidence_graph.entity(node)))
+        .map(|node| entity_color_key(molecule, incidence_graph.entity(node)))
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
+        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((entity_keys, incidence_keys))
@@ -2234,9 +2241,9 @@ fn initial_class_keys(
 /// Construct topology-level partition descriptors for the exact adapter.
 fn partition_descriptors(
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
-    incidence_keys: &[InitialClassKey],
-) -> Vec<InitialClassKey> {
+    entity_keys: &[InitialColorKey],
+    incidence_keys: &[InitialColorKey],
+) -> Vec<InitialColorKey> {
     adapter
         .node_sources
         .iter()
@@ -2255,9 +2262,9 @@ fn partition_descriptors(
 /// Construct constitution-level partition descriptors for the exact adapter.
 fn constitution_partition_descriptors(
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     incidence_graph: &IncidenceGraph,
-) -> Vec<InitialClassKey> {
+) -> Vec<InitialColorKey> {
     adapter
         .node_sources
         .iter()
@@ -2272,9 +2279,9 @@ fn constitution_partition_descriptors(
                     Incidence::MulticenterParticipant(_)
                     | Incidence::MulticenterParticipantSpan(_) => variant(4, []),
                     incidence => incidence_key(incidence)
-                        .expect("initial classes established incidence normalization"),
+                        .expect("initial colors established incidence normalization"),
                 };
-                InitialClassKey::Incidence(value)
+                InitialColorKey::Incidence(value)
             }
         })
         .collect()
@@ -2282,9 +2289,9 @@ fn constitution_partition_descriptors(
 
 fn constitution_entity_classes(molecule: &Molecule) -> Result<Vec<u32>, Contradiction> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let partition = OrderedPartition::from_descriptors(&descriptors).refine(adapter.graph());
     let classes = partition.cell_indices(adapter.graph().node_count());
@@ -2342,9 +2349,9 @@ fn structure_partition_descriptors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     entity_classes: &[u32],
-) -> Result<Vec<InitialClassKey>, Contradiction> {
+) -> Result<Vec<InitialColorKey>, Contradiction> {
     let entity_class = |entity: Entity| entity_classes[incidence_graph.node_of(entity).index()];
 
     adapter
@@ -2353,7 +2360,7 @@ fn structure_partition_descriptors(
         .map(|source| match *source {
             SubdivisionNodeSource::Node(node) => {
                 let entity = incidence_graph.entity(node);
-                let InitialClassKey::Entity { position, .. } = entity_keys[node.index()] else {
+                let InitialColorKey::Entity { position, .. } = entity_keys[node.index()] else {
                     unreachable!("entity key corresponds to an entity node")
                 };
                 let value = match entity {
@@ -2393,7 +2400,7 @@ fn structure_partition_descriptors(
                     }
                     _ => product([CanonicalKeyValue::Unsigned(entity_class(entity).into())]),
                 };
-                Ok(InitialClassKey::Entity { position, value })
+                Ok(InitialColorKey::Entity { position, value })
             }
             SubdivisionNodeSource::Edge(edge) => {
                 let value = match incidence_graph.incidence(edge) {
@@ -2402,7 +2409,7 @@ fn structure_partition_descriptors(
                     Incidence::MulticenterParticipant(_) => variant(4, []),
                     incidence => incidence_key(incidence)?,
                 };
-                Ok(InitialClassKey::Incidence(value))
+                Ok(InitialColorKey::Incidence(value))
             }
         })
         .collect()
@@ -2482,7 +2489,7 @@ fn structure_partition(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
     adapter: &AutomorphismAdapter,
-    entity_keys: &[InitialClassKey],
+    entity_keys: &[InitialColorKey],
     para_stereo: bool,
 ) -> Result<(OrderedPartition, usize), Contradiction> {
     let constitution_classes = constitution_entity_classes(molecule)?;
@@ -2531,25 +2538,25 @@ fn structure_partition(
     }
 }
 
-/// Assign dense ordered classes to normalized entity and incidence keys.
-fn rank_initial_classes(
-    entity_keys: &[InitialClassKey],
-    incidence_keys: &[InitialClassKey],
-) -> InitialClasses {
+/// Assign dense ordered colors to normalized entity and incidence keys.
+fn rank_initial_colors(
+    entity_keys: &[InitialColorKey],
+    incidence_keys: &[InitialColorKey],
+) -> InitialColors {
     let keys = entity_keys
         .iter()
         .chain(incidence_keys.iter())
         .cloned()
         .collect::<BTreeSet<_>>();
-    let classes = keys
+    let colors = keys
         .into_iter()
         .enumerate()
-        .map(|(class, key)| (key, class as u32))
+        .map(|(color, key)| (key, color as u32))
         .collect::<BTreeMap<_, _>>();
 
-    InitialClasses {
-        entities: entity_keys.iter().map(|key| classes[key]).collect(),
-        incidences: incidence_keys.iter().map(|key| classes[key]).collect(),
+    InitialColors {
+        entities: entity_keys.iter().map(|key| colors[key]).collect(),
+        incidences: incidence_keys.iter().map(|key| colors[key]).collect(),
     }
 }
 
@@ -2590,7 +2597,7 @@ fn bond_inherent_fields(attributes: &BondForm) -> Result<Vec<FieldKey>, Contradi
     ])
 }
 
-fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassKey, Contradiction> {
+fn entity_color_key(molecule: &Molecule, entity: Entity) -> Result<InitialColorKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => {
             let attributes = molecule.atom(id).attributes;
@@ -2699,13 +2706,13 @@ fn entity_class_key(molecule: &Molecule, entity: Entity) -> Result<InitialClassK
         }
     };
 
-    Ok(InitialClassKey::Entity { position, value })
+    Ok(InitialColorKey::Entity { position, value })
 }
 
-fn reaction_span_entity_class_key(
+fn reaction_span_entity_color_key(
     span: &ReactionSpan,
     entity: Entity,
-) -> Result<InitialClassKey, Contradiction> {
+) -> Result<InitialColorKey, Contradiction> {
     let (position, value) = match entity {
         Entity::Atom(id) => (
             EntityBlockPosition::ATOM,
@@ -2788,7 +2795,7 @@ fn reaction_span_entity_class_key(
             })?,
         ),
     };
-    Ok(InitialClassKey::Entity { position, value })
+    Ok(InitialColorKey::Entity { position, value })
 }
 
 fn topology_candidate(
@@ -3471,13 +3478,13 @@ fn canonicalize_topology_with_options(
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
     let leaf_candidate = |order: &[NodeId]| {
         topology_candidate(molecule, &incidence_graph, order)
-            .expect("initial classes established topology normalization")
+            .expect("initial colors established topology normalization")
     };
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let selected = canonical_search(
@@ -3518,13 +3525,13 @@ fn canonicalize_constitution_with_options(
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Constitution);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
     let leaf_candidate = |order: &[NodeId]| {
         constitution_candidate(molecule, &incidence_graph, order)
-            .expect("initial classes established constitution normalization")
+            .expect("initial colors established constitution normalization")
     };
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let selected = canonical_search(
@@ -3570,9 +3577,9 @@ fn canonicalize_structure_with_options(
     // each refined cell until orbit representatives carry that covariant action as well.
     options.automorphism_pruning = false;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -3626,9 +3633,9 @@ fn canonicalize_full_with_options(
     let normalized = molecule.clone().normalize()?;
     let molecule = &normalized;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -3677,9 +3684,9 @@ fn canonical_key_by(
         DescriptionLevel::Full => unreachable!("handled before incidence construction"),
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let options = CanonicalSearchOptions {
         automorphism_pruning: level != DescriptionLevel::Structure,
@@ -3692,7 +3699,7 @@ fn canonical_key_by(
             let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
-                    .expect("initial classes established topology normalization")
+                    .expect("initial colors established topology normalization")
             };
             canonical_search(
                 &adapter,
@@ -3710,7 +3717,7 @@ fn canonical_key_by(
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
             let leaf_candidate = |order: &[NodeId]| {
                 constitution_candidate(molecule, &incidence_graph, order)
-                    .expect("initial classes established constitution normalization")
+                    .expect("initial colors established constitution normalization")
             };
             canonical_search(
                 &adapter,
@@ -3757,9 +3764,9 @@ fn canonical_key_by_full(
     context: &CanonicalizeContext,
 ) -> Result<CanonicalComparisonKey, MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_class_keys(molecule, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let (partition, _) = structure_partition(
         molecule,
         &incidence_graph,
@@ -3793,15 +3800,15 @@ fn canonical_key_by_full(
 fn reaction_span_entity_keys(
     span: &ReactionSpan,
     incidence_graph: &IncidenceGraph,
-) -> Result<(Vec<InitialClassKey>, Vec<InitialClassKey>), Contradiction> {
+) -> Result<(Vec<InitialColorKey>, Vec<InitialColorKey>), Contradiction> {
     let entity_keys = incidence_graph
         .graph()
         .node_ids()
-        .map(|node| reaction_span_entity_class_key(span, incidence_graph.entity(node)))
+        .map(|node| reaction_span_entity_color_key(span, incidence_graph.entity(node)))
         .collect::<Result<Vec<_>, _>>()?;
     let incidence_keys = incidence_graph
         .incidences()
-        .map(|(_, incidence)| incidence_key(incidence).map(InitialClassKey::Incidence))
+        .map(|(_, incidence)| incidence_key(incidence).map(InitialColorKey::Incidence))
         .collect::<Result<Vec<_>, _>>()?;
     Ok((entity_keys, incidence_keys))
 }
@@ -4277,8 +4284,8 @@ fn reaction_span_canonical_candidate(
     };
     let incidence_graph = span.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
-    let classes = rank_initial_classes(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &classes);
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let descriptors = match level {
         DescriptionLevel::Topology => {
             partition_descriptors(&adapter, &entity_keys, &incidence_keys)
@@ -4296,7 +4303,7 @@ fn reaction_span_canonical_candidate(
             .expect("integrity established compatible reaction-span frame actions");
         CanonicalCandidate {
             key: reaction_span_comparison_key(&reframed, level)
-                .expect("initial classes established span normalization"),
+                .expect("initial colors established span normalization"),
             entity_order: order.to_vec(),
         }
     };

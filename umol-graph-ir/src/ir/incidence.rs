@@ -36,7 +36,7 @@ pub enum IncidenceLevel {
 ///
 /// The total order uses the frozen aggregate-canonicalization schema rather
 /// than enum declaration order. For normalized values, it agrees with the
-/// typed incidence keys used to form canonicalization classes.
+/// typed incidence keys used to form canonicalization colors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Incidence {
     BondEndpoint,
