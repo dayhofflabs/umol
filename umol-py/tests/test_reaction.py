@@ -12,7 +12,6 @@ from umol import (
     AtomForm,
     AtomDelta,
     AtomFieldChange,
-    DescriptionLevel,
     ChemistryModel,
     CommonSubgraphEnumerationAlgorithm,
     Correspondence,
@@ -1158,8 +1157,6 @@ def test_reaction_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(DescriptionLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, DescriptionLevel.Full)
 
 
 def test_reaction_canonicalize_with_correspondence():
@@ -1174,17 +1171,6 @@ def test_reaction_canonicalize_with_correspondence():
     assert isinstance(correspondence, MoleculeCorrespondence)
     assert correspondence.is_total()
     assert correspondence.atoms.matched_pairs == [(0, 1), (1, 0)]
-
-
-def test_reaction_canonicalize_by():
-    plain = Reaction.parse('{:lhs {:atoms ["C"]} :deltas []}')
-    constrained = Reaction.parse('{:lhs {:atoms ["C#v4"]} :deltas []}')
-
-    assert plain.canonical_eq_by(
-        constrained,
-        DescriptionLevel.Structure,
-    )
-    assert not plain.canonical_eq(constrained)
 
 
 def test_reaction_canonicalize_error():

@@ -4,7 +4,6 @@ from umol import (
     BondForm,
     BondDelta,
     BondFieldChange,
-    DescriptionLevel,
     ContradictionError,
     Delta,
     Deltas,
@@ -192,8 +191,6 @@ def test_reaction_span_canonicalize():
     assert canonical == expected
     assert source != expected
     assert source.canonical_eq(expected)
-    assert source.canonicalize_by(DescriptionLevel.Full) == canonical
-    assert source.canonical_eq_by(expected, DescriptionLevel.Full)
 
 
 def test_reaction_span_canonicalize_with_correspondence():
@@ -210,17 +207,6 @@ def test_reaction_span_canonicalize_with_correspondence():
     assert correspondence.is_total()
     assert correspondence.atoms.matched_pairs == [(0, 3), (1, 2), (2, 1), (3, 0)]
     assert correspondence.bonds.matched_pairs == [(0, 0), (1, 2), (2, 1)]
-
-
-def test_reaction_span_canonicalize_by():
-    plain = ReactionSpan.parse('{:atoms ["C"]}')
-    constrained = ReactionSpan.parse('{:atoms ["C#v4"]}')
-
-    assert plain.canonical_eq_by(
-        constrained,
-        DescriptionLevel.Structure,
-    )
-    assert not plain.canonical_eq(constrained)
 
 
 def test_reaction_span_canonicalize_error():

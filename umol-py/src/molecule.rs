@@ -22,7 +22,6 @@ use umol_utils::solution::Solution as GraphSolution;
 use crate::aromatic::{AromaticSystemForm, AromaticSystemViews};
 use crate::atom::{AtomForm, AtomViews};
 use crate::bond::{BondForm, BondViews};
-use crate::canonicalize::DescriptionLevel;
 use crate::constraint::molecule::{Constraint, ConstraintsLike, ConstraintsView};
 use crate::correspondence::MoleculeCorrespondence;
 use crate::dative::{DativeBondForm, DativeBondViews};
@@ -261,11 +260,6 @@ impl Molecule {
         ingest_smiles_with(source, &io_config, &chemistry_model, &resolve_config)
             .map(Self::from_rust)
             .map_err(smiles_input_error)
-    }
-
-    /// Return the least description level containing every populated part of this molecule.
-    fn description_level(&self) -> DescriptionLevel {
-        DescriptionLevel::from_rust(self.0.description_level())
     }
 
     /// Create a mutable editor initialized from this molecule.

@@ -6,7 +6,6 @@ use umol_graph::ops::canonicalize::CanonicalizeConfig as GraphCanonicalizeConfig
 use umol_graph::ops::model::StereoModel as GraphStereoModel;
 use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext as GraphIrCanonicalizeContext,
-    DescriptionLevel as GraphIrDescriptionLevel,
     MoleculeCanonicalizeError as GraphIrMoleculeCanonicalizeError,
     ReactionCanonicalizeError as GraphIrReactionCanonicalizeError,
     ReactionSpanCanonicalizeError as GraphIrReactionSpanCanonicalizeError,
@@ -19,36 +18,6 @@ use crate::model::stereo::StereoModel;
 use crate::molecule::Molecule;
 use crate::reaction::Reaction;
 use crate::reaction_span::ReactionSpan;
-
-/// One level in the cumulative graph-IR description hierarchy.
-#[pyclass(eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DescriptionLevel {
-    Topology,
-    Constitution,
-    Structure,
-    Full,
-}
-
-impl DescriptionLevel {
-    pub(crate) fn from_rust(level: GraphIrDescriptionLevel) -> Self {
-        match level {
-            GraphIrDescriptionLevel::Topology => Self::Topology,
-            GraphIrDescriptionLevel::Constitution => Self::Constitution,
-            GraphIrDescriptionLevel::Structure => Self::Structure,
-            GraphIrDescriptionLevel::Full => Self::Full,
-        }
-    }
-
-    pub(crate) fn to_rust(self) -> GraphIrDescriptionLevel {
-        match self {
-            Self::Topology => GraphIrDescriptionLevel::Topology,
-            Self::Constitution => GraphIrDescriptionLevel::Constitution,
-            Self::Structure => GraphIrDescriptionLevel::Structure,
-            Self::Full => GraphIrDescriptionLevel::Full,
-        }
-    }
-}
 
 /// Operational configuration for aggregate canonicalization.
 #[pyclass(eq, frozen, from_py_object)]
@@ -180,23 +149,6 @@ impl Molecule {
             .map_err(molecule_canonicalization_error)
     }
 
-    /// Return this molecule in the canonical frame selected at `level`.
-    ///
-    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (level, *, stereo_model=None, config=None))]
-    fn canonicalize_by(
-        &self,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
-        self.to_rust()
-            .clone()
-            .canonicalize_by(level.to_rust(), &canonicalize_context(stereo_model, config))
-            .map(Self::from_rust)
-            .map_err(molecule_canonicalization_error)
-    }
-
     /// Compare complete canonical forms under the same model and config.
     #[pyo3(signature = (other, *, stereo_model=None, config=None))]
     fn canonical_eq(
@@ -207,22 +159,6 @@ impl Molecule {
     ) -> bool {
         self.to_rust()
             .canonical_eq(other.to_rust(), &canonicalize_context(stereo_model, config))
-    }
-
-    /// Compare canonical forms at `level` under the same model and config.
-    #[pyo3(signature = (other, level, *, stereo_model=None, config=None))]
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> bool {
-        self.to_rust().canonical_eq_by(
-            other.to_rust(),
-            level.to_rust(),
-            &canonicalize_context(stereo_model, config),
-        )
     }
 }
 
@@ -266,23 +202,6 @@ impl ReactionSpan {
             .map_err(reaction_span_canonicalization_error)
     }
 
-    /// Return this reaction span in the canonical frame selected at `level`.
-    ///
-    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (level, *, stereo_model=None, config=None))]
-    fn canonicalize_by(
-        &self,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
-        self.to_rust()
-            .clone()
-            .canonicalize_by(level.to_rust(), &canonicalize_context(stereo_model, config))
-            .map(Self::from_rust)
-            .map_err(reaction_span_canonicalization_error)
-    }
-
     /// Compare complete canonical forms under the same model and config.
     #[pyo3(signature = (other, *, stereo_model=None, config=None))]
     fn canonical_eq(
@@ -293,22 +212,6 @@ impl ReactionSpan {
     ) -> bool {
         self.to_rust()
             .canonical_eq(other.to_rust(), &canonicalize_context(stereo_model, config))
-    }
-
-    /// Compare canonical forms at `level` under the same model and config.
-    #[pyo3(signature = (other, level, *, stereo_model=None, config=None))]
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> bool {
-        self.to_rust().canonical_eq_by(
-            other.to_rust(),
-            level.to_rust(),
-            &canonicalize_context(stereo_model, config),
-        )
     }
 }
 
@@ -352,24 +255,6 @@ impl Reaction {
         ))
     }
 
-    /// Return this reaction in the canonical frame selected at `level`.
-    ///
-    /// Canonical representatives may change between umol 0.x releases and are not persistent ids.
-    #[pyo3(signature = (level, *, stereo_model=None, config=None))]
-    fn canonicalize_by(
-        &self,
-        py: Python<'_>,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<Self> {
-        let canonical = self
-            .to_rust(py)?
-            .canonicalize_by(level.to_rust(), &canonicalize_context(stereo_model, config))
-            .map_err(reaction_canonicalization_error)?;
-        Self::from_rust(py, canonical)
-    }
-
     /// Compare complete canonical forms under the same model and config.
     #[pyo3(signature = (other, *, stereo_model=None, config=None))]
     fn canonical_eq(
@@ -384,23 +269,6 @@ impl Reaction {
             &canonicalize_context(stereo_model, config),
         ))
     }
-
-    /// Compare canonical forms at `level` under the same model and config.
-    #[pyo3(signature = (other, level, *, stereo_model=None, config=None))]
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        py: Python<'_>,
-        level: DescriptionLevel,
-        stereo_model: Option<StereoModel>,
-        config: Option<CanonicalizeConfig>,
-    ) -> PyResult<bool> {
-        Ok(self.to_rust(py)?.canonical_eq_by(
-            &other.to_rust(py)?,
-            level.to_rust(),
-            &canonicalize_context(stereo_model, config),
-        ))
-    }
 }
 
 #[cfg(test)]
@@ -409,19 +277,6 @@ mod tests {
     use umol_graph_core::AutomorphismAlgorithm as GraphCoreAutomorphismAlgorithm;
 
     use super::*;
-
-    #[rstest]
-    #[case::topology(GraphIrDescriptionLevel::Topology, DescriptionLevel::Topology)]
-    #[case::constitution(GraphIrDescriptionLevel::Constitution, DescriptionLevel::Constitution)]
-    #[case::structure(GraphIrDescriptionLevel::Structure, DescriptionLevel::Structure)]
-    #[case::full(GraphIrDescriptionLevel::Full, DescriptionLevel::Full)]
-    fn test_description_level_conversion(
-        #[case] rust: GraphIrDescriptionLevel,
-        #[case] python: DescriptionLevel,
-    ) {
-        assert_eq!(DescriptionLevel::from_rust(rust), python);
-        assert_eq!(python.to_rust(), rust);
-    }
 
     #[rstest]
     #[case::default(CanonicalizeConfig::default())]

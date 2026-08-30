@@ -1316,6 +1316,16 @@ require a new application-result witness in doc 204.
 - **S1b — Python API retirement** (`umol-py`): remove Python description-level selection, migrate
   supported methods to the complete operation, and retain exact Rust/Python agreement. Use the
   Python 3.13 build gate. **Breaking (red→green).** [dep: S1a]
+  **Done.** The Python `DescriptionLevel` export, `Molecule.description_level`, and the
+  level-parameterized canonicalization and equality methods are removed. `canonicalize`,
+  `canonicalize_with_correspondence`, and `canonical_eq` remain direct bindings of the complete
+  Rust operations, with the same stereo-model and operation-config inputs and the same
+  contradiction behavior. The package export set, operation-signature inventory, and molecule,
+  reaction, and reaction-span canonicalization cases now cover only the complete surface.
+
+  Under the repository Python 3.13.15 environment, 1,635 binding unit tests pass and two are
+  ignored, the extension rebuilds successfully, and all 42 focused canonicalization, public-export,
+  and signature tests pass. Strict all-target Clippy for `umol-py` also passes.
 - **S1c — living documentation** (`docs/development/{data-types,nomenclature,property-tests,python-api}.md`,
   rustdoc, Python docs): align the public guides with fixed relation repeated-participant integrity,
   including the explicit prohibition on repeated complete stereo-ligand values, bounded frames,
