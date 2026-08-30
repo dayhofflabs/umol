@@ -32,8 +32,8 @@ before its aggregate semantics and removal stages began. Completed doc
 normalization and reframing are complete, and public canonicalization is complete-only. The
 completed S1 and S2 work below records the interim surface by which the branch reached this point;
 it is not the current public API. Nested description levels remain private exact-search machinery.
-S3b is now the next subitem and must preserve complete canonicalization, equality, correspondence,
-and hash semantics.
+S5b is now the next subitem and extends conservative complete-key prefixes beyond topology without
+changing complete canonicalization, equality, correspondence, or hash semantics.
 
 ## Current evidence
 
@@ -662,7 +662,7 @@ measure 95.631-96.632 us, 91.587-91.880 us, and 47.093-47.278 us respectively wi
 
 ### S5 — Enable conservative typed prefix pruning
 
-#### S5a — Represent guaranteed complete-key prefixes
+#### S5a — Represent guaranteed complete-key prefixes **Done**
 
 **Module:** graph-IR typed canonical-key and search internals.
 
@@ -676,6 +676,21 @@ This is additive private algorithm infrastructure with no public API change.
 **Tests and evidence:** Use small hand-enumerated partitions to assert that the reported prefix is a
 prefix of every descendant leaf key. Cover an empty prefix, a partially fixed topology prefix, and a
 branch whose guaranteed prefix is already worse than the incumbent.
+
+`CanonicalComparisonKeyPrefix` preserves the complete key's ordered entity-block and constraint-
+block structure while allowing the last represented block to contain only guaranteed rows. Its
+comparison checks only represented positions and rows, so an omitted suffix is not compared as an
+empty vector or replaced with a guessed value. The topology constructor emits fixed atom rows up to
+the first unresolved source entity. It emits bond rows only after every referenced atom image is
+known. The representation and constructors remain test-only until S5c connects them to production
+search.
+
+The topology prefix table hand-enumerates every descendant of empty and partially fixed partitions
+and verifies that each descendant agrees with the reported prefix. A complete topology case verifies
+that bond rows appear once both referenced atom images are fixed, and the worse case verifies that a
+fixed oxygen row is already worse than a carbon-first incumbent. The direct comparison table covers
+empty, equal partial, lower, worse, and constraint-block prefixes. The existing exhaustive search
+test continues to exercise the prefix-pruning seam independently of the molecular constructor.
 
 **Depends on:** S0b, S3b, and S4c. Prefix pruning does not require orbit pruning, but this ordering
 keeps the measured effects attributable.

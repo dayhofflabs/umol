@@ -46,18 +46,6 @@ fn reverse_node_branch_order(
     false
 }
 
-impl OrderedPartition {
-    fn fixed_entity_prefix(&self, entity_count: usize) -> Vec<NodeId> {
-        self.cells
-            .iter()
-            .take_while(|cell| cell.len() == 1)
-            .flatten()
-            .copied()
-            .take_while(|node| node.index() < entity_count)
-            .collect()
-    }
-}
-
 impl AutomorphismAdapter {
     fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> AutomorphismAdapterOutput {
         let output = self
@@ -3113,6 +3101,147 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
 }
 
 #[rstest]
+#[case::empty(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        ..Default::default()
+    }),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1)]],
+    },
+    CanonicalComparisonKeyPrefix::default(),
+    vec![
+        vec![NodeId(0), NodeId(1)],
+        vec![NodeId(1), NodeId(0)],
+    ],
+    vec![NodeId(0), NodeId(1)],
+    Ordering::Equal,
+)]
+#[case::partial(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::O),
+        ],
+        ..Default::default()
+    }),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
+    },
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product(
+                atom_inherent_fields(&AtomForm::from_element(Element::C)).unwrap(),
+            )]),
+        }],
+        constraints: Vec::new(),
+    },
+    vec![
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+        vec![NodeId(0), NodeId(2), NodeId(1)],
+    ],
+    vec![NodeId(0), NodeId(1), NodeId(2)],
+    Ordering::Equal,
+)]
+#[case::complete_topology(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    }),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
+    },
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![
+            PositionedKey {
+                position: EntityBlockPosition::ATOM,
+                value: CanonicalKeyValue::Sequence(vec![
+                    CanonicalKeyValue::Product(
+                        atom_inherent_fields(&AtomForm::from_element(Element::C)).unwrap(),
+                    ),
+                    CanonicalKeyValue::Product(
+                        atom_inherent_fields(&AtomForm::from_element(Element::O)).unwrap(),
+                    ),
+                ]),
+            },
+            PositionedKey {
+                position: EntityBlockPosition::BOND,
+                value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product({
+                    let mut fields = vec![field(
+                        0,
+                        product([
+                            CanonicalKeyValue::Unsigned(0),
+                            CanonicalKeyValue::Unsigned(1),
+                        ]),
+                    )];
+                    fields.extend(
+                        bond_inherent_fields(&BondForm::from_order(1)).unwrap(),
+                    );
+                    fields
+                })]),
+            },
+        ],
+        constraints: Vec::new(),
+    },
+    vec![vec![NodeId(0), NodeId(1), NodeId(2)]],
+    vec![NodeId(0), NodeId(1), NodeId(2)],
+    Ordering::Equal,
+)]
+#[case::worse(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::O),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    }),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
+    },
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product(
+                atom_inherent_fields(&AtomForm::from_element(Element::O)).unwrap(),
+            )]),
+        }],
+        constraints: Vec::new(),
+    },
+    vec![
+        vec![NodeId(0), NodeId(1), NodeId(2)],
+        vec![NodeId(0), NodeId(2), NodeId(1)],
+    ],
+    vec![NodeId(1), NodeId(0), NodeId(2)],
+    Ordering::Greater,
+)]
+fn test_topology_comparison_key_prefix(
+    #[case] molecule: Molecule,
+    #[case] partition: OrderedPartition,
+    #[case] expected: CanonicalComparisonKeyPrefix,
+    #[case] descendant_orders: Vec<Vec<NodeId>>,
+    #[case] incumbent_order: Vec<NodeId>,
+    #[case] expected_incumbent_ordering: Ordering,
+) {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    let prefix = topology_comparison_key_prefix(&molecule, &incidence_graph, &partition).unwrap();
+    let incumbent = topology_candidate(&molecule, &incidence_graph, &incumbent_order).unwrap();
+
+    assert_eq!(prefix, expected);
+    assert_eq!(prefix.cmp_key(&incumbent.key), expected_incumbent_ordering);
+    for order in descendant_orders {
+        let descendant = topology_candidate(&molecule, &incidence_graph, &order).unwrap();
+        assert_eq!(prefix.cmp_key(&descendant.key), Ordering::Equal);
+    }
+}
+
+#[rstest]
 fn test_topology_comparison_key() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -5481,6 +5610,103 @@ fn test_positioned_key_cmp(
     )]
 fn test_span_key_cmp(#[case] lhs: SpanKey, #[case] rhs: SpanKey, #[case] expected: Ordering) {
     assert_eq!(lhs.cmp(&rhs), expected);
+}
+
+#[rstest]
+#[case::empty(
+    CanonicalComparisonKeyPrefix::default(),
+    CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: Vec::new(),
+    },
+    Ordering::Equal,
+)]
+#[case::partial(
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: Vec::new(),
+    },
+    CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([
+                CanonicalKeyValue::Signed(0),
+                CanonicalKeyValue::Signed(1),
+            ]),
+        }],
+        constraints: Vec::new(),
+    },
+    Ordering::Equal,
+)]
+#[case::lower(
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(-1)]),
+        }],
+        constraints: Vec::new(),
+    },
+    CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: Vec::new(),
+    },
+    Ordering::Less,
+)]
+#[case::worse(
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(1)]),
+        }],
+        constraints: Vec::new(),
+    },
+    CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: Vec::new(),
+    },
+    Ordering::Greater,
+)]
+#[case::constraint(
+    CanonicalComparisonKeyPrefix {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: vec![PositionedKey {
+            position: ConstraintBlockPosition::MOLECULE,
+            value: sequence([CanonicalKeyValue::Signed(1)]),
+        }],
+    },
+    CanonicalComparisonKey {
+        entity_blocks: vec![PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+        constraints: vec![PositionedKey {
+            position: ConstraintBlockPosition::MOLECULE,
+            value: sequence([CanonicalKeyValue::Signed(0)]),
+        }],
+    },
+    Ordering::Greater,
+)]
+fn test_canonical_comparison_key_prefix_cmp_key(
+    #[case] prefix: CanonicalComparisonKeyPrefix,
+    #[case] key: CanonicalComparisonKey,
+    #[case] expected: Ordering,
+) {
+    assert_eq!(prefix.cmp_key(&key), expected);
 }
 
 #[rstest]

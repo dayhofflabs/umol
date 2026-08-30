@@ -612,6 +612,52 @@ impl PartialOrd for CanonicalComparisonKey {
     }
 }
 
+#[cfg(test)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CanonicalComparisonKeyPrefix {
+    entity_blocks: Vec<EntityBlockKey>,
+    constraints: Vec<ConstraintBlockKey>,
+}
+
+#[cfg(test)]
+impl CanonicalComparisonKeyPrefix {
+    fn cmp_key(&self, key: &CanonicalComparisonKey) -> Ordering {
+        fn cmp_key_block_prefixes<P: Ord>(
+            prefixes: &[PositionedKey<P>],
+            blocks: &[PositionedKey<P>],
+        ) -> Ordering {
+            for (index, prefix) in prefixes.iter().enumerate() {
+                let Some(block) = blocks.get(index) else {
+                    return Ordering::Greater;
+                };
+                let position_order = prefix.position.cmp(&block.position);
+                if position_order != Ordering::Equal {
+                    return position_order;
+                }
+                let CanonicalKeyValue::Sequence(prefix_rows) = &prefix.value else {
+                    unreachable!("canonical key block prefixes contain row sequences")
+                };
+                let CanonicalKeyValue::Sequence(rows) = &block.value else {
+                    unreachable!("canonical key blocks contain row sequences")
+                };
+                for (row_index, prefix_row) in prefix_rows.iter().enumerate() {
+                    let Some(row) = rows.get(row_index) else {
+                        return Ordering::Greater;
+                    };
+                    let row_order = prefix_row.cmp(row);
+                    if row_order != Ordering::Equal {
+                        return row_order;
+                    }
+                }
+            }
+            Ordering::Equal
+        }
+
+        cmp_key_block_prefixes(&self.entity_blocks, &key.entity_blocks)
+            .then_with(|| cmp_key_block_prefixes(&self.constraints, &key.constraints))
+    }
+}
+
 fn hash_value<T: Hash>(value: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
@@ -2104,6 +2150,24 @@ impl OrderedPartition {
             .collect()
     }
 
+    #[cfg(test)]
+    fn fixed_entity_prefix(&self, entity_count: usize) -> Vec<NodeId> {
+        let mut prefix = Vec::new();
+        for cell in &self.cells {
+            let Some(&node) = cell.first() else {
+                continue;
+            };
+            if node.index() >= entity_count {
+                continue;
+            }
+            if cell.len() != 1 {
+                break;
+            }
+            prefix.push(node);
+        }
+        prefix
+    }
+
     fn cell_indices(&self, node_count: usize) -> Vec<u32> {
         let mut indices = vec![0; node_count];
         for (cell_index, cell) in self.cells.iter().enumerate() {
@@ -2980,32 +3044,12 @@ fn reaction_span_entity_color_key(
     Ok(InitialColorKey::Entity { position, value })
 }
 
-fn topology_candidate(
+fn topology_bond_key_rows(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
-    order: &[NodeId],
-) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    atom_images: &[usize],
+) -> Result<Vec<(CanonicalKeyValue, BondId, NodeId)>, Contradiction> {
     let bond_count = incidence_graph.entity_count(EntityKind::Bond);
-    let mut atom_images = vec![0_usize; atom_count];
-    let mut atom_order = Vec::with_capacity(atom_count);
-
-    for &node in order {
-        if let Entity::Atom(id) = incidence_graph.entity(node) {
-            atom_images[id.index()] = atom_order.len();
-            atom_order.push(id);
-        }
-    }
-
-    debug_assert_eq!(atom_order.len(), atom_count);
-
-    let atoms = atom_order
-        .iter()
-        .copied()
-        .map(|id| {
-            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
     let mut bonds = molecule
         .bonds()
         .iter()
@@ -3030,6 +3074,35 @@ fn topology_candidate(
         .collect::<Result<Vec<_>, Contradiction>>()?;
     debug_assert_eq!(bonds.len(), bond_count);
     bonds.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0).then_with(|| lhs.1.cmp(&rhs.1)));
+    Ok(bonds)
+}
+
+fn topology_candidate(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    order: &[NodeId],
+) -> Result<CanonicalCandidate<CanonicalComparisonKey>, Contradiction> {
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let mut atom_images = vec![0_usize; atom_count];
+    let mut atom_order = Vec::with_capacity(atom_count);
+
+    for &node in order {
+        if let Entity::Atom(id) = incidence_graph.entity(node) {
+            atom_images[id.index()] = atom_order.len();
+            atom_order.push(id);
+        }
+    }
+
+    debug_assert_eq!(atom_order.len(), atom_count);
+
+    let atoms = atom_order
+        .iter()
+        .copied()
+        .map(|id| {
+            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?;
 
     let mut entity_order = atom_order
         .into_iter()
@@ -3059,6 +3132,56 @@ fn topology_candidate(
         },
         entity_order,
     })
+}
+
+#[cfg(test)]
+fn topology_comparison_key_prefix(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    partition: &OrderedPartition,
+) -> Result<CanonicalComparisonKeyPrefix, Contradiction> {
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let atom_order = partition
+        .fixed_entity_prefix(incidence_graph.graph().node_count())
+        .into_iter()
+        .filter_map(|node| match incidence_graph.entity(node) {
+            Entity::Atom(id) => Some(id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let atoms = atom_order
+        .iter()
+        .copied()
+        .map(|id| {
+            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut prefix = CanonicalComparisonKeyPrefix::default();
+    if !atoms.is_empty() {
+        prefix.entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Sequence(atoms),
+        });
+    }
+    if atom_order.len() != atom_count {
+        return Ok(prefix);
+    }
+
+    let mut atom_images = vec![0_usize; atom_count];
+    for (image, id) in atom_order.into_iter().enumerate() {
+        atom_images[id.index()] = image;
+    }
+    let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?
+        .into_iter()
+        .map(|(key, _, _)| key)
+        .collect::<Vec<_>>();
+    if !bonds.is_empty() {
+        prefix.entity_blocks.push(PositionedKey {
+            position: EntityBlockPosition::BOND,
+            value: CanonicalKeyValue::Sequence(bonds),
+        });
+    }
+    Ok(prefix)
 }
 
 fn constitution_candidate(
