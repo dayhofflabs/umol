@@ -3571,6 +3571,48 @@ fn complete_candidate(
     Ok((candidate, complete))
 }
 
+#[cfg(test)]
+fn molecule_comparison_key_prefix(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    partition: &OrderedPartition,
+    level: DescriptionLevel,
+) -> Result<CanonicalComparisonKeyPrefix, Contradiction> {
+    let topology_prefix = topology_comparison_key_prefix(molecule, incidence_graph, partition)?;
+    if level == DescriptionLevel::Topology {
+        return Ok(topology_prefix);
+    }
+
+    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+    let atom_order = partition
+        .fixed_entity_prefix(incidence_graph.graph().node_count())
+        .into_iter()
+        .filter(|&node| matches!(incidence_graph.entity(node), Entity::Atom(_)))
+        .collect::<Vec<_>>();
+    if atom_order.len() != atom_count {
+        return Ok(topology_prefix);
+    }
+
+    let key = match level {
+        DescriptionLevel::Topology => unreachable!("topology prefix returned above"),
+        DescriptionLevel::Constitution => {
+            constitution_candidate(molecule, incidence_graph, &atom_order)?.key
+        }
+        DescriptionLevel::Structure => {
+            structure_candidate(molecule, incidence_graph, &atom_order)?.key
+        }
+        DescriptionLevel::Full => {
+            complete_candidate(molecule, incidence_graph, &atom_order)?
+                .0
+                .key
+        }
+    };
+    Ok(CanonicalComparisonKeyPrefix {
+        entity_blocks: key.entity_blocks,
+        constraints: key.constraints,
+    })
+}
+
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),

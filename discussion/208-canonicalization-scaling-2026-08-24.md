@@ -32,8 +32,8 @@ before its aggregate semantics and removal stages began. Completed doc
 normalization and reframing are complete, and public canonicalization is complete-only. The
 completed S1 and S2 work below records the interim surface by which the branch reached this point;
 it is not the current public API. Nested description levels remain private exact-search machinery.
-S5b is now the next subitem and extends conservative complete-key prefixes beyond topology without
-changing complete canonicalization, equality, correspondence, or hash semantics.
+S5c is now the next subitem and connects the conservative complete-key prefixes to production
+search without changing complete canonicalization, equality, correspondence, or hash semantics.
 
 ## Current evidence
 
@@ -695,7 +695,7 @@ test continues to exercise the prefix-pruning seam independently of the molecula
 **Depends on:** S0b, S3b, and S4c. Prefix pruning does not require orbit pruning, but this ordering
 keeps the measured effects attributable.
 
-#### S5b — Extend prefixes across typed feature sections
+#### S5b — Extend prefixes across typed feature sections **Done**
 
 **Module:** graph-IR aggregate key builders and canonicalization search.
 
@@ -709,6 +709,21 @@ This is additive private algorithm work with no public API change.
 **Tests and evidence:** Enumerate all completions of bounded topology, overlay, stereo, and
 constraint partitions and assert that the extracted value prefixes every completed key. Include
 disconnected and symmetry-heavy cases.
+
+`molecule_comparison_key_prefix` retains the partial topology prefix until every atom row is fixed.
+At that boundary the existing typed candidate builders determine bond and overlay rows from the
+fixed atom images, then determine stereo frames and constraint positions from those entity rows.
+The resulting prefix therefore reuses the exact leaf-key construction without assigning a guessed
+image to an unresolved source entity. A `Full` case with an unresolved atom reference confirms that
+the prefix stops in the atom block and exposes no constraint block.
+
+The bounded table enumerates both completions of a partial topology partition, both completions of
+two equivalent aromatic systems in disconnected components, all 24 bond orders of a symmetric
+tetrahedral structure, all four completions of the unresolved-reference case, and both completions
+of a constrained full-description case. Every completed typed key agrees with the extracted prefix.
+The expected entity- and constraint-block positions additionally verify that constitution,
+structure, and complete prefixes reach the intended feature sections rather than passing with a
+shorter topology-only value.
 
 **Depends on:** S5a.
 

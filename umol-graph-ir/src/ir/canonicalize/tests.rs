@@ -139,6 +139,31 @@ where
     best.expect("every finite partition has an entity ordering")
 }
 
+fn partition_entity_orders(partition: &OrderedPartition, entity_count: usize) -> Vec<Vec<NodeId>> {
+    let mut orders = vec![Vec::new()];
+    for cell in &partition.cells {
+        let entities = cell
+            .iter()
+            .copied()
+            .filter(|node| node.index() < entity_count)
+            .collect::<Vec<_>>();
+        if entities.is_empty() {
+            continue;
+        }
+
+        let mut extended = Vec::new();
+        for order in &orders {
+            for permutation in permutations(entities.len()) {
+                let mut next = order.clone();
+                next.extend(permutation.into_iter().map(|index| entities[index]));
+                extended.push(next);
+            }
+        }
+        orders = extended;
+    }
+    orders
+}
+
 fn initial_colors(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -3238,6 +3263,213 @@ fn test_topology_comparison_key_prefix(
     for order in descendant_orders {
         let descendant = topology_candidate(&molecule, &incidence_graph, &order).unwrap();
         assert_eq!(prefix.cmp_key(&descendant.key), Ordering::Equal);
+    }
+}
+
+#[rstest]
+#[case::topology(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 3],
+        ..Default::default()
+    }),
+    DescriptionLevel::Topology,
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
+    },
+    vec![EntityBlockPosition::ATOM],
+    Vec::new(),
+)]
+#[case::overlay(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 4],
+        aromatic: vec![
+            (
+                vec![AtomId(0), AtomId(1)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            ),
+            (
+                vec![AtomId(2), AtomId(3)],
+                AromaticSystemForm::from_electrons(vec![1, 1]),
+            ),
+        ],
+        ..Default::default()
+    }),
+    DescriptionLevel::Constitution,
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0)],
+            vec![NodeId(1)],
+            vec![NodeId(2)],
+            vec![NodeId(3)],
+            vec![NodeId(4), NodeId(5)],
+        ],
+    },
+    vec![
+        EntityBlockPosition::ATOM,
+        EntityBlockPosition::AROMATIC_SYSTEM,
+    ],
+    Vec::new(),
+)]
+#[case::stereo(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 5],
+        bonds: (1..=4)
+            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
+        )],
+        ..Default::default()
+    }),
+    DescriptionLevel::Structure,
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0)],
+            vec![NodeId(1)],
+            vec![NodeId(2)],
+            vec![NodeId(3)],
+            vec![NodeId(4)],
+            vec![NodeId(5), NodeId(6), NodeId(7), NodeId(8)],
+            vec![NodeId(9)],
+        ],
+    },
+    vec![
+        EntityBlockPosition::ATOM,
+        EntityBlockPosition::BOND,
+        EntityBlockPosition::STEREO_ATOM,
+    ],
+    Vec::new(),
+)]
+#[case::unresolved_reference(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::N),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(1), AtomId(2)]),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0)],
+            vec![NodeId(1), NodeId(2)],
+            vec![NodeId(3), NodeId(4)],
+        ],
+    },
+    vec![EntityBlockPosition::ATOM],
+    Vec::new(),
+)]
+#[case::constraints(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C)
+                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            AtomForm::from_element(Element::N),
+            AtomForm::from_element(Element::O),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+        ],
+        constraints: Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(1), AtomId(2)]),
+        })
+        .into(),
+        ..Default::default()
+    }),
+    DescriptionLevel::Full,
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0)],
+            vec![NodeId(1)],
+            vec![NodeId(2)],
+            vec![NodeId(3), NodeId(4)],
+        ],
+    },
+    vec![EntityBlockPosition::ATOM, EntityBlockPosition::BOND],
+    vec![
+        ConstraintBlockPosition::ATOM,
+        ConstraintBlockPosition::MOLECULE,
+    ],
+)]
+fn test_molecule_comparison_key_prefix(
+    #[case] molecule: Molecule,
+    #[case] level: DescriptionLevel,
+    #[case] partition: OrderedPartition,
+    #[case] expected_entity_blocks: Vec<EntityBlockPosition>,
+    #[case] expected_constraint_blocks: Vec<ConstraintBlockPosition>,
+) {
+    let molecule = if level == DescriptionLevel::Full {
+        molecule.normalize().unwrap()
+    } else {
+        molecule
+    };
+    let incidence_level = match level {
+        DescriptionLevel::Topology => IncidenceLevel::Topology,
+        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
+        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
+    };
+    let incidence_graph = molecule.incidence_graph(incidence_level);
+    let prefix =
+        molecule_comparison_key_prefix(&molecule, &incidence_graph, &partition, level).unwrap();
+
+    assert_eq!(
+        prefix
+            .entity_blocks
+            .iter()
+            .map(|block| block.position)
+            .collect::<Vec<_>>(),
+        expected_entity_blocks,
+    );
+    assert_eq!(
+        prefix
+            .constraints
+            .iter()
+            .map(|block| block.position)
+            .collect::<Vec<_>>(),
+        expected_constraint_blocks,
+    );
+    for order in partition_entity_orders(&partition, incidence_graph.graph().node_count()) {
+        let key = match level {
+            DescriptionLevel::Topology => {
+                topology_candidate(&molecule, &incidence_graph, &order)
+                    .unwrap()
+                    .key
+            }
+            DescriptionLevel::Constitution => {
+                constitution_candidate(&molecule, &incidence_graph, &order)
+                    .unwrap()
+                    .key
+            }
+            DescriptionLevel::Structure => {
+                structure_candidate(&molecule, &incidence_graph, &order)
+                    .unwrap()
+                    .key
+            }
+            DescriptionLevel::Full => {
+                complete_candidate(&molecule, &incidence_graph, &order)
+                    .unwrap()
+                    .0
+                    .key
+            }
+        };
+        assert_eq!(prefix.cmp_key(&key), Ordering::Equal);
     }
 }
 
