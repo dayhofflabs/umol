@@ -1,15 +1,17 @@
 //! Reaction-span frame-transport and reframe properties.
 //!
 //! Integrity-valid direct spans and materialized reactions exercise the complete action algebra,
-//! fused/witness agreement, normalization-prefix law, idempotence, projection agreement, and the
+//! fused/witness agreement, normalization-prefix law, projection agreement, and the
 //! operational-reaction roundtrip. These overlap deliberately: transport isolates an independently
-//! supplied action, while reframe validates representative selection across all six span aggregates.
+//! supplied action, while reframe validates representative selection across all six span
+//! aggregates. Pipeline fixpoint and absorption laws are checked in the canonicalization module.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_ir::ir::{FrameTransport, Normalize, Reframe};
+use umol_graph_ir::ir::{Contradiction, FrameTransport, Normalize, Reframe};
 
 use super::reaction_span_strategy;
+use crate::strategies::intrinsic_contradiction_scenario_strategy;
 
 proptest! {
     #![proptest_config(Config {
@@ -36,6 +38,22 @@ proptest! {
             span.clone().reframe_by(&composite),
         );
         prop_assert_eq!(span.clone().reframe_by(&composite), Some(span));
+    }
+
+    #[test]
+    fn test_reaction_span_representative_action_contradiction(
+        scenario in intrinsic_contradiction_scenario_strategy(),
+    ) {
+        for span in scenario.spans {
+            let action = span.representative_action();
+
+            prop_assert_eq!(
+                action.compose(&action.identity()),
+                Some(action.clone()),
+            );
+            prop_assert_eq!(span.clone().normalize(), Err(Contradiction));
+            prop_assert_eq!(span.reframe(), Err(Contradiction));
+        }
     }
 
     #[test]
@@ -76,7 +94,6 @@ proptest! {
         prop_assert!(span.normalized_eq(&normalized));
         prop_assert!(span.framed_eq(&normalized));
         prop_assert!(span.framed_eq(&once));
-        prop_assert_eq!(once.clone().reframe(), Ok(once));
     }
 
     #[test]

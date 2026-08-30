@@ -11,15 +11,18 @@ use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_chem::element::Element;
 use umol_graph_ir::ir::{
     AromaticSystemDelta, AromaticSystemForm, AromaticSystemId, AtomForm, AtomId, BondForm, BondId,
-    DativeBondDelta, DativeBondForm, DativeBondId, Delta, Deltas, FrameTransport, Molecule,
-    MoleculeEntries, MulticenterBondDelta, MulticenterBondForm, MulticenterBondId,
+    Contradiction, DativeBondDelta, DativeBondForm, DativeBondId, Delta, Deltas, FrameTransport,
+    Molecule, MoleculeEntries, MulticenterBondDelta, MulticenterBondForm, MulticenterBondId,
     NoncovalentBondDelta, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, Normalize,
     Reaction, Reframe, StereoAtomDelta, StereoAtomForm, StereoAtomId, StereoBondDelta,
     StereoBondForm, StereoBondId, StereoKind, StereoLigand, StereoLigandKind,
 };
 use umol_perm::{DynPermutation, Permutation};
 
-use crate::strategies::comprehensive_reaction_strategy;
+use crate::strategies::{
+    comprehensive_reaction_strategy, intrinsic_contradiction_scenario_strategy,
+    standardization_scenario_strategy,
+};
 
 const STEREO_BOND_FRAMES: [[u32; 4]; 8] = [
     [0, 1, 2, 3],
@@ -402,6 +405,47 @@ proptest! {
     }
 
     #[test]
+    fn test_reaction_representative_action_erased_entity(
+        scenario in standardization_scenario_strategy(),
+    ) {
+        let normalized = scenario.reaction.clone().normalize().map_err(|_| {
+            TestCaseError::fail("generated reaction is intrinsically contradictory")
+        })?;
+        let (reframed, action) = scenario.reaction.reframe_with_action().map_err(|_| {
+            TestCaseError::fail("generated reaction is intrinsically contradictory")
+        })?;
+        let transported = normalized
+            .clone()
+            .reframe_by(&action)
+            .ok_or_else(|| TestCaseError::fail("input-domain action did not cover its source"))?
+            .normalize()
+            .map_err(|_| TestCaseError::fail("transported reaction became contradictory"))?;
+
+        prop_assert!(action.multicenter_bonds().contains(MulticenterBondId(7)));
+        prop_assert!(!normalized
+            .representative_action()
+            .multicenter_bonds()
+            .contains(MulticenterBondId(7)));
+        prop_assert_eq!(transported, reframed);
+    }
+
+    #[test]
+    fn test_reaction_representative_action_contradiction(
+        scenario in intrinsic_contradiction_scenario_strategy(),
+    ) {
+        for reaction in scenario.reactions {
+            let action = reaction.representative_action();
+
+            prop_assert_eq!(
+                action.compose(&action.identity()),
+                Some(action.clone()),
+            );
+            prop_assert_eq!(reaction.clone().normalize(), Err(Contradiction));
+            prop_assert_eq!(reaction.reframe(), Err(Contradiction));
+        }
+    }
+
+    #[test]
     fn test_reaction_reframe_with_action(reaction in comprehensive_reaction_strategy()) {
         let fused = reaction.clone().reframe().map_err(|_| {
             TestCaseError::fail("generated reaction is intrinsically contradictory")
@@ -425,15 +469,6 @@ proptest! {
         prop_assert_eq!(fused, witnessed.clone());
         prop_assert_eq!(transported, witnessed);
         prop_assert_eq!(selected_action.clone(), selected_action.identity());
-    }
-
-    #[test]
-    fn test_reaction_reframe_idempotence(reaction in comprehensive_reaction_strategy()) {
-        let once = reaction.reframe().map_err(|_| {
-            TestCaseError::fail("generated reaction is intrinsically contradictory")
-        })?;
-
-        prop_assert_eq!(once.clone().reframe(), Ok(once));
     }
 
     #[test]

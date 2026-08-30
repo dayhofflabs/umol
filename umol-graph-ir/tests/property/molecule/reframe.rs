@@ -2,15 +2,18 @@
 //!
 //! The generated domain contains integrity-valid molecules with all overlay kinds, positional
 //! payloads, and recursive constraints. Transport is checked through its action algebra, while
-//! reframing is checked by agreement of its fused and witness-returning executions and by repeated
-//! application. These overlap deliberately: the former isolates a supplied action and the latter
-//! validates representative selection plus the normalization prefix.
+//! reframing is checked by agreement of its fused and witness-returning executions. These overlap
+//! deliberately: the former isolates a supplied action and the latter validates representative
+//! selection plus the normalization prefix. Pipeline fixpoint and absorption laws are checked in
+//! the canonicalization module.
 
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph_ir::ir::{FrameTransport, Normalize, Reframe};
+use umol_graph_ir::ir::{Contradiction, FrameTransport, Normalize, Reframe};
 
-use crate::strategies::molecule_with_constraints_strategy;
+use crate::strategies::{
+    intrinsic_contradiction_scenario_strategy, molecule_with_constraints_strategy,
+};
 
 proptest! {
     #![proptest_config(Config {
@@ -44,6 +47,22 @@ proptest! {
     }
 
     #[test]
+    fn test_molecule_representative_action_contradiction(
+        scenario in intrinsic_contradiction_scenario_strategy(),
+    ) {
+        for molecule in scenario.molecules {
+            let action = molecule.representative_action();
+
+            prop_assert_eq!(
+                action.compose(&action.identity()),
+                Some(action.clone()),
+            );
+            prop_assert_eq!(molecule.clone().normalize(), Err(Contradiction));
+            prop_assert_eq!(molecule.reframe(), Err(Contradiction));
+        }
+    }
+
+    #[test]
     fn test_molecule_reframe_with_action(molecule in molecule_with_constraints_strategy()) {
         let fused = molecule.clone().reframe().map_err(|_| {
             TestCaseError::fail("generated molecule is intrinsically contradictory")
@@ -67,15 +86,6 @@ proptest! {
         prop_assert_eq!(fused, witnessed.clone());
         prop_assert_eq!(transported, witnessed);
         prop_assert_eq!(selected_action.clone(), selected_action.identity());
-    }
-
-    #[test]
-    fn test_molecule_reframe_idempotence(molecule in molecule_with_constraints_strategy()) {
-        let once = molecule.reframe().map_err(|_| {
-            TestCaseError::fail("generated molecule is intrinsically contradictory")
-        })?;
-
-        prop_assert_eq!(once.clone().reframe(), Ok(once));
     }
 
     #[test]

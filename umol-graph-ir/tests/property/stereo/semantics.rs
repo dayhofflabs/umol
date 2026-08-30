@@ -5,7 +5,7 @@ use std::iter;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph_core::AutomorphismAlgorithm;
-use umol_graph_ir::ir::{ConstitutionColoring, FrameTransport, GraphSymmetryConfig};
+use umol_graph_ir::ir::{ConstitutionColoring, GraphSymmetryConfig};
 
 use crate::strategies::*;
 
@@ -116,35 +116,4 @@ proptest! {
         );
     }
 
-    #[test]
-    fn test_stereo_atom_form_reframe_by(
-        args in stereo_atom_form_strategy().prop_flat_map(|form| {
-            let kind = form.configuration.kind().expect("strategy generates a kinded form");
-            (Just(form), stereo_frame_permutation_strategy(kind))
-        }),
-    ) {
-        let (form, permutation) = args;
-        prop_assert_eq!(
-            form.clone()
-                .reframe_by(&permutation)
-                .and_then(|form| form.reframe_by(&permutation.inverse())),
-            Some(form),
-        );
-    }
-
-    #[test]
-    fn test_stereo_bond_form_reframe_by(
-        args in stereo_bond_form_strategy().prop_flat_map(|form| (
-            Just(form),
-            stereo_frame_permutation_strategy(StereoKind::CisTrans),
-        )),
-    ) {
-        let (form, permutation) = args;
-        prop_assert_eq!(
-            form.clone()
-                .reframe_by(&permutation)
-                .and_then(|form| form.reframe_by(&permutation.inverse())),
-            Some(form),
-        );
-    }
 }

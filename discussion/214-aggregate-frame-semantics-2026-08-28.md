@@ -1268,6 +1268,22 @@ canonicalization. Ten inherited reaction and reaction-span failures remain.
   repeat-valid and `equiv`-named assertions, and document why retained overlapping properties have
   different operational domains or validation methods. **Additive; S0 remains green with the
   feature-gated property target passing.** [dep: S0u]
+  **Done.** A dedicated frame-property module now checks local forms, all six entity-kind span
+  aggregates, and molecule/reaction/reaction-span roots under identity, inverse, and composition.
+  It separately covers missing and incompatible action domains, covering supersets, nonidentity
+  actions, and position-sensitive payloads. Shared generated scenarios exercise all six overlay
+  kinds, independently derived participant actions, entries erased by reaction normalization, and
+  integrity-valid intrinsic contradictions.
+
+  The molecule, reaction, and reaction-span suites now assert the complete nine-law
+  normalization/reframe/canonicalize matrix, the successful comparison implication ladder and
+  relation laws, the totalized contradictory canonical-equality class without a correspondence
+  witness, and the correspondence law that remapping followed by reframing reconstructs the
+  canonical result. Fused and witness-returning reframing agree, the returned input-domain action
+  transports normalized input correctly, and representative actions remain total on intrinsic
+  contradictions. Obsolete inverse-only stereo transport and duplicate standalone fixpoint
+  properties were removed in favor of the systematic suite. All 370 feature-gated property tests
+  pass at 256 cases; strict all-target Clippy with the property feature also passes.
 
 S0 ends green with the pre-orbit frame transport gaps fixed for molecules, reactions, and spans. It
 also has one systematic executable specification of the complete quotient pipeline and does not

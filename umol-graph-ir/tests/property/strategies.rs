@@ -55,6 +55,7 @@ pub(crate) use umol_graph_ir::ir::{
     TetrahedralStereoForm, Topicity, TopicityForm, TopicityRelationForm, TransactionError,
     UnpairedElectronsForm, UnpairedElectronsUpdate,
 };
+use umol_graph_ir::ir::{OverlaysFrameAction, Reframe};
 pub(crate) use umol_perm::{Orientation, Permutation};
 
 const ELEMENTS: &[Element] = &[
@@ -2369,6 +2370,218 @@ pub(crate) fn molecule_dense_renumbering_strategy(
                     (molecule, correspondence)
                 },
             )
+    })
+}
+
+/// Raw, satisfiable molecule/reaction/span values sharing all six overlay kinds. Singleton numeric
+/// sets make normalization observable, nonuniform positional payloads make frame transport
+/// observable, and distinct normalized atom charges keep canonicalization inexpensive.
+#[derive(Clone, Debug)]
+pub(crate) struct StandardizationScenario {
+    pub(crate) molecule: Molecule,
+    pub(crate) reaction: Reaction,
+    pub(crate) span: ReactionSpan,
+    pub(crate) correspondence: MoleculeCorrespondence,
+    pub(crate) first_action: OverlaysFrameAction,
+    pub(crate) second_action: OverlaysFrameAction,
+    pub(crate) covering_action: OverlaysFrameAction,
+    pub(crate) incompatible_action: OverlaysFrameAction,
+}
+
+pub(crate) fn standardization_scenario_strategy() -> impl Strategy<Value = StandardizationScenario>
+{
+    const ATOM_COUNT: usize = 11;
+
+    (2usize..=9).prop_map(|factor| {
+        let atoms = (0..ATOM_COUNT)
+            .map(|index| {
+                AtomForm::from_element(Element::C).with_charge(NumForm::lit_set([index as i64]))
+            })
+            .collect();
+        let bonds = vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(5), AtomId(6), BondForm::from_order(2)),
+            (AtomId(5), AtomId(7), BondForm::from_order(1)),
+            (AtomId(5), AtomId(8), BondForm::from_order(1)),
+            (AtomId(6), AtomId(9), BondForm::from_order(1)),
+            (AtomId(6), AtomId(10), BondForm::from_order(1)),
+        ];
+        let entries = MoleculeEntries {
+            atoms,
+            bonds,
+            dative: vec![(
+                vec![AtomId(3), AtomId(1), AtomId(2)],
+                AtomId(4),
+                DativeBondForm::from_order(2),
+            )],
+            aromatic: vec![(
+                vec![AtomId(5), AtomId(1), AtomId(7)],
+                AromaticSystemForm::from_electrons(vec![5, 1, 7]),
+            )],
+            multicenter: vec![(
+                vec![AtomId(8), AtomId(2), AtomId(6)],
+                MulticenterBondForm::from_electrons(vec![8, 2, 6]),
+            )],
+            noncovalent: vec![(
+                AtomId(9),
+                AtomId(3),
+                NoncovalentBondForm::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            stereo_atoms: vec![(
+                AtomId(0),
+                [4, 1, 3, 2]
+                    .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                    .into(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, 0u32),
+            )],
+            stereo_bonds: vec![(
+                BondId(4),
+                [8, 7, 10, 9]
+                    .map(|atom| StereoLigand::new(AtomId(atom), StereoLigandKind::Atom))
+                    .into(),
+                StereoBondForm::new(StereoKind::CisTrans, 0u32),
+            )],
+            constraints: Constraints::new(),
+        };
+
+        let mut covering_entries = entries.clone();
+        covering_entries.dative.push((
+            vec![AtomId(7), AtomId(10)],
+            AtomId(8),
+            DativeBondForm::from_order(1),
+        ));
+        let mut incompatible_entries = entries.clone();
+        incompatible_entries.dative[0].0 = vec![AtomId(3), AtomId(1)];
+
+        let molecule = Molecule::from_entries(entries);
+        let covering_molecule = Molecule::from_entries(covering_entries);
+        let incompatible_molecule = Molecule::from_entries(incompatible_entries);
+        let correspondence = |source: &Molecule, factor: usize| {
+            let atoms = (0..source.atoms().count())
+                .map(|index| AtomId(((index * factor) % ATOM_COUNT) as u32))
+                .collect::<Vec<_>>();
+            let bonds = source.bonds().ids().collect::<Vec<_>>();
+            let dative_bonds = source.dative_bonds().ids().collect::<Vec<_>>();
+            let aromatic_systems = source.aromatic_systems().ids().collect::<Vec<_>>();
+            let multicenter_bonds = source.multicenter_bonds().ids().collect::<Vec<_>>();
+            let noncovalent_bonds = source.noncovalent_bonds().ids().collect::<Vec<_>>();
+            let stereo_atoms = source.stereo_atoms().ids().collect::<Vec<_>>();
+            let stereo_bonds = source.stereo_bonds().ids().collect::<Vec<_>>();
+            MoleculeCorrespondence::new(
+                Correspondence::from_images(&atoms, atoms.len()),
+                Correspondence::from_images(&bonds, bonds.len()),
+                Correspondence::from_images(&dative_bonds, dative_bonds.len()),
+                Correspondence::from_images(&aromatic_systems, aromatic_systems.len()),
+                Correspondence::from_images(&multicenter_bonds, multicenter_bonds.len()),
+                Correspondence::from_images(&noncovalent_bonds, noncovalent_bonds.len()),
+                Correspondence::from_images(&stereo_atoms, stereo_atoms.len()),
+                Correspondence::from_images(&stereo_bonds, stereo_bonds.len()),
+            )
+        };
+        let first_correspondence = correspondence(&molecule, factor);
+        let second_correspondence = correspondence(&molecule, ATOM_COUNT - factor);
+        let first_action = molecule
+            .remap(&first_correspondence)
+            .representative_action();
+        let second_action = molecule
+            .remap(&second_correspondence)
+            .representative_action();
+        let covering_correspondence = correspondence(&covering_molecule, factor);
+        let covering_action = covering_molecule
+            .remap(&covering_correspondence)
+            .representative_action();
+        let incompatible_correspondence = correspondence(&incompatible_molecule, factor);
+        let incompatible_action = incompatible_molecule
+            .remap(&incompatible_correspondence)
+            .representative_action();
+
+        let original_charge = molecule.atom(AtomId(10)).attributes.charge.clone();
+        let erased_attributes = MulticenterBondForm::from_electrons(vec![10, 9, 8]);
+        let reaction = Reaction::new(
+            molecule.clone(),
+            Deltas::from_iter([
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(10),
+                    change: AtomFieldChange::Charge {
+                        old: original_charge,
+                        new: NumForm::Lit(20),
+                    },
+                }),
+                Delta::Atom(AtomDelta::ModifyField {
+                    id: AtomId(10),
+                    change: AtomFieldChange::Charge {
+                        old: NumForm::Lit(20),
+                        new: NumForm::Lit(21),
+                    },
+                }),
+                Delta::MulticenterBond(MulticenterBondDelta::Add {
+                    id: MulticenterBondId(7),
+                    atoms: vec![AtomId(10), AtomId(9), AtomId(8)],
+                    attributes: erased_attributes.clone(),
+                }),
+                Delta::MulticenterBond(MulticenterBondDelta::Remove {
+                    id: MulticenterBondId(7),
+                    atoms: vec![AtomId(10), AtomId(9), AtomId(8)],
+                    attributes: erased_attributes,
+                }),
+            ]),
+        );
+        let span = reaction
+            .to_reaction_span()
+            .expect("the generated reaction materializes");
+
+        StandardizationScenario {
+            molecule,
+            reaction,
+            span,
+            correspondence: first_correspondence,
+            first_action,
+            second_action,
+            covering_action,
+            incompatible_action,
+        }
+    })
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct IntrinsicContradictionScenario {
+    pub(crate) molecules: [Molecule; 3],
+    pub(crate) reactions: [Reaction; 3],
+    pub(crate) spans: [ReactionSpan; 3],
+}
+
+pub(crate) fn intrinsic_contradiction_scenario_strategy(
+) -> impl Strategy<Value = IntrinsicContradictionScenario> {
+    standardization_scenario_strategy().prop_map(|scenario| {
+        let mut first = scenario.molecule.clone();
+        first.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
+        first.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(0);
+        let mut second = scenario.molecule;
+        second.atom_mut(AtomId(10)).attributes.charge = NumForm::lit_set([]);
+        second.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(1);
+        let mut third = second.clone();
+        third.atom_mut(AtomId(10)).attributes.implicit_hydrogens = NumForm::Lit(2);
+        let first_reaction = Reaction::new(first.clone(), Deltas::new());
+        let second_reaction = Reaction::new(second.clone(), Deltas::new());
+        let third_reaction = Reaction::new(third.clone(), Deltas::new());
+        let first_span = first_reaction
+            .to_reaction_span()
+            .expect("the contradictory lhs still materializes");
+        let second_span = second_reaction
+            .to_reaction_span()
+            .expect("the contradictory lhs still materializes");
+        let third_span = third_reaction
+            .to_reaction_span()
+            .expect("the contradictory lhs still materializes");
+
+        IntrinsicContradictionScenario {
+            molecules: [first, second, third],
+            reactions: [first_reaction, second_reaction, third_reaction],
+            spans: [first_span, second_span, third_span],
+        }
     })
 }
 
