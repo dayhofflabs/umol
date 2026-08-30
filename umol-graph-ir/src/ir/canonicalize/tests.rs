@@ -3332,40 +3332,55 @@ fn test_automorphism_adapter_automorphisms() {
             source_orbits: vec![NodeId(0), NodeId(0), NodeId(2)],
             source_canonical_labels: vec![NodeId(0), NodeId(1), NodeId(2)],
             source_generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
-            adapter_generators: vec![vec![NodeId(1), NodeId(0), NodeId(2)]],
         },
     );
 }
 
 #[rstest]
-#[case::subdivided_edge(
+#[case::feature_free(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
-            AtomForm::from_element(Element::N),
-            AtomForm::from_element(Element::N),
-            AtomForm::from_element(Element::B),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
         ],
-        dative: vec![(
-            vec![AtomId(0), AtomId(1)],
-            AtomId(2),
-            DativeBondForm::from_order(1),
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    }),
+    vec![NodeId(1), NodeId(0), NodeId(2)],
+    true,
+)]
+#[case::distinct_ligands(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+        ],
+        bonds: (1..=4)
+            .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
+            .collect(),
+        stereo_atoms: vec![(
+            AtomId(0),
+            (1..=4)
+                .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                .collect(),
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )],
         ..Default::default()
     }),
-    vec![
-        (NodeId(0), Incidence::DativeDonor),
-        (NodeId(1), Incidence::DativeDonor),
-        (NodeId(2), Incidence::DativeAcceptor),
-    ],
+    (0..10).map(NodeId::from).collect(),
+    true,
 )]
-#[case::stereo_atom(
+#[case::prochiral_explicit_hydrogens(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
             AtomForm::from_element(Element::H),
             AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
         ],
         bonds: (1..=4)
             .map(|ligand| (AtomId(0), AtomId(ligand), BondForm::from_order(1)))
@@ -3380,22 +3395,71 @@ fn test_automorphism_adapter_automorphisms() {
         ..Default::default()
     }),
     vec![
-        (NodeId(0), Incidence::StereoSite),
-        (NodeId(1), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(2), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(3), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(4), Incidence::StereoLigand(StereoLigandKind::Atom)),
+        NodeId(0), NodeId(2), NodeId(1), NodeId(3), NodeId(4),
+        NodeId(6), NodeId(5), NodeId(7), NodeId(8), NodeId(9),
     ],
+    false,
 )]
-#[case::stereo_bond_endpoints(
+#[case::stereo_site_exchange(
+    Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::Br),
+            AtomForm::from_element(Element::I),
+        ],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(5), AtomId(6), BondForm::from_order(1)),
+            (AtomId(5), AtomId(7), BondForm::from_order(1)),
+            (AtomId(5), AtomId(8), BondForm::from_order(1)),
+            (AtomId(5), AtomId(9), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                (1..=4)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            (
+                AtomId(5),
+                (6..=9)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+        ],
+        ..Default::default()
+    }),
+    vec![
+        NodeId(5), NodeId(6), NodeId(7), NodeId(8), NodeId(9),
+        NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4),
+        NodeId(14), NodeId(15), NodeId(16), NodeId(17),
+        NodeId(10), NodeId(11), NodeId(12), NodeId(13),
+        NodeId(19), NodeId(18),
+    ],
+    true,
+)]
+#[case::stereo_bond_endpoint_exchange(
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
             AtomForm::from_element(Element::C),
             AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
-            AtomForm::from_element(Element::H),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
+            AtomForm::from_element(Element::F),
+            AtomForm::from_element(Element::Cl),
         ],
         bonds: vec![
             (AtomId(0), AtomId(1), BondForm::from_order(2)),
@@ -3414,69 +3478,27 @@ fn test_automorphism_adapter_automorphisms() {
         ..Default::default()
     }),
     vec![
-        (NodeId(6), Incidence::StereoSite),
-        (NodeId(2), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(3), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(4), Incidence::StereoLigand(StereoLigandKind::Atom)),
-        (NodeId(5), Incidence::StereoLigand(StereoLigandKind::Atom)),
+        NodeId(1), NodeId(0), NodeId(4), NodeId(5), NodeId(2), NodeId(3),
+        NodeId(6), NodeId(9), NodeId(10), NodeId(7), NodeId(8), NodeId(11),
     ],
+    true,
 )]
-fn test_automorphism_adapter_automorphisms_occurrences(
+fn test_retain_stereo_preserving_generators(
     #[case] molecule: Molecule,
-    #[case] expected_occurrences: Vec<(NodeId, Incidence)>,
+    #[case] generator: Vec<NodeId>,
+    #[case] expected_retained: bool,
 ) {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let colors = initial_colors(&molecule, &incidence_graph).unwrap();
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let output = adapter.automorphisms(AutomorphismAlgorithm::Nauty);
-    let occurrence_nodes = (adapter.source_node_count..adapter.graph().node_count())
-        .map(NodeId::from)
-        .collect::<Vec<_>>();
+    let mut generators = vec![generator.clone()];
+    let expected = if expected_retained {
+        vec![generator]
+    } else {
+        Vec::new()
+    };
 
-    assert_eq!(
-        occurrence_nodes
-            .iter()
-            .map(|&node| match adapter.node_source(node) {
-                SubdivisionNodeSource::Edge(edge) => {
-                    let [participant, _] = incidence_graph.graph().edge_endpoints(edge);
-                    (participant, incidence_graph.incidence(edge).clone())
-                }
-                SubdivisionNodeSource::Node(_) => panic!("occurrence node must represent an edge"),
-            })
-            .collect::<Vec<_>>(),
-        expected_occurrences,
-    );
-    assert_ne!(output.adapter_generators, Vec::<Vec<NodeId>>::new());
-    assert_eq!(
-        output.source_generators.len(),
-        output.adapter_generators.len(),
-    );
-    for (source_generator, adapter_generator) in output
-        .source_generators
-        .iter()
-        .zip(&output.adapter_generators)
-    {
-        assert_eq!(
-            source_generator,
-            &adapter_generator[..adapter.source_node_count],
-        );
-        let mut images = adapter_generator.clone();
-        images.sort_unstable();
-        assert_eq!(images, adapter.graph().node_ids().collect::<Vec<_>>());
-        for &node in &occurrence_nodes {
-            let image = adapter_generator[node.index()];
-            assert_eq!(adapter.color(image), adapter.color(node));
-            assert!(matches!(
-                adapter.node_source(image),
-                SubdivisionNodeSource::Edge(_)
-            ));
-        }
-    }
-    assert!(output.adapter_generators.iter().any(|generator| {
-        occurrence_nodes
-            .iter()
-            .any(|&node| generator[node.index()] != node)
-    }));
+    retain_stereo_preserving_generators(&molecule, &incidence_graph, &mut generators);
+
+    assert_eq!(generators, expected);
 }
 
 #[rstest]

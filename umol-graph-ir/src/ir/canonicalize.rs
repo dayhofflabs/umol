@@ -1769,7 +1769,6 @@ struct AutomorphismAdapterOutput {
     /// Source entity nodes in backend canonical-label order, used only to order search branches.
     source_canonical_labels: Vec<NodeId>,
     source_generators: Vec<Vec<NodeId>>,
-    adapter_generators: Vec<Vec<NodeId>>,
 }
 
 impl AutomorphismAdapter {
@@ -1904,15 +1903,94 @@ impl AutomorphismAdapter {
                     .collect()
             })
             .collect();
-        let adapter_generators = output.generators().to_vec();
-
         AutomorphismAdapterOutput {
             source_orbits,
             source_canonical_labels,
             source_generators,
-            adapter_generators,
         }
     }
+}
+
+fn generator_preserves_stereo(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generator: &[NodeId],
+) -> bool {
+    let entity_image =
+        |entity| incidence_graph.entity(generator[incidence_graph.node_of(entity).index()]);
+    let frame_action = |source: Vec<StereoLigand>, target: Vec<StereoLigand>| {
+        let mapped = source
+            .into_iter()
+            .map(|ligand| {
+                let Entity::Atom(atom_id) = entity_image(Entity::Atom(ligand.atom_id)) else {
+                    return None;
+                };
+                Some(StereoLigand::new(atom_id, ligand.kind))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Permutation::between(&mapped, &target)
+    };
+    let configuration_preserved = |source: &StereoConfigurationForm,
+                                   target: &StereoConfigurationForm,
+                                   action: Permutation| {
+        source
+            .clone()
+            .reframe_by(&action)
+            .is_some_and(|mapped| mapped.normalized_eq(target))
+    };
+
+    for source in molecule.stereo_atoms().iter() {
+        let Entity::StereoAtom(target_id) = entity_image(Entity::StereoAtom(source.id)) else {
+            return false;
+        };
+        let target = molecule.stereo_atom(target_id);
+        if entity_image(Entity::Atom(source.site_id())) != Entity::Atom(target.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+            return false;
+        };
+        if !configuration_preserved(
+            &source.attributes.configuration,
+            &target.attributes.configuration,
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    for source in molecule.stereo_bonds().iter() {
+        let Entity::StereoBond(target_id) = entity_image(Entity::StereoBond(source.id)) else {
+            return false;
+        };
+        let target = molecule.stereo_bond(target_id);
+        if entity_image(Entity::Bond(source.site_id())) != Entity::Bond(target.site_id()) {
+            return false;
+        }
+        let Some(action) = frame_action(source.ligand_frame(), target.ligand_frame()) else {
+            return false;
+        };
+        if !configuration_preserved(
+            &source.attributes.configuration,
+            &target.attributes.configuration,
+            action,
+        ) {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn retain_stereo_preserving_generators(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    generators: &mut Vec<Vec<NodeId>>,
+) {
+    if molecule.stereo_atoms().count() == 0 && molecule.stereo_bonds().count() == 0 {
+        return;
+    }
+    generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2094,6 +2172,71 @@ where
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
 {
+    canonical_search_impl(
+        adapter,
+        partition_descriptors,
+        algorithm,
+        options,
+        leaf_candidate,
+        prefix_worse,
+        false,
+        &|_| {},
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn canonical_search_with_generator_filter<
+    K,
+    Descriptor,
+    LeafCandidate,
+    PrefixWorse,
+    FilterGenerators,
+>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+    prefix_worse: &PrefixWorse,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
+    canonical_search_impl(
+        adapter,
+        partition_descriptors,
+        algorithm,
+        options,
+        leaf_candidate,
+        prefix_worse,
+        true,
+        filter_generators,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn canonical_search_impl<K, Descriptor, LeafCandidate, PrefixWorse, FilterGenerators>(
+    adapter: &AutomorphismAdapter,
+    partition_descriptors: &[Descriptor],
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+    prefix_worse: &PrefixWorse,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    Descriptor: Clone + Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
+{
     let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
     let mut best = None;
     let mut stats = CanonicalSearchStats {
@@ -2119,6 +2262,8 @@ where
         options,
         leaf_candidate,
         prefix_worse,
+        apply_generator_filter,
+        filter_generators,
         &mut best,
         &mut stats,
     );
@@ -2130,19 +2275,22 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search_partition<K, LeafCandidate, PrefixWorse>(
+fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
     prefix_worse: &PrefixWorse,
+    apply_generator_filter: bool,
+    filter_generators: &FilterGenerators,
     best: &mut Option<CanonicalCandidate<K>>,
     stats: &mut CanonicalSearchStats,
 ) where
     K: Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
+    FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     if options.prefix_pruning
         && best
@@ -2171,9 +2319,13 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = options.automorphism_pruning.then(|| {
+    let automorphisms = (options.automorphism_pruning || apply_generator_filter).then(|| {
         stats.backend_calls += 1;
-        adapter.automorphisms_for_partition(&partition, algorithm)
+        let mut output = adapter.automorphisms_for_partition(&partition, algorithm);
+        if apply_generator_filter {
+            filter_generators(&mut output.source_generators);
+        }
+        output
     });
 
     if options.automorphism_pruning {
@@ -2214,6 +2366,8 @@ fn search_partition<K, LeafCandidate, PrefixWorse>(
             options,
             leaf_candidate,
             prefix_worse,
+            apply_generator_filter,
+            filter_generators,
             best,
             stats,
         );
@@ -3571,10 +3725,8 @@ fn canonicalize_structure_with_options(
     context: &CanonicalizeContext,
     mut options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    // A structure-frame automorphism acts on both entity ids and stereo configurations. The graph
-    // adapter currently projects only the id action, so its orbits cannot soundly discard a branch
-    // whose coupled frame action changes the leaf key. Keep full stereo search exhaustive within
-    // each refined cell until orbit representatives carry that covariant action as well.
+    // Structure orbits remain disabled until they are rebuilt from the stereo-preserving
+    // generators retained below.
     options.automorphism_pruning = false;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
@@ -3593,13 +3745,17 @@ fn canonicalize_structure_with_options(
             .expect("structure descriptors established entity normalization")
     };
     let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
-    let selected = canonical_search(
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
+    };
+    let selected = canonical_search_with_generator_filter(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
         &no_prefix,
+        &filter_generators,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);

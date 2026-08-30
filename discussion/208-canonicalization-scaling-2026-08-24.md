@@ -558,50 +558,41 @@ is now `45.994-93.659 us`, compared with the pre-dispatch full-search range of `
 
 ### S4 — Restore sound orbit pruning at structure level
 
-#### S4a — Preserve the backend occurrence-node action **Done**
+#### S4a — Establish source-generator sufficiency **Done**
 
 **Module:** the graph-IR automorphism adapter and canonicalization search internals.
 
-Retain full backend generator permutations through the graph-IR adapter instead of projecting them
-immediately to source entity ids. Keep the existing source projection for canonical labels and
-public correspondences. No graph-core API change is required if its existing full-node generators
-are sufficient.
+Use the existing source-node generator projection. Molecule integrity makes every complete ligand
+value within a stereo frame distinct. Mapping each ligand's atom id while retaining its ligand kind
+therefore determines a unique permutation between the mapped source frame and the target frame.
+The occurrence-node action carries no additional stereo information and is not retained.
 
-This is an additive internal representation change with no public API change.
+No graph-core or public API change is required.
 
-**Tests and evidence:** Add adapter tests containing direct bonds, subdivided edge occurrences,
-stereo-atom ligand occurrences, and stereo-bond endpoint occurrences. Assert that projection agrees
-with the current source action while the retained action covers every occurrence node.
-
-`AutomorphismAdapterOutput` now keeps the source-domain projections as `source_orbits`,
-`source_canonical_labels`, and `source_generators`, and retains the backend permutations over the
-complete adapter graph as `adapter_generators`. Existing branch ordering and orbit pruning continue
-to consume only the source-domain fields. Graph-core already returns every generator image over
-its complete node domain, so no graph-core API change was required.
-
-The adapter table covers a direct bond with no occurrence nodes, a dative bond with subdivided
-donor and acceptor edges, a stereo atom with its site and four ligand occurrences, and a stereo bond
-whose site is the bond entity and whose four ligand occurrences are attached to the endpoint
-substituents. For every non-trivial case, each source generator equals the source-node prefix of its
-adapter generator, each adapter generator is a permutation of every adapter node, occurrence nodes
-remain in their exact incidence color, and at least one generator moves an occurrence node.
+**Tests and evidence:** The adapter tests retain exact source-orbit, source-canonical-label, and
+source-generator projection checks. S4b's atom- and bond-stereo cases demonstrate that the projected
+source action uniquely determines the required frame action, including a whole-stereo-site exchange.
 
 **Depends on:** S0b and S3b.
 
-#### S4b — Filter generators by stereo preservation
+#### S4b — Filter generators by stereo preservation **Done**
 
 **Module:** graph-IR canonicalization stereo-action helpers and their unit tests.
 
-Implement the settled predicate that applies a full generator to each stereo site, ordered ligand
-frame, and configuration. Retain only generators that preserve the complete stereo payload. The
-feature-free fast path accepts the backend action without constructing stereo checks.
+Apply each source generator to every stereo entity, site, and ligand-bearing atom. Preserve ligand
+kinds, derive the unique action from the mapped and target frames, and retain the generator only
+when the transported normalized configuration equals the target configuration. The feature-free
+fast path returns the generator vector without visiting it.
 
 This is additive private algorithm work with no public API change.
 
-**Tests and evidence:** Use example tests for an ordinary distinct-ligand stereocenter, a prochiral
-counterexample, a global symmetry exchanging stereo sites, and a stereo bond. Include at least one
-case in which a structural generator must be rejected and one in which a non-trivial generator is
-retained.
+**Tests and evidence:** The exact table covers a feature-free non-trivial generator, an ordinary
+distinct-ligand stereocenter, an explicit-hydrogen prochiral transposition, a global symmetry
+exchanging two stereo sites, and a stereo-bond endpoint-block exchange. The prochiral transposition
+is rejected because it changes the tetrahedral configuration; both non-trivial global exchanges are
+retained. Structure search filters the automorphism output already needed for backend branch
+ordering, without an additional backend call. Orbit pruning remains disabled until S4c rebuilds
+source orbits from the retained subgroup.
 
 **Depends on:** S4a.
 

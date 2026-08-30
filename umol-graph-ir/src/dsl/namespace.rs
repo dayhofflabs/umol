@@ -257,7 +257,7 @@ impl MoleculeContext {
     ) -> Result<StereoAtomId, ParseError> {
         let id = self.stereo_atoms.next_id();
         self.set_keyword(Entity::StereoAtom(id), keyword)?;
-        Ok(self.stereo_atoms.register((site, ligand_multiset(ligands))))
+        Ok(self.stereo_atoms.register((site, ligand_set_key(ligands))))
     }
 
     pub(crate) fn register_stereo_bond(
@@ -268,7 +268,7 @@ impl MoleculeContext {
     ) -> Result<StereoBondId, ParseError> {
         let id = self.stereo_bonds.next_id();
         self.set_keyword(Entity::StereoBond(id), keyword)?;
-        Ok(self.stereo_bonds.register((site, ligand_multiset(ligands))))
+        Ok(self.stereo_bonds.register((site, ligand_set_key(ligands))))
     }
 
     pub(crate) fn atom_count(&self) -> usize {
@@ -417,7 +417,7 @@ impl MoleculeContext {
         ligands: &[StereoLigand],
     ) -> Option<StereoAtomId> {
         self.stereo_atoms
-            .find_by_participants(&(site, ligand_multiset(ligands)))
+            .find_by_participants(&(site, ligand_set_key(ligands)))
     }
 
     pub(crate) fn find_stereo_bond_by_participants(
@@ -426,7 +426,7 @@ impl MoleculeContext {
         ligands: &[StereoLigand],
     ) -> Option<StereoBondId> {
         self.stereo_bonds
-            .find_by_participants(&(site, ligand_multiset(ligands)))
+            .find_by_participants(&(site, ligand_set_key(ligands)))
     }
 
     pub(crate) fn register_atom_alias(
@@ -663,9 +663,8 @@ fn atom_multiset(atoms: &[AtomId]) -> Vec<AtomId> {
     atoms
 }
 
-/// The canonical key of a stereo element's ligand frame: the ligand sorted multiset
-/// (can have duplicate virtual ligands).
-fn ligand_multiset(ligands: &[StereoLigand]) -> Vec<StereoLigand> {
+/// The canonical key of a stereo element's ligand frame: its distinct ligands in sorted order.
+fn ligand_set_key(ligands: &[StereoLigand]) -> Vec<StereoLigand> {
     let mut ligands = ligands.to_vec();
     ligands.sort_unstable();
     ligands

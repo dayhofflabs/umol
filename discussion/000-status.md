@@ -32,7 +32,7 @@ the statuses recorded here remain authoritative.
   documentation, and the eventual arXiv link.
 - [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
   improves canonicalization performance; completed doc 214 satisfies its aggregate-semantics and
-  complete-only API dependency, so S3b is next.
+  complete-only API dependency; S4c source-orbit reconstruction is next.
 - [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
   records the missing single-id-space remapping layer and its open representation decision.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
@@ -246,7 +246,7 @@ the statuses recorded here remain authoritative.
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.         |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.        |
-| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-29   | S4a retains complete adapter-node actions; S4b stereo-preserving generator filtering is next; S6a removes release-path accounting. |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-29   | S4b filters source generators by stereo preservation; S4c rebuilds sound subgroup orbits; S6a removes release-path accounting. |
 | [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Superseded    | 2026-08-29   | Superseded by completed doc 214. S0–S1 remain implemented; the S2–S5 disposition records moved and abandoned work. |
 | [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                             | Superseded    | 2026-08-26   | Superseded by doc 211; the storage migration could not be separated from the relation API change.          |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |

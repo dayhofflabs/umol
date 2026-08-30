@@ -79,8 +79,8 @@ impl<'a> StereoAtomViews<'a> {
         self.stereo_atoms.incident_ids(atom)
     }
 
-    /// Id of the stereo atom on `site` with exactly this ligand multiset, if any. Ligands are a
-    /// multiset (virtual ligands repeat); their frame order is not matched.
+    /// Id of the stereo atom on `site` with exactly this ligand set, if any. The frame order is not
+    /// matched.
     pub fn of_id(&self, site: AtomId, ligands: &[StereoLigand]) -> Option<StereoAtomId> {
         self.stereo_atoms.coincident_id(site, ligands)
     }
@@ -334,8 +334,8 @@ impl<'a> StereoBondViews<'a> {
         self.stereo_bonds.ids()
     }
 
-    /// Id of the stereo bond on `site` with exactly this ligand multiset, if any. Ligands are a
-    /// multiset (virtual ligands repeat); their frame order is not matched.
+    /// Id of the stereo bond on `site` with exactly this ligand set, if any. The frame order is not
+    /// matched.
     pub fn of_id(&self, site: BondId, ligands: &[StereoLigand]) -> Option<StereoBondId> {
         self.stereo_bonds.coincident_id(site, ligands)
     }
