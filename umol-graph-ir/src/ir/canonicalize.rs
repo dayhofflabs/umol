@@ -612,14 +612,12 @@ impl PartialOrd for CanonicalComparisonKey {
     }
 }
 
-#[cfg(test)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalComparisonKeyPrefix {
     entity_blocks: Vec<EntityBlockKey>,
     constraints: Vec<ConstraintBlockKey>,
 }
 
-#[cfg(test)]
 impl CanonicalComparisonKeyPrefix {
     fn cmp_key(&self, key: &CanonicalComparisonKey) -> Ordering {
         fn cmp_key_block_prefixes<P: Ord>(
@@ -2150,7 +2148,6 @@ impl OrderedPartition {
             .collect()
     }
 
-    #[cfg(test)]
     fn fixed_entity_prefix(&self, entity_count: usize) -> Vec<NodeId> {
         let mut prefix = Vec::new();
         for cell in &self.cells {
@@ -3134,7 +3131,6 @@ fn topology_candidate(
     })
 }
 
-#[cfg(test)]
 fn topology_comparison_key_prefix(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -3571,7 +3567,6 @@ fn complete_candidate(
     Ok((candidate, complete))
 }
 
-#[cfg(test)]
 fn molecule_comparison_key_prefix(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -3611,6 +3606,20 @@ fn molecule_comparison_key_prefix(
         entity_blocks: key.entity_blocks,
         constraints: key.constraints,
     })
+}
+
+fn molecule_prefix_worse(
+    molecule: &Molecule,
+    incidence_graph: &IncidenceGraph,
+    partition: &OrderedPartition,
+    level: DescriptionLevel,
+    incumbent: &CanonicalCandidate<CanonicalComparisonKey>,
+) -> Result<bool, Contradiction> {
+    Ok(
+        molecule_comparison_key_prefix(molecule, incidence_graph, partition, level)?
+            .cmp_key(&incumbent.key)
+            == Ordering::Greater,
+    )
 }
 
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
@@ -3833,14 +3842,23 @@ fn canonicalize_topology_with_options(
         topology_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Topology,
+            incumbent,
+        )
+        .expect("initial colors established topology prefix normalization")
+    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
+        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -3880,14 +3898,23 @@ fn canonicalize_constitution_with_options(
         constitution_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established constitution normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Constitution,
+            incumbent,
+        )
+        .expect("initial colors established constitution prefix normalization")
+    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
+        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -3934,7 +3961,16 @@ fn canonicalize_structure_with_options(
         structure_candidate(molecule, &incidence_graph, order)
             .expect("structure descriptors established entity normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Structure,
+            incumbent,
+        )
+        .expect("structure descriptors established prefix normalization")
+    };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
     };
@@ -3944,7 +3980,7 @@ fn canonicalize_structure_with_options(
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &no_prefix,
+        &prefix_worse,
         &filter_generators,
     );
     let correspondence =
@@ -3995,7 +4031,16 @@ fn canonicalize_full_with_options(
             .expect("structure descriptors established complete normalization")
             .0
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Full,
+            incumbent,
+        )
+        .expect("structure descriptors established complete prefix normalization")
+    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
@@ -4005,7 +4050,7 @@ fn canonicalize_full_with_options(
             ..options
         },
         &leaf_candidate,
-        &no_prefix,
+        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -4033,7 +4078,10 @@ fn canonical_key_by(
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(molecule, &incidence_graph, partition, level, incumbent)
+            .expect("initial descriptors established comparison-key prefix normalization")
+    };
     let options = CanonicalSearchOptions {
         automorphism_pruning: level != DescriptionLevel::Structure,
         prefix_pruning: false,
@@ -4053,7 +4101,7 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
+                &prefix_worse,
             )
             .candidate
             .key
@@ -4071,7 +4119,7 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
+                &prefix_worse,
             )
             .candidate
             .key
@@ -4095,7 +4143,7 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &no_prefix,
+                &prefix_worse,
             )
             .candidate
             .key
@@ -4126,7 +4174,16 @@ fn canonical_key_by_full(
             .expect("normalized structure descriptors established complete normalization")
             .0
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Full,
+            incumbent,
+        )
+        .expect("structure descriptors established complete prefix normalization")
+    };
     Ok(canonical_search(
         &adapter,
         &descriptors,
@@ -4137,7 +4194,7 @@ fn canonical_key_by_full(
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
+        &prefix_worse,
     )
     .candidate
     .key)

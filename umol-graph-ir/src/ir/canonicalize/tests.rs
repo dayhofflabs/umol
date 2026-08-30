@@ -3474,6 +3474,176 @@ fn test_molecule_comparison_key_prefix(
 }
 
 #[rstest]
+fn test_molecule_prefix_worse(canonicalize_context: CanonicalizeContext) {
+    let molecule = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![
+            AtomForm::from_element(Element::C)
+                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+            AtomForm::from_element(Element::C),
+        ],
+        ..Default::default()
+    })
+    .normalize()
+    .unwrap();
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph).unwrap();
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let (partition, _) = structure_partition(
+        &molecule,
+        &incidence_graph,
+        &adapter,
+        &entity_keys,
+        canonicalize_context.para_stereo,
+    )
+    .unwrap();
+    let descriptors = partition.cell_indices(adapter.graph().node_count());
+    let leaf_candidate = |order: &[NodeId]| {
+        complete_candidate(&molecule, &incidence_graph, order)
+            .unwrap()
+            .0
+    };
+    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
+        molecule_prefix_worse(
+            &molecule,
+            &incidence_graph,
+            partition,
+            DescriptionLevel::Full,
+            incumbent,
+        )
+        .unwrap()
+    };
+    let entity_cells = partition
+        .cells
+        .iter()
+        .filter(|cell| {
+            cell.first()
+                .is_some_and(|node| node.index() < adapter.source_node_count)
+        })
+        .cloned()
+        .collect();
+    let expected = exhaustive_minimum(&adapter, entity_cells, &leaf_candidate);
+    let (_, expected_molecule) =
+        complete_candidate(&molecule, &incidence_graph, &expected.entity_order).unwrap();
+    let mut results = Vec::new();
+
+    for (prefix_pruning, branch_order) in [
+        (false, node_branch_order as BranchOrdering),
+        (true, node_branch_order as BranchOrdering),
+        (false, reverse_node_branch_order as BranchOrdering),
+        (true, reverse_node_branch_order as BranchOrdering),
+        (true, backend_canonical_branch_order as BranchOrdering),
+    ] {
+        let actual = canonical_search(
+            &adapter,
+            &descriptors,
+            canonicalize_context.automorphism_algorithm,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning,
+                branch_order,
+            },
+            &leaf_candidate,
+            &prefix_worse,
+        );
+        let correspondence =
+            correspondence_from_order(&molecule, &incidence_graph, &actual.candidate.entity_order);
+        let canonical = molecule.remap(&correspondence).reframe().unwrap();
+
+        assert_eq!(actual.candidate.key, expected.key);
+        assert_eq!(canonical, expected_molecule);
+        assert!(molecule.framed_eq_under(&canonical, &correspondence));
+        assert_eq!(molecule.remap(&correspondence).reframe(), Ok(canonical),);
+        results.push(actual.stats);
+    }
+
+    assert_eq!(
+        results,
+        vec![
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![4],
+                refinement_calls: 41,
+                branch_order_calls: 17,
+                backend_calls: 0,
+                visited_leaves: 24,
+                leaf_comparisons: 23,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![4],
+                refinement_calls: 41,
+                branch_order_calls: 17,
+                backend_calls: 0,
+                visited_leaves: 6,
+                leaf_comparisons: 5,
+                prefix_pruned_branches: 18,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![4],
+                refinement_calls: 41,
+                branch_order_calls: 17,
+                backend_calls: 0,
+                visited_leaves: 24,
+                leaf_comparisons: 23,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![4],
+                refinement_calls: 41,
+                branch_order_calls: 17,
+                backend_calls: 0,
+                visited_leaves: 15,
+                leaf_comparisons: 14,
+                prefix_pruned_branches: 9,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![4],
+                refinement_calls: 41,
+                branch_order_calls: 17,
+                backend_calls: 17,
+                visited_leaves: 6,
+                leaf_comparisons: 5,
+                prefix_pruned_branches: 18,
+                orbit_pruned_branches: 0,
+            },
+        ],
+    );
+
+    for atom_images in permutations(molecule.atoms().count()) {
+        let renumbering = molecule_correspondence(&[
+            atom_images,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ]);
+        let renumbered = molecule.remap(&renumbering);
+        let (actual, correspondence) = canonicalize_full_with_options(
+            &renumbered,
+            &canonicalize_context,
+            CanonicalSearchOptions {
+                automorphism_pruning: false,
+                prefix_pruning: true,
+                branch_order: backend_canonical_branch_order,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(actual, expected_molecule);
+        assert_eq!(renumbered.remap(&correspondence).reframe(), Ok(actual));
+    }
+}
+
+#[rstest]
 fn test_topology_comparison_key() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![

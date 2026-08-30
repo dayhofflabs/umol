@@ -32,8 +32,8 @@ before its aggregate semantics and removal stages began. Completed doc
 normalization and reframing are complete, and public canonicalization is complete-only. The
 completed S1 and S2 work below records the interim surface by which the branch reached this point;
 it is not the current public API. Nested description levels remain private exact-search machinery.
-S5c is now the next subitem and connects the conservative complete-key prefixes to production
-search without changing complete canonicalization, equality, correspondence, or hash semantics.
+S5c remains the current subitem. Its correctness checks pass, but the measured production path
+regresses and remains disabled pending disposition of the optimization.
 
 ## Current evidence
 
@@ -741,6 +741,24 @@ This changes private search behavior while preserving exact results.
 exhaustive partitions, both candidate orders, and dense renumberings. Assert exact canonical
 aggregates and correspondence transport, then record prefix-pruned branches, leaves, backend calls,
 and timings. The stage is not complete merely because the counter becomes non-zero.
+
+**Current evidence (2026-08-30):** The private enabled and disabled paths select the same bounded
+exhaustive minimum with forward, reverse, and backend branch ordering and preserve correspondence
+transport through all 24 dense atom renumberings of the constrained four-atom fixture. Forward
+ordering visits 24 leaves without prefix pruning and 6 with it, rejecting 18 branches; reverse
+ordering visits 24 and 15 leaves respectively, rejecting 9; backend ordering with prefix pruning
+visits 6 leaves, rejects 18 branches, and makes 17 backend calls.
+
+That accounting does not translate into lower runtime. With production prefix pruning enabled,
+`para_stereo_trichloropentane` measures 246.56-247.04 us without para stereo and
+305.28-306.69 us with para stereo. A same-build run with production pruning disabled measures
+209.35-210.55 us and 267.95-269.59 us respectively, a 12-15% advantage for the disabled path. The
+prefix becomes discriminating only after all atom images are fixed, when its construction performs
+essentially the same work as the leaf candidate; a surviving branch then constructs that leaf
+again. The three feature-free scaling cases remain neutral because orbit pruning already leaves one
+candidate. Production prefix pruning therefore remains disabled. S5c is not done; its disposition
+requires either abandoning this optimization or changing the search/key interaction so useful
+prefix work is available before, or reusable by, leaf construction.
 
 **Depends on:** S4c and S5b.
 
