@@ -30,9 +30,9 @@ the statuses recorded here remain authoritative.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
-- [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
-  improves canonicalization performance; completed doc 214 satisfies its aggregate-semantics and
-  complete-only API dependency; S5c found a 12-15% prefix-pruning regression and needs disposition.
+- [216 — Canonicalization performance](216-canonicalization-performance-2026-08-30.md)
+  re-runs the reaction-network workloads after completed doc 208 and uses the resulting cost
+  decomposition to select any further backend, carrier, search, or repeated-call optimization.
 - [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
   records the missing single-id-space remapping layer and its open representation decision.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
@@ -246,7 +246,7 @@ the statuses recorded here remain authoritative.
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.         |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.        |
-| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-30   | S5c prefix pruning regresses 12-15%; abandon or redesign before S6a.                                        |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | Completed     | 2026-08-30   |                                                                                                            |
 | [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Superseded    | 2026-08-29   | Superseded by completed doc 214. S0–S1 remain implemented; the S2–S5 disposition records moved and abandoned work. |
 | [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                             | Superseded    | 2026-08-26   | Superseded by doc 211; the storage migration could not be separated from the relation API change.          |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
@@ -254,3 +254,4 @@ the statuses recorded here remain authoritative.
 | [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-08-29   | Generic entity-set abstraction, name, visibility, and construction surface require design review before implementation. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
+| [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | Proposed      | 2026-08-30   | Re-run the atom-mapping branch network workloads and decompose the remaining canonicalization cost.         |

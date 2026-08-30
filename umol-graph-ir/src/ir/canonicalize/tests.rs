@@ -30,9 +30,8 @@ fn node_branch_order(
     _algorithm: AutomorphismAlgorithm,
     _automorphisms: Option<&AutomorphismAdapterOutput>,
     candidates: &mut [NodeId],
-) -> bool {
+) {
     candidates.sort_unstable();
-    false
 }
 
 fn reverse_node_branch_order(
@@ -41,9 +40,8 @@ fn reverse_node_branch_order(
     _algorithm: AutomorphismAlgorithm,
     _automorphisms: Option<&AutomorphismAdapterOutput>,
     candidates: &mut [NodeId],
-) -> bool {
+) {
     candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs));
-    false
 }
 
 impl AutomorphismAdapter {
@@ -137,31 +135,6 @@ where
         &mut best,
     );
     best.expect("every finite partition has an entity ordering")
-}
-
-fn partition_entity_orders(partition: &OrderedPartition, entity_count: usize) -> Vec<Vec<NodeId>> {
-    let mut orders = vec![Vec::new()];
-    for cell in &partition.cells {
-        let entities = cell
-            .iter()
-            .copied()
-            .filter(|node| node.index() < entity_count)
-            .collect::<Vec<_>>();
-        if entities.is_empty() {
-            continue;
-        }
-
-        let mut extended = Vec::new();
-        for order in &orders {
-            for permutation in permutations(entities.len()) {
-                let mut next = order.clone();
-                next.extend(permutation.into_iter().map(|index| entities[index]));
-                extended.push(next);
-            }
-        }
-        orders = extended;
-    }
-    orders
 }
 
 fn initial_colors(
@@ -1703,7 +1676,6 @@ fn test_canonicalize_structure_para_stereo(
         &context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -1713,7 +1685,6 @@ fn test_canonicalize_structure_para_stereo(
         &context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
     )
@@ -2401,7 +2372,6 @@ fn test_canonicalize_structure_renumbering(
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
         )
@@ -2455,7 +2425,6 @@ fn test_canonicalize_structure_minimum(
         )
         .expect("structure descriptors establish normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let expected = exhaustive_minimum(
         &adapter,
         adapter_entity_blocks(&incidence_graph),
@@ -2474,50 +2443,36 @@ fn test_canonicalize_structure_minimum(
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
     ] {
-        let actual = canonical_search(
-            &adapter,
-            &descriptors,
-            algorithm,
-            options,
-            &leaf_candidate,
-            &no_prefix,
-        );
+        let actual = canonical_search(&adapter, &descriptors, algorithm, options, &leaf_candidate);
         assert_eq!(actual.candidate.key, expected.key, "{options:?}");
     }
 
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     ] {
@@ -2577,7 +2532,6 @@ fn test_canonicalize_structure_orbit_pruning(
         structure_candidate(&molecule, &incidence_graph, order)
             .expect("structure descriptors establish normalization")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
     };
@@ -2602,22 +2556,18 @@ fn test_canonicalize_structure_orbit_pruning(
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
     ] {
@@ -2627,7 +2577,6 @@ fn test_canonicalize_structure_orbit_pruning(
             algorithm,
             options,
             &leaf_candidate,
-            &no_prefix,
             &filter_generators,
         );
         let correspondence =
@@ -2656,7 +2605,6 @@ fn test_canonicalize_structure_orbit_pruning(
                 backend_calls: 1,
                 visited_leaves: 2,
                 leaf_comparisons: 1,
-                prefix_pruned_branches: 0,
                 orbit_pruned_branches: 0,
             },
             CanonicalSearchStats {
@@ -2666,7 +2614,6 @@ fn test_canonicalize_structure_orbit_pruning(
                 backend_calls: 1,
                 visited_leaves: 2,
                 leaf_comparisons: 1,
-                prefix_pruned_branches: 0,
                 orbit_pruned_branches: 0,
             },
             CanonicalSearchStats {
@@ -2676,7 +2623,6 @@ fn test_canonicalize_structure_orbit_pruning(
                 backend_calls: 1,
                 visited_leaves: 1,
                 leaf_comparisons: 0,
-                prefix_pruned_branches: 0,
                 orbit_pruned_branches: 1,
             },
             CanonicalSearchStats {
@@ -2686,7 +2632,6 @@ fn test_canonicalize_structure_orbit_pruning(
                 backend_calls: 1,
                 visited_leaves: 1,
                 leaf_comparisons: 0,
-                prefix_pruned_branches: 0,
                 orbit_pruned_branches: 1,
             },
         ],
@@ -3122,524 +3067,6 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
         for (_, incidence_color) in &incidences {
             assert_ne!(entity_color, incidence_color);
         }
-    }
-}
-
-#[rstest]
-#[case::empty(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 2],
-        ..Default::default()
-    }),
-    OrderedPartition {
-        cells: vec![vec![NodeId(0), NodeId(1)]],
-    },
-    CanonicalComparisonKeyPrefix::default(),
-    vec![
-        vec![NodeId(0), NodeId(1)],
-        vec![NodeId(1), NodeId(0)],
-    ],
-    vec![NodeId(0), NodeId(1)],
-    Ordering::Equal,
-)]
-#[case::partial(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::O),
-            AtomForm::from_element(Element::O),
-        ],
-        ..Default::default()
-    }),
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
-    },
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product(
-                atom_inherent_fields(&AtomForm::from_element(Element::C)).unwrap(),
-            )]),
-        }],
-        constraints: Vec::new(),
-    },
-    vec![
-        vec![NodeId(0), NodeId(1), NodeId(2)],
-        vec![NodeId(0), NodeId(2), NodeId(1)],
-    ],
-    vec![NodeId(0), NodeId(1), NodeId(2)],
-    Ordering::Equal,
-)]
-#[case::complete_topology(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::O),
-        ],
-        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
-        ..Default::default()
-    }),
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
-    },
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![
-            PositionedKey {
-                position: EntityBlockPosition::ATOM,
-                value: CanonicalKeyValue::Sequence(vec![
-                    CanonicalKeyValue::Product(
-                        atom_inherent_fields(&AtomForm::from_element(Element::C)).unwrap(),
-                    ),
-                    CanonicalKeyValue::Product(
-                        atom_inherent_fields(&AtomForm::from_element(Element::O)).unwrap(),
-                    ),
-                ]),
-            },
-            PositionedKey {
-                position: EntityBlockPosition::BOND,
-                value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product({
-                    let mut fields = vec![field(
-                        0,
-                        product([
-                            CanonicalKeyValue::Unsigned(0),
-                            CanonicalKeyValue::Unsigned(1),
-                        ]),
-                    )];
-                    fields.extend(
-                        bond_inherent_fields(&BondForm::from_order(1)).unwrap(),
-                    );
-                    fields
-                })]),
-            },
-        ],
-        constraints: Vec::new(),
-    },
-    vec![vec![NodeId(0), NodeId(1), NodeId(2)]],
-    vec![NodeId(0), NodeId(1), NodeId(2)],
-    Ordering::Equal,
-)]
-#[case::worse(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::O),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-        ],
-        ..Default::default()
-    }),
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
-    },
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Sequence(vec![CanonicalKeyValue::Product(
-                atom_inherent_fields(&AtomForm::from_element(Element::O)).unwrap(),
-            )]),
-        }],
-        constraints: Vec::new(),
-    },
-    vec![
-        vec![NodeId(0), NodeId(1), NodeId(2)],
-        vec![NodeId(0), NodeId(2), NodeId(1)],
-    ],
-    vec![NodeId(1), NodeId(0), NodeId(2)],
-    Ordering::Greater,
-)]
-fn test_topology_comparison_key_prefix(
-    #[case] molecule: Molecule,
-    #[case] partition: OrderedPartition,
-    #[case] expected: CanonicalComparisonKeyPrefix,
-    #[case] descendant_orders: Vec<Vec<NodeId>>,
-    #[case] incumbent_order: Vec<NodeId>,
-    #[case] expected_incumbent_ordering: Ordering,
-) {
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let prefix = topology_comparison_key_prefix(&molecule, &incidence_graph, &partition).unwrap();
-    let incumbent = topology_candidate(&molecule, &incidence_graph, &incumbent_order).unwrap();
-
-    assert_eq!(prefix, expected);
-    assert_eq!(prefix.cmp_key(&incumbent.key), expected_incumbent_ordering);
-    for order in descendant_orders {
-        let descendant = topology_candidate(&molecule, &incidence_graph, &order).unwrap();
-        assert_eq!(prefix.cmp_key(&descendant.key), Ordering::Equal);
-    }
-}
-
-#[rstest]
-#[case::topology(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 3],
-        ..Default::default()
-    }),
-    DescriptionLevel::Topology,
-    OrderedPartition {
-        cells: vec![vec![NodeId(0)], vec![NodeId(1), NodeId(2)]],
-    },
-    vec![EntityBlockPosition::ATOM],
-    Vec::new(),
-)]
-#[case::overlay(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 4],
-        aromatic: vec![
-            (
-                vec![AtomId(0), AtomId(1)],
-                AromaticSystemForm::from_electrons(vec![1, 1]),
-            ),
-            (
-                vec![AtomId(2), AtomId(3)],
-                AromaticSystemForm::from_electrons(vec![1, 1]),
-            ),
-        ],
-        ..Default::default()
-    }),
-    DescriptionLevel::Constitution,
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(0)],
-            vec![NodeId(1)],
-            vec![NodeId(2)],
-            vec![NodeId(3)],
-            vec![NodeId(4), NodeId(5)],
-        ],
-    },
-    vec![
-        EntityBlockPosition::ATOM,
-        EntityBlockPosition::AROMATIC_SYSTEM,
-    ],
-    Vec::new(),
-)]
-#[case::stereo(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![AtomForm::from_element(Element::C); 5],
-        bonds: (1..=4)
-            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-            .collect(),
-        stereo_atoms: vec![(
-            AtomId(0),
-            vec![
-                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-            ],
-            StereoAtomForm::new(StereoKind::Tetrahedral, 1_u32),
-        )],
-        ..Default::default()
-    }),
-    DescriptionLevel::Structure,
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(0)],
-            vec![NodeId(1)],
-            vec![NodeId(2)],
-            vec![NodeId(3)],
-            vec![NodeId(4)],
-            vec![NodeId(5), NodeId(6), NodeId(7), NodeId(8)],
-            vec![NodeId(9)],
-        ],
-    },
-    vec![
-        EntityBlockPosition::ATOM,
-        EntityBlockPosition::BOND,
-        EntityBlockPosition::STEREO_ATOM,
-    ],
-    Vec::new(),
-)]
-#[case::unresolved_reference(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::N),
-            AtomForm::from_element(Element::N),
-        ],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-        ],
-        constraints: Constraint::Molecule(MoleculeConstraint::Connected {
-            atoms: Some(vec![AtomId(1), AtomId(2)]),
-        })
-        .into(),
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(0)],
-            vec![NodeId(1), NodeId(2)],
-            vec![NodeId(3), NodeId(4)],
-        ],
-    },
-    vec![EntityBlockPosition::ATOM],
-    Vec::new(),
-)]
-#[case::constraints(
-    Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C)
-                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
-            AtomForm::from_element(Element::N),
-            AtomForm::from_element(Element::O),
-        ],
-        bonds: vec![
-            (AtomId(0), AtomId(1), BondForm::from_order(1)),
-            (AtomId(0), AtomId(2), BondForm::from_order(1)),
-        ],
-        constraints: Constraint::Molecule(MoleculeConstraint::Connected {
-            atoms: Some(vec![AtomId(1), AtomId(2)]),
-        })
-        .into(),
-        ..Default::default()
-    }),
-    DescriptionLevel::Full,
-    OrderedPartition {
-        cells: vec![
-            vec![NodeId(0)],
-            vec![NodeId(1)],
-            vec![NodeId(2)],
-            vec![NodeId(3), NodeId(4)],
-        ],
-    },
-    vec![EntityBlockPosition::ATOM, EntityBlockPosition::BOND],
-    vec![
-        ConstraintBlockPosition::ATOM,
-        ConstraintBlockPosition::MOLECULE,
-    ],
-)]
-fn test_molecule_comparison_key_prefix(
-    #[case] molecule: Molecule,
-    #[case] level: DescriptionLevel,
-    #[case] partition: OrderedPartition,
-    #[case] expected_entity_blocks: Vec<EntityBlockPosition>,
-    #[case] expected_constraint_blocks: Vec<ConstraintBlockPosition>,
-) {
-    let molecule = if level == DescriptionLevel::Full {
-        molecule.normalize().unwrap()
-    } else {
-        molecule
-    };
-    let incidence_level = match level {
-        DescriptionLevel::Topology => IncidenceLevel::Topology,
-        DescriptionLevel::Constitution => IncidenceLevel::Constitution,
-        DescriptionLevel::Structure | DescriptionLevel::Full => IncidenceLevel::Full,
-    };
-    let incidence_graph = molecule.incidence_graph(incidence_level);
-    let prefix =
-        molecule_comparison_key_prefix(&molecule, &incidence_graph, &partition, level).unwrap();
-
-    assert_eq!(
-        prefix
-            .entity_blocks
-            .iter()
-            .map(|block| block.position)
-            .collect::<Vec<_>>(),
-        expected_entity_blocks,
-    );
-    assert_eq!(
-        prefix
-            .constraints
-            .iter()
-            .map(|block| block.position)
-            .collect::<Vec<_>>(),
-        expected_constraint_blocks,
-    );
-    for order in partition_entity_orders(&partition, incidence_graph.graph().node_count()) {
-        let key = match level {
-            DescriptionLevel::Topology => {
-                topology_candidate(&molecule, &incidence_graph, &order)
-                    .unwrap()
-                    .key
-            }
-            DescriptionLevel::Constitution => {
-                constitution_candidate(&molecule, &incidence_graph, &order)
-                    .unwrap()
-                    .key
-            }
-            DescriptionLevel::Structure => {
-                structure_candidate(&molecule, &incidence_graph, &order)
-                    .unwrap()
-                    .key
-            }
-            DescriptionLevel::Full => {
-                complete_candidate(&molecule, &incidence_graph, &order)
-                    .unwrap()
-                    .0
-                    .key
-            }
-        };
-        assert_eq!(prefix.cmp_key(&key), Ordering::Equal);
-    }
-}
-
-#[rstest]
-fn test_molecule_prefix_worse(canonicalize_context: CanonicalizeContext) {
-    let molecule = Molecule::from_entries(MoleculeEntries {
-        atoms: vec![
-            AtomForm::from_element(Element::C)
-                .with_constraint(AtomConstraintForm::Valence(NumForm::Lit(4))),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-            AtomForm::from_element(Element::C),
-        ],
-        ..Default::default()
-    })
-    .normalize()
-    .unwrap();
-    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
-    let (entity_keys, incidence_keys) = initial_color_keys(&molecule, &incidence_graph).unwrap();
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let (partition, _) = structure_partition(
-        &molecule,
-        &incidence_graph,
-        &adapter,
-        &entity_keys,
-        canonicalize_context.para_stereo,
-    )
-    .unwrap();
-    let descriptors = partition.cell_indices(adapter.graph().node_count());
-    let leaf_candidate = |order: &[NodeId]| {
-        complete_candidate(&molecule, &incidence_graph, order)
-            .unwrap()
-            .0
-    };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            &molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Full,
-            incumbent,
-        )
-        .unwrap()
-    };
-    let entity_cells = partition
-        .cells
-        .iter()
-        .filter(|cell| {
-            cell.first()
-                .is_some_and(|node| node.index() < adapter.source_node_count)
-        })
-        .cloned()
-        .collect();
-    let expected = exhaustive_minimum(&adapter, entity_cells, &leaf_candidate);
-    let (_, expected_molecule) =
-        complete_candidate(&molecule, &incidence_graph, &expected.entity_order).unwrap();
-    let mut results = Vec::new();
-
-    for (prefix_pruning, branch_order) in [
-        (false, node_branch_order as BranchOrdering),
-        (true, node_branch_order as BranchOrdering),
-        (false, reverse_node_branch_order as BranchOrdering),
-        (true, reverse_node_branch_order as BranchOrdering),
-        (true, backend_canonical_branch_order as BranchOrdering),
-    ] {
-        let actual = canonical_search(
-            &adapter,
-            &descriptors,
-            canonicalize_context.automorphism_algorithm,
-            CanonicalSearchOptions {
-                automorphism_pruning: false,
-                prefix_pruning,
-                branch_order,
-            },
-            &leaf_candidate,
-            &prefix_worse,
-        );
-        let correspondence =
-            correspondence_from_order(&molecule, &incidence_graph, &actual.candidate.entity_order);
-        let canonical = molecule.remap(&correspondence).reframe().unwrap();
-
-        assert_eq!(actual.candidate.key, expected.key);
-        assert_eq!(canonical, expected_molecule);
-        assert!(molecule.framed_eq_under(&canonical, &correspondence));
-        assert_eq!(molecule.remap(&correspondence).reframe(), Ok(canonical),);
-        results.push(actual.stats);
-    }
-
-    assert_eq!(
-        results,
-        vec![
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![4],
-                refinement_calls: 41,
-                branch_order_calls: 17,
-                backend_calls: 0,
-                visited_leaves: 24,
-                leaf_comparisons: 23,
-                prefix_pruned_branches: 0,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![4],
-                refinement_calls: 41,
-                branch_order_calls: 17,
-                backend_calls: 0,
-                visited_leaves: 6,
-                leaf_comparisons: 5,
-                prefix_pruned_branches: 18,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![4],
-                refinement_calls: 41,
-                branch_order_calls: 17,
-                backend_calls: 0,
-                visited_leaves: 24,
-                leaf_comparisons: 23,
-                prefix_pruned_branches: 0,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![4],
-                refinement_calls: 41,
-                branch_order_calls: 17,
-                backend_calls: 0,
-                visited_leaves: 15,
-                leaf_comparisons: 14,
-                prefix_pruned_branches: 9,
-                orbit_pruned_branches: 0,
-            },
-            CanonicalSearchStats {
-                initial_residual_cell_sizes: vec![4],
-                refinement_calls: 41,
-                branch_order_calls: 17,
-                backend_calls: 17,
-                visited_leaves: 6,
-                leaf_comparisons: 5,
-                prefix_pruned_branches: 18,
-                orbit_pruned_branches: 0,
-            },
-        ],
-    );
-
-    for atom_images in permutations(molecule.atoms().count()) {
-        let renumbering = molecule_correspondence(&[
-            atom_images,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        ]);
-        let renumbered = molecule.remap(&renumbering);
-        let (actual, correspondence) = canonicalize_full_with_options(
-            &renumbered,
-            &canonicalize_context,
-            CanonicalSearchOptions {
-                automorphism_pruning: false,
-                prefix_pruning: true,
-                branch_order: backend_canonical_branch_order,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(actual, expected_molecule);
-        assert_eq!(renumbered.remap(&correspondence).reframe(), Ok(actual));
     }
 }
 
@@ -4439,7 +3866,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         topology_candidate(&molecule, &incidence_graph, order)
             .expect("selected topology values normalize")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let expected = exhaustive_minimum(
         &adapter,
         adapter_entity_blocks(&incidence_graph),
@@ -4451,11 +3877,9 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: node_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     );
     let reversed = canonical_search(
         &adapter,
@@ -4463,11 +3887,9 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     );
     let pruned = canonical_search(
         &adapter,
@@ -4475,11 +3897,9 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     );
 
     assert_eq!(unpruned.candidate.key, expected.key);
@@ -4493,7 +3913,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     1,
     CanonicalSearchOptions {
         automorphism_pruning: false,
-        prefix_pruning: false,
         branch_order: node_branch_order,
     },
     CanonicalSearchStats {
@@ -4503,7 +3922,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         backend_calls: 0,
         visited_leaves: 1,
         leaf_comparisons: 0,
-        prefix_pruned_branches: 0,
         orbit_pruned_branches: 0,
     },
 )]
@@ -4511,7 +3929,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     2,
     CanonicalSearchOptions {
         automorphism_pruning: false,
-        prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     },
     CanonicalSearchStats {
@@ -4521,7 +3938,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         backend_calls: 1,
         visited_leaves: 2,
         leaf_comparisons: 1,
-        prefix_pruned_branches: 0,
         orbit_pruned_branches: 0,
     },
 )]
@@ -4529,7 +3945,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     2,
     CanonicalSearchOptions {
         automorphism_pruning: true,
-        prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     },
     CanonicalSearchStats {
@@ -4539,7 +3954,6 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         backend_calls: 1,
         visited_leaves: 1,
         leaf_comparisons: 0,
-        prefix_pruned_branches: 0,
         orbit_pruned_branches: 1,
     },
 )]
@@ -4554,14 +3968,12 @@ fn test_canonical_search_stats(
         key: order.to_vec(),
         entity_order: order.to_vec(),
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<Vec<NodeId>>| false;
     let actual = canonical_search(
         &adapter,
         &adapter.colors,
         AutomorphismAlgorithm::Nauty,
         options,
         &leaf_candidate,
-        &no_prefix,
     );
 
     assert_eq!(actual.stats, expected);
@@ -4597,10 +4009,8 @@ fn test_canonical_search_color_labels() {
         topology_candidate(&molecule, &incidence_graph, order)
             .expect("selected topology values normalize")
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     let options = CanonicalSearchOptions {
         automorphism_pruning: true,
-        prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     };
 
@@ -4610,7 +4020,6 @@ fn test_canonical_search_color_labels() {
         AutomorphismAlgorithm::Nauty,
         options,
         &leaf_candidate,
-        &no_prefix,
     );
     let actual = canonical_search(
         &relabeled,
@@ -4618,7 +4027,6 @@ fn test_canonical_search_color_labels() {
         AutomorphismAlgorithm::Nauty,
         options,
         &leaf_candidate,
-        &no_prefix,
     );
 
     assert_eq!(actual.candidate.key, expected.candidate.key);
@@ -4771,7 +4179,6 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4781,7 +4188,6 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4872,7 +4278,6 @@ fn test_canonicalize_topology_exhaustive_domain(
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
         )
@@ -4882,7 +4287,6 @@ fn test_canonicalize_topology_exhaustive_domain(
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
-                prefix_pruning: false,
                 branch_order: reverse_node_branch_order,
             },
         )
@@ -5062,7 +4466,6 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
         ),
@@ -5128,7 +4531,6 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -5138,7 +4540,6 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -5158,7 +4559,6 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -5179,7 +4579,6 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -5209,7 +4608,6 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -5242,7 +4640,6 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
     )
@@ -5358,7 +4755,6 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
         )
@@ -5368,7 +4764,6 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
-                prefix_pruning: false,
                 branch_order: reverse_node_branch_order,
             },
         )
@@ -5527,37 +4922,6 @@ fn test_canonicalize_constitution_contradiction(canonicalize_context: Canonicali
 }
 
 #[rstest]
-fn test_canonical_search_prefix() {
-    let source = Graph::new(4, &[]);
-    let adapter = direct_graph_adapter(&source);
-    let entity_blocks = vec![source.node_ids().collect()];
-    let leaf_candidate = |order: &[NodeId]| CanonicalCandidate {
-        key: order.to_vec(),
-        entity_order: order.to_vec(),
-    };
-    let prefix_worse = |partition: &OrderedPartition, best: &CanonicalCandidate<Vec<NodeId>>| {
-        let prefix = partition.fixed_entity_prefix(4);
-        prefix.as_slice() > &best.key[..prefix.len()]
-    };
-    let expected = exhaustive_minimum(&adapter, entity_blocks, &leaf_candidate);
-    let actual = canonical_search(
-        &adapter,
-        &adapter.colors,
-        AutomorphismAlgorithm::Nauty,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            prefix_pruning: true,
-            branch_order: node_branch_order,
-        },
-        &leaf_candidate,
-        &prefix_worse,
-    );
-
-    assert_eq!(actual.candidate.key, expected.key);
-    assert_ne!(actual.stats.prefix_pruned_branches, 0);
-}
-
-#[rstest]
 #[case::order_four(4)]
 fn test_canonical_search_exhaustive(#[case] node_count: usize) {
     let endpoint_pairs = (0..node_count as u32)
@@ -5593,18 +4957,15 @@ fn test_canonical_search_exhaustive(#[case] node_count: usize) {
                 entity_order: order.to_vec(),
             }
         };
-        let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
         let expected = exhaustive_minimum(&adapter, entity_blocks, &leaf_candidate);
 
         for options in [
             CanonicalSearchOptions {
                 automorphism_pruning: false,
-                prefix_pruning: false,
                 branch_order: reverse_node_branch_order,
             },
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                prefix_pruning: false,
                 branch_order: backend_canonical_branch_order,
             },
         ] {
@@ -5615,7 +4976,6 @@ fn test_canonical_search_exhaustive(#[case] node_count: usize) {
                     AutomorphismAlgorithm::Nauty,
                     options,
                     &leaf_candidate,
-                    &no_prefix,
                 )
                 .candidate
                 .key,
@@ -6012,103 +5372,6 @@ fn test_positioned_key_cmp(
     )]
 fn test_span_key_cmp(#[case] lhs: SpanKey, #[case] rhs: SpanKey, #[case] expected: Ordering) {
     assert_eq!(lhs.cmp(&rhs), expected);
-}
-
-#[rstest]
-#[case::empty(
-    CanonicalComparisonKeyPrefix::default(),
-    CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: Vec::new(),
-    },
-    Ordering::Equal,
-)]
-#[case::partial(
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: Vec::new(),
-    },
-    CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([
-                CanonicalKeyValue::Signed(0),
-                CanonicalKeyValue::Signed(1),
-            ]),
-        }],
-        constraints: Vec::new(),
-    },
-    Ordering::Equal,
-)]
-#[case::lower(
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(-1)]),
-        }],
-        constraints: Vec::new(),
-    },
-    CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: Vec::new(),
-    },
-    Ordering::Less,
-)]
-#[case::worse(
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(1)]),
-        }],
-        constraints: Vec::new(),
-    },
-    CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: Vec::new(),
-    },
-    Ordering::Greater,
-)]
-#[case::constraint(
-    CanonicalComparisonKeyPrefix {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: vec![PositionedKey {
-            position: ConstraintBlockPosition::MOLECULE,
-            value: sequence([CanonicalKeyValue::Signed(1)]),
-        }],
-    },
-    CanonicalComparisonKey {
-        entity_blocks: vec![PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-        constraints: vec![PositionedKey {
-            position: ConstraintBlockPosition::MOLECULE,
-            value: sequence([CanonicalKeyValue::Signed(0)]),
-        }],
-    },
-    Ordering::Greater,
-)]
-fn test_canonical_comparison_key_prefix_cmp_key(
-    #[case] prefix: CanonicalComparisonKeyPrefix,
-    #[case] key: CanonicalComparisonKey,
-    #[case] expected: Ordering,
-) {
-    assert_eq!(prefix.cmp_key(&key), expected);
 }
 
 #[rstest]

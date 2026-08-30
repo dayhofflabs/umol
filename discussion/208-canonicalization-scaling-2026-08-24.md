@@ -1,13 +1,14 @@
 # 208 — Canonicalization scaling
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-24
 Relates: [186](186-molecule-canonicalization-2026-08-05.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
 [207](207-reaction-network-spike-2026-08-24.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),
 [211](211-relation-frames-and-api-2026-08-26.md),
-[214](214-aggregate-frame-semantics-2026-08-28.md)
+[214](214-aggregate-frame-semantics-2026-08-28.md),
+[216](216-canonicalization-performance-2026-08-30.md)
 
 ## Purpose
 
@@ -32,8 +33,10 @@ before its aggregate semantics and removal stages began. Completed doc
 normalization and reframing are complete, and public canonicalization is complete-only. The
 completed S1 and S2 work below records the interim surface by which the branch reached this point;
 it is not the current public API. Nested description levels remain private exact-search machinery.
-S5c remains the current subitem. Its correctness checks pass, but the measured production path
-regresses and remains disabled pending disposition of the optimization.
+The S5 prefix-pruning experiment was correct but regressed its production-shaped benchmark by
+12-15%; the implementation and its purpose-built machinery were removed. The deferred
+reaction-network rerun and broader backend analysis continue in proposed doc
+[216](216-canonicalization-performance-2026-08-30.md).
 
 ## Current evidence
 
@@ -51,7 +54,7 @@ Canonicalization accounts for 99.73%, averaging about 8 ms per produced derivati
 0.4 ms in the ethane closure. The increase per call is far larger than the change in molecule size.
 This is sufficient to stop treating canonicalization as incidental overhead.
 
-The current implementation provides a concrete starting explanation. Complete `Molecule`
+The pre-208 implementation provides a concrete starting explanation. Complete `Molecule`
 canonicalization uses graph-IR's typed individualization/refinement search. For the `Full` level it
 unconditionally disables automorphism-orbit pruning and does not use prefix pruning. When a refined
 entity cell remains non-singleton, it recursively individualizes every candidate in that cell.
@@ -93,9 +96,9 @@ those are the two additions needed for the investigation rather than a new bench
 
 ### Private canonicalization level
 
-Doc 209 restores private `CanonicalizeLevel::{Topology, Constitution, Structure, Full}` inside the
+Doc 209 restores private `DescriptionLevel::{Topology, Constitution, Structure, Full}` inside the
 canonicalizer and removes every public level selector. Private inspection selects the lowest level
-required by a molecule, reaction, or reaction span from the entity families and constraints carried
+required by a molecule, reaction, or reaction span from the entity kinds and constraints carried
 by that representation. Complete unary operations use that level, while complete binary equality
 uses the greater level required by either operand.
 
@@ -166,13 +169,14 @@ one optimization patch:
    to generators that preserve stereo atoms and bonds, and measure whether the resulting sound
    subgroup recovers the useful orbits. Compute the full stabilizer only if generator filtering is
    measurably insufficient.
-3. **Typed prefix pruning.** The search already has a prefix-pruning seam but the production
+3. **Typed prefix pruning.** The search had a prefix-pruning seam but the production
    canonicalizers supply a predicate that never prunes. A branch may be rejected only by a typed
    key prefix shared by every completion of its current ordered partition. Prefix construction stops
    at the first component whose source row, referenced target id, stereo frame, or constraint
    position is unresolved. The branch is worse only when this guaranteed prefix is
    lexicographically greater than the incumbent prefix of the same length. This conservative rule
-   may miss pruning opportunities but cannot reject an improving completion.
+   may miss pruning opportunities but cannot reject an improving completion. S5 evaluated and
+   removed this approach after it regressed the production-shaped benchmark.
 4. **Complete-operation materialization.** After private-level reduction, compare complete
    canonicalization, canonicalization with correspondence, canonical hash, and canonical equality.
    A hash-specific path is justified only if materializing and structurally hashing the canonical
@@ -201,11 +205,11 @@ classification, or the atom-mapping objective.
 ## Entity lookup index cost
 
 Doc [211](211-relation-frames-and-api-2026-08-26.md) relocates entity lookup from graph-core's
-`find_by_participants` to the entity-family types, keyed by whatever integrity establishes as each
-family's uniqueness key. That settles the semantics but leaves the index shape open, and the shapes
-differ per family:
+`find_by_participants` to the entity-kind aggregate types, keyed by whatever integrity establishes
+as each entity kind's uniqueness key. That settles the semantics but leaves the index shape open,
+and the shapes differ per entity kind:
 
-| family | uniqueness key | index available today |
+| entity kind | uniqueness key | index available today |
 | --- | --- | --- |
 | aromatic system | any member atom | incidence is already exactly right — systems are atom-disjoint |
 | multicenter bond | atom set | incidence gives candidates; an atom may be in several |
@@ -302,11 +306,11 @@ This is additive private instrumentation with no public API change.
 partition, and an orbit-pruned partition. Assert exact counter relationships only where they are
 algorithmic invariants; timings remain benchmark evidence rather than test assertions.
 
-`CanonicalSearchStats` now records initial residual entity-cell sizes, refinement calls,
-branch-order calls, backend calls, visited leaves, leaf comparisons, and both pruning counts. The
-private branch-order callback reports whether it invoked the backend, allowing the collector to
-count ordering calls without double-counting automorphism output reused for orbit pruning. The
-module-local table establishes these exact base cases:
+During the investigation, `CanonicalSearchStats` recorded initial residual entity-cell sizes,
+refinement calls, branch-order calls, backend calls, visited leaves, leaf comparisons, and both
+pruning counts. The private branch-order callback reported whether it invoked the backend, allowing
+the collector to count ordering calls without double-counting automorphism output reused for orbit
+pruning. The module-local table established these exact base cases:
 
 | Case | Residual cells | Refinements | Branch orders | Backend | Leaves | Comparisons | Prefix-pruned | Orbit-pruned |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -314,8 +318,9 @@ module-local table establishes these exact base cases:
 | Symmetric, backend-ordered | `[2]` | 3 | 1 | 1 | 2 | 1 | 0 | 0 |
 | Symmetric, orbit-pruned | `[2]` | 2 | 1 | 1 | 1 | 0 | 0 | 1 |
 
-The accounting remains temporary release-path code during the investigation and is still subject
-to the mandatory S6a removal gate.
+S6a later placed the surviving statistics and every counter update behind `cfg(test)`, removed the
+prefix-specific accounting, and restored the production branch-order callback to a result-free
+operation.
 
 **Depends on:** S0a.
 
@@ -392,11 +397,11 @@ property test stating that dense id renumbering does not change the description 
 
 `DescriptionLevel` now lives beside `Molecule` and is re-exported from `umol_graph_ir::ir` with the
 settled derived containment order. `Molecule::description_level()` checks all non-stereo overlay and
-stereo collections, every entity family's inline constraint store, and the molecule-level
+stereo collections, every entity kind's inline constraint store, and the molecule-level
 constraint store without validating or interpreting their values.
 
-The module-local `rstest` table covers ordinary topology, each non-stereo overlay family, stereo
-atoms and bonds, every inline entity-constraint family, and a molecule-level constraint. A separate
+The module-local `rstest` table covers ordinary topology, each non-stereo overlay kind, stereo atoms
+and bonds, every inline entity-constraint kind, and a molecule-level constraint. A separate
 table pins the adjacent ordering and `min`/`max` laws. The property suite promotes the existing
 independent dense permutations of all eight entity namespaces to a shared molecule strategy and
 verifies that description inspection is invariant under those renumberings; the existing
@@ -660,9 +665,9 @@ measure 95.631-96.632 us, 91.587-91.880 us, and 47.093-47.278 us respectively wi
 
 **Depends on:** S4b.
 
-### S5 — Enable conservative typed prefix pruning
+### S5 — Evaluate conservative typed prefix pruning
 
-#### S5a — Represent guaranteed complete-key prefixes **Done**
+#### S5a — Represent guaranteed complete-key prefixes **Done; later removed**
 
 **Module:** graph-IR typed canonical-key and search internals.
 
@@ -677,25 +682,26 @@ This is additive private algorithm infrastructure with no public API change.
 prefix of every descendant leaf key. Cover an empty prefix, a partially fixed topology prefix, and a
 branch whose guaranteed prefix is already worse than the incumbent.
 
-`CanonicalComparisonKeyPrefix` preserves the complete key's ordered entity-block and constraint-
+`CanonicalComparisonKeyPrefix` preserved the complete key's ordered entity-block and constraint-
 block structure while allowing the last represented block to contain only guaranteed rows. Its
 comparison checks only represented positions and rows, so an omitted suffix is not compared as an
 empty vector or replaced with a guessed value. The topology constructor emits fixed atom rows up to
 the first unresolved source entity. It emits bond rows only after every referenced atom image is
-known. The representation and constructors remain test-only until S5c connects them to production
+known. The representation and constructors remained test-only until S5c connected them to production
 search.
 
 The topology prefix table hand-enumerates every descendant of empty and partially fixed partitions
 and verifies that each descendant agrees with the reported prefix. A complete topology case verifies
 that bond rows appear once both referenced atom images are fixed, and the worse case verifies that a
-fixed oxygen row is already worse than a carbon-first incumbent. The direct comparison table covers
-empty, equal partial, lower, worse, and constraint-block prefixes. The existing exhaustive search
-test continues to exercise the prefix-pruning seam independently of the molecular constructor.
+fixed oxygen row is already worse than a carbon-first incumbent. The direct comparison table covered
+empty, equal partial, lower, worse, and constraint-block prefixes. The exhaustive search fixture
+also exercised the prefix-pruning seam independently of the molecular constructor. Those tests were
+removed with the rejected machinery after S5c; their evidence remains recorded here.
 
 **Depends on:** S0b, S3b, and S4c. Prefix pruning does not require orbit pruning, but this ordering
 keeps the measured effects attributable.
 
-#### S5b — Extend prefixes across typed feature sections **Done**
+#### S5b — Extend prefixes across typed feature sections **Done; later removed**
 
 **Module:** graph-IR aggregate key builders and canonicalization search.
 
@@ -710,12 +716,12 @@ This is additive private algorithm work with no public API change.
 constraint partitions and assert that the extracted value prefixes every completed key. Include
 disconnected and symmetry-heavy cases.
 
-`molecule_comparison_key_prefix` retains the partial topology prefix until every atom row is fixed.
+`molecule_comparison_key_prefix` retained the partial topology prefix until every atom row was fixed.
 At that boundary the existing typed candidate builders determine bond and overlay rows from the
 fixed atom images, then determine stereo frames and constraint positions from those entity rows.
-The resulting prefix therefore reuses the exact leaf-key construction without assigning a guessed
-image to an unresolved source entity. A `Full` case with an unresolved atom reference confirms that
-the prefix stops in the atom block and exposes no constraint block.
+The resulting prefix therefore reused the exact leaf-key construction without assigning a guessed
+image to an unresolved source entity. A `Full` case with an unresolved atom reference confirmed that
+the prefix stopped in the atom block and exposed no constraint block.
 
 The bounded table enumerates both completions of a partial topology partition, both completions of
 two equivalent aromatic systems in disconnected components, all 24 bond orders of a symmetric
@@ -727,7 +733,7 @@ shorter topology-only value.
 
 **Depends on:** S5a.
 
-#### S5c — Connect the production pruning seam
+#### S5c — Connect the production pruning seam **Done — abandoned**
 
 **Module:** graph-IR canonicalization search and aggregate canonicalizers.
 
@@ -756,15 +762,20 @@ That accounting does not translate into lower runtime. With production prefix pr
 prefix becomes discriminating only after all atom images are fixed, when its construction performs
 essentially the same work as the leaf candidate; a surviving branch then constructs that leaf
 again. The three feature-free scaling cases remain neutral because orbit pruning already leaves one
-candidate. Production prefix pruning therefore remains disabled. S5c is not done; its disposition
-requires either abandoning this optimization or changing the search/key interaction so useful
-prefix work is available before, or reusable by, leaf construction.
+candidate.
+
+The selected disposition is to abandon this optimization rather than retain a disabled production
+switch. `CanonicalComparisonKeyPrefix`, the extraction and comparison functions, the search
+predicate, the option and counter fields, and the prefix-specific tests were removed. The exact
+experimental implementation and differential evidence remain in git history at `ca4bf0bc8`.
+Future work may construct reusable incremental key state earlier in the search, but that is a new
+design rather than a reason to retain the measured machinery.
 
 **Depends on:** S4c and S5b.
 
 ### S6 — Integrate, measure, and dispose of follow-on work
 
-#### S6a — Run the graph-IR correctness and performance gate
+#### S6a — Run the graph-IR correctness and performance gate **Done**
 
 **Module:** the complete graph-IR canonicalization surface.
 
@@ -783,9 +794,28 @@ counters are recorded in this document. A source audit and release build confirm
 `CanonicalSearchStats` and its updates are absent from the release-compiled path. This is a
 completion gate, not deferred cleanup.
 
+The final graph-IR gate passes: 257 focused canonicalization unit tests, all 15 canonicalization
+integration tests, and all 24 canonicalization-filtered property tests pass; graph-IR clippy passes
+for all targets with the property feature and warnings denied. `cargo check -p umol-graph-ir
+--release` confirms the ordinary build after `CanonicalSearchStats`, the instrumented result field,
+and every counter update were placed behind `cfg(test)`. The production branch-order callback no
+longer returns an accounting flag.
+
+The uninstrumented optimized quick benchmark records:
+
+| Case | Complete canonicalization without para stereo | With para stereo |
+| --- | ---: | ---: |
+| `feature_free_connected` | 95.20-95.64 us | 96.72-100.19 us |
+| `feature_free_disconnected` | 92.09-92.79 us | 90.82-92.32 us |
+| `symmetry_heavy_radicals` | 47.80-49.53 us | 46.56-46.99 us |
+| `para_stereo_trichloropentane` | 209.01-209.83 us | 265.91-269.64 us |
+
+These results reproduce the post-dispatch and post-orbit-pruning range without release-path search
+accounting and without the removed prefix machinery.
+
 **Depends on:** S3b, S4c, and S5c.
 
-#### S6b — Run the Python and workspace regression gate
+#### S6b — Run the Python and workspace regression gate **Done**
 
 **Module:** `umol-py` and all workspace users of canonicalization.
 
@@ -801,9 +831,16 @@ changes.
 no public selector. Any fixture or generated artifact that embeds the removed surface is either
 migrated or explicitly disposed of.
 
+The Python 3.13 environment rebuilt the extension successfully, and the Python suite passes with
+1,313 tests passed and 2 skipped. `cargo test --workspace --no-fail-fast` and workspace clippy for
+all targets with warnings denied both pass under the same environment. The source and permanent-
+guide inventory contains `DescriptionLevel` only in canonicalization-private code, its module-local
+tests, and documentation that explicitly describes it as private; no public level-selecting
+canonicalization method remains.
+
 **Depends on:** S6a.
 
-#### S6c — Re-run the reaction-network workloads
+#### S6c — Re-run the reaction-network workloads **Moved to doc 216**
 
 **Module:** `experimental/reaction-network` benchmark or reporting path; no production dependency
 from graph-IR to the experimental crate.
@@ -822,11 +859,16 @@ remaining bottleneck.
 
 **Depends on:** S6a.
 
-#### S6d — Reconcile documentation and lifecycle status
+This evidence requires the atom-mapping branch's experimental reaction-network sources. It is
+transferred to proposed doc [216](216-canonicalization-performance-2026-08-30.md), which records the
+post-merge measurement boundary and the candidate backend, carrier, stabilizer, and repeated-call
+questions. It is not required to retain completed graph-IR changes on this branch.
+
+#### S6d — Reconcile documentation and lifecycle status **Done**
 
 **Module:** this document, `discussion/000-status.md`, and the nomenclature and development guides.
 
-Document the implemented private `CanonicalizeLevel` dispatch, complete-only API, pruning boundary,
+Document the implemented private `DescriptionLevel` dispatch, complete-only API, pruning boundary,
 benchmark evidence, and any deliberately unresolved behavior. Mark this document Completed only
 after the public inventory and all verification gates agree with the implementation, including the
 S6a removal of release-path search accounting.
@@ -836,27 +878,18 @@ This is documentation and lifecycle work.
 **Tests and evidence:** Documentation examples name only current APIs, `git diff --check` passes,
 and the status row describes completed rather than proposed scope.
 
-**Depends on:** S6a, S6b, and S6c.
+**Depends on:** S6a and S6b; S6c is transferred to doc 216.
 
 ### Dependency summary
 
-The remaining critical path is
-`S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
-S5 follows S4 deliberately so benchmark deltas remain attributable even though their private
-infrastructure is largely independent. No remaining implementation stage is optional within this
-scope.
+The completed critical path was
+`S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b -> S6d`.
+S5 followed S4 so benchmark deltas remained attributable; its measured implementation was removed.
+The reaction-network rerun formerly tracked as S6c is now doc 216's first evidence gate.
 
-## Potential issues after the current scope
+## Transferred performance work
 
-The following concerns remain separate work. They should be reconsidered using the final S6
-measurements rather than being folded into the pruning implementation:
-
-1. **Direct backend numbering.** Determine whether a typed adapter can use backend canonical labels
-   as the final graph-IR numbering while preserving typed ordering, covariant frames, and exact
-   aggregate semantics, instead of using the backend only for branch ordering and automorphisms.
-2. **Incremental canonicalization.** Determine whether a product obtained by a local reaction edit
-   can reuse refinement, partition, or canonical-label information from its source without making
-   molecule identity depend on derivation history.
-3. **Repeated-call reduction.** Determine whether canonical-result caching, pre-canonical duplicate
-   detection, or symmetry-adapted rule application materially reduces calls after the single-call
-   search is corrected. This is distinct from making one canonicalization faster.
+Doc [216](216-canonicalization-performance-2026-08-30.md) owns the reaction-network rerun and the
+decision about any subsequent backend request mode, reusable backend session, generated-group
+stabilizer path, compact or edge-colored carrier, typed-search change, incremental canonicalization,
+or repeated-call reduction. None is part of this completed scope.

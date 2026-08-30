@@ -612,50 +612,6 @@ impl PartialOrd for CanonicalComparisonKey {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct CanonicalComparisonKeyPrefix {
-    entity_blocks: Vec<EntityBlockKey>,
-    constraints: Vec<ConstraintBlockKey>,
-}
-
-impl CanonicalComparisonKeyPrefix {
-    fn cmp_key(&self, key: &CanonicalComparisonKey) -> Ordering {
-        fn cmp_key_block_prefixes<P: Ord>(
-            prefixes: &[PositionedKey<P>],
-            blocks: &[PositionedKey<P>],
-        ) -> Ordering {
-            for (index, prefix) in prefixes.iter().enumerate() {
-                let Some(block) = blocks.get(index) else {
-                    return Ordering::Greater;
-                };
-                let position_order = prefix.position.cmp(&block.position);
-                if position_order != Ordering::Equal {
-                    return position_order;
-                }
-                let CanonicalKeyValue::Sequence(prefix_rows) = &prefix.value else {
-                    unreachable!("canonical key block prefixes contain row sequences")
-                };
-                let CanonicalKeyValue::Sequence(rows) = &block.value else {
-                    unreachable!("canonical key blocks contain row sequences")
-                };
-                for (row_index, prefix_row) in prefix_rows.iter().enumerate() {
-                    let Some(row) = rows.get(row_index) else {
-                        return Ordering::Greater;
-                    };
-                    let row_order = prefix_row.cmp(row);
-                    if row_order != Ordering::Equal {
-                        return row_order;
-                    }
-                }
-            }
-            Ordering::Equal
-        }
-
-        cmp_key_block_prefixes(&self.entity_blocks, &key.entity_blocks)
-            .then_with(|| cmp_key_block_prefixes(&self.constraints, &key.constraints))
-    }
-}
-
 fn hash_value<T: Hash>(value: &T) -> u64 {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
@@ -2148,23 +2104,6 @@ impl OrderedPartition {
             .collect()
     }
 
-    fn fixed_entity_prefix(&self, entity_count: usize) -> Vec<NodeId> {
-        let mut prefix = Vec::new();
-        for cell in &self.cells {
-            let Some(&node) = cell.first() else {
-                continue;
-            };
-            if node.index() >= entity_count {
-                continue;
-            }
-            if cell.len() != 1 {
-                break;
-            }
-            prefix.push(node);
-        }
-        prefix
-    }
-
     fn cell_indices(&self, node_count: usize) -> Vec<u32> {
         let mut indices = vec![0; node_count];
         for (cell_index, cell) in self.cells.iter().enumerate() {
@@ -2182,7 +2121,7 @@ type BranchOrdering = fn(
     AutomorphismAlgorithm,
     Option<&AutomorphismAdapterOutput>,
     &mut [NodeId],
-) -> bool;
+);
 
 fn backend_canonical_branch_order(
     adapter: &AutomorphismAdapter,
@@ -2190,8 +2129,7 @@ fn backend_canonical_branch_order(
     algorithm: AutomorphismAlgorithm,
     automorphisms: Option<&AutomorphismAdapterOutput>,
     candidates: &mut [NodeId],
-) -> bool {
-    let backend_called = automorphisms.is_none();
+) {
     let labels = automorphisms.map_or_else(
         || {
             adapter
@@ -2205,16 +2143,15 @@ fn backend_canonical_branch_order(
         ranks[node.index()] = rank;
     }
     candidates.sort_unstable_by_key(|node| ranks[node.index()]);
-    backend_called
 }
 
 #[derive(Clone, Copy, Debug)]
 struct CanonicalSearchOptions {
     automorphism_pruning: bool,
-    prefix_pruning: bool,
     branch_order: BranchOrdering,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct CanonicalSearchStats {
     initial_residual_cell_sizes: Vec<usize>,
@@ -2223,7 +2160,6 @@ struct CanonicalSearchStats {
     backend_calls: usize,
     visited_leaves: usize,
     leaf_comparisons: usize,
-    prefix_pruned_branches: usize,
     orbit_pruned_branches: usize,
 }
 
@@ -2236,6 +2172,7 @@ struct CanonicalCandidate<K> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct CanonicalSearchResult<K> {
     candidate: CanonicalCandidate<K>,
+    #[cfg(test)]
     stats: CanonicalSearchStats,
 }
 
@@ -2243,21 +2180,17 @@ struct CanonicalSearchResult<K> {
 ///
 /// Adapter colors are opaque equality labels and do not order the partition. Automorphism pruning
 /// requires the leaf key to be invariant under adapter automorphisms.
-/// Prefix pruning requires `prefix_worse` to reject only partitions whose every leaf is greater
-/// than the current best key.
-fn canonical_search<K, Descriptor, LeafCandidate, PrefixWorse>(
+fn canonical_search<K, Descriptor, LeafCandidate>(
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
     Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
 {
     canonical_search_impl(
         adapter,
@@ -2265,33 +2198,23 @@ where
         algorithm,
         options,
         leaf_candidate,
-        prefix_worse,
         false,
         &|_| {},
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn canonical_search_with_generator_filter<
-    K,
-    Descriptor,
-    LeafCandidate,
-    PrefixWorse,
-    FilterGenerators,
->(
+fn canonical_search_with_generator_filter<K, Descriptor, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
     filter_generators: &FilterGenerators,
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
     Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     canonical_search_impl(
@@ -2300,20 +2223,17 @@ where
         algorithm,
         options,
         leaf_candidate,
-        prefix_worse,
         true,
         filter_generators,
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn canonical_search_impl<K, Descriptor, LeafCandidate, PrefixWorse, FilterGenerators>(
+fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition_descriptors: &[Descriptor],
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
     apply_generator_filter: bool,
     filter_generators: &FilterGenerators,
 ) -> CanonicalSearchResult<K>
@@ -2321,11 +2241,11 @@ where
     K: Ord,
     Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
     let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
     let mut best = None;
+    #[cfg(test)]
     let mut stats = CanonicalSearchStats {
         initial_residual_cell_sizes: initial
             .cells
@@ -2348,53 +2268,49 @@ where
         algorithm,
         options,
         leaf_candidate,
-        prefix_worse,
         apply_generator_filter,
         filter_generators,
         &mut best,
+        #[cfg(test)]
         &mut stats,
     );
 
     CanonicalSearchResult {
         candidate: best.expect("every finite partition has a discrete entity refinement"),
+        #[cfg(test)]
         stats,
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
+fn search_partition<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
     partition: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
-    prefix_worse: &PrefixWorse,
     apply_generator_filter: bool,
     filter_generators: &FilterGenerators,
     best: &mut Option<CanonicalCandidate<K>>,
-    stats: &mut CanonicalSearchStats,
+    #[cfg(test)] stats: &mut CanonicalSearchStats,
 ) where
     K: Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
-    PrefixWorse: Fn(&OrderedPartition, &CanonicalCandidate<K>) -> bool,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    if options.prefix_pruning
-        && best
-            .as_ref()
-            .is_some_and(|best| prefix_worse(&partition, best))
-    {
-        stats.prefix_pruned_branches += 1;
-        return;
-    }
-
     let Some(cell_index) = partition.first_non_singleton_entity_cell(adapter.source_node_count)
     else {
-        stats.visited_leaves += 1;
+        #[cfg(test)]
+        {
+            stats.visited_leaves += 1;
+        }
         let entity_order = partition.entity_order(adapter.source_node_count);
         let candidate = leaf_candidate(&entity_order);
         let improves = if let Some(best) = best.as_ref() {
-            stats.leaf_comparisons += 1;
+            #[cfg(test)]
+            {
+                stats.leaf_comparisons += 1;
+            }
             candidate.key < best.key
         } else {
             true
@@ -2407,7 +2323,10 @@ fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
 
     let mut candidates = partition.cells[cell_index].clone();
     let automorphisms = (options.automorphism_pruning || apply_generator_filter).then(|| {
-        stats.backend_calls += 1;
+        #[cfg(test)]
+        {
+            stats.backend_calls += 1;
+        }
         let mut output = adapter.automorphisms_for_partition(&partition, algorithm);
         if apply_generator_filter {
             filter_generators(&mut output.source_generators);
@@ -2429,22 +2348,32 @@ fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
                 .and_modify(|representative| *representative = (*representative).min(candidate))
                 .or_insert(candidate);
         }
-        stats.orbit_pruned_branches += partition.cells[cell_index].len() - representatives.len();
+        #[cfg(test)]
+        {
+            stats.orbit_pruned_branches +=
+                partition.cells[cell_index].len() - representatives.len();
+        }
         candidates = representatives.into_values().collect();
     }
 
-    stats.branch_order_calls += 1;
-    let backend_called = (options.branch_order)(
+    #[cfg(test)]
+    {
+        stats.branch_order_calls += 1;
+        stats.backend_calls += usize::from(automorphisms.is_none());
+    }
+    (options.branch_order)(
         adapter,
         &partition,
         algorithm,
         automorphisms.as_ref(),
         &mut candidates,
     );
-    stats.backend_calls += usize::from(backend_called);
 
     for candidate in candidates {
-        stats.refinement_calls += 1;
+        #[cfg(test)]
+        {
+            stats.refinement_calls += 1;
+        }
         let child = partition
             .individualize(cell_index, candidate)
             .refine(adapter.graph());
@@ -2454,10 +2383,10 @@ fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
             algorithm,
             options,
             leaf_candidate,
-            prefix_worse,
             apply_generator_filter,
             filter_generators,
             best,
+            #[cfg(test)]
             stats,
         );
     }
@@ -3131,55 +3060,6 @@ fn topology_candidate(
     })
 }
 
-fn topology_comparison_key_prefix(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    partition: &OrderedPartition,
-) -> Result<CanonicalComparisonKeyPrefix, Contradiction> {
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
-    let atom_order = partition
-        .fixed_entity_prefix(incidence_graph.graph().node_count())
-        .into_iter()
-        .filter_map(|node| match incidence_graph.entity(node) {
-            Entity::Atom(id) => Some(id),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let atoms = atom_order
-        .iter()
-        .copied()
-        .map(|id| {
-            atom_inherent_fields(molecule.atom(id).attributes).map(CanonicalKeyValue::Product)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut prefix = CanonicalComparisonKeyPrefix::default();
-    if !atoms.is_empty() {
-        prefix.entity_blocks.push(PositionedKey {
-            position: EntityBlockPosition::ATOM,
-            value: CanonicalKeyValue::Sequence(atoms),
-        });
-    }
-    if atom_order.len() != atom_count {
-        return Ok(prefix);
-    }
-
-    let mut atom_images = vec![0_usize; atom_count];
-    for (image, id) in atom_order.into_iter().enumerate() {
-        atom_images[id.index()] = image;
-    }
-    let bonds = topology_bond_key_rows(molecule, incidence_graph, &atom_images)?
-        .into_iter()
-        .map(|(key, _, _)| key)
-        .collect::<Vec<_>>();
-    if !bonds.is_empty() {
-        prefix.entity_blocks.push(PositionedKey {
-            position: EntityBlockPosition::BOND,
-            value: CanonicalKeyValue::Sequence(bonds),
-        });
-    }
-    Ok(prefix)
-}
-
 fn constitution_candidate(
     molecule: &Molecule,
     incidence_graph: &IncidenceGraph,
@@ -3567,61 +3447,6 @@ fn complete_candidate(
     Ok((candidate, complete))
 }
 
-fn molecule_comparison_key_prefix(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    partition: &OrderedPartition,
-    level: DescriptionLevel,
-) -> Result<CanonicalComparisonKeyPrefix, Contradiction> {
-    let topology_prefix = topology_comparison_key_prefix(molecule, incidence_graph, partition)?;
-    if level == DescriptionLevel::Topology {
-        return Ok(topology_prefix);
-    }
-
-    let atom_count = incidence_graph.entity_count(EntityKind::Atom);
-    let atom_order = partition
-        .fixed_entity_prefix(incidence_graph.graph().node_count())
-        .into_iter()
-        .filter(|&node| matches!(incidence_graph.entity(node), Entity::Atom(_)))
-        .collect::<Vec<_>>();
-    if atom_order.len() != atom_count {
-        return Ok(topology_prefix);
-    }
-
-    let key = match level {
-        DescriptionLevel::Topology => unreachable!("topology prefix returned above"),
-        DescriptionLevel::Constitution => {
-            constitution_candidate(molecule, incidence_graph, &atom_order)?.key
-        }
-        DescriptionLevel::Structure => {
-            structure_candidate(molecule, incidence_graph, &atom_order)?.key
-        }
-        DescriptionLevel::Full => {
-            complete_candidate(molecule, incidence_graph, &atom_order)?
-                .0
-                .key
-        }
-    };
-    Ok(CanonicalComparisonKeyPrefix {
-        entity_blocks: key.entity_blocks,
-        constraints: key.constraints,
-    })
-}
-
-fn molecule_prefix_worse(
-    molecule: &Molecule,
-    incidence_graph: &IncidenceGraph,
-    partition: &OrderedPartition,
-    level: DescriptionLevel,
-    incumbent: &CanonicalCandidate<CanonicalComparisonKey>,
-) -> Result<bool, Contradiction> {
-    Ok(
-        molecule_comparison_key_prefix(molecule, incidence_graph, partition, level)?
-            .cmp_key(&incumbent.key)
-            == Ordering::Greater,
-    )
-}
-
 fn molecule_counts(molecule: &Molecule) -> [usize; 8] {
     [
         molecule.atoms().count(),
@@ -3821,7 +3646,6 @@ fn canonicalize_topology(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -3842,23 +3666,12 @@ fn canonicalize_topology_with_options(
         topology_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
     };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Topology,
-            incumbent,
-        )
-        .expect("initial colors established topology prefix normalization")
-    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -3877,7 +3690,6 @@ fn canonicalize_constitution(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -3898,23 +3710,12 @@ fn canonicalize_constitution_with_options(
         constitution_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established constitution normalization")
     };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Constitution,
-            incumbent,
-        )
-        .expect("initial colors established constitution prefix normalization")
-    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -3933,7 +3734,6 @@ fn canonicalize_structure(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -3961,16 +3761,6 @@ fn canonicalize_structure_with_options(
         structure_candidate(molecule, &incidence_graph, order)
             .expect("structure descriptors established entity normalization")
     };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Structure,
-            incumbent,
-        )
-        .expect("structure descriptors established prefix normalization")
-    };
     let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
         retain_stereo_preserving_generators(molecule, &incidence_graph, generators);
     };
@@ -3980,7 +3770,6 @@ fn canonicalize_structure_with_options(
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
-        &prefix_worse,
         &filter_generators,
     );
     let correspondence =
@@ -4000,7 +3789,6 @@ fn canonicalize_full(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
     )
@@ -4031,16 +3819,6 @@ fn canonicalize_full_with_options(
             .expect("structure descriptors established complete normalization")
             .0
     };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Full,
-            incumbent,
-        )
-        .expect("structure descriptors established complete prefix normalization")
-    };
     let selected = canonical_search(
         &adapter,
         &descriptors,
@@ -4050,7 +3828,6 @@ fn canonicalize_full_with_options(
             ..options
         },
         &leaf_candidate,
-        &prefix_worse,
     );
     let correspondence =
         correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
@@ -4078,13 +3855,8 @@ fn canonical_key_by(
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(molecule, &incidence_graph, partition, level, incumbent)
-            .expect("initial descriptors established comparison-key prefix normalization")
-    };
     let options = CanonicalSearchOptions {
         automorphism_pruning: level != DescriptionLevel::Structure,
-        prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     };
 
@@ -4101,7 +3873,6 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &prefix_worse,
             )
             .candidate
             .key
@@ -4119,7 +3890,6 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &prefix_worse,
             )
             .candidate
             .key
@@ -4143,7 +3913,6 @@ fn canonical_key_by(
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
-                &prefix_worse,
             )
             .candidate
             .key
@@ -4174,27 +3943,15 @@ fn canonical_key_by_full(
             .expect("normalized structure descriptors established complete normalization")
             .0
     };
-    let prefix_worse = |partition: &OrderedPartition, incumbent: &CanonicalCandidate<_>| {
-        molecule_prefix_worse(
-            molecule,
-            &incidence_graph,
-            partition,
-            DescriptionLevel::Full,
-            incumbent,
-        )
-        .expect("structure descriptors established complete prefix normalization")
-    };
     Ok(canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &prefix_worse,
     )
     .candidate
     .key)
@@ -4600,7 +4357,6 @@ fn canonicalize_molecule_with_correspondence_by_effective(
                 | DescriptionLevel::Constitution
                 | DescriptionLevel::Structure
         ),
-        prefix_pruning: false,
         branch_order: backend_canonical_branch_order,
     };
     match level {
@@ -4712,18 +4468,15 @@ fn reaction_span_canonical_candidate(
             entity_order: order.to_vec(),
         }
     };
-    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
     Ok(canonical_search(
         &adapter,
         &descriptors,
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            prefix_pruning: false,
             branch_order: backend_canonical_branch_order,
         },
         &leaf_candidate,
-        &no_prefix,
     )
     .candidate)
 }

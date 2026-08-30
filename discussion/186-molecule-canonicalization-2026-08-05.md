@@ -8,7 +8,8 @@ Relates: [156](156-ast-comparison-and-property-suite-2026-07-20.md),
 [185](185-python-reaction-span-2026-08-04.md),
 [188](188-inchi-migration-2026-08-09.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
-[214](214-aggregate-frame-semantics-2026-08-28.md)
+[214](214-aggregate-frame-semantics-2026-08-28.md),
+[216](216-canonicalization-performance-2026-08-30.md)
 
 ## Supersession notice — 2026-08-28
 
