@@ -200,6 +200,9 @@ pub trait FrameTransport: Sized {
 /// `representative_action` exposes the complete witness when a downstream consumer needs it;
 /// `reframe` may fuse local selection and transport when it does not. `reframe_with_action` and
 /// `framed_eq` are provided from those operations.
+/// Aggregate action values are operation-issued witnesses with private construction. Their algebra
+/// preserves an exact input domain, while `reframe_by` consumers may accept a covering witness and
+/// ignore entries they do not reference.
 ///
 /// # Semantic properties
 ///

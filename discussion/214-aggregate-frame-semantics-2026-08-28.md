@@ -1332,22 +1332,40 @@ require a new application-result witness in doc 204.
   direct frame transport, `DynPermutation`, the `FrameTransport` / `Reframe` distinction,
   and the rule that plain aggregate `reframe` fuses local action derivation and transport without
   materializing a complete witness. Document the local,
-  entity-kind aggregate, and `OverlaysFrameAction` carrier hierarchy, the per-entity-kind representative-action table,
-  stereo-bond endpoint-block wreath-product actions, noncovalent ordered predicate transport, and
+  entity-kind aggregate, and `OverlaysFrameAction` carrier hierarchy, the per-entity-kind
+  representative-action table, stereo-bond endpoint-block wreath-product actions, noncovalent
+  ordered predicate transport, and
   delta behavior: id remapping preserves participant frames, reframing transports every
   frame-relative delta payload under the owning entity action, a reaction has one lhs- or
   `Add`-owned participant frame per overlay id, a compatible removal may carry another explicit
-  local ordering whose action is composed with the owner action, structured incompatibility is
-  `IncidenceMismatch`, raw span construction preserves an equivalent `Modified` tag while
-  normalization and standardized producers collapse it, and reaction application installs the
-  realized host value as `old` after pattern matching. Also cover input-domain representative
-  actions, receiver-relative compatibility,
+  local ordering and consumes the owner action conjugated into that frame, structured
+  incompatibility is `IncidenceMismatch`, raw span construction preserves an equivalent
+  `Modified` tag while normalization and standardized producers collapse it, and reaction
+  application installs the realized host value as `old` after pattern matching. Also cover
+  input-domain representative actions, receiver-relative compatibility,
   exact-domain action algebra with subset-compatible consumers, and the `normalized_eq` /
   `framed_eq` / `framed_eq_under` ladder, operation-issued action and correspondence witnesses,
   the coherent action/reframing/pipeline property laws and their operational domains, `#T`/`#C`
   failure semantics, and the complete-only canonicalization surface. Historical discussion text
   remains in place behind its supersession notices. **Additive (green).**
   [dep: S0g, S0v, S1a, S1b]
+  **Done.** The data-type, nomenclature, property-test, and Python API guides now describe the
+  implemented integrity boundary, pairwise-distinct bounded stereo frames, `#T`/`#C` failure
+  semantics, the six entity-kind representative actions, `DynPermutation`, the transport/reframe
+  split, the local/entity-kind/overlay action hierarchy, exact producer domains with
+  receiver-relative consumption, and fused aggregate reframing. The reaction material covers
+  owning frames, conjugated removal-local transport, exhaustive delta and constraint transport,
+  `IncidenceMismatch`, raw equivalent `Modified` entries, and realized host values during
+  application. The comparison and property sections now state the operation-issued action and
+  correspondence witnesses, complete equality ladder, group-action laws, and all nine coherent
+  normalization/reframe/canonicalize laws. The retired public description-level surface has been
+  removed from the living guides; Python documents only complete canonicalization and keeps frame
+  actions internal until it has an independent consumer.
+
+  A nightly format pass completed. Strict Rust documentation compilation reached one pre-existing
+  private-link warning in `Molecule::apply`; the ordinary graph-IR/perm documentation build and all
+  four graph-IR rustdoc tests pass, with three ignored examples. Under the repository Python
+  3.13.15 environment, `cargo check -p umol-py` passes. `git diff --check` is clean.
 
 S1 is deferrable after S0 if the immediate deliverable is integrity plus correct frame transport;
 the core semantics do not depend on retiring public description levels. It remains required before

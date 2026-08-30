@@ -189,6 +189,25 @@ access is genuinely part of the wrapper's role. Private PyO3 adapter types are n
 representation behavior they implement, not for one consumer such as a delta. They must not create
 a second public data model.
 
+## Aggregate canonicalization
+
+`Molecule`, `Reaction`, and `ReactionSpan` expose complete-only `canonicalize`,
+`canonicalize_with_correspondence`, and `canonical_eq`. Each accepts the same optional
+`StereoModel` and `CanonicalizeConfig`; canonicalization of an intrinsically contradictory value
+raises `ContradictionError`. Python does not expose `DescriptionLevel`, a molecule
+`description_level` query, or level-parameterized `*_by` operations. Topology, constitution, and
+structure remain private search prefixes rather than reduced public comparison surfaces.
+
+`canonicalize_with_correspondence` returns exactly the same canonical aggregate as `canonicalize`
+plus the total source-to-canonical entity-id correspondence. The participant-frame action is the
+separate witness consumed internally by Rust reframing. Python does not expose frame-action classes
+until a supported Python operation has an independent action consumer; the correspondence does not
+implicitly promise participant-frame transport by itself.
+
+Canonical representatives may change between umol 0.x releases and are not persistent identifiers.
+Persist the molecular assertion, not a canonical entity numbering, unless a future API supplies an
+explicitly versioned canonicalization profile.
+
 ## Equality and hashing
 
 Immutable values may be hashable when their Rust semantics define stable equality and hashing.

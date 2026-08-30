@@ -58,6 +58,11 @@ macro_rules! overlay_frame_action {
         $name:ident, $id:ty, $action:ty, $allows:expr
     ) => {
         $(#[$meta])*
+        ///
+        /// This is an operation-issued witness: its private map records the exact typed
+        /// entity-id and local-degree domain established by its producer. Identity and inverse
+        /// preserve that domain, while composition requires an equal domain. A frame-relative
+        /// consumer may accept a covering witness and ignore entries it does not reference.
         #[derive(Clone, Debug, PartialEq, Eq)]
         pub struct $name(BTreeMap<$id, $action>);
 
@@ -174,7 +179,8 @@ overlay_frame_action! {
 ///
 /// Fields are private because this is an operation-issued witness. Producers establish the typed
 /// domains and local action groups; consumers may use a covering witness and ignore entries they do
-/// not reference.
+/// not reference. Identity and inverse preserve the complete six-kind domain, and composition is
+/// defined only for equal typed id-and-degree domains.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OverlaysFrameAction {
     dative_bonds: DativeBondsFrameAction,

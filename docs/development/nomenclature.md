@@ -244,7 +244,7 @@ spelling.
 | `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
-| `CanonicalizeLevel`, `CanonicalizationLevel` | `DescriptionLevel` | the nested hierarchy belongs to the represented description, not to canonicalization |
+| `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
 | `ground` for a molecule's or entity's chemistry-level determinedness | `concrete` | ground is the lattice term (constraint coordinates included) and risks the ground-state reading |
 
 ## Open issues
@@ -311,7 +311,9 @@ define that order.
 the search-based counterpart of `framed_eq_under`: the caller does not supply a correspondence because
 canonicalization selects the frame.
 
-For a fixed umol release, level, and context, canonicalization is deterministic. During the 0.x
+The public operation is complete-only: topology, constitution, and structure are private search
+prefixes, not caller-selectable canonicalization levels. For a fixed umol release and context,
+canonicalization is deterministic. During the 0.x
 series, its typed order and canonical representatives may change between releases. A canonical form
 is therefore not a persistent identifier unless a future API supplies an explicitly versioned
 canonicalization profile.
@@ -319,7 +321,7 @@ canonicalization profile.
 **Not:** *normalize*, which operates within an existing id and participant frame. Not *canonical
 labeling* either: canonical labeling is the graph-algorithm component used to select the frame,
 whereas aggregate canonicalization constructs the complete remapped graph IR.
-**In code:** `Canonicalize`, `canonicalize`, `canonical_eq`.
+**In code:** `Canonicalize`, `canonicalize`, `canonicalize_with_correspondence`, `canonical_eq`.
 
 ### Class
 
@@ -433,7 +435,7 @@ structural composition and connectivity without adding stereo configuration.
 
 **Not:** all overlays, because stereo atoms and stereo bonds belong only to the structure level. Not
 constraints, which do not contribute to structural identity.
-**In code:** the `Constitution` variants of `DescriptionLevel` and `IncidenceLevel`.
+**In code:** private `DescriptionLevel::Constitution`; public `IncidenceLevel::Constitution`.
 
 ### Constraint
 
@@ -606,10 +608,10 @@ constraints views.
 A **description level** is one member of the cumulative graph-IR description hierarchy:
 `Topology`, `Constitution`, `Structure`, and `Full`. Each level includes every lower level.
 
-The value has two coordinated readings. As an assertion, it states the greatest level an operation
-should use. When projected from a molecule, `Molecule::description_level` returns the least level
-containing everything the molecule actually has. A `Topology` result does not imply an incomplete
-molecule; it says that no higher description section is populated.
+The hierarchy is private canonicalization machinery. It selects the least search prefix containing
+the complete input so empty higher domains need not enlarge the incidence graph. It is not a public
+projection, a molecule property, or a reduced canonicalization surface: public canonicalization
+always includes every present entity and constraint.
 
 `Topology` contains the topology domain. `Constitution = Topology + NonStereo`, and
 `Structure = Constitution + Stereo`. `Full` adds inline and molecule-level constraints. The domains
@@ -617,9 +619,9 @@ are disjoint groups of entity kinds; the levels are their cumulative prefixes.
 
 **Not:** *model*, which decides semantic acceptance; *features*, which are independently combinable
 switches; *domain*, which names a compositional entity group; *scope*, which does not express the
-projected reading or the cumulative order; *representation level*, which compares distinct models;
-*canonicalization level*, which assigns the representation hierarchy to one operation.
-**In code:** `DescriptionLevel`, `Molecule::description_level`.
+cumulative order; *representation level*, which compares distinct models; a public
+*canonicalization level*, because the public operation is complete-only.
+**In code:** private `DescriptionLevel` in aggregate canonicalization.
 
 ### Determined
 
@@ -808,8 +810,8 @@ because they are complete graph-model objects, not lattice values. Role-bearing 
 
 ### Full
 
-**Full** is the terminal description level: the complete molecular structure plus inline and
-molecule-level constraints.
+**Full** is the private terminal description level: the complete molecular structure plus inline
+and molecule-level constraints. It is not a public canonicalization selector.
 
 `IncidenceLevel::Full` has a narrower carrier-specific use: it means every structural entity is
 present in the incidence graph. Constraints are not incidence entities, so this carrier corresponds
@@ -817,7 +819,8 @@ to `DescriptionLevel::Structure`, not `DescriptionLevel::Full`.
 
 **Not:** a chemistry model or conformance pass. The full description preserves the complete
 represented assertion; it does not validate it.
-**In code:** `DescriptionLevel::Full`; `IncidenceLevel::Full` in its carrier-specific sense.
+**In code:** private `DescriptionLevel::Full`; public `IncidenceLevel::Full` in its
+carrier-specific sense.
 
 ### Ground term
 
@@ -1019,10 +1022,9 @@ A new leaf type should follow the same shape, and should implement `AsLit` so th
 A **level** is one member of a closed enum of nested named layers. Selecting a level includes every
 lower layer; the alternatives cannot be combined independently.
 
-`DescriptionLevel` classifies cumulative parts of the graph-IR description. Its asserted and
-projected readings are defined under *Description level*. Future structural entity kinds enter the
-first applicable level without changing the meanings of earlier levels; future constraint variants
-enter `Full`.
+Private `DescriptionLevel` classifies cumulative parts of the graph-IR description for complete
+canonicalization. Future structural entity kinds enter the first applicable level without changing
+the meanings of earlier levels; future constraint variants enter `Full`.
 
 `IncidenceLevel` stops at `Full`, using that name for the complete structural carrier because
 constraints do not occur in an incidence graph. Thus `IncidenceLevel::Full` supplies the carrier for
@@ -1035,7 +1037,7 @@ kinds introduced together, whereas a level includes that domain and every preced
 
 **Not:** *features*, which are independently combinable bitflags; *selection*, which does not express
 the nested relation.
-**In code:** `DescriptionLevel`, `IncidenceLevel`.
+**In code:** private `DescriptionLevel`; public `IncidenceLevel`.
 
 ### Ligand and site
 
@@ -1050,6 +1052,11 @@ A ligand need not be an atom of the graph. A **virtual ligand** occupies a coord
 without a corresponding node — an implicit hydrogen or a lone pair, each borne by a named atom. This
 is how a sulfoxide or a pyramidal amine is expressed without materializing the hydrogen or inventing
 an atom for the lone pair.
+
+A published stereo frame contains pairwise-distinct complete ligand values and at most
+`MAX_DEGREE` ligands. Two equal virtual ligands with the same anchor and kind are therefore
+prohibited; an implicit hydrogen and a lone pair on the same anchor remain distinct. Explicit
+hydrogens are atoms and remain distinct by atom id.
 
 **Not:** *participant* used flatly. Site and ligands are both participants, but they are not
 interchangeable, and diagnostics should say which.
@@ -1367,10 +1374,9 @@ span `L ←K→ R` is read off those tags: `K = Unchanged ∪ Modified`, `L = K 
 `Modified` — a preserved entity relabeled across the reaction — is the relabeling-DPO reading: the
 entity persists in `K` and its label is resolved per side. The tag asserts nothing beyond those two
 side values. If they are `normalized_eq`, the entry is semantically a no-op whose normal form is
-`Unchanged`. Raw span construction preserves an explicitly supplied tag; the current private
-normalization path and canonicalization collapse it, while `superimpose` may emit `Unchanged`
-directly because it derives a standardized span. Doc 214 will expose the same behavior through the
-public normalization and reframing pipeline.
+`Unchanged`. Raw span construction preserves an explicitly supplied tag; `normalize`, `reframe`,
+and `canonicalize` collapse it, while `superimpose` may emit `Unchanged` directly because it derives
+a standardized span.
 
 A correspondence with values and a direction added is what lifts it to a span.
 
@@ -1428,11 +1434,13 @@ Pairwise alignment uses `DynPermutation::between` or `Permutation::between` to d
 participant-frame action between two supplied frames, then applies it through
 `FrameTransport::reframe_by`.
 Integrity prohibits repeated complete participant values, so equal structured incidence determines
-one action. `Reframe` instead selects an action for a frame-owning carrier. A reaction removal may
-carry another explicit local ordering of its source incidence: reaction transport conjugates the
-owning action by the derived local-to-owner alignment, preserving the relation between the removal
-frame and its owner. Normalization instead aligns the removal directly with the owner before
-reframing selects another frame.
+one action. `FrameTransport` is the transport-only operation for forms, form spans, delta payloads,
+and constraints that can consume an action but do not select a frame. `Reframe` extends `Normalize`
+for a frame-owning aggregate, derives its representative action, and selects the frame. A reaction
+removal may carry another explicit local ordering of its source incidence: reaction transport
+conjugates the owning action by the derived local-to-owner alignment, preserving the relation
+between the removal frame and its owner. Normalization instead aligns the removal directly with the
+owner before reframing selects another frame.
 
 An action over an entity aggregate uses the aggregate's plural name followed by singular
 `FrameAction`: `DativeBondsFrameAction`, `AromaticSystemsFrameAction`,
@@ -1441,10 +1449,22 @@ An action over an entity aggregate uses the aggregate's plural name followed by 
 belongs to the carrier being acted on; `FrameAction` remains singular because the value is one
 complete action.
 
+Aggregate actions are operation-issued witnesses with private construction. Their identity,
+inverse, and composition operations preserve an exact typed id-and-degree domain, with composition
+defined only for equal domains. Consumption is receiver-relative: a frame-relative receiver needs
+coverage only for the values it contains and ignores irrelevant action entries. A missing action,
+wrong degree, or inadmissible entity-kind subgroup returns `None`.
+
+`representative_action` and `reframe_with_action` materialize the complete input-domain witness for
+a downstream consumer. Plain aggregate `reframe` fuses local action derivation and transport and
+does not allocate that complete witness merely to discard it. `OverlaysFrameAction` covers
+`Molecule`, `Reaction`, and `ReactionSpan` roots and their frame-relative constraints; a bare
+`Deltas` value has no complete action because its owning frames live on the reaction.
+
 **Not:** a remapping, which relabels ids across id spaces and does not touch order; not
 canonicalization, which also selects ids.
-**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe`, `reframe_by`,
-`OverlaysFrameAction`.
+**In code:** `Reframe`, `FrameTransport`, `representative_action`, `reframe_with_action`, `reframe`,
+`reframe_by`, `framed_eq`, `OverlaysFrameAction`.
 
 ### Relation set
 
@@ -1621,7 +1641,7 @@ excluding constraints.
 
 **Not:** `Full`, which additionally includes constraints; molecular topology, which excludes
 overlays.
-**In code:** `DescriptionLevel::Structure`.
+**In code:** private `DescriptionLevel::Structure`.
 
 ### Tie-break
 
@@ -1644,7 +1664,7 @@ including the inherent values carried by those entities. It does not include ove
 
 **Not:** constitution, which adds the non-stereo overlays; the incidence graph, which is an
 algorithmic representation constructed from selected structure; constraints.
-**In code:** the `Topology` variants of `DescriptionLevel` and `IncidenceLevel`.
+**In code:** private `DescriptionLevel::Topology`; public `IncidenceLevel::Topology`.
 
 ### Transaction
 

@@ -172,6 +172,13 @@ an operation order. Source-format checks such as wedge, directional-bond, or chi
 interpretation likewise stay in the source-format layer; only the resulting graph IR's representation
 is checked by the shared integrity gate.
 
+Those assertions must eventually be realized against an integrity-valid stereo frame. They do not
+create distinguishable occurrences of an equal virtual ligand. If perception could satisfy `#T` or
+`#C` only by repeating an implicit hydrogen or lone pair, it perceives no such stereo entity and
+follows the operation's existing absence policy. Any boundary that supplies an explicit repeated or
+oversized frame instead rejects it during raise; it must not normalize, deduplicate, or choose an
+arbitrary coset for malformed input.
+
 Canonicalization is a transformation of a closed, representation-integrity-valid value. It does not
 repair or revalidate malformed representation state, and its error types contain no unreachable
 integrity arm. Canonicalization preserves tier-2 and tier-3 invalid states; intrinsic normalization
@@ -277,9 +284,8 @@ keeps addition and removal as meaningful inverses.
 An equivalent `Modified` reaction-span entry is another raw/normal distinction. The tag carries no
 assertion beyond its two side values. If those values are equal under `normalized_eq`, the entry is
 semantically a no-op and normalizes to `Unchanged`. Checked and asserted span construction preserve
-the explicitly supplied raw tag. The current private reaction-span normalization path collapses it,
-and canonicalization invokes that path. Doc 214 will expose the same behavior through `Normalize`;
-reframing will inherit the collapse because normalization is its first pipeline step.
+the explicitly supplied raw tag. `ReactionSpan::normalize` collapses it, and reframing and
+canonicalization inherit the collapse because normalization is their first pipeline step.
 
 This does not license silent normalization in an operation that promises faithful representation
 conversion. Instead, classify the operation accurately:
@@ -389,22 +395,19 @@ pub trait Canonicalize: Reframe {
         context: &CanonicalizeContext,
     ) -> Result<Self, Self::Error>;
 
-    fn canonicalize_by(
+    fn canonicalize_with_correspondence(
         self,
-        level: DescriptionLevel,
         context: &CanonicalizeContext,
-    ) -> Result<Self, Self::Error>;
+    ) -> Result<(Self, MoleculeCorrespondence), Self::Error>;
+
+    fn canonical_hash(
+        self,
+        context: &CanonicalizeContext,
+    ) -> Result<u64, Self::Error>;
 
     fn canonical_eq(
         &self,
         other: &Self,
-        context: &CanonicalizeContext,
-    ) -> bool;
-
-    fn canonical_eq_by(
-        &self,
-        other: &Self,
-        level: DescriptionLevel,
         context: &CanonicalizeContext,
     ) -> bool;
 }
@@ -422,6 +425,12 @@ equal because both denote the empty semantic value. One contradiction and one su
 not compare equal. Integrity failures never make distinct inputs equal; callers that need the
 diagnostic invoke `canonicalize` directly.
 
+The public operation is complete-only. Callers cannot select topology, constitution, or structure
+as a reduced comparison surface, and a molecule does not publish a description-level query.
+Canonicalization may use a private effective structural prefix to avoid constructing empty search
+domains, but every present entity, inline constraint, and molecule-level constraint participates in
+the result and in `canonical_eq`.
+
 Stored stereo entities participate whether or not para-stereo refinement is enabled. Without
 para-stereo refinement, perform one stereo-sensitive refinement from the constitution-level
 partition. With it enabled, feed each stereo-sensitive partition back into refinement until the
@@ -434,33 +443,12 @@ cells, not merely an unchanged cell count or unchanged backend color integers. E
 round strictly increases the number of cells, so the finite incidence-node set supplies the
 termination bound. Do not expose an iteration cutoff that can change the canonical form.
 
-A parameterized operation may select a frame using only a coarser structural layer while returning
-the complete original molecule in that frame. Its guarantee is deliberately limited:
-
-- the selected structural layer is in canonical form;
-- the complete result is a remapping and reframing of the input and retains excluded features
-  semantically, while still normalizing their carried form values; and
-- the ordering of excluded features within an automorphism class of the selected layer is not
-  determined.
-
-An excluded feature must not break such a tie. Complete outputs from differently numbered inputs
-may therefore differ by an automorphism of the selected layer. `DescriptionLevel::Full` is not
-a coarser operation: it includes normalized constraints and is exactly equivalent to the
-unqualified operation. `canonicalize_by(Full, context)` equals `canonicalize(context)`, and
-`canonical_eq_by(other, Full, context)` equals `canonical_eq(other, context)`.
-
-Because `canonicalize_by` returns the complete normalized aggregate, an intrinsic contradiction in
-excluded data still makes that transformation fail. For `Topology`, `Constitution`, and `Structure`,
-`canonical_eq_by` compares only the selected layer and must not be implemented by comparing complete
-`canonicalize_by` results; contradictions outside the selected layer do not affect that reduced
-relation. `Full` has no excluded data and is identical to unqualified `canonical_eq`.
-
 Backend canonical labels are search inputs, not the numbering authority. The canonical frame
 is the minimum under the library's typed comparison order. Automorphism generators and orbits may
 prune equivalent branches, but changing the selected graph algorithm must not change the resulting
 canonical representative.
 
-For a fixed umol release, canonicalization is deterministic under a fixed level and context. The
+For a fixed umol release, canonicalization is deterministic under a fixed context. The
 returned canonical form is an ordinary IR value: it carries no canonicalization-schema version or
 producer provenance and is not a persistent identifier. During the 0.x series, the typed comparison
 schema and resulting canonical numbering may change between releases as the entity model and
@@ -483,11 +471,11 @@ explicit positions instead of inferring order from Rust declarations. During 0.x
 schema revision may change them together with this table and the corresponding exact tests.
 
 The entity model has three ordered structural domains. Topology is AB, non-stereo is DAMN, and
-stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo. The
-public cumulative description levels are `Topology`, `Constitution`, `Structure`, and `Full`.
-`Structure` is topology plus overlays and excludes constraints. `Full` appends normalized
-entity-level and molecule-level constraints and is identical to unqualified canonicalization.
-`NonStereo` names the middle entity domain; it is not another cumulative level.
+stereo is SS. Constitution is topology plus non-stereo. Overlays are non-stereo plus stereo, and
+structure is topology plus overlays. The private canonicalization implementation uses those
+prefixes to select the least search carrier containing the complete input; this is an optimization,
+not a public description-level operation. Complete canonicalization appends normalized entity-level
+and molecule-level constraints after the complete structure key.
 
 | Domain position | Structural domain | Entity slots |
 | ---: | --- | --- |
@@ -496,14 +484,14 @@ entity-level and molecule-level constraints and is identical to unqualified cano
 | 2 | Stereo | Stereo atom = 0, Stereo bond = 1 |
 
 An entity-block position is the composite `(domain position, entity slot)`. Entity blocks compare by
-this position and then by their dense row sequence. This hierarchy makes `Topology`, `Constitution`,
-and `Structure` exact domain prefixes while allowing a future entity kind to be appended within the
-domain to which it belongs. An absent block contributes no entry. `Full` adds the separate terminal
-constraint section. Extending an entity domain does not move that section or alter keys for
-molecules that lack the new kind.
+this position and then by their dense row sequence. This hierarchy makes topology, constitution,
+and structure exact internal domain prefixes while allowing a future entity kind to be appended
+within the domain to which it belongs. An absent block contributes no entry. The separate terminal
+constraint section follows every structural domain. Extending an entity domain does not move that
+section or alter keys for molecules that lack the new kind.
 
-Rows compare their components in the following local field order. Every entity kind included at
-the selected structural level contributes all of its inherent fields; participant topology,
+Rows compare their components in the following local field order. Every present entity kind
+contributes all of its inherent fields; participant topology,
 participant-indexed values, and frame-dependent values occupy the listed structural components
 rather than being omitted. The dense row index is implicit in the row sequence. Inline constraints
 are excluded here and enter through the constraint section.
@@ -635,7 +623,8 @@ constraint, or entity kind within its assigned domain can leave the key of every
 byte-for-byte equivalent at the typed-key level. This is a useful extension property, not a
 cross-release promise. A genuinely new structural category may instead require another domain;
 moving an existing entity kind between domains or inserting a domain changes both comparison order
-and cumulative-level semantics. The concrete Rust key storage remains private and may change.
+and the private structural-prefix semantics. The concrete Rust key storage remains private and may
+change.
 Exact ordering tests instantiate the current positions to detect accidental drift; an intentional
 schema revision updates those tests and this table together.
 
@@ -743,6 +732,12 @@ relation's identity; the stored sequence is the coordinate frame its payload is 
 core never interprets that frame — it relabels ids and preserves sequence — so all frame semantics
 live in graph IR.
 
+Published entity frames contain pairwise-distinct complete participant values. In particular, a
+stereo frame cannot repeat an equal `StereoLigand`, including an implicit hydrogen or lone pair with
+the same anchor and kind, and its length cannot exceed `umol_perm::MAX_DEGREE`. These integrity
+rules make the action between two compatible stored frames unique and keep every stereo action in
+the bounded `Permutation` representation.
+
 Comparing two entries therefore has three independent parts, and a site chooses each:
 
 - **identity** — do the two hold the same structured participants under the entity kind's factor
@@ -760,11 +755,56 @@ Comparing two entries therefore has three independent parts, and a site chooses 
 reads neither frame, and an undetermined electron-count vector has nothing to reorder. A site that
 needs both must ask for both.
 
-Only the per-participant electron counts of aromatic systems and multicenter bonds, and the stereo
-configuration with its frame-relative constraints, are position-sensitive. Dative-bond order,
-noncovalent-bond kind and their constraints are not, and their `FrameTransport` implementation
-destructures the form exhaustively and rebuilds it, so a new position-indexed field fails to compile
-rather than being left silently unframed.
+The six overlay kinds select and transport frames as follows:
+
+| Entity kind | Representative frame | Local action | Position-sensitive values |
+| --- | --- | --- | --- |
+| Dative bond | donors sorted by atom id; acceptor fixed | `DynPermutation` on donors | donor sequence; the current form and constraints are invariant |
+| Aromatic system | participants sorted by atom id | `DynPermutation` | participant electron counts |
+| Multicenter bond | participants sorted by atom id | `DynPermutation` | participant electron counts |
+| Noncovalent bond | endpoints sorted by atom id | degree-two `DynPermutation` | ordered predicate pairs in `NoncovalentBondEndsSatisfy`; the entity form is invariant |
+| Stereo atom | complete ligands sorted | bounded `Permutation` in the full ligand symmetric group | configuration, ligand-symmetry and fluxionality permutations, topicity positions, and stereo constraints |
+| Stereo bond | sort each two-ligand endpoint block, then order the blocks | bounded `Permutation` in `S_2 wr S_2` | configuration and every frame-relative stereo-bond constraint |
+
+The stereo-bond group may permute within each endpoint block and exchange the two complete blocks;
+it cannot move one ligand across the block boundary. Dative-bond order, noncovalent-bond kind,
+aromatic and multicenter charge and spin, and their inline constraints are currently
+frame-invariant. Their `FrameTransport` implementations destructure the complete form, so a new
+field must be classified explicitly rather than being silently left unframed.
+
+`FrameTransport` is the transport-only operation for a receiver and an independently supplied
+action. Entity forms, `EntitySpan<form>`, individual overlay delta payloads, and constraint values
+implement it because they can consume a compatible action but do not own enough participant data
+to select one. `Reframe` is implemented only by a frame-owning carrier. It extends `Normalize`,
+derives a representative action, and therefore represents the second prefix in the
+normalize–reframe–canonicalize pipeline.
+
+The associated action is complete for its receiver:
+
+| Carrier | `FrameTransport::Action` |
+| --- | --- |
+| One ordinary overlay form or form span | one `DynPermutation` |
+| One stereo form or form span | one bounded `Permutation` |
+| One entity-kind aggregate or `*Spans` peer | one typed local action per entity id |
+| `Molecule` or `ReactionSpan` | one six-component `OverlaysFrameAction` |
+| `Reaction` | one `OverlaysFrameAction` covering every lhs and `Add`-owned overlay id |
+| `Constraint`, `ConstraintSpan`, or `ConstraintDelta` | a covering `OverlaysFrameAction` |
+| `Deltas` without its reaction | none; removals may use local frames whose owners live on the reaction |
+
+Each entity-kind aggregate action and `OverlaysFrameAction` is an operation-issued witness with
+private construction. Identity and inverse preserve its exact typed id-and-degree domain, and
+composition is defined only for equal domains and degrees. Consumer compatibility is weaker and
+receiver-relative: a receiver requires coverage for every frame-relative value it contains, ignores
+irrelevant entries, and returns `None` for a missing degree, inadmissible subgroup action, or other
+observable incompatibility. A witness may therefore be reused with another compatible carrier; it
+is not bound to one object identity.
+
+`representative_action` is derived from the input's frame owners before normalization and remains
+total when later normalization finds an intrinsic contradiction or erases an entry.
+`reframe_with_action` returns that input-domain witness with the result. Plain aggregate `reframe`
+derives and immediately consumes local actions as it visits entries; it does not pre-emptively
+allocate the complete aggregate witness merely to discard it. Sparse action storage used for
+frame-relative constraints allocates no backing map for an empty domain.
 
 Each constraint form classifies its own participant-frame use through an exhaustive match. Each
 entity delta likewise classifies its fields exhaustively and delegates constraint payloads to that
@@ -784,6 +824,12 @@ selected owning action. Application-specific rule-to-host alignment may likewise
 normalized removal directly into the host frame; that is not generic frame transport of a raw
 locally framed reaction. An incompatible distinguished factor or stereo-bond endpoint-block
 assignment changes structured incidence rather than producing a second frame of the same entity.
+Reaction integrity reports that case as `IncidenceMismatch`.
+
+Reaction application derives the unique action from each mapped rule frame to the host frame and
+transports every frame-relative field and constraint delta before matching. After the pattern
+`old` value matches, lowering records the realized host value as the transaction's `old`; it does
+not retain the rule pattern as if it were the concrete value being replaced.
 
 Applying a remapping to an independently supplied graph or relation set introduces a contextual
 coverage condition: every participant must lie in the remapping's declared source domain. Public

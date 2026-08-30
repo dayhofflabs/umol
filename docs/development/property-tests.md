@@ -396,9 +396,9 @@ The properties exercise:
 - symmetry under reversing a correspondence;
 - composition of correspondence-aware equivalence on generated atom reorderings;
 - exact idempotence and dense-remapping invariance of complete molecule canonicalization;
-- reflexivity, symmetry, and dense-remapping invariance of `canonical_eq` and `canonical_eq_by` at
-  every canonicalization level; and
-- equivalence of the unqualified operations and their explicit `Full` forms.
+- reflexivity, symmetry, and dense-remapping invariance of complete `canonical_eq`; and
+- agreement of `canonicalize_with_correspondence` with `canonicalize`, including that remapping and
+  reframing the input under its operation-issued witnesses produces the returned canonical form.
 
 This example shows why the comparison relation must appear in every public
 property. Writing only “the result equals the input” is ambiguous for a graph-IR value
@@ -417,6 +417,60 @@ claim. The suite directly checks reflexivity and symmetry of `normalized_eq`, wh
 composition checks the mapped `framed_eq_under` relation on a restricted atom-reordering domain.
 The coherent pipeline property stage systematizes the remaining `framed_eq` and cross-quotient
 laws.
+
+### Frame transport and reframing
+
+For each of the six overlay kinds, test the local action and its aggregate carrier. Cover forms,
+kind-specific form spans, frame-relative constraints and deltas, entity-kind aggregates, and the
+`Molecule`, `Reaction`, and `ReactionSpan` roots where applicable. Generated values must include
+nonidentity actions and nonuniform position-sensitive payloads; an identity-only action or a
+constant payload cannot detect reversed action direction or a dropped transport.
+
+`FrameTransport` has three group-action laws on every compatible receiver:
+
+- identity leaves the receiver unchanged;
+- applying an action and its inverse recovers the receiver; and
+- sequential application agrees with action composition.
+
+Aggregate actions additionally preserve their exact typed id-and-degree domains through identity
+and inverse, compose only on equal domains, and may be consumed by a receiver whose required domain
+is a subset. Test missing entries, wrong degrees, and inadmissible stereo-bond actions as `None`, not
+as silent no-ops. Reaction removals with a nonidentity local-to-owner action must exercise
+conjugation explicitly; ordinary composition does not establish the transport law in the removal's
+local frame.
+
+For every integrity-valid frame owner, `representative_action` is total on the input domain, even
+when normalization later erases an entry or reports an intrinsic contradiction. On satisfiable
+inputs, `reframe_with_action` must agree exactly with plain `reframe`, and transporting the
+normalized input by the returned action then normalizing again must reproduce the representative.
+Reframing is idempotent and the representative action of a reframed value is identity. This also
+checks that the fused aggregate `reframe` path and the witness-producing path implement the same
+operation.
+
+### Standardization pipeline
+
+The coherent pipeline suite names normalization as `N`, reframing as `R`, and complete
+canonicalization as `C`, and checks all absorption and idempotence laws:
+
+```text
+N(N(x)) = N(x)    R(R(x)) = R(x)    C(C(x)) = C(x)
+R(N(x)) = R(x)    N(R(x)) = R(x)
+C(N(x)) = C(x)    C(R(x)) = C(x)
+N(C(x)) = C(x)    R(C(x)) = C(x)
+```
+
+State the equality appropriate to each equation; do not hide a frame or id quotient behind `==`.
+The relation ladder is `==` implies `normalized_eq`, which implies `framed_eq`, which implies
+`canonical_eq`. For satisfiable integrity-valid values, canonical equality is exactly framed
+equality under some complete correspondence. Two intrinsic contradictions compare equal at each
+semantic quotient, while one contradiction and one satisfiable value do not. A transformation that
+must produce a value still returns its contradiction error rather than manufacturing a witness.
+
+Run these properties over raw satisfiable, normalized, reframed, and canonical values, plus focused
+intrinsic-contradiction and incompatible-action cases. Cover all six overlay kinds and every
+aggregate root. Preserve the operational distinction between the id correspondence and the
+participant-frame action: applying the correspondence alone preserves stored participant order,
+and the corresponding reframe step completes the canonical transport.
 
 ### Reaction operations
 

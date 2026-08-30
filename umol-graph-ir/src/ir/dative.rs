@@ -14,7 +14,6 @@ use super::id::{AtomId, DativeBondId};
 use super::num::NumForm;
 use super::traits::{FrameTransport, Lattice, Normalize, Reframe};
 
-/// The site this entry is borne by.
 /// The molecule's dative bonds.
 ///
 /// The donors bear the participant frame; the acceptor is a single distinguished atom. Neither
