@@ -31,17 +31,12 @@ the statuses recorded here remain authoritative.
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
 - [208 - Canonicalization optimization](208-canonicalization-scaling-2026-08-24.md)
-  improves canonicalization performance.
-- [214 - Aggregate frame semantics](214-aggregate-frame-semantics-2026-08-28.md)
-  replaces doc 209's unfinished scope: stereo frames are pairwise-distinct and bounded by
-  `MAX_DEGREE`; its staged plan closes every publication boundary, removes occurrence-orbit
-  machinery, and completes molecule, reaction, and reaction-span frame transport.
-- [215 - Integrity closure and minimization](215-integrity-minimization-2026-08-28.md)
-  corrects the minimum aggregate integrity domain and closes the remaining mutation and defensive
-  check gaps before doc 214 continues.
+  improves canonicalization performance; completed doc 214 satisfies its aggregate-semantics and
+  complete-only API dependency, so S3b is next.
 - [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
+  records the missing single-id-space remapping layer and its open representation decision.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
-  records the missing single-id-space remapping layer and the representation decision it requires.
+  records the proposed entity-set abstraction for editor overlays.
 
 ## Document index
 
@@ -211,7 +206,7 @@ the statuses recorded here remain authoritative.
 | [165-ast-api-worklist-2026-07-27.md](165-ast-api-worklist-2026-07-27.md)                                         | Proposed      | 2026-07-27   | Consolidated AST API, ring-view, relation-integrity, and matching work.                                    |
 | [166-molecule-ops-2026-07-27.md](166-molecule-ops-2026-07-27.md)                                                 | Proposed      | 2026-07-27   | Hydrogen transformations and remaining validator implementation.                                           |
 | [167-graph-alg-execution-2026-07-27.md](167-graph-alg-execution-2026-07-27.md)                                   | Completed     | 2026-07-27   |                                                                                                            |
-| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-28   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and explicit `Equiv` failure semantics. |
+| [168-api-hygiene-2026-07-27.md](168-api-hygiene-2026-07-27.md)                                                   | Proposed      | 2026-08-29   | Crate boundaries, visibility, re-exports, errors, and diagnostics; includes `Normalize` error typing and one private-link rustdoc correction. |
 | [169-dsl-metadata-context-2026-07-27.md](169-dsl-metadata-context-2026-07-27.md)                                 | Completed     | 2026-07-28   |                                                                                                            |
 | [170-reaction-smiles-python-2026-07-28.md](170-reaction-smiles-python-2026-07-28.md)                             | Completed     | 2026-07-28   |                                                                                                            |
 | [171-aromaticity-inconsistency-policy-2026-07-29.md](171-aromaticity-inconsistency-policy-2026-07-29.md)         | Completed     | 2026-08-01   |                                                                                                            |
@@ -251,11 +246,11 @@ the statuses recorded here remain authoritative.
 | [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.         |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.        |
-| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-28   | S2 complete; S3 awaits aggregate frame semantics and complete-only integration in doc 214; S6a removes release-path accounting. |
-| [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Superseded    | 2026-08-28   | Superseded by doc 214. S0–S1 remain implemented; the S2–S5 disposition records which work moved and which directions were abandoned. |
+| [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | In Progress   | 2026-08-29   | Doc 214 is complete; S3b renumbering and retained-workload verification is next; S6a removes release-path accounting. |
+| [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Superseded    | 2026-08-29   | Superseded by completed doc 214. S0–S1 remain implemented; the S2–S5 disposition records moved and abandoned work. |
 | [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                             | Superseded    | 2026-08-26   | Superseded by doc 211; the storage migration could not be separated from the relation API change.          |
-| [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-28   | Repeat-valid orbit semantics superseded by doc 214; frame-preserving relation API remains completed.       |
-| [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Proposed      | 2026-08-28   | Findings on the missing remapping id-transport layer; representation decision open, out of doc 211's scope. |
+| [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
+| [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Proposed      | 2026-08-29   | Findings on the missing remapping id-transport layer; representation decision open, out of doc 211's scope. |
 | [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-08-29   | Generic entity-set abstraction, name, visibility, and construction surface require design review before implementation. |
-| [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | In Progress   | 2026-08-29   | S0a-S1c complete; S2a cross-surface verification is next.                                                 |
-| [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-28   | S0-S3 complete; 2026-08-29 correction prohibits donor/acceptor repetition within one dative bond.          |
+| [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
+| [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |

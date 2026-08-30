@@ -1,6 +1,6 @@
 # 214 — Aggregate frame semantics
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-28
 Relates: [103](103-stereochemistry-overlay-and-ports-2026-05-28.md),
 [104](104-stereochemistry-implementation-plan-2026-05-31.md),
@@ -1377,11 +1377,29 @@ doc 214 can close as a replacement for all moved doc-209 work.
   property/conformance suites, benchmark builds, clippy, workspace tests, and Python 3.13 extension
   plus pytest. Record exact commands and results in this document. **Additive (green).**
   [dep: S0v, S1c]
+  **Done.** `cargo +nightly fmt --all`, its check mode, and `git diff --check` pass. Under the
+  repository Python 3.13.15 environment,
+  `cargo nextest run --workspace --all-features --no-fail-fast` passes all 29,631 tests with six
+  skipped in 157.839 seconds, covering the feature-gated graph-IR property and conformance targets
+  as well as the workspace. `cargo test --workspace --all-features --doc` passes every doctest
+  target. `cargo bench -p umol-graph-ir --bench canonicalize --bench reaction --no-run` builds both
+  benchmark executables. `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  passes. `maturin develop --manifest-path umol-py/Cargo.toml` rebuilds and installs the extension,
+  and `pytest -q umol-py/tests` reports 1,313 passed and two skipped.
 - **S2b — evidence review and lifecycle closeout** (docs 168, 186, 208, 209, 211, 212, 214 and
   `discussion/000-status.md`): verify that no living guide or API claims repeat-valid or unbounded
   stereo frames, move any genuinely independent follow-up rather than hiding it, and mark this
   document `Completed` only after every non-deferrable and retained doc-209 item is implemented and
   green. **Additive (green).** [dep: S2a]
+  **Done.** The source and living-guide audit finds no surviving occurrence-orbit helper, public
+  description-level selector, repeat-valid stereo-frame claim, or unbounded stereo-frame path.
+  Docs 186 and 211 retain their historical discussions behind dated completion addenda; doc 209's
+  moved-versus-abandoned disposition now records the successor's completion. Every moved doc-209
+  item maps to a completed doc-214 subitem and the full verification gate above is green. Doc 208 is
+  released to S3b. Doc 212's remapping representation decision remains an independent proposed
+  task. The unrelated strict-rustdoc warning caused by `Molecule::apply` linking a private method is
+  recorded in proposed doc 168 rather than hidden here. The status index is synchronized and this
+  document is complete.
 
 ## Dependency summary
 

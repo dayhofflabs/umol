@@ -65,6 +65,13 @@ in the preserved text below are not current design.
 - S5c's instruction to close this document as `Completed` is abandoned. Doc 214 owns its own plan,
   verification, and closeout after its design is settled.
 
+### Successor completion — 2026-08-29
+
+Doc 214 has completed every item moved above. It implemented aggregate normalization and frame
+transport, frame-preserving delta remapping, reaction and reaction-span transport, complete-only
+Rust and Python canonicalization, the corrected correspondence law, and the cross-language
+verification gate. This document remains `Superseded`; none of the abandoned directions is revived.
+
 The remainder of this document is preserved as the record of the implemented work and the plan that
 was superseded. Its later “settled” statements and S2–S5 instructions are not current design.
 

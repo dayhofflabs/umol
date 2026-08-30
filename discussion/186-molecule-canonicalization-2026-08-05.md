@@ -19,6 +19,14 @@ position-order fallback. Current design rejects those frames at publication and 
 frame action. The graph-canonicalization implementation and all unrelated completed scope remain
 historical and implemented as recorded below.
 
+### Completion addendum — 2026-08-29
+
+Doc 214 is complete. It also supersedes this record's public description-level selectors,
+level-parameterized canonicalization methods, and `Equiv` / `equiv_under` terminology. The current
+public pipeline is complete-only `Normalize` -> `Reframe` -> `Canonicalize`, with
+`normalized_eq`, `framed_eq`, and `canonical_eq` as its equality ladder. The historical design and
+implementation account below remains unchanged.
+
 `Molecule` does not provide a canonical representation with respect to entity renumbering.
 `Graph::canonical_key` and canonical labels are available in
 `umol-graph-core::algorithms::automorphism`; the molecule-level incidence (Levi) graph is available

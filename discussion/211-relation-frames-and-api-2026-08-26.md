@@ -23,6 +23,14 @@ frames; the orbit search, virtual-block swaps, `FrameAction`, and `find_reframed
 scheduled to be unwound. Frame-preserving relation storage, entry identity, participant transport,
 and the remainder of the completed relation API work stay in force.
 
+### Completion addendum — 2026-08-29
+
+Doc 214 completed that unwind. Published stereo frames are now pairwise-distinct and bounded;
+occurrence-orbit search, `FrameAction`, `find_reframed`, and their repeat-specific permutation
+machinery are removed. Current graph-IR transport uses `FrameTransport` and `Reframe`, and current
+fixed-frame comparison uses `normalized_eq`. The historical repeat-valid analysis below remains as
+the record of the superseded decision.
+
 ## Purpose
 
 The graph-core relation types carry construction-time participant ordering, a payload reindex

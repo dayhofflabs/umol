@@ -27,12 +27,13 @@ problem is general; the reaction-network crate must not acquire a corpus-specifi
 
 Doc 209 implemented private effective-level dispatch and proposed removing description levels and
 level-selecting canonicalization methods from the public Rust and Python APIs, but it was superseded
-before its aggregate semantics and removal stages began. Doc
-[214](214-aggregate-frame-semantics-2026-08-28.md) owns that remaining design and implementation
-scope. The completed S1 and S2 work below records how the current branch reached its present state;
-it is not the operative API direction. The nested levels remain available privately for exact search
-reduction. S3 must preserve complete canonicalization, equality, correspondence, and hash semantics
-against the contract selected there.
+before its aggregate semantics and removal stages began. Completed doc
+[214](214-aggregate-frame-semantics-2026-08-28.md) implemented that remaining scope: aggregate
+normalization and reframing are complete, and public canonicalization is complete-only. The
+completed S1 and S2 work below records the interim surface by which the branch reached this point;
+it is not the current public API. Nested description levels remain private exact-search machinery.
+S3b is now the next subitem and must preserve complete canonicalization, equality, correspondence,
+and hash semantics.
 
 ## Current evidence
 
@@ -481,19 +482,19 @@ over all targets with warnings denied.
 
 **Module:** `umol-graph-ir/src/ir/canonicalize.rs` and aggregate canonicalization implementations.
 
-Doc 209 implemented private `CanonicalizeLevel` inspection and aggregate dispatch. Doc
-[214](214-aggregate-frame-semantics-2026-08-28.md) owns the remaining molecule, reaction, and
+Doc 209 implemented private canonicalization-level inspection and aggregate dispatch. Completed doc
+[214](214-aggregate-frame-semantics-2026-08-28.md) supplies the molecule, reaction, and
 reaction-span frame semantics, complete-only public API, and exactness tests. This subitem has no
 independent implementation remaining in doc 208.
 
-**Depends on:** doc 214 completion.
+**Dependency satisfied by:** completed doc 214.
 
 #### S3b — Verify the reduction under renumbering and retained workloads
 
 **Module:** canonicalization property tests and `umol-graph-ir/benches/canonicalize.rs`.
 
 Apply the existing dense-renumbering generators to feature-free and partially featured molecules.
-After doc 214 removes the public level operations, benchmark the retained cases through
+With doc 214's public level removal complete, benchmark the retained cases through
 `canonicalize`, `canonicalize_with_correspondence`, `canonical_hash`, and `canonical_eq` for an
 equal remapping and a structurally unequal input. The existing pre-change explicit-level results
 provide the forced-full and lower-level timing baselines without retaining a public forcing API.
@@ -506,7 +507,7 @@ levels. Record search counters and complete-operation Criterion results in this 
 assert wall-clock thresholds in tests. Use the result to decide whether a separate canonical-hash
 materialization optimization is justified.
 
-**Depends on:** doc 214 completion.
+**Dependency satisfied by:** completed doc 214.
 
 ### S4 — Restore sound orbit pruning at structure level
 
@@ -640,22 +641,23 @@ completion gate, not deferred cleanup.
 
 **Depends on:** S3b, S4c, and S5c.
 
-#### S6b — Run the Python and workspace migration gate
+#### S6b — Run the Python and workspace regression gate
 
 **Module:** `umol-py` and all workspace users of canonicalization.
 
 Activate `umol-py/.venv`, confirm Python 3.13, rebuild the extension, run the Python tests, and run
 the workspace test and lint gates. Search source, tests, examples, and documentation for the removed
-`DescriptionLevel` and `_by` surface. `CanonicalizeLevel` may remain only in
+public `DescriptionLevel` and `_by` surface. `DescriptionLevel` may remain only in
 canonicalization-private code and module-local tests.
 
-This verifies the breaking selector migration across language boundaries.
+This re-verifies the complete-only selector contract across language boundaries after the search
+changes.
 
 **Tests and evidence:** The Python and workspace gates pass with complete-only canonicalization and
 no public selector. Any fixture or generated artifact that embeds the removed surface is either
 migrated or explicitly disposed of.
 
-**Depends on:** doc 214 completion and S6a.
+**Depends on:** S6a.
 
 #### S6c — Re-run the reaction-network workloads
 
@@ -695,7 +697,7 @@ and the status row describes completed rather than proposed scope.
 ### Dependency summary
 
 The remaining critical path is
-`doc 214 -> S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
+`S3b -> S4a -> S4b -> S4c -> S5a -> S5b -> S5c -> S6a -> S6b/S6c -> S6d`.
 S5 follows S4 deliberately so benchmark deltas remain attributable even though their private
 infrastructure is largely independent. No remaining implementation stage is optional within this
 scope.

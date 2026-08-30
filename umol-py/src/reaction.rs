@@ -633,10 +633,11 @@ impl ReactionProductsIter {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use pyo3::exceptions::{PyStopIteration, PyTypeError, PyValueError};
     use pyo3::types::{PyDict, PyList};
     use rstest::{fixture, rstest};
-    use std::iter;
     use umol_chem::element::Element as ChemElement;
     use umol_graph::ingest::ingest_smiles;
     use umol_graph_ir::dsl::{
