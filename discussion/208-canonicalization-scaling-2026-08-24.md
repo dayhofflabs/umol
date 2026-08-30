@@ -596,7 +596,7 @@ source orbits from the retained subgroup.
 
 **Depends on:** S4a.
 
-#### S4c — Build safe subgroup orbits and enable pruning
+#### S4c — Build safe subgroup orbits and enable pruning **Done**
 
 **Module:** graph-IR canonicalization search.
 
@@ -612,6 +612,51 @@ This changes private search behavior while preserving exact results.
 and reverse candidate orders, retained stereo examples, para-stereo examples, and dense
 renumberings. Assert exact canonical aggregates and transport laws, then record leaves, backend
 calls, orbit-pruned branches, and timings for the retained benchmark cases.
+
+The filtered search path now rebuilds source-entity orbits solely from the retained source
+generators. It takes the transitive closure of every source-to-image pair and assigns the minimum
+source node as the deterministic orbit representative; an empty retained set therefore produces
+singleton orbits. Unfiltered topology and constitution searches continue to use the backend's full
+source orbits. Production `Structure` search enables the rebuilt orbits, while constrained `Full`
+search remains exhaustive.
+
+The bounded exact test compares the generated minimum and transported canonical aggregate under
+unpruned and pruned search with both forward and reverse branch orders. A global exchange of two
+stereo sites has these exact counters:
+
+| Search | Refinements | Backend | Leaves | Comparisons | Orbit-pruned |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Unpruned, either order | 3 | 1 | 2 | 1 | 0 |
+| Pruned, either order | 2 | 1 | 1 | 0 | 1 |
+
+The retained feature-free cases reconstruct the full structural source orbits and reproduce the
+topology-search accounting recorded in S3b:
+
+| Case | Refinements | Backend | Leaves | Orbit-pruned |
+| --- | ---: | ---: | ---: | ---: |
+| Connected | 6 | 5 | 1 | 10 |
+| Disconnected | 6 | 5 | 1 | 10 |
+| Radicals | 7 | 6 | 1 | 16 |
+
+The symmetric single-stereo-site fixture records the expected conservative under-pruning: the
+backend basis contains no individually stereo-preserving generator, so both enabled and disabled
+search visit 24 leaves and report zero orbit-pruned branches even though stereo-preserving products
+of rejected generators exist. No full stabilizer algorithm was added. The para-stereo cascade is
+already discrete after refinement. Its pruned and unpruned searches both visit one leaf. Exact
+aggregate equality, source-to-result transport, all 120 dense atom renumberings of the symmetric
+stereo fixture, and the focused dense-renumbering properties pass.
+
+An optimized Criterion quick run on 2026-08-29 measured the public complete operation after S4c:
+
+| Case | Without para stereo | With para stereo |
+| --- | ---: | ---: |
+| `tetrahedral_stereo` | 62.183-62.657 us | 60.583-61.562 us |
+| `meso_dichlorobutane` | 103.84-105.95 us | 103.32-105.51 us |
+| `para_stereo_trichloropentane` | 210.16-210.72 us | 265.88-267.31 us |
+| `para_stereo_cascade` | 789.82-797.27 us | 688.00-688.58 us |
+
+The three feature-free public complete benchmarks remain on their lower effective-level path and
+measure 95.631-96.632 us, 91.587-91.880 us, and 47.093-47.278 us respectively without para stereo.
 
 **Depends on:** S4b.
 

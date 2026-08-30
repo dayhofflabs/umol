@@ -6,7 +6,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use thiserror::Error;
 use umol_graph_core::{
-    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId, SubdivisionNodeSource,
+    AutomorphismAlgorithm, AutomorphismOutput, Correspondence, Graph, NodeId,
+    SubdivisionNodeSource, UnionFind,
 };
 use umol_perm::{Orientation, Permutation};
 
@@ -1993,6 +1994,31 @@ fn retain_stereo_preserving_generators(
     generators.retain(|generator| generator_preserves_stereo(molecule, incidence_graph, generator));
 }
 
+fn source_orbits_from_generators(
+    source_node_count: usize,
+    generators: &[Vec<NodeId>],
+) -> Vec<NodeId> {
+    let mut sets = UnionFind::new(source_node_count);
+    for generator in generators {
+        debug_assert_eq!(generator.len(), source_node_count);
+        for (source, image) in generator.iter().enumerate() {
+            sets.union(source, image.index());
+        }
+    }
+
+    let roots = (0..source_node_count)
+        .map(|source| sets.find(source))
+        .collect::<Vec<_>>();
+    let mut representatives = vec![usize::MAX; source_node_count];
+    for (source, root) in roots.iter().copied().enumerate() {
+        representatives[root] = representatives[root].min(source);
+    }
+    roots
+        .into_iter()
+        .map(|root| NodeId(representatives[root] as u32))
+        .collect()
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct OrderedPartition {
     cells: Vec<Vec<NodeId>>,
@@ -2324,6 +2350,8 @@ fn search_partition<K, LeafCandidate, PrefixWorse, FilterGenerators>(
         let mut output = adapter.automorphisms_for_partition(&partition, algorithm);
         if apply_generator_filter {
             filter_generators(&mut output.source_generators);
+            output.source_orbits =
+                source_orbits_from_generators(adapter.source_node_count, &output.source_generators);
         }
         output
     });
@@ -3723,11 +3751,8 @@ fn canonicalize_structure(
 fn canonicalize_structure_with_options(
     molecule: &Molecule,
     context: &CanonicalizeContext,
-    mut options: CanonicalSearchOptions,
+    options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
-    // Structure orbits remain disabled until they are rebuilt from the stereo-preserving
-    // generators retained below.
-    options.automorphism_pruning = false;
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
@@ -4349,7 +4374,9 @@ fn canonicalize_molecule_with_correspondence_by_effective(
     let options = CanonicalSearchOptions {
         automorphism_pruning: matches!(
             level,
-            DescriptionLevel::Topology | DescriptionLevel::Constitution
+            DescriptionLevel::Topology
+                | DescriptionLevel::Constitution
+                | DescriptionLevel::Structure
         ),
         prefix_pruning: false,
         branch_order: backend_canonical_branch_order,

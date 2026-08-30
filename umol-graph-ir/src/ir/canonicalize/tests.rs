@@ -407,6 +407,54 @@ fn symmetric_stereo_canonicalization_molecule() -> Molecule {
 }
 
 #[fixture]
+fn stereo_site_exchange_canonicalization_molecule() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [
+            Element::C,
+            Element::F,
+            Element::Cl,
+            Element::Br,
+            Element::I,
+            Element::C,
+            Element::F,
+            Element::Cl,
+            Element::Br,
+            Element::I,
+        ]
+        .into_iter()
+        .map(AtomForm::from_element)
+        .collect(),
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+            (AtomId(5), AtomId(6), BondForm::from_order(1)),
+            (AtomId(5), AtomId(7), BondForm::from_order(1)),
+            (AtomId(5), AtomId(8), BondForm::from_order(1)),
+            (AtomId(5), AtomId(9), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![
+            (
+                AtomId(0),
+                (1..=4)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+            (
+                AtomId(5),
+                (6..=9)
+                    .map(|ligand| StereoLigand::new(AtomId(ligand), StereoLigandKind::Atom))
+                    .collect(),
+                StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
+            ),
+        ],
+        ..Default::default()
+    })
+}
+
+#[fixture]
 fn meso_canonicalization_molecule() -> Molecule {
     Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -1637,9 +1685,40 @@ fn test_canonicalize_structure_para_stereo(
         para_stereo: true,
         ..canonicalize_context
     };
-    let canonical = canonicalize_structure(&para_stereo_canonicalization_molecule, &context)
-        .expect("fixed molecule canonicalizes");
+    let (canonical, correspondence) = canonicalize_structure_with_options(
+        &para_stereo_canonicalization_molecule,
+        &context,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: backend_canonical_branch_order,
+        },
+    )
+    .expect("fixed molecule canonicalizes");
+    let (unpruned, unpruned_correspondence) = canonicalize_structure_with_options(
+        &para_stereo_canonicalization_molecule,
+        &context,
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            prefix_pruning: false,
+            branch_order: reverse_node_branch_order,
+        },
+    )
+    .expect("fixed molecule canonicalizes without orbit pruning");
 
+    assert_eq!(unpruned, canonical);
+    assert_eq!(
+        para_stereo_canonicalization_molecule
+            .remap(&correspondence)
+            .reframe(),
+        Ok(canonical.clone()),
+    );
+    assert_eq!(
+        para_stereo_canonicalization_molecule
+            .remap(&unpruned_correspondence)
+            .reframe(),
+        Ok(canonical.clone()),
+    );
     assert_eq!(
         canonicalize_structure(&renumbered, &context),
         Ok(canonical.clone()),
@@ -2287,7 +2366,6 @@ fn test_canonicalize_structure_renumbering(
         &canonicalize_context,
     )
     .expect("fixed molecule canonicalizes");
-    let expected = selected_structure_key(&canonical);
 
     for rank in 0..(1..=5).product() {
         let permutation = Permutation::unrank(5, rank);
@@ -2305,10 +2383,27 @@ fn test_canonicalize_structure_renumbering(
             Vec::new(),
         ]);
         let renumbered = symmetric_stereo_canonicalization_molecule.remap(&correspondence);
-        let actual = canonicalize_structure(&renumbered, &canonicalize_context)
-            .expect("renumbered molecule canonicalizes");
+        let (actual, canonical_correspondence) = canonicalize_structure_with_options(
+            &renumbered,
+            &canonicalize_context,
+            CanonicalSearchOptions {
+                automorphism_pruning: true,
+                prefix_pruning: false,
+                branch_order: backend_canonical_branch_order,
+            },
+        )
+        .expect("renumbered molecule canonicalizes");
 
-        assert_eq!(selected_structure_key(&actual), expected, "rank {rank}");
+        assert_eq!(actual, canonical, "rank {rank}");
+        assert!(
+            renumbered.framed_eq_under(&actual, &canonical_correspondence),
+            "rank {rank}",
+        );
+        assert_eq!(
+            renumbered.remap(&canonical_correspondence).reframe(),
+            Ok(actual),
+            "rank {rank}",
+        );
     }
 }
 
@@ -2353,6 +2448,15 @@ fn test_canonicalize_structure_minimum(
         adapter_entity_blocks(&incidence_graph),
         &leaf_candidate,
     );
+    let expected_correspondence = correspondence_from_order(
+        &symmetric_stereo_canonicalization_molecule,
+        &incidence_graph,
+        &expected.entity_order,
+    );
+    let expected_molecule = symmetric_stereo_canonicalization_molecule
+        .remap(&expected_correspondence)
+        .reframe()
+        .expect("exhaustive minimum preserves compatible frames");
 
     for options in [
         CanonicalSearchOptions {
@@ -2381,6 +2485,21 @@ fn test_canonicalize_structure_minimum(
         CanonicalSearchOptions {
             automorphism_pruning: false,
             prefix_pruning: false,
+            branch_order: node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            prefix_pruning: false,
+            branch_order: reverse_node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
             branch_order: reverse_node_branch_order,
         },
         CanonicalSearchOptions {
@@ -2389,7 +2508,7 @@ fn test_canonicalize_structure_minimum(
             branch_order: backend_canonical_branch_order,
         },
     ] {
-        let (canonical, _) = canonicalize_structure_with_options(
+        let (canonical, correspondence) = canonicalize_structure_with_options(
             &symmetric_stereo_canonicalization_molecule,
             &CanonicalizeContext {
                 automorphism_algorithm: algorithm,
@@ -2398,12 +2517,167 @@ fn test_canonicalize_structure_minimum(
             options,
         )
         .expect("fixed molecule canonicalizes");
+
+        assert_eq!(canonical, expected_molecule, "{options:?}");
         assert_eq!(
             selected_structure_key(&canonical),
             expected.key,
             "{options:?}"
         );
+        assert!(
+            symmetric_stereo_canonicalization_molecule.framed_eq_under(&canonical, &correspondence),
+            "{options:?}",
+        );
+        assert_eq!(
+            symmetric_stereo_canonicalization_molecule
+                .remap(&correspondence)
+                .reframe(),
+            Ok(canonical),
+            "{options:?}",
+        );
     }
+}
+
+#[rstest]
+#[case::nauty(AutomorphismAlgorithm::Nauty)]
+fn test_canonicalize_structure_orbit_pruning(
+    stereo_site_exchange_canonicalization_molecule: Molecule,
+    canonicalize_context: CanonicalizeContext,
+    #[case] algorithm: AutomorphismAlgorithm,
+) {
+    let molecule = stereo_site_exchange_canonicalization_molecule;
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Full);
+    let (entity_keys, incidence_keys) =
+        initial_color_keys(&molecule, &incidence_graph).expect("fixed molecule has initial colors");
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let (partition, _) = structure_partition(
+        &molecule,
+        &incidence_graph,
+        &adapter,
+        &entity_keys,
+        canonicalize_context.para_stereo,
+    )
+    .expect("fixed molecule has a structure partition");
+    let descriptors = partition.cell_indices(adapter.graph().node_count());
+    let leaf_candidate = |order: &[NodeId]| {
+        structure_candidate(&molecule, &incidence_graph, order)
+            .expect("structure descriptors establish normalization")
+    };
+    let no_prefix = |_: &OrderedPartition, _: &CanonicalCandidate<_>| false;
+    let filter_generators = |generators: &mut Vec<Vec<NodeId>>| {
+        retain_stereo_preserving_generators(&molecule, &incidence_graph, generators);
+    };
+    let entity_cells = partition
+        .cells
+        .iter()
+        .filter(|cell| {
+            cell.first()
+                .is_some_and(|node| node.index() < adapter.source_node_count)
+        })
+        .cloned()
+        .collect();
+    let expected = exhaustive_minimum(&adapter, entity_cells, &leaf_candidate);
+    let expected_correspondence =
+        correspondence_from_order(&molecule, &incidence_graph, &expected.entity_order);
+    let expected_molecule = molecule
+        .remap(&expected_correspondence)
+        .reframe()
+        .expect("exhaustive minimum preserves compatible frames");
+    let mut stats = Vec::new();
+
+    for options in [
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            prefix_pruning: false,
+            branch_order: node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: false,
+            prefix_pruning: false,
+            branch_order: reverse_node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: node_branch_order,
+        },
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            prefix_pruning: false,
+            branch_order: reverse_node_branch_order,
+        },
+    ] {
+        let actual = canonical_search_with_generator_filter(
+            &adapter,
+            &descriptors,
+            algorithm,
+            options,
+            &leaf_candidate,
+            &no_prefix,
+            &filter_generators,
+        );
+        let correspondence =
+            correspondence_from_order(&molecule, &incidence_graph, &actual.candidate.entity_order);
+        let canonical = molecule
+            .remap(&correspondence)
+            .reframe()
+            .expect("selected minimum preserves compatible frames");
+
+        assert_eq!(actual.candidate.key, expected.key, "{options:?}");
+        assert_eq!(canonical, expected_molecule, "{options:?}");
+        assert!(
+            molecule.framed_eq_under(&canonical, &correspondence),
+            "{options:?}",
+        );
+        stats.push(actual.stats);
+    }
+
+    assert_eq!(
+        stats,
+        vec![
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![2; 10],
+                refinement_calls: 3,
+                branch_order_calls: 1,
+                backend_calls: 1,
+                visited_leaves: 2,
+                leaf_comparisons: 1,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![2; 10],
+                refinement_calls: 3,
+                branch_order_calls: 1,
+                backend_calls: 1,
+                visited_leaves: 2,
+                leaf_comparisons: 1,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 0,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![2; 10],
+                refinement_calls: 2,
+                branch_order_calls: 1,
+                backend_calls: 1,
+                visited_leaves: 1,
+                leaf_comparisons: 0,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 1,
+            },
+            CanonicalSearchStats {
+                initial_residual_cell_sizes: vec![2; 10],
+                refinement_calls: 2,
+                branch_order_calls: 1,
+                backend_calls: 1,
+                visited_leaves: 1,
+                leaf_comparisons: 0,
+                prefix_pruned_branches: 0,
+                orbit_pruned_branches: 1,
+            },
+        ],
+    );
 }
 
 #[rstest]
@@ -3499,6 +3773,36 @@ fn test_retain_stereo_preserving_generators(
     retain_stereo_preserving_generators(&molecule, &incidence_graph, &mut generators);
 
     assert_eq!(generators, expected);
+}
+
+#[rstest]
+#[case::empty(
+    4,
+    Vec::new(),
+    vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+)]
+#[case::one_generator(
+    4,
+    vec![vec![NodeId(1), NodeId(0), NodeId(2), NodeId(3)]],
+    vec![NodeId(0), NodeId(0), NodeId(2), NodeId(3)],
+)]
+#[case::generated_subgroup(
+    4,
+    vec![
+        vec![NodeId(1), NodeId(0), NodeId(2), NodeId(3)],
+        vec![NodeId(0), NodeId(2), NodeId(1), NodeId(3)],
+    ],
+    vec![NodeId(0), NodeId(0), NodeId(0), NodeId(3)],
+)]
+fn test_source_orbits_from_generators(
+    #[case] source_node_count: usize,
+    #[case] generators: Vec<Vec<NodeId>>,
+    #[case] expected: Vec<NodeId>,
+) {
+    assert_eq!(
+        source_orbits_from_generators(source_node_count, &generators),
+        expected,
+    );
 }
 
 #[rstest]
