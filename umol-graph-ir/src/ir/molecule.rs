@@ -1361,8 +1361,8 @@ impl Molecule {
     ///
     /// # Semantic properties
     ///
-    /// On success, the returned molecule passes [`Molecule::check_integrity`]. On either failure,
-    /// `self` remains unchanged and no partially modified molecule is returned.
+    /// On success, the returned molecule satisfies all molecule integrity requirements. On either
+    /// failure, `self` remains unchanged and no partially modified molecule is returned.
     pub fn apply(&self, edits: Edits) -> Result<Molecule, MoleculeApplyError> {
         let editor = self.edit().apply(edits)?;
         Ok(editor.try_build()?)
