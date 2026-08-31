@@ -1271,6 +1271,81 @@ Report the factorial comparison of selected setup, carrier, and refinement chang
 carrier sizes, allocation counts and bytes, refinement rounds, backend calls, leaves, and complete
 time. Do not report the sum of isolated gains as the combined improvement.
 
+**Evidence.** S2a supplies the setup-by-carrier factorial: the unchanged setup and dense setup were
+each measured with the complete carrier, compact ordinary-single carrier, and compact modal
+carrier. Dense setup and the selected modal carrier remained complementary rather than competing
+ways to remove the same work. The table below continues from that matrix with the two refinement
+changes on the selected dense-plus-modal implementation. It reports stored release Criterion means
+without para stereo; the final column is measured directly against the frozen baseline rather than
+constructed by adding the intervening gains.
+
+| Case | Frozen baseline | Dense + modal (S3a) | Flat all-cell (S3b) | Size-selected active cells (S3c) | Final vs baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Constructed naphthalene | 65.571 us | 30.062 us | 23.650 us | 23.673 us | -63.9% |
+| Constructed disconnected rings | 90.789 us | 45.538 us | 36.426 us | 36.554 us | -59.7% |
+| Feature-free connected | 94.972 us | 48.469 us | 41.211 us | 40.811 us | -57.0% |
+| Feature-free disconnected | 90.979 us | 50.238 us | 44.008 us | 43.616 us | -52.1% |
+| Symmetry-heavy radicals | 46.797 us | 36.636 us | 33.471 us | 33.347 us | -28.7% |
+| Para-stereo cascade | 783.523 us | 764.010 us | 561.057 us | 539.766 us | -31.1% |
+
+The carrier is selected only for topology search. The para-stereo cascade therefore measures dense
+setup followed by the generally applicable refinement changes, while the topology rows measure
+their interaction with the compact carrier. Repeating the comparison with para stereo
+enabled produced the same disposition: no complete-operation confidence interval admitted a
+regression. The active-cell path is intentionally neutral on these small cases and becomes material
+with carrier size; the permanent 8/16/32/64/77/128-node path series measured cumulative changes from
+S3b of -0.7%, -1.7%, -4.8%, -18.3%, -26.4%, and -51.5%.
+
+Carrier and search-tree measurements show that the gains occur at distinct layers:
+
+| Case | Carrier | Nodes / edges | Initial cells | Refinement calls | Backend calls | Leaves |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Constructed naphthalene | Complete | 21 / 22 | 7 | 3 | 2 | 1 |
+| Constructed naphthalene | Modal | 10 / 11 | 3 | 3 | 2 | 1 |
+| CHEBI:2453 | Complete | 33 / 34 | 33 | 1 | 0 | 1 |
+| CHEBI:2453 | Modal | 20 / 21 | 20 | 1 | 0 | 1 |
+| CHEBI:46245 | Complete | 126 / 126 | 124 | 2 | 1 | 1 |
+| CHEBI:46245 | Modal | 77 / 77 | 76 | 2 | 1 | 1 |
+
+Dense setup preserves the initial partition and search tree. The compact carrier reduces the
+refinement and backend domains without changing the number of refinement calls, backend calls, or
+visited leaves in these controls. S3b and S3c produce the exact same ordered refinement and thus
+also preserve the carrier, search tree, backend calls, and leaves. They reduce the work within each
+refinement call.
+
+The allocation evidence is correspondingly phase-specific and is not added across rows. For the
+complete operation, dense setup plus modal compaction reduced CHEBI:2453 from 1,695 allocations /
+223,556 gross bytes to 808 / 121,416, and CHEBI:46245 from 16,492 / 4,076,938 to 6,598 /
+1,399,257. The S3b refinement-only probe reduced the previous map-based implementation as follows:
+
+| Refinement case | Map-based reference | Flat all-cell |
+| --- | ---: | ---: |
+| Constructed naphthalene | 53 / 4,120 | 11 / 608 |
+| Constructed disconnected rings | 18 / 776 | 3 / 120 |
+| 77-node path | 4,845 / 759,868 | 95 / 51,480 |
+
+A temporary S3d probe then compared the two exact S3b/S3c refinement algorithms directly. Active
+cells trade a few small worklist allocations for substantially less signature storage:
+
+| Path nodes | Flat all-cell | Active-cell |
+| ---: | ---: | ---: |
+| 32 | 43 / 6,544 | 46 / 3,138 |
+| 64 | 78 / 23,504 | 82 / 8,514 |
+| 77 | 95 / 51,480 | 100 / 13,838 |
+| 128 | 145 / 88,144 | 150 / 25,410 |
+
+The temporary allocator was removed after measurement. A fresh run of the imported-corpus baseline
+on the atom-mapping checkpoint also reproduced the frozen S0a scale before any cross-branch result
+is claimed. The selected branch remains independent; the final CHEBI and reaction-network
+measurements still belong to S5 after released `main` is merged into `feature/atom-mapping`.
+
+**Disposition.** Retain dense initial setup, the modal compact topology carrier, flat signature
+storage, and the size-selected active-cell refinement. The measured combined gains are substantial,
+the refinements preserve the selected carrier's exact search semantics, and no retained component
+duplicates another's measured role.
+
+**Done.**
+
 ### S4 — Re-evaluate backend work against the selected search
 
 #### S4a — Measure backend request modes and local branch order
