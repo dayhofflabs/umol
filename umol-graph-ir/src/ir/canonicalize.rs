@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::mem;
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -2061,27 +2062,55 @@ impl OrderedPartition {
     }
 
     fn refine(mut self, graph: &Graph) -> Self {
-        loop {
-            let cell_indices = self.cell_indices(graph.node_count());
-            let cell_count = self.cells.len();
-            let mut refined = Vec::with_capacity(self.cells.len());
-            let mut changed = false;
+        let node_count = graph.node_count();
+        let mut cell_indices = vec![0; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
 
-            for cell in self.cells {
-                let mut splits = BTreeMap::<Vec<u32>, Vec<NodeId>>::new();
+        loop {
+            for (cell_index, cell) in self.cells.iter().enumerate() {
                 for node in cell {
-                    let mut signature = vec![0; cell_count];
-                    for neighbor in graph.neighbors(node) {
-                        signature[cell_indices[neighbor.node.index()] as usize] += 1;
-                    }
-                    splits.entry(signature).or_default().push(node);
+                    cell_indices[node.index()] = cell_index as u32;
                 }
-                changed |= splits.len() > 1;
-                // The minimum sorted-incidence key places the greater exact signature first.
-                refined.extend(splits.into_values().rev());
+            }
+            let cell_count = self.cells.len();
+            signatures.clear();
+            signatures.resize(node_count * cell_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * cell_count;
+                for neighbor in graph.neighbors(node) {
+                    signatures[offset + cell_indices[neighbor.node.index()] as usize] += 1;
+                }
             }
 
-            self.cells = refined;
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * cell_count;
+                    &signatures[offset..offset + cell_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
             if !changed {
                 return self;
             }

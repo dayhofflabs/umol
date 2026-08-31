@@ -1186,6 +1186,36 @@ partitions. Add a property comparing exact ordered refinement and complete canon
 dense renumbering. Integrate only the narrow changes whose allocation reduction produces no
 systematic benchmark regression.
 
+**Implementation.** `OrderedPartition::refine` now reuses one node-to-cell vector, one flat
+node-by-cell signature vector, and the outer next-cell vector across fixed-point rounds. Each round
+computes all exact neighbor-count signatures once, orders a cell by descending signature with the
+existing node-id tie break, and groups adjacent equal signatures. Unsplit cells move directly into
+the next partition; split groups receive their required cell vectors. This retains the previous
+asymptotic signature storage while removing the per-node signature vectors and per-cell tree maps.
+
+The prototype retained the previous map-based implementation as a test-only reference through its
+disposition gate. It produced identical ordered cells for the six prescribed partition shapes and
+through recursive individualization for every simple graph on four nodes. The permanent bounded
+exhaustive property compares exact recursive refinement under reverse dense renumbering and checks
+complete topology canonicalization, correspondence transport, and convergence for both incomplete
+and complete order-one forms. The temporary reference and allocation probe were then removed.
+
+The allocation probe measured refinement alone with an initially unsplit partition. Constructed
+naphthalene fell from 53 allocations / 4,120 gross bytes to 11 / 608, disconnected six-membered
+rings from 18 / 776 to 3 / 120, and a 77-node path from 4,845 / 759,868 to 95 / 51,480. Against the
+fresh integrated-S3a Criterion baseline, every complete-operation case improved in both para-stereo
+modes: 8.8--25.1% without para stereo and 6.9--19.8% with para stereo. The lower bounds were the
+small frame-relative constraint case; constructed naphthalene improved by about 20%, disconnected
+rings by about 19--20%, the retained feature-free controls by about 12--15%, and the 77-atom
+topology corpus case by about 25% without para stereo. No confidence interval admitted a
+regression.
+
+All 275 canonicalization unit tests, 15 canonicalization integration tests, and seven
+feature-gated molecule canonicalization properties passed, as did warning-denying Clippy with the
+`proptest` feature.
+
+**Done.**
+
 #### S3c — Evaluate worklist refinement
 
 **Module:** private graph-IR partition refinement, tests, and benchmarks; additive (green); no public

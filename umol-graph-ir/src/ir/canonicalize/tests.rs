@@ -3951,17 +3951,196 @@ fn test_ordered_partition_from_color_ranks(
 }
 
 #[rstest]
-#[case::path(
-        Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
-        OrderedPartition {
-            cells: vec![vec![NodeId(1), NodeId(2)], vec![NodeId(0), NodeId(3)]],
-        },
-    )]
-fn test_ordered_partition_refine(#[case] graph: Graph, #[case] expected: OrderedPartition) {
-    assert_eq!(
-        OrderedPartition::from_descriptors(&[0_u32; 4]).refine(&graph),
-        expected,
-    );
+#[case::empty(
+    OrderedPartition { cells: Vec::new() },
+    Graph::new(0, &[]),
+    OrderedPartition { cells: Vec::new() },
+)]
+#[case::discrete(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
+    },
+    Graph::new(3, &[[0, 1], [1, 2]]),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
+    },
+)]
+#[case::unsplit(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)]],
+    },
+    Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]),
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)]],
+    },
+)]
+#[case::multiply_split(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)]],
+    },
+    Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]),
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(2)],
+            vec![NodeId(1), NodeId(3)],
+            vec![NodeId(0), NodeId(4)],
+        ],
+    },
+)]
+#[case::disconnected(
+    OrderedPartition {
+        cells: vec![vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3), NodeId(4)]],
+    },
+    Graph::new(5, &[[0, 1], [2, 3]]),
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(0), NodeId(1), NodeId(2), NodeId(3)],
+            vec![NodeId(4)],
+        ],
+    },
+)]
+#[case::individualized(
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(2)],
+            vec![NodeId(0), NodeId(1), NodeId(3)],
+        ],
+    },
+    Graph::new(4, &[[0, 1], [0, 2], [0, 3]]),
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(2)],
+            vec![NodeId(0)],
+            vec![NodeId(1), NodeId(3)],
+        ],
+    },
+)]
+fn test_ordered_partition_refine(
+    #[case] partition: OrderedPartition,
+    #[case] graph: Graph,
+    #[case] expected: OrderedPartition,
+) {
+    assert_eq!(partition.refine(&graph), expected,);
+}
+
+#[rstest]
+#[case::order_four(4)]
+fn test_ordered_partition_refine_exhaustive_domain(
+    canonicalize_context: CanonicalizeContext,
+    #[case] atom_count: usize,
+) {
+    fn compare_refinement(
+        partition: OrderedPartition,
+        renumbered_partition: OrderedPartition,
+        graph: &Graph,
+        renumbered_graph: &Graph,
+    ) {
+        let actual = partition.refine(graph);
+        let renumbered = renumbered_partition.refine(renumbered_graph);
+        let node_count = graph.node_count();
+        let transported = OrderedPartition {
+            cells: renumbered
+                .cells
+                .iter()
+                .map(|cell| {
+                    let mut cell = cell
+                        .iter()
+                        .map(|node| NodeId((node_count - 1 - node.index()) as u32))
+                        .collect::<Vec<_>>();
+                    cell.sort_unstable();
+                    cell
+                })
+                .collect(),
+        };
+        assert_eq!(actual, transported);
+
+        let Some(cell_index) = actual.first_non_singleton_entity_cell(graph.node_count()) else {
+            return;
+        };
+        for node in actual.cells[cell_index].clone() {
+            let image = NodeId((node_count - 1 - node.index()) as u32);
+            compare_refinement(
+                actual.individualize(cell_index, node),
+                renumbered.individualize(cell_index, image),
+                graph,
+                renumbered_graph,
+            );
+        }
+    }
+
+    let endpoint_pairs = (0..atom_count as u32)
+        .flat_map(|first| ((first + 1)..atom_count as u32).map(move |second| [first, second]))
+        .collect::<Vec<_>>();
+
+    for complete_bond_form in [false, true] {
+        for edge_mask in 0..(1_u64 << endpoint_pairs.len()) {
+            let selected_pairs = endpoint_pairs
+                .iter()
+                .enumerate()
+                .filter_map(|(position, &pair)| ((edge_mask >> position) & 1 == 1).then_some(pair))
+                .collect::<Vec<_>>();
+            let graph = Graph::new(atom_count, &selected_pairs);
+            let renumbered_pairs = selected_pairs
+                .iter()
+                .map(|&[first, second]| {
+                    [
+                        atom_count as u32 - 1 - first,
+                        atom_count as u32 - 1 - second,
+                    ]
+                })
+                .collect::<Vec<_>>();
+            let renumbered_graph = Graph::new(atom_count, &renumbered_pairs);
+            compare_refinement(
+                OrderedPartition::from_descriptors(&vec![0_u32; atom_count]),
+                OrderedPartition::from_descriptors(&vec![0_u32; atom_count]),
+                &graph,
+                &renumbered_graph,
+            );
+
+            let molecule = Molecule::from_entries(MoleculeEntries {
+                atoms: vec![AtomForm::from_element(Element::C); atom_count],
+                bonds: selected_pairs
+                    .iter()
+                    .map(|&[first, second]| {
+                        let bond = BondForm::from_order(1);
+                        (
+                            AtomId(first),
+                            AtomId(second),
+                            if complete_bond_form {
+                                bond.into_concrete()
+                            } else {
+                                bond
+                            },
+                        )
+                    })
+                    .collect(),
+                ..Default::default()
+            });
+            let renumbered = molecule.remap(&reverse_correspondence(&molecule));
+            let (expected, expected_correspondence) = canonicalize_topology_with_options(
+                &molecule,
+                &canonicalize_context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    branch_order: backend_canonical_branch_order,
+                },
+            )
+            .unwrap();
+            let (actual, actual_correspondence) = canonicalize_topology_with_options(
+                &renumbered,
+                &canonicalize_context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    branch_order: backend_canonical_branch_order,
+                },
+            )
+            .unwrap();
+
+            assert_eq!(actual, expected);
+            assert!(molecule.framed_eq_under(&expected, &expected_correspondence));
+            assert!(renumbered.framed_eq_under(&actual, &actual_correspondence));
+        }
+    }
 }
 
 #[rstest]
