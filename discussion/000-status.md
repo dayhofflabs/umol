@@ -31,8 +31,8 @@ the statuses recorded here remain authoritative.
   first OIDC-authenticated release, CI runtime, published Rust and Python
   documentation, and the eventual arXiv link.
 - [216 — Canonicalization performance](216-canonicalization-performance-2026-08-30.md)
-  records the integrated dense setup, modal compact carrier, and reusable refinement storage;
-  worklist and backend gates precede the 0.7.0 release and post-release network rerun.
+  records the integrated dense setup, modal compact carrier, and size-selected refinement paths;
+  interaction and backend gates precede the 0.7.0 release and post-release network rerun.
 - [212 - The remapping id-transport layer](212-remapping-layer-2026-08-26.md)
   records the missing single-id-space remapping layer and its open representation decision.
 - [213 - Collapsing the editor's overlay storage](213-editor-overlay-storage-2026-08-27.md)
@@ -254,4 +254,4 @@ the statuses recorded here remain authoritative.
 | [213-editor-overlay-storage-2026-08-27.md](213-editor-overlay-storage-2026-08-27.md)                             | Proposed      | 2026-08-29   | Generic entity-set abstraction, name, visibility, and construction surface require design review before implementation. |
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
-| [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | In Progress   | 2026-08-30   | S3b integrated reusable refinement storage without regression; S3c is the conditional worklist gate.        |
+| [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | In Progress   | 2026-08-30   | S3c integrated size-selected active-cell refinement; S3d re-measures the combined interactions.             |

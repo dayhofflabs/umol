@@ -1227,6 +1227,41 @@ ordered equitable partition. Differentially compare the final stable ordered par
 result with the retained reference. Integrate it only if the larger change materially improves at
 least the carrier-size or symmetry-scaling cases; otherwise remove it and record the result.
 
+**Gate.** Profiling-only release instrumentation measured refinement after S3b at 1.615 us of a
+23.695 us constructed-naphthalene canonicalization (6.8%, three calls) and 2.586 us of a 37.275 us
+disconnected-rings canonicalization (6.9%, five calls). The same measurement on a 77-node path was
+129.424 us of 246.560 us (52.5%, two calls). Refinement was therefore no longer dominant for the
+small controls but remained the dominant carrier-size term, satisfying the conditional gate. The
+timing instrumentation was removed before benchmarking.
+
+**Implementation.** Large carriers now refine from a batched active-cell worklist. The first round
+uses every partition cell as a splitter. Later rounds use, in global partition order, only the cells
+created by the preceding split. Counts to every unchanged cell are already equal within each
+current cell, so omitting those constant coordinates preserves the exact descending signature
+order as well as the stable cell membership. The all-cell S3b algorithm remains selected for small
+carriers. The private `ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT` constant records the benchmark-derived
+crossover and is currently 32; it is an internal operational choice, not user configuration.
+
+The active-cell and all-cell algorithms produce identical ordered partitions for the six S3b
+shapes, every simple graph on four nodes through recursive individualization, constructed
+naphthalene, disconnected rings, and the 77-node path. A 32-node topology path additionally checks
+complete canonicalization convergence under reverse dense renumbering, exact idempotence, and
+correspondence transport through the production threshold path.
+
+A permanent self-contained topology-path scaling benchmark now covers 8, 16, 32, 64, 77, and 128
+carrier nodes. Against the fresh S3b baseline, the selected hybrid changed the complete-operation
+point estimates by -0.7%, -1.7%, -4.8%, -18.3%, -26.4%, and -51.5%, respectively. The 8-node
+and 16-node cases remain on the unchanged all-cell path; the 32-node and larger cases all improved.
+Across the existing complete-operation corpus, no case regressed in either para-stereo mode. The
+larger para-stereo cascade improved by 3.8% without para stereo and 2.5% with it; the other cases
+were unchanged or improved.
+
+All 279 canonicalization unit tests, 15 canonicalization integration tests, and seven
+feature-gated molecule canonicalization properties passed, as did warning-denying Clippy with the
+`proptest` feature.
+
+**Done.**
+
 #### S3d — Re-measure carrier/refinement interactions
 
 **Module:** canonicalization benchmarks and doc 216; additive (green); no public API.

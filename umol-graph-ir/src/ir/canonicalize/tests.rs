@@ -4020,7 +4020,8 @@ fn test_ordered_partition_refine(
     #[case] graph: Graph,
     #[case] expected: OrderedPartition,
 ) {
-    assert_eq!(partition.refine(&graph), expected,);
+    assert_eq!(partition.clone().refine(&graph), expected);
+    assert_eq!(partition.refine_by_active_cells(&graph), expected);
 }
 
 #[rstest]
@@ -4035,7 +4036,11 @@ fn test_ordered_partition_refine_exhaustive_domain(
         graph: &Graph,
         renumbered_graph: &Graph,
     ) {
+        let reference = partition.clone().refine_by_all_cells(graph);
+        let active = partition.clone().refine_by_active_cells(graph);
         let actual = partition.refine(graph);
+        assert_eq!(active, reference);
+        assert_eq!(actual, reference);
         let renumbered = renumbered_partition.refine(renumbered_graph);
         let node_count = graph.node_count();
         let transported = OrderedPartition {
@@ -4141,6 +4146,50 @@ fn test_ordered_partition_refine_exhaustive_domain(
             assert!(renumbered.framed_eq_under(&actual, &actual_correspondence));
         }
     }
+}
+
+#[rstest]
+#[case::naphthalene(
+    10,
+    &[
+        (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
+        (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
+    ],
+)]
+#[case::disconnected_rings(
+    12,
+    &[
+        (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
+        (6, 7), (7, 8), (8, 9), (9, 10), (10, 11), (11, 6),
+    ],
+)]
+#[case::long_path(
+    77,
+    &(0_u32..76)
+        .map(|first| (first, first + 1))
+        .collect::<Vec<_>>(),
+)]
+fn test_ordered_partition_refine_active_cell_equivalence(
+    #[case] atom_count: usize,
+    #[case] edges: &[(u32, u32)],
+) {
+    let graph = Graph::new(
+        atom_count,
+        &edges
+            .iter()
+            .map(|&(first, second)| [first, second])
+            .collect::<Vec<_>>(),
+    );
+    let partition = OrderedPartition::from_descriptors(&vec![0_u32; atom_count]);
+
+    assert_eq!(
+        partition.clone().refine(&graph),
+        partition.clone().refine_by_all_cells(&graph),
+    );
+    assert_eq!(
+        partition.clone().refine_by_active_cells(&graph),
+        partition.refine_by_all_cells(&graph),
+    );
 }
 
 #[rstest]
@@ -4473,6 +4522,17 @@ fn test_canonicalize_topology(canonicalize_context: CanonicalizeContext) {
         (AtomId(0), AtomId(1), BondForm::from_order(1).into_concrete()),
         (AtomId(2), AtomId(3), BondForm::from_order(2).into_concrete()),
     ],
+    ..Default::default()
+}))]
+#[case::topology_path(Molecule::from_entries(MoleculeEntries {
+    atoms: vec![AtomForm::from_element(Element::C); 32],
+    bonds: (0_u32..31)
+        .map(|first| (
+            AtomId(first),
+            AtomId(first + 1),
+            BondForm::from_order(1),
+        ))
+        .collect(),
     ..Default::default()
 }))]
 fn test_canonicalize_topology_relabeling(

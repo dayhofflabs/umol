@@ -172,6 +172,15 @@ fn disconnected_rings() -> Molecule {
     )
 }
 
+fn carbon_path(atom_count: usize) -> Molecule {
+    carbon_graph(
+        atom_count,
+        &(0..atom_count as u32 - 1)
+            .map(|first| (first, first + 1))
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn overlay_heavy() -> Molecule {
     let mut atoms = [
         Element::C,
@@ -805,6 +814,32 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_topology_path_scaling(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = [8, 16, 32, 64, 77, 128].map(|atom_count| (atom_count, carbon_path(atom_count)));
+    let mut group = c.benchmark_group("canonicalize/scaling/topology_path");
+
+    for (atom_count, molecule) in &cases {
+        group.bench_function(BenchmarkId::from_parameter(atom_count), |b| {
+            b.iter_batched(
+                || molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("topology path canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 fn bench_reframe(c: &mut Criterion) {
     let corpus = reframing_corpus();
 
@@ -883,6 +918,7 @@ criterion_group!(
     bench_remapping,
     bench_canonicalize,
     bench_retained_scaling_cases,
+    bench_topology_path_scaling,
     bench_reframe,
 );
 criterion_main!(canonicalize);

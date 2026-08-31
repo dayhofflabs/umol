@@ -3,7 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::mem;
+use std::{iter, mem};
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -2033,6 +2033,9 @@ struct OrderedPartition {
     cells: Vec<Vec<NodeId>>,
 }
 
+/// Minimum carrier size at which refinement tracks only cells created by the preceding split.
+const ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT: usize = 32;
+
 impl OrderedPartition {
     fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
         let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
@@ -2061,7 +2064,85 @@ impl OrderedPartition {
         Self { cells }
     }
 
-    fn refine(mut self, graph: &Graph) -> Self {
+    fn refine(self, graph: &Graph) -> Self {
+        if graph.node_count() < ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT {
+            self.refine_by_all_cells(graph)
+        } else {
+            self.refine_by_active_cells(graph)
+        }
+    }
+
+    fn refine_by_active_cells(mut self, graph: &Graph) -> Self {
+        let node_count = graph.node_count();
+        let mut active_cells = vec![true; self.cells.len()];
+        let mut node_active_columns = vec![usize::MAX; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+        let mut next_active_cells = Vec::<bool>::with_capacity(self.cells.len());
+
+        loop {
+            node_active_columns.fill(usize::MAX);
+            let mut active_count = 0;
+            for (cell_index, cell) in self.cells.iter().enumerate() {
+                if active_cells[cell_index] {
+                    for node in cell {
+                        node_active_columns[node.index()] = active_count;
+                    }
+                    active_count += 1;
+                }
+            }
+            signatures.clear();
+            signatures.resize(node_count * active_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * active_count;
+                for neighbor in graph.neighbors(node) {
+                    let column = node_active_columns[neighbor.node.index()];
+                    if column != usize::MAX {
+                        signatures[offset + column] += 1;
+                    }
+                }
+            }
+
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * active_count;
+                    &signatures[offset..offset + active_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                    next_active_cells.push(false);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    let new_cell_count = next_cells.len() - next_active_cells.len();
+                    next_active_cells.extend(iter::repeat_n(true, new_cell_count));
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
+            if !changed {
+                return self;
+            }
+            mem::swap(&mut active_cells, &mut next_active_cells);
+            next_active_cells.clear();
+        }
+    }
+
+    fn refine_by_all_cells(mut self, graph: &Graph) -> Self {
         let node_count = graph.node_count();
         let mut cell_indices = vec![0; node_count];
         let mut signatures = Vec::<u32>::new();
