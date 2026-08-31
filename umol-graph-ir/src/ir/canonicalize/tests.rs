@@ -6,6 +6,7 @@
 use std::cmp::Ordering;
 use std::{array, iter};
 
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use umol_chem::element::Element;
 use umol_edn::FromEdn;
@@ -143,6 +144,56 @@ fn initial_colors(
 ) -> Result<InitialColors, Contradiction> {
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, incidence_graph)?;
     Ok(rank_initial_colors(&entity_keys, &incidence_keys))
+}
+
+fn rank_initial_colors_by_cloning(
+    entity_keys: &[InitialColorKey],
+    incidence_keys: &[InitialColorKey],
+) -> InitialColors {
+    let keys = entity_keys
+        .iter()
+        .chain(incidence_keys.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let colors = keys
+        .into_iter()
+        .enumerate()
+        .map(|(color, key)| (key, color as u32))
+        .collect::<BTreeMap<_, _>>();
+
+    InitialColors {
+        entities: entity_keys.iter().map(|key| colors[key]).collect(),
+        incidences: incidence_keys.iter().map(|key| colors[key]).collect(),
+    }
+}
+
+fn canonicalize_topology_with_cloned_keys(
+    molecule: &Molecule,
+    context: &CanonicalizeContext,
+) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
+    let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
+    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let colors = rank_initial_colors_by_cloning(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+    let leaf_candidate = |order: &[NodeId]| {
+        topology_candidate(molecule, &incidence_graph, order)
+            .expect("initial colors established topology normalization")
+    };
+    let selected = canonical_search(
+        &adapter,
+        &descriptors,
+        context.automorphism_algorithm,
+        CanonicalSearchOptions {
+            automorphism_pruning: true,
+            branch_order: backend_canonical_branch_order,
+        },
+        &leaf_candidate,
+    );
+    let correspondence =
+        correspondence_from_order(molecule, &incidence_graph, &selected.candidate.entity_order);
+    let canonical = molecule.remap(&correspondence).reframe()?;
+    Ok((canonical, correspondence))
 }
 
 fn topology_comparison_key(
@@ -3071,6 +3122,67 @@ fn test_initial_colors_incidence(initial_color_molecule: Molecule) {
 }
 
 #[rstest]
+#[case::empty(Vec::new(), Vec::new(), InitialColors {
+    entities: Vec::new(),
+    incidences: Vec::new(),
+})]
+#[case::repeated(
+    vec![
+        InitialColorKey::Entity {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Unsigned(2),
+        },
+        InitialColorKey::Entity {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Unsigned(2),
+        },
+    ],
+    vec![
+        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(1)),
+        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(1)),
+    ],
+    InitialColors {
+        entities: vec![0, 0],
+        incidences: vec![1, 1],
+    },
+)]
+#[case::ordered_distinct(
+    vec![
+        InitialColorKey::Entity {
+            position: EntityBlockPosition::BOND,
+            value: CanonicalKeyValue::Unsigned(0),
+        },
+        InitialColorKey::Entity {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Unsigned(2),
+        },
+        InitialColorKey::Entity {
+            position: EntityBlockPosition::ATOM,
+            value: CanonicalKeyValue::Unsigned(1),
+        },
+    ],
+    vec![
+        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(2)),
+        InitialColorKey::Incidence(CanonicalKeyValue::Unsigned(0)),
+    ],
+    InitialColors {
+        entities: vec![2, 1, 0],
+        incidences: vec![4, 3],
+    },
+)]
+fn test_rank_initial_colors(
+    #[case] entity_keys: Vec<InitialColorKey>,
+    #[case] incidence_keys: Vec<InitialColorKey>,
+    #[case] expected: InitialColors,
+) {
+    assert_eq!(rank_initial_colors(&entity_keys, &incidence_keys), expected,);
+    assert_eq!(
+        rank_initial_colors_by_cloning(&entity_keys, &incidence_keys),
+        expected,
+    );
+}
+
+#[rstest]
 fn test_topology_comparison_key() {
     let molecule = Molecule::from_entries(MoleculeEntries {
         atoms: vec![
@@ -3782,6 +3894,31 @@ fn test_ordered_partition_from_descriptors(
 }
 
 #[rstest]
+#[case::empty(Vec::new(), OrderedPartition { cells: Vec::new() })]
+#[case::repeated(
+    vec![2, 0, 2, 1, 0],
+    OrderedPartition {
+        cells: vec![
+            vec![NodeId(1), NodeId(4)],
+            vec![NodeId(3)],
+            vec![NodeId(0), NodeId(2)],
+        ],
+    },
+)]
+#[case::ordered_distinct(
+    vec![0, 1, 2],
+    OrderedPartition {
+        cells: vec![vec![NodeId(0)], vec![NodeId(1)], vec![NodeId(2)]],
+    },
+)]
+fn test_ordered_partition_from_color_ranks(
+    #[case] colors: Vec<u32>,
+    #[case] expected: OrderedPartition,
+) {
+    assert_eq!(OrderedPartition::from_color_ranks(colors), expected);
+}
+
+#[rstest]
 #[case::path(
         Graph::new(4, &[[0, 1], [1, 2], [2, 3]]),
         OrderedPartition {
@@ -4231,6 +4368,114 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
                 .collect::<Vec<_>>(),
         ),
     );
+}
+
+proptest! {
+    #[test]
+    fn dense_initial_setup_preserves_topology_canonicalization(
+        (elements, selected_edges, atom_rotation, bond_rotation) in
+            (0usize..=6).prop_flat_map(|atom_count| {
+                let edge_count = atom_count.saturating_sub(1) * atom_count / 2;
+                (
+                    prop::collection::vec(
+                        prop::sample::select(vec![Element::C, Element::N, Element::O]),
+                        atom_count,
+                    ),
+                    prop::collection::vec(any::<bool>(), edge_count),
+                    any::<usize>(),
+                    any::<usize>(),
+                )
+            }),
+    ) {
+        let mut selected_edges = selected_edges.into_iter();
+        let mut bonds = Vec::new();
+        for first in 0..elements.len() {
+            for second in first + 1..elements.len() {
+                if selected_edges
+                    .next()
+                    .expect("the edge selector has one value per endpoint pair")
+                {
+                    bonds.push((
+                        AtomId(first as u32),
+                        AtomId(second as u32),
+                        BondForm::from_order(1),
+                    ));
+                }
+            }
+        }
+        let molecule = Molecule::from_entries(MoleculeEntries {
+            atoms: elements.into_iter().map(AtomForm::from_element).collect(),
+            bonds,
+            ..Default::default()
+        });
+        let rotate = |count: usize, rotation: usize| {
+            if count == 0 {
+                Vec::new()
+            } else {
+                (0..count)
+                    .map(|index| (index + rotation % count) % count)
+                    .collect::<Vec<_>>()
+            }
+        };
+        let renumbering = molecule_correspondence(&[
+            rotate(molecule.atoms().count(), atom_rotation),
+            rotate(molecule.bonds().count(), bond_rotation),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ]);
+        let renumbered = molecule.remap(&renumbering);
+        let context = CanonicalizeContext {
+            para_stereo: false,
+            automorphism_algorithm: AutomorphismAlgorithm::Nauty,
+        };
+        let mut canonical_forms = Vec::new();
+
+        for source in [&molecule, &renumbered] {
+            let incidence_graph = source.incidence_graph(IncidenceLevel::Topology);
+            let (entity_keys, incidence_keys) =
+                initial_color_keys(source, &incidence_graph).map_err(|_| {
+                    TestCaseError::fail("literal topology keys must normalize")
+                })?;
+            let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+            let cloned_colors = rank_initial_colors_by_cloning(&entity_keys, &incidence_keys);
+            prop_assert_eq!(&colors, &cloned_colors);
+
+            let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+            let partition = topology_initial_partition(&adapter, &colors);
+            let cloned_descriptors =
+                partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+            let cloned_partition = OrderedPartition::from_descriptors(&cloned_descriptors);
+            prop_assert_eq!(&partition, &cloned_partition);
+
+            let (canonical, correspondence) = canonicalize_topology_with_options(
+                source,
+                &context,
+                CanonicalSearchOptions {
+                    automorphism_pruning: true,
+                    branch_order: backend_canonical_branch_order,
+                },
+            )
+            .map_err(|error| {
+                TestCaseError::fail(format!("literal topology must canonicalize: {error}"))
+            })?;
+            let (cloned_canonical, _) = canonicalize_topology_with_cloned_keys(source, &context)
+                .map_err(|error| {
+                    TestCaseError::fail(format!(
+                        "literal topology must canonicalize through cloned keys: {error}"
+                    ))
+                })?;
+
+            prop_assert_eq!(&canonical, &cloned_canonical);
+            prop_assert!(source.framed_eq_under(&canonical, &correspondence));
+            canonical_forms.push(canonical);
+        }
+
+        prop_assert_eq!(&canonical_forms[0], &canonical_forms[1]);
+    }
 }
 
 #[rstest]

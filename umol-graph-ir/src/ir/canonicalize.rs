@@ -2039,6 +2039,19 @@ impl OrderedPartition {
         }
     }
 
+    fn from_color_ranks(colors: impl IntoIterator<Item = u32>) -> Self {
+        let mut cells = Vec::<Vec<NodeId>>::new();
+        for (index, color) in colors.into_iter().enumerate() {
+            let color = color as usize;
+            if cells.len() <= color {
+                cells.resize_with(color + 1, Vec::new);
+            }
+            cells[color].push(NodeId(index as u32));
+        }
+        cells.retain(|cell| !cell.is_empty());
+        Self { cells }
+    }
+
     fn refine(mut self, graph: &Graph) -> Self {
         loop {
             let cell_indices = self.cell_indices(graph.node_count());
@@ -2194,7 +2207,29 @@ where
 {
     canonical_search_impl(
         adapter,
-        partition_descriptors,
+        OrderedPartition::from_descriptors(partition_descriptors),
+        algorithm,
+        options,
+        leaf_candidate,
+        false,
+        &|_| {},
+    )
+}
+
+fn canonical_search_from_partition<K, LeafCandidate>(
+    adapter: &AutomorphismAdapter,
+    partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+{
+    canonical_search_impl(
+        adapter,
+        partition,
         algorithm,
         options,
         leaf_candidate,
@@ -2219,7 +2254,7 @@ where
 {
     canonical_search_impl(
         adapter,
-        partition_descriptors,
+        OrderedPartition::from_descriptors(partition_descriptors),
         algorithm,
         options,
         leaf_candidate,
@@ -2228,9 +2263,9 @@ where
     )
 }
 
-fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
+fn canonical_search_impl<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
-    partition_descriptors: &[Descriptor],
+    initial: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
@@ -2239,11 +2274,10 @@ fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
-    Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
+    let initial = initial.refine(adapter.graph());
     let mut best = None;
     #[cfg(test)]
     let mut stats = CanonicalSearchStats {
@@ -2411,6 +2445,7 @@ fn initial_color_keys(
 }
 
 /// Construct topology-level partition descriptors for the exact adapter.
+#[cfg(test)]
 fn partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialColorKey],
@@ -2424,6 +2459,16 @@ fn partition_descriptors(
             SubdivisionNodeSource::Edge(edge) => incidence_keys[edge.index()].clone(),
         })
         .collect()
+}
+
+fn topology_initial_partition(
+    adapter: &AutomorphismAdapter,
+    colors: &InitialColors,
+) -> OrderedPartition {
+    OrderedPartition::from_color_ranks(adapter.node_sources.iter().map(|source| match *source {
+        SubdivisionNodeSource::Node(node) => colors.entities[node.index()],
+        SubdivisionNodeSource::Edge(edge) => colors.incidences[edge.index()],
+    }))
 }
 
 /// Search descriptors for the constitution key.
@@ -2715,20 +2760,31 @@ fn rank_initial_colors(
     entity_keys: &[InitialColorKey],
     incidence_keys: &[InitialColorKey],
 ) -> InitialColors {
-    let keys = entity_keys
-        .iter()
-        .chain(incidence_keys.iter())
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let colors = keys
-        .into_iter()
-        .enumerate()
-        .map(|(color, key)| (key, color as u32))
-        .collect::<BTreeMap<_, _>>();
+    let entity_count = entity_keys.len();
+    let key = |index: usize| {
+        if index < entity_count {
+            &entity_keys[index]
+        } else {
+            &incidence_keys[index - entity_count]
+        }
+    };
+    let mut indices = (0..entity_count + incidence_keys.len()).collect::<Vec<_>>();
+    indices.sort_unstable_by(|&left, &right| key(left).cmp(key(right)));
 
+    let mut ranks = vec![0; indices.len()];
+    let mut previous = None;
+    let mut rank = 0;
+    for index in indices {
+        if previous.is_some_and(|previous| key(previous) != key(index)) {
+            rank += 1;
+        }
+        ranks[index] = rank;
+        previous = Some(index);
+    }
+    let incidences = ranks.split_off(entity_count);
     InitialColors {
-        entities: entity_keys.iter().map(|key| colors[key]).collect(),
-        incidences: incidence_keys.iter().map(|key| colors[key]).collect(),
+        entities: ranks,
+        incidences,
     }
 }
 
@@ -3661,14 +3717,14 @@ fn canonicalize_topology_with_options(
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+    let partition = topology_initial_partition(&adapter, &colors);
     let leaf_candidate = |order: &[NodeId]| {
         topology_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
     };
-    let selected = canonical_search(
+    let selected = canonical_search_from_partition(
         &adapter,
-        &descriptors,
+        partition,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
@@ -3862,14 +3918,14 @@ fn canonical_key_by(
 
     let key = match level {
         DescriptionLevel::Topology => {
-            let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+            let partition = topology_initial_partition(&adapter, &colors);
             let leaf_candidate = |order: &[NodeId]| {
                 topology_candidate(molecule, &incidence_graph, order)
                     .expect("initial colors established topology normalization")
             };
-            canonical_search(
+            canonical_search_from_partition(
                 &adapter,
-                &descriptors,
+                partition,
                 context.automorphism_algorithm,
                 options,
                 &leaf_candidate,
@@ -4447,14 +4503,6 @@ fn reaction_span_canonical_candidate(
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = match level {
-        DescriptionLevel::Topology => {
-            partition_descriptors(&adapter, &entity_keys, &incidence_keys)
-        }
-        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
-            constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph)
-        }
-    };
     let leaf_candidate = |order: &[NodeId]| {
         let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
         let remapped = span.remap(&correspondence);
@@ -4468,17 +4516,31 @@ fn reaction_span_canonical_candidate(
             entity_order: order.to_vec(),
         }
     };
-    Ok(canonical_search(
-        &adapter,
-        &descriptors,
-        context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
-        },
-        &leaf_candidate,
-    )
-    .candidate)
+    let options = CanonicalSearchOptions {
+        automorphism_pruning: false,
+        branch_order: backend_canonical_branch_order,
+    };
+    let selected = match level {
+        DescriptionLevel::Topology => canonical_search_from_partition(
+            &adapter,
+            topology_initial_partition(&adapter, &colors),
+            context.automorphism_algorithm,
+            options,
+            &leaf_candidate,
+        ),
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
+            let descriptors =
+                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+            canonical_search(
+                &adapter,
+                &descriptors,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+            )
+        }
+    };
+    Ok(selected.candidate)
 }
 
 fn reaction_span_from_candidate(
