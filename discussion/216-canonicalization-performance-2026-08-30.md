@@ -1077,12 +1077,12 @@ without changing production code.
 
 **Implementation.** `rank_initial_colors` now orders references to the existing initial-color keys,
 assigns dense ranks, and constructs the initial `OrderedPartition` directly from those ranks. The
-canonical search accepts that preconstructed partition. The cloned-key implementation remains only
-as a test oracle; its unit tables and the dense-renumbering property establish identical ranks,
-ordered cells, and topology canonicalization.
+canonical search accepts that preconstructed partition. The cloned-key implementation remained only
+through the differential gate; its unit tables and the dense-renumbering property established
+identical ranks, ordered cells, and topology canonicalization before the comparator was removed.
 
-The integration passed the focused rank and partition tables, the feature-gated differential
-property, all 15 canonicalization integration tests, and clippy with all graph-IR targets and the
+The integration passed the focused rank and partition tables, the generated differential property,
+all 15 canonicalization integration tests, and clippy with all graph-IR targets and the
 `proptest` feature. Against the fresh `upstream/main` baseline, the complete-operation benchmark
 improved by approximately 13--19% for feature-free and topology-heavy controls, 5--10% for ordinary
 overlay and stereo controls, and was within the benchmark noise threshold for the two para-stereo
@@ -1120,6 +1120,21 @@ carrier is selected, settle its private representation and name before S3a. If t
 would require changing the public `IncidenceGraph`, stop and prepare the required data-type contract
 and plan correction before implementation.
 
+**Decision.** The selected private representation is `CompactTopologyCarrier`. It contains the
+`AutomorphismAdapter` used by search and its initial `OrderedPartition`. Atom vertices occupy the
+adapter's source prefix. Bonds in the largest normalized exact bond-form class are represented as
+direct edges; ties select the lowest dense semantic color. Every other bond is represented by a
+colored subdivision vertex. The existing `SubdivisionNodeSource` and general canonical search are
+reused, so production has no carrier-policy enum, new node-source vocabulary, or separate compact
+search implementation.
+
+The public `IncidenceGraph` remains the complete semantic representation and supplies the typed leaf
+key and correspondence. The compact carrier affects only private topology search: the leaf key
+still orders all bonds by mapped endpoints and normalized fields, and the returned correspondence
+still maps every atom and bond.
+
+**Done.**
+
 ### S3 — Integrate the selected carrier and optimize refinement
 
 #### S3a — Integrate or reject the compact topology carrier
@@ -1132,6 +1147,32 @@ the complete semantic incidence representation. Search only the atom and marked-
 induce direct-class bond images from atom images. Preserve complete bond ordering in the typed leaf
 key and complete bond correspondence in the returned witness. Re-run the S1c differential suite
 after integration. If no compact policy was selected, close this subitem by removing the prototype.
+
+**Implementation.** Molecule topology canonicalization and topology canonical-key comparison now
+construct `CompactTopologyCarrier` from the shared dense entity colors. The carrier uses modal-class
+direct edges and subdivisions for every other bond class, then passes its initial partition to the
+existing canonical search. Automorphism projection and backend branch ordering retain only the atom
+source prefix. Complete bond images continue to be induced by the unchanged typed leaf candidate
+and correspondence builder.
+
+The integrated carrier passed its three-case construction table, focused mixed-order, electronic,
+and disconnected relabeling cases, and bounded exhaustive validation for every incomplete and
+complete order-one simple graph through four atoms. Those checks establish exact idempotence,
+dense-renumbering invariance, correspondence transport, integrity, and agreement between pruned and
+unpruned search. The old incidence-carrier comparator found the permitted representative change on
+a five-atom disconnected case; both correspondences transported their sources correctly, and all
+equivalent compact-carrier inputs converged. The comparator was then removed. All 269
+canonicalization unit tests, 15 canonicalization integration tests, and seven feature-gated molecule
+canonicalization properties passed.
+
+Against the fresh `upstream/main` baseline, complete topology canonicalization improved by about
+55% for constructed naphthalene, 50--51% for disconnected rings, 45--49% for the two retained
+feature-free controls, and 22% for the symmetry-heavy radical control in both para-stereo modes.
+Higher-description controls continued to receive the dense-setup gain without a systematic
+regression; the para-stereo trichloropentane control was statistically unchanged with para stereo
+enabled and every other measured control improved.
+
+**Done.**
 
 #### S3b — Reduce refinement allocation on the selected carrier
 
