@@ -1293,8 +1293,21 @@ setup followed by the generally applicable refinement changes, while the topolog
 their interaction with the compact carrier. Repeating the comparison with para stereo
 enabled produced the same disposition: no complete-operation confidence interval admitted a
 regression. The active-cell path is intentionally neutral on these small cases and becomes material
-with carrier size; the permanent 8/16/32/64/77/128-node path series measured cumulative changes from
-S3b of -0.7%, -1.7%, -4.8%, -18.3%, -26.4%, and -51.5%.
+with carrier size. The permanent topology-path scaling series compares S3c directly with S3b, not
+with the frozen pre-216 baseline used in the preceding table:
+
+| Path nodes | S3c algorithm | Complete time vs S3b |
+| ---: | --- | ---: |
+| 8 | All-cell | -0.7% |
+| 16 | All-cell | -1.7% |
+| 32 | Active-cell | -4.8% |
+| 64 | Active-cell | -18.3% |
+| 77 | Active-cell | -26.4% |
+| 128 | Active-cell | -51.5% |
+
+The 8-node and 16-node rows use the unchanged S3b algorithm, so their small point-estimate changes
+are measurement variation. The `-51.5%` result is specifically the 128-node S3c path relative to
+the same path under S3b; it is not a row in the general corpus table above.
 
 Carrier and search-tree measurements show that the gains occur at distinct layers:
 
