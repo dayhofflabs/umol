@@ -72,13 +72,6 @@ proptest = []
 [dependencies]
 bitvec = "1.0.1"
 clap = { version = "4", features = ["derive"] }
-umol-graph-ir = { path = "../umol-graph-ir", version = "0.6.0" }
-umol-edn = { path = "../umol-edn", version = "0.6.0", features = [
-    "macros",
-    "indexmap",
-] }
-umol-graph-core = { path = "../umol-graph-core", version = "0.6.0" }
-umol-io = { path = "../umol-io", version = "0.6.0" }
 murmur3 = "0.5"
 nalgebra = "0.34.0"
 smallvec = "1.15.1"
@@ -89,10 +82,17 @@ serde = { version = "1.0.221", features = ["derive"] }
 strum = "0.28.0"
 thiserror = "2.0"
 toml = "1.1.0"
-umol-chem = { path = "../umol-chem", version = "0.6.0" }
-umol-utils = { path = "../umol-utils", version = "0.6.0" }
-umol-params = { path = "../umol-params", version = "0.6.0" }
-umol-perm = { path = "../umol-perm", version = "0.6.0" }
+umol-chem = { path = "../umol-chem", version = "0.7.0" }
+umol-edn = { path = "../umol-edn", version = "0.7.0", features = [
+    "macros",
+    "indexmap",
+] }
+umol-graph-core = { path = "../umol-graph-core", version = "0.7.0" }
+umol-graph-ir = { path = "../umol-graph-ir", version = "0.7.0" }
+umol-io = { path = "../umol-io", version = "0.7.0" }
+umol-params = { path = "../umol-params", version = "0.7.0" }
+umol-perm = { path = "../umol-perm", version = "0.7.0" }
+umol-utils = { path = "../umol-utils", version = "0.7.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
 
 [dev-dependencies]
