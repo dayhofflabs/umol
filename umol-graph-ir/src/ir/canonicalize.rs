@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{iter, mem};
 
 use thiserror::Error;
 use umol_graph_core::{
@@ -1749,11 +1750,11 @@ enum AutomorphismColor {
     Incidence(u32),
 }
 
-/// Colored simple-graph encoding of an incidence graph for automorphism operations.
+/// Colored simple graph and source-domain projection used by canonical search.
 ///
-/// Source entity nodes keep their ids. Role- or value-bearing incidence edges are represented by
-/// colored occurrence nodes; single-role endpoints remain direct unless parallel incidences require
-/// subdivision.
+/// Source nodes occupy the leading `source_node_count` positions. Remaining vertices encode
+/// subdivided incidences or bonds and are excluded when backend automorphisms are projected onto
+/// the search domain.
 #[derive(Clone, Debug)]
 struct AutomorphismAdapter {
     graph: Graph,
@@ -1877,7 +1878,12 @@ impl AutomorphismAdapter {
 
     fn project_automorphisms(&self, output: &AutomorphismOutput) -> AutomorphismAdapterOutput {
         let source_node = |node| match self.node_source(node) {
-            SubdivisionNodeSource::Node(source) => source,
+            SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
+                source
+            }
+            SubdivisionNodeSource::Node(_) => {
+                unreachable!("disjoint colors preserve the source-node domain")
+            }
             SubdivisionNodeSource::Edge(_) => {
                 unreachable!("disjoint colors preserve the adapter node domain")
             }
@@ -1889,7 +1895,10 @@ impl AutomorphismAdapter {
             .canonical_labels()
             .iter()
             .filter_map(|&node| match self.node_source(node) {
-                SubdivisionNodeSource::Node(source) => Some(source),
+                SubdivisionNodeSource::Node(source) if source.index() < self.source_node_count => {
+                    Some(source)
+                }
+                SubdivisionNodeSource::Node(_) => None,
                 SubdivisionNodeSource::Edge(_) => None,
             })
             .collect();
@@ -2024,6 +2033,9 @@ struct OrderedPartition {
     cells: Vec<Vec<NodeId>>,
 }
 
+/// Minimum carrier size at which refinement tracks only cells created by the preceding split.
+const ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT: usize = 32;
+
 impl OrderedPartition {
     fn from_descriptors<C: Clone + Ord>(descriptors: &[C]) -> Self {
         let mut cells = BTreeMap::<C, Vec<NodeId>>::new();
@@ -2039,28 +2051,147 @@ impl OrderedPartition {
         }
     }
 
-    fn refine(mut self, graph: &Graph) -> Self {
-        loop {
-            let cell_indices = self.cell_indices(graph.node_count());
-            let cell_count = self.cells.len();
-            let mut refined = Vec::with_capacity(self.cells.len());
-            let mut changed = false;
+    fn from_color_ranks(colors: impl IntoIterator<Item = u32>) -> Self {
+        let mut cells = Vec::<Vec<NodeId>>::new();
+        for (index, color) in colors.into_iter().enumerate() {
+            let color = color as usize;
+            if cells.len() <= color {
+                cells.resize_with(color + 1, Vec::new);
+            }
+            cells[color].push(NodeId(index as u32));
+        }
+        cells.retain(|cell| !cell.is_empty());
+        Self { cells }
+    }
 
-            for cell in self.cells {
-                let mut splits = BTreeMap::<Vec<u32>, Vec<NodeId>>::new();
-                for node in cell {
-                    let mut signature = vec![0; cell_count];
-                    for neighbor in graph.neighbors(node) {
-                        signature[cell_indices[neighbor.node.index()] as usize] += 1;
+    fn refine(self, graph: &Graph) -> Self {
+        if graph.node_count() < ACTIVE_CELL_REFINEMENT_MIN_NODE_COUNT {
+            self.refine_by_all_cells(graph)
+        } else {
+            self.refine_by_active_cells(graph)
+        }
+    }
+
+    fn refine_by_active_cells(mut self, graph: &Graph) -> Self {
+        let node_count = graph.node_count();
+        let mut active_cells = vec![true; self.cells.len()];
+        let mut node_active_columns = vec![usize::MAX; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+        let mut next_active_cells = Vec::<bool>::with_capacity(self.cells.len());
+
+        loop {
+            node_active_columns.fill(usize::MAX);
+            let mut active_count = 0;
+            for (cell_index, cell) in self.cells.iter().enumerate() {
+                if active_cells[cell_index] {
+                    for node in cell {
+                        node_active_columns[node.index()] = active_count;
                     }
-                    splits.entry(signature).or_default().push(node);
+                    active_count += 1;
                 }
-                changed |= splits.len() > 1;
-                // The minimum sorted-incidence key places the greater exact signature first.
-                refined.extend(splits.into_values().rev());
+            }
+            signatures.clear();
+            signatures.resize(node_count * active_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * active_count;
+                for neighbor in graph.neighbors(node) {
+                    let column = node_active_columns[neighbor.node.index()];
+                    if column != usize::MAX {
+                        signatures[offset + column] += 1;
+                    }
+                }
             }
 
-            self.cells = refined;
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * active_count;
+                    &signatures[offset..offset + active_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                    next_active_cells.push(false);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    let new_cell_count = next_cells.len() - next_active_cells.len();
+                    next_active_cells.extend(iter::repeat_n(true, new_cell_count));
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
+            if !changed {
+                return self;
+            }
+            mem::swap(&mut active_cells, &mut next_active_cells);
+            next_active_cells.clear();
+        }
+    }
+
+    fn refine_by_all_cells(mut self, graph: &Graph) -> Self {
+        let node_count = graph.node_count();
+        let mut cell_indices = vec![0; node_count];
+        let mut signatures = Vec::<u32>::new();
+        let mut next_cells = Vec::<Vec<NodeId>>::with_capacity(self.cells.len());
+
+        loop {
+            for (cell_index, cell) in self.cells.iter().enumerate() {
+                for node in cell {
+                    cell_indices[node.index()] = cell_index as u32;
+                }
+            }
+            let cell_count = self.cells.len();
+            signatures.clear();
+            signatures.resize(node_count * cell_count, 0);
+            for node in graph.node_ids() {
+                let offset = node.index() * cell_count;
+                for neighbor in graph.neighbors(node) {
+                    signatures[offset + cell_indices[neighbor.node.index()] as usize] += 1;
+                }
+            }
+
+            let mut changed = false;
+            for mut cell in self.cells.drain(..) {
+                let signature = |node: NodeId| {
+                    let offset = node.index() * cell_count;
+                    &signatures[offset..offset + cell_count]
+                };
+                cell.sort_unstable_by(|lhs, rhs| {
+                    signature(*rhs)
+                        .cmp(signature(*lhs))
+                        .then_with(|| lhs.cmp(rhs))
+                });
+
+                let mut group_start = 0;
+                for index in 1..cell.len() {
+                    if signature(cell[index]) != signature(cell[group_start]) {
+                        next_cells.push(cell[group_start..index].to_vec());
+                        group_start = index;
+                    }
+                }
+                if group_start == 0 {
+                    next_cells.push(cell);
+                } else {
+                    next_cells.push(cell[group_start..].to_vec());
+                    changed = true;
+                }
+            }
+
+            mem::swap(&mut self.cells, &mut next_cells);
             if !changed {
                 return self;
             }
@@ -2115,34 +2246,41 @@ impl OrderedPartition {
     }
 }
 
-type BranchOrdering = fn(
-    &AutomorphismAdapter,
-    &OrderedPartition,
-    AutomorphismAlgorithm,
-    Option<&AutomorphismAdapterOutput>,
-    &mut [NodeId],
-);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BranchOrdering {
+    BackendCanonical,
+    NodeId,
+    #[cfg(test)]
+    ReverseNodeId,
+}
 
-fn backend_canonical_branch_order(
-    adapter: &AutomorphismAdapter,
-    partition: &OrderedPartition,
-    algorithm: AutomorphismAlgorithm,
-    automorphisms: Option<&AutomorphismAdapterOutput>,
-    candidates: &mut [NodeId],
-) {
-    let labels = automorphisms.map_or_else(
-        || {
-            adapter
-                .automorphisms_for_partition(partition, algorithm)
-                .source_canonical_labels
-        },
-        |output| output.source_canonical_labels.clone(),
-    );
-    let mut ranks = vec![0; adapter.source_node_count];
-    for (rank, node) in labels.iter().enumerate() {
-        ranks[node.index()] = rank;
+impl BranchOrdering {
+    fn requires_automorphisms(self) -> bool {
+        self == Self::BackendCanonical
     }
-    candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+
+    fn order(
+        self,
+        adapter: &AutomorphismAdapter,
+        automorphisms: Option<&AutomorphismAdapterOutput>,
+        candidates: &mut [NodeId],
+    ) {
+        match self {
+            Self::BackendCanonical => {
+                let labels = &automorphisms
+                    .expect("backend branch order requested automorphisms")
+                    .source_canonical_labels;
+                let mut ranks = vec![0; adapter.source_node_count];
+                for (rank, node) in labels.iter().enumerate() {
+                    ranks[node.index()] = rank;
+                }
+                candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+            }
+            Self::NodeId => candidates.sort_unstable(),
+            #[cfg(test)]
+            Self::ReverseNodeId => candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs)),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2194,7 +2332,29 @@ where
 {
     canonical_search_impl(
         adapter,
-        partition_descriptors,
+        OrderedPartition::from_descriptors(partition_descriptors),
+        algorithm,
+        options,
+        leaf_candidate,
+        false,
+        &|_| {},
+    )
+}
+
+fn canonical_search_from_partition<K, LeafCandidate>(
+    adapter: &AutomorphismAdapter,
+    partition: OrderedPartition,
+    algorithm: AutomorphismAlgorithm,
+    options: CanonicalSearchOptions,
+    leaf_candidate: &LeafCandidate,
+) -> CanonicalSearchResult<K>
+where
+    K: Ord,
+    LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
+{
+    canonical_search_impl(
+        adapter,
+        partition,
         algorithm,
         options,
         leaf_candidate,
@@ -2219,7 +2379,7 @@ where
 {
     canonical_search_impl(
         adapter,
-        partition_descriptors,
+        OrderedPartition::from_descriptors(partition_descriptors),
         algorithm,
         options,
         leaf_candidate,
@@ -2228,9 +2388,9 @@ where
     )
 }
 
-fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
+fn canonical_search_impl<K, LeafCandidate, FilterGenerators>(
     adapter: &AutomorphismAdapter,
-    partition_descriptors: &[Descriptor],
+    initial: OrderedPartition,
     algorithm: AutomorphismAlgorithm,
     options: CanonicalSearchOptions,
     leaf_candidate: &LeafCandidate,
@@ -2239,11 +2399,10 @@ fn canonical_search_impl<K, Descriptor, LeafCandidate, FilterGenerators>(
 ) -> CanonicalSearchResult<K>
 where
     K: Ord,
-    Descriptor: Clone + Ord,
     LeafCandidate: Fn(&[NodeId]) -> CanonicalCandidate<K>,
     FilterGenerators: Fn(&mut Vec<Vec<NodeId>>),
 {
-    let initial = OrderedPartition::from_descriptors(partition_descriptors).refine(adapter.graph());
+    let initial = initial.refine(adapter.graph());
     let mut best = None;
     #[cfg(test)]
     let mut stats = CanonicalSearchStats {
@@ -2322,7 +2481,10 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = (options.automorphism_pruning || apply_generator_filter).then(|| {
+    let automorphisms = (options.automorphism_pruning
+        || apply_generator_filter
+        || options.branch_order.requires_automorphisms())
+    .then(|| {
         #[cfg(test)]
         {
             stats.backend_calls += 1;
@@ -2359,15 +2521,10 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     #[cfg(test)]
     {
         stats.branch_order_calls += 1;
-        stats.backend_calls += usize::from(automorphisms.is_none());
     }
-    (options.branch_order)(
-        adapter,
-        &partition,
-        algorithm,
-        automorphisms.as_ref(),
-        &mut candidates,
-    );
+    options
+        .branch_order
+        .order(adapter, automorphisms.as_ref(), &mut candidates);
 
     for candidate in candidates {
         #[cfg(test)]
@@ -2410,7 +2567,86 @@ fn initial_color_keys(
     Ok((entity_keys, incidence_keys))
 }
 
+/// Topology search carrier with atoms and non-modal bond subdivisions as vertices.
+///
+/// Bonds in the largest normalized bond-form class are represented directly as edges. Every other
+/// bond remains a colored subdivision vertex. The complete typed leaf key and correspondence still
+/// order and map every bond.
+#[derive(Clone, Debug)]
+struct CompactTopologyCarrier {
+    adapter: AutomorphismAdapter,
+    initial_partition: OrderedPartition,
+}
+
+impl CompactTopologyCarrier {
+    /// Construct the carrier from the dense normalized colors of topology entities.
+    fn new(molecule: &Molecule, incidence_graph: &IncidenceGraph, entity_colors: &[u32]) -> Self {
+        let mut bond_color_counts = vec![0_usize; entity_colors.len()];
+        for bond in molecule.bonds().iter() {
+            let node = incidence_graph.node_of(Entity::Bond(bond.id));
+            bond_color_counts[entity_colors[node.index()] as usize] += 1;
+        }
+        let direct_bond_color = bond_color_counts
+            .into_iter()
+            .enumerate()
+            .filter(|(_, count)| *count > 0)
+            .max_by(|(lhs_color, lhs_count), (rhs_color, rhs_count)| {
+                lhs_count
+                    .cmp(rhs_count)
+                    .then_with(|| rhs_color.cmp(lhs_color))
+            })
+            .map(|(color, _)| color as u32);
+
+        let atom_count = incidence_graph.entity_count(EntityKind::Atom);
+        let mut colors = entity_colors[..atom_count]
+            .iter()
+            .copied()
+            .map(AutomorphismColor::Entity)
+            .collect::<Vec<_>>();
+        let mut node_sources = (0..atom_count)
+            .map(|index| SubdivisionNodeSource::Node(NodeId(index as u32)))
+            .collect::<Vec<_>>();
+        let mut edges = Vec::<[u32; 2]>::with_capacity(molecule.bonds().count() * 2);
+
+        for bond in molecule.bonds().iter() {
+            let node = incidence_graph.node_of(Entity::Bond(bond.id));
+            let bond_color = entity_colors[node.index()];
+            let [first, second] = bond.atom_ids().map(|atom| atom.index() as u32);
+            if direct_bond_color == Some(bond_color) {
+                edges.push([first, second]);
+            } else {
+                let subdivision = NodeId(node_sources.len() as u32);
+                node_sources.push(SubdivisionNodeSource::Node(subdivision));
+                colors.push(AutomorphismColor::Entity(bond_color));
+                edges.push([first, subdivision.0]);
+                edges.push([subdivision.0, second]);
+            }
+        }
+
+        let graph = Graph::new(node_sources.len(), &edges);
+        debug_assert!(graph.is_simple());
+        let initial_partition = OrderedPartition::from_color_ranks(colors.iter().map(|color| {
+            let AutomorphismColor::Entity(color) = *color else {
+                unreachable!("the topology carrier uses entity colors")
+            };
+            color
+        }));
+
+        Self {
+            adapter: AutomorphismAdapter {
+                graph,
+                colors,
+                node_sources,
+                incidence_nodes: Vec::new(),
+                source_node_count: atom_count,
+            },
+            initial_partition,
+        }
+    }
+}
+
 /// Construct topology-level partition descriptors for the exact adapter.
+#[cfg(test)]
 fn partition_descriptors(
     adapter: &AutomorphismAdapter,
     entity_keys: &[InitialColorKey],
@@ -2424,6 +2660,16 @@ fn partition_descriptors(
             SubdivisionNodeSource::Edge(edge) => incidence_keys[edge.index()].clone(),
         })
         .collect()
+}
+
+fn topology_initial_partition(
+    adapter: &AutomorphismAdapter,
+    colors: &InitialColors,
+) -> OrderedPartition {
+    OrderedPartition::from_color_ranks(adapter.node_sources.iter().map(|source| match *source {
+        SubdivisionNodeSource::Node(node) => colors.entities[node.index()],
+        SubdivisionNodeSource::Edge(edge) => colors.incidences[edge.index()],
+    }))
 }
 
 /// Search descriptors for the constitution key.
@@ -2715,20 +2961,31 @@ fn rank_initial_colors(
     entity_keys: &[InitialColorKey],
     incidence_keys: &[InitialColorKey],
 ) -> InitialColors {
-    let keys = entity_keys
-        .iter()
-        .chain(incidence_keys.iter())
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let colors = keys
-        .into_iter()
-        .enumerate()
-        .map(|(color, key)| (key, color as u32))
-        .collect::<BTreeMap<_, _>>();
+    let entity_count = entity_keys.len();
+    let key = |index: usize| {
+        if index < entity_count {
+            &entity_keys[index]
+        } else {
+            &incidence_keys[index - entity_count]
+        }
+    };
+    let mut indices = (0..entity_count + incidence_keys.len()).collect::<Vec<_>>();
+    indices.sort_unstable_by(|&left, &right| key(left).cmp(key(right)));
 
+    let mut ranks = vec![0; indices.len()];
+    let mut previous = None;
+    let mut rank = 0;
+    for index in indices {
+        if previous.is_some_and(|previous| key(previous) != key(index)) {
+            rank += 1;
+        }
+        ranks[index] = rank;
+        previous = Some(index);
+    }
+    let incidences = ranks.split_off(entity_count);
     InitialColors {
-        entities: entity_keys.iter().map(|key| colors[key]).collect(),
-        incidences: incidence_keys.iter().map(|key| colors[key]).collect(),
+        entities: ranks,
+        incidences,
     }
 }
 
@@ -3646,7 +3903,7 @@ fn canonicalize_topology(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3658,17 +3915,19 @@ fn canonicalize_topology_with_options(
     options: CanonicalSearchOptions,
 ) -> Result<(Molecule, MoleculeCorrespondence), MoleculeCanonicalizeError> {
     let incidence_graph = molecule.incidence_graph(IncidenceLevel::Topology);
-    let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
+    let (entity_keys, _) = initial_color_keys(molecule, &incidence_graph)?;
+    let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+    let CompactTopologyCarrier {
+        adapter,
+        initial_partition,
+    } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
     let leaf_candidate = |order: &[NodeId]| {
         topology_candidate(molecule, &incidence_graph, order)
             .expect("initial colors established topology normalization")
     };
-    let selected = canonical_search(
+    let selected = canonical_search_from_partition(
         &adapter,
-        &descriptors,
+        initial_partition,
         context.automorphism_algorithm,
         options,
         &leaf_candidate,
@@ -3690,7 +3949,7 @@ fn canonicalize_constitution(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3734,7 +3993,7 @@ fn canonicalize_structure(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3789,7 +4048,7 @@ fn canonicalize_full(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3853,30 +4112,40 @@ fn canonical_key_by(
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
-    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
-    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
+    let automorphism_pruning = level != DescriptionLevel::Structure;
     let options = CanonicalSearchOptions {
-        automorphism_pruning: level != DescriptionLevel::Structure,
-        branch_order: backend_canonical_branch_order,
+        automorphism_pruning,
+        branch_order: if automorphism_pruning {
+            BranchOrdering::BackendCanonical
+        } else {
+            BranchOrdering::NodeId
+        },
     };
 
+    if level == DescriptionLevel::Topology {
+        let entity_colors = rank_initial_colors(&entity_keys, &[]).entities;
+        let CompactTopologyCarrier {
+            adapter,
+            initial_partition,
+        } = CompactTopologyCarrier::new(molecule, &incidence_graph, &entity_colors);
+        let leaf_candidate = |order: &[NodeId]| {
+            topology_candidate(molecule, &incidence_graph, order)
+                .expect("initial colors established topology normalization")
+        };
+        return Ok(canonical_search_from_partition(
+            &adapter,
+            initial_partition,
+            context.automorphism_algorithm,
+            options,
+            &leaf_candidate,
+        )
+        .candidate
+        .key);
+    }
+
+    let colors = rank_initial_colors(&entity_keys, &incidence_keys);
+    let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
     let key = match level {
-        DescriptionLevel::Topology => {
-            let descriptors = partition_descriptors(&adapter, &entity_keys, &incidence_keys);
-            let leaf_candidate = |order: &[NodeId]| {
-                topology_candidate(molecule, &incidence_graph, order)
-                    .expect("initial colors established topology normalization")
-            };
-            canonical_search(
-                &adapter,
-                &descriptors,
-                context.automorphism_algorithm,
-                options,
-                &leaf_candidate,
-            )
-            .candidate
-            .key
-        }
         DescriptionLevel::Constitution => {
             let descriptors =
                 constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
@@ -3917,7 +4186,9 @@ fn canonical_key_by(
             .candidate
             .key
         }
-        DescriptionLevel::Full => unreachable!("handled before selected-layer search"),
+        DescriptionLevel::Topology | DescriptionLevel::Full => {
+            unreachable!("handled before selected-layer search")
+        }
     };
     Ok(key)
 }
@@ -3949,7 +4220,7 @@ fn canonical_key_by_full(
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         &leaf_candidate,
     )
@@ -4357,7 +4628,11 @@ fn canonicalize_molecule_with_correspondence_by_effective(
                 | DescriptionLevel::Constitution
                 | DescriptionLevel::Structure
         ),
-        branch_order: backend_canonical_branch_order,
+        branch_order: if level == DescriptionLevel::Full {
+            BranchOrdering::NodeId
+        } else {
+            BranchOrdering::BackendCanonical
+        },
     };
     match level {
         DescriptionLevel::Topology => {
@@ -4447,14 +4722,6 @@ fn reaction_span_canonical_candidate(
     let (entity_keys, incidence_keys) = reaction_span_entity_keys(span, &incidence_graph)?;
     let colors = rank_initial_colors(&entity_keys, &incidence_keys);
     let adapter = AutomorphismAdapter::new(&incidence_graph, &colors);
-    let descriptors = match level {
-        DescriptionLevel::Topology => {
-            partition_descriptors(&adapter, &entity_keys, &incidence_keys)
-        }
-        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
-            constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph)
-        }
-    };
     let leaf_candidate = |order: &[NodeId]| {
         let correspondence = lhs_anchored_correspondence_from_order(span, &incidence_graph, order);
         let remapped = span.remap(&correspondence);
@@ -4468,17 +4735,31 @@ fn reaction_span_canonical_candidate(
             entity_order: order.to_vec(),
         }
     };
-    Ok(canonical_search(
-        &adapter,
-        &descriptors,
-        context.automorphism_algorithm,
-        CanonicalSearchOptions {
-            automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
-        },
-        &leaf_candidate,
-    )
-    .candidate)
+    let options = CanonicalSearchOptions {
+        automorphism_pruning: false,
+        branch_order: BranchOrdering::NodeId,
+    };
+    let selected = match level {
+        DescriptionLevel::Topology => canonical_search_from_partition(
+            &adapter,
+            topology_initial_partition(&adapter, &colors),
+            context.automorphism_algorithm,
+            options,
+            &leaf_candidate,
+        ),
+        DescriptionLevel::Constitution | DescriptionLevel::Structure | DescriptionLevel::Full => {
+            let descriptors =
+                constitution_partition_descriptors(&adapter, &entity_keys, &incidence_graph);
+            canonical_search(
+                &adapter,
+                &descriptors,
+                context.automorphism_algorithm,
+                options,
+                &leaf_candidate,
+            )
+        }
+    };
+    Ok(selected.candidate)
 }
 
 fn reaction_span_from_candidate(

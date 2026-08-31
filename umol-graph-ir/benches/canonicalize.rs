@@ -14,8 +14,9 @@ use umol_graph_ir::ir::{
     Canonicalize, CanonicalizeContext, Constraint, DativeBondForm, DativeBondId, IncidenceLevel,
     Molecule, MoleculeConstraint, MoleculeCorrespondence, MoleculeEntries, MulticenterBondForm,
     MulticenterBondId, NoncovalentBondForm, NoncovalentBondId, NoncovalentBondKind, NumForm,
-    Reframe, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId, StereoCoset, StereoKind,
-    StereoLigand, StereoLigandKind,
+    Reframe, StereoAtomConstraintForm, StereoAtomForm, StereoAtomId, StereoBondForm, StereoBondId,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind, StereoLigandPair, Topicity,
+    TopicityForm, TopicityRelationForm,
 };
 
 const ALGORITHM: AutomorphismAlgorithm = AutomorphismAlgorithm::Nauty;
@@ -171,6 +172,15 @@ fn disconnected_rings() -> Molecule {
     )
 }
 
+fn carbon_path(atom_count: usize) -> Molecule {
+    carbon_graph(
+        atom_count,
+        &(0..atom_count as u32 - 1)
+            .map(|first| (first, first + 1))
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn overlay_heavy() -> Molecule {
     let mut atoms = [
         Element::C,
@@ -276,6 +286,64 @@ fn tetrahedral_stereo() -> Molecule {
             vec![ligand(1), ligand(2), ligand(3), ligand(4)],
             StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0)),
         )],
+        ..Default::default()
+    })
+}
+
+fn cis_trans_stereo_bond() -> Molecule {
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [
+            Element::C,
+            Element::C,
+            Element::F,
+            Element::Cl,
+            Element::Br,
+            Element::I,
+        ]
+        .into_iter()
+        .map(atom)
+        .collect(),
+        bonds: vec![
+            bond(0, 1, 2),
+            bond(0, 2, 1),
+            bond(0, 3, 1),
+            bond(1, 4, 1),
+            bond(1, 5, 1),
+        ],
+        stereo_bonds: vec![(
+            BondId(0),
+            vec![ligand(3), ligand(2), ligand(5), ligand(4)],
+            StereoBondForm::new(StereoKind::CisTrans, 1u32),
+        )],
+        ..Default::default()
+    })
+}
+
+fn mixed_atom_and_bond_stereo() -> Molecule {
+    let stereo_atom = tetrahedral_stereo();
+    let stereo_bond = cis_trans_stereo_bond();
+    Molecule::combine_all([&stereo_atom, &stereo_bond]).0
+}
+
+fn frame_relative_stereo_constraint() -> Molecule {
+    let constraint = StereoAtomConstraintForm::Topicity(TopicityForm {
+        pair: StereoLigandPair::new(0usize.into(), 2usize.into()),
+        relation: TopicityRelationForm::Lit(Topicity::Enantiotopic),
+    });
+    Molecule::from_entries(MoleculeEntries {
+        atoms: [Element::C, Element::F, Element::Cl, Element::Br, Element::I]
+            .into_iter()
+            .map(atom)
+            .collect(),
+        bonds: vec![bond(0, 1, 1), bond(0, 2, 1), bond(0, 3, 1), bond(0, 4, 1)],
+        stereo_atoms: vec![(
+            AtomId(0),
+            vec![ligand(1), ligand(2), ligand(3), ligand(4)],
+            StereoAtomForm::new(StereoKind::Tetrahedral, StereoCoset::Lit(0))
+                .with_constraint(constraint.clone()),
+        )],
+        constraints: Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral, constraint)
+            .into(),
         ..Default::default()
     })
 }
@@ -472,6 +540,18 @@ fn corpus() -> Vec<CorpusCase> {
         CorpusCase {
             name: "tetrahedral_stereo",
             molecule: tetrahedral_stereo(),
+        },
+        CorpusCase {
+            name: "cis_trans_stereo_bond",
+            molecule: cis_trans_stereo_bond(),
+        },
+        CorpusCase {
+            name: "mixed_atom_and_bond_stereo",
+            molecule: mixed_atom_and_bond_stereo(),
+        },
+        CorpusCase {
+            name: "frame_relative_stereo_constraint",
+            molecule: frame_relative_stereo_constraint(),
         },
         CorpusCase {
             name: "meso_dichlorobutane",
@@ -734,6 +814,32 @@ fn bench_retained_scaling_cases(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_topology_path_scaling(c: &mut Criterion) {
+    let context = CanonicalizeContext {
+        para_stereo: false,
+        automorphism_algorithm: ALGORITHM,
+    };
+    let cases = [8, 16, 32, 64, 77, 128].map(|atom_count| (atom_count, carbon_path(atom_count)));
+    let mut group = c.benchmark_group("canonicalize/scaling/topology_path");
+
+    for (atom_count, molecule) in &cases {
+        group.bench_function(BenchmarkId::from_parameter(atom_count), |b| {
+            b.iter_batched(
+                || molecule.clone(),
+                |molecule| {
+                    black_box(
+                        molecule
+                            .canonicalize(&context)
+                            .expect("topology path canonicalizes"),
+                    )
+                },
+                BatchSize::SmallInput,
+            )
+        });
+    }
+    group.finish();
+}
+
 fn bench_reframe(c: &mut Criterion) {
     let corpus = reframing_corpus();
 
@@ -812,6 +918,7 @@ criterion_group!(
     bench_remapping,
     bench_canonicalize,
     bench_retained_scaling_cases,
+    bench_topology_path_scaling,
     bench_reframe,
 );
 criterion_main!(canonicalize);
