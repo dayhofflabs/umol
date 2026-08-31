@@ -1438,6 +1438,70 @@ the generated-group/BSGS work related to docs 109 and 110, require their own set
 implementation. Otherwise reject or defer them with the measured ceiling. This subitem does not
 introduce either mechanism under doc 216.
 
+**Reusable backend storage.** With canonical labels enabled, each non-empty C-shim call makes five
+input/work `malloc` calls and one `calloc`, while `init_sg` allocates the canonical sparse graph's
+three arrays. The shim frees all nine allocations after the call. On a 64-bit target, retaining
+those arrays requires `36N + 16E` bytes for an undirected carrier with `N` nodes and `E` edges:
+
+| Carrier | Nodes / edges | Reusable native bytes |
+| --- | ---: | ---: |
+| Constructed naphthalene modal carrier | 10 / 11 | 536 |
+| C60 topology carrier | 60 / 90 | 3,600 |
+| CHEBI:46245 modal carrier | 77 / 77 | 4,004 |
+| Fully subdivided C60 carrier | 150 / 180 | 8,280 |
+
+Nauty's larger dynamic refinement and search workspaces are already thread-local capacity-retaining
+arrays; a new session would not eliminate their steady-state allocation. A temporary optimized C
+control repeated the shim's eight `malloc` calls, one `calloc`, matching frees, and endpoint touches
+at the exact C60 sizes. The stable results were 0.267 us for the 3,600-byte topology allocation set
+and 0.391 us for the 8,280-byte subdivided set. At C60's measured two backend calls, eliminating all
+nine per-call allocations would save about 0.53 us, or 0.35% of the 150.54-us complete operation.
+
+This allocation control does not include copying CSR, partition, or output data. The earlier
+symbolized sample provides a conservative bound for that larger wrapper term: the complete C shim
+and native call occupied 93 canonicalization samples while `sparsenauty` occupied 80. Their
+13-sample difference was 1.9% of canonicalization and included every shim allocation and copy, some
+of which remains necessary because partitions, orbits, labels, and generators vary per request.
+Rust-side fixed-topology preparation is also bounded by the 4.5 percentage-point difference between
+the complete adapter path and the C shim in that sample; that difference additionally includes
+result projection, which a session cannot cache. The compact carrier and reduced call counts landed
+after that sample, so these are deliberately conservative ceilings rather than expected gains.
+
+A reusable session would consequently add ownership, capacity, reentrancy, and graph-versus-
+partition lifetime semantics at the graph-core/native boundary for a sub-percent measured native
+allocation term and a less-than-1.9% complete wrapper ceiling. No session or graph-core request API
+is retained or moved to a new work document.
+
+**Generated-group stabilizers.** The selected search now makes zero, one, or two backend requests in
+the measured cases. Constructed naphthalene and C60 make two; C60-F and CHEBI:46245 make one;
+CHEBI:2453 and already-discrete cases make none. A root generated group could replace only requests
+below the root. It cannot remove the root backend request that supplies the generators, and exact
+stabilizer-chain construction and subgroup handling have their own cost.
+
+The existing graph-core controls put the raw C60 root request at 12.957 us. Three independent C60
+point-stabilizer requests take 18.826 us together, or about 6.275 us per distinguished site. Even
+crediting a generated-group path with the complete cost of the one child request before charging
+for BSGS construction would therefore save at most 4.2% of complete C60 canonicalization.
+Naphthalene's full-output root request takes 1.857 us; treating that as a conservative ceiling for its
+single avoidable child request gives at most 7.9% of its 23.617-us complete operation. One-call and
+zero-call cases have no within-canonicalization stabilizer reuse opportunity.
+
+The current `AutomorphismOutput` already exposes generators, but `umol-perm` has no generated-group
+or stabilizer-chain implementation. Topology and constitution child partitions are point
+stabilizers of the root action. Structure search additionally needs the subgroup compatible with
+stereo-frame preservation: deriving useful child generators there is not merely a storage change
+and cannot be specified as repeated point stabilization without settling subgroup semantics. The
+measured search depth does not justify introducing that algebra and its public contracts solely for
+canonicalization.
+
+**Disposition.** Reject a reusable backend session as a doc-216 optimization under the current
+cost and call-count profile. Defer generated groups and BSGS to the cross-consumer design already
+owned by docs 109 and 110; do not implement or specialize them for the current canonicalizer. A
+future canonicalization workload may reopen either measurement only if it demonstrates materially
+deeper backend-request chains or a materially larger wrapper share.
+
+**Done.**
+
 #### S4c — Release the selected general improvements
 
 **Module:** repository release metadata and operations; additive (green); no public API beyond the
