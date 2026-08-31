@@ -1363,14 +1363,69 @@ duplicates another's measured role.
 
 #### S4a — Measure backend request modes and local branch order
 
-**Module:** profiling-only graph-core/nauty and graph-IR search experiments; additive (green); no
-production public API. [dep: S3d]
+**Module:** graph-IR private search plus profiling-only graph-core/nauty experiments; additive
+(green); no production public API. [dep: S3d]
 
 Measure automorphism-only backend requests for topology and constitution search and deterministic
 local branch order where the backend result cannot prune. Compare exact canonical aggregates,
 correspondence transport, backend calls, search nodes, and complete time. Keep any cross-crate
 request seam inside the experimental worktree until its public or private contract is explicitly
 settled.
+
+On the direct sys/core fixtures, the automorphism-only spike returned the same projected orbits and
+generators while omitting the canonical labels. On the raw backend request, the saving was
+measurable but small even for the repository's highly symmetric C60 fixture:
+
+| Backend carrier | Canonical labels | Automorphisms only | Change |
+| --- | ---: | ---: | ---: |
+| C60 graph, 60 nodes / 90 edges | 12.988 us | 12.050 us | -7.2% |
+| Fully subdivided C60 incidence graph, 150 nodes / 180 edges | 28.794 us | 27.196 us | -5.6% |
+
+Complete canonicalization reduced the attainable saving further. The C60 molecule came from
+`umol-io/tests/mol_parsing/data/molecule/jmol/c60.mol`; monofluorinated C60 was constructed by
+adding one fluorine atom and one single bond to atom 0. The temporary benchmark compared the
+frozen S3d path, local node-id branch order with the existing backend request, and local order with
+the automorphism-only request:
+
+| Molecule | Frozen S3d | Local order | Automorphisms only | Automorphisms only vs S3d |
+| --- | ---: | ---: | ---: | ---: |
+| C60 | 150.54 us | 152.15 us | 148.20 us | -1.6% |
+| C60-F | 136.85 us | 136.58 us | 135.81 us | -0.8% |
+
+The fluorine substitution makes the complete operation about 9% faster because it breaks C60's
+symmetry. Search accounting explains the difference. C60's 60-node / 90-edge topology carrier
+started from one 60-member residual cell and used three refinement calls, two branch-order calls,
+two backend calls, one leaf, and 60 orbit-pruned branches. C60-F's 61-node / 91-edge carrier started
+from 28 two-member residual cells and used two refinement calls, one branch-order call, one backend
+call, one leaf, and one orbit-pruned branch. Backend and local branch order produced the exact same
+candidate and search counts in both cases.
+
+The general complete-operation corpus placed the same ceiling at roughly 2.5--7% for the measured
+topology cases and no material gain for structure or full cases. Requesting automorphisms without
+labels for structure also changed the backend's generator presentation. This remained correct, but
+the stereo-preserving generator filter could then retain a differently useful generating set and
+change pruning strength. A public graph-core request mode and native request plumbing are not
+justified by the measured complete-operation gain, so the experimental cross-crate seam is not
+retained.
+
+Local deterministic ordering has a separate, narrow disposition. When neither orbit pruning nor a
+generator filter needs automorphisms, backend canonical labels were used only to order branches;
+the exact typed leaf minimum does not depend on that order. `BranchOrdering` now makes the two
+choices explicit. Full molecule search, unpruned structure/full key search, and reaction-span
+search use node-id order and make no branch-order-only backend request. Topology, constitution, and
+structure searches keep backend canonical order when they already need the backend result. The
+focused search-statistics case observes two leaves and zero backend calls for local order, versus
+the same two leaves and one backend call for backend order. All 281 focused unit tests, 15
+canonicalization integration tests, and 22 selected canonicalization property tests passed. A final
+complete-corpus benchmark was neutral within normal run variation, as expected for the small
+full-description cases, while removing the avoidable request by construction.
+
+**Disposition.** Retain local node-id ordering only where the backend result has no pruning or
+filtering consumer. Do not retain the automorphism-only cross-crate request seam or the temporary
+C60 benchmark and tests. Carry the measured backend ceiling into S4b's session and stabilizer
+disposition.
+
+**Done.**
 
 #### S4b — Dispose backend session and stabilizer candidates
 

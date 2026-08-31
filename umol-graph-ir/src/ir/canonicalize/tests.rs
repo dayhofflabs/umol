@@ -24,26 +24,6 @@ use crate::ir::{
     Stereogenicity, StereogenicityForm, Topicity, TopicityForm, TopicityRelationForm,
 };
 
-fn node_branch_order(
-    _adapter: &AutomorphismAdapter,
-    _partition: &OrderedPartition,
-    _algorithm: AutomorphismAlgorithm,
-    _automorphisms: Option<&AutomorphismAdapterOutput>,
-    candidates: &mut [NodeId],
-) {
-    candidates.sort_unstable();
-}
-
-fn reverse_node_branch_order(
-    _adapter: &AutomorphismAdapter,
-    _partition: &OrderedPartition,
-    _algorithm: AutomorphismAlgorithm,
-    _automorphisms: Option<&AutomorphismAdapterOutput>,
-    candidates: &mut [NodeId],
-) {
-    candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs));
-}
-
 impl AutomorphismAdapter {
     fn automorphisms(&self, algorithm: AutomorphismAlgorithm) -> AutomorphismAdapterOutput {
         let output = self
@@ -1676,7 +1656,7 @@ fn test_canonicalize_structure_para_stereo(
         &context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .expect("fixed molecule canonicalizes");
@@ -1685,7 +1665,7 @@ fn test_canonicalize_structure_para_stereo(
         &context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
     )
     .expect("fixed molecule canonicalizes without orbit pruning");
@@ -2372,7 +2352,7 @@ fn test_canonicalize_structure_renumbering(
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                branch_order: backend_canonical_branch_order,
+                branch_order: BranchOrdering::BackendCanonical,
             },
         )
         .expect("renumbered molecule canonicalizes");
@@ -2443,11 +2423,11 @@ fn test_canonicalize_structure_minimum(
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
     ] {
         let actual = canonical_search(&adapter, &descriptors, algorithm, options, &leaf_candidate);
@@ -2457,23 +2437,23 @@ fn test_canonicalize_structure_minimum(
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     ] {
         let (canonical, correspondence) = canonicalize_structure_with_options(
@@ -2556,19 +2536,19 @@ fn test_canonicalize_structure_orbit_pruning(
     for options in [
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
     ] {
         let actual = canonical_search_with_generator_filter(
@@ -4127,7 +4107,7 @@ fn test_ordered_partition_refine_exhaustive_domain(
                 &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
-                    branch_order: backend_canonical_branch_order,
+                    branch_order: BranchOrdering::BackendCanonical,
                 },
             )
             .unwrap();
@@ -4136,7 +4116,7 @@ fn test_ordered_partition_refine_exhaustive_domain(
                 &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
-                    branch_order: backend_canonical_branch_order,
+                    branch_order: BranchOrdering::BackendCanonical,
                 },
             )
             .unwrap();
@@ -4274,7 +4254,7 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: node_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         &leaf_candidate,
     );
@@ -4284,7 +4264,7 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
         &leaf_candidate,
     );
@@ -4294,7 +4274,7 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         AutomorphismAlgorithm::Nauty,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
         &leaf_candidate,
     );
@@ -4310,7 +4290,7 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     1,
     CanonicalSearchOptions {
         automorphism_pruning: false,
-        branch_order: node_branch_order,
+        branch_order: BranchOrdering::NodeId,
     },
     CanonicalSearchStats {
         initial_residual_cell_sizes: vec![],
@@ -4326,7 +4306,7 @@ fn test_canonical_search(#[case] molecule: Molecule) {
     2,
     CanonicalSearchOptions {
         automorphism_pruning: false,
-        branch_order: backend_canonical_branch_order,
+        branch_order: BranchOrdering::BackendCanonical,
     },
     CanonicalSearchStats {
         initial_residual_cell_sizes: vec![2],
@@ -4338,11 +4318,27 @@ fn test_canonical_search(#[case] molecule: Molecule) {
         orbit_pruned_branches: 0,
     },
 )]
+#[case::local_branch_order(
+    2,
+    CanonicalSearchOptions {
+        automorphism_pruning: false,
+        branch_order: BranchOrdering::NodeId,
+    },
+    CanonicalSearchStats {
+        initial_residual_cell_sizes: vec![2],
+        refinement_calls: 3,
+        branch_order_calls: 1,
+        backend_calls: 0,
+        visited_leaves: 2,
+        leaf_comparisons: 1,
+        orbit_pruned_branches: 0,
+    },
+)]
 #[case::orbit_pruned(
     2,
     CanonicalSearchOptions {
         automorphism_pruning: true,
-        branch_order: backend_canonical_branch_order,
+        branch_order: BranchOrdering::BackendCanonical,
     },
     CanonicalSearchStats {
         initial_residual_cell_sizes: vec![2],
@@ -4408,7 +4404,7 @@ fn test_canonical_search_color_labels() {
     };
     let options = CanonicalSearchOptions {
         automorphism_pruning: true,
-        branch_order: backend_canonical_branch_order,
+        branch_order: BranchOrdering::BackendCanonical,
     };
 
     let expected = canonical_search(
@@ -4541,7 +4537,7 @@ fn test_canonicalize_topology_relabeling(
 ) {
     let options = CanonicalSearchOptions {
         automorphism_pruning: true,
-        branch_order: backend_canonical_branch_order,
+        branch_order: BranchOrdering::BackendCanonical,
     };
     let expected = canonicalize_topology(&molecule, &canonicalize_context).unwrap();
     let renumbered = molecule.remap(&reverse_correspondence(&molecule));
@@ -4651,7 +4647,7 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -4660,7 +4656,7 @@ fn test_canonicalize_topology_excluded_data(canonicalize_context: CanonicalizeCo
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -4747,7 +4743,7 @@ fn test_canonicalize_topology_exhaustive_domain(
                 &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: true,
-                    branch_order: backend_canonical_branch_order,
+                    branch_order: BranchOrdering::BackendCanonical,
                 },
             )
             .unwrap();
@@ -4756,7 +4752,7 @@ fn test_canonicalize_topology_exhaustive_domain(
                 &canonicalize_context,
                 CanonicalSearchOptions {
                     automorphism_pruning: false,
-                    branch_order: reverse_node_branch_order,
+                    branch_order: BranchOrdering::ReverseNodeId,
                 },
             )
             .unwrap();
@@ -4932,7 +4928,7 @@ fn test_canonicalize_constitution(canonicalize_context: CanonicalizeContext) {
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                branch_order: backend_canonical_branch_order,
+                branch_order: BranchOrdering::BackendCanonical,
             },
         ),
         Ok((expected, expected_correspondence)),
@@ -4997,7 +4993,7 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -5006,7 +5002,7 @@ fn test_canonicalize_constitution_excluded_data(canonicalize_context: Canonicali
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -5025,7 +5021,7 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -5045,7 +5041,7 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -5074,7 +5070,7 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .unwrap();
@@ -5106,7 +5102,7 @@ fn test_canonicalize_constitution_properties(
         &canonicalize_context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: reverse_node_branch_order,
+            branch_order: BranchOrdering::ReverseNodeId,
         },
     )
     .unwrap();
@@ -5221,7 +5217,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                branch_order: backend_canonical_branch_order,
+                branch_order: BranchOrdering::BackendCanonical,
             },
         )
         .unwrap();
@@ -5230,7 +5226,7 @@ fn test_canonicalize_constitution_entity_kind_minimum(canonicalize_context: Cano
             &canonicalize_context,
             CanonicalSearchOptions {
                 automorphism_pruning: false,
-                branch_order: reverse_node_branch_order,
+                branch_order: BranchOrdering::ReverseNodeId,
             },
         )
         .unwrap();
@@ -5428,11 +5424,11 @@ fn test_canonical_search_exhaustive(#[case] node_count: usize) {
         for options in [
             CanonicalSearchOptions {
                 automorphism_pruning: false,
-                branch_order: reverse_node_branch_order,
+                branch_order: BranchOrdering::ReverseNodeId,
             },
             CanonicalSearchOptions {
                 automorphism_pruning: true,
-                branch_order: backend_canonical_branch_order,
+                branch_order: BranchOrdering::BackendCanonical,
             },
         ] {
             assert_eq!(

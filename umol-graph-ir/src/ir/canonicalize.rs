@@ -2246,34 +2246,41 @@ impl OrderedPartition {
     }
 }
 
-type BranchOrdering = fn(
-    &AutomorphismAdapter,
-    &OrderedPartition,
-    AutomorphismAlgorithm,
-    Option<&AutomorphismAdapterOutput>,
-    &mut [NodeId],
-);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BranchOrdering {
+    BackendCanonical,
+    NodeId,
+    #[cfg(test)]
+    ReverseNodeId,
+}
 
-fn backend_canonical_branch_order(
-    adapter: &AutomorphismAdapter,
-    partition: &OrderedPartition,
-    algorithm: AutomorphismAlgorithm,
-    automorphisms: Option<&AutomorphismAdapterOutput>,
-    candidates: &mut [NodeId],
-) {
-    let labels = automorphisms.map_or_else(
-        || {
-            adapter
-                .automorphisms_for_partition(partition, algorithm)
-                .source_canonical_labels
-        },
-        |output| output.source_canonical_labels.clone(),
-    );
-    let mut ranks = vec![0; adapter.source_node_count];
-    for (rank, node) in labels.iter().enumerate() {
-        ranks[node.index()] = rank;
+impl BranchOrdering {
+    fn requires_automorphisms(self) -> bool {
+        self == Self::BackendCanonical
     }
-    candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+
+    fn order(
+        self,
+        adapter: &AutomorphismAdapter,
+        automorphisms: Option<&AutomorphismAdapterOutput>,
+        candidates: &mut [NodeId],
+    ) {
+        match self {
+            Self::BackendCanonical => {
+                let labels = &automorphisms
+                    .expect("backend branch order requested automorphisms")
+                    .source_canonical_labels;
+                let mut ranks = vec![0; adapter.source_node_count];
+                for (rank, node) in labels.iter().enumerate() {
+                    ranks[node.index()] = rank;
+                }
+                candidates.sort_unstable_by_key(|node| ranks[node.index()]);
+            }
+            Self::NodeId => candidates.sort_unstable(),
+            #[cfg(test)]
+            Self::ReverseNodeId => candidates.sort_unstable_by(|lhs, rhs| rhs.cmp(lhs)),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2474,7 +2481,10 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     };
 
     let mut candidates = partition.cells[cell_index].clone();
-    let automorphisms = (options.automorphism_pruning || apply_generator_filter).then(|| {
+    let automorphisms = (options.automorphism_pruning
+        || apply_generator_filter
+        || options.branch_order.requires_automorphisms())
+    .then(|| {
         #[cfg(test)]
         {
             stats.backend_calls += 1;
@@ -2511,15 +2521,10 @@ fn search_partition<K, LeafCandidate, FilterGenerators>(
     #[cfg(test)]
     {
         stats.branch_order_calls += 1;
-        stats.backend_calls += usize::from(automorphisms.is_none());
     }
-    (options.branch_order)(
-        adapter,
-        &partition,
-        algorithm,
-        automorphisms.as_ref(),
-        &mut candidates,
-    );
+    options
+        .branch_order
+        .order(adapter, automorphisms.as_ref(), &mut candidates);
 
     for candidate in candidates {
         #[cfg(test)]
@@ -3898,7 +3903,7 @@ fn canonicalize_topology(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3944,7 +3949,7 @@ fn canonicalize_constitution(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -3988,7 +3993,7 @@ fn canonicalize_structure(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: true,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::BackendCanonical,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -4043,7 +4048,7 @@ fn canonicalize_full(
         context,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
     )
     .map(|(molecule, _)| molecule)
@@ -4107,9 +4112,14 @@ fn canonical_key_by(
     };
     let incidence_graph = molecule.incidence_graph(incidence_level);
     let (entity_keys, incidence_keys) = initial_color_keys(molecule, &incidence_graph)?;
+    let automorphism_pruning = level != DescriptionLevel::Structure;
     let options = CanonicalSearchOptions {
-        automorphism_pruning: level != DescriptionLevel::Structure,
-        branch_order: backend_canonical_branch_order,
+        automorphism_pruning,
+        branch_order: if automorphism_pruning {
+            BranchOrdering::BackendCanonical
+        } else {
+            BranchOrdering::NodeId
+        },
     };
 
     if level == DescriptionLevel::Topology {
@@ -4210,7 +4220,7 @@ fn canonical_key_by_full(
         context.automorphism_algorithm,
         CanonicalSearchOptions {
             automorphism_pruning: false,
-            branch_order: backend_canonical_branch_order,
+            branch_order: BranchOrdering::NodeId,
         },
         &leaf_candidate,
     )
@@ -4618,7 +4628,11 @@ fn canonicalize_molecule_with_correspondence_by_effective(
                 | DescriptionLevel::Constitution
                 | DescriptionLevel::Structure
         ),
-        branch_order: backend_canonical_branch_order,
+        branch_order: if level == DescriptionLevel::Full {
+            BranchOrdering::NodeId
+        } else {
+            BranchOrdering::BackendCanonical
+        },
     };
     match level {
         DescriptionLevel::Topology => {
@@ -4723,7 +4737,7 @@ fn reaction_span_canonical_candidate(
     };
     let options = CanonicalSearchOptions {
         automorphism_pruning: false,
-        branch_order: backend_canonical_branch_order,
+        branch_order: BranchOrdering::NodeId,
     };
     let selected = match level {
         DescriptionLevel::Topology => canonical_search_from_partition(
