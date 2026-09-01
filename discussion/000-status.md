@@ -12,11 +12,13 @@ documents may use the former `Active` status or otherwise be stale.
 | Blocked       | Work is otherwise ready or under way but cannot continue. The note must identify the concrete blocker.                                              |
 | Completed     | The document's agreed implementation scope is complete. Deferred follow-ups belong in another proposed document.                                    |
 | Informational | Research, analysis, evidence, or a durable decision record with no tracked implementation scope.                                                    |
-| Superseded    | A newer document replaces this document. The note identifies the replacement.                                                                       |
+| Superseded    | The document has been refuted or replaced in a significant way. The note identifies the replacement.                                                |
 | Outdated      | Historical material that is no longer an accurate description and has no single replacement recorded here.                                          |
 
 `Blocked` is not a synonym for deferred, lower-priority, or awaiting selection.
-Do not use `In Progress` merely because a document is still relevant.
+Do not use `In Progress` merely because a document is still relevant. A document
+superseded only in part keeps its ordinary status and records the superseded
+portion in a notice at its top.
 
 Some early informational documents preserve exploratory conversations and
 speculative analysis. They are historical research inputs, not statements of
@@ -157,7 +159,7 @@ the statuses recorded here remain authoritative.
 | [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                             | Completed     | 2026-06-18   |                                                                                                            |
 | [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Proposed      | 2026-07-27   | Analysis only; open entity-model decisions remain and no code is authorized.                               |
 | [118-validator-architecture-2026-06-20.md](118-validator-architecture-2026-06-20.md)                             | Completed     | 2026-06-20   |                                                                                                            |
-| [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-06-21   |                                                                                                            |
+| [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-08-31   | A dated addendum corrects the plan step 5 record; see doc 206 F10.                                         |
 | [120-molecular-graph-generation-2026-06-21.md](120-molecular-graph-generation-2026-06-21.md)                     | Proposed      | 2026-07-27   | Architecture proposal with decisions required before implementation planning.                              |
 | [121-linux-profiling-setup-2026-06-21.md](121-linux-profiling-setup-2026-06-21.md)                               | Informational | 2026-06-21   |                                                                                                            |
 | [122-ast-read-path-references-2026-06-21.md](122-ast-read-path-references-2026-06-21.md)                         | Completed     | 2026-06-21   |                                                                                                            |
@@ -191,7 +193,7 @@ the statuses recorded here remain authoritative.
 | [150-python-reaction-bindings-plan-2026-07-13.md](150-python-reaction-bindings-plan-2026-07-13.md)               | Completed     | 2026-07-14   |                                                                                                            |
 | [151-python-molecule-workflows-2026-07-13.md](151-python-molecule-workflows-2026-07-13.md)                       | Completed     | 2026-07-25   |                                                                                                            |
 | [152-basic-molecule-wildcards-2026-07-18.md](152-basic-molecule-wildcards-2026-07-18.md)                         | Completed     | 2026-07-18   |                                                                                                            |
-| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Proposed      | 2026-07-27   | Future task inventory; implementation order is not yet settled.                                            |
+| [153-format-parsing-outstanding-tasks-2026-07-18.md](153-format-parsing-outstanding-tasks-2026-07-18.md)         | Proposed      | 2026-08-31   | Future task inventory; implementation order is not yet settled. T9 adds the OpenSMILES arrangement verification. |
 | [154-lattice-probabilistic-fingerprints-2026-07-18.md](154-lattice-probabilistic-fingerprints-2026-07-18.md)     | Informational | 2026-07-18   |                                                                                                            |
 | [155-smiles-io-and-resolve-configuration-2026-07-19.md](155-smiles-io-and-resolve-configuration-2026-07-19.md)   | Completed     | 2026-07-19   |                                                                                                            |
 | [156-ast-comparison-and-property-suite-2026-07-20.md](156-ast-comparison-and-property-suite-2026-07-20.md)       | Completed     | 2026-07-21   |                                                                                                            |
@@ -243,11 +245,11 @@ the statuses recorded here remain authoritative.
 | [202-release-followups-2026-08-19.md](202-release-followups-2026-08-19.md)                                       | Proposed      | 2026-08-19   | Validate crates.io OIDC live, review CI runtime and docs.rs, publish Python docs, and update the arXiv link. |
 | [203-atom-mapping-2026-08-19.md](203-atom-mapping-2026-08-19.md)                                                 | Completed     | 2026-08-20   |                                                                                                            |
 | [204-reaction-application-redesign-2026-08-19.md](204-reaction-application-redesign-2026-08-19.md)               | Proposed      | 2026-08-19   | Redesign the application result and decide whether `ReactionDerivation` remains, changes, or is removed.   |
-| [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-24   | Review workflow and A1 scope are settled; literature/formulation gate precedes the algorithm plan.         |
-| [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Proposed      | 2026-08-21   | umol-perm review-cycle findings: contract sections, test witnesses, doc corrections, naming; awaiting triage. |
-| [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | In Progress   | 2026-08-24   | S6c records the extended C/H evidence; S7 persists QRS GraphML and mapping artifacts after doc 208.        |
+| [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-31   | QRS population, rule-domain, aromatic/stereo, literature/formulation, and pre-annotation design remain.    |
+| [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Completed     | 2026-08-31   | Both review cycles implemented; the OpenSMILES arrangement verification moved to doc 153 T9.               |
+| [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | Completed     | 2026-08-31   |                                                                                                            |
 | [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | Completed     | 2026-08-30   |                                                                                                            |
-| [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Superseded    | 2026-08-29   | Superseded by completed doc 214. S0–S1 remain implemented; the S2–S5 disposition records moved and abandoned work. |
+| [209-normalization-canonical-semantics-2026-08-25.md](209-normalization-canonical-semantics-2026-08-25.md)       | Completed     | 2026-08-31   |                                                                                                            |
 | [210-relation-frame-storage-2026-08-25.md](210-relation-frame-storage-2026-08-25.md)                             | Superseded    | 2026-08-26   | Superseded by doc 211; the storage migration could not be separated from the relation API change.          |
 | [211-relation-frames-and-api-2026-08-26.md](211-relation-frames-and-api-2026-08-26.md)                           | Completed     | 2026-08-29   |                                                                                                            |
 | [212-remapping-layer-2026-08-26.md](212-remapping-layer-2026-08-26.md)                                           | Proposed      | 2026-08-29   | Findings on the missing remapping id-transport layer; representation decision open, out of doc 211's scope. |

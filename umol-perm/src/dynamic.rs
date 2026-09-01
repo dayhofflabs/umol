@@ -1,31 +1,15 @@
 //! Arbitrary-degree permutations.
 
-use crate::PermutationError;
+use std::cmp::Ordering;
 
-fn validate_image(image: &[usize]) -> Result<(), PermutationError> {
-    let degree = image.len();
-    let mut seen = vec![false; degree];
-    for (position, &value) in image.iter().enumerate() {
-        if value >= degree {
-            return Err(PermutationError::ImageValueOutOfRange {
-                position,
-                value,
-                degree,
-            });
-        }
-        if seen[value] {
-            return Err(PermutationError::DuplicateImageValue { value });
-        }
-        seen[value] = true;
-    }
-    Ok(())
-}
+use crate::PermutationError;
 
 /// A permutation with runtime degree, in one-line notation.
 ///
 /// Unlike [`Permutation`](crate::Permutation), this action has no fixed maximum degree and is not
-/// `Copy`. Its direction is `new[i] = old[action[i]]`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// `Copy`. Its direction is `new[i] = old[action[i]]`. The ordering compares degree first, then
+/// the image lexicographically.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DynPermutation {
     image: Vec<usize>,
 }
@@ -38,7 +22,7 @@ impl DynPermutation {
         }
     }
 
-    /// The number of positions moved by this action.
+    /// The number of positions the action is defined on.
     pub fn degree(&self) -> usize {
         self.image.len()
     }
@@ -102,6 +86,45 @@ impl DynPermutation {
     }
 }
 
+impl PartialOrd for DynPermutation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for DynPermutation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.degree()
+            .cmp(&other.degree())
+            .then_with(|| self.image.cmp(&other.image))
+    }
+}
+
+fn validate_image(image: &[usize]) -> Result<(), PermutationError> {
+    let degree = image.len();
+    let mut seen = vec![false; degree];
+    for (position, &value) in image.iter().enumerate() {
+        if value >= degree {
+            return Err(PermutationError::ImageValueOutOfRange {
+                position,
+                value,
+                degree,
+            });
+        }
+        if seen[value] {
+            return Err(PermutationError::DuplicateImageValue { value });
+        }
+        seen[value] = true;
+    }
+    Ok(())
+}
+
+/// Checked construction from a one-line image.
+///
+/// # Errors
+///
+/// Returns an error when the image contains a value outside `0..image.len()`
+/// or repeats a value.
 impl TryFrom<&[usize]> for DynPermutation {
     type Error = PermutationError;
 
@@ -113,6 +136,12 @@ impl TryFrom<&[usize]> for DynPermutation {
     }
 }
 
+/// Checked construction from an owned one-line image.
+///
+/// # Errors
+///
+/// Returns an error when the image contains a value outside `0..image.len()`
+/// or repeats a value.
 impl TryFrom<Vec<usize>> for DynPermutation {
     type Error = PermutationError;
 
@@ -137,6 +166,12 @@ mod tests {
         vec![6, 5, 4, 3, 2, 1, 0],
     )]
     fn test_dyn_permutation_try_from(#[case] image: Vec<usize>, #[case] expected: Vec<usize>) {
+        assert_eq!(
+            DynPermutation::try_from(image.as_slice())
+                .expect("case is a permutation")
+                .image(),
+            expected,
+        );
         assert_eq!(
             DynPermutation::try_from(image)
                 .expect("case is a permutation")
@@ -242,5 +277,19 @@ mod tests {
             DynPermutation::between(from, to).map(|permutation| permutation.image().to_vec()),
             expected,
         );
+    }
+
+    #[rstest]
+    #[case::equal(vec![1, 0], vec![1, 0], Ordering::Equal)]
+    #[case::same_degree(vec![0, 1, 2], vec![1, 0, 2], Ordering::Less)]
+    #[case::degree_first(vec![2, 0, 1], vec![0, 1, 2, 3], Ordering::Less)]
+    fn test_dyn_permutation_cmp(
+        #[case] left: Vec<usize>,
+        #[case] right: Vec<usize>,
+        #[case] expected: Ordering,
+    ) {
+        let left = DynPermutation::try_from(left).expect("case left is a permutation");
+        let right = DynPermutation::try_from(right).expect("case right is a permutation");
+        assert_eq!(left.cmp(&right), expected);
     }
 }

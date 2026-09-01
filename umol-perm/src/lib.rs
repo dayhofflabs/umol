@@ -12,8 +12,8 @@ mod group;
 mod oriented;
 mod permutation;
 
-pub use class::{ClassKey, Coset};
-pub use coset::CosetSpace;
+pub use class::ClassKey;
+pub use coset::{Coset, CosetSpace};
 pub use dynamic::DynPermutation;
 pub use error::{ParseClassKeyError, PermutationError};
 pub use group::PermutationGroup;

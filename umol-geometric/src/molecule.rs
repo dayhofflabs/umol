@@ -349,10 +349,10 @@ impl Molecule {
         }
 
         let rep = &self.representation;
-        let perms = self.atom_permutations();
+        let permutations = self.atom_permutations();
         let h = group.order();
         assert_eq!(rep.order(), h);
-        assert_eq!(perms.len(), h);
+        assert_eq!(permutations.len(), h);
 
         // Step 1: Γ_3N characters (one per class)
         let n_classes = group.class_sizes().len();
@@ -365,7 +365,7 @@ impl Molecule {
                 continue;
             }
             class_seen[c] = true;
-            let n_fixed: usize = perms[k]
+            let n_fixed: usize = permutations[k]
                 .iter()
                 .enumerate()
                 .filter(|(i, &j)| *i == j)
@@ -385,12 +385,12 @@ impl Molecule {
         let d3n_mats: Vec<DMatrix<f64>> = group
             .ops()
             .into_iter()
-            .zip(perms.iter())
-            .map(|(op, perm)| {
+            .zip(permutations.iter())
+            .map(|(op, permutation)| {
                 let mut d = DMatrix::zeros(dim3n, dim3n);
                 let matrix = rep.matrix(op);
                 for i in 0..n {
-                    let j = perm[i];
+                    let j = permutation[i];
                     // block (3*j, 3*i) = M_R
                     for r in 0..3 {
                         for c in 0..3 {
@@ -892,7 +892,7 @@ fn compute_atom_permutations(
         .matrices()
         .iter()
         .map(|matrix| {
-            let mut perm = vec![0usize; n];
+            let mut permutation = vec![0usize; n];
             for i in 0..n {
                 let p = Vector3::new(coords[(0, i)], coords[(1, i)], coords[(2, i)]);
                 let rp = matrix * p;
@@ -910,9 +910,9 @@ fn compute_atom_permutations(
                         best_j = j;
                     }
                 }
-                perm[i] = best_j;
+                permutation[i] = best_j;
             }
-            perm
+            permutation
         })
         .collect()
 }
@@ -1096,10 +1096,10 @@ mod tests {
 
         // Each permutation must be a valid bijection
         let n = sym.atom_count();
-        for perm in sym.atom_permutations() {
-            assert_eq!(perm.len(), n);
+        for permutation in sym.atom_permutations() {
+            assert_eq!(permutation.len(), n);
             let mut seen = vec![false; n];
-            for &j in perm {
+            for &j in permutation {
                 assert!(j < n);
                 seen[j] = true;
             }

@@ -2,7 +2,8 @@
 
 Status: **Active task inventory**
 Date: 2026-07-18
-Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-ctfile-winnow-migration-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md)
+Relates: [047](047-smiles-conformance-suite-2026-01-21.md), [048](048-smiles-parser-configuration-2026-01-23.md), [100](100-table-ir-raise-ast-2026-05-27.md), [112](112-ctfile-winnow-migration-2026-06-13.md), [151](151-python-molecule-workflows-2026-07-13.md), [152](152-basic-molecule-wildcards-2026-07-18.md),
+[206](206-umol-perm-review-2026-08-21.md)
 
 ## Purpose
 
@@ -163,6 +164,19 @@ Required work:
 - Defer Python `CxSmiles`, `Mol`, and `Sdf` APIs until their Rust boundary objects and configs exist.
 - Keep parsing methods operation-specific, with separate config types for SMILES, MOL, SDF, and CXSMILES.
 - Avoid generic format-polymorphic parsing APIs unless a later design shows concrete value.
+
+### T9 — Verify OpenSMILES arrangement numbering against umol-perm cosets
+
+Moved from the umol-perm review ([206](206-umol-perm-review-2026-08-21.md), open item 5).
+
+- Pin the TH and AL index-to-arrangement-number correspondence with fixtures; check first
+  whether the existing SMILES conformance suite already exercises it end to end.
+- Verify the TB/OH enantiomer pairing against the OpenSMILES `@`/`@@` numbering (the unverified
+  note in `ClassKey::build`); the specification copy is in `materials/formats/opensmiles`, and
+  RDKit can serve as cross-validation.
+- Pin the fixed-point-freeness of the TB/OH axial swaps once the pairing is verified; the
+  review's exact scan (moved cosets TH 2/2, AX 2/2, TB 20/20, OH 30/30; CT 0/2, SP 0/3) is the
+  expected evidence.
 
 ## Immediate decision points
 

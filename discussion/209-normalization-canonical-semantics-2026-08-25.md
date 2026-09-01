@@ -1,6 +1,6 @@
 # 209 — Normalization and canonical semantics
 
-Status: Superseded
+Status: Completed
 Date: 2026-08-25
 Relates: [168](168-api-hygiene-2026-07-27.md),
 [186](186-molecule-canonicalization-2026-08-05.md),
@@ -11,7 +11,7 @@ Relates: [168](168-api-hygiene-2026-07-27.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)
 
-## Superseded
+## Partially superseded
 
 Doc [214](214-aggregate-frame-semantics-2026-08-28.md) replaces the unfinished scope of this
 document. S0 and S1 were implemented, and S2a's dependency on doc 211 was resolved, but review before
@@ -74,6 +74,17 @@ verification gate. This document remains `Superseded`; none of the abandoned dir
 
 The remainder of this document is preserved as the record of the implemented work and the plan that
 was superseded. Its later “settled” statements and S2–S5 instructions are not current design.
+
+### Reclassification — 2026-08-31
+
+The `Superseded` status vocabulary now applies only to documents refuted or replaced in a
+significant way; a document superseded in part keeps its ordinary status and records the
+superseded portion in a notice at its top. Under that rule this document is `Completed`: the
+implemented scope (S0, S1, and S2a's resolution) is complete and remains the settled record —
+S1a in particular governs `CosetSpace::allows`/`normalizer` and their evidence — while the moved
+S2–S5 scope was completed by doc 214 as recorded above. This corrects the earlier conclusion
+"This document is therefore not `Completed`", which predates the vocabulary refinement. The
+supersession notice above otherwise stands unchanged.
 
 ## Purpose
 
