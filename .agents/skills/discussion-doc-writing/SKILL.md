@@ -128,6 +128,12 @@ surrounding historical account.
 `discussion/000-status.md` may reclassify a document as `Superseded` or `Outdated` and identify the
 replacement without rewriting the closed document.
 
+`Superseded` applies only to a document that has been refuted or replaced in a significant way —
+its operative content as a whole no longer stands. When only a portion is superseded, keep the
+document's ordinary status and record the superseded portion in a dated notice at the top of the
+document, identifying the replacement. Settled scope recorded in the rest of the document remains
+authoritative and must not be hidden behind a `Superseded` index row.
+
 Permanent guides under `docs/development/` are the living normative surface. Discussion documents
 must not be cited from source comments or public rustdoc.
 

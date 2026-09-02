@@ -5,9 +5,10 @@
 //! proper-rotation group as a permutation group acting on the ligand positions.
 
 use std::collections::HashMap;
+use std::fmt;
+use std::ops::RangeInclusive;
 use std::str::FromStr;
 use std::sync::{LazyLock, Mutex};
-use std::{fmt, ptr};
 
 use crate::coset::{CosetSpace, Decomposition};
 use crate::error::ParseClassKeyError;
@@ -138,6 +139,18 @@ impl ClassKey {
 
     /// The interned coset space for this class, built once and leaked for
     /// `'static`.
+    ///
+    /// # Establishes
+    ///
+    /// The returned reference is canonical for its key: every call with an equal key returns the
+    /// identical pointer, so pointer identity coincides with key identity. `Coset` equality
+    /// relies on this.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the key's degree lies outside [`Self::degree_domain`]. Parsing rejects such
+    /// keys, so the panic is reachable only from directly constructed ones. A build panic poisons
+    /// the shared registry: every later `space` call on any key then panics.
     pub fn space(self) -> &'static CosetSpace {
         let mut registry = REGISTRY.lock().expect("coset-space registry poisoned");
         if let Some(&interned) = registry.get(&self) {
@@ -146,6 +159,23 @@ impl ClassKey {
         let interned: &'static CosetSpace = Box::leak(Box::new(self.build()));
         registry.insert(self, interned);
         interned
+    }
+
+    /// The supported degree domain; a key whose degree lies outside it has no
+    /// coset space.
+    pub fn degree_domain(self) -> RangeInclusive<u8> {
+        match self {
+            ClassKey::Symmetric(_)
+            | ClassKey::Alternating(_)
+            | ClassKey::Cyclic(_)
+            | ClassKey::Dihedral(_) => 1..=(MAX_DEGREE as u8),
+            ClassKey::Tetrahedral
+            | ClassKey::CisTrans
+            | ClassKey::Axial
+            | ClassKey::SquarePlanar => 4..=4,
+            ClassKey::TrigonalBipyramidal => 5..=5,
+            ClassKey::Octahedral => 6..=6,
+        }
     }
 }
 
@@ -166,6 +196,18 @@ impl fmt::Display for ClassKey {
     }
 }
 
+/// Parses the rendered key text, e.g. `"TH"` or `"Sym4"`.
+///
+/// # Errors
+///
+/// Returns `UnknownClassKey` for an unrecognized prefix, `InvalidDegree` for a
+/// missing, malformed, or out-of-domain degree, and `DegreeTooLarge` for a
+/// degree above `MAX_DEGREE`.
+///
+/// # Semantic properties
+///
+/// Parsing inverts rendering: `key.to_string().parse() == Ok(key)` for every
+/// key inside its degree domain.
 impl FromStr for ClassKey {
     type Err = ParseClassKeyError;
 
@@ -209,66 +251,28 @@ impl FromStr for ClassKey {
                 maximum: MAX_DEGREE,
             });
         }
-        Ok(match family {
+        let key = match family {
             Family::Symmetric => ClassKey::Symmetric(degree as u8),
             Family::Alternating => ClassKey::Alternating(degree as u8),
             Family::Cyclic => ClassKey::Cyclic(degree as u8),
             Family::Dihedral => ClassKey::Dihedral(degree as u8),
-        })
+        };
+        if !key.degree_domain().contains(&(degree as u8)) {
+            return Err(ParseClassKeyError::InvalidDegree {
+                input: s.to_string(),
+            });
+        }
+        Ok(key)
     }
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<ClassKey, &'static CosetSpace>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// A configuration: an index into the cosets of an interned space. Identity is
-/// the interned space pointer plus the index.
-#[derive(Clone, Copy, Debug)]
-pub struct Coset {
-    space: &'static CosetSpace,
-    index: u32,
-}
-
-impl Coset {
-    /// A configuration index into `key`'s coset space. Panics if `index >= count`;
-    /// use [`new_unchecked`](Self::new_unchecked) to skip the check.
-    pub fn new(key: ClassKey, index: u32) -> Self {
-        let space = key.space();
-        assert!(
-            (index as usize) < space.count(),
-            "coset index out of range for the class"
-        );
-        Self { space, index }
-    }
-
-    /// Like [`new`](Self::new) without the range check; the caller guarantees
-    /// `index < count`.
-    pub fn new_unchecked(key: ClassKey, index: u32) -> Self {
-        Self {
-            space: key.space(),
-            index,
-        }
-    }
-
-    pub fn index(self) -> u32 {
-        self.index
-    }
-
-    pub fn space(self) -> &'static CosetSpace {
-        self.space
-    }
-}
-
-impl PartialEq for Coset {
-    fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.space, other.space) && self.index == other.index
-    }
-}
-
-impl Eq for Coset {}
-
 #[cfg(test)]
 mod tests {
+    use std::ptr;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -354,6 +358,35 @@ mod tests {
     }
 
     #[rstest]
+    fn test_class_key_degree_domain() {
+        let family_keys = (0..=u8::MAX).flat_map(|degree| {
+            [
+                (ClassKey::Symmetric(degree), degree),
+                (ClassKey::Alternating(degree), degree),
+                (ClassKey::Cyclic(degree), degree),
+                (ClassKey::Dihedral(degree), degree),
+            ]
+        });
+        let geometry_keys = [
+            (ClassKey::Tetrahedral, 4),
+            (ClassKey::CisTrans, 4),
+            (ClassKey::Axial, 4),
+            (ClassKey::SquarePlanar, 4),
+            (ClassKey::TrigonalBipyramidal, 5),
+            (ClassKey::Octahedral, 6),
+        ];
+        for (key, degree) in family_keys.chain(geometry_keys) {
+            let in_domain = key.degree_domain().contains(&degree);
+            let parsed = key.to_string().parse::<ClassKey>();
+            assert_eq!(parsed.is_ok(), in_domain, "{key}");
+            if in_domain {
+                assert_eq!(parsed, Ok(key), "{key}");
+                assert_eq!(key.space().degree(), degree as usize, "{key}");
+            }
+        }
+    }
+
+    #[rstest]
     #[case::symmetric(ClassKey::Symmetric(4), "Sym4")]
     #[case::alternating(ClassKey::Alternating(4), "Alt4")]
     #[case::cyclic(ClassKey::Cyclic(5), "Cyc5")]
@@ -383,20 +416,19 @@ mod tests {
         "Cyc7",
         ParseClassKeyError::DegreeTooLarge { degree: 7, maximum: MAX_DEGREE },
     )]
+    #[case::zero_degree_cyclic(
+        "Cyc0",
+        ParseClassKeyError::InvalidDegree { input: "Cyc0".to_string() },
+    )]
+    #[case::zero_degree_symmetric(
+        "Sym0",
+        ParseClassKeyError::InvalidDegree { input: "Sym0".to_string() },
+    )]
     #[case::degree_exceeds_u8(
         "Sym256",
         ParseClassKeyError::DegreeTooLarge { degree: 256, maximum: MAX_DEGREE },
     )]
     fn test_class_key_from_str_error(#[case] text: &str, #[case] expected: ParseClassKeyError) {
         assert_eq!(ClassKey::from_str(text), Err(expected));
-    }
-
-    #[rstest]
-    #[case::tetrahedral(ClassKey::Tetrahedral, 0)]
-    #[case::square_planar(ClassKey::SquarePlanar, 2)]
-    fn test_coset_new(#[case] key: ClassKey, #[case] index: u32) {
-        let coset = Coset::new(key, index);
-        assert_eq!(coset.index(), index);
-        assert!(ptr::eq(coset.space(), key.space()));
     }
 }

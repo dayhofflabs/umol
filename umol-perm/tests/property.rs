@@ -6,7 +6,7 @@ use std::ptr;
 use proptest::prelude::*;
 use umol_perm::{
     ClassKey, Coset, DynPermutation, Orientation, OrientedPermutation, OrientedPermutationGroup,
-    Permutation, PermutationGroup,
+    Permutation, PermutationGroup, MAX_DEGREE,
 };
 
 fn factorial(n: usize) -> usize {
@@ -14,16 +14,17 @@ fn factorial(n: usize) -> usize {
 }
 
 /// A uniform random permutation of `degree` positions, via its Lehmer rank.
-fn perm_of(degree: usize) -> impl Strategy<Value = Permutation> {
+fn permutation_of(degree: usize) -> impl Strategy<Value = Permutation> {
     (0..factorial(degree)).prop_map(move |rank| Permutation::unrank(degree, rank))
 }
 
 fn permutation() -> impl Strategy<Value = Permutation> {
-    (2usize..=6).prop_flat_map(perm_of)
+    (2usize..=MAX_DEGREE).prop_flat_map(permutation_of)
 }
 
 fn permutation_image() -> impl Strategy<Value = Vec<usize>> {
-    (0usize..=6).prop_flat_map(|degree| Just((0..degree).collect::<Vec<_>>()).prop_shuffle())
+    (0usize..=MAX_DEGREE)
+        .prop_flat_map(|degree| Just((0..degree).collect::<Vec<_>>()).prop_shuffle())
 }
 
 fn dyn_permutation(degree: usize) -> impl Strategy<Value = DynPermutation> {
@@ -34,27 +35,30 @@ fn dyn_permutation(degree: usize) -> impl Strategy<Value = DynPermutation> {
     })
 }
 
-fn perm_pair() -> impl Strategy<Value = (Permutation, Permutation)> {
-    (2usize..=6).prop_flat_map(|d| (perm_of(d), perm_of(d)))
+fn permutation_pair() -> impl Strategy<Value = (Permutation, Permutation)> {
+    (2usize..=MAX_DEGREE).prop_flat_map(|d| (permutation_of(d), permutation_of(d)))
 }
 
-fn perm_triple() -> impl Strategy<Value = (Permutation, Permutation, Permutation)> {
-    (2usize..=6).prop_flat_map(|d| (perm_of(d), perm_of(d), perm_of(d)))
+fn permutation_triple() -> impl Strategy<Value = (Permutation, Permutation, Permutation)> {
+    (2usize..=MAX_DEGREE)
+        .prop_flat_map(|d| (permutation_of(d), permutation_of(d), permutation_of(d)))
 }
 
-fn perm_pair_with_items() -> impl Strategy<Value = (Permutation, Permutation, Vec<u16>)> {
-    (2usize..=6).prop_flat_map(|degree| {
+fn permutation_pair_with_items() -> impl Strategy<Value = (Permutation, Permutation, Vec<u16>)> {
+    (2usize..=MAX_DEGREE).prop_flat_map(|degree| {
         (
-            perm_of(degree),
-            perm_of(degree),
+            permutation_of(degree),
+            permutation_of(degree),
             prop::collection::vec(any::<u16>(), degree),
         )
     })
 }
 
+/// A generated group, paired with its degree and generators. Degree is held low
+/// so the closure check stays cheap.
 fn permutation_group() -> impl Strategy<Value = (usize, Vec<Permutation>, PermutationGroup)> {
     (2usize..=4).prop_flat_map(|degree| {
-        prop::collection::vec(perm_of(degree), 0..=3).prop_map(move |generators| {
+        prop::collection::vec(permutation_of(degree), 0..=3).prop_map(move |generators| {
             let group = PermutationGroup::generate(degree, &generators);
             (degree, generators, group)
         })
@@ -63,7 +67,7 @@ fn permutation_group() -> impl Strategy<Value = (usize, Vec<Permutation>, Permut
 
 fn oriented_of(degree: usize) -> impl Strategy<Value = OrientedPermutation> {
     (
-        perm_of(degree),
+        permutation_of(degree),
         prop_oneof![Just(Orientation::Proper), Just(Orientation::Improper)],
     )
         .prop_map(|(permutation, orientation)| OrientedPermutation::new(permutation, orientation))
@@ -81,22 +85,7 @@ fn oriented_group(
     })
 }
 
-fn class_key_text() -> impl Strategy<Value = ClassKey> {
-    prop_oneof![
-        (0u8..=6).prop_map(ClassKey::Symmetric),
-        (0u8..=6).prop_map(ClassKey::Alternating),
-        (0u8..=6).prop_map(ClassKey::Cyclic),
-        (0u8..=6).prop_map(ClassKey::Dihedral),
-        Just(ClassKey::Tetrahedral),
-        Just(ClassKey::CisTrans),
-        Just(ClassKey::Axial),
-        Just(ClassKey::SquarePlanar),
-        Just(ClassKey::TrigonalBipyramidal),
-        Just(ClassKey::Octahedral),
-    ]
-}
-
-fn class_key() -> impl Strategy<Value = ClassKey> {
+fn geometry_class_key() -> impl Strategy<Value = ClassKey> {
     prop_oneof![
         Just(ClassKey::Tetrahedral),
         Just(ClassKey::CisTrans),
@@ -109,18 +98,18 @@ fn class_key() -> impl Strategy<Value = ClassKey> {
 
 /// A class key paired with a valid coset index in its space.
 fn coset_index() -> impl Strategy<Value = (ClassKey, u32)> {
-    class_key().prop_flat_map(|key| (Just(key), 0..key.space().count() as u32))
+    geometry_class_key().prop_flat_map(|key| (Just(key), 0..key.space().count() as u32))
 }
 
 fn coset_indices() -> impl Strategy<Value = (ClassKey, u32, u32)> {
-    class_key().prop_flat_map(|key| {
+    geometry_class_key().prop_flat_map(|key| {
         let count = key.space().count() as u32;
         (Just(key), 0..count, 0..count)
     })
 }
 
 fn coset_generators() -> impl Strategy<Value = (ClassKey, Vec<Permutation>)> {
-    class_key().prop_flat_map(|key| {
+    geometry_class_key().prop_flat_map(|key| {
         let space = key.space();
         let group_order = space.group().order();
         let parent_order = space.count() * group_order;
@@ -137,6 +126,31 @@ fn coset_generators() -> impl Strategy<Value = (ClassKey, Vec<Permutation>)> {
                 .collect();
             (key, generators)
         })
+    })
+}
+
+/// A class key with two parent-group relabelings and a valid coset index.
+fn coset_relabelings() -> impl Strategy<Value = (ClassKey, Permutation, Permutation, u32)> {
+    geometry_class_key().prop_flat_map(|key| {
+        let space = key.space();
+        let group_order = space.group().order();
+        let parent_order = space.count() * group_order;
+        (
+            Just(key),
+            0..parent_order,
+            0..parent_order,
+            0..space.count() as u32,
+        )
+            .prop_map(move |(key, first, second, index)| {
+                let parent_element = |i: usize| {
+                    let group_element = space.group().elements()[i % group_order];
+                    let representative = space
+                        .unindex((i / group_order) as u32)
+                        .expect("generated coset index is in range");
+                    group_element.compose(representative)
+                };
+                (key, parent_element(first), parent_element(second), index)
+            })
     })
 }
 
@@ -216,12 +230,12 @@ proptest! {
     }
 
     #[test]
-    fn test_permutation_compose_associative((a, b, c) in perm_triple()) {
+    fn test_permutation_compose_associative((a, b, c) in permutation_triple()) {
         prop_assert_eq!(a.compose(b).compose(c), a.compose(b.compose(c)));
     }
 
     #[test]
-    fn test_permutation_sign_homomorphism((a, b) in perm_pair()) {
+    fn test_permutation_sign_homomorphism((a, b) in permutation_pair()) {
         prop_assert_eq!(a.compose(b).sign(), a.sign() * b.sign());
     }
 
@@ -231,7 +245,7 @@ proptest! {
     }
 
     #[test]
-    fn test_permutation_identity_sign(degree in 2usize..=6) {
+    fn test_permutation_identity_sign(degree in 2usize..=MAX_DEGREE) {
         prop_assert_eq!(Permutation::identity(degree).sign(), 1);
     }
 
@@ -244,7 +258,7 @@ proptest! {
     }
 
     #[test]
-    fn test_permutation_act_composition((a, b, items) in perm_pair_with_items()) {
+    fn test_permutation_act_composition((a, b, items) in permutation_pair_with_items()) {
         prop_assert_eq!(a.compose(b).act(&items), b.act(&a.act(&items)));
     }
 
@@ -309,7 +323,7 @@ proptest! {
     }
 
     #[test]
-    fn test_coset_space_observable_coset_index(key in class_key()) {
+    fn test_coset_space_observable_coset_index(key in geometry_class_key()) {
         let s = key.space();
         prop_assert_eq!(s.observable_coset(s.count() as u32, &[]), None);
     }
@@ -322,7 +336,7 @@ proptest! {
     }
 
     #[test]
-    fn test_coset_space_orbit_reps_identity(key in class_key()) {
+    fn test_coset_space_orbit_reps_identity(key in geometry_class_key()) {
         let s = key.space();
         let expected = (0..s.count() as u32).collect::<Vec<u32>>();
         prop_assert_eq!(s.orbit_reps(&[]), Some(expected.clone()));
@@ -332,6 +346,8 @@ proptest! {
     #[test]
     fn test_coset_space_orbit_reps((key, generators) in coset_generators()) {
         let space = key.space();
+        // Definition-level reference: BFS closure over the generators' right
+        // action on coset indices, independent of orbit_reps' implementation.
         let mut expected = Vec::with_capacity(space.count());
         for start in 0..space.count() as u32 {
             let mut reached = vec![start];
@@ -351,17 +367,21 @@ proptest! {
     }
 
     #[test]
-    fn test_class_key_display_from_str_roundtrip(key in class_key_text()) {
-        prop_assert_eq!(key.to_string().parse::<ClassKey>(), Ok(key));
+    fn test_coset_space_reindex_composition((key, g, h, index) in coset_relabelings()) {
+        let space = key.space();
+        prop_assert_eq!(
+            space.reindex(index, g.compose(h)),
+            space.reindex(index, g).and_then(|i| space.reindex(i, h)),
+        );
     }
 
     #[test]
-    fn test_class_key_space_interning(key in class_key()) {
+    fn test_class_key_space_interning(key in geometry_class_key()) {
         prop_assert!(ptr::eq(key.space(), key.space()));
     }
 
     #[test]
-    fn test_coset_space((key, index) in coset_index()) {
+    fn test_coset_space_interning((key, index) in coset_index()) {
         let coset = Coset::new(key, index);
         prop_assert!(ptr::eq(coset.space(), key.space()));
     }

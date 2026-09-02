@@ -8,6 +8,7 @@
 //! - `rank`/`unrank` are the Lehmer order — an internal canonical numbering for
 //!   coset representatives, NOT the OpenSMILES arrangement index.
 
+use std::cmp::Ordering;
 use std::fmt;
 
 use crate::error::PermutationError;
@@ -19,7 +20,8 @@ use crate::error::PermutationError;
 pub const MAX_DEGREE: usize = 6;
 
 /// A permutation of `0..degree` (`degree <= MAX_DEGREE`) in one-line notation.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+/// The ordering compares degree first, then the image lexicographically.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Permutation {
     image: [u32; MAX_DEGREE],
     degree: u32,
@@ -27,6 +29,10 @@ pub struct Permutation {
 
 impl Permutation {
     /// The identity permutation of the given degree.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `degree > MAX_DEGREE`.
     pub fn identity(degree: usize) -> Self {
         assert!(degree <= MAX_DEGREE);
         let mut image = [0u32; MAX_DEGREE];
@@ -39,8 +45,12 @@ impl Permutation {
         }
     }
 
-    /// Build from a one-line image; panics unless `image` is a bijection of
-    /// `0..image.len()`.
+    /// Build from a one-line image.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `image` is a bijection of `0..image.len()` with length at
+    /// most [`MAX_DEGREE`].
     pub fn from_image(image: &[usize]) -> Self {
         Self::try_from(image).expect("invalid permutation image")
     }
@@ -49,14 +59,21 @@ impl Permutation {
         self.degree as usize
     }
 
-    /// σ(i). Panics if `i >= degree`.
+    /// σ(i).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `i >= degree`.
     pub fn apply(self, i: usize) -> usize {
         assert!(i < self.degree(), "apply index out of range");
         self.image[i] as usize
     }
 
-    /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`. Panics unless
-    /// `items.len() == degree`.
+    /// Reorder `items` by σ: `act(items)[i] = items[σ(i)]`.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `items.len() == degree`.
     pub fn act<T: Clone>(self, items: &[T]) -> Vec<T> {
         assert!(
             items.len() == self.degree(),
@@ -67,8 +84,11 @@ impl Permutation {
             .collect()
     }
 
-    /// Function composition σ ∘ τ: `compose(τ).apply(i) == σ(τ(i))`. Panics on a
-    /// degree mismatch.
+    /// Function composition σ ∘ τ: `compose(τ).apply(i) == σ(τ(i))`.
+    ///
+    /// # Panics
+    ///
+    /// Panics on a degree mismatch.
     pub fn compose(self, other: Self) -> Self {
         assert_eq!(self.degree, other.degree);
         let mut image = [0u32; MAX_DEGREE];
@@ -114,7 +134,10 @@ impl Permutation {
     /// The unique τ that relabels `from` into `to`: `act(τ, from) == to`.
     /// Returns `None` unless exactly one such permutation exists. Repeated equal
     /// values therefore return `None` when their occurrences can be exchanged.
-    /// Panics when the common length exceeds the fixed representation maximum.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the common length exceeds [`MAX_DEGREE`].
     pub fn between<T: Eq>(from: &[T], to: &[T]) -> Option<Self> {
         if from.len() != to.len() {
             return None;
@@ -152,8 +175,11 @@ impl Permutation {
         rank
     }
 
-    /// The `rank`-th permutation of the given degree in Lehmer order. Panics unless
-    /// `degree <= MAX_DEGREE` and `rank < degree!`.
+    /// The `rank`-th permutation of the given degree in Lehmer order.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `degree <= MAX_DEGREE` and `rank < degree!`.
     pub fn unrank(degree: usize, mut rank: usize) -> Self {
         assert!(degree <= MAX_DEGREE);
         let mut factorial: usize = (1..=degree).product();
@@ -170,9 +196,15 @@ impl Permutation {
     }
 
     /// Build from disjoint cycles: each `[c0,…,ck]` sets `σ(c0)=c1, …, σ(ck)=c0`;
-    /// unlisted points are fixed; `[]` is the identity. Returns an error when a
-    /// point is out of range or occurs more than once. Panics if `degree` exceeds
-    /// the fixed representation maximum.
+    /// unlisted points are fixed; `[]` is the identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a point is out of range or occurs more than once.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `degree > MAX_DEGREE`.
     pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
         assert!(degree <= MAX_DEGREE);
         let mut seen = [false; MAX_DEGREE];
@@ -226,6 +258,31 @@ impl Permutation {
     }
 }
 
+impl PartialOrd for Permutation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Permutation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.degree
+            .cmp(&other.degree)
+            .then_with(|| self.image.cmp(&other.image))
+    }
+}
+
+/// Checked construction from a one-line image.
+///
+/// # Errors
+///
+/// Returns an error when the image is longer than [`MAX_DEGREE`], contains a
+/// value outside `0..image.len()`, or repeats a value.
+///
+/// # Semantic properties
+///
+/// For an accepted image, `σ(i) == image[i]` for every `i`: construction and
+/// the one-line reading are mutually inverse.
 impl TryFrom<&[usize]> for Permutation {
     type Error = PermutationError;
 
@@ -477,6 +534,21 @@ mod tests {
         #[case] expected: Result<Permutation, PermutationError>,
     ) {
         assert_eq!(Permutation::try_from(image), expected);
+    }
+
+    #[rstest]
+    #[case::equal(&[1, 0], &[1, 0], Ordering::Equal)]
+    #[case::same_degree(&[0, 1, 2], &[1, 0, 2], Ordering::Less)]
+    #[case::degree_first(&[2, 0, 1], &[0, 1, 2, 3], Ordering::Less)]
+    fn test_permutation_cmp(
+        #[case] left: &[usize],
+        #[case] right: &[usize],
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(
+            Permutation::from_image(left).cmp(&Permutation::from_image(right)),
+            expected
+        );
     }
 
     #[rstest]

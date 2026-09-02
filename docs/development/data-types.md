@@ -62,6 +62,12 @@ available independently of the reaction implementation history.
 
 ## Integrity checks and validation tiers
 
+`# Semantic properties` states the laws of an operation algebra — composition, roundtrips,
+delegation, normal forms — while `# Assumes` and `# Establishes` state data properties:
+predicates on values that downstream operations rely on. A property established by every public
+producer of a type is stated once in the type's documentation rather than repeated in each
+constructor's `# Establishes`.
+
 The three tiers are ordered by the information needed to state the failed property. The numbering
 does not imply one API family: tier 1 is enforced by graph-IR-owned integrity checks, while tiers 2 and 3
 are semantic validation in the chemistry layer.

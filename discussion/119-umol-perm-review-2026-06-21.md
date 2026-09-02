@@ -173,3 +173,12 @@ geometries — single named home).
 
 Verified: `cargo test --workspace --all-features` (all suites pass) and
 `cargo clippy --workspace --all-features --all-targets` clean for the touched crates.
+
+## Addendum (2026-08-31) — plan step 5 correction
+
+The Implemented note above records that all five plan steps landed. Step 5's umol-perm unit
+cases for the new `None` paths did not: git history shows no `None`-path unit cases for
+`coset_rep`, `index`, `unindex`, `reindex`, or `enantiomer` at the implementing commit or any
+later one. The absence was found during the umol-perm review
+([206](206-umol-perm-review-2026-08-21.md), finding F10), and the witnesses were added there on
+2026-08-31. The rest of the Implemented record is accurate.

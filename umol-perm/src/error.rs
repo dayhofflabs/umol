@@ -70,7 +70,7 @@ impl Error for PermutationError {}
 pub enum ParseClassKeyError {
     /// The input is neither a fixed class key nor a recognized class family.
     UnknownClassKey { input: String },
-    /// A recognized class family has a missing or malformed degree.
+    /// A recognized class family has a missing, malformed, or out-of-domain degree.
     InvalidDegree { input: String },
     /// The parsed degree does not fit the fixed permutation representation.
     DegreeTooLarge { degree: usize, maximum: usize },

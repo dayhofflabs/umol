@@ -214,6 +214,17 @@ The engine-adjacent side is settled by the *Operation names* entry: the agent no
 only, and every run artifact (`*Error`, `*Config`, state) takes the verb stem. Open here remains
 only the choice between agent-noun engines and verb-phrase parameterless transforms.
 
+## Module names
+
+A module exporting a result-object noun is named that noun (`coloring`, `embedding`,
+`matching`, `value`); an operation module whose only defining type is an agent is named the
+verb (`resolve`, `validate`, `transform`, `parse`, `edit`), with the agent noun inside
+(`resolve::Resolver`). Do not mix agent-noun and verb module names within one operation
+family.
+
+A data module may take a concise adjective when that is the most direct description of its
+content (`oriented`, `dynamic`). Related modules are named recognizably alike.
+
 ## Retired and discouraged
 
 Indexed by the word not to use. Add a row whenever an entry's `Not:` line forbids a specific
@@ -1210,6 +1221,14 @@ semantic deduplication.
 explicit context. Not chemical standardization, resolution, validation, or repair.
 **In code:** `Normalize`, `normalize`, `normalized`, `Normalized<T>`,
 `Normalize::normalized_eq`.
+
+### Normalizer
+
+The allowed permutation carrying a ligand frame to its least presentation. In code:
+`CosetSpace::normalizer`, with `CosetSpace::allows` testing membership in the parent group. The
+noun names the returned action, not an engine; the frame selection it performs is reframe-side
+machinery despite the shared stem with *normalize*. **Not:** the group-theoretic normalizer
+subgroup `N_P(R)`, which does not occur in code.
 
 ### Operation names
 
