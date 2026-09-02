@@ -4,10 +4,11 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use umol_chem::element::Element;
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::{AtomForm, AtomId, BondForm, Molecule, MoleculeEntries};
 use umol_io::depiction::molecule::depict;
 use umol_io::depiction::Depiction;
-use umol_io::layout::{MoleculeLayout, Point2D};
+use umol_io::layout::MoleculeLayout;
 use umol_io::svg::render;
 
 fn chain_depiction(atom_count: usize) -> Depiction {

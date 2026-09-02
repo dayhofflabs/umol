@@ -2,6 +2,7 @@
 
 use std::fmt::Write;
 
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::{
     AsLit, AtomId, AtomView, Entity, IsotopeMass, Molecule, StereoAtomView, StereoBondView,
 };
@@ -13,7 +14,7 @@ use super::{
 };
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
-use crate::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
+use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
 ///

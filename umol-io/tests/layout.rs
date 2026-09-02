@@ -1,11 +1,12 @@
 use rstest::rstest;
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::AtomId;
 #[cfg(feature = "coordgen")]
 use umol_graph_ir::ir::Molecule;
 use umol_graph_ir::mol;
 #[cfg(feature = "coordgen")]
 use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
-use umol_io::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
+use umol_io::layout::{MoleculeLayout, MoleculeLayoutError};
 
 #[cfg(feature = "coordgen")]
 #[rstest]

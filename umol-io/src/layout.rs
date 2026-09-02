@@ -3,6 +3,7 @@
 use std::any::Any;
 
 use thiserror::Error;
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::{AtomId, Molecule};
 use umol_utils::error::UmolError;
 
@@ -50,26 +51,6 @@ pub enum LayoutError {
 impl UmolError for LayoutError {
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-/// A point in the dimensionless, mathematical coordinate system used by molecule layouts.
-///
-/// The coordinate system is y-up and uses a nominal bond length of one. Output formats with a
-/// different axis convention perform the corresponding transform when rendering.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Point2D {
-    pub x: f64,
-    pub y: f64,
-}
-
-impl Point2D {
-    pub const fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-
-    fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite()
     }
 }
 

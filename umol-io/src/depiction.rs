@@ -3,11 +3,11 @@
 pub mod molecule;
 pub mod reaction;
 
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
 #[cfg(feature = "coordgen")]
 use crate::layout::MoleculeLayoutAlgorithm;
-use crate::layout::Point2D;
 
 /// Constructs a format-neutral depiction using an explicitly selected layout algorithm.
 #[cfg(feature = "coordgen")]

@@ -3,6 +3,7 @@
 use std::any::Any;
 
 use thiserror::Error;
+use umol_geometric_core::Point2D;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{AtomId, Entity, Molecule};
 #[cfg(feature = "coordgen")]
@@ -14,7 +15,7 @@ use super::Depict;
 use super::{molecule, ArrowItem, Depiction, DepictionItem, DepictionReference, TextItem};
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
-use crate::layout::{MoleculeLayout, MoleculeLayoutError, Point2D};
+use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 const ARROW_HALF_LENGTH: f64 = 1.0;
 const SIDE_ARROW_GAP: f64 = 1.0;
@@ -389,9 +390,10 @@ mod tests {
     use crate::depiction::{
         ArrowItem, AtomItem, BondItem, Bounds, DepictionItem, DepictionReference, TextItem,
     };
+    use crate::layout::MoleculeLayout;
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
-    use crate::layout::{MoleculeLayout, Point2D};
+    use umol_geometric_core::Point2D;
 
     #[rstest]
     fn test_depict_from_sides() {

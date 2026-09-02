@@ -2,13 +2,13 @@
 
 use std::fmt::Write;
 
+use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
 use crate::depiction::{
     ArrowItem, AtomItem, BondItem, Bounds, Depiction, DepictionItem, DepictionReference,
     MarkerItem, MarkerKind, TextItem,
 };
-use crate::layout::Point2D;
 
 const VIEW_MARGIN: f64 = 0.5;
 const BOND_GAP: f64 = 0.12;
