@@ -15,8 +15,8 @@ use umol_utils::error::UmolError;
 #[cfg(feature = "coordgen")]
 use super::Depict;
 use super::{
-    AtomItem, BondItem, DashedContourItem, Depiction, DepictionItem, DepictionReference, TextItem,
-    WedgeItem, WedgeKind,
+    AtomItem, AtomLabel, BondItem, DashedContourItem, Depiction, DepictionItem, DepictionReference,
+    TextItem, WedgeItem, WedgeKind,
 };
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
@@ -353,7 +353,7 @@ fn point3(point: Point2D, z: f64) -> Point3D {
     Point3D::new(point.x, point.y, z)
 }
 
-fn atom_label(atom: AtomView<'_>) -> Option<String> {
+fn atom_label(atom: AtomView<'_>) -> Option<AtomLabel> {
     let element = atom.element().as_lit()?;
     let isotope = match atom.isotope_mass().as_lit() {
         Some(IsotopeMass::MassNumber(mass)) => Some(mass),
@@ -371,12 +371,8 @@ fn atom_label(atom: AtomView<'_>) -> Option<String> {
         return None;
     }
 
-    let mut label = String::new();
-
-    if let Some(mass) = isotope {
-        write!(label, "{mass}").expect("writing to a String cannot fail");
-    }
-    label.push_str(element.symbol());
+    let mut base = element.symbol().to_owned();
+    let mut right_subscript = None;
 
     if !isolated_carbon || decorated {
         if let Some(hydrogens) = atom
@@ -384,16 +380,22 @@ fn atom_label(atom: AtomView<'_>) -> Option<String> {
             .as_lit()
             .filter(|&count| count != 0)
         {
-            label.push('H');
+            base.push('H');
             if hydrogens != 1 {
-                write!(label, "{hydrogens}").expect("writing to a String cannot fail");
+                right_subscript = Some(hydrogens.to_string());
             }
         }
     }
 
-    append_charge_and_unpaired(&mut label, charge, unpaired_electrons);
+    let mut right_superscript = String::new();
+    append_charge_and_unpaired(&mut right_superscript, charge, unpaired_electrons);
 
-    Some(label)
+    Some(AtomLabel {
+        base,
+        left_superscript: isotope.map(|mass| mass.to_string()),
+        right_subscript,
+        right_superscript: (!right_superscript.is_empty()).then_some(right_superscript),
+    })
 }
 
 fn position(layout: &MoleculeLayout, atom: AtomId) -> Point2D {
@@ -972,12 +974,22 @@ mod tests {
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(0.0, 1.0),
-                    label: "13CH2+••".to_owned(),
+                    label: AtomLabel {
+                        base: "CH".to_owned(),
+                        left_superscript: Some("13".to_owned()),
+                        right_subscript: Some("2".to_owned()),
+                        right_superscript: Some("+••".to_owned()),
+                    },
                     references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(2.0, -1.0),
-                    label: "O-".to_owned(),
+                    label: AtomLabel {
+                        base: "O".to_owned(),
+                        left_superscript: None,
+                        right_subscript: None,
+                        right_superscript: Some("-".to_owned()),
+                    },
                     references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
                 }),
             ]
@@ -992,39 +1004,87 @@ mod tests {
     }
 
     #[rstest]
-    #[case::heteroatom(r#"{:atoms ["N#h2"] :bonds []}"#, 0, Some("NH2"))]
-    #[case::isolated_carbon(r#"{:atoms ["C#h4"] :bonds []}"#, 0, Some("C"))]
-    #[case::isolated_charged_carbon(r#"{:atoms ["C#c+#h4"] :bonds []}"#, 0, Some("CH4+"))]
-    #[case::skeleton_carbon(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, 0, None)]
+    #[case::heteroatom(
+        r#"{:atoms ["N#h2"] :bonds []}"#,
+        Some(AtomLabel {
+            base: "NH".to_owned(),
+            left_superscript: None,
+            right_subscript: Some("2".to_owned()),
+            right_superscript: None,
+        })
+    )]
+    #[case::isolated_carbon(
+        r#"{:atoms ["C#h4"] :bonds []}"#,
+        Some(AtomLabel {
+            base: "C".to_owned(),
+            left_superscript: None,
+            right_subscript: None,
+            right_superscript: None,
+        })
+    )]
+    #[case::isolated_charged_carbon(
+        r#"{:atoms ["C#c+#h4"] :bonds []}"#,
+        Some(AtomLabel {
+            base: "CH".to_owned(),
+            left_superscript: None,
+            right_subscript: Some("4".to_owned()),
+            right_superscript: Some("+".to_owned()),
+        })
+    )]
+    #[case::skeleton_carbon(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, None)]
     #[case::skeleton_carbon_with_implicit_hydrogens(
         r#"{:atoms ["C#h3" "C"] :bonds [[0 1 "1"]]}"#,
-        0,
         None
     )]
-    #[case::isotopic_carbon(r#"{:atoms ["C#i13#h2" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("13CH2"))]
-    #[case::charged_carbon(r#"{:atoms ["C#c+" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("C+"))]
-    #[case::radical_carbon(r#"{:atoms ["C#u2" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("C••"))]
+    #[case::isotopic_carbon(
+        r#"{:atoms ["C#i13#h2" "C"] :bonds [[0 1 "1"]]}"#,
+        Some(AtomLabel {
+            base: "CH".to_owned(),
+            left_superscript: Some("13".to_owned()),
+            right_subscript: Some("2".to_owned()),
+            right_superscript: None,
+        })
+    )]
+    #[case::charged_carbon(
+        r#"{:atoms ["C#c+" "C"] :bonds [[0 1 "1"]]}"#,
+        Some(AtomLabel {
+            base: "C".to_owned(),
+            left_superscript: None,
+            right_subscript: None,
+            right_superscript: Some("+".to_owned()),
+        })
+    )]
+    #[case::radical_carbon(
+        r#"{:atoms ["C#u2" "C"] :bonds [[0 1 "1"]]}"#,
+        Some(AtomLabel {
+            base: "C".to_owned(),
+            left_superscript: None,
+            right_subscript: None,
+            right_superscript: Some("••".to_owned()),
+        })
+    )]
     #[case::multi_digit_fields(
         r#"{:atoms ["N#i15#c-12#h12#u2"] :bonds []}"#,
-        0,
-        Some("15NH1212-••")
+        Some(AtomLabel {
+            base: "NH".to_owned(),
+            left_superscript: Some("15".to_owned()),
+            right_subscript: Some("12".to_owned()),
+            right_superscript: Some("12-••".to_owned()),
+        })
     )]
     #[case::independently_nonliteral_fields(
         r#"{:atoms ["N#i*#c*#h*#u*#s3"] :bonds []}"#,
-        0,
-        Some("N")
+        Some(AtomLabel {
+            base: "N".to_owned(),
+            left_superscript: None,
+            right_subscript: None,
+            right_superscript: None,
+        })
     )]
-    fn test_atom_label(
-        #[case] input: &str,
-        #[case] atom_id: usize,
-        #[case] expected: Option<&str>,
-    ) {
+    fn test_atom_label(#[case] input: &str, #[case] expected: Option<AtomLabel>) {
         let molecule = mol_dsl!(input);
 
-        assert_eq!(
-            atom_label(molecule.atom(AtomId::from(atom_id))).as_deref(),
-            expected
-        );
+        assert_eq!(atom_label(molecule.atom(AtomId(0))), expected);
     }
 
     #[test]
@@ -1173,7 +1233,7 @@ mod tests {
         assert_eq!(bond_line_counts(&depiction), [1, 1, 1, 1, 1]);
     }
 
-    #[test]
+    #[rstest]
     fn test_depict_omits_nonliteral_projection_states() {
         let molecule = mol_dsl!(r#"{:atoms ["*#i13#c+#h2" "N#i*#c*#h*"] :bonds [[0 1 "*"]]}"#);
         let layout = layout(&[[0.0, 0.0], [1.0, 0.0]]);
@@ -1184,7 +1244,12 @@ mod tests {
             depiction.items(),
             [DepictionItem::Atom(AtomItem {
                 position: Point2D::new(1.0, 0.0),
-                label: "N".to_owned(),
+                label: AtomLabel {
+                    base: "N".to_owned(),
+                    left_superscript: None,
+                    right_subscript: None,
+                    right_superscript: None,
+                },
                 references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
             })]
         );

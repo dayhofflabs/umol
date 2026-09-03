@@ -86,13 +86,29 @@ impl DepictionItem {
     }
 }
 
+/// Typographic content of an atom label.
+///
+/// Each optional script is positioned relative to `base`. The carrier describes presentation
+/// structure only; it does not require nonempty text or assign chemical meaning to a slot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtomLabel {
+    /// Text on the ordinary baseline.
+    pub base: String,
+    /// Optional superscript preceding the base.
+    pub left_superscript: Option<String>,
+    /// Optional subscript following the base.
+    pub right_subscript: Option<String>,
+    /// Optional superscript following the base and any subscript.
+    pub right_superscript: Option<String>,
+}
+
 /// A positioned atom label.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AtomItem {
     /// Center of the atom label.
     pub position: Point2D,
-    /// Display text selected by depiction construction.
-    pub label: String,
+    /// Structured display text selected by depiction construction.
+    pub label: AtomLabel,
     /// Structured source references carried into rendered output.
     pub references: Vec<DepictionReference>,
 }
@@ -259,7 +275,12 @@ mod tests {
         vec![
             DepictionItem::Atom(AtomItem {
                 position: Point2D::new(2.0, 3.0),
-                label: "C".to_owned(),
+                label: AtomLabel {
+                    base: "C".to_owned(),
+                    left_superscript: None,
+                    right_subscript: None,
+                    right_superscript: None,
+                },
                 references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(0)))],
             }),
             DepictionItem::Bond(BondItem {
@@ -339,7 +360,12 @@ mod tests {
     #[case::present(
         vec![DepictionItem::Atom(AtomItem {
             position: Point2D::new(-1.0, 2.0),
-            label: "N".to_owned(),
+            label: AtomLabel {
+                base: "N".to_owned(),
+                left_superscript: None,
+                right_subscript: None,
+                right_superscript: None,
+            },
             references: Vec::new(),
         })],
         Some(Bounds {
@@ -357,7 +383,12 @@ mod tests {
     #[case::atom(
         DepictionItem::Atom(AtomItem {
             position: Point2D::new(0.0, 0.0),
-            label: "C".to_owned(),
+            label: AtomLabel {
+                base: "C".to_owned(),
+                left_superscript: None,
+                right_subscript: None,
+                right_superscript: None,
+            },
             references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
         }),
         vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))]
@@ -427,7 +458,12 @@ mod tests {
         let depiction = Depiction::from_items(vec![
             DepictionItem::Atom(AtomItem {
                 position: Point2D::new(1.0, 2.0),
-                label: text.to_owned(),
+                label: AtomLabel {
+                    base: text.to_owned(),
+                    left_superscript: None,
+                    right_subscript: None,
+                    right_superscript: None,
+                },
                 references: vec![
                     DepictionReference::Molecule(Entity::Atom(AtomId(0))),
                     DepictionReference::ReactionLhs(Entity::Bond(BondId(1))),
@@ -484,7 +520,15 @@ mod tests {
                  reaction-lhs/stereo-bond/7 correspondence-pair/8 delta/9"
             )
         );
-        assert_eq!(groups[0].first_element_child().unwrap().text(), Some(text));
+        assert_eq!(
+            groups[0]
+                .first_element_child()
+                .unwrap()
+                .first_element_child()
+                .unwrap()
+                .text(),
+            Some(text)
+        );
         assert_eq!(groups[1].attribute("data-umol-references"), None);
         assert_eq!(
             groups[1].attribute("mask"),
@@ -513,6 +557,6 @@ mod tests {
             ["line", "polygon"]
         );
         assert_eq!(groups[3].attribute("data-umol-references"), Some("delta/9"));
-        assert_eq!(svg.matches("C&lt;&amp;&gt;&quot;&apos;").count(), 3);
+        assert_eq!(svg.matches("C&lt;&amp;&gt;&quot;&apos;").count(), 2);
     }
 }

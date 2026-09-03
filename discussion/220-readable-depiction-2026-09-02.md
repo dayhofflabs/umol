@@ -99,15 +99,19 @@ its implicit hydrogens when the carbon is represented by the skeleton, while ret
 heteroatoms and carbons decorated by an isotope, nonzero charge, or nonzero unpaired-electron
 count. An isolated neutral carbon is the exceptional visible skeleton atom and is labeled `C`, not
 `CH4`. Isotopes, hydrogen counts on otherwise visible labels, and charges remain visible when their
-underlying fields are literal. The isotope precedes the element symbol; charge and literal
-unpaired-electron counts follow the atom, with the latter rendered as radical dots. Lone pairs and
-multiplicity remain outside this cut.
+underlying fields are literal. The isotope is a left superscript, the implicit-hydrogen count is a
+subscript after `H`, and charge and literal unpaired-electron counts are right superscripts, with the
+latter rendered as radical dots. `AtomLabel` carries these typographic parts separately rather than
+asking a renderer to recover them from flattened text. Lone pairs and multiplicity remain outside
+this cut.
 
 For the current SVG output, bonds should remain center-to-center in `Depiction` and the SVG renderer
-should mask the bond layer beneath visible atom labels. The mask should use duplicates of the same
-text with enough expansion to provide clearance and cover counters and gaps within a label. It must
-not paint a background-colored box. This delegates glyph realization to the browser and handles all
-bond shapes uniformly without adding font measurement or label bounds to the public scene model.
+should mask the bond layer beneath visible atom labels. Visual review showed that an expanded
+glyph-shaped mask leaves counters and inter-glyph gaps available to underlying bonds. The mask must
+instead use one continuous, conservative rectangle for each structured label and include those same
+estimated extents in the SVG viewport. The rectangle changes only mask luminance; it does not paint
+a background-colored box. The estimates remain renderer-private and avoid adding font measurement
+or label bounds to the public scene model.
 
 This is deliberately an SVG presentation fix, not a general solution to label collision in a
 format-neutral depiction. Other renderers may eventually justify explicit label geometry, but that
@@ -251,6 +255,45 @@ same signed-half-plane predicate used by the postcondition check.
 **Rust/Python boundary:** these native input records are not Python API. Python reaches them only
 through graph-IR molecule depiction.
 
+### Atom-label presentation
+
+**Type and role:** `AtomLabel` is the format-neutral typographic content of one `AtomItem`. Its
+`base` is ordinary baseline text; `left_superscript`, `right_subscript`, and `right_superscript`
+carry optional script runs. Molecule lowering uses these slots for isotope mass, implicit-hydrogen
+count, and charge plus radical dots respectively.
+
+**Open carrier or operation-issued value:** `AtomLabel` is an open presentation carrier with public
+fields, like `AtomItem`. `Depiction` remains operation-issued and has no public aggregate
+constructor.
+
+**Intrinsic representation invariants:** the carrier owns UTF-8 strings and claims no chemical,
+font-metric, or nonempty-text invariant. An absent optional field means that script run is omitted.
+
+**Contextual properties, semantic predicates, and validators:** the label has no independently
+supplied context and no validator. Its relationship to a graph-IR atom is expressed by the enclosing
+`AtomItem` references and established by molecule lowering, not by the open carrier itself.
+
+**Public constructors:** no constructor is added. Callers may use the public fields consistently
+with the other open depiction items. `AtomItem::label` changes from flattened `String` to
+`AtomLabel`; no compatibility field or parallel item type is retained.
+
+**Conversions and preserved information:** molecule lowering maps each independently literal
+display field into its typographic slot and retains the existing omission rules. It does not expose
+a reverse conversion or infer missing chemical fields from presentation text.
+
+**Explicit transformations and contextual consumers:** there is no label transformation. Reaction
+translation preserves every label field while moving the enclosing item and translating only its
+references. SVG rendering is the first consumer of the typographic slots and remains infallible.
+
+**Failure, absence, and panic behavior:** rendering accepts every open carrier value without error
+or panic. Empty strings can produce no visible glyph; an absent script produces no `tspan`.
+
+**Algebraic, preservation, or roundtrip properties:** equal labels render deterministically, and
+reaction translation leaves the complete label structurally equal.
+
+**Rust/Python boundary:** `AtomLabel` and `AtomItem` remain Rust scene API. Python receives only the
+rendered `Svg` and gains no scene-model constructor or label type.
+
 ### Depiction geometry and fallibility
 
 **Type and role:** ordinary multiple-line bonds remain `BondItem`. `WedgeItem` carries `tip`,
@@ -311,8 +354,10 @@ constructors are added; `Molecule.depict_with` and `Reaction.depict_with` retain
 
 - renderer constants remain fixed and monochrome through `currentColor`;
 - ordinary skeleton carbons are omitted, but an isolated neutral carbon is labeled `C`;
-- isotope precedes the element, while charge and radical dots follow the atom;
-- bonds are cleared behind labels with an SVG mask, never a background-colored patch;
+- isotope is a left superscript, implicit-hydrogen counts are subscripts, and charge and radical dots
+  are right superscripts;
+- bonds are cleared behind continuous label rectangles with an SVG mask, never a
+  background-colored patch;
 - unsuitable aromatic contours, local aromatic assertions, unresolved stereo, and unsupported
   stereo kinds are omitted;
 - definite cis/trans inconsistency and unusable definite tetrahedral geometry are errors; and
@@ -601,24 +646,47 @@ Command: `cargo bench -p umol-io --bench svg -- fused_aromatic --noplot`. Verifi
 `cargo clippy -p umol-io --all-targets --features coordgen -- -D warnings`,
 `cargo +nightly fmt --all -- --check`, and `git diff --check`.
 
-### S5 — Integrated verification and closeout
+### S5 — Visual-review cleanup
 
-- **S5a — End-to-end fixtures** `[dep: S2, S3, S4]`: exercise representative molecules and a mapped
+- **S5a — Label typography and clearance** `[dep: S2]`: replace the glyph-shaped bond mask with a
+  continuous clearance region covering the complete displayed label, without painting an assumed
+  background color. Render the implicit-hydrogen count as a subscript and charge and radical dots
+  as superscripts. Make the SVG viewport include the displayed label extents so long labels are not
+  clipped. Preserve the existing label-field omission semantics and structured references, and
+  update the exact SVG, nonwhite-background, reaction, and viewport tests with the implementation.
+- **S5b — Wedge geometry tuning** `[dep: S3]`: give solid and hashed wedges a readable nonzero width
+  at the stereocenter, and increase the hashed wedge's cross-line count while reducing its spacing.
+  Preserve wedge selection, coset recovery, and source references; cover both treatments with exact
+  SVG tests and rerun the tetrahedral rendering benchmark.
+- **S5c — Visual evidence rerun** `[dep: S4, S5a, S5b]`: regenerate the single-page visual corpus
+  through graph IR, CoordGen, format-neutral depiction, and SVG. Reinspect label clearance and
+  typography, both wedge treatments, cis/trans layouts, aromatic systems, and mapped reactions.
+  Localized multiple-bond junctions may retain the present centered-line treatment in this cut;
+  the aromatic-system output passed the first visual review and needs no redesign here.
+
+S5 is green when the review corpus has no label overlap or clipping, scripted atom annotations and
+both wedge treatments are readable, the nonwhite-background case remains background-independent,
+and the previously accepted multiple-bond and aromatic output is unchanged.
+
+### S6 — Integrated verification and closeout
+
+- **S6a — End-to-end fixtures** `[dep: S5c]`: exercise representative molecules and a mapped
   reaction through graph IR, CoordGen, format-neutral depiction, SVG, and Python rich display.
   Assert semantic SVG structure and exact small stable fragments; inspect generated SVGs from
   temporary output for readability without checking generated artifacts into `materials/`.
-- **S5b — Performance and quality gate** `[dep: S5a]`: compare final Criterion results with S0,
+- **S6b — Performance and quality gate** `[dep: S6a]`: compare final Criterion results with S0,
   format the workspace, run native CoordGen and feature-enabled `umol-io` tests and clippy, then run
   the depiction-enabled Python tests through the repository Python 3.13 environment. Run the full
   workspace gate after the narrow checks pass.
-- **S5c — API and document closeout** `[dep: S5b]`: repeat the public-symbol contract audit, update
+- **S6c — API and document closeout** `[dep: S6b]`: repeat the public-symbol contract audit, update
   rustdoc to current behavior, record the implemented fixture and benchmark evidence here, change
   this document and `discussion/000-status.md` to `Completed`, and leave deferred renderer
   generalization or additional stereo conventions as separately scoped work rather than implied
   behavior.
 
-The critical path is S0 -> S1 -> S3 -> S5. S2 and S4 depend on the S0 scene contract but not on the
-native stereo implementation; they may be developed independently before S5. Nothing after S0 is
-purely optional for the readable-depiction outcome. Color schemes, public rendering configuration,
-font metrics, non-SVG collision geometry, unknown-stereo marks, local aromatic assertions, lone-pair
-and multiplicity labels, and additional stereo kinds are explicitly deferrable follow-up work.
+The critical path is S0 -> S1 -> S3 -> S5 -> S6. S2 and S4 depend on the S0 scene contract but not
+on the native stereo implementation; they may be developed independently before S5. Nothing after
+S0 is purely optional for the readable-depiction outcome. Color schemes, public rendering
+configuration, font metrics, non-SVG collision geometry, unknown-stereo marks, local aromatic
+assertions, lone-pair and multiplicity labels, and additional stereo kinds are explicitly
+deferrable follow-up work.

@@ -6,7 +6,7 @@ use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
 use crate::depict::{
-    ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
+    ArrowItem, AtomItem, AtomLabel, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
     DepictionReference, TextItem, WedgeItem, WedgeKind,
 };
 
@@ -18,25 +18,34 @@ const WEDGE_HASH_COUNT: usize = 5;
 const DASHED_CONTOUR_WIDTH: f64 = 0.04;
 const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
+const SCRIPT_TEXT_SIZE: f64 = 0.315;
 const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
-const ATOM_LABEL_MASK_EXPANSION: f64 = 0.3;
+const ATOM_LABEL_CHARACTER_ADVANCE: f64 = 0.36;
+const ATOM_LABEL_SCRIPT_CHARACTER_ADVANCE: f64 = 0.252;
+const ATOM_LABEL_HORIZONTAL_CLEARANCE: f64 = 0.08;
+const ATOM_LABEL_VERTICAL_CLEARANCE: f64 = 0.08;
+const ATOM_LABEL_BASE_HALF_HEIGHT: f64 = 0.2475;
+const ATOM_LABEL_SCRIPT_HALF_HEIGHT: f64 = 0.17325;
+const ATOM_LABEL_SUPERSCRIPT_RISE: f64 = 0.1575;
+const ATOM_LABEL_SUBSCRIPT_DROP: f64 = 0.1125;
 const ARROW_HEAD_LENGTH: f64 = 0.24;
 const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 
 /// Renders a [`Depiction`] as a complete SVG document fragment.
 ///
 /// Depiction item order is preserved among item groups. When atom labels are present, one leading
-/// definition masks molecular strokes beneath duplicates of the visible glyphs without painting a
-/// page-background color. Coordinates are converted from the depiction's y-up convention to SVG's
-/// y-down convention. The view box extends the depiction's anchor bounds by half a nominal bond
-/// length on each side; an empty depiction uses a centered one-by-one view box. Structured
+/// definition masks molecular strokes beneath continuous conservative label rectangles without
+/// painting a page-background color. Coordinates are converted from the depiction's y-up
+/// convention to SVG's y-down convention. The view box covers both depiction anchors and estimated
+/// atom-label extents, then adds half a nominal bond length on each side; an empty depiction uses a
+/// centered one-by-one view box. Structured
 /// references are encoded in the `data-umol-references` attribute as ordered, space-separated path
 /// tokens: molecular entity references use `molecule`, `reaction-lhs`, or `reaction-rhs` followed
 /// by entity kind and id; `correspondence-pair` and `delta` references use their kind followed by
 /// their zero-based position.
 pub fn render(depiction: &Depiction) -> String {
     let mut output = String::new();
-    let view_box = SvgViewBox::from_bounds(depiction.bounds());
+    let view_box = SvgViewBox::from_depiction(depiction);
 
     output.push_str(r#"<svg xmlns="http://www.w3.org/2000/svg" class="umol-depiction" viewBox=""#);
     write_number(&mut output, view_box.x);
@@ -77,13 +86,21 @@ struct SvgViewBox {
 }
 
 impl SvgViewBox {
-    fn from_bounds(bounds: Option<&Bounds>) -> Self {
-        match bounds {
-            Some(bounds) => Self {
-                x: bounds.min.x - VIEW_MARGIN,
-                y: -bounds.max.y - VIEW_MARGIN,
-                width: bounds.max.x - bounds.min.x + 2.0 * VIEW_MARGIN,
-                height: bounds.max.y - bounds.min.y + 2.0 * VIEW_MARGIN,
+    fn from_depiction(depiction: &Depiction) -> Self {
+        let mut extents = depiction.bounds().map(SvgExtents::from_depiction_bounds);
+        for item in depiction.items() {
+            if let DepictionItem::Atom(atom) = item {
+                let label_box = atom_label_box(atom);
+                include_svg_box(&mut extents, label_box);
+            }
+        }
+
+        match extents {
+            Some(extents) => Self {
+                x: extents.min_x - VIEW_MARGIN,
+                y: extents.min_y - VIEW_MARGIN,
+                width: extents.max_x - extents.min_x + 2.0 * VIEW_MARGIN,
+                height: extents.max_y - extents.min_y + 2.0 * VIEW_MARGIN,
             },
             None => Self {
                 x: -VIEW_MARGIN,
@@ -93,6 +110,92 @@ impl SvgViewBox {
             },
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct SvgExtents {
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+}
+
+impl SvgExtents {
+    fn from_depiction_bounds(bounds: &Bounds) -> Self {
+        Self {
+            min_x: bounds.min.x,
+            min_y: -bounds.max.y,
+            max_x: bounds.max.x,
+            max_y: -bounds.min.y,
+        }
+    }
+
+    fn include_box(&mut self, label_box: SvgBox) {
+        self.min_x = self.min_x.min(label_box.x);
+        self.min_y = self.min_y.min(label_box.y);
+        self.max_x = self.max_x.max(label_box.x + label_box.width);
+        self.max_y = self.max_y.max(label_box.y + label_box.height);
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SvgBox {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn include_svg_box(extents: &mut Option<SvgExtents>, label_box: SvgBox) {
+    match extents {
+        Some(extents) => extents.include_box(label_box),
+        None => {
+            *extents = Some(SvgExtents {
+                min_x: label_box.x,
+                min_y: label_box.y,
+                max_x: label_box.x + label_box.width,
+                max_y: label_box.y + label_box.height,
+            });
+        }
+    }
+}
+
+fn atom_label_box(atom: &AtomItem) -> SvgBox {
+    let label = &atom.label;
+    let base_width = character_count(&label.base) * ATOM_LABEL_CHARACTER_ADVANCE;
+    let script_width = [
+        &label.left_superscript,
+        &label.right_subscript,
+        &label.right_superscript,
+    ]
+    .into_iter()
+    .flatten()
+    .map(|text| character_count(text) * ATOM_LABEL_SCRIPT_CHARACTER_ADVANCE)
+    .sum::<f64>();
+    let width = base_width + script_width + 2.0 * ATOM_LABEL_HORIZONTAL_CLEARANCE;
+    let has_superscript = label.left_superscript.is_some() || label.right_superscript.is_some();
+    let top = if has_superscript {
+        (ATOM_LABEL_SUPERSCRIPT_RISE + ATOM_LABEL_SCRIPT_HALF_HEIGHT)
+            .max(ATOM_LABEL_BASE_HALF_HEIGHT)
+    } else {
+        ATOM_LABEL_BASE_HALF_HEIGHT
+    } + ATOM_LABEL_VERTICAL_CLEARANCE;
+    let bottom = if label.right_subscript.is_some() {
+        (ATOM_LABEL_SUBSCRIPT_DROP + ATOM_LABEL_SCRIPT_HALF_HEIGHT).max(ATOM_LABEL_BASE_HALF_HEIGHT)
+    } else {
+        ATOM_LABEL_BASE_HALF_HEIGHT
+    } + ATOM_LABEL_VERTICAL_CLEARANCE;
+
+    SvgBox {
+        x: atom.position.x - width / 2.0,
+        y: -atom.position.y - top,
+        width,
+        height: top + bottom,
+    }
+}
+
+fn character_count(text: &str) -> f64 {
+    text.chars().count() as f64
 }
 
 fn render_atom_mask(output: &mut String, depiction: &Depiction, view_box: SvgViewBox) {
@@ -117,13 +220,16 @@ fn render_atom_mask(output: &mut String, depiction: &Depiction, view_box: SvgVie
     output.push_str(r#"" fill="white"/>"#);
     for item in depiction.items() {
         if let DepictionItem::Atom(atom) = item {
-            render_atom_glyph(
-                output,
-                "umol-atom-mask",
-                atom,
-                "black",
-                Some(2.0 * ATOM_LABEL_MASK_EXPANSION),
-            );
+            let label_box = atom_label_box(atom);
+            output.push_str(r#"<rect class="umol-atom-mask" x=""#);
+            write_number(output, label_box.x);
+            output.push_str(r#"" y=""#);
+            write_number(output, label_box.y);
+            output.push_str(r#"" width=""#);
+            write_number(output, label_box.width);
+            output.push_str(r#"" height=""#);
+            write_number(output, label_box.height);
+            output.push_str(r#"" fill="black"/>"#);
         }
     }
     output.push_str("</mask></defs>\n");
@@ -171,33 +277,43 @@ fn item_kind(item: &DepictionItem) -> &'static str {
 }
 
 fn render_atom(output: &mut String, atom: &AtomItem) {
-    render_atom_glyph(output, "umol-atom", atom, "currentColor", None);
-}
-
-fn render_atom_glyph(
-    output: &mut String,
-    class: &str,
-    atom: &AtomItem,
-    fill: &str,
-    stroke_width: Option<f64>,
-) {
-    output.push_str("<text class=\"");
-    output.push_str(class);
-    output.push('"');
+    output.push_str(r#"<text class="umol-atom""#);
     write_point_attributes(output, atom.position);
     write!(
         output,
-        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{TEXT_SIZE}" fill="{fill}""#
+        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{TEXT_SIZE}" fill="currentColor">"#
     )
     .expect("writing to a String cannot fail");
-    if let Some(stroke_width) = stroke_width {
-        output.push_str(r#" stroke="black" stroke-width=""#);
-        write_number(output, stroke_width);
-        output.push_str(r#"" stroke-linecap="round" stroke-linejoin="round""#);
+
+    let AtomLabel {
+        base,
+        left_superscript,
+        right_subscript,
+        right_superscript,
+    } = &atom.label;
+    if let Some(text) = left_superscript {
+        render_atom_script(output, "umol-atom-left-superscript", "super", text);
     }
-    output.push('>');
-    write_escaped_text(output, &atom.label);
+    output.push_str(r#"<tspan class="umol-atom-base">"#);
+    write_escaped_text(output, base);
+    output.push_str("</tspan>");
+    if let Some(text) = right_subscript {
+        render_atom_script(output, "umol-atom-right-subscript", "sub", text);
+    }
+    if let Some(text) = right_superscript {
+        render_atom_script(output, "umol-atom-right-superscript", "super", text);
+    }
     output.push_str("</text>");
+}
+
+fn render_atom_script(output: &mut String, class: &str, baseline_shift: &str, text: &str) {
+    write!(
+        output,
+        r#"<tspan class="{class}" font-size="{SCRIPT_TEXT_SIZE}" baseline-shift="{baseline_shift}">"#
+    )
+    .expect("writing to a String cannot fail");
+    write_escaped_text(output, text);
+    output.push_str("</tspan>");
 }
 
 fn render_bond(output: &mut String, bond: &BondItem) {
@@ -497,14 +613,15 @@ mod tests {
                 .iter()
                 .map(|node| node.tag_name().name())
                 .collect::<Vec<_>>(),
-            ["rect", "text"]
+            ["rect", "rect"]
         );
         assert_eq!(mask_children[0].attribute("fill"), Some("white"));
         assert_eq!(mask_children[1].attribute("class"), Some("umol-atom-mask"));
+        assert_eq!(mask_children[1].attribute("x"), Some("1.74"));
+        assert_eq!(mask_children[1].attribute("y"), Some("-0.3275"));
+        assert_eq!(mask_children[1].attribute("width"), Some("0.52"));
+        assert_eq!(mask_children[1].attribute("height"), Some("0.655"));
         assert_eq!(mask_children[1].attribute("fill"), Some("black"));
-        assert_eq!(mask_children[1].attribute("stroke"), Some("black"));
-        assert_eq!(mask_children[1].attribute("stroke-width"), Some("0.6"));
-        assert_eq!(mask_children[1].text(), Some("N"));
         assert_eq!(
             groups
                 .iter()
@@ -537,32 +654,40 @@ mod tests {
     }
 
     #[rstest]
-    #[case::visible(
-        "umol-atom",
-        "currentColor",
-        None,
-        r#"<text class="umol-atom" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="currentColor">&lt;&amp;&gt;&quot;&apos;</text>"#
+    #[case::base(
+        AtomLabel {
+            base: "<&>\"'".to_owned(),
+            left_superscript: None,
+            right_subscript: None,
+            right_superscript: None,
+        },
+        r#"<text class="umol-atom" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="currentColor"><tspan class="umol-atom-base">&lt;&amp;&gt;&quot;&apos;</tspan></text>"#
     )]
-    #[case::mask(
-        "umol-atom-mask",
-        "black",
-        Some(0.6),
-        r#"<text class="umol-atom-mask" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="black" stroke="black" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round">&lt;&amp;&gt;&quot;&apos;</text>"#
+    #[case::structured(
+        AtomLabel {
+            base: "CH".to_owned(),
+            left_superscript: Some("13".to_owned()),
+            right_subscript: Some("2".to_owned()),
+            right_superscript: Some("+••".to_owned()),
+        },
+        concat!(
+            r#"<text class="umol-atom" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="currentColor">"#,
+            r#"<tspan class="umol-atom-left-superscript" font-size="0.315" baseline-shift="super">13</tspan>"#,
+            r#"<tspan class="umol-atom-base">CH</tspan>"#,
+            r#"<tspan class="umol-atom-right-subscript" font-size="0.315" baseline-shift="sub">2</tspan>"#,
+            r#"<tspan class="umol-atom-right-superscript" font-size="0.315" baseline-shift="super">+••</tspan>"#,
+            "</text>",
+        )
     )]
-    fn test_render_atom_glyph(
-        #[case] class: &str,
-        #[case] fill: &str,
-        #[case] stroke_width: Option<f64>,
-        #[case] expected: &str,
-    ) {
+    fn test_render_atom(#[case] label: AtomLabel, #[case] expected: &str) {
         let atom = AtomItem {
             position: Point2D::new(1.0, -2.0),
-            label: "<&>\"'".to_owned(),
+            label,
             references: Vec::new(),
         };
         let mut output = String::new();
 
-        render_atom_glyph(&mut output, class, &atom, fill, stroke_width);
+        render_atom(&mut output, &atom);
 
         assert_eq!(output, expected);
     }
@@ -666,7 +791,7 @@ mod tests {
             .filter(|child| child.has_tag_name("g"))
             .collect::<Vec<_>>();
 
-        assert_eq!(root.attribute("viewBox"), Some("-1.5 -2.5 5 7"));
+        assert_eq!(root.attribute("viewBox"), Some("-1.5 -2.5 5.26 7.3275"));
         assert_eq!(
             children
                 .iter()
@@ -704,7 +829,9 @@ mod tests {
         let oxygen = groups[1].first_element_child().unwrap();
         assert_eq!(oxygen.attribute("x"), Some("3"));
         assert_eq!(oxygen.attribute("y"), Some("4"));
-        assert_eq!(oxygen.text(), Some("O"));
+        let oxygen_base = oxygen.first_element_child().unwrap();
+        assert_eq!(oxygen_base.attribute("class"), Some("umol-atom-base"));
+        assert_eq!(oxygen_base.text(), Some("O"));
     }
 
     #[rstest]
@@ -724,10 +851,9 @@ mod tests {
         let svg = render(&depiction);
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
-        let mask_labels = root
+        let mask_boxes = root
             .descendants()
             .filter(|node| node.attribute("class") == Some("umol-atom-mask"))
-            .map(|node| node.text().unwrap())
             .collect::<Vec<_>>();
         let bond_groups = root
             .children()
@@ -738,7 +864,11 @@ mod tests {
             .find(|node| node.attribute("data-umol-item") == Some("arrow"))
             .unwrap();
 
-        assert_eq!(mask_labels, ["O", "N"]);
+        assert_eq!(mask_boxes.len(), 2);
+        assert_eq!(mask_boxes[0].attribute("x"), Some("-2.26"));
+        assert_eq!(mask_boxes[0].attribute("width"), Some("0.52"));
+        assert_eq!(mask_boxes[1].attribute("x"), Some("2.74"));
+        assert_eq!(mask_boxes[1].attribute("width"), Some("0.52"));
         assert_eq!(
             bond_groups
                 .iter()

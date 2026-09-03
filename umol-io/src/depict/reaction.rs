@@ -368,7 +368,7 @@ mod tests {
     #[cfg(feature = "coordgen")]
     use crate::depict::Depict;
     use crate::depict::{
-        ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, DepictionItem,
+        ArrowItem, AtomItem, AtomLabel, BondItem, Bounds, DashedContourItem, DepictionItem,
         DepictionReference, TextItem, WedgeItem, WedgeKind,
     };
     #[cfg(feature = "coordgen")]
@@ -440,7 +440,12 @@ mod tests {
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(-2.0, 0.0),
-                    label: "O".to_owned(),
+                    label: AtomLabel {
+                        base: "O".to_owned(),
+                        left_superscript: None,
+                        right_subscript: None,
+                        right_superscript: None,
+                    },
                     references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(1)))],
                 }),
                 DepictionItem::Text(TextItem {
@@ -472,7 +477,12 @@ mod tests {
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(2.0, 0.0),
-                    label: "O".to_owned(),
+                    label: AtomLabel {
+                        base: "O".to_owned(),
+                        left_superscript: None,
+                        right_subscript: None,
+                        right_superscript: None,
+                    },
                     references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
@@ -649,7 +659,12 @@ mod tests {
             [
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(-12.0, 0.0),
-                    label: "C".to_owned(),
+                    label: AtomLabel {
+                        base: "C".to_owned(),
+                        left_superscript: None,
+                        right_subscript: None,
+                        right_superscript: None,
+                    },
                     references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
@@ -667,7 +682,12 @@ mod tests {
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(2.0, 0.0),
-                    label: "C".to_owned(),
+                    label: AtomLabel {
+                        base: "C".to_owned(),
+                        left_superscript: None,
+                        right_subscript: None,
+                        right_superscript: None,
+                    },
                     references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
