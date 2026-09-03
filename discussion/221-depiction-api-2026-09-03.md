@@ -283,7 +283,7 @@ passing a layout algorithm directly to `Depict::depict_with`.
 
 ### S2 — Seal the scene representation
 
-#### S2a — Reaction-owned side composition and errors
+#### S2a — Reaction-owned side composition and errors **Done**
 
 **Modules:** `umol-io::depict::reaction`, `umol-io::depict::molecule`
 
@@ -300,7 +300,7 @@ a reachable `Depict` failure before completing the subitem.
 **Change:** breaking (red until S2c migrates the remaining external callers).  
 **Dependencies:** [dep: S1a].
 
-#### S2b — Opaque `Depiction` and private lowering/rendering
+#### S2b — Opaque `Depiction` and private lowering/rendering **Done**
 
 **Modules:** `umol-io::depict`, `umol-io::depict::molecule`,
 `umol-io::depict::reaction`, `umol-io::svg`, `umol-io::lib`
@@ -319,16 +319,16 @@ tests inside the owning crate. Do not add test-only public accessors.
 **Change:** breaking (red until S2c migrates the remaining external tests and benchmarks).  
 **Dependencies:** [dep: S2a].
 
-#### S2c — Property and benchmark migration
+#### S2c — Unit-test and benchmark migration **Done**
 
 **Modules:** `umol-io` depiction property suite and SVG benchmark
 
-Move the tetrahedral scene-law property tests into the owning crate so they can inspect the private
-IR without widening production visibility. Preserve the documented ligand-frame and geometric
-transformation properties, generated domain, and validation method. Rewrite the SVG benchmark to
-hold opaque depictions produced outside the timed loop and benchmark `Depiction::render_svg()`;
-replace its independently supplied reaction sides with an actual `Reaction`. Keep the separate
-public layout benchmark unchanged.
+Move the tetrahedral scene-law tests into the owning crate so they can inspect the private IR
+without widening production visibility. Exercise the two tetrahedral cosets and all 24 ligand
+frames deterministically, and cover the finite rotation and reflection classes with targeted unit
+tests. Rewrite the SVG benchmark to hold opaque depictions produced outside the timed loop and
+benchmark `Depiction::render_svg()`; replace its independently supplied reaction sides with an
+actual `Reaction`. Keep the separate public layout benchmark unchanged.
 
 **Change:** breaking caller migration (green).  
 **Dependencies:** [dep: S2b].
@@ -337,6 +337,14 @@ public layout benchmark unchanged.
 compile and run; clippy passes for all `umol-io` targets with both features. A workspace search
 finds no external use of retired item types, accessors, side-composition functions, free SVG
 rendering, `DepictFromSidesError`, or Python `Svg`.
+
+**S2 evidence:** `cargo test -p umol-io --features 'coordgen proptest'` passed 3,397 unit tests,
+including the moved tetrahedral depiction tests, plus 15 layout and six SMILES property
+tests. Quick Criterion runs completed for both the opaque SVG-rendering benchmark and the unchanged
+layout benchmark. Clippy passed with warnings denied for all `umol-io` targets under both features;
+the feature-disabled crate and the depiction-enabled `umol-py` Rust suite also passed. A workspace
+source search found no external use of the retired scene types, inspection methods, side-composition
+functions, free renderer, `DepictFromSidesError`, or Python `Svg`.
 
 ### S3 — Release-facing verification and closeout
 

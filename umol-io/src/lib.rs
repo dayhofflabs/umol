@@ -2,9 +2,11 @@
 //! and the TableIR boundary type.
 
 pub mod ctfile;
+#[cfg(feature = "coordgen")]
 pub mod depict;
 pub mod layout;
 pub mod smiles;
-pub mod svg;
+#[cfg(feature = "coordgen")]
+mod svg;
 pub mod table_ir;
 mod utils;

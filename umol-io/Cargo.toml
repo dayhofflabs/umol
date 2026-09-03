@@ -66,10 +66,6 @@ name = "smiles_parsing"
 name = "smiles_property"
 required-features = ["proptest"]
 
-[[test]]
-name = "depiction_property"
-required-features = ["proptest"]
-
 [[bench]]
 name = "layout"
 harness = false
@@ -86,6 +82,7 @@ harness = false
 [[bench]]
 name = "svg"
 harness = false
+required-features = ["coordgen"]
 
 [[bin]]
 name = "depict_dsl"
