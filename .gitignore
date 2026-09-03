@@ -11,6 +11,7 @@ whitepaper
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.ruff_cache/
 umol-py/python/umol/*.so
 
 ### Emacs ###
@@ -261,5 +262,8 @@ tags
 
 ### EDN ###
 .clj-kondo/
+
+### Typos ###
+typos.toml
 
 # End of https://www.toptal.com/developers/gitignore/api/linux,macos,vim,emacs,intellij+all,visualstudiocode,rust,rust-analyzer
