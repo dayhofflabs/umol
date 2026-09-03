@@ -1687,6 +1687,17 @@ mod tests {
 
     #[cfg(feature = "coordgen")]
     #[rstest]
+    fn test_molecule_depict() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
+
+        assert_eq!(
+            molecule.depict(),
+            molecule.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
     #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
     fn test_molecule_depict_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
         let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);

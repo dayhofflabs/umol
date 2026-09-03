@@ -12,6 +12,8 @@ from umol import (  # noqa: E402
     BondFieldChange,
     ContradictionError,
     Delta,
+    DepictConfig,
+    Depiction,
     Deltas,
     Molecule,
     MoleculeLayoutAlgorithm,
@@ -19,6 +21,19 @@ from umol import (  # noqa: E402
     Reaction,
     Svg,
 )
+
+
+def test_depict_config_new():
+    config = DepictConfig()
+
+    assert config == DepictConfig.default()
+    assert config.layout_algorithm == MoleculeLayoutAlgorithm.CoordGen()
+    assert repr(config) == "DepictConfig.default()"
+
+
+def test_depiction_constructor_error():
+    with pytest.raises(TypeError):
+        Depiction()
 
 
 def test_molecule_layout_algorithm():

@@ -237,6 +237,9 @@ PUBLIC_EXPORTS = frozenset(
 if hasattr(native, "Svg"):
     PUBLIC_EXPORTS |= frozenset({"MoleculeLayoutAlgorithm", "Svg"})
 
+if hasattr(native, "Depiction"):
+    PUBLIC_EXPORTS |= frozenset({"DepictConfig", "Depiction"})
+
 EDITING_EXPORTS = frozenset(
     {
         "AromaticSystemUpdate",

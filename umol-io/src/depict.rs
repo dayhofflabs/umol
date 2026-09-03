@@ -8,12 +8,42 @@ use umol_graph_ir::ir::Entity;
 
 #[cfg(feature = "coordgen")]
 use crate::layout::MoleculeLayoutAlgorithm;
+use crate::svg;
+
+/// Operational configuration for molecule and reaction depiction.
+///
+/// The initial configuration selects the layout algorithm. CoordGen is currently the only
+/// available variant.
+#[cfg(feature = "coordgen")]
+pub struct DepictConfig {
+    /// Algorithm used to generate the molecular layout.
+    pub layout_algorithm: MoleculeLayoutAlgorithm,
+}
+
+#[cfg(feature = "coordgen")]
+impl Default for DepictConfig {
+    fn default() -> Self {
+        Self {
+            layout_algorithm: MoleculeLayoutAlgorithm::CoordGen,
+        }
+    }
+}
 
 /// Constructs a format-neutral depiction using an explicitly selected layout algorithm.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
     /// Failure produced while laying out or depicting this value.
     type Error;
+
+    /// Constructs the depiction with [`DepictConfig::default`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the default layout or depiction operation cannot produce the
+    /// result.
+    fn depict(&self) -> Result<Depiction, Self::Error> {
+        self.depict_with(DepictConfig::default().layout_algorithm)
+    }
 
     /// Constructs the depiction with `layout_algorithm`.
     ///
@@ -52,6 +82,15 @@ impl Depiction {
     /// Anchor and endpoint bounds, or `None` when the scene has no items.
     pub fn bounds(&self) -> Option<&Bounds> {
         self.bounds.as_ref()
+    }
+
+    /// Renders this depiction as a complete SVG document fragment.
+    ///
+    /// Item order is preserved. Coordinates are converted from the depiction's y-up convention to
+    /// SVG's y-down convention. Molecular strokes are masked beneath estimated atom-label bounds,
+    /// and structured source references are encoded in `data-umol-references` attributes.
+    pub fn render_svg(&self) -> String {
+        svg::render(self)
     }
 }
 
@@ -453,7 +492,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_render_items() {
+    fn test_depiction_render_svg() {
         let text = "C<&>\"'";
         let depiction = Depiction::from_items(vec![
             DepictionItem::Atom(AtomItem {
@@ -495,7 +534,10 @@ mod tests {
             }),
         ]);
 
-        let svg = render(&depiction);
+        let svg = depiction.render_svg();
+
+        assert_eq!(svg, render(&depiction));
+
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
         let groups = root

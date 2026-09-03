@@ -4,9 +4,10 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use umol_io::depict::molecule::MoleculeDepictionError as IoMoleculeDepictionError;
 use umol_io::depict::reaction::ReactionDepictionError as IoReactionDepictionError;
-use umol_io::depict::{Depict as IoDepict, Depiction as IoDepiction};
+use umol_io::depict::{
+    Depict as IoDepict, DepictConfig as IoDepictConfig, Depiction as IoDepiction,
+};
 use umol_io::layout::MoleculeLayoutAlgorithm as IoMoleculeLayoutAlgorithm;
-use umol_io::svg::render as render_svg;
 
 use crate::error::contradiction_error;
 use crate::molecule::Molecule;
@@ -50,6 +51,83 @@ impl MoleculeLayoutAlgorithm {
     }
 }
 
+/// Operational configuration for molecule and reaction depiction.
+#[pyclass(eq, frozen, from_py_object)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DepictConfig {
+    layout_algorithm: MoleculeLayoutAlgorithm,
+}
+
+impl Default for DepictConfig {
+    fn default() -> Self {
+        Self {
+            layout_algorithm: MoleculeLayoutAlgorithm::CoordGen(),
+        }
+    }
+}
+
+#[pymethods]
+impl DepictConfig {
+    #[new]
+    #[pyo3(signature = (*, layout_algorithm=MoleculeLayoutAlgorithm::CoordGen()))]
+    fn new(layout_algorithm: MoleculeLayoutAlgorithm) -> Self {
+        Self { layout_algorithm }
+    }
+
+    #[staticmethod]
+    fn default() -> Self {
+        Default::default()
+    }
+
+    #[getter]
+    fn layout_algorithm(&self) -> MoleculeLayoutAlgorithm {
+        self.layout_algorithm
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "DepictConfig.default()"
+    }
+}
+
+impl DepictConfig {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion boundary for depiction configuration"
+    )]
+    pub(crate) fn to_rust(self) -> IoDepictConfig {
+        IoDepictConfig {
+            layout_algorithm: self.layout_algorithm.to_rust(),
+        }
+    }
+}
+
+/// An opaque, format-neutral molecule or reaction depiction.
+#[pyclass(frozen, skip_from_py_object)]
+pub struct Depiction(IoDepiction);
+
+#[pymethods]
+impl Depiction {
+    /// Render this depiction as a complete SVG document fragment.
+    fn render_svg(&self) -> String {
+        self.0.render_svg()
+    }
+
+    /// Return the complete SVG fragment through Jupyter's rich-display protocol.
+    fn _repr_svg_(&self) -> String {
+        self.render_svg()
+    }
+}
+
+impl Depiction {
+    #[allow(
+        dead_code,
+        reason = "Rust-to-Python conversion boundary for format-neutral depictions"
+    )]
+    pub(crate) fn from_rust(depiction: IoDepiction) -> Self {
+        Self(depiction)
+    }
+}
+
 /// An already rendered SVG value for notebook display.
 #[pyclass(frozen, skip_from_py_object)]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,7 +143,7 @@ impl Svg {
 
 impl Svg {
     pub(crate) fn from_rust(depiction: &IoDepiction) -> Self {
-        Self(render_svg(depiction))
+        Self(depiction.render_svg())
     }
 }
 
@@ -129,13 +207,49 @@ mod tests {
     }
 
     #[rstest]
+    fn test_depict_config_new() {
+        let config = DepictConfig::new(MoleculeLayoutAlgorithm::CoordGen());
+
+        assert_eq!(config, DepictConfig::default());
+        assert_eq!(
+            config.layout_algorithm(),
+            MoleculeLayoutAlgorithm::CoordGen()
+        );
+        assert_eq!(config.__repr__(), "DepictConfig.default()");
+        assert_eq!(
+            config.to_rust().layout_algorithm,
+            IoMoleculeLayoutAlgorithm::CoordGen
+        );
+    }
+
+    #[rstest]
+    fn test_depiction_render_svg() {
+        let molecule = Molecule::from_rust(GraphIrMolecule::new());
+        let rust = molecule.to_rust().depict().unwrap();
+        let expected = rust.render_svg();
+        let depiction = Depiction::from_rust(rust);
+
+        assert_eq!(depiction.render_svg(), expected);
+        assert_eq!(depiction._repr_svg_(), expected);
+    }
+
+    #[rstest]
+    fn test_depiction_constructor_error() {
+        Python::attach(|py| {
+            let error = py.get_type::<Depiction>().call0().unwrap_err();
+
+            assert!(error.is_instance_of::<PyTypeError>(py));
+        });
+    }
+
+    #[rstest]
     fn test_svg_repr_svg() {
         let molecule = Molecule::from_rust(GraphIrMolecule::new());
         let depiction = molecule
             .to_rust()
             .depict_with(IoMoleculeLayoutAlgorithm::CoordGen)
             .unwrap();
-        let expected = render_svg(&depiction);
+        let expected = depiction.render_svg();
 
         let svg = molecule
             .depict_with(MoleculeLayoutAlgorithm::CoordGen())
@@ -206,11 +320,10 @@ mod tests {
                 umol_graph_ir::mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
                 Deltas::new(),
             );
-            let expected = render_svg(
-                &reaction
-                    .depict_with(IoMoleculeLayoutAlgorithm::CoordGen)
-                    .unwrap(),
-            );
+            let expected = reaction
+                .depict_with(IoMoleculeLayoutAlgorithm::CoordGen)
+                .unwrap()
+                .render_svg();
             let reaction = Reaction::from_rust(py, reaction).unwrap();
 
             let svg = reaction

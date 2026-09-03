@@ -2,7 +2,8 @@
 
 Status: Completed
 Date: 2026-09-02
-Relates: [201](201-molecular-data-first-steps-2026-08-19.md)
+Relates: [201](201-molecular-data-first-steps-2026-08-19.md),
+[221](221-depiction-api-2026-09-03.md)
 
 ## Purpose
 

@@ -1032,6 +1032,46 @@ mod tests {
 
     #[cfg(feature = "coordgen")]
     #[rstest]
+    fn test_reaction_depict() {
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(1),
+                    new: NumForm::Lit(2),
+                },
+            })]),
+        );
+
+        assert_eq!(
+            reaction.depict(),
+            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
+    fn test_reaction_depict_error() {
+        let reaction = Reaction::new(
+            mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#),
+            Deltas::from_iter([Delta::Bond(BondDelta::ModifyField {
+                id: BondId(0),
+                change: BondFieldChange::Order {
+                    old: NumForm::Lit(2),
+                    new: NumForm::Lit(3),
+                },
+            })]),
+        );
+
+        assert_eq!(
+            reaction.depict(),
+            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+        );
+    }
+
+    #[cfg(feature = "coordgen")]
+    #[rstest]
     #[case::coordgen(MoleculeLayoutAlgorithm::CoordGen)]
     fn test_reaction_depict_with(#[case] algorithm: MoleculeLayoutAlgorithm) {
         let reaction = Reaction::new(

@@ -234,6 +234,10 @@ if hasattr(_native_module, "Svg"):
     MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
     Svg = _native_module.Svg
 
+if hasattr(_native_module, "Depiction"):
+    DepictConfig = _native_module.DepictConfig
+    Depiction = _native_module.Depiction
+
 try:
     __version__ = version("umol-py")
 except PackageNotFoundError:
@@ -468,3 +472,6 @@ __all__ = [
 
 if hasattr(_native_module, "Svg"):
     __all__.extend(["MoleculeLayoutAlgorithm", "Svg"])
+
+if hasattr(_native_module, "Depiction"):
+    __all__.extend(["DepictConfig", "Depiction"])
