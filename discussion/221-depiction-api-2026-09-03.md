@@ -95,10 +95,11 @@ display protocol, not the data-access interface.
 - Bind `DepictConfig` and the opaque `Depiction` in Python. Python `depict()` and `depict_with()`
   return `Depiction`; `render_svg()` returns ordinary SVG text, and `_repr_svg_()` delegates to the
   same rendering operation for notebook display. Remove the Python-only `Svg` result.
-- Gate the complete high-level depiction surface on CoordGen while it is the only available layout
-  backend. With the feature disabled, `Depict`, `DepictConfig`, `Depiction`, and their implementations
-  are absent rather than present with no usable backend. The independent layout representation may
-  remain available outside that gate.
+- Gate the complete high-level depiction surface on the `depiction` capability feature. The feature
+  currently enables `coordgen` because CoordGen is the default and only layout backend. With
+  `depiction` disabled, `Depict`, `DepictConfig`, `Depiction`, and their implementations are absent
+  rather than present with no usable backend. The independent `coordgen` layout feature and layout
+  representation remain available outside that gate.
 - Do not add color schemes, renderer selection, or new drawing behavior in this work.
 - Correct the API before its first release; no compatibility layer for the unreleased surface is
   required.
@@ -170,7 +171,7 @@ feature do not expose these types or methods.
 
 ## Target public surface
 
-With the Rust `coordgen` feature, `umol_io::depict` exposes only `Depict`, `DepictConfig`,
+With the Rust `depiction` feature, `umol_io::depict` exposes only `Depict`, `DepictConfig`,
 `Depiction`, `MoleculeDepictionError`, and `ReactionDepictionError`. `Depiction` has no public
 constructor, conversion, scene accessor, or structural-equality contract; its public operation is
 `render_svg()`. `DepictConfig` has public `layout_algorithm: MoleculeLayoutAlgorithm` and implements
@@ -308,7 +309,7 @@ a reachable `Depict` failure before completing the subitem.
 Remove the public scene accessors and external visibility of `DepictionItem`, all item records,
 `AtomLabel`, `WedgeKind`, `DepictionReference`, and `Bounds`. Make molecule lowering, reaction
 composition, and SVG rendering internal modules and functions, re-exporting only the target public
-depiction symbols. Gate that complete surface on `coordgen`; leave the independent layout module
+depiction symbols. Gate that complete surface on `depiction`; leave the independent layout module
 and coordinate types under their existing feature behavior. Remove `Depiction`'s current derived
 `Clone`, `Debug`, and `PartialEq` implementations; no copying, debug-inspection, or scene-equality
 contract has been settled for the opaque result.
@@ -333,18 +334,22 @@ actual `Reaction`. Keep the separate public layout benchmark unchanged.
 **Change:** breaking caller migration (green).  
 **Dependencies:** [dep: S2b].
 
-**Stage gate:** `umol-io` tests pass with `coordgen` and `proptest`; the SVG and layout benchmarks
+**Stage gate:** `umol-io` tests pass with `depiction` and `proptest`; the SVG and layout benchmarks
 compile and run; clippy passes for all `umol-io` targets with both features. A workspace search
 finds no external use of retired item types, accessors, side-composition functions, free SVG
 rendering, `DepictFromSidesError`, or Python `Svg`.
 
-**S2 evidence:** `cargo test -p umol-io --features 'coordgen proptest'` passed 3,397 unit tests,
+**S2 evidence:** `cargo test -p umol-io --features 'depiction proptest'` passed 3,397 unit tests,
 including the moved tetrahedral depiction tests, plus 15 layout and six SMILES property
 tests. Quick Criterion runs completed for both the opaque SVG-rendering benchmark and the unchanged
 layout benchmark. Clippy passed with warnings denied for all `umol-io` targets under both features;
 the feature-disabled crate and the depiction-enabled `umol-py` Rust suite also passed. A workspace
 source search found no external use of the retired scene types, inspection methods, side-composition
 functions, free renderer, `DepictFromSidesError`, or Python `Svg`.
+
+The feature boundary was also checked directly with `--no-default-features`: `cargo check` and
+`cargo test` passed without `depiction` (3,299 unit and six integration tests) and with `depiction`
+(3,397 unit and 15 layout integration tests).
 
 ### S3 — Release-facing verification and closeout
 
