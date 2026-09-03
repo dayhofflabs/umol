@@ -1,6 +1,6 @@
 # 220 — Readable molecular depiction
 
-Status: In Progress
+Status: Completed
 Date: 2026-09-02
 Relates: [201](201-molecular-data-first-steps-2026-08-19.md)
 
@@ -103,7 +103,8 @@ underlying fields are literal. The isotope is a left superscript, the implicit-h
 subscript after `H`, and charge and literal unpaired-electron counts are right superscripts, with the
 latter rendered as radical dots. `AtomLabel` carries these typographic parts separately rather than
 asking a renderer to recover them from flattened text. Lone pairs and multiplicity remain outside
-this cut.
+this cut. Negative atom and aromatic-system charges use U+2212 MINUS SIGN rather than U+002D
+HYPHEN-MINUS.
 
 For the current SVG output, bonds should remain center-to-center in `Depiction` and the SVG renderer
 should mask the bond layer beneath visible atom labels. Visual review showed that an expanded
@@ -654,35 +655,159 @@ Command: `cargo bench -p umol-io --bench svg -- fused_aromatic --noplot`. Verifi
   as superscripts. Make the SVG viewport include the displayed label extents so long labels are not
   clipped. Preserve the existing label-field omission semantics and structured references, and
   update the exact SVG, nonwhite-background, reaction, and viewport tests with the implementation.
-- **S5b — Wedge geometry tuning** `[dep: S3]`: give solid and hashed wedges a readable nonzero width
+- [x] **S5b — Wedge geometry tuning** `[dep: S3]`: give solid and hashed wedges a readable nonzero width
   at the stereocenter, and increase the hashed wedge's cross-line count while reducing its spacing.
   Preserve wedge selection, coset recovery, and source references; cover both treatments with exact
   SVG tests and rerun the tetrahedral rendering benchmark.
-- **S5c — Visual evidence rerun** `[dep: S4, S5a, S5b]`: regenerate the single-page visual corpus
+- [x] **S5c — Visual evidence rerun** `[dep: S4, S5a, S5b]`: regenerate the single-page visual corpus
   through graph IR, CoordGen, format-neutral depiction, and SVG. Reinspect label clearance and
-  typography, both wedge treatments, cis/trans layouts, aromatic systems, and mapped reactions.
-  Localized multiple-bond junctions may retain the present centered-line treatment in this cut;
-  the aromatic-system output passed the first visual review and needs no redesign here.
+  typography, both wedge treatments, cis/trans layouts, aromatic systems, and mapped reactions. The
+  corpus includes norbornane, cubane, and adamantane cage projections; phenanthrene, azulene, and
+  coronene aromatic systems; both fully substituted literal cis/trans cosets; and fully substituted
+  undetermined cis/trans. Localized multiple-bond junctions may retain the present centered-line
+  treatment in this cut; the aromatic-system output passed the first visual review and needs no
+  redesign here.
+- [x] **S5d — Bond-aware mapping-index placement** `[dep: S5c]`: replace the fixed upper-right
+  mapping-index offset with a deterministic atom-local direction derived from incident bond vectors.
+  Place a degree-one index opposite its bond and a multiply bonded index along the bisector of the
+  largest angular gap, with explicit deterministic handling for isolated, collinear, and tied cases.
+  Keep the CoordGen coordinates, reaction-side translations, fixed index clearance, and public scene
+  contract unchanged; do not add a global collision solver or renderer-specific glyph geometry.
+  Cover the direction selection with table tests and regenerate the mapped-reaction visual cases to
+  verify that indices no longer overlap bonds incident to their atoms. Reduce mapping-index text to
+  85% of the ordinary annotation size, shorten the fixed reaction arrow to one and a half nominal
+  bond lengths, and terminate its shaft beneath the arrowhead base rather than at the visible tip.
 
 S5 is green when the review corpus has no label overlap or clipping, scripted atom annotations and
 both wedge treatments are readable, the nonwhite-background case remains background-independent,
-and the previously accepted multiple-bond and aromatic output is unchanged.
+mapping indices avoid bonds incident to their atoms, and the previously accepted multiple-bond and
+aromatic output is unchanged.
+
+S5a-S5c completed on 2026-09-03. `AtomLabel` now carries baseline, left-superscript,
+right-subscript, and right-superscript runs; molecule lowering assigns isotope mass, implicit-H
+count, and charge plus radical dots to those runs without changing the settled field-omission
+rules. SVG rendering masks molecular strokes with one conservative continuous rectangle per label,
+uses no painted page background, and expands the viewport by the same estimated extents. The public
+API audit found only the intended open `AtomLabel` carrier and `AtomItem::label` field change; no
+constructor, configuration, Python scene type, or new failure boundary was added.
+
+Solid and hashed wedges now meet the stereocenter at one ordinary bond width. The hashed treatment
+uses eight evenly spaced cross-lines, including nonzero narrow and broad ends. The representative
+tetrahedral SVG benchmark moved from 3.3265–3.3423 us immediately before S5b to
+4.1466–4.1704 us after it, a measured 24.08–25.19% increase from the three additional rendered hash
+lines. The absolute cost remains approximately 4.16 us.
+
+The 22-case single-page corpus was regenerated through graph IR, CoordGen, format-neutral
+depiction, and SVG on a nonwhite field. Visual inspection found continuous label clearance without
+clipping; readable isotope, implicit-H, charge, and radical typography; distinct solid and hashed
+wedges; opposite literal cis/trans layouts; unchanged accepted localized-bond and aromatic-system
+output; and legible mapped-reaction indices. The deliberately dense two-atom label fixture consumes
+nearly its complete bond span but has no label collision. The extended pass also covers norbornane,
+cubane, adamantane, phenanthrene, azulene, coronene, both literal fully substituted cis/trans
+cosets, and a fully substituted undetermined cis/trans case. The cage projections remain coherent,
+although cubane and adamantane retain plain line crossings without an over/under treatment. The
+larger aromatic systems each receive one outer contour, and the undetermined cis/trans case receives
+neither a layout constraint nor an unknown-stereo glyph. Verification used
+`cargo test -p umol-io --features coordgen -q`,
+`cargo clippy -p umol-io --all-targets --features coordgen -- -D warnings`,
+`cargo +nightly fmt --all -- --check`, and `git diff --check`.
+
+S5d completed on 2026-09-03. Reaction lowering now keeps the previous index radius while selecting
+each mapped atom's direction from its incident bond vectors. A degree-one atom uses the direction
+opposite its bond; a higher-degree atom uses the bisector of the first largest angular gap after
+sorting; and an isolated atom retains the fixed upper-right fallback. Effectively zero Cartesian
+components are normalized to zero so cardinal placements do not introduce trigonometric residue
+into scene coordinates or bounds. CoordGen coordinates and reaction-side translations remain
+unchanged.
+
+Table cases cover isolated, degree-one, degree-two, collinear, and tied geometries. The 22-case HTML
+corpus was regenerated through the existing pipeline, and the mapped-reaction panel places every
+index away from bonds incident to its atom. The public API audit found no new or changed symbol,
+constructor, scene field, configuration, or failure boundary; only the current-behavior rustdoc for
+`depict_from_sides` changed. Correspondence-index text is rendered at 85% of the ordinary annotation
+size. The fixed reaction arrow now spans one and a half nominal bond lengths, and its round-capped
+shaft terminates beneath the arrowhead base so it cannot protrude past the triangular tip. Exact SVG
+cases cover both text sizes and the shaft/head join. Verification used
+`cargo test -p umol-io --features coordgen -q`,
+`cargo clippy -p umol-io --all-targets --features coordgen -- -D warnings`,
+`cargo +nightly fmt --all -- --check`, and `git diff --check`.
 
 ### S6 — Integrated verification and closeout
 
-- **S6a — End-to-end fixtures** `[dep: S5c]`: exercise representative molecules and a mapped
+- [x] **S6a — End-to-end fixtures** `[dep: S5d]`: exercise representative molecules and a mapped
   reaction through graph IR, CoordGen, format-neutral depiction, SVG, and Python rich display.
   Assert semantic SVG structure and exact small stable fragments; inspect generated SVGs from
   temporary output for readability without checking generated artifacts into `materials/`.
-- **S6b — Performance and quality gate** `[dep: S6a]`: compare final Criterion results with S0,
+- [x] **S6b — Performance and quality gate** `[dep: S6a]`: compare final Criterion results with S0,
   format the workspace, run native CoordGen and feature-enabled `umol-io` tests and clippy, then run
   the depiction-enabled Python tests through the repository Python 3.13 environment. Run the full
   workspace gate after the narrow checks pass.
-- **S6c — API and document closeout** `[dep: S6b]`: repeat the public-symbol contract audit, update
+- [x] **S6c — API and document closeout** `[dep: S6b]`: repeat the public-symbol contract audit, update
   rustdoc to current behavior, record the implemented fixture and benchmark evidence here, change
   this document and `discussion/000-status.md` to `Completed`, and leave deferred renderer
   generalization or additional stereo conventions as separately scoped work rather than implied
   behavior.
+
+S6 completed on 2026-09-03. The Python end-to-end cases now exercise structured isotope,
+implicit-H, charge, and radical labels; a literal tetrahedral configuration; an explicit aromatic
+system; and a mapped reaction through graph IR, CoordGen, format-neutral depiction, SVG, and rich
+display. They parse the SVG structure, check graph-IR references and item kinds, reject the removed
+generic marker representation, and retain exact assertions for mapping-index size and reaction
+arrow geometry. The existing 22-case HTML corpus supplied the temporary visual output; its final
+mapped-reaction rendering and the other feature panels were inspected and accepted without adding
+the artifact to `materials/`.
+
+Final Criterion intervals and midpoint changes from the S0 baseline are:
+
+| Layout case | Final time, 95% interval | Midpoint change from S0 |
+| --- | ---: | ---: |
+| acyclic/asymmetric_tree_8 | 61.575–61.940 µs | -2.1% |
+| cyclic/cyclooctane | 10.367–10.389 µs | -3.0% |
+| aromatic/benzene | 7.871–7.892 µs | -2.8% |
+| disconnected/mixed_components_8 | 9.792–10.076 µs | +0.6% |
+| underdetermined/wildcard_path_8 | 71.702–73.388 µs | -2.6% |
+| cis_trans/z_but_2_ene | 4.601–4.750 µs | +9.1% |
+| cis_trans/e_but_2_ene | 4.575–4.675 µs | +9.0% |
+| mapping_hard_tail/high_symmetry_complete_7 | 1.291–1.324 ms | -0.5% |
+| mapping_hard_tail/repeated_components_3x2 | 7.631–7.658 µs | -3.7% |
+
+| SVG case | Final time, 95% interval | Midpoint change from S0 |
+| --- | ---: | ---: |
+| chain/8 | 2.475–2.484 µs | -31.8% |
+| chain/128 | 49.117–49.855 µs | -27.0% |
+| representative/labeled_atoms | 1.901–1.921 µs | +122.8% |
+| representative/tetrahedral_stereo | 4.199–4.309 µs | +140.1% |
+| representative/fused_aromatic | 3.787–3.823 µs | -62.0% |
+| representative/mapped_reaction | 7.808–7.835 µs | +24.0% |
+
+The approximately 9% cis/trans layout cost is the expected enforcement and postcondition check for
+a supported definite relation. The labeled-atom, tetrahedral, and mapped-reaction SVG cases now do
+materially more work than their S0 marker-era counterparts: structured text and masking, real wedge
+geometry, and bond-aware indices plus corrected arrow geometry respectively. Their absolute times
+remain approximately 1.91, 4.25, and 7.82 µs. The remaining layout cases are stable within about 4%
+by midpoint, while the ordinary-chain and aromatic-contour renderings are faster than their S0
+forms.
+
+The final public-symbol audit reconciled every implemented symbol with the contract above.
+`Depiction::from_items` remains private; `MoleculeLayout` retains checked finite construction and
+frame validation; the native `CisTransBond` input and its failure boundary remain exactly the
+settled breaking experimental API; and no depiction configuration, unchecked aggregate
+constructor, compatibility layout operation, Python scene-model type, or additional failure seam
+was introduced. Public rustdoc describes the implemented projection, omission and error rules,
+label masking, reference encoding, and atom-local mapping-index placement; no historical claims
+remain in public code.
+
+Final verification used
+`cargo bench -p umol-io --bench layout --features coordgen -- --noplot`,
+`cargo bench -p umol-io --bench svg -- --noplot`,
+`cargo test -p umol-coordgen-sys --features native`,
+`cargo test -p umol-io --features coordgen`,
+`cargo test -p umol-io --test depiction_property --features 'coordgen proptest'`,
+`cargo clippy -p umol-io --all-targets --features 'coordgen proptest' -- -D warnings`,
+`cargo +nightly fmt --all -- --check`, the depiction-enabled `umol-py` Rust tests, and a Python 3.13
+`maturin develop --features depiction`. The focused Python depiction suite passed 8 cases, the full
+Python suite passed 1321 with 2 skipped, and Python-3.13-activated `cargo test --workspace` and
+`cargo clippy --workspace --all-targets -- -D warnings` both passed.
 
 The critical path is S0 -> S1 -> S3 -> S5 -> S6. S2 and S4 depend on the S0 scene contract but not
 on the native stereo implementation; they may be developed independently before S5. Nothing after

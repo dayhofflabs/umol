@@ -19,6 +19,7 @@ const WEDGE_HASH_COUNT: usize = 8;
 const DASHED_CONTOUR_WIDTH: f64 = 0.04;
 const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
+const MAPPING_INDEX_TEXT_SIZE: f64 = TEXT_SIZE * 0.85;
 const SCRIPT_TEXT_SIZE: f64 = 0.315;
 const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
 const ATOM_LABEL_CHARACTER_ADVANCE: f64 = 0.36;
@@ -423,11 +424,20 @@ fn render_dashed_contour(output: &mut String, contour: &DashedContourItem) {
 }
 
 fn render_text(output: &mut String, text: &TextItem) {
+    let text_size = if text
+        .references
+        .iter()
+        .any(|reference| matches!(reference, DepictionReference::CorrespondencePair(_)))
+    {
+        MAPPING_INDEX_TEXT_SIZE
+    } else {
+        TEXT_SIZE
+    };
     output.push_str(r#"<text class="umol-text""#);
     write_point_attributes(output, text.position);
     write!(
         output,
-        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{TEXT_SIZE}" fill="currentColor">"#
+        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{text_size}" fill="currentColor">"#
     )
     .expect("writing to a String cannot fail");
     write_escaped_text(output, &text.text);
@@ -435,12 +445,11 @@ fn render_text(output: &mut String, text: &TextItem) {
 }
 
 fn render_arrow(output: &mut String, arrow: &ArrowItem) {
-    render_line(output, "umol-arrow-shaft", arrow.start, arrow.end);
-
     let dx = arrow.end.x - arrow.start.x;
     let dy = arrow.end.y - arrow.start.y;
     let length = dx.hypot(dy);
     if length == 0.0 {
+        render_line(output, "umol-arrow-shaft", arrow.start, arrow.end);
         return;
     }
     let along = Point2D::new(dx / length, dy / length);
@@ -449,6 +458,7 @@ fn render_arrow(output: &mut String, arrow: &ArrowItem) {
         arrow.end.x - ARROW_HEAD_LENGTH * along.x,
         arrow.end.y - ARROW_HEAD_LENGTH * along.y,
     );
+    render_line(output, "umol-arrow-shaft", arrow.start, base);
     let first = Point2D::new(
         base.x + ARROW_HEAD_HALF_WIDTH * perpendicular.x,
         base.y + ARROW_HEAD_HALF_WIDTH * perpendicular.y,
@@ -773,6 +783,51 @@ mod tests {
     }
 
     #[rstest]
+    #[case::annotation(
+        Vec::new(),
+        r#"<text class="umol-text" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="currentColor">&lt;&amp;</text>"#
+    )]
+    #[case::mapping_index(
+        vec![
+            DepictionReference::ReactionLhs(Entity::Atom(AtomId(0))),
+            DepictionReference::CorrespondencePair(3),
+        ],
+        r#"<text class="umol-text" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.3825" fill="currentColor">&lt;&amp;</text>"#
+    )]
+    fn test_render_text(#[case] references: Vec<DepictionReference>, #[case] expected: &str) {
+        let text = TextItem {
+            position: Point2D::new(1.0, -2.0),
+            text: "<&".to_owned(),
+            references,
+        };
+        let mut output = String::new();
+
+        render_text(&mut output, &text);
+
+        assert_eq!(output, expected);
+    }
+
+    #[rstest]
+    #[case::horizontal(
+        ArrowItem {
+            start: Point2D::new(-0.75, 0.0),
+            end: Point2D::new(0.75, 0.0),
+            references: Vec::new(),
+        },
+        concat!(
+            r#"<line class="umol-arrow-shaft" x1="-0.75" y1="0" x2="0.51" y2="0" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<polygon class="umol-arrow-head" points="0.75,0 0.51,-0.11 0.51,0.11" fill="currentColor"/>"#,
+        )
+    )]
+    fn test_render_arrow(#[case] arrow: ArrowItem, #[case] expected: &str) {
+        let mut output = String::new();
+
+        render_arrow(&mut output, &arrow);
+
+        assert_eq!(output, expected);
+    }
+
+    #[rstest]
     fn test_render_empty_depiction() {
         let molecule = Molecule::new();
         let layout = MoleculeLayout::try_new(Vec::new()).unwrap();
@@ -880,9 +935,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(mask_boxes.len(), 2);
-        assert_eq!(mask_boxes[0].attribute("x"), Some("-2.26"));
+        assert_eq!(mask_boxes[0].attribute("x"), Some("-2.01"));
         assert_eq!(mask_boxes[0].attribute("width"), Some("0.52"));
-        assert_eq!(mask_boxes[1].attribute("x"), Some("2.74"));
+        assert_eq!(mask_boxes[1].attribute("x"), Some("2.49"));
         assert_eq!(mask_boxes[1].attribute("width"), Some("0.52"));
         assert_eq!(
             bond_groups

@@ -556,7 +556,7 @@ fn append_charge_and_unpaired(
         if magnitude != 1 {
             write!(output, "{magnitude}").expect("writing to a String cannot fail");
         }
-        output.push(if charge > 0 { '+' } else { '-' });
+        output.push(if charge > 0 { '+' } else { '−' });
     }
     if let Some(count) = unpaired_electrons {
         for _ in 0..count {
@@ -988,7 +988,7 @@ mod tests {
                         base: "O".to_owned(),
                         left_superscript: None,
                         right_subscript: None,
-                        right_superscript: Some("-".to_owned()),
+                        right_superscript: Some("−".to_owned()),
                     },
                     references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
                 }),
@@ -1069,7 +1069,7 @@ mod tests {
             base: "NH".to_owned(),
             left_superscript: Some("15".to_owned()),
             right_subscript: Some("12".to_owned()),
-            right_superscript: Some("12-••".to_owned()),
+            right_superscript: Some("12−••".to_owned()),
         })
     )]
     #[case::independently_nonliteral_fields(
@@ -1451,7 +1451,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::charge_and_radicals("*#c-#u2#s3", Some("-••"))]
+    #[case::charge_and_radicals("*#c-#u2#s3", Some("−••"))]
     #[case::literal_charge_nonliteral_radicals("*#c2#u*#s3", Some("2+"))]
     #[case::nonliteral_charge_literal_radicals("*#c*#u2#s*", Some("••"))]
     #[case::neutral_closed_shell("*#c0#u0#s1", None)]
@@ -1558,7 +1558,7 @@ mod tests {
         };
 
         assert_point_close(annotation.position, Point2D::new(0.37, 0.37));
-        assert_eq!(annotation.text, "-");
+        assert_eq!(annotation.text, "−");
         assert_eq!(
             annotation.references,
             [DepictionReference::Molecule(Entity::AromaticSystem(

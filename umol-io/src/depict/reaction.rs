@@ -1,6 +1,7 @@
 //! Indexed-side depiction from two molecules, layouts, and an atom correspondence.
 
 use std::any::Any;
+use std::f64::consts::{PI, SQRT_2, TAU};
 
 use thiserror::Error;
 use umol_geometric_core::Point2D;
@@ -18,9 +19,12 @@ use crate::layout::MoleculeLayout;
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
-const ARROW_HALF_LENGTH: f64 = 1.0;
+const ARROW_HALF_LENGTH: f64 = 0.75;
 const SIDE_ARROW_GAP: f64 = 1.0;
-const MAP_INDEX_OFFSET: Point2D = Point2D::new(0.35, 0.35);
+const MAP_INDEX_COMPONENT_OFFSET: f64 = 0.35;
+const MAP_INDEX_DISTANCE: f64 = MAP_INDEX_COMPONENT_OFFSET * SQRT_2;
+const MAP_INDEX_FALLBACK_OFFSET: Point2D =
+    Point2D::new(MAP_INDEX_COMPONENT_OFFSET, MAP_INDEX_COMPONENT_OFFSET);
 
 /// Constructs an indexed-side reaction depiction from independently laid-out molecular sides.
 ///
@@ -47,7 +51,8 @@ const MAP_INDEX_OFFSET: Point2D = Point2D::new(0.35, 0.35);
 ///
 /// Side-item order is preserved. Correspondence-pair indices depend only on the correspondence's
 /// left-id order, so identical inputs produce structurally equal depictions. Each supplied layout
-/// is changed only by one translation.
+/// is changed only by one translation. Index positions are selected atom-locally away from
+/// incident bond directions and do not alter either molecular layout.
 pub fn depict_from_sides(
     lhs: &Molecule,
     lhs_layout: &MoleculeLayout,
@@ -85,6 +90,7 @@ pub fn depict_from_sides(
         .collect::<Vec<_>>();
 
     items.extend(index_items(
+        lhs,
         lhs_layout,
         lhs_offset,
         atom_correspondence
@@ -107,6 +113,7 @@ pub fn depict_from_sides(
             .map(|item| translate_item(item, rhs_offset, ReactionSide::Rhs)),
     );
     items.extend(index_items(
+        rhs,
         rhs_layout,
         rhs_offset,
         atom_correspondence
@@ -313,6 +320,7 @@ fn translate_item(mut item: DepictionItem, offset: Point2D, side: ReactionSide) 
 }
 
 fn index_items(
+    molecule: &Molecule,
     layout: &MoleculeLayout,
     offset: Point2D,
     indexed_atoms: impl IntoIterator<Item = (usize, AtomId)>,
@@ -325,7 +333,10 @@ fn index_items(
                 .position(atom)
                 .expect("correspondence frame agreement establishes every atom position");
             DepictionItem::Text(TextItem {
-                position: translate(translate(position, offset), MAP_INDEX_OFFSET),
+                position: translate(
+                    translate(position, offset),
+                    mapping_index_offset(molecule, layout, atom),
+                ),
                 text: index.to_string(),
                 references: vec![
                     reaction_reference(side, Entity::Atom(atom)),
@@ -334,6 +345,61 @@ fn index_items(
             })
         })
         .collect()
+}
+
+fn mapping_index_offset(molecule: &Molecule, layout: &MoleculeLayout, atom: AtomId) -> Point2D {
+    let origin = *layout
+        .position(atom)
+        .expect("molecule/layout frame agreement establishes the atom position");
+    let mut angles = molecule
+        .neighbors(atom)
+        .filter_map(|neighbor| {
+            let position = *layout
+                .position(neighbor.atom_id())
+                .expect("molecule/layout frame agreement establishes every neighbor position");
+            let dx = position.x - origin.x;
+            let dy = position.y - origin.y;
+            let length = dx.hypot(dy);
+            (length > f64::EPSILON).then(|| {
+                let angle = dy.atan2(dx);
+                if angle < 0.0 {
+                    angle + TAU
+                } else {
+                    angle
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let angle = match angles.len() {
+        0 => return MAP_INDEX_FALLBACK_OFFSET,
+        1 => angles[0] + PI,
+        _ => {
+            angles.sort_by(f64::total_cmp);
+            let mut largest_start = angles[0];
+            let mut largest_extent = 0.0;
+            for index in 0..angles.len() {
+                let start = angles[index];
+                let end = if index + 1 == angles.len() {
+                    angles[0] + TAU
+                } else {
+                    angles[index + 1]
+                };
+                let extent = end - start;
+                if extent > largest_extent {
+                    largest_start = start;
+                    largest_extent = extent;
+                }
+            }
+            largest_start + largest_extent / 2.0
+        }
+    };
+    let x = MAP_INDEX_DISTANCE * angle.cos();
+    let y = MAP_INDEX_DISTANCE * angle.sin();
+    Point2D::new(
+        if x.abs() < f64::EPSILON { 0.0 } else { x },
+        if y.abs() < f64::EPSILON { 0.0 } else { y },
+    )
 }
 
 fn reaction_reference(side: ReactionSide, entity: Entity) -> DepictionReference {
@@ -349,10 +415,11 @@ fn translate(point: Point2D, offset: Point2D) -> Point2D {
 
 #[cfg(test)]
 mod tests {
+    use float_cmp::approx_eq;
     use rstest::rstest;
     use umol_geometric_core::Point2D;
     use umol_graph_core::Correspondence;
-    use umol_graph_ir::ir::{AtomId, BondId, Entity, StereoAtomId};
+    use umol_graph_ir::ir::{AtomId, BondId, Entity, Molecule, StereoAtomId};
     #[cfg(feature = "coordgen")]
     use umol_graph_ir::ir::{
         BondDelta, BondFieldChange, Contradiction, Delta, Deltas, NumForm, Reaction,
@@ -363,7 +430,9 @@ mod tests {
     use super::depict_from_sides_with;
     #[cfg(feature = "coordgen")]
     use super::ReactionDepictionError;
-    use super::{depict_from_sides, translate_item, DepictFromSidesError, ReactionSide};
+    use super::{
+        depict_from_sides, mapping_index_offset, translate_item, DepictFromSidesError, ReactionSide,
+    };
     use crate::depict::molecule::MoleculeDepictionError;
     #[cfg(feature = "coordgen")]
     use crate::depict::Depict;
@@ -415,6 +484,69 @@ mod tests {
     }
 
     #[rstest]
+    #[case::isolated(
+        mol_dsl!(r#"{:atoms ["C"] :bonds []}"#),
+        MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0)]).unwrap(),
+        AtomId(0),
+        Point2D::new(0.35, 0.35)
+    )]
+    #[case::degree_one(
+        mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#),
+        MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 0.0)]).unwrap(),
+        AtomId(0),
+        Point2D::new(-0.4949747468305833, 0.0)
+    )]
+    #[case::degree_two(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        MoleculeLayout::try_new(vec![
+            Point2D::new(0.0, 0.0),
+            Point2D::new(1.0, 0.0),
+            Point2D::new(0.0, 1.0),
+        ])
+        .unwrap(),
+        AtomId(0),
+        Point2D::new(-0.35, -0.35)
+    )]
+    #[case::collinear(
+        mol_dsl!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        MoleculeLayout::try_new(vec![
+            Point2D::new(0.0, 0.0),
+            Point2D::new(1.0, 0.0),
+            Point2D::new(-1.0, 0.0),
+        ])
+        .unwrap(),
+        AtomId(0),
+        Point2D::new(0.0, 0.4949747468305833)
+    )]
+    #[case::tied(
+        mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]}"#
+        ),
+        MoleculeLayout::try_new(vec![
+            Point2D::new(0.0, 0.0),
+            Point2D::new(1.0, 0.0),
+            Point2D::new(0.0, 1.0),
+            Point2D::new(-1.0, 0.0),
+            Point2D::new(0.0, -1.0),
+        ])
+        .unwrap(),
+        AtomId(0),
+        Point2D::new(0.35, 0.35)
+    )]
+    fn test_mapping_index_offset(
+        #[case] molecule: Molecule,
+        #[case] layout: MoleculeLayout,
+        #[case] atom: AtomId,
+        #[case] expected: Point2D,
+    ) {
+        let actual = mapping_index_offset(&molecule, &layout, atom);
+
+        assert!(approx_eq!(f64, actual.x, expected.x, epsilon = 1e-12));
+        assert!(approx_eq!(f64, actual.y, expected.y, epsilon = 1e-12));
+    }
+
+    #[rstest]
     fn test_depict_from_sides() {
         let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let rhs = mol_dsl!(r#"{:atoms ["O" "C"] :bonds [[0 1 "1"]]}"#);
@@ -433,13 +565,13 @@ mod tests {
             depiction.items(),
             [
                 DepictionItem::Bond(BondItem {
-                    start: Point2D::new(-3.0, 0.0),
-                    end: Point2D::new(-2.0, 0.0),
+                    start: Point2D::new(-2.75, 0.0),
+                    end: Point2D::new(-1.75, 0.0),
                     line_count: 1,
                     references: vec![DepictionReference::ReactionLhs(Entity::Bond(BondId(0),))],
                 }),
                 DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(-2.0, 0.0),
+                    position: Point2D::new(-1.75, 0.0),
                     label: AtomLabel {
                         base: "O".to_owned(),
                         left_superscript: None,
@@ -449,7 +581,7 @@ mod tests {
                     references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(1)))],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(-2.65, 0.35),
+                    position: Point2D::new(-3.244974746830583, 0.0),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Atom(AtomId(0))),
@@ -457,7 +589,7 @@ mod tests {
                     ],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(-1.65, 0.35),
+                    position: Point2D::new(-1.2550252531694168, 0.0),
                     text: "1".to_owned(),
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Atom(AtomId(1))),
@@ -465,18 +597,18 @@ mod tests {
                     ],
                 }),
                 DepictionItem::Arrow(ArrowItem {
-                    start: Point2D::new(-1.0, 0.0),
-                    end: Point2D::new(1.0, 0.0),
+                    start: Point2D::new(-0.75, 0.0),
+                    end: Point2D::new(0.75, 0.0),
                     references: Vec::new(),
                 }),
                 DepictionItem::Bond(BondItem {
-                    start: Point2D::new(2.0, 0.0),
-                    end: Point2D::new(3.0, 0.0),
+                    start: Point2D::new(1.75, 0.0),
+                    end: Point2D::new(2.75, 0.0),
                     line_count: 1,
                     references: vec![DepictionReference::ReactionRhs(Entity::Bond(BondId(0),))],
                 }),
                 DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(2.0, 0.0),
+                    position: Point2D::new(1.75, 0.0),
                     label: AtomLabel {
                         base: "O".to_owned(),
                         left_superscript: None,
@@ -486,7 +618,7 @@ mod tests {
                     references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(3.35, 0.35),
+                    position: Point2D::new(3.244974746830583, 0.0),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Atom(AtomId(1))),
@@ -494,7 +626,7 @@ mod tests {
                     ],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(2.35, 0.35),
+                    position: Point2D::new(1.2550252531694168, 0.0),
                     text: "1".to_owned(),
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Atom(AtomId(0))),
@@ -506,8 +638,8 @@ mod tests {
         assert_eq!(
             depiction.bounds(),
             Some(&Bounds {
-                min: Point2D::new(-3.0, 0.0),
-                max: Point2D::new(3.35, 0.35),
+                min: Point2D::new(-3.244974746830583, 0.0),
+                max: Point2D::new(3.244974746830583, 0.0),
             })
         );
         assert_eq!(
@@ -547,7 +679,7 @@ mod tests {
             index_items,
             [
                 TextItem {
-                    position: Point2D::new(-3.65, 0.35),
+                    position: Point2D::new(-3.4, 0.35),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Atom(AtomId(0))),
@@ -555,7 +687,7 @@ mod tests {
                     ],
                 },
                 TextItem {
-                    position: Point2D::new(-1.65, 0.35),
+                    position: Point2D::new(-1.4, 0.35),
                     text: "1".to_owned(),
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Atom(AtomId(2))),
@@ -563,7 +695,7 @@ mod tests {
                     ],
                 },
                 TextItem {
-                    position: Point2D::new(3.35, 0.35),
+                    position: Point2D::new(3.244974746830583, 0.0),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Atom(AtomId(1))),
@@ -571,7 +703,7 @@ mod tests {
                     ],
                 },
                 TextItem {
-                    position: Point2D::new(2.35, 0.35),
+                    position: Point2D::new(1.2550252531694168, 0.0),
                     text: "1".to_owned(),
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Atom(AtomId(0))),
@@ -621,8 +753,8 @@ mod tests {
             wedges,
             [
                 WedgeItem {
-                    tip: Point2D::new(-3.0, 0.0),
-                    base: Point2D::new(-2.0, 0.0),
+                    tip: Point2D::new(-2.75, 0.0),
+                    base: Point2D::new(-1.75, 0.0),
                     kind: WedgeKind::Solid,
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Bond(BondId(0))),
@@ -630,8 +762,8 @@ mod tests {
                     ],
                 },
                 WedgeItem {
-                    tip: Point2D::new(3.0, 0.0),
-                    base: Point2D::new(4.0, 0.0),
+                    tip: Point2D::new(2.75, 0.0),
+                    base: Point2D::new(3.75, 0.0),
                     kind: WedgeKind::Solid,
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Bond(BondId(0))),
@@ -658,7 +790,7 @@ mod tests {
             depiction.items(),
             [
                 DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(-12.0, 0.0),
+                    position: Point2D::new(-11.75, 0.0),
                     label: AtomLabel {
                         base: "C".to_owned(),
                         left_superscript: None,
@@ -668,7 +800,7 @@ mod tests {
                     references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(-1.65, 0.35),
+                    position: Point2D::new(-1.4, 0.35),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionLhs(Entity::Atom(AtomId(1))),
@@ -676,12 +808,12 @@ mod tests {
                     ],
                 }),
                 DepictionItem::Arrow(ArrowItem {
-                    start: Point2D::new(-1.0, 0.0),
-                    end: Point2D::new(1.0, 0.0),
+                    start: Point2D::new(-0.75, 0.0),
+                    end: Point2D::new(0.75, 0.0),
                     references: Vec::new(),
                 }),
                 DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(2.0, 0.0),
+                    position: Point2D::new(1.75, 0.0),
                     label: AtomLabel {
                         base: "C".to_owned(),
                         left_superscript: None,
@@ -691,7 +823,7 @@ mod tests {
                     references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Text(TextItem {
-                    position: Point2D::new(2.35, 0.35),
+                    position: Point2D::new(2.1, 0.35),
                     text: "0".to_owned(),
                     references: vec![
                         DepictionReference::ReactionRhs(Entity::Atom(AtomId(0))),
