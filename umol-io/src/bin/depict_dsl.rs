@@ -7,8 +7,6 @@ use std::{env, fs, io, process};
 
 use umol_graph_ir::dsl::{MoleculeDsl, ReactionDsl};
 use umol_io::depict::Depict;
-use umol_io::layout::MoleculeLayoutAlgorithm;
-use umol_io::svg;
 
 const USAGE: &str = "usage: depict_dsl <molecule|reaction> <input.dsl> <output.svg>";
 
@@ -49,20 +47,16 @@ fn run() -> Result<(), Box<dyn Error>> {
     let depiction = match kind.as_str() {
         "molecule" => {
             let molecule = source.parse::<MoleculeDsl>()?;
-            molecule
-                .molecule()
-                .depict_with(MoleculeLayoutAlgorithm::CoordGen)?
+            molecule.molecule().depict()?
         }
         "reaction" => {
             let reaction = source.parse::<ReactionDsl>()?;
-            reaction
-                .reaction()
-                .depict_with(MoleculeLayoutAlgorithm::CoordGen)?
+            reaction.reaction().depict()?
         }
         _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, USAGE).into()),
     };
 
-    fs::write(&output, svg::render(&depiction)).map_err(|error| {
+    fs::write(&output, depiction.render_svg()).map_err(|error| {
         io::Error::new(
             error.kind(),
             format!("cannot write {}: {error}", output.display()),

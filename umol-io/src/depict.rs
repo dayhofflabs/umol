@@ -29,7 +29,7 @@ impl Default for DepictConfig {
     }
 }
 
-/// Constructs a format-neutral depiction using an explicitly selected layout algorithm.
+/// Constructs a format-neutral depiction using default or explicitly configured operations.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
     /// Failure produced while laying out or depicting this value.
@@ -42,19 +42,16 @@ pub trait Depict {
     /// Returns [`Self::Error`] when the default layout or depiction operation cannot produce the
     /// result.
     fn depict(&self) -> Result<Depiction, Self::Error> {
-        self.depict_with(DepictConfig::default().layout_algorithm)
+        self.depict_with(&DepictConfig::default())
     }
 
-    /// Constructs the depiction with `layout_algorithm`.
+    /// Constructs the depiction with `config`.
     ///
     /// # Errors
     ///
-    /// Returns [`Self::Error`] when the selected layout algorithm or depiction operation cannot
-    /// produce the result.
-    fn depict_with(
-        &self,
-        layout_algorithm: MoleculeLayoutAlgorithm,
-    ) -> Result<Depiction, Self::Error>;
+    /// Returns [`Self::Error`] when the configured layout or depiction operation cannot produce
+    /// the result.
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error>;
 }
 
 /// An ordered, format-neutral molecular drawing scene.

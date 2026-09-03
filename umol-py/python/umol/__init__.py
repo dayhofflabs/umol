@@ -230,11 +230,8 @@ from ._native import (
 )
 from .elements import E
 
-if hasattr(_native_module, "Svg"):
-    MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
-    Svg = _native_module.Svg
-
 if hasattr(_native_module, "Depiction"):
+    MoleculeLayoutAlgorithm = _native_module.MoleculeLayoutAlgorithm
     DepictConfig = _native_module.DepictConfig
     Depiction = _native_module.Depiction
 
@@ -470,8 +467,5 @@ __all__ = [
     "ValenceTieBreak",
 ]
 
-if hasattr(_native_module, "Svg"):
-    __all__.extend(["MoleculeLayoutAlgorithm", "Svg"])
-
 if hasattr(_native_module, "Depiction"):
-    __all__.extend(["DepictConfig", "Depiction"])
+    __all__.extend(["MoleculeLayoutAlgorithm", "DepictConfig", "Depiction"])

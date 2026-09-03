@@ -12,14 +12,14 @@ use umol_graph_ir::ir::{
 };
 use umol_utils::error::UmolError;
 
-#[cfg(feature = "coordgen")]
-use super::Depict;
 use super::{
     AtomItem, AtomLabel, BondItem, DashedContourItem, Depiction, DepictionItem, DepictionReference,
     TextItem, WedgeItem, WedgeKind,
 };
 #[cfg(feature = "coordgen")]
-use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
+use super::{Depict, DepictConfig};
+#[cfg(feature = "coordgen")]
+use crate::layout::{layout_molecule, LayoutError};
 use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 const AROMATIC_CONTOUR_OFFSET: f64 = 0.18;
@@ -119,11 +119,8 @@ pub fn depict(
 impl Depict for Molecule {
     type Error = MoleculeDepictionError;
 
-    fn depict_with(
-        &self,
-        layout_algorithm: MoleculeLayoutAlgorithm,
-    ) -> Result<Depiction, Self::Error> {
-        let layout = layout_molecule(self, layout_algorithm)?;
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
+        let layout = layout_molecule(self, config.layout_algorithm)?;
         depict(self, &layout)
     }
 }
@@ -947,7 +944,7 @@ mod tests {
     use crate::ctfile::parser::parse_mol_to_table_ir;
     use crate::depict::Bounds;
     #[cfg(feature = "coordgen")]
-    use crate::depict::Depict;
+    use crate::depict::{Depict, DepictConfig};
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
@@ -1692,7 +1689,7 @@ mod tests {
 
         assert_eq!(
             molecule.depict(),
-            molecule.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+            molecule.depict_with(&DepictConfig::default())
         );
     }
 
@@ -1703,8 +1700,11 @@ mod tests {
         let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"#);
         let layout = layout_molecule(&molecule, algorithm).unwrap();
         let expected = depict(&molecule, &layout).unwrap();
+        let config = DepictConfig {
+            layout_algorithm: algorithm,
+        };
 
-        assert_eq!(molecule.depict_with(algorithm), Ok(expected));
+        assert_eq!(molecule.depict_with(&config), Ok(expected));
     }
 
     fn bond_line_counts(depiction: &Depiction) -> Vec<u8> {

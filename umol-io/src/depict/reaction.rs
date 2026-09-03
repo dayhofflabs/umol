@@ -11,9 +11,9 @@ use umol_graph_ir::ir::{AtomId, Entity, Molecule};
 use umol_graph_ir::ir::{Contradiction, Reaction};
 use umol_utils::error::UmolError;
 
-#[cfg(feature = "coordgen")]
-use super::Depict;
 use super::{molecule, ArrowItem, Depiction, DepictionItem, DepictionReference, TextItem};
+#[cfg(feature = "coordgen")]
+use super::{Depict, DepictConfig};
 use crate::depict::molecule::MoleculeDepictionError;
 use crate::layout::MoleculeLayout;
 #[cfg(feature = "coordgen")]
@@ -170,20 +170,17 @@ pub fn depict_from_sides_with(
 impl Depict for Reaction {
     type Error = ReactionDepictionError;
 
-    fn depict_with(
-        &self,
-        layout_algorithm: MoleculeLayoutAlgorithm,
-    ) -> Result<Depiction, Self::Error> {
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error> {
         let span = self
             .to_reaction_span()
             .map_err(ReactionDepictionError::Materialization)?;
         let lhs = span.lhs();
         let rhs = span.rhs();
         let correspondence = span.correspondence();
-        let lhs_layout = layout_molecule(&lhs, layout_algorithm)
+        let lhs_layout = layout_molecule(&lhs, config.layout_algorithm)
             .map_err(MoleculeDepictionError::Layout)
             .map_err(ReactionDepictionError::LhsDepiction)?;
-        let rhs_layout = layout_molecule(&rhs, layout_algorithm)
+        let rhs_layout = layout_molecule(&rhs, config.layout_algorithm)
             .map_err(MoleculeDepictionError::Layout)
             .map_err(ReactionDepictionError::RhsDepiction)?;
 
@@ -434,12 +431,12 @@ mod tests {
         depict_from_sides, mapping_index_offset, translate_item, DepictFromSidesError, ReactionSide,
     };
     use crate::depict::molecule::MoleculeDepictionError;
-    #[cfg(feature = "coordgen")]
-    use crate::depict::Depict;
     use crate::depict::{
         ArrowItem, AtomItem, AtomLabel, BondItem, Bounds, DashedContourItem, DepictionItem,
         DepictionReference, TextItem, WedgeItem, WedgeKind,
     };
+    #[cfg(feature = "coordgen")]
+    use crate::depict::{Depict, DepictConfig};
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
     use crate::layout::{MoleculeLayout, MoleculeLayoutError};
@@ -1046,7 +1043,7 @@ mod tests {
 
         assert_eq!(
             reaction.depict(),
-            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+            reaction.depict_with(&DepictConfig::default())
         );
     }
 
@@ -1066,7 +1063,7 @@ mod tests {
 
         assert_eq!(
             reaction.depict(),
-            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen)
+            reaction.depict_with(&DepictConfig::default())
         );
     }
 
@@ -1090,8 +1087,11 @@ mod tests {
         let correspondence = span.correspondence();
         let expected =
             depict_from_sides_with(&lhs, &rhs, correspondence.atoms(), algorithm).unwrap();
+        let config = DepictConfig {
+            layout_algorithm: algorithm,
+        };
 
-        let depiction = reaction.depict_with(algorithm).unwrap();
+        let depiction = reaction.depict_with(&config).unwrap();
         let line_counts = depiction
             .items()
             .iter()
@@ -1120,7 +1120,7 @@ mod tests {
         );
 
         assert_eq!(
-            reaction.depict_with(MoleculeLayoutAlgorithm::CoordGen),
+            reaction.depict_with(&DepictConfig::default()),
             Err(ReactionDepictionError::Materialization(Contradiction))
         );
     }

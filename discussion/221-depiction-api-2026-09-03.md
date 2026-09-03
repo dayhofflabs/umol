@@ -242,7 +242,7 @@ and import suite passed 76 tests.
 
 ### S1 — Cut over the primary Rust and Python operations
 
-#### S1a — Config-based Rust `Depict` implementations
+#### S1a — Config-based Rust `Depict` implementations **Done**
 
 **Modules:** `umol-io::depict`, `umol-io::depict::molecule`,
 `umol-io::depict::reaction`, `umol-io::bin::depict_dsl`
@@ -256,7 +256,7 @@ materialization, and side-specific failure meanings.
 **Change:** breaking (red until S1b migrates the Python caller).  
 **Dependencies:** [dep: S0a, S0b].
 
-#### S1b — Rust-equivalent Python methods
+#### S1b — Rust-equivalent Python methods **Done**
 
 **Modules:** `umol-py::depict`, `umol-py::lib`, `umol` package exports and Python depiction tests
 
@@ -273,6 +273,13 @@ corresponding Rust operation errors.
 suites pass. Python tests cover molecule and reaction `depict`, explicit default configuration,
 ordinary SVG text access, file-write-compatible text, notebook display, and exact materialization
 and lowering failures.
+
+**S1 evidence:** `cargo test -p umol-io --features coordgen` passed 3,405 unit and 15 integration
+tests. Under Python 3.13.15, `cargo test -p umol-py --lib --features depiction` passed 1,647 tests
+with two ignored; a fresh depiction-enabled `maturin develop` completed, and the focused Python
+depiction and import suite passed 78 tests. Clippy passed with warnings denied for all targets in
+both affected crates. A workspace source search found no remaining Python `Svg` symbol or caller
+passing a layout algorithm directly to `Depict::depict_with`.
 
 ### S2 — Seal the scene representation
 
