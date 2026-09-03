@@ -27,6 +27,9 @@ the statuses recorded here remain authoritative.
 
 ## Current frontier
 
+- [220 — Readable molecular depiction](220-readable-depiction-2026-09-02.md)
+  settles the small fixed-style projection needed for label clearance, explicit aromatic systems,
+  and meaningful stereo glyphs.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
@@ -257,3 +260,4 @@ the statuses recorded here remain authoritative.
 | [214-aggregate-frame-semantics-2026-08-28.md](214-aggregate-frame-semantics-2026-08-28.md)                       | Completed     | 2026-08-29   |                                                                                                            |
 | [215-integrity-minimization-2026-08-28.md](215-integrity-minimization-2026-08-28.md)                             | Completed     | 2026-08-29   |                                                                                                            |
 | [216-canonicalization-performance-2026-08-30.md](216-canonicalization-performance-2026-08-30.md)                 | In Progress   | 2026-08-30   | S4b rejected backend sessions and deferred BSGS with measured ceilings; S4c prepares the 0.7.0 release.       |
+| [220-readable-depiction-2026-09-02.md](220-readable-depiction-2026-09-02.md)                                     | In Progress   | 2026-09-02   | S0 completed the baseline and additive scene vocabulary; S1 adds cis/trans-aware layout.                      |

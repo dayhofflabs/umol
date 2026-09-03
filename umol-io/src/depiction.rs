@@ -62,6 +62,10 @@ pub enum DepictionItem {
     Atom(AtomItem),
     /// A localized bond segment.
     Bond(BondItem),
+    /// A localized stereochemical wedge.
+    Wedge(WedgeItem),
+    /// A dashed contour through an ordered sequence of points.
+    DashedContour(DashedContourItem),
     /// Free text.
     Text(TextItem),
     /// An aromatic or stereo mark.
@@ -76,6 +80,8 @@ impl DepictionItem {
         match self {
             Self::Atom(item) => &item.references,
             Self::Bond(item) => &item.references,
+            Self::Wedge(item) => &item.references,
+            Self::DashedContour(item) => &item.references,
             Self::Text(item) => &item.references,
             Self::Marker(item) => &item.references,
             Self::Arrow(item) => &item.references,
@@ -103,6 +109,39 @@ pub struct BondItem {
     pub end: Point2D,
     /// Number of parallel lines selected by depiction construction.
     pub line_count: u8,
+    /// Structured source references carried into rendered output.
+    pub references: Vec<DepictionReference>,
+}
+
+/// A stereochemical wedge between a narrow tip and a wider base.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WedgeItem {
+    /// Narrow endpoint, located at the stereocenter in an issued depiction.
+    pub tip: Point2D,
+    /// Center of the wide endpoint at the ligand.
+    pub base: Point2D,
+    /// Visible wedge treatment.
+    pub kind: WedgeKind,
+    /// Structured source references carried into rendered output.
+    pub references: Vec<DepictionReference>,
+}
+
+/// Visible treatments for a stereochemical wedge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WedgeKind {
+    /// A filled triangular wedge.
+    Solid,
+    /// A wedge represented by transverse hash marks.
+    Hashed,
+}
+
+/// A dashed contour through an ordered sequence of scene points.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DashedContourItem {
+    /// Points visited by the contour in drawing order.
+    pub points: Vec<Point2D>,
+    /// Whether the last point is joined back to the first.
+    pub closed: bool,
     /// Structured source references carried into rendered output.
     pub references: Vec<DepictionReference>,
 }
@@ -186,6 +225,15 @@ impl Bounds {
                     include_point(&mut bounds, item.start);
                     include_point(&mut bounds, item.end);
                 }
+                DepictionItem::Wedge(item) => {
+                    include_point(&mut bounds, item.tip);
+                    include_point(&mut bounds, item.base);
+                }
+                DepictionItem::DashedContour(item) => {
+                    for &point in &item.points {
+                        include_point(&mut bounds, point);
+                    }
+                }
                 DepictionItem::Text(item) => include_point(&mut bounds, item.position),
                 DepictionItem::Marker(item) => include_point(&mut bounds, item.position),
                 DepictionItem::Arrow(item) => {
@@ -244,6 +292,21 @@ mod tests {
                 line_count: 2,
                 references: vec![DepictionReference::Molecule(Entity::Bond(BondId(0)))],
             }),
+            DepictionItem::Wedge(WedgeItem {
+                tip: Point2D::new(-4.0, -5.0),
+                base: Point2D::new(7.0, 2.0),
+                kind: WedgeKind::Solid,
+                references: vec![DepictionReference::Molecule(Entity::StereoAtom(
+                    StereoAtomId(0),
+                ))],
+            }),
+            DepictionItem::DashedContour(DashedContourItem {
+                points: vec![Point2D::new(-6.0, 1.0), Point2D::new(0.0, 8.0)],
+                closed: true,
+                references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+                    AromaticSystemId(0),
+                ))],
+            }),
             DepictionItem::Text(TextItem {
                 position: Point2D::new(0.0, 5.0),
                 text: "0".to_owned(),
@@ -263,8 +326,8 @@ mod tests {
             }),
         ],
         Some(Bounds {
-            min: Point2D::new(-3.0, -4.0),
-            max: Point2D::new(6.0, 5.0),
+            min: Point2D::new(-6.0, -5.0),
+            max: Point2D::new(7.0, 8.0),
         })
     )]
     fn test_depiction_from_items(
@@ -338,6 +401,33 @@ mod tests {
             references: vec![DepictionReference::ReactionLhs(Entity::Bond(BondId(2)))],
         }),
         vec![DepictionReference::ReactionLhs(Entity::Bond(BondId(2)))]
+    )]
+    #[case::wedge(
+        DepictionItem::Wedge(WedgeItem {
+            tip: Point2D::new(0.0, 0.0),
+            base: Point2D::new(1.0, 0.0),
+            kind: WedgeKind::Hashed,
+            references: vec![
+                DepictionReference::Molecule(Entity::Bond(BondId(2))),
+                DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(1))),
+            ],
+        }),
+        vec![
+            DepictionReference::Molecule(Entity::Bond(BondId(2))),
+            DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(1))),
+        ]
+    )]
+    #[case::dashed_contour(
+        DepictionItem::DashedContour(DashedContourItem {
+            points: vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 0.0)],
+            closed: false,
+            references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(2),
+            ))],
+        }),
+        vec![DepictionReference::Molecule(Entity::AromaticSystem(
+            AromaticSystemId(2),
+        ))]
     )]
     #[case::text(
         DepictionItem::Text(TextItem {

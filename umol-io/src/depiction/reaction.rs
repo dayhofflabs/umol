@@ -312,6 +312,17 @@ fn translate_item(mut item: DepictionItem, offset: Point2D, side: ReactionSide) 
             item.end = translate(item.end, offset);
             &mut item.references
         }
+        DepictionItem::Wedge(item) => {
+            item.tip = translate(item.tip, offset);
+            item.base = translate(item.base, offset);
+            &mut item.references
+        }
+        DepictionItem::DashedContour(item) => {
+            for point in &mut item.points {
+                *point = translate(*point, offset);
+            }
+            &mut item.references
+        }
         DepictionItem::Text(item) => {
             item.position = translate(item.position, offset);
             &mut item.references
@@ -384,16 +395,56 @@ mod tests {
     use super::depict_from_sides_with;
     #[cfg(feature = "coordgen")]
     use super::ReactionDepictionError;
-    use super::{depict_from_sides, DepictFromSidesError};
+    use super::{depict_from_sides, translate_item, DepictFromSidesError, ReactionSide};
     #[cfg(feature = "coordgen")]
     use crate::depiction::Depict;
     use crate::depiction::{
-        ArrowItem, AtomItem, BondItem, Bounds, DepictionItem, DepictionReference, TextItem,
+        ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, DepictionItem,
+        DepictionReference, TextItem, WedgeItem, WedgeKind,
     };
     use crate::layout::MoleculeLayout;
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
     use umol_geometric_core::Point2D;
+
+    #[rstest]
+    fn test_translate_item_geometry() {
+        let wedge = DepictionItem::Wedge(WedgeItem {
+            tip: Point2D::new(1.0, 2.0),
+            base: Point2D::new(3.0, 4.0),
+            kind: WedgeKind::Hashed,
+            references: vec![
+                DepictionReference::Molecule(Entity::Bond(BondId(2))),
+                DepictionReference::CorrespondencePair(4),
+            ],
+        });
+        let contour = DepictionItem::DashedContour(DashedContourItem {
+            points: vec![Point2D::new(-1.0, 0.0), Point2D::new(2.0, 3.0)],
+            closed: true,
+            references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
+        });
+
+        assert_eq!(
+            translate_item(wedge, Point2D::new(5.0, -2.0), ReactionSide::Lhs),
+            DepictionItem::Wedge(WedgeItem {
+                tip: Point2D::new(6.0, 0.0),
+                base: Point2D::new(8.0, 2.0),
+                kind: WedgeKind::Hashed,
+                references: vec![
+                    DepictionReference::ReactionLhs(Entity::Bond(BondId(2))),
+                    DepictionReference::CorrespondencePair(4),
+                ],
+            })
+        );
+        assert_eq!(
+            translate_item(contour, Point2D::new(-3.0, 4.0), ReactionSide::Rhs),
+            DepictionItem::DashedContour(DashedContourItem {
+                points: vec![Point2D::new(-4.0, 4.0), Point2D::new(-1.0, 7.0)],
+                closed: true,
+                references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(1)))],
+            })
+        );
+    }
 
     #[rstest]
     fn test_depict_from_sides() {

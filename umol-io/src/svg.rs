@@ -6,13 +6,17 @@ use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
 use crate::depiction::{
-    ArrowItem, AtomItem, BondItem, Bounds, Depiction, DepictionItem, DepictionReference,
-    MarkerItem, MarkerKind, TextItem,
+    ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
+    DepictionReference, MarkerItem, MarkerKind, TextItem, WedgeItem, WedgeKind,
 };
 
 const VIEW_MARGIN: f64 = 0.5;
 const BOND_GAP: f64 = 0.12;
 const BOND_WIDTH: f64 = 0.06;
+const WEDGE_BASE_HALF_WIDTH: f64 = 0.1;
+const WEDGE_HASH_COUNT: usize = 5;
+const DASHED_CONTOUR_WIDTH: f64 = 0.04;
+const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
 const AROMATIC_MARKER_RADIUS: f64 = 0.16;
 const STEREO_MARKER_RADIUS: f64 = 0.19;
@@ -93,6 +97,8 @@ fn render_item(output: &mut String, item: &DepictionItem) {
     match item {
         DepictionItem::Atom(atom) => render_atom(output, atom),
         DepictionItem::Bond(bond) => render_bond(output, bond),
+        DepictionItem::Wedge(wedge) => render_wedge(output, wedge),
+        DepictionItem::DashedContour(contour) => render_dashed_contour(output, contour),
         DepictionItem::Text(text) => render_text(output, text),
         DepictionItem::Marker(marker) => render_marker(output, marker),
         DepictionItem::Arrow(arrow) => render_arrow(output, arrow),
@@ -105,6 +111,8 @@ fn item_kind(item: &DepictionItem) -> &'static str {
     match item {
         DepictionItem::Atom(_) => "atom",
         DepictionItem::Bond(_) => "bond",
+        DepictionItem::Wedge(_) => "wedge",
+        DepictionItem::DashedContour(_) => "dashed-contour",
         DepictionItem::Text(_) => "text",
         DepictionItem::Marker(_) => "marker",
         DepictionItem::Arrow(_) => "arrow",
@@ -144,6 +152,77 @@ fn render_bond(output: &mut String, bond: &BondItem) {
             Point2D::new(bond.end.x + offset.x, bond.end.y + offset.y),
         );
     }
+}
+
+fn render_wedge(output: &mut String, wedge: &WedgeItem) {
+    let dx = wedge.base.x - wedge.tip.x;
+    let dy = wedge.base.y - wedge.tip.y;
+    let length = dx.hypot(dy);
+    let perpendicular = if length == 0.0 {
+        Point2D::new(0.0, 0.0)
+    } else {
+        Point2D::new(-dy / length, dx / length)
+    };
+
+    match wedge.kind {
+        WedgeKind::Solid => {
+            let first = Point2D::new(
+                wedge.base.x + WEDGE_BASE_HALF_WIDTH * perpendicular.x,
+                wedge.base.y + WEDGE_BASE_HALF_WIDTH * perpendicular.y,
+            );
+            let second = Point2D::new(
+                wedge.base.x - WEDGE_BASE_HALF_WIDTH * perpendicular.x,
+                wedge.base.y - WEDGE_BASE_HALF_WIDTH * perpendicular.y,
+            );
+            output.push_str(r#"<polygon class="umol-wedge-solid" points=""#);
+            write_svg_point(output, wedge.tip);
+            output.push(' ');
+            write_svg_point(output, first);
+            output.push(' ');
+            write_svg_point(output, second);
+            output.push_str(r#"" fill="currentColor"/>"#);
+        }
+        WedgeKind::Hashed => {
+            for index in 1..=WEDGE_HASH_COUNT {
+                let numerator = index as f64;
+                let denominator = WEDGE_HASH_COUNT as f64;
+                let center = Point2D::new(
+                    wedge.tip.x + dx * numerator / denominator,
+                    wedge.tip.y + dy * numerator / denominator,
+                );
+                let half_width = (WEDGE_BASE_HALF_WIDTH / denominator) * numerator;
+                let first = Point2D::new(
+                    center.x + half_width * perpendicular.x,
+                    center.y + half_width * perpendicular.y,
+                );
+                let second = Point2D::new(
+                    center.x - half_width * perpendicular.x,
+                    center.y - half_width * perpendicular.y,
+                );
+                render_line(output, "umol-wedge-hash", first, second);
+            }
+        }
+    }
+}
+
+fn render_dashed_contour(output: &mut String, contour: &DashedContourItem) {
+    output.push_str(r#"<path class="umol-dashed-contour" d=""#);
+    if let Some((first, rest)) = contour.points.split_first() {
+        output.push('M');
+        write_svg_point(output, *first);
+        for &point in rest {
+            output.push_str(" L");
+            write_svg_point(output, point);
+        }
+        if contour.closed {
+            output.push_str(" Z");
+        }
+    }
+    write!(
+        output,
+        r#"" fill="none" stroke="currentColor" stroke-width="{DASHED_CONTOUR_WIDTH}" stroke-dasharray="{DASHED_CONTOUR_PATTERN}" stroke-linecap="round" stroke-linejoin="round"/>"#
+    )
+    .expect("writing to a String cannot fail");
 }
 
 fn render_text(output: &mut String, text: &TextItem) {
@@ -338,12 +417,78 @@ fn marker_kind(kind: MarkerKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use roxmltree::Document;
-    use umol_graph_ir::ir::Molecule;
+    use rstest::rstest;
+    use umol_graph_ir::ir::{AromaticSystemId, BondId, Entity, Molecule};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
     use crate::depiction::molecule::depict;
     use crate::layout::MoleculeLayout;
+
+    #[rstest]
+    #[case::solid(
+        WedgeKind::Solid,
+        r#"<polygon class="umol-wedge-solid" points="0,0 5,-0.1 5,0.1" fill="currentColor"/>"#
+    )]
+    #[case::hashed(
+        WedgeKind::Hashed,
+        concat!(
+            r#"<line class="umol-wedge-hash" x1="1" y1="-0.02" x2="1" y2="0.02" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="2" y1="-0.04" x2="2" y2="0.04" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="3" y1="-0.06" x2="3" y2="0.06" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="4" y1="-0.08" x2="4" y2="0.08" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="5" y1="-0.1" x2="5" y2="0.1" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+        )
+    )]
+    fn test_render_wedge(#[case] kind: WedgeKind, #[case] expected_glyph: &str) {
+        let item = DepictionItem::Wedge(WedgeItem {
+            tip: Point2D::new(0.0, 0.0),
+            base: Point2D::new(5.0, 0.0),
+            kind,
+            references: vec![DepictionReference::Molecule(Entity::Bond(BondId(3)))],
+        });
+        let mut output = String::new();
+
+        render_item(&mut output, &item);
+
+        assert_eq!(
+            output,
+            format!(
+                r#"<g data-umol-item="wedge" data-umol-references="molecule/bond/3">{expected_glyph}</g>
+"#
+            )
+        );
+    }
+
+    #[rstest]
+    #[case::open(
+        false,
+        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+"#
+    )]
+    #[case::closed(
+        true,
+        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0 Z" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+"#
+    )]
+    fn test_render_dashed_contour(#[case] closed: bool, #[case] expected: &str) {
+        let item = DepictionItem::DashedContour(DashedContourItem {
+            points: vec![
+                Point2D::new(-1.0, 2.0),
+                Point2D::new(0.0, -1.0),
+                Point2D::new(3.0, 0.0),
+            ],
+            closed,
+            references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(2),
+            ))],
+        });
+        let mut output = String::new();
+
+        render_item(&mut output, &item);
+
+        assert_eq!(output, expected);
+    }
 
     #[test]
     fn test_render_empty_depiction() {

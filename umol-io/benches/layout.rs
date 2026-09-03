@@ -8,6 +8,7 @@ use umol_coordgen_sys::COORDGEN_VERSION;
 use umol_graph_ir::ir::{
     AromaticSystemForm, AtomForm, AtomId, BondForm, ElementForm, Molecule, MoleculeEntries,
 };
+use umol_graph_ir::mol_dsl;
 use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
 const ALGORITHM: MoleculeLayoutAlgorithm = MoleculeLayoutAlgorithm::CoordGen;
@@ -146,6 +147,17 @@ fn cases() -> Vec<LayoutCase> {
         ],
     );
 
+    let cis_trans_z = mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#
+    );
+    let cis_trans_e = mol_dsl!(
+        r#"{:atoms ["C" "C" "C" "C"]
+            :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+            :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
+    );
+
     // These shapes come from the atom-mapping benchmark. Their mapping hardness is caused by
     // symmetry and output multiplicity; the layout benchmark records how CoordGen handles the same
     // molecular inputs without treating mapping cost as a layout property.
@@ -164,6 +176,8 @@ fn cases() -> Vec<LayoutCase> {
         LayoutCase::new("aromatic", "benzene", aromatic),
         LayoutCase::new("disconnected", "mixed_components_8", disconnected),
         LayoutCase::new("underdetermined", "wildcard_path_8", underdetermined),
+        LayoutCase::new("cis_trans", "z_but_2_ene", cis_trans_z),
+        LayoutCase::new("cis_trans", "e_but_2_ene", cis_trans_e),
         LayoutCase::new(
             "mapping_hard_tail",
             "high_symmetry_complete_7",

@@ -3,6 +3,7 @@
 Status: Completed
 Date: 2026-08-19
 Relates: [200](200-molecular-data-substrate-2026-08-19.md),
+[220](220-readable-depiction-2026-09-02.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
 [207](207-reaction-network-spike-2026-08-24.md),
 [131](131-reaction-application-design-2026-06-24.md),
