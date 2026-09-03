@@ -1,6 +1,6 @@
 # 201 — Molecular data: scope and first experiments
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-19
 Relates: [200](200-molecular-data-substrate-2026-08-19.md),
 [205](205-mapping-test-corpus-2026-08-20.md),
@@ -1748,36 +1748,44 @@ that retained surface after removing the storage consumers.
   Preserve completed docs 207 and 216 as historical records; add a dated clarification only where
   the removal would otherwise make a current claim ambiguous. This removes the crate's complete
   public API and adds no replacement. **Breaking (red -> green).** [dep: S9b, S9c, S9d]
-- **S9f — `umol-io`, `umol-coordgen-sys`, and `umol-py`: retained depiction cleanup.** Reconcile the
-  implemented public layout, depiction, SVG-rendering, and Python-display symbols with the S4-S5
-  contract; retain explicit algorithm selection and the separation between layout, depiction, SVG,
-  and Jupyter display. Improve the existing fixed SVG styling and geometry without introducing a
-  new configuration layer or implicit layout default, and update rustdoc and focused rendering
-  tests with the behavior. This changes rendering behavior but adds no public API; any discovered
-  public-surface change requires an explicit design amendment and contract reconciliation before
-  implementation. **Additive (green).** [dep: S9d]
-- **S9g — repository verification and closeout.** Run formatting; workspace tests and Clippy with
-  all targets and relevant features; the experimental reaction-network and atom-mapping tests,
-  property suites, and retained benchmarks; the CoordGen-enabled `umol-io` checks; and the Python
-  3.13 build and pytest gate with depiction enabled. Confirm that no live source, manifest, fixture,
-  feature, package export, guide, or open discussion plan still requires `umol-store`. Update doc
-  201 and its status-index row to `Completed` only after the public-surface inventory and every
-  removal above are reconciled. The first crates.io publication of `umol-coordgen-sys` must be made
-  manually from the local release environment before crates.io trusted publishing can authorize
-  the workflow; the crate remains in the workflow's dependency-ordered publication list for later
-  releases. **Additive (green).** [dep: S9e, S9f]
+- **S9f — `umol-io`, `umol-coordgen-sys`, and `umol-py`: retain and reconcile depiction.** **Done
+  2026-09-02.** The extracted branch preserves explicit CoordGen selection and the separation
+  between layout, format-neutral depiction, SVG rendering, and Python rich display. The public
+  surface matches the S4-S5 contract: `MoleculeLayout` has checked construction and frame
+  agreement; `Depiction` remains operation-issued with no public aggregate constructor; rendering
+  consumes that closed scene; and Python exposes only the explicit layout selector, frozen `Svg`
+  value, and molecule and reaction `depict_with` operations. The vendored native boundary is
+  feature-gated and reports input, allocation, backend, and non-finite-output failures without
+  exposing raw pointers. No implicit algorithm default, configuration layer, or additional public
+  seam was introduced by the split. A later visual-quality pass is a separate product process, not
+  unfinished scope of this storage experiment. **Additive (green).** [dep: S9d]
+- **S9g — repository verification and closeout.** **Done 2026-09-02.** Both extracted branches are
+  rooted directly at upstream main commit `4053d820054302c13c7598f619c6ab810c063a3f` and have no
+  storage dependency. The depiction branch contains no experimental or `umol-store` path; the
+  experimental branch contains no CoordGen, depiction, DuckDB, Parquet, notebook, or `umol-store`
+  dependency. Its two crates are standalone `publish = false` workspaces excluded from the root
+  workspace, and Cargo lockfiles are no longer generally ignored.
 
-**S9 gate:** `umol-store` and every storage-only consumer are absent, both experimental crates and
-their retained scientific work are green, the depiction and Python SVG surfaces are clean and
-verified, and doc 201 preserves the useful approach and negative evidence without leaving an
-unowned storage stub.
+  Post-split verification passed the default and `proptest` suites plus strict all-target Clippy in
+  both experimental crates; the CoordGen ABI tests; `umol-io` with CoordGen, including the layout
+  suite; Rust tests and strict Clippy for the depiction-enabled Python binding; the Python 3.13
+  pytest suite with depiction enabled; local packaging of `umol-coordgen-sys`; formatting; and
+  `git diff --check`. The original combined branch remains archival working state rather than a
+  merge dependency. The first crates.io publication of `umol-coordgen-sys` is a separate release
+  operation required before trusted publishing can manage later releases; it is not a completion
+  condition for this experiment. **Additive (green).** [dep: S9e, S9f]
+
+**S9 gate:** satisfied. `umol-store` and every storage-only consumer are absent, both experimental
+crates and their retained scientific work are green, the retained depiction and Python SVG
+surfaces are reconciled and verified, and this document preserves the useful approach and negative
+evidence without leaving an unowned storage stub.
 
 ### Dependency summary
 
 The storage branch is `S0 -> S1 -> S2 -> S3`, after which the atom-mapping path reaches S6 and
 continues in doc 205. S7 records the first layout evidence; S8 reuses the molecule record and Arrow
 path in a database-backed generation and deduplication experiment; both terminate in the S9 branch
-split. The depiction branch receives its retained-surface cleanup in S9f. The independent
+split. The depiction branch receives its retained-surface reconciliation in S9f. The independent
 experimental branch preserves the mapping and network work without Store or depiction. The
 reaction-template counterexample is deferred rather than a dependency of this experiment.
 
