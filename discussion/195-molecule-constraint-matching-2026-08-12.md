@@ -4,6 +4,7 @@ Status: Proposed
 Date: 2026-08-12
 Relates: [128](128-substructure-derived-predicates-2026-06-23.md),
 [165](165-ast-api-worklist-2026-07-27.md),
+[166](166-molecule-ops-2026-07-27.md),
 [193](193-subpattern-constraints-2026-08-09.md),
 [194](194-constraint-assertion-semantics-2026-08-10.md)
 
@@ -37,6 +38,17 @@ its LHS); `apply_at` with a supplied correspondence is ungated. Six tests exerci
   `test_reaction_apply_iteration_error`, `test_molecule_react_iteration_error`.
 
 ## Scope
+
+### Adjacent validation work
+
+Doc 166's additive hydrogen and entity-field work excludes new or revised
+validation semantics for molecule-level constraints. That deferred work
+includes the local domain and physical validity of
+`UnpairedElectronCoupling` targets and the treatment of those targets inside
+logical constraint trees. Existing behavior is unchanged. Settle that work
+with the molecule-level constraint surface rather than extending an entity
+validator or the 0.7.1 scope. This note records the ownership boundary; it does
+not add an implementation plan here.
 
 Note (2026-08-13): matching keeps the open-world reading of the asserted side — a pattern
 constrains only what it mentions, and the absence of a constraint on a pattern entity means
