@@ -27,6 +27,9 @@ the statuses recorded here remain authoritative.
 
 ## Current frontier
 
+- [201 — Molecular data: scope and first experiments](201-molecular-data-first-steps-2026-08-19.md)
+  now retains only the depiction branch. SVG cleanup, final verification, and
+  the manual first publication of `umol-coordgen-sys` remain before closeout.
 - Docs 164–168 consolidate the remaining work from historic docs 086, 104, and
   105 into area-specific proposed worklists.
 - [202 — Release follow-ups](202-release-followups-2026-08-19.md) tracks the
@@ -241,11 +244,11 @@ the statuses recorded here remain authoritative.
 | [198-resolver-performance-2026-08-17.md](198-resolver-performance-2026-08-17.md)                                 | In Progress   | 2026-08-18   | Linear aromatic merging removes the quadratic tail; phase lifecycle, valence, and cycle-analysis follow-ups remain. |
 | [199-open-container-integrity-2026-08-18.md](199-open-container-integrity-2026-08-18.md)                         | Proposed      | 2026-08-18   | The checked `Molecule::apply` failure boundary is settled; broader open-container and finalization semantics remain. |
 | [200-molecular-data-substrate-2026-08-19.md](200-molecular-data-substrate-2026-08-19.md)                         | Informational | 2026-08-19   | Molecular data substrate: template libraries, reaction networks, binary and columnar forms, query, geometry, ontology, and notebooks. |
-| [201-molecular-data-first-steps-2026-08-19.md](201-molecular-data-first-steps-2026-08-19.md)                     | In Progress   | 2026-08-22   | S6 is complete; S7 is deferred pending doc 205 corpus experience. The temporary Python storage bridge awaits disposition; S8 remains. |
+| [201-molecular-data-first-steps-2026-08-19.md](201-molecular-data-first-steps-2026-08-19.md)                     | In Progress   | 2026-09-02   | S9f-S9g: depiction cleanup, first CoordGen publication, verification, and closeout remain.                  |
 | [202-release-followups-2026-08-19.md](202-release-followups-2026-08-19.md)                                       | Proposed      | 2026-08-19   | Validate crates.io OIDC live, review CI runtime and docs.rs, publish Python docs, and update the arXiv link. |
 | [203-atom-mapping-2026-08-19.md](203-atom-mapping-2026-08-19.md)                                                 | Completed     | 2026-08-20   |                                                                                                            |
 | [204-reaction-application-redesign-2026-08-19.md](204-reaction-application-redesign-2026-08-19.md)               | Proposed      | 2026-08-19   | Redesign the application result and decide whether `ReactionDerivation` remains, changes, or is removed.   |
-| [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | Proposed      | 2026-08-31   | QRS population, rule-domain, aromatic/stereo, literature/formulation, and pre-annotation design remain.    |
+| [205-mapping-test-corpus-2026-08-20.md](205-mapping-test-corpus-2026-08-20.md)                                   | In Progress   | 2026-09-02   | Population, algorithm work, and the annotation application remain.                                        |
 | [206-umol-perm-review-2026-08-21.md](206-umol-perm-review-2026-08-21.md)                                         | Completed     | 2026-08-31   | Both review cycles implemented; the OpenSMILES arrangement verification moved to doc 153 T9.               |
 | [207-reaction-network-spike-2026-08-24.md](207-reaction-network-spike-2026-08-24.md)                             | Completed     | 2026-08-31   |                                                                                                            |
 | [208-canonicalization-scaling-2026-08-24.md](208-canonicalization-scaling-2026-08-24.md)                         | Completed     | 2026-08-30   |                                                                                                            |
