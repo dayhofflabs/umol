@@ -89,7 +89,7 @@ impl Reaction {
         py: Python<'_>,
         layout_algorithm: MoleculeLayoutAlgorithm,
     ) -> PyResult<Svg> {
-        self.to_rust(py)
+        self.to_rust(py)?
             .depict_with(layout_algorithm.to_rust())
             .map(|depiction| Svg::from_rust(&depiction))
             .map_err(reaction_depiction_error)

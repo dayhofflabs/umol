@@ -3,6 +3,7 @@ members = [
     "umol-graph-ir",
     "umol-graph-ir-macros",
     "umol-chem",
+    "umol-coordgen-sys",
     "umol-utils",
     "umol-edn",
     "umol-edn-macros",

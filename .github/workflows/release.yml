@@ -175,6 +175,7 @@ jobs:
           }
 
           publish_crate umol-edn-macros
+          publish_crate umol-coordgen-sys
           publish_crate umol-geometric-core
           publish_crate umol-graph-ir-macros
           publish_crate umol-msym-sys

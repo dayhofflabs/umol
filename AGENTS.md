@@ -10,6 +10,8 @@ representations and operations, with Python bindings in `umol-py`.
   algorithms.
 - `umol-graph` provides chemistry-aware operations over the graph-IR model.
 - `umol-io` owns external-format boundary representations and parsers.
+- `umol-coordgen-sys` provides the vendored native boundary for feature-gated
+  2D coordinate generation.
 - `umol-geometric*` provides geometric representations and their connection to
   the graph model.
 - `umol-py` exposes the supported high-level surface to Python.

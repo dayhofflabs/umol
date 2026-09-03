@@ -1,3 +1,4 @@
 # Preserve vendored upstream source snapshots verbatim.
 umol-msym-sys/libmsym/** -whitespace
 umol-nauty-sys/nauty/** -whitespace
+umol-coordgen-sys/coordgen/** -whitespace
