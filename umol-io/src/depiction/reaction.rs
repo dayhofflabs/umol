@@ -298,10 +298,6 @@ fn translate_item(mut item: DepictionItem, offset: Point2D, side: ReactionSide) 
             item.position = translate(item.position, offset);
             &mut item.references
         }
-        DepictionItem::Marker(item) => {
-            item.position = translate(item.position, offset);
-            &mut item.references
-        }
         DepictionItem::Arrow(item) => {
             item.start = translate(item.start, offset);
             item.end = translate(item.end, offset);

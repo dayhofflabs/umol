@@ -549,18 +549,18 @@ Python 3.13 environment, the rebuilt focused Python depiction tests, and
 
 ### S4 — Aromatic-system contours and annotations
 
-- **S4a — Outer-face extraction** `[dep: S0]`: build the explicit system's induced edge geometry,
+- [x] **S4a — Outer-face extraction** `[dep: S0]`: build the explicit system's induced edge geometry,
   reject segment crossings and degenerate rotations, sort incident half-edges by angle, walk all
   faces, select the unbounded face by signed area, and offset it inward. Treat a system with no
   degree-two member in its induced graph as cage-like for this first cut, so C60 is omitted rather
   than decorated as one apparent ring. Emit one closed `DashedContourItem` or no item; never fall
   back to atom/bond dots, ring circles, or a Kekule assignment.
-- **S4b — System annotations** `[dep: S4a, S2]`: render literal aromatic-system charge and unpaired
+- [x] **S4b — System annotations** `[dep: S4a, S2]`: render literal aromatic-system charge and unpaired
   electrons as text anchored first at the unweighted member centroid, moved through a fixed
   deterministic set of clear interior candidates, then to the upper-right exterior fallback.
   Atom-local radicals remain attached to atom labels or skeleton vertices. Nonliteral system fields
   are omitted individually.
-- **S4c — Aromatic fixtures and marker removal** `[dep: S4a, S4b]`: cover a single ring, fused rings,
+- [x] **S4c — Aromatic fixtures and marker removal** `[dep: S4a, S4b]`: cover a single ring, fused rings,
   multiple disjoint systems, concave and crossed layouts, and the C60 conformance molecule as a
   stress case. Remove aromatic marker production, omit local aromatic assertions, then remove
   `MarkerItem`, `MarkerKind`, and `DepictionItem::Marker` after all Rust, reaction, SVG, and Python
@@ -568,6 +568,37 @@ Python 3.13 environment, the rebuilt focused Python depiction tests, and
 
 S4 is green when trustworthy systems receive exactly one referenced contour, unsuitable systems
 receive none, and no generic marker API or marker-shaped aromatic/stereo output remains.
+
+S4 completed on 2026-09-03. Molecule lowering now builds the induced geometry of each explicit
+aromatic system, rejects disconnected, crossed, degenerate, self-intersecting, and cage-like
+projections, walks the angularly ordered half-edge embedding, selects its clockwise unbounded face,
+and offsets that boundary inward. A suitable system emits exactly one closed
+`DashedContourItem` carrying only its `AromaticSystemId`; an unsuitable system emits no aromatic
+decoration. The no-degree-two-member rule deliberately omits the 60-atom, 90-bond C60 conformance
+fixture rather than showing one apparent projected ring.
+
+Literal system charge and unpaired-electron count are extracted independently and appended with the
+same sign, magnitude, and radical-dot convention as atom labels. The unweighted member centroid is
+used when clear; otherwise lowering checks a fixed nearest-first set of interior candidates before
+using the fixed upper-right exterior fallback. An unsuitable contour receives no system annotation.
+Exact fixtures cover a single ring, fused rings with an internal fusion bond, two disjoint systems,
+a concave boundary, crossed and degenerate layouts, the exterior annotation fallback, and C60.
+Atom- and bond-local aromatic assertions are omitted.
+
+The settled breaking cleanup removed `MarkerItem`, `MarkerKind`, and `DepictionItem::Marker` after
+their molecule, reaction, bounds/reference, and SVG consumers were removed. No replacement public
+type, constructor, configuration, Python scene API, or failure variant was added; `Depiction`
+remains operation-issued. The fused fixture fell from 32 items in S3 to 12 items in S4 and the
+focused SVG rerun measured:
+
+| SVG case | S4 time, 95% interval | Change from recorded S3 interval |
+| --- | ---: | ---: |
+| representative/fused_aromatic | 3.718–3.762 us | approximately -54.3% to -53.2% |
+
+Command: `cargo bench -p umol-io --bench svg -- fused_aromatic --noplot`. Verification used
+`cargo test -p umol-io --features coordgen -q`,
+`cargo clippy -p umol-io --all-targets --features coordgen -- -D warnings`,
+`cargo +nightly fmt --all -- --check`, and `git diff --check`.
 
 ### S5 — Integrated verification and closeout
 

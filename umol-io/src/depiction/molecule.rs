@@ -7,31 +7,39 @@ use thiserror::Error;
 use umol_chem::element::Element;
 use umol_geometric_core::{complementary_direction, signed_volume, Point2D, Point3D};
 use umol_graph_ir::ir::{
-    AsLit, AtomId, AtomView, BondId, Entity, IsotopeMass, Molecule, StereoAtomId, StereoAtomView,
-    StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
+    AromaticSystemView, AsLit, AtomId, AtomView, BondId, Entity, IsotopeMass, Molecule,
+    StereoAtomId, StereoAtomView, StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
 use umol_utils::error::UmolError;
 
 #[cfg(feature = "coordgen")]
 use super::Depict;
 use super::{
-    AtomItem, BondItem, Depiction, DepictionItem, DepictionReference, MarkerItem, MarkerKind,
+    AtomItem, BondItem, DashedContourItem, Depiction, DepictionItem, DepictionReference, TextItem,
     WedgeItem, WedgeKind,
 };
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
 use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
+const AROMATIC_CONTOUR_OFFSET: f64 = 0.18;
+const AROMATIC_ANNOTATION_CLEARANCE: f64 = 0.28;
+const AROMATIC_ANNOTATION_STEP: f64 = 0.35;
+const AROMATIC_ANNOTATION_EXTERIOR_OFFSET: f64 = 0.35;
+const GEOMETRY_EPSILON: f64 = 1.0e-9;
+const MAX_CONTOUR_MITER: f64 = 4.0;
+
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
 ///
-/// Localized bonds and selected tetrahedral wedges are followed by visible atom labels and
-/// aromatic markers, with each group ordered by graph-IR id. Carbon labels are omitted at
-/// non-isolated skeleton vertices unless an isotope, charge, or radical count decorates the atom.
-/// Aromatic markers project both aromatic-system membership and definite aromatic atom or bond
-/// constraints. Definite cis/trans stereo is carried by the supplied coordinates. Nonliteral
-/// projected fields and unsupported overlays, stereo kinds, or constraints are omitted. The first
+/// Localized bonds and selected tetrahedral wedges are followed by visible atom labels, then one
+/// trustworthy outer contour and any literal system annotation for each explicit aromatic system;
+/// each group is ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton
+/// vertices unless an isotope, charge, or radical count decorates the atom. Definite cis/trans
+/// stereo is carried by the supplied coordinates. Nonliteral projected fields and unsupported
+/// overlays, stereo kinds, local aromatic assertions, or constraints are omitted. The first
 /// projection does not represent dative, multicenter, or noncovalent bonds, unprojected inherent
-/// fields, or unsupported constraints.
+/// fields, or unsupported constraints. Crossed, degenerate, self-intersecting, and cage-like
+/// aromatic projections receive no contour or system annotation.
 ///
 /// # Errors
 ///
@@ -93,46 +101,15 @@ pub fn depict(
         }));
     }
 
-    for atom in molecule.atoms().iter() {
-        let system = atom.aromatic_system_id();
-        let asserted = atom
-            .constraints()
-            .aromatic_valence()
-            .is_some_and(|value| value.is_aromatic());
-        if system.is_none() && !asserted {
+    for system in molecule.aromatic_systems().iter() {
+        let Some(contour) = aromatic_contour(molecule, layout, system) else {
             continue;
+        };
+        let annotation = aromatic_annotation(molecule, layout, system, &contour.points);
+        items.push(DepictionItem::DashedContour(contour));
+        if let Some(annotation) = annotation {
+            items.push(DepictionItem::Text(annotation));
         }
-
-        let mut references = Vec::with_capacity(2);
-        if let Some(system) = system {
-            references.push(DepictionReference::Molecule(Entity::AromaticSystem(system)));
-        }
-        references.push(DepictionReference::Molecule(Entity::Atom(atom.id)));
-        items.push(DepictionItem::Marker(MarkerItem {
-            position: position(layout, atom.id),
-            kind: MarkerKind::Aromatic,
-            references,
-        }));
-    }
-
-    for bond in molecule.bonds().iter() {
-        let system = bond.aromatic_system().map(|system| system.id);
-        let asserted = bond.constraints().aromatic().as_lit() == Some(true);
-        if system.is_none() && !asserted {
-            continue;
-        }
-
-        let [first, second] = bond.atom_ids();
-        let mut references = Vec::with_capacity(2);
-        if let Some(system) = system {
-            references.push(DepictionReference::Molecule(Entity::AromaticSystem(system)));
-        }
-        references.push(DepictionReference::Molecule(Entity::Bond(bond.id)));
-        items.push(DepictionItem::Marker(MarkerItem {
-            position: midpoint(position(layout, first), position(layout, second)),
-            kind: MarkerKind::Aromatic,
-            references,
-        }));
     }
 
     Ok(Depiction::from_items(items))
@@ -414,19 +391,7 @@ fn atom_label(atom: AtomView<'_>) -> Option<String> {
         }
     }
 
-    if let Some(charge) = charge {
-        let magnitude = charge.unsigned_abs();
-        if magnitude != 1 {
-            write!(label, "{magnitude}").expect("writing to a String cannot fail");
-        }
-        label.push(if charge > 0 { '+' } else { '-' });
-    }
-
-    if let Some(count) = unpaired_electrons {
-        for _ in 0..count {
-            label.push('•');
-        }
-    }
+    append_charge_and_unpaired(&mut label, charge, unpaired_electrons);
 
     Some(label)
 }
@@ -441,16 +406,545 @@ fn midpoint(first: Point2D, second: Point2D) -> Point2D {
     Point2D::new((first.x + second.x) / 2.0, (first.y + second.y) / 2.0)
 }
 
+fn aromatic_contour(
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+    system: AromaticSystemView<'_>,
+) -> Option<DashedContourItem> {
+    let atoms = system.atom_ids().collect::<Vec<_>>();
+    if atoms.len() < 3 {
+        return None;
+    }
+
+    let mut member_indices = vec![None; molecule.atoms().count()];
+    for (member_index, atom) in atoms.iter().copied().enumerate() {
+        member_indices[atom.index()] = Some(member_index);
+    }
+
+    let mut edges = Vec::new();
+    let mut adjacency = vec![Vec::new(); atoms.len()];
+    for bond in system.bonds() {
+        let [first, second] = bond.atom_ids();
+        let first = member_indices[first.index()]?;
+        let second = member_indices[second.index()]?;
+        if first == second {
+            return None;
+        }
+        edges.push((first, second));
+        adjacency[first].push(second);
+        adjacency[second].push(first);
+    }
+
+    if adjacency.iter().any(|neighbors| neighbors.len() < 2)
+        || adjacency.iter().all(|neighbors| neighbors.len() != 2)
+        || !is_connected(&adjacency)
+    {
+        return None;
+    }
+
+    let positions = atoms
+        .iter()
+        .map(|&atom| position(layout, atom))
+        .collect::<Vec<_>>();
+    if edges_cross(&edges, &positions) {
+        return None;
+    }
+    for (site, neighbors) in adjacency.iter_mut().enumerate() {
+        neighbors.sort_by(|&first, &second| {
+            direction_angle(positions[site], positions[first])
+                .total_cmp(&direction_angle(positions[site], positions[second]))
+        });
+        if degenerate_rotation(site, neighbors, &positions) {
+            return None;
+        }
+    }
+
+    let faces = walk_faces(&adjacency)?;
+    let outer = faces
+        .into_iter()
+        .map(|face| {
+            let area = signed_area_indices(&face, &positions);
+            (area, face)
+        })
+        .filter(|(area, _)| *area < -GEOMETRY_EPSILON)
+        .min_by(|(first, _), (second, _)| first.total_cmp(second))?
+        .1;
+    let outer = simplify_boundary(outer, &positions)?;
+    let boundary = outer
+        .iter()
+        .map(|&member| positions[member])
+        .collect::<Vec<_>>();
+    let points = offset_clockwise_boundary(&boundary)?;
+
+    Some(DashedContourItem {
+        points,
+        closed: true,
+        references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+            system.id,
+        ))],
+    })
+}
+
+fn aromatic_annotation(
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+    system: AromaticSystemView<'_>,
+    contour: &[Point2D],
+) -> Option<TextItem> {
+    let charge = system.charge().as_lit().filter(|&charge| charge != 0);
+    let unpaired_electrons = system
+        .unpaired_electrons()
+        .count
+        .as_lit()
+        .filter(|&count| count > 0);
+    if charge.is_none() && unpaired_electrons.is_none() {
+        return None;
+    }
+
+    let member_positions = system
+        .atom_ids()
+        .map(|atom| position(layout, atom))
+        .collect::<Vec<_>>();
+    let centroid = scale(
+        member_positions
+            .iter()
+            .copied()
+            .fold(Point2D::new(0.0, 0.0), add),
+        1.0 / member_positions.len() as f64,
+    );
+    let position = annotation_candidates(centroid)
+        .into_iter()
+        .find(|&candidate| {
+            point_in_polygon(candidate, contour)
+                && annotation_position_is_clear(candidate, molecule, layout, contour)
+        })
+        .unwrap_or_else(|| {
+            let max_x = contour
+                .iter()
+                .map(|point| point.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let max_y = contour
+                .iter()
+                .map(|point| point.y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            Point2D::new(
+                max_x + AROMATIC_ANNOTATION_EXTERIOR_OFFSET,
+                max_y + AROMATIC_ANNOTATION_EXTERIOR_OFFSET,
+            )
+        });
+
+    let mut text = String::new();
+    append_charge_and_unpaired(&mut text, charge, unpaired_electrons);
+    Some(TextItem {
+        position,
+        text,
+        references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+            system.id,
+        ))],
+    })
+}
+
+fn append_charge_and_unpaired(
+    output: &mut String,
+    charge: Option<i64>,
+    unpaired_electrons: Option<i64>,
+) {
+    if let Some(charge) = charge {
+        let magnitude = charge.unsigned_abs();
+        if magnitude != 1 {
+            write!(output, "{magnitude}").expect("writing to a String cannot fail");
+        }
+        output.push(if charge > 0 { '+' } else { '-' });
+    }
+    if let Some(count) = unpaired_electrons {
+        for _ in 0..count {
+            output.push('•');
+        }
+    }
+}
+
+fn annotation_candidates(centroid: Point2D) -> Vec<Point2D> {
+    const OFFSETS: [(i8, i8); 17] = [
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (0, -1),
+        (-1, 0),
+        (1, 1),
+        (1, -1),
+        (-1, -1),
+        (-1, 1),
+        (0, 2),
+        (2, 0),
+        (0, -2),
+        (-2, 0),
+        (2, 2),
+        (2, -2),
+        (-2, -2),
+        (-2, 2),
+    ];
+    OFFSETS
+        .into_iter()
+        .map(|(x, y)| {
+            Point2D::new(
+                centroid.x + f64::from(x) * AROMATIC_ANNOTATION_STEP,
+                centroid.y + f64::from(y) * AROMATIC_ANNOTATION_STEP,
+            )
+        })
+        .collect()
+}
+
+fn annotation_position_is_clear(
+    candidate: Point2D,
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+    contour: &[Point2D],
+) -> bool {
+    let clearance_squared = AROMATIC_ANNOTATION_CLEARANCE.powi(2);
+    if molecule.atoms().iter().any(|atom| {
+        squared_length(difference(candidate, position(layout, atom.id))) < clearance_squared
+    }) {
+        return false;
+    }
+    if molecule.bonds().iter().any(|bond| {
+        let [first, second] = bond.atom_ids();
+        squared_distance_to_segment(candidate, position(layout, first), position(layout, second))
+            < clearance_squared
+    }) {
+        return false;
+    }
+    !(0..contour.len()).any(|index| {
+        squared_distance_to_segment(
+            candidate,
+            contour[index],
+            contour[(index + 1) % contour.len()],
+        ) < clearance_squared
+    })
+}
+
+fn squared_distance_to_segment(point: Point2D, start: Point2D, end: Point2D) -> f64 {
+    let segment = difference(end, start);
+    let length_squared = squared_length(segment);
+    if length_squared <= GEOMETRY_EPSILON {
+        return squared_length(difference(point, start));
+    }
+    let projection = (dot(difference(point, start), segment) / length_squared).clamp(0.0, 1.0);
+    squared_length(difference(point, add(start, scale(segment, projection))))
+}
+
+fn is_connected(adjacency: &[Vec<usize>]) -> bool {
+    let mut visited = vec![false; adjacency.len()];
+    let mut pending = vec![0];
+    visited[0] = true;
+    while let Some(site) = pending.pop() {
+        for &neighbor in &adjacency[site] {
+            if !visited[neighbor] {
+                visited[neighbor] = true;
+                pending.push(neighbor);
+            }
+        }
+    }
+    visited.into_iter().all(|is_visited| is_visited)
+}
+
+fn direction_angle(origin: Point2D, target: Point2D) -> f64 {
+    (target.y - origin.y).atan2(target.x - origin.x)
+}
+
+fn degenerate_rotation(site: usize, neighbors: &[usize], positions: &[Point2D]) -> bool {
+    neighbors.iter().enumerate().any(|(index, &first)| {
+        let second = neighbors[(index + 1) % neighbors.len()];
+        same_direction(positions[site], positions[first], positions[second])
+    })
+}
+
+fn same_direction(origin: Point2D, first: Point2D, second: Point2D) -> bool {
+    let first = difference(first, origin);
+    let second = difference(second, origin);
+    let first_length = squared_length(first);
+    let second_length = squared_length(second);
+    if first_length <= GEOMETRY_EPSILON || second_length <= GEOMETRY_EPSILON {
+        return true;
+    }
+    cross(first, second).abs() <= GEOMETRY_EPSILON * first_length.sqrt() * second_length.sqrt()
+        && dot(first, second) > 0.0
+}
+
+fn edges_cross(edges: &[(usize, usize)], positions: &[Point2D]) -> bool {
+    edges.iter().enumerate().any(|(index, &(a, b))| {
+        edges[index + 1..].iter().any(|&(c, d)| {
+            a != c
+                && a != d
+                && b != c
+                && b != d
+                && segments_intersect(positions[a], positions[b], positions[c], positions[d])
+        })
+    })
+}
+
+fn segments_intersect(a: Point2D, b: Point2D, c: Point2D, d: Point2D) -> bool {
+    let ab_c = orientation(a, b, c);
+    let ab_d = orientation(a, b, d);
+    let cd_a = orientation(c, d, a);
+    let cd_b = orientation(c, d, b);
+    (opposite_signs(ab_c, ab_d) && opposite_signs(cd_a, cd_b))
+        || (ab_c.abs() <= GEOMETRY_EPSILON && point_on_segment(c, a, b))
+        || (ab_d.abs() <= GEOMETRY_EPSILON && point_on_segment(d, a, b))
+        || (cd_a.abs() <= GEOMETRY_EPSILON && point_on_segment(a, c, d))
+        || (cd_b.abs() <= GEOMETRY_EPSILON && point_on_segment(b, c, d))
+}
+
+fn opposite_signs(first: f64, second: f64) -> bool {
+    (first > GEOMETRY_EPSILON && second < -GEOMETRY_EPSILON)
+        || (first < -GEOMETRY_EPSILON && second > GEOMETRY_EPSILON)
+}
+
+fn point_on_segment(point: Point2D, start: Point2D, end: Point2D) -> bool {
+    point.x >= start.x.min(end.x) - GEOMETRY_EPSILON
+        && point.x <= start.x.max(end.x) + GEOMETRY_EPSILON
+        && point.y >= start.y.min(end.y) - GEOMETRY_EPSILON
+        && point.y <= start.y.max(end.y) + GEOMETRY_EPSILON
+}
+
+fn orientation(first: Point2D, second: Point2D, third: Point2D) -> f64 {
+    cross(difference(second, first), difference(third, first))
+}
+
+fn walk_faces(adjacency: &[Vec<usize>]) -> Option<Vec<Vec<usize>>> {
+    let mut visited = adjacency
+        .iter()
+        .map(|neighbors| vec![false; neighbors.len()])
+        .collect::<Vec<_>>();
+    let directed_edge_count = adjacency.iter().map(Vec::len).sum::<usize>();
+    let mut faces = Vec::new();
+
+    for first in 0..adjacency.len() {
+        for (second_position, &second) in adjacency[first].iter().enumerate() {
+            if visited[first][second_position] {
+                continue;
+            }
+            let start = (first, second);
+            let mut edge = start;
+            let mut face = Vec::new();
+            loop {
+                let outgoing = adjacency[edge.0]
+                    .iter()
+                    .position(|&neighbor| neighbor == edge.1)?;
+                if visited[edge.0][outgoing] {
+                    return None;
+                }
+                visited[edge.0][outgoing] = true;
+                face.push(edge.0);
+                let incoming = adjacency[edge.1]
+                    .iter()
+                    .position(|&neighbor| neighbor == edge.0)?;
+                let next = adjacency[edge.1]
+                    [(incoming + adjacency[edge.1].len() - 1) % adjacency[edge.1].len()];
+                edge = (edge.1, next);
+                if edge == start {
+                    break;
+                }
+                if face.len() > directed_edge_count {
+                    return None;
+                }
+            }
+            let mut distinct = face.clone();
+            distinct.sort_unstable();
+            distinct.dedup();
+            if face.len() < 3 || distinct.len() != face.len() {
+                return None;
+            }
+            faces.push(face);
+        }
+    }
+    Some(faces)
+}
+
+fn signed_area_indices(indices: &[usize], positions: &[Point2D]) -> f64 {
+    let points = indices
+        .iter()
+        .map(|&index| positions[index])
+        .collect::<Vec<_>>();
+    signed_area(&points)
+}
+
+fn simplify_boundary(mut boundary: Vec<usize>, positions: &[Point2D]) -> Option<Vec<usize>> {
+    loop {
+        if boundary.len() < 3 {
+            return None;
+        }
+        let removable = (0..boundary.len()).find(|&index| {
+            let previous = positions[boundary[(index + boundary.len() - 1) % boundary.len()]];
+            let current = positions[boundary[index]];
+            let next = positions[boundary[(index + 1) % boundary.len()]];
+            let incoming = difference(current, previous);
+            let outgoing = difference(next, current);
+            cross(incoming, outgoing).abs() <= GEOMETRY_EPSILON && dot(incoming, outgoing) > 0.0
+        });
+        let Some(index) = removable else {
+            break;
+        };
+        boundary.remove(index);
+    }
+
+    if signed_area_indices(&boundary, positions) >= -GEOMETRY_EPSILON {
+        return None;
+    }
+    let first = boundary
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, member)| **member)
+        .map(|(index, _)| index)?;
+    boundary.rotate_left(first);
+    Some(boundary)
+}
+
+fn offset_clockwise_boundary(boundary: &[Point2D]) -> Option<Vec<Point2D>> {
+    let mut points = Vec::with_capacity(boundary.len());
+    for index in 0..boundary.len() {
+        let previous = boundary[(index + boundary.len() - 1) % boundary.len()];
+        let current = boundary[index];
+        let next = boundary[(index + 1) % boundary.len()];
+        let incoming = unit(difference(current, previous))?;
+        let outgoing = unit(difference(next, current))?;
+        let incoming_anchor = add(
+            current,
+            scale(right_normal(incoming), AROMATIC_CONTOUR_OFFSET),
+        );
+        let outgoing_anchor = add(
+            current,
+            scale(right_normal(outgoing), AROMATIC_CONTOUR_OFFSET),
+        );
+        let offset = line_intersection(incoming_anchor, incoming, outgoing_anchor, outgoing)?;
+        if squared_length(difference(offset, current)).sqrt()
+            > MAX_CONTOUR_MITER * AROMATIC_CONTOUR_OFFSET
+        {
+            return None;
+        }
+        points.push(offset);
+    }
+
+    if signed_area(&points) >= -GEOMETRY_EPSILON || polygon_self_intersects(&points) {
+        return None;
+    }
+    for index in 0..points.len() {
+        let midpoint = midpoint(points[index], points[(index + 1) % points.len()]);
+        if !point_in_polygon(points[index], boundary) || !point_in_polygon(midpoint, boundary) {
+            return None;
+        }
+    }
+    Some(points)
+}
+
+fn polygon_self_intersects(points: &[Point2D]) -> bool {
+    (0..points.len()).any(|first| {
+        let first_next = (first + 1) % points.len();
+        ((first + 1)..points.len()).any(|second| {
+            let second_next = (second + 1) % points.len();
+            first != second_next
+                && first_next != second
+                && segments_intersect(
+                    points[first],
+                    points[first_next],
+                    points[second],
+                    points[second_next],
+                )
+        })
+    })
+}
+
+fn point_in_polygon(point: Point2D, polygon: &[Point2D]) -> bool {
+    let mut inside = false;
+    for index in 0..polygon.len() {
+        let first = polygon[index];
+        let second = polygon[(index + 1) % polygon.len()];
+        if orientation(first, second, point).abs() <= GEOMETRY_EPSILON
+            && point_on_segment(point, first, second)
+        {
+            return true;
+        }
+        if (first.y > point.y) != (second.y > point.y) {
+            let x = (second.x - first.x) * (point.y - first.y) / (second.y - first.y) + first.x;
+            if point.x < x {
+                inside = !inside;
+            }
+        }
+    }
+    inside
+}
+
+fn signed_area(points: &[Point2D]) -> f64 {
+    points
+        .iter()
+        .enumerate()
+        .map(|(index, &point)| {
+            let next = points[(index + 1) % points.len()];
+            point.x * next.y - next.x * point.y
+        })
+        .sum::<f64>()
+        / 2.0
+}
+
+fn line_intersection(
+    first: Point2D,
+    first_direction: Point2D,
+    second: Point2D,
+    second_direction: Point2D,
+) -> Option<Point2D> {
+    let denominator = cross(first_direction, second_direction);
+    if denominator.abs() <= GEOMETRY_EPSILON {
+        return None;
+    }
+    let distance = cross(difference(second, first), second_direction) / denominator;
+    Some(add(first, scale(first_direction, distance)))
+}
+
+fn unit(vector: Point2D) -> Option<Point2D> {
+    let length = squared_length(vector).sqrt();
+    (length > GEOMETRY_EPSILON).then(|| scale(vector, 1.0 / length))
+}
+
+fn right_normal(vector: Point2D) -> Point2D {
+    Point2D::new(vector.y, -vector.x)
+}
+
+fn difference(first: Point2D, second: Point2D) -> Point2D {
+    Point2D::new(first.x - second.x, first.y - second.y)
+}
+
+fn add(first: Point2D, second: Point2D) -> Point2D {
+    Point2D::new(first.x + second.x, first.y + second.y)
+}
+
+fn scale(vector: Point2D, factor: f64) -> Point2D {
+    Point2D::new(vector.x * factor, vector.y * factor)
+}
+
+fn dot(first: Point2D, second: Point2D) -> f64 {
+    first.x * second.x + first.y * second.y
+}
+
+fn cross(first: Point2D, second: Point2D) -> f64 {
+    first.x * second.y - first.y * second.x
+}
+
+fn squared_length(vector: Point2D) -> f64 {
+    dot(vector, vector)
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, StereoAtomId};
+    use umol_graph_ir::ir::{
+        AromaticSystemForm, AromaticSystemId, AtomId, BondId, ElectronCountsForm, StereoAtomId,
+        TryIntoIr,
+    };
     use umol_graph_ir::mol_dsl;
 
     use super::*;
+    use crate::depiction::Bounds;
     #[cfg(feature = "coordgen")]
     use crate::depiction::Depict;
-    use crate::depiction::{Bounds, MarkerItem};
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
@@ -696,100 +1190,325 @@ mod tests {
     }
 
     #[rstest]
-    #[case::constraint_only(
-        r#"{:atoms ["C#a+" "C#a+"] :bonds [[0 1 "1#a"]]}"#,
-        vec![
-            MarkerItem {
-                position: Point2D::new(0.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(0)))],
+    fn test_depict_single_aromatic_system_contour() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3] :attrs "*"}]}"#
+        );
+        let layout = layout(&[[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        let contours = contours(&depiction);
+        let [contour] = contours.as_slice() else {
+            panic!("expected exactly one aromatic-system contour");
+        };
+        assert_points_close(
+            &contour.points,
+            &[
+                Point2D::new(-0.82, -0.82),
+                Point2D::new(-0.82, 0.82),
+                Point2D::new(0.82, 0.82),
+                Point2D::new(0.82, -0.82),
+            ],
+        );
+        assert!(contour.closed);
+        assert_eq!(
+            contour.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))]
+        );
+    }
+
+    #[rstest]
+    fn test_depict_multiple_aromatic_system_contours() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]
+                        [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 4 "1"]]
+                :aromatic-systems [
+                    {:atoms [0 1 2 3] :attrs "*"}
+                    {:atoms [4 5 6 7] :attrs "*"}]}"#
+        );
+        let layout = layout(&[
+            [-3.0, -1.0],
+            [-1.0, -1.0],
+            [-1.0, 1.0],
+            [-3.0, 1.0],
+            [1.0, -1.0],
+            [3.0, -1.0],
+            [3.0, 1.0],
+            [1.0, 1.0],
+        ]);
+
+        let contours = contours(&depict(&molecule, &layout).unwrap());
+        let [first, second] = contours.as_slice() else {
+            panic!("expected one contour for each aromatic system");
+        };
+
+        assert_points_close(
+            &first.points,
+            &[
+                Point2D::new(-2.82, -0.82),
+                Point2D::new(-2.82, 0.82),
+                Point2D::new(-1.18, 0.82),
+                Point2D::new(-1.18, -0.82),
+            ],
+        );
+        assert_points_close(
+            &second.points,
+            &[
+                Point2D::new(1.18, -0.82),
+                Point2D::new(1.18, 0.82),
+                Point2D::new(2.82, 0.82),
+                Point2D::new(2.82, -0.82),
+            ],
+        );
+        assert_eq!([first.closed, second.closed], [true, true]);
+        assert_eq!(
+            first.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))]
+        );
+        assert_eq!(
+            second.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(1),
+            ))]
+        );
+    }
+
+    #[rstest]
+    fn test_depict_concave_aromatic_system_contour() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3 4] :attrs "*"}]}"#
+        );
+        let layout = layout(&[
+            [-2.0, -1.0],
+            [2.0, -1.0],
+            [2.0, 1.0],
+            [0.0, 0.0],
+            [-2.0, 1.0],
+        ]);
+
+        let contours = contours(&depict(&molecule, &layout).unwrap());
+        let [contour] = contours.as_slice() else {
+            panic!("expected exactly one concave aromatic-system contour");
+        };
+
+        assert_points_close(
+            &contour.points,
+            &[
+                Point2D::new(-1.82, -0.82),
+                Point2D::new(-1.82, 0.7087538820250189),
+                Point2D::new(0.0, -0.20124611797498107),
+                Point2D::new(1.82, 0.7087538820250189),
+                Point2D::new(1.82, -0.82),
+            ],
+        );
+        assert!(contour.closed);
+        assert_eq!(
+            contour.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))]
+        );
+    }
+
+    #[rstest]
+    #[case::crossed([[-1.0, -1.0], [1.0, 1.0], [-1.0, 1.0], [1.0, -1.0]])]
+    #[case::degenerate([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0]])]
+    fn test_depict_omits_untrustworthy_aromatic_contour(#[case] positions: [[f64; 2]; 4]) {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3] :attrs "*"}]}"#
+        );
+
+        let depiction = depict(&molecule, &layout(&positions)).unwrap();
+
+        assert_eq!(contours(&depiction), []);
+    }
+
+    #[rstest]
+    fn test_depict_omits_aromatic_system_without_degree_two_member() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]
+                        [1 2 "1"] [1 3 "1"] [2 3 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3] :attrs "*"}]}"#
+        );
+        let layout = layout(&[[0.0, 1.0], [-1.0, -1.0], [1.0, -1.0], [0.0, 0.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(contours(&depiction), []);
+    }
+
+    #[rstest]
+    fn test_depict_omits_c60_conformance_cage_contour() {
+        let source = include_str!("../../tests/mol_parsing/data/molecule/scifinder/99685-96-8.mol");
+        let table = crate::ctfile::parser::parse_mol_to_table_ir(source).unwrap();
+        let positions = table
+            .positions
+            .as_ref()
+            .expect("the C60 conformance molecule carries coordinates")
+            .iter()
+            .map(|point| Point2D::new(point.x, point.y))
+            .collect();
+        let layout = MoleculeLayout::try_new(positions).unwrap();
+        let molecule: Molecule = (&table).try_into_ir(&()).unwrap();
+        let mut editor = molecule.edit();
+        editor.add_aromatic_system(
+            (0..60).map(AtomId).collect(),
+            AromaticSystemForm {
+                electrons: ElectronCountsForm::Lit(vec![1; 60]),
+                ..Default::default()
             },
-            MarkerItem {
-                position: Point2D::new(2.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(1)))],
-            },
-            MarkerItem {
-                position: Point2D::new(1.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![DepictionReference::Molecule(Entity::Bond(BondId(0)))],
-            },
-        ]
-    )]
-    #[case::overlay_only(
-        r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :aromatic-systems [{:atoms [0 1] :attrs "*"}]}"#,
-        vec![
-            MarkerItem {
-                position: Point2D::new(0.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Atom(AtomId(0))),
-                ],
-            },
-            MarkerItem {
-                position: Point2D::new(2.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Atom(AtomId(1))),
-                ],
-            },
-            MarkerItem {
-                position: Point2D::new(1.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
-                ],
-            },
-        ]
-    )]
-    #[case::combined(
-        r#"{:atoms ["C#a+" "C#a+"] :bonds [[0 1 "1#a"]] :aromatic-systems [{:atoms [0 1] :attrs "*"}]}"#,
-        vec![
-            MarkerItem {
-                position: Point2D::new(0.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Atom(AtomId(0))),
-                ],
-            },
-            MarkerItem {
-                position: Point2D::new(2.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Atom(AtomId(1))),
-                ],
-            },
-            MarkerItem {
-                position: Point2D::new(1.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![
-                    DepictionReference::Molecule(Entity::AromaticSystem(AromaticSystemId(0))),
-                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
-                ],
-            },
-        ]
-    )]
-    #[case::nonaromatic(
-        r#"{:atoms ["C#a!" "C#a!"] :bonds [[0 1 "1#a!"]]}"#,
-        vec![]
-    )]
-    #[case::undetermined(
-        r#"{:atoms ["C#a*" "C#a*"] :bonds [[0 1 "1#a*"]]}"#,
-        vec![]
-    )]
-    fn test_depict_aromatic_projection(#[case] input: &str, #[case] expected: Vec<MarkerItem>) {
-        let molecule = mol_dsl!(input);
-        let layout = layout(&[[0.0, 0.0], [2.0, 0.0]]);
+        );
+        let molecule = editor.build();
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(molecule.atoms().count(), 60);
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).bond_count(),
+            90
+        );
+        assert_eq!(contours(&depiction), []);
+        assert_eq!(texts(&depiction), []);
+    }
+
+    #[rstest]
+    #[case::charge_and_radicals("*#c-#u2#s3", Some("-••"))]
+    #[case::literal_charge_nonliteral_radicals("*#c2#u*#s3", Some("2+"))]
+    #[case::nonliteral_charge_literal_radicals("*#c*#u2#s*", Some("••"))]
+    #[case::neutral_closed_shell("*#c0#u0#s1", None)]
+    #[case::both_nonliteral("*#c*#u*#s*", None)]
+    fn test_depict_aromatic_system_annotation_fields(
+        #[case] attributes: &str,
+        #[case] expected: Option<&str>,
+    ) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]
+                :aromatic-systems [{{:atoms [0 1 2 3] :attrs "{attributes}"}}]}}"#
+        ));
+        let layout = layout(&[[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+        let expected = expected.map(|text| TextItem {
+            position: Point2D::new(0.0, 0.0),
+            text: text.to_owned(),
+            references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))],
+        });
+
+        assert_eq!(texts(&depiction), expected.into_iter().collect::<Vec<_>>());
+    }
+
+    #[rstest]
+    fn test_depict_moves_aromatic_annotation_off_internal_fusion_bond() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"]
+                        [5 0 "1"] [2 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"]
+                        [9 3 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3 4 5 6 7 8 9] :attrs "*#c+"}]}"#
+        );
+        let layout = layout(&[
+            [-1.732, 0.5],
+            [-0.866, 1.0],
+            [0.0, 0.5],
+            [0.0, -0.5],
+            [-0.866, -1.0],
+            [-1.732, -0.5],
+            [0.866, 1.0],
+            [1.732, 0.5],
+            [1.732, -0.5],
+            [0.866, -1.0],
+        ]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+        let contours = contours(&depiction);
+        let [contour] = contours.as_slice() else {
+            panic!("expected exactly one fused aromatic-system contour");
+        };
+
+        assert_points_close(
+            &contour.points,
+            &[
+                Point2D::new(-1.552, 0.3960784758008787),
+                Point2D::new(-0.866, 0.7921523788031881),
+                Point2D::new(0.0, 0.2921523788031882),
+                Point2D::new(0.866, 0.7921523788031881),
+                Point2D::new(1.552, 0.3960784758008787),
+                Point2D::new(1.552, -0.3960784758008787),
+                Point2D::new(0.866, -0.7921523788031881),
+                Point2D::new(0.0, -0.2921523788031882),
+                Point2D::new(-0.866, -0.7921523788031881),
+                Point2D::new(-1.552, -0.3960784758008787),
+            ],
+        );
+        assert!(contour.closed);
+        assert_eq!(
+            contour.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))]
+        );
 
         assert_eq!(
-            markers(&depict(&molecule, &layout).unwrap(), MarkerKind::Aromatic),
-            expected
+            texts(&depiction),
+            [TextItem {
+                position: Point2D::new(0.35, 0.0),
+                text: "+".to_owned(),
+                references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
+                    AromaticSystemId(0),
+                ))],
+            }]
         );
+    }
+
+    #[rstest]
+    fn test_depict_uses_exterior_aromatic_annotation_fallback() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]
+                :aromatic-systems [{:atoms [0 1 2 3] :attrs "*#c-"}]}"#
+        );
+        let layout = layout(&[[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+        let texts = texts(&depiction);
+        let [annotation] = texts.as_slice() else {
+            panic!("expected exactly one aromatic-system annotation");
+        };
+
+        assert_point_close(annotation.position, Point2D::new(0.37, 0.37));
+        assert_eq!(annotation.text, "-");
+        assert_eq!(
+            annotation.references,
+            [DepictionReference::Molecule(Entity::AromaticSystem(
+                AromaticSystemId(0),
+            ))]
+        );
+    }
+
+    #[rstest]
+    fn test_depict_local_aromatic_assertions_are_omitted() {
+        let baseline = mol_dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
+        let asserted = mol_dsl!(r#"{:atoms ["C#a+" "C#a+"] :bonds [[0 1 "1#a"]]}"#);
+        let layout = layout(&[[0.0, 0.0], [2.0, 0.0]]);
+
+        assert_ne!(baseline, asserted);
+        assert_eq!(depict(&baseline, &layout), depict(&asserted, &layout));
     }
 
     #[rstest]
@@ -807,14 +1526,10 @@ mod tests {
 
         let depiction = depict(&molecule, &layout).unwrap();
 
-        assert!(depiction.items().iter().all(|item| !matches!(
-            item,
-            DepictionItem::Wedge(_)
-                | DepictionItem::Marker(MarkerItem {
-                    kind: MarkerKind::Stereo,
-                    ..
-                })
-        )));
+        assert!(depiction
+            .items()
+            .iter()
+            .all(|item| !matches!(item, DepictionItem::Wedge(_))));
         assert_eq!(bond_line_counts(&depiction), [1, 1, 1, 1]);
     }
 
@@ -830,7 +1545,6 @@ mod tests {
         let depiction = depict(&molecule, &layout).unwrap();
 
         assert_eq!(bond_line_counts(&depiction), [1, 2, 1]);
-        assert!(markers(&depiction, MarkerKind::Stereo).is_empty());
     }
 
     #[rstest]
@@ -938,14 +1652,38 @@ mod tests {
             .collect()
     }
 
-    fn markers(depiction: &Depiction, kind: MarkerKind) -> Vec<MarkerItem> {
+    fn contours(depiction: &Depiction) -> Vec<DashedContourItem> {
         depiction
             .items()
             .iter()
             .filter_map(|item| match item {
-                DepictionItem::Marker(marker) if marker.kind == kind => Some(marker.clone()),
+                DepictionItem::DashedContour(contour) => Some(contour.clone()),
                 _ => None,
             })
             .collect()
+    }
+
+    fn texts(depiction: &Depiction) -> Vec<TextItem> {
+        depiction
+            .items()
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Text(text) => Some(text.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn assert_points_close(actual: &[Point2D], expected: &[Point2D]) {
+        assert_eq!(actual.len(), expected.len());
+        for (&actual, &expected) in actual.iter().zip(expected) {
+            assert!((actual.x - expected.x).abs() < 1.0e-12);
+            assert!((actual.y - expected.y).abs() < 1.0e-12);
+        }
+    }
+
+    fn assert_point_close(actual: Point2D, expected: Point2D) {
+        assert!((actual.x - expected.x).abs() < 1.0e-12);
+        assert!((actual.y - expected.y).abs() < 1.0e-12);
     }
 }

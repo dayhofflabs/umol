@@ -68,8 +68,6 @@ pub enum DepictionItem {
     DashedContour(DashedContourItem),
     /// Free text.
     Text(TextItem),
-    /// An aromatic or stereo mark.
-    Marker(MarkerItem),
     /// A directed arrow.
     Arrow(ArrowItem),
 }
@@ -83,7 +81,6 @@ impl DepictionItem {
             Self::Wedge(item) => &item.references,
             Self::DashedContour(item) => &item.references,
             Self::Text(item) => &item.references,
-            Self::Marker(item) => &item.references,
             Self::Arrow(item) => &item.references,
         }
     }
@@ -157,26 +154,6 @@ pub struct TextItem {
     pub references: Vec<DepictionReference>,
 }
 
-/// A small semantic mark placed at one scene position.
-#[derive(Clone, Debug, PartialEq)]
-pub struct MarkerItem {
-    /// Center of the marker.
-    pub position: Point2D,
-    /// Meaning of the visible marker.
-    pub kind: MarkerKind,
-    /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
-}
-
-/// Marker meanings supported by the first depiction projection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum MarkerKind {
-    /// Marks aromatic participation.
-    Aromatic,
-    /// Marks a stereo site without prescribing wedge or hatch geometry.
-    Stereo,
-}
-
 /// A directed reaction or annotation arrow.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArrowItem {
@@ -235,7 +212,6 @@ impl Bounds {
                     }
                 }
                 DepictionItem::Text(item) => include_point(&mut bounds, item.position),
-                DepictionItem::Marker(item) => include_point(&mut bounds, item.position),
                 DepictionItem::Arrow(item) => {
                     include_point(&mut bounds, item.start);
                     include_point(&mut bounds, item.end);
@@ -311,13 +287,6 @@ mod tests {
                 position: Point2D::new(0.0, 5.0),
                 text: "0".to_owned(),
                 references: vec![DepictionReference::CorrespondencePair(0)],
-            }),
-            DepictionItem::Marker(MarkerItem {
-                position: Point2D::new(-3.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: vec![DepictionReference::Molecule(Entity::AromaticSystem(
-                    AromaticSystemId(0),
-                ))],
             }),
             DepictionItem::Arrow(ArrowItem {
                 start: Point2D::new(1.0, -4.0),
@@ -437,20 +406,6 @@ mod tests {
         }),
         vec![DepictionReference::CorrespondencePair(3)]
     )]
-    #[case::marker(
-        DepictionItem::Marker(MarkerItem {
-            position: Point2D::new(2.0, 1.0),
-            kind: MarkerKind::Stereo,
-            references: vec![
-                DepictionReference::ReactionRhs(Entity::StereoAtom(StereoAtomId(0))),
-                DepictionReference::Delta(4),
-            ],
-        }),
-        vec![
-            DepictionReference::ReactionRhs(Entity::StereoAtom(StereoAtomId(0))),
-            DepictionReference::Delta(4),
-        ]
-    )]
     #[case::arrow(
         DepictionItem::Arrow(ArrowItem {
             start: Point2D::new(-1.0, 0.0),
@@ -497,16 +452,6 @@ mod tests {
                 text: text.to_owned(),
                 references: vec![DepictionReference::CorrespondencePair(8)],
             }),
-            DepictionItem::Marker(MarkerItem {
-                position: Point2D::new(-1.0, 0.0),
-                kind: MarkerKind::Aromatic,
-                references: Vec::new(),
-            }),
-            DepictionItem::Marker(MarkerItem {
-                position: Point2D::new(1.0, 0.0),
-                kind: MarkerKind::Stereo,
-                references: Vec::new(),
-            }),
             DepictionItem::Arrow(ArrowItem {
                 start: Point2D::new(-3.0, -2.0),
                 end: Point2D::new(3.0, -2.0),
@@ -528,7 +473,7 @@ mod tests {
                 .iter()
                 .map(|group| group.attribute("data-umol-item").unwrap())
                 .collect::<Vec<_>>(),
-            ["atom", "bond", "text", "marker", "marker", "arrow"]
+            ["atom", "bond", "text", "arrow"]
         );
         assert_eq!(
             groups[0].attribute("data-umol-references"),
@@ -559,17 +504,15 @@ mod tests {
         assert_eq!(bond_lines[1].attribute("x2"), Some("2"));
         assert_eq!(bond_lines[1].attribute("y2"), Some("0.94"));
         assert_eq!(groups[2].first_element_child().unwrap().text(), Some(text));
-        assert_eq!(groups[3].attribute("data-umol-marker"), Some("aromatic"));
-        assert_eq!(groups[4].attribute("data-umol-marker"), Some("stereo"));
         assert_eq!(
-            groups[5]
+            groups[3]
                 .children()
                 .filter(|child| child.is_element())
                 .map(|child| child.tag_name().name())
                 .collect::<Vec<_>>(),
             ["line", "polygon"]
         );
-        assert_eq!(groups[5].attribute("data-umol-references"), Some("delta/9"));
+        assert_eq!(groups[3].attribute("data-umol-references"), Some("delta/9"));
         assert_eq!(svg.matches("C&lt;&amp;&gt;&quot;&apos;").count(), 3);
     }
 }

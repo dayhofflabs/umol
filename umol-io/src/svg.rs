@@ -7,7 +7,7 @@ use umol_graph_ir::ir::Entity;
 
 use crate::depiction::{
     ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
-    DepictionReference, MarkerItem, MarkerKind, TextItem, WedgeItem, WedgeKind,
+    DepictionReference, TextItem, WedgeItem, WedgeKind,
 };
 
 const VIEW_MARGIN: f64 = 0.5;
@@ -20,9 +20,6 @@ const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
 const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
 const ATOM_LABEL_MASK_EXPANSION: f64 = 0.3;
-const AROMATIC_MARKER_RADIUS: f64 = 0.16;
-const STEREO_MARKER_RADIUS: f64 = 0.19;
-const MARKER_WIDTH: f64 = 0.04;
 const ARROW_HEAD_LENGTH: f64 = 0.24;
 const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 
@@ -136,11 +133,6 @@ fn render_item(output: &mut String, item: &DepictionItem, atom_mask: bool) {
     output.push_str("<g data-umol-item=\"");
     output.push_str(item_kind(item));
     output.push('"');
-    if let DepictionItem::Marker(marker) = item {
-        output.push_str(" data-umol-marker=\"");
-        output.push_str(marker_kind(marker.kind));
-        output.push('"');
-    }
     write_references(output, item.references());
     if atom_mask {
         write!(output, r##" mask="url(#{ATOM_LABEL_MASK_ID})""##)
@@ -154,7 +146,6 @@ fn render_item(output: &mut String, item: &DepictionItem, atom_mask: bool) {
         DepictionItem::Wedge(wedge) => render_wedge(output, wedge),
         DepictionItem::DashedContour(contour) => render_dashed_contour(output, contour),
         DepictionItem::Text(text) => render_text(output, text),
-        DepictionItem::Marker(marker) => render_marker(output, marker),
         DepictionItem::Arrow(arrow) => render_arrow(output, arrow),
     }
 
@@ -175,7 +166,6 @@ fn item_kind(item: &DepictionItem) -> &'static str {
         DepictionItem::Wedge(_) => "wedge",
         DepictionItem::DashedContour(_) => "dashed-contour",
         DepictionItem::Text(_) => "text",
-        DepictionItem::Marker(_) => "marker",
         DepictionItem::Arrow(_) => "arrow",
     }
 }
@@ -314,30 +304,6 @@ fn render_text(output: &mut String, text: &TextItem) {
     .expect("writing to a String cannot fail");
     write_escaped_text(output, &text.text);
     output.push_str("</text>");
-}
-
-fn render_marker(output: &mut String, marker: &MarkerItem) {
-    let (class, radius, dash) = match marker.kind {
-        MarkerKind::Aromatic => (
-            "umol-aromatic-marker",
-            AROMATIC_MARKER_RADIUS,
-            Some("0.05 0.05"),
-        ),
-        MarkerKind::Stereo => ("umol-stereo-marker", STEREO_MARKER_RADIUS, None),
-    };
-    output.push_str("<circle class=\"");
-    output.push_str(class);
-    output.push('"');
-    write_point_attributes_with_names(output, marker.position, "cx", "cy");
-    write!(
-        output,
-        r#" r="{radius}" fill="none" stroke="currentColor" stroke-width="{MARKER_WIDTH}""#
-    )
-    .expect("writing to a String cannot fail");
-    if let Some(dash) = dash {
-        write!(output, r#" stroke-dasharray="{dash}""#).expect("writing to a String cannot fail");
-    }
-    output.push_str("/>");
 }
 
 fn render_arrow(output: &mut String, arrow: &ArrowItem) {
@@ -484,13 +450,6 @@ fn write_entity_reference(output: &mut String, frame: &str, entity: Entity) {
         Entity::StereoBond(id) => write!(output, "stereo-bond/{}", id.index()),
     }
     .expect("writing to a String cannot fail");
-}
-
-fn marker_kind(kind: MarkerKind) -> &'static str {
-    match kind {
-        MarkerKind::Aromatic => "aromatic",
-        MarkerKind::Stereo => "stereo",
-    }
 }
 
 #[cfg(test)]
