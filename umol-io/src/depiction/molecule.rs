@@ -1,17 +1,22 @@
 //! Depiction construction from graph-IR molecules and supplied layouts.
 
+use std::any::Any;
 use std::fmt::Write;
 
+use thiserror::Error;
 use umol_chem::element::Element;
-use umol_geometric_core::Point2D;
+use umol_geometric_core::{complementary_direction, signed_volume, Point2D, Point3D};
 use umol_graph_ir::ir::{
-    AsLit, AtomId, AtomView, Entity, IsotopeMass, Molecule, StereoAtomView, StereoBondView,
+    AsLit, AtomId, AtomView, BondId, Entity, IsotopeMass, Molecule, StereoAtomId, StereoAtomView,
+    StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
+use umol_utils::error::UmolError;
 
 #[cfg(feature = "coordgen")]
 use super::Depict;
 use super::{
     AtomItem, BondItem, Depiction, DepictionItem, DepictionReference, MarkerItem, MarkerKind,
+    WedgeItem, WedgeKind,
 };
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, LayoutError, MoleculeLayoutAlgorithm};
@@ -19,24 +24,32 @@ use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
 ///
-/// Localized bonds are followed by visible atom labels, aromatic markers, and stereo markers, with
-/// each group ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton vertices
-/// unless an isotope, charge, or radical count decorates the atom. Aromatic markers project both
-/// aromatic-system membership and definite aromatic atom or bond constraints. Nonliteral
-/// projected fields and unsupported overlays or constraints are omitted. The first projection does
-/// not represent dative, multicenter, or noncovalent bonds, unprojected inherent fields, or
-/// unsupported constraints.
+/// Localized bonds and selected tetrahedral wedges are followed by visible atom labels and
+/// aromatic markers, with each group ordered by graph-IR id. Carbon labels are omitted at
+/// non-isolated skeleton vertices unless an isotope, charge, or radical count decorates the atom.
+/// Aromatic markers project both aromatic-system membership and definite aromatic atom or bond
+/// constraints. Definite cis/trans stereo is carried by the supplied coordinates. Nonliteral
+/// projected fields and unsupported overlays, stereo kinds, or constraints are omitted. The first
+/// projection does not represent dative, multicenter, or noncovalent bonds, unprojected inherent
+/// fields, or unsupported constraints.
 ///
 /// # Errors
 ///
-/// Returns [`MoleculeLayoutError::FrameSizeMismatch`] if the molecule and layout do not use the
-/// same dense atom frame.
+/// Returns [`MoleculeDepictionError::LayoutFrame`] if the molecule and layout do not use the same
+/// dense atom frame, or [`MoleculeDepictionError::TetrahedralGeometry`] if a definite tetrahedral
+/// stereo atom cannot be represented by a distinct, geometrically valid display wedge.
+///
+/// # Semantic properties
+///
+/// Every emitted tetrahedral wedge replaces its selected localized single bond. Reading the wedge
+/// with the TableIR winding convention in the selected ligand frame reproduces the stored coset.
 pub fn depict(
     molecule: &Molecule,
     layout: &MoleculeLayout,
-) -> Result<Depiction, MoleculeLayoutError> {
+) -> Result<Depiction, MoleculeDepictionError> {
     layout.check_frame(molecule)?;
 
+    let wedges = tetrahedral_wedges(molecule, layout)?;
     let mut items = Vec::new();
 
     for bond in molecule.bonds().iter() {
@@ -48,12 +61,25 @@ pub fn depict(
             continue;
         };
         let [first, second] = bond.atom_ids();
-        items.push(DepictionItem::Bond(BondItem {
-            start: position(layout, first),
-            end: position(layout, second),
-            line_count,
-            references: vec![DepictionReference::Molecule(Entity::Bond(bond.id))],
-        }));
+        let bond_reference = DepictionReference::Molecule(Entity::Bond(bond.id));
+        if let Some(wedge) = wedges[bond.id.index()] {
+            items.push(DepictionItem::Wedge(WedgeItem {
+                tip: position(layout, wedge.tip),
+                base: position(layout, wedge.base),
+                kind: wedge.kind,
+                references: vec![
+                    bond_reference,
+                    DepictionReference::Molecule(Entity::StereoAtom(wedge.stereo_atom)),
+                ],
+            }));
+        } else {
+            items.push(DepictionItem::Bond(BondItem {
+                start: position(layout, first),
+                end: position(layout, second),
+                line_count,
+                references: vec![bond_reference],
+            }));
+        }
     }
 
     for atom in molecule.atoms().iter() {
@@ -109,33 +135,245 @@ pub fn depict(
         }));
     }
 
-    items.extend(
-        molecule
-            .stereo_atoms()
-            .iter()
-            .map(|stereo| stereo_atom_marker(layout, stereo)),
-    );
-    items.extend(
-        molecule
-            .stereo_bonds()
-            .iter()
-            .map(|stereo| stereo_bond_marker(layout, stereo)),
-    );
-
     Ok(Depiction::from_items(items))
 }
 
 #[cfg(feature = "coordgen")]
 impl Depict for Molecule {
-    type Error = LayoutError;
+    type Error = MoleculeDepictionError;
 
     fn depict_with(
         &self,
         layout_algorithm: MoleculeLayoutAlgorithm,
     ) -> Result<Depiction, Self::Error> {
         let layout = layout_molecule(self, layout_algorithm)?;
-        Ok(depict(self, &layout).expect("generated layout preserves the molecule atom frame"))
+        depict(self, &layout)
     }
+}
+
+/// Failures while depicting a graph-IR [`Molecule`].
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum MoleculeDepictionError {
+    #[cfg(feature = "coordgen")]
+    #[error("layout: {0}")]
+    Layout(#[from] LayoutError),
+    #[error("layout frame: {0}")]
+    LayoutFrame(#[from] MoleculeLayoutError),
+    #[error("tetrahedral geometry cannot establish a display wedge for stereo atom {stereo_atom}")]
+    TetrahedralGeometry { stereo_atom: StereoAtomId },
+}
+
+impl UmolError for MoleculeDepictionError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SelectedWedge {
+    stereo_atom: StereoAtomId,
+    tip: AtomId,
+    base: AtomId,
+    kind: WedgeKind,
+}
+
+#[derive(Clone, Copy)]
+struct WedgeCandidate {
+    bond: BondId,
+    base: AtomId,
+    kind: WedgeKind,
+}
+
+struct TetrahedralCandidates {
+    stereo_atom: StereoAtomId,
+    site: AtomId,
+    wedges: Vec<WedgeCandidate>,
+}
+
+fn tetrahedral_wedges(
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+) -> Result<Vec<Option<SelectedWedge>>, MoleculeDepictionError> {
+    let stereos = molecule
+        .stereo_atoms()
+        .iter()
+        .filter(|stereo| {
+            stereo
+                .attributes
+                .configuration
+                .as_lit()
+                .is_some_and(|configuration| configuration.kind == StereoKind::Tetrahedral)
+        })
+        .collect::<Vec<_>>();
+    let mut tetrahedral_sites = vec![false; molecule.atoms().count()];
+    for stereo in &stereos {
+        tetrahedral_sites[stereo.site_id().index()] = true;
+    }
+
+    let candidates = stereos
+        .into_iter()
+        .map(|stereo| tetrahedral_candidates(molecule, layout, stereo, &tetrahedral_sites))
+        .collect::<Vec<_>>();
+    let mut bond_owners = vec![None; molecule.bonds().count()];
+    for stereo_index in 0..candidates.len() {
+        let mut visited_bonds = vec![false; molecule.bonds().count()];
+        if !assign_distinct_wedge(
+            stereo_index,
+            &candidates,
+            &mut bond_owners,
+            &mut visited_bonds,
+        ) {
+            return Err(MoleculeDepictionError::TetrahedralGeometry {
+                stereo_atom: candidates[stereo_index].stereo_atom,
+            });
+        }
+    }
+
+    let mut selected = vec![None; molecule.bonds().count()];
+    for (bond_index, owner) in bond_owners.into_iter().enumerate() {
+        let Some(stereo_index) = owner else {
+            continue;
+        };
+        let stereo = &candidates[stereo_index];
+        let wedge = stereo
+            .wedges
+            .iter()
+            .find(|wedge| wedge.bond.index() == bond_index)
+            .expect("wedge assignment retains one candidate for its owning stereo atom");
+        selected[bond_index] = Some(SelectedWedge {
+            stereo_atom: stereo.stereo_atom,
+            tip: stereo.site,
+            base: wedge.base,
+            kind: wedge.kind,
+        });
+    }
+    Ok(selected)
+}
+
+fn tetrahedral_candidates(
+    molecule: &Molecule,
+    layout: &MoleculeLayout,
+    stereo: StereoAtomView<'_>,
+    tetrahedral_sites: &[bool],
+) -> TetrahedralCandidates {
+    let mut ligands = stereo
+        .ligands()
+        .map(|ligand| StereoLigand::new(ligand.atom_id(), ligand.kind()))
+        .collect::<Vec<_>>();
+    ligands.sort_by_key(|ligand| {
+        (
+            ligand.kind != StereoLigandKind::Atom,
+            ligand.atom_id,
+            ligand.kind,
+        )
+    });
+    let StereoCoset::Lit(coset) = stereo
+        .coset_for(ligands.iter().copied())
+        .expect("a closed stereo atom can be reframed over its stored distinct ligands")
+    else {
+        unreachable!("literal stereo configuration remains literal after reframing")
+    };
+
+    let mut wedges = ligands
+        .iter()
+        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+        .filter_map(|ligand| {
+            let bond = molecule.bonds().of(stereo.site_id(), ligand.atom_id)?;
+            if bond.order().as_lit() != Some(1) {
+                return None;
+            }
+            let kind = wedge_kind(layout, stereo.site_id(), &ligands, *ligand, coset)?;
+            Some(WedgeCandidate {
+                bond: bond.id,
+                base: ligand.atom_id,
+                kind,
+            })
+        })
+        .collect::<Vec<_>>();
+    wedges.sort_by_key(|wedge| (tetrahedral_sites[wedge.base.index()], wedge.bond.index()));
+
+    TetrahedralCandidates {
+        stereo_atom: stereo.id,
+        site: stereo.site_id(),
+        wedges,
+    }
+}
+
+fn assign_distinct_wedge(
+    stereo_index: usize,
+    candidates: &[TetrahedralCandidates],
+    bond_owners: &mut [Option<usize>],
+    visited_bonds: &mut [bool],
+) -> bool {
+    for wedge in &candidates[stereo_index].wedges {
+        let bond_index = wedge.bond.index();
+        if visited_bonds[bond_index] {
+            continue;
+        }
+        visited_bonds[bond_index] = true;
+        let displaced = bond_owners[bond_index];
+        if displaced.is_none_or(|owner| {
+            assign_distinct_wedge(owner, candidates, bond_owners, visited_bonds)
+        }) {
+            bond_owners[bond_index] = Some(stereo_index);
+            return true;
+        }
+    }
+    false
+}
+
+fn wedge_kind(
+    layout: &MoleculeLayout,
+    site: AtomId,
+    ligands: &[StereoLigand],
+    wedged: StereoLigand,
+    coset: u32,
+) -> Option<WedgeKind> {
+    [WedgeKind::Solid, WedgeKind::Hashed]
+        .into_iter()
+        .find(|&kind| wedge_coset(layout, site, ligands, wedged, kind) == Some(coset))
+}
+
+fn wedge_coset(
+    layout: &MoleculeLayout,
+    site: AtomId,
+    ligands: &[StereoLigand],
+    wedged: StereoLigand,
+    kind: WedgeKind,
+) -> Option<u32> {
+    let center = point3(position(layout, site), 0.0);
+    let actual_positions = ligands
+        .iter()
+        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+        .map(|ligand| point3(position(layout, ligand.atom_id), 0.0))
+        .collect::<Vec<_>>();
+    let virtual_position = complementary_direction(center, &actual_positions);
+    let wedge_z = match kind {
+        WedgeKind::Solid => 1.0,
+        WedgeKind::Hashed => -1.0,
+    };
+    let points = ligands
+        .iter()
+        .map(|ligand| match ligand.kind {
+            StereoLigandKind::Atom if *ligand == wedged => {
+                point3(position(layout, ligand.atom_id), wedge_z)
+            }
+            StereoLigandKind::Atom => point3(position(layout, ligand.atom_id), 0.0),
+            StereoLigandKind::ImplicitHydrogen | StereoLigandKind::LonePair => virtual_position,
+        })
+        .collect::<Vec<_>>();
+    let [first, second, third, fourth] = points.as_slice() else {
+        return None;
+    };
+    let volume = signed_volume(*first, *second, *third, *fourth);
+    if !volume.is_finite() || volume == 0.0 {
+        return None;
+    }
+    Some(u32::from(volume >= 0.0))
+}
+
+fn point3(point: Point2D, z: f64) -> Point3D {
+    Point3D::new(point.x, point.y, z)
 }
 
 fn atom_label(atom: AtomView<'_>) -> Option<String> {
@@ -193,31 +431,6 @@ fn atom_label(atom: AtomView<'_>) -> Option<String> {
     Some(label)
 }
 
-fn stereo_atom_marker(layout: &MoleculeLayout, stereo: StereoAtomView<'_>) -> DepictionItem {
-    let site = stereo.site_id();
-    DepictionItem::Marker(MarkerItem {
-        position: position(layout, site),
-        kind: MarkerKind::Stereo,
-        references: vec![
-            DepictionReference::Molecule(Entity::StereoAtom(stereo.id)),
-            DepictionReference::Molecule(Entity::Atom(site)),
-        ],
-    })
-}
-
-fn stereo_bond_marker(layout: &MoleculeLayout, stereo: StereoBondView<'_>) -> DepictionItem {
-    let site = stereo.site();
-    let [first, second] = site.atom_ids();
-    DepictionItem::Marker(MarkerItem {
-        position: midpoint(position(layout, first), position(layout, second)),
-        kind: MarkerKind::Stereo,
-        references: vec![
-            DepictionReference::Molecule(Entity::StereoBond(stereo.id)),
-            DepictionReference::Molecule(Entity::Bond(site.id)),
-        ],
-    })
-}
-
 fn position(layout: &MoleculeLayout, atom: AtomId) -> Point2D {
     *layout
         .position(atom)
@@ -231,7 +444,7 @@ fn midpoint(first: Point2D, second: Point2D) -> Point2D {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, StereoAtomId, StereoBondId};
+    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, StereoAtomId};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
@@ -327,6 +540,142 @@ mod tests {
 
         assert_eq!(bond_line_counts(&depict(&single, &layout).unwrap()), [1]);
         assert_eq!(bond_line_counts(&depict(&double, &layout).unwrap()), [2]);
+    }
+
+    #[rstest]
+    #[case::solid("Th0", WedgeKind::Solid)]
+    #[case::hashed("Th1", WedgeKind::Hashed)]
+    fn test_depict_tetrahedral_wedge(#[case] attributes: &str, #[case] kind: WedgeKind) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{{:site 0 :ligands [1 2 3 4] :attrs "{attributes}"}}]}}"#
+        ));
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+        let wedges = depiction
+            .items()
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Wedge(wedge) => Some(wedge.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            wedges,
+            [WedgeItem {
+                tip: Point2D::new(0.0, 0.0),
+                base: Point2D::new(1.0, 0.0),
+                kind,
+                references: vec![
+                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
+                    DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(0))),
+                ],
+            }]
+        );
+        assert_eq!(bond_line_counts(&depiction), [1, 1, 1]);
+    }
+
+    #[rstest]
+    #[case::implicit_hydrogen("[:h 0]")]
+    #[case::lone_pair("[:lp 0]")]
+    fn test_depict_tetrahedral_virtual_ligand(#[case] virtual_ligand: &str) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]
+                :stereo-atoms [{{:site 0 :ligands [1 2 3 {virtual_ligand}] :attrs "Th0"}}]}}"#
+        ));
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(
+            wedges(&depiction),
+            [WedgeItem {
+                tip: Point2D::new(0.0, 0.0),
+                base: Point2D::new(1.0, 0.0),
+                kind: WedgeKind::Solid,
+                references: vec![
+                    DepictionReference::Molecule(Entity::Bond(BondId(0))),
+                    DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(0))),
+                ],
+            }]
+        );
+        assert_eq!(bond_line_counts(&depiction), [1, 1]);
+    }
+
+    #[rstest]
+    fn test_depict_tetrahedral_ring_site() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "F" "Cl"]
+                :bonds [[0 3 "1"] [0 1 "1"] [1 2 "1"] [2 0 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+        );
+        let layout = layout(&[
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.5, 0.866],
+            [-1.0, 0.0],
+            [0.0, -1.0],
+        ]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(wedges(&depiction).len(), 1);
+        assert_eq!(
+            wedges(&depiction)[0].references,
+            [
+                DepictionReference::Molecule(Entity::Bond(BondId(0))),
+                DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(0))),
+            ]
+        );
+        assert_eq!(bond_line_counts(&depiction), [1, 1, 1, 1]);
+    }
+
+    #[rstest]
+    fn test_depict_adjacent_tetrahedral_sites_use_distinct_bonds() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "F" "Cl" "Br" "F" "Cl" "Br"]
+                :bonds [[0 1 "1"]
+                        [0 2 "1"] [0 3 "1"] [0 4 "1"]
+                        [1 5 "1"] [1 6 "1"] [1 7 "1"]]
+                :stereo-atoms [
+                    {:site 0 :ligands [1 2 3 4] :attrs "Th0"}
+                    {:site 1 :ligands [0 5 6 7] :attrs "Th0"}]}"#
+        );
+        let layout = layout(&[
+            [-0.5, 0.0],
+            [0.5, 0.0],
+            [-1.5, 0.0],
+            [-0.5, 1.0],
+            [-0.5, -1.0],
+            [1.5, 0.0],
+            [0.5, 1.0],
+            [0.5, -1.0],
+        ]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+        let wedge_references = wedges(&depiction)
+            .into_iter()
+            .map(|wedge| wedge.references)
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            wedge_references,
+            [
+                vec![
+                    DepictionReference::Molecule(Entity::Bond(BondId(1))),
+                    DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(0))),
+                ],
+                vec![
+                    DepictionReference::Molecule(Entity::Bond(BondId(4))),
+                    DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(1))),
+                ],
+            ]
+        );
+        assert_eq!(bond_line_counts(&depiction), [1, 1, 1, 1, 1]);
     }
 
     #[test]
@@ -444,42 +793,44 @@ mod tests {
     }
 
     #[rstest]
-    #[case::atom(
-        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th1"}]}"#,
-        vec![[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]],
-        MarkerItem {
-            position: Point2D::new(0.0, 0.0),
-            kind: MarkerKind::Stereo,
-            references: vec![
-                DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(0))),
-                DepictionReference::Molecule(Entity::Atom(AtomId(0))),
-            ],
-        }
-    )]
-    #[case::bond(
-        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#,
-        vec![[0.0, 0.0], [1.0, 0.0], [3.0, 0.0], [4.0, 0.0]],
-        MarkerItem {
-            position: Point2D::new(2.0, 0.0),
-            kind: MarkerKind::Stereo,
-            references: vec![
-                DepictionReference::Molecule(Entity::StereoBond(StereoBondId(0))),
-                DepictionReference::Molecule(Entity::Bond(BondId(1))),
-            ],
-        }
-    )]
-    fn test_depict_stereo_entity_marks_site(
-        #[case] input: &str,
-        #[case] positions: Vec<[f64; 2]>,
-        #[case] expected: MarkerItem,
-    ) {
-        let molecule = mol_dsl!(input);
-        let layout = layout(&positions);
+    #[case::undetermined("Th*")]
+    #[case::set("Th{0,1}")]
+    #[case::term("Th?configuration")]
+    #[case::unsupported("Sp0")]
+    fn test_depict_stereo_atom_omission(#[case] attributes: &str) {
+        let molecule = mol_dsl!(&format!(
+            r#"{{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{{:site 0 :ligands [1 2 3 4] :attrs "{attributes}"}}]}}"#
+        ));
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [-1.0, 0.0], [0.0, -1.0]]);
 
-        assert_eq!(
-            markers(&depict(&molecule, &layout).unwrap(), MarkerKind::Stereo),
-            [expected]
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert!(depiction.items().iter().all(|item| !matches!(
+            item,
+            DepictionItem::Wedge(_)
+                | DepictionItem::Marker(MarkerItem {
+                    kind: MarkerKind::Stereo,
+                    ..
+                })
+        )));
+        assert_eq!(bond_line_counts(&depiction), [1, 1, 1, 1]);
+    }
+
+    #[rstest]
+    fn test_depict_cis_trans_stereo() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#
         );
+        let layout = layout(&[[0.0, 1.0], [1.0, 0.0], [2.0, 0.0], [3.0, -1.0]]);
+
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        assert_eq!(bond_line_counts(&depiction), [1, 2, 1]);
+        assert!(markers(&depiction, MarkerKind::Stereo).is_empty());
     }
 
     #[rstest]
@@ -521,16 +872,35 @@ mod tests {
         assert_eq!(depict(&baseline, &layout), depict(&changed, &layout));
     }
 
-    #[test]
+    #[rstest]
     fn test_depict_frame_size_mismatch() {
         let molecule = mol_dsl!(r#"{:atoms ["C"] :bonds []}"#);
         let layout = layout(&[]);
 
         assert_eq!(
             depict(&molecule, &layout),
-            Err(MoleculeLayoutError::FrameSizeMismatch {
-                molecule_atom_count: 1,
-                layout_atom_count: 0,
+            Err(MoleculeDepictionError::LayoutFrame(
+                MoleculeLayoutError::FrameSizeMismatch {
+                    molecule_atom_count: 1,
+                    layout_atom_count: 0,
+                }
+            ))
+        );
+    }
+
+    #[rstest]
+    fn test_depict_tetrahedral_geometry_error() {
+        let molecule = mol_dsl!(
+            r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+                :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 2 3 4] :attrs "Th0"}]}"#
+        );
+        let layout = layout(&[[0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [3.0, 0.0], [4.0, 0.0]]);
+
+        assert_eq!(
+            depict(&molecule, &layout),
+            Err(MoleculeDepictionError::TetrahedralGeometry {
+                stereo_atom: StereoAtomId(0),
             })
         );
     }
@@ -552,6 +922,17 @@ mod tests {
             .iter()
             .filter_map(|item| match item {
                 DepictionItem::Bond(bond) => Some(bond.line_count),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn wedges(depiction: &Depiction) -> Vec<WedgeItem> {
+        depiction
+            .items()
+            .iter()
+            .filter_map(|item| match item {
+                DepictionItem::Wedge(wedge) => Some(wedge.clone()),
                 _ => None,
             })
             .collect()

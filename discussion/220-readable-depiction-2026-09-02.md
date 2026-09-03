@@ -476,7 +476,7 @@ Verification used `cargo test -p umol-io --features coordgen -q`,
 
 ### S3 — Definite stereo depiction
 
-- **S3a — Tetrahedral wedge selection and error boundary** `[dep: S0]`: introduce
+- [x] **S3a — Tetrahedral wedge selection and error boundary** `[dep: S0]`: introduce
   `MoleculeDepictionError` and migrate direct molecule depiction, reaction-side propagation, the
   `Depict` implementations, and Python error mapping within this breaking subitem. Collect literal
   tetrahedral stereo atoms, choose distinct explicit display bonds deterministically across
@@ -484,17 +484,68 @@ Verification used `cargo test -p umol-io --features coordgen -q`,
   `Hashed` so the inverse winding reproduces the stored coset after `coset_for`. Replace the
   selected ordinary `BondItem` rather than overlaying it. Return `MoleculeDepictionError` when the
   geometry cannot establish a valid wedge.
-- **S3b — Stereo omission and references** `[dep: S1, S3a]`: stop producing generic stereo markers.
+- [x] **S3b — Stereo omission and references** `[dep: S1, S3a]`: stop producing generic stereo markers.
   Verify that literal cis/trans stereo is visible in the S1 coordinates, literal tetrahedral stereo
   carries both bond and stereo-atom references, and unresolved or unsupported stereo emits neither
   a definite mark nor an error. Exercise reaction translation and lhs/rhs error propagation.
-- **S3c — Stereo laws and evidence** `[dep: S3b]`: add a feature-gated
+- [x] **S3c — Stereo laws and evidence** `[dep: S3b]`: add a feature-gated
   `depiction_property` test target for ligand reframing and wedge-to-coset recovery, plus
   correctness fixtures for virtual H/lone-pair frames, rings, adjacent stereocenters, and both
   wedge kinds. Rerun the layout and SVG benchmark subsets.
 
 S3 is green when every supported definite stereo entity is either represented consistently or
 reported as an error, while every unresolved or unsupported stereo form is omitted deliberately.
+
+S3 completed on 2026-09-03. Literal tetrahedral configurations now replace one deterministically
+selected explicit single bond with a solid or hashed wedge carrying both bond and stereo-atom
+references. Selection reframes the stored configuration into an actual-ligands-first display
+order, validates the emitted winding against the TableIR convention, and assigns distinct bonds
+across adjacent stereocenters. Unusable definite geometry returns
+`MoleculeDepictionError::TetrahedralGeometry`; layout and depiction failures propagate through the
+corresponding molecule, reaction-side, reaction, and Python `RuntimeError` boundaries. Definite
+cis/trans remains visible through the S1 coordinate constraint, while unresolved and unsupported
+stereo emits no generic marker.
+
+The feature-gated `depiction_property` target exercises stored-frame invariance over all
+degree-four ligand permutations and independently recovers both tetrahedral cosets from wedges
+over translated, scaled, rotated, and reflected nondegenerate layouts. Exact fixtures cover solid
+and hashed wedges, virtual hydrogen, lone pair, a ring site, adjacent stereocenters, reaction-side
+translation, and lhs/rhs errors. The public-symbol audit found only the settled
+`MoleculeDepictionError` and the settled breaking variants of `DepictFromSidesError` and
+`ReactionDepictionError`. No public constructor, depiction configuration, scene re-export, or
+Python scene API was added; `Depiction` remains operation-issued.
+
+The S3 evidence rerun completed all 9/9 layout groups and 6/6 SVG groups. Layout has no S3 algorithm
+change and remained within ordinary run variation. The real wedge adds about 0.64 us to the
+tetrahedral SVG fixture relative to S2; its absolute render time remains about 3.49 us.
+
+| Layout case | S3 time per molecule, 95% interval |
+| --- | ---: |
+| acyclic/asymmetric_tree_8 | 61.529–61.859 us |
+| cyclic/cyclooctane | 10.401–10.479 us |
+| aromatic/benzene | 7.948–8.033 us |
+| disconnected/mixed_components_8 | 9.690–9.737 us |
+| underdetermined/wildcard_path_8 | 70.698–71.123 us |
+| cis_trans/z_but_2_ene | 4.566–4.601 us |
+| cis_trans/e_but_2_ene | 4.569–4.624 us |
+| mapping_hard_tail/high_symmetry_complete_7 | 1.279–1.286 ms |
+| mapping_hard_tail/repeated_components_3x2 | 7.683–7.780 us |
+
+| SVG case | S3 time, 95% interval | Criterion change from preceding run, 95% interval |
+| --- | ---: | ---: |
+| chain/8 | 2.449–2.458 us | -3.70% to -3.21% |
+| chain/128 | 49.219–50.168 us | -3.91% to -0.85% |
+| representative/labeled_atoms | 1.428–1.446 us | -3.48% to -2.63% |
+| representative/tetrahedral_stereo | 3.481–3.499 us | +22.73% to +23.63% |
+| representative/fused_aromatic | 8.036–8.142 us | -4.48% to -3.72% |
+| representative/mapped_reaction | 7.390–7.423 us | -2.97% to -2.41% |
+
+Commands: `cargo bench -p umol-io --bench layout --features coordgen -- --noplot` and
+`cargo bench -p umol-io --bench svg -- --noplot`. Verification used the `umol-io` default and
+CoordGen test suites, the feature-gated `depiction_property` target, Clippy over all `umol-io`
+targets with CoordGen and proptest, `umol-py` Rust tests and Clippy with depiction in the repository
+Python 3.13 environment, the rebuilt focused Python depiction tests, and
+`cargo +nightly fmt --all -- --check`.
 
 ### S4 — Aromatic-system contours and annotations
 

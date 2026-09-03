@@ -2,11 +2,10 @@
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use umol_io::depiction::molecule::MoleculeDepictionError as IoMoleculeDepictionError;
 use umol_io::depiction::reaction::ReactionDepictionError as IoReactionDepictionError;
 use umol_io::depiction::{Depict as IoDepict, Depiction as IoDepiction};
-use umol_io::layout::{
-    LayoutError as IoLayoutError, MoleculeLayoutAlgorithm as IoMoleculeLayoutAlgorithm,
-};
+use umol_io::layout::MoleculeLayoutAlgorithm as IoMoleculeLayoutAlgorithm;
 use umol_io::svg::render as render_svg;
 
 use crate::error::contradiction_error;
@@ -77,7 +76,7 @@ impl Molecule {
         self.to_rust()
             .depict_with(layout_algorithm.to_rust())
             .map(|depiction| Svg::from_rust(&depiction))
-            .map_err(layout_error)
+            .map_err(molecule_depiction_error)
     }
 }
 
@@ -96,25 +95,25 @@ impl Reaction {
     }
 }
 
-fn layout_error(error: IoLayoutError) -> PyErr {
+fn molecule_depiction_error(error: IoMoleculeDepictionError) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
 }
 
 fn reaction_depiction_error(error: IoReactionDepictionError) -> PyErr {
     match error {
         IoReactionDepictionError::Materialization(error) => contradiction_error(error),
-        error @ (IoReactionDepictionError::LhsLayout(_)
-        | IoReactionDepictionError::RhsLayout(_)) => PyRuntimeError::new_err(error.to_string()),
+        error @ (IoReactionDepictionError::LhsDepiction(_)
+        | IoReactionDepictionError::RhsDepiction(_)) => PyRuntimeError::new_err(error.to_string()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use pyo3::exceptions::PyTypeError;
+    use pyo3::exceptions::{PyRuntimeError, PyTypeError};
     use rstest::rstest;
     use umol_graph_ir::ir::{
         BondDelta, BondFieldChange, BondId, Delta, Deltas, Molecule as GraphIrMolecule, NumForm,
-        Reaction as GraphIrReaction,
+        Reaction as GraphIrReaction, StereoAtomId,
     };
 
     use super::*;
@@ -156,6 +155,47 @@ mod tests {
             let error = py.get_type::<Svg>().call0().unwrap_err();
 
             assert!(error.is_instance_of::<PyTypeError>(py));
+        });
+    }
+
+    #[rstest]
+    fn test_molecule_depiction_error() {
+        Python::attach(|py| {
+            let error = molecule_depiction_error(IoMoleculeDepictionError::TetrahedralGeometry {
+                stereo_atom: StereoAtomId(3),
+            });
+
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                "tetrahedral geometry cannot establish a display wedge for stereo atom 3"
+            );
+        });
+    }
+
+    #[rstest]
+    #[case::lhs(IoReactionDepictionError::LhsDepiction(
+        IoMoleculeDepictionError::TetrahedralGeometry {
+            stereo_atom: StereoAtomId(1),
+        }
+    ), "lhs depiction: tetrahedral geometry cannot establish a display wedge for stereo atom 1")]
+    #[case::rhs(IoReactionDepictionError::RhsDepiction(
+        IoMoleculeDepictionError::TetrahedralGeometry {
+            stereo_atom: StereoAtomId(2),
+        }
+    ), "rhs depiction: tetrahedral geometry cannot establish a display wedge for stereo atom 2")]
+    fn test_reaction_depiction_error(
+        #[case] input: IoReactionDepictionError,
+        #[case] message: &str,
+    ) {
+        Python::attach(|py| {
+            let error = reaction_depiction_error(input);
+
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
+            assert_eq!(
+                error.value(py).str().unwrap().extract::<String>().unwrap(),
+                message
+            );
         });
     }
 

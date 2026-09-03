@@ -1,8 +1,8 @@
 use rstest::rstest;
 use umol_geometric_core::Point2D;
+use umol_graph_ir::ir::AtomId;
 #[cfg(feature = "coordgen")]
-use umol_graph_ir::ir::Molecule;
-use umol_graph_ir::ir::{AtomId, BondId};
+use umol_graph_ir::ir::{BondId, Molecule};
 use umol_graph_ir::mol;
 #[cfg(feature = "coordgen")]
 use umol_graph_ir::mol_dsl;
