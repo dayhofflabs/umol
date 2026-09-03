@@ -1,9 +1,11 @@
 use rstest::rstest;
 use umol_geometric_core::Point2D;
-use umol_graph_ir::ir::AtomId;
 #[cfg(feature = "coordgen")]
 use umol_graph_ir::ir::Molecule;
+use umol_graph_ir::ir::{AtomId, BondId};
 use umol_graph_ir::mol;
+#[cfg(feature = "coordgen")]
+use umol_graph_ir::mol_dsl;
 #[cfg(feature = "coordgen")]
 use umol_io::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 use umol_io::layout::{MoleculeLayout, MoleculeLayoutError};
@@ -93,6 +95,63 @@ fn test_layout_molecule_determinism(#[case] algorithm: MoleculeLayoutAlgorithm) 
     let second = layout_molecule(&molecule, algorithm).expect("second layout succeeds");
 
     assert_eq!(first, second);
+}
+
+#[cfg(feature = "coordgen")]
+#[rstest]
+#[case::z_implicit_hydrogen(
+    r#"{:atoms ["C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+        :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct0"}]}"#,
+    BondId(1),
+    AtomId(0),
+    AtomId(3),
+    true
+)]
+#[case::e_implicit_hydrogen(
+    r#"{:atoms ["C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+        :stereo-bonds [{:site 1 :ligands [0 [:h 1] 3 [:h 2]] :attrs "Ct1"}]}"#,
+    BondId(1),
+    AtomId(0),
+    AtomId(3),
+    false
+)]
+#[case::reversed_endpoint_frame(
+    r#"{:atoms ["C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [2 1 "2"] [2 3 "1"]]
+        :stereo-bonds [{:site 1 :ligands [3 [:h 2] 0 [:h 1]] :attrs "Ct0"}]}"#,
+    BondId(1),
+    AtomId(3),
+    AtomId(0),
+    true
+)]
+#[case::reframed_implicit_hydrogen(
+    r#"{:atoms ["C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+        :stereo-bonds [{:site 1 :ligands [[:h 1] 0 3 [:h 2]] :attrs "Ct0"}]}"#,
+    BondId(1),
+    AtomId(0),
+    AtomId(3),
+    false
+)]
+fn test_layout_molecule_cis_trans(
+    #[case] input: &str,
+    #[case] site: BondId,
+    #[case] first_ligand: AtomId,
+    #[case] second_ligand: AtomId,
+    #[case] expected_same_side: bool,
+) {
+    let molecule = mol_dsl!(input);
+
+    let layout = layout_molecule(&molecule, MoleculeLayoutAlgorithm::CoordGen)
+        .expect("cis/trans layout succeeds");
+    let [site_0, site_1] = molecule.bond(site).atom_ids();
+
+    assert_eq!(
+        layout_same_side(&layout, site_0, site_1, first_ligand, second_ligand),
+        expected_same_side
+    );
 }
 
 #[rstest]
@@ -185,4 +244,32 @@ fn layout_distance(layout: &MoleculeLayout, atom_0: AtomId, atom_1: AtomId) -> f
         .position(atom_1)
         .expect("second atom is in the layout frame");
     (point_1.x - point_0.x).hypot(point_1.y - point_0.y)
+}
+
+#[cfg(feature = "coordgen")]
+fn layout_same_side(
+    layout: &MoleculeLayout,
+    site_0: AtomId,
+    site_1: AtomId,
+    first_ligand: AtomId,
+    second_ligand: AtomId,
+) -> bool {
+    let first = layout_half_plane(layout, site_0, site_1, first_ligand);
+    let second = layout_half_plane(layout, site_0, site_1, second_ligand);
+    assert!(first.abs() > 1e-6);
+    assert!(second.abs() > 1e-6);
+    first.is_sign_positive() == second.is_sign_positive()
+}
+
+#[cfg(feature = "coordgen")]
+fn layout_half_plane(
+    layout: &MoleculeLayout,
+    site_0: AtomId,
+    site_1: AtomId,
+    ligand: AtomId,
+) -> f64 {
+    let site_0 = layout.position(site_0).expect("site atom is in frame");
+    let site_1 = layout.position(site_1).expect("site atom is in frame");
+    let ligand = layout.position(ligand).expect("ligand atom is in frame");
+    (site_1.x - site_0.x) * (ligand.y - site_0.y) - (site_1.y - site_0.y) * (ligand.x - site_0.x)
 }

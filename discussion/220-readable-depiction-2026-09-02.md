@@ -378,27 +378,56 @@ pass. Verification used `cargo test -p umol-io -q`,
 
 ### S1 — Cis/trans-aware CoordGen layout
 
-- **S1a — Native input boundary** `[dep: S0]`: add `SideRelation` and `CisTransBond`, change the
+- [x] **S1a — Native input boundary** `[dep: S0]`: add `SideRelation` and `CisTransBond`, change the
   Rust and C coordinate-generation signatures, validate index/order/incidence/uniqueness before
   FFI, validate the C relation discriminator, and update all empty-stereo callers. Add exact ABI
   tests for every invalid-input category.
-- **S1b — Backend application and postcondition** `[dep: S1a]`: attach the selected substituents
+- [x] **S1b — Backend application and postcondition** `[dep: S1a]`: attach the selected substituents
   and relation to CoordGen's bond stereo record, establish its absolute stereo before coordinate
   generation, and verify the returned half-planes in the safe Rust wrapper. Test same-side,
   opposite-side, endpoint reversal, determinism, degeneracy classification, and mismatch
   detection without using CoordGen itself as the assertion oracle.
-- **S1c — Graph-IR projection** `[dep: S1b]`: in `umol-io/src/layout/coordgen.rs`, select actual
+- [x] **S1c — Graph-IR projection** `[dep: S1b]`: in `umol-io/src/layout/coordgen.rs`, select actual
   endpoint ligands, reframe with `StereoBondView::coset_for`, and emit native requests only for
   `CisTrans` plus `StereoCoset::Lit`. Add layout fixtures proving Z and E geometry, reversed stored
   site orientation, implicit-H frames, and omission of undetermined, set, term, and unsupported
   stereo forms.
-- **S1d — Layout evidence** `[dep: S1c]`: rerun the layout benchmark cases and retain the comparison
+- [x] **S1d — Layout evidence** `[dep: S1c]`: rerun the layout benchmark cases and retain the comparison
   with the S0 baseline. Treat success rate and stereo postcondition failures as evidence alongside
   time per molecule.
 
 S1 is green when `umol-coordgen-sys` native tests and `umol-io` layout tests pass with the CoordGen
 feature and every successful literal cis/trans fixture satisfies an independently computed
 relative-side predicate.
+
+The S1 layout benchmark completed all 9/9 groups, including both definite cis/trans cases, with no
+layout or stereo-postcondition errors. The intended stereo projection and postcondition cost is
+about 0.4 us per four-atom definite cis/trans molecule; the remaining movement is ordinary
+whole-benchmark run variation rather than a shared added cost:
+
+| Case | S1 time per molecule, 95% interval | Criterion change from S0, 95% interval |
+| --- | ---: | ---: |
+| acyclic/asymmetric_tree_8 | 61.817–62.027 us | -2.04% to -1.49% |
+| cyclic/cyclooctane | 10.496–10.782 us | -1.32% to +0.99% |
+| aromatic/benzene | 8.012–8.044 us | -2.51% to +0.50% |
+| disconnected/mixed_components_8 | 9.941–10.103 us | +1.24% to +3.02% |
+| underdetermined/wildcard_path_8 | 71.151–71.578 us | -6.65% to -4.04% |
+| cis_trans/z_but_2_ene | 4.605–4.878 us | +7.74% to +10.25% |
+| cis_trans/e_but_2_ene | 4.619–4.637 us | +8.77% to +9.18% |
+| mapping_hard_tail/high_symmetry_complete_7 | 1.293–1.301 ms | -4.15% to -0.46% |
+| mapping_hard_tail/repeated_components_3x2 | 7.648–7.670 us | -4.51% to -2.58% |
+
+Command: `cargo bench -p umol-io --bench layout --features coordgen -- --noplot`.
+
+S1 completed on 2026-09-02. The public-symbol audit found only the settled
+`SideRelation`, `CisTransBond`, extended `CoordgenError`, and breaking
+`generate_coordinates` input boundary. The record remains an open `#[repr(C)]` carrier; contextual
+index, order, incidence, uniqueness, and output-geometry invariants are checked by the one safe
+operation. No constructor, compatibility entry point, generic graph-IR projection helper, or
+Python scene API was added. Verification used
+`cargo test -p umol-coordgen-sys --features native -q`,
+`cargo test -p umol-io --features coordgen -q`, and Clippy with `-D warnings` for both crates and
+all feature-relevant targets.
 
 ### S2 — Atom labels and bond clearance
 
