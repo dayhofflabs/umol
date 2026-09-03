@@ -1,6 +1,6 @@
 # 221 — Depiction API
 
-Status: In Progress
+Status: Completed
 Date: 2026-09-03
 Relates: [220](220-readable-depiction-2026-09-02.md)
 
@@ -353,9 +353,9 @@ The feature boundary was also checked directly with `--no-default-features`: `ca
 
 ### S3 — Release-facing verification and closeout
 
-#### S3a — Public documentation and release surface
+#### S3a — Public documentation and release surface **Done**
 
-**Modules:** Rust rustdoc, Python docstrings and exports, `RELEASE_NOTES.md`
+**Modules:** Rust rustdoc, Python docstrings, exports and build configuration, `RELEASE_NOTES.md`
 
 Describe only the final method-based Rust and Python APIs, including feature availability,
 configuration defaulting, reaction materialization failure, SVG text access, and notebook display.
@@ -366,11 +366,19 @@ compatibility aliases or hidden public construction seams.
 **Change:** additive documentation and surface audit (green).  
 **Dependencies:** [dep: S1b, S2c].
 
-#### S3b — Final verification and document closeout
+**Evidence:** depiction-enabled Rust documentation exposes exactly `Depict`, `DepictConfig`,
+`Depiction`, `MoleculeDepictionError`, and `ReactionDepictionError`. The error variants match the
+settled layout, tetrahedral-geometry, reaction-materialization, and side-specific failure
+boundaries. No scene carrier or constructor is public. Python docstrings describe the equivalent
+methods, ordinary SVG text access, notebook display, and materialization errors; the default
+Maturin configuration enables the Python `depiction` feature. `RELEASE_NOTES.md` now describes only
+the compatible 0.7.1 API.
+
+#### S3b — Final verification and document closeout **Done**
 
 **Modules:** workspace verification and this discussion record
 
-Run `cargo +nightly fmt --all -- --check`; the focused CoordGen/proptest tests, clippy, and
+Run `cargo +nightly fmt --all -- --check`; the focused depiction/proptest tests, clippy, and
 benchmarks; and the depiction-enabled `umol-py` Rust and Python suites using the repository Python
 3.13 environment and a fresh `maturin develop`. Then run the Python-activated workspace test and
 clippy gates. Inspect generated public documentation and the final feature-disabled build. Record
@@ -380,11 +388,30 @@ the implementation and status index agree.
 **Change:** verification and closeout (green).  
 **Dependencies:** [dep: S3a].
 
+**Evidence:** `cargo test -p umol-io --features 'depiction proptest'` passed 3,397 unit, 15
+layout-integration, and six SMILES-property tests. Clippy passed with warnings denied for all
+`umol-io` targets under those features. Quick Criterion runs completed for the SVG and layout
+benchmarks; representative SVG rendering remained at 1.9–8.8 microseconds and ordinary CoordGen
+layout at 4.6–71.7 microseconds, with the deliberately pathological complete graph at 1.30
+milliseconds.
+
+With `umol-py/.venv` confirmed as Python 3.13.15, the depiction-enabled Rust suite passed 1,647
+tests with two ignored. A fresh `maturin develop` without a command-line feature override read the
+default features from `pyproject.toml`, built and installed the abi3 extension with depiction, and
+the complete Python suite passed 1,325 tests with two skipped. Depiction-enabled `umol-py` Clippy,
+Python-activated `cargo test --workspace --no-fail-fast`, and workspace Clippy with warnings denied
+all passed.
+
+`cargo doc -p umol-io --no-deps --features depiction` completed without warnings and exposed
+exactly the five settled depiction symbols. The feature-disabled `cargo check` and rustdoc build
+also passed; its generated crate index omitted the `depict` module. The final formatting and diff
+checks (`cargo +nightly fmt --all -- --check` and `git diff --check`) completed cleanly.
+
 The critical path is S0a/S0b -> S0c -> S1a -> S1b -> S2a -> S2b -> S2c -> S3a -> S3b. No stage is
 deferrable for the 0.7.1 depiction release; S0 is additive preparation, while S1 and S2 perform the
 two independent public-surface cutovers and restore a green workspace at each stage boundary.
 
 ## Release consequence
 
-The 0.7.1 release notes and publication preparation are provisional until this contract is
-implemented. The `umol-perm` cleanup remains internal and is not part of this scope.
+The compatible 0.7.1 depiction contract and release notes are complete. Publication preparation
+remains a separate process. The `umol-perm` cleanup remains internal and is not part of this scope.

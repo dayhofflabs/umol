@@ -118,10 +118,13 @@ impl Depict for Reaction {
 #[cfg(feature = "coordgen")]
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum ReactionDepictionError {
+    /// The reaction deltas could not be materialized into a two-sided reaction span.
     #[error("reaction materialization: {0}")]
     Materialization(#[source] Contradiction),
+    /// Layout or depiction of the materialized left-hand side failed.
     #[error("lhs depiction: {0}")]
     LhsDepiction(#[source] MoleculeDepictionError),
+    /// Layout or depiction of the materialized right-hand side failed.
     #[error("rhs depiction: {0}")]
     RhsDepiction(#[source] MoleculeDepictionError),
 }

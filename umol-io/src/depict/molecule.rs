@@ -125,9 +125,11 @@ impl Depict for Molecule {
 /// Failures while depicting a graph-IR [`Molecule`].
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum MoleculeDepictionError {
+    /// The configured layout backend could not produce coordinates.
     #[cfg(feature = "coordgen")]
     #[error("layout: {0}")]
     Layout(#[from] LayoutError),
+    /// A definite tetrahedral stereo atom could not be represented by a display wedge.
     #[error("tetrahedral geometry cannot establish a display wedge for stereo atom {stereo_atom}")]
     TetrahedralGeometry { stereo_atom: StereoAtomId },
 }

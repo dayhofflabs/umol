@@ -28,7 +28,7 @@ test = ["pytest"]
 [tool.maturin]
 module-name = "umol._native"
 python-source = "python"
-features = ["pyo3/extension-module"]
+features = ["depiction", "pyo3/extension-module"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

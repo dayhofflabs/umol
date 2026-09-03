@@ -1,4 +1,9 @@
 //! Format-neutral molecule and reaction depiction.
+//!
+//! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
+//! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
+//! explicit configuration. Both operations return an opaque [`Depiction`], whose
+//! [`Depiction::render_svg`] method produces SVG text.
 
 pub(crate) mod molecule;
 mod reaction;
@@ -32,6 +37,10 @@ impl Default for DepictConfig {
 }
 
 /// Constructs a format-neutral depiction using default or explicitly configured operations.
+///
+/// Graph-IR molecules return [`MoleculeDepictionError`]. Graph-IR reactions return
+/// [`ReactionDepictionError`] and are materialized into their two sides before either side is laid
+/// out or depicted.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
     /// Failure produced while laying out or depicting this value.
@@ -56,7 +65,7 @@ pub trait Depict {
     fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error>;
 }
 
-/// An ordered, format-neutral molecular drawing scene.
+/// An opaque, format-neutral molecular drawing scene.
 ///
 /// Item order is drawing order. Bounds cover item anchors and segment endpoints; they do
 /// not include renderer-dependent glyph extents. A depiction is issued by a graph-IR lowering or
@@ -80,11 +89,12 @@ impl Depiction {
         self.bounds.as_ref()
     }
 
-    /// Renders this depiction as a complete SVG document fragment.
+    /// Renders this depiction as a complete SVG document.
     ///
     /// Item order is preserved. Coordinates are converted from the depiction's y-up convention to
     /// SVG's y-down convention. Molecular strokes are masked beneath estimated atom-label bounds,
-    /// and structured source references are encoded in `data-umol-references` attributes.
+    /// and structured source references are encoded in `data-umol-references` attributes. The
+    /// returned text can be written directly to an SVG file.
     pub fn render_svg(&self) -> String {
         svg::render(self)
     }

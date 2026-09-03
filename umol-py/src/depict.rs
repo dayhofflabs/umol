@@ -1,4 +1,4 @@
-//! Explicit layout and SVG display bindings.
+//! Explicit layout and SVG depiction bindings, enabled by the `depiction` feature.
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -52,6 +52,8 @@ impl MoleculeLayoutAlgorithm {
 }
 
 /// Operational configuration for molecule and reaction depiction.
+///
+/// The default configuration selects CoordGen, currently the only layout algorithm.
 #[pyclass(eq, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DepictConfig {
@@ -103,12 +105,12 @@ pub struct Depiction(IoDepiction);
 
 #[pymethods]
 impl Depiction {
-    /// Render this depiction as a complete SVG document fragment.
+    /// Render this depiction as a complete SVG document suitable for writing to an SVG file.
     fn render_svg(&self) -> String {
         self.0.render_svg()
     }
 
-    /// Return the complete SVG fragment through Jupyter's rich-display protocol.
+    /// Return the complete SVG document through Jupyter's rich-display protocol.
     fn _repr_svg_(&self) -> String {
         self.render_svg()
     }
@@ -123,6 +125,8 @@ impl Depiction {
 #[pymethods]
 impl Molecule {
     /// Construct a format-neutral depiction using the default configuration.
+    ///
+    /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict(&self) -> PyResult<Depiction> {
         self.to_rust()
             .depict()
@@ -131,6 +135,8 @@ impl Molecule {
     }
 
     /// Construct a format-neutral depiction using `config`.
+    ///
+    /// Raises `RuntimeError` if layout or tetrahedral depiction fails.
     fn depict_with(&self, config: DepictConfig) -> PyResult<Depiction> {
         let config = config.to_rust();
         self.to_rust()
@@ -143,6 +149,9 @@ impl Molecule {
 #[pymethods]
 impl Reaction {
     /// Construct a format-neutral depiction using the default configuration.
+    ///
+    /// Raises `ContradictionError` if the reaction cannot be materialized and `RuntimeError` if
+    /// layout or depiction of either materialized side fails.
     fn depict(&self, py: Python<'_>) -> PyResult<Depiction> {
         self.to_rust(py)?
             .depict()
@@ -151,6 +160,9 @@ impl Reaction {
     }
 
     /// Construct a format-neutral depiction using `config`.
+    ///
+    /// Raises `ContradictionError` if the reaction cannot be materialized and `RuntimeError` if
+    /// layout or depiction of either materialized side fails.
     fn depict_with(&self, py: Python<'_>, config: DepictConfig) -> PyResult<Depiction> {
         let config = config.to_rust();
         self.to_rust(py)?
