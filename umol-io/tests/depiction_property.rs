@@ -15,8 +15,8 @@ use umol_graph_ir::ir::{
     AtomForm, AtomId, BondForm, Entity, FrameTransport, Molecule, MoleculeEntries, StereoAtomForm,
     StereoCoset, StereoKind, StereoLigand, StereoLigandKind,
 };
-use umol_io::depiction::molecule::depict;
-use umol_io::depiction::{Depiction, DepictionItem, DepictionReference, WedgeItem, WedgeKind};
+use umol_io::depict::molecule::depict;
+use umol_io::depict::{Depiction, DepictionItem, DepictionReference, WedgeItem, WedgeKind};
 use umol_io::layout::MoleculeLayout;
 use umol_perm::Permutation;
 

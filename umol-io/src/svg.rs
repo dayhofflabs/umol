@@ -5,7 +5,7 @@ use std::fmt::Write;
 use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
-use crate::depiction::{
+use crate::depict::{
     ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, Depiction, DepictionItem,
     DepictionReference, TextItem, WedgeItem, WedgeKind,
 };
@@ -461,8 +461,8 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::depiction::molecule::depict;
-    use crate::depiction::reaction::depict_from_sides;
+    use crate::depict::molecule::depict;
+    use crate::depict::reaction::depict_from_sides;
     use crate::layout::MoleculeLayout;
 
     #[rstest]

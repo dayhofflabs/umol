@@ -2,9 +2,9 @@
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use umol_io::depiction::molecule::MoleculeDepictionError as IoMoleculeDepictionError;
-use umol_io::depiction::reaction::ReactionDepictionError as IoReactionDepictionError;
-use umol_io::depiction::{Depict as IoDepict, Depiction as IoDepiction};
+use umol_io::depict::molecule::MoleculeDepictionError as IoMoleculeDepictionError;
+use umol_io::depict::reaction::ReactionDepictionError as IoReactionDepictionError;
+use umol_io::depict::{Depict as IoDepict, Depiction as IoDepiction};
 use umol_io::layout::MoleculeLayoutAlgorithm as IoMoleculeLayoutAlgorithm;
 use umol_io::svg::render as render_svg;
 

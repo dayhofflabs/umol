@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::{env, fs, io, process};
 
 use umol_graph_ir::dsl::{MoleculeDsl, ReactionDsl};
-use umol_io::depiction::Depict;
+use umol_io::depict::Depict;
 use umol_io::layout::MoleculeLayoutAlgorithm;
 use umol_io::svg;
 

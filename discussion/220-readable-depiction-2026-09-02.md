@@ -188,11 +188,12 @@ materialized tetrahedral and cis/trans entities with a literal ground coset.
 
 ## Public contract
 
-No public depiction configuration is added. `MoleculeLayout` remains an open, finite coordinate
-carrier in one dense atom frame. `Depiction` remains an operation-issued scene with no public
-aggregate constructor. Graph-IR lowering selects chemical display semantics and source references;
-the SVG renderer realizes those items without reading graph IR. Python continues to expose only the
-explicit layout-algorithm choice and an already rendered `Svg` value.
+No public depiction configuration is added. The public operation module is `umol_io::depict`; the
+noun `Depiction` names its result rather than its module. `MoleculeLayout` remains an open, finite
+coordinate carrier in one dense atom frame. `Depiction` remains an operation-issued scene with no
+public aggregate constructor. Graph-IR lowering selects chemical display semantics and source
+references; the SVG renderer realizes those items without reading graph IR. Python continues to
+expose only the explicit layout-algorithm choice and an already rendered `Svg` value.
 
 ### Native cis/trans input
 

@@ -942,9 +942,10 @@ mod tests {
     use umol_graph_ir::mol_dsl;
 
     use super::*;
-    use crate::depiction::Bounds;
+    use crate::ctfile::parser::parse_mol_to_table_ir;
+    use crate::depict::Bounds;
     #[cfg(feature = "coordgen")]
-    use crate::depiction::Depict;
+    use crate::depict::Depict;
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
 
@@ -1353,7 +1354,7 @@ mod tests {
     #[rstest]
     fn test_depict_omits_c60_conformance_cage_contour() {
         let source = include_str!("../../tests/mol_parsing/data/molecule/scifinder/99685-96-8.mol");
-        let table = crate::ctfile::parser::parse_mol_to_table_ir(source).unwrap();
+        let table = parse_mol_to_table_ir(source).unwrap();
         let positions = table
             .positions
             .as_ref()

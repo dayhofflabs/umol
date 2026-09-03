@@ -8,9 +8,9 @@ use umol_geometric_core::Point2D;
 use umol_graph_core::Correspondence;
 use umol_graph_ir::ir::{AtomForm, AtomId, BondForm, Molecule, MoleculeEntries};
 use umol_graph_ir::mol_dsl;
-use umol_io::depiction::molecule::depict;
-use umol_io::depiction::reaction::depict_from_sides;
-use umol_io::depiction::Depiction;
+use umol_io::depict::molecule::depict;
+use umol_io::depict::reaction::depict_from_sides;
+use umol_io::depict::Depiction;
 use umol_io::layout::MoleculeLayout;
 use umol_io::svg::render;
 

@@ -4,7 +4,7 @@
 use pyo3::prelude::*;
 
 #[cfg(feature = "depiction")]
-use crate::depiction::{MoleculeLayoutAlgorithm, Svg};
+use crate::depict::{MoleculeLayoutAlgorithm, Svg};
 #[cfg(feature = "graph")]
 use crate::{
     algorithm::{
@@ -153,7 +153,7 @@ mod defaults;
 #[cfg(feature = "graph")]
 mod delta;
 #[cfg(feature = "depiction")]
-mod depiction;
+mod depict;
 #[cfg(feature = "graph")]
 mod edit;
 #[cfg(feature = "graph")]

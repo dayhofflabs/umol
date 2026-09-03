@@ -1,4 +1,4 @@
-//! Format-neutral drawing items for molecular and reaction depictions.
+//! Format-neutral depiction operations and their drawing items.
 
 pub mod molecule;
 pub mod reaction;

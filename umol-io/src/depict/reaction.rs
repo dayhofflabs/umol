@@ -13,7 +13,7 @@ use umol_utils::error::UmolError;
 #[cfg(feature = "coordgen")]
 use super::Depict;
 use super::{molecule, ArrowItem, Depiction, DepictionItem, DepictionReference, TextItem};
-use crate::depiction::molecule::MoleculeDepictionError;
+use crate::depict::molecule::MoleculeDepictionError;
 use crate::layout::MoleculeLayout;
 #[cfg(feature = "coordgen")]
 use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
@@ -364,10 +364,10 @@ mod tests {
     #[cfg(feature = "coordgen")]
     use super::ReactionDepictionError;
     use super::{depict_from_sides, translate_item, DepictFromSidesError, ReactionSide};
-    use crate::depiction::molecule::MoleculeDepictionError;
+    use crate::depict::molecule::MoleculeDepictionError;
     #[cfg(feature = "coordgen")]
-    use crate::depiction::Depict;
-    use crate::depiction::{
+    use crate::depict::Depict;
+    use crate::depict::{
         ArrowItem, AtomItem, BondItem, Bounds, DashedContourItem, DepictionItem,
         DepictionReference, TextItem, WedgeItem, WedgeKind,
     };
