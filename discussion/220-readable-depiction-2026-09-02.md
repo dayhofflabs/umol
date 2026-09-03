@@ -648,7 +648,7 @@ Command: `cargo bench -p umol-io --bench svg -- fused_aromatic --noplot`. Verifi
 
 ### S5 — Visual-review cleanup
 
-- **S5a — Label typography and clearance** `[dep: S2]`: replace the glyph-shaped bond mask with a
+- [x] **S5a — Label typography and clearance** `[dep: S2]`: replace the glyph-shaped bond mask with a
   continuous clearance region covering the complete displayed label, without painting an assumed
   background color. Render the implicit-hydrogen count as a subscript and charge and radical dots
   as superscripts. Make the SVG viewport include the displayed label extents so long labels are not

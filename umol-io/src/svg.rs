@@ -13,8 +13,9 @@ use crate::depict::{
 const VIEW_MARGIN: f64 = 0.5;
 const BOND_GAP: f64 = 0.12;
 const BOND_WIDTH: f64 = 0.06;
+const WEDGE_TIP_HALF_WIDTH: f64 = 0.03;
 const WEDGE_BASE_HALF_WIDTH: f64 = 0.1;
-const WEDGE_HASH_COUNT: usize = 5;
+const WEDGE_HASH_COUNT: usize = 8;
 const DASHED_CONTOUR_WIDTH: f64 = 0.04;
 const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
@@ -351,31 +352,42 @@ fn render_wedge(output: &mut String, wedge: &WedgeItem) {
 
     match wedge.kind {
         WedgeKind::Solid => {
-            let first = Point2D::new(
+            let tip_first = Point2D::new(
+                wedge.tip.x + WEDGE_TIP_HALF_WIDTH * perpendicular.x,
+                wedge.tip.y + WEDGE_TIP_HALF_WIDTH * perpendicular.y,
+            );
+            let base_first = Point2D::new(
                 wedge.base.x + WEDGE_BASE_HALF_WIDTH * perpendicular.x,
                 wedge.base.y + WEDGE_BASE_HALF_WIDTH * perpendicular.y,
             );
-            let second = Point2D::new(
+            let base_second = Point2D::new(
                 wedge.base.x - WEDGE_BASE_HALF_WIDTH * perpendicular.x,
                 wedge.base.y - WEDGE_BASE_HALF_WIDTH * perpendicular.y,
             );
+            let tip_second = Point2D::new(
+                wedge.tip.x - WEDGE_TIP_HALF_WIDTH * perpendicular.x,
+                wedge.tip.y - WEDGE_TIP_HALF_WIDTH * perpendicular.y,
+            );
             output.push_str(r#"<polygon class="umol-wedge-solid" points=""#);
-            write_svg_point(output, wedge.tip);
+            write_svg_point(output, tip_first);
             output.push(' ');
-            write_svg_point(output, first);
+            write_svg_point(output, base_first);
             output.push(' ');
-            write_svg_point(output, second);
+            write_svg_point(output, base_second);
+            output.push(' ');
+            write_svg_point(output, tip_second);
             output.push_str(r#"" fill="currentColor"/>"#);
         }
         WedgeKind::Hashed => {
-            for index in 1..=WEDGE_HASH_COUNT {
+            for index in 0..WEDGE_HASH_COUNT {
                 let numerator = index as f64;
-                let denominator = WEDGE_HASH_COUNT as f64;
+                let denominator = (WEDGE_HASH_COUNT - 1) as f64;
                 let center = Point2D::new(
                     wedge.tip.x + dx * numerator / denominator,
                     wedge.tip.y + dy * numerator / denominator,
                 );
-                let half_width = (WEDGE_BASE_HALF_WIDTH / denominator) * numerator;
+                let half_width = WEDGE_TIP_HALF_WIDTH
+                    + (WEDGE_BASE_HALF_WIDTH - WEDGE_TIP_HALF_WIDTH) * numerator / denominator;
                 let first = Point2D::new(
                     center.x + half_width * perpendicular.x,
                     center.y + half_width * perpendicular.y,
@@ -695,22 +707,25 @@ mod tests {
     #[rstest]
     #[case::solid(
         WedgeKind::Solid,
-        r#"<polygon class="umol-wedge-solid" points="0,0 5,-0.1 5,0.1" fill="currentColor"/>"#
+        r#"<polygon class="umol-wedge-solid" points="0,-0.03 7,-0.1 7,0.1 0,0.03" fill="currentColor"/>"#
     )]
     #[case::hashed(
         WedgeKind::Hashed,
         concat!(
-            r#"<line class="umol-wedge-hash" x1="1" y1="-0.02" x2="1" y2="0.02" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
-            r#"<line class="umol-wedge-hash" x1="2" y1="-0.04" x2="2" y2="0.04" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="0" y1="-0.03" x2="0" y2="0.03" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="1" y1="-0.04" x2="1" y2="0.04" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="2" y1="-0.05" x2="2" y2="0.05" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
             r#"<line class="umol-wedge-hash" x1="3" y1="-0.06" x2="3" y2="0.06" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
-            r#"<line class="umol-wedge-hash" x1="4" y1="-0.08" x2="4" y2="0.08" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
-            r#"<line class="umol-wedge-hash" x1="5" y1="-0.1" x2="5" y2="0.1" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="4" y1="-0.07" x2="4" y2="0.07" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="5" y1="-0.08" x2="5" y2="0.08" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="6" y1="-0.09" x2="6" y2="0.09" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
+            r#"<line class="umol-wedge-hash" x1="7" y1="-0.1" x2="7" y2="0.1" fill="none" stroke="currentColor" stroke-width="0.06" stroke-linecap="round"/>"#,
         )
     )]
     fn test_render_wedge(#[case] kind: WedgeKind, #[case] expected_glyph: &str) {
         let item = DepictionItem::Wedge(WedgeItem {
             tip: Point2D::new(0.0, 0.0),
-            base: Point2D::new(5.0, 0.0),
+            base: Point2D::new(7.0, 0.0),
             kind,
             references: vec![DepictionReference::Molecule(Entity::Bond(BondId(3)))],
         });
