@@ -3,6 +3,8 @@
 
 use pyo3::prelude::*;
 
+#[cfg(feature = "depiction")]
+use crate::depict::{MoleculeLayoutAlgorithm, Svg};
 #[cfg(feature = "graph")]
 use crate::{
     algorithm::{
@@ -150,6 +152,8 @@ mod dative;
 mod defaults;
 #[cfg(feature = "graph")]
 mod delta;
+#[cfg(feature = "depiction")]
+mod depict;
 #[cfg(feature = "graph")]
 mod edit;
 #[cfg(feature = "graph")]
@@ -202,6 +206,10 @@ mod transaction;
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     #[cfg(feature = "graph")]
     {
+        #[cfg(feature = "depiction")]
+        module.add_class::<MoleculeLayoutAlgorithm>()?;
+        #[cfg(feature = "depiction")]
+        module.add_class::<Svg>()?;
         module.add_class::<AutomorphismAlgorithm>()?;
         module.add_class::<CanonicalizeConfig>()?;
         module.add_class::<CommonSubgraphEnumerationAlgorithm>()?;

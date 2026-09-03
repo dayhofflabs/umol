@@ -17,6 +17,7 @@ bench = false
 
 [features]
 conformance = []
+coordgen = ["dep:umol-coordgen-sys", "umol-coordgen-sys/native"]
 proptest = []
 
 [dependencies]
@@ -31,10 +32,12 @@ regex = "1.11.2"
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
+umol-graph-core = { path = "../umol-graph-core", version = "0.7.0" }
 umol-graph-ir = { path = "../umol-graph-ir", version = "0.7.0" }
 umol-geometric-core = { path = "../umol-geometric-core", version = "0.7.0" }
 umol-perm = { path = "../umol-perm", version = "0.7.0" }
 umol-chem = { path = "../umol-chem", version = "0.7.0" }
+umol-coordgen-sys = { path = "../umol-coordgen-sys", version = "0.7.0", optional = true }
 umol-utils = { path = "../umol-utils", version = "0.7.0" }
 
 [dev-dependencies]
@@ -43,11 +46,15 @@ float-cmp = "0.10.0"
 insta = { version = "1.43.2", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.1"
 proptest = "1.7.0"
+roxmltree = "0.21.1"
 rstest = "0.26.1"
 serde = { version = "1.0.221", features = ["derive"] }
 
 [[test]]
 name = "mol_parsing"
+
+[[test]]
+name = "layout"
 
 [[test]]
 name = "sdf_parsing"
@@ -59,6 +66,15 @@ name = "smiles_parsing"
 name = "smiles_property"
 required-features = ["proptest"]
 
+[[test]]
+name = "depiction_property"
+required-features = ["proptest"]
+
+[[bench]]
+name = "layout"
+harness = false
+required-features = ["coordgen"]
+
 [[bench]]
 name = "mol_parsing"
 harness = false
@@ -66,6 +82,15 @@ harness = false
 [[bench]]
 name = "smiles_parsing"
 harness = false
+
+[[bench]]
+name = "svg"
+harness = false
+
+[[bin]]
+name = "depict_dsl"
+bench = false
+required-features = ["coordgen"]
 
 [lints.clippy]
 absolute_paths = "warn"

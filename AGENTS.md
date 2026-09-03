@@ -10,6 +10,8 @@ representations and operations, with Python bindings in `umol-py`.
   algorithms.
 - `umol-graph` provides chemistry-aware operations over the graph-IR model.
 - `umol-io` owns external-format boundary representations and parsers.
+- `umol-coordgen-sys` provides the vendored native boundary for feature-gated
+  2D coordinate generation.
 - `umol-geometric*` provides geometric representations and their connection to
   the graph model.
 - `umol-py` exposes the supported high-level surface to Python.
@@ -21,6 +23,7 @@ models. Do not treat a format boundary type as the one true molecular model.
 
 | Crate | Responsibility |
 | --- | --- |
+| `umol-coordgen-sys` | Feature-gated vendored CoordGen source and native 2D-coordinate boundary |
 | `umol-graph-ir`, `umol-graph-ir-macros` | Molecular and reaction DSLs, graph IR, constraints, edits, deltas, and validation vocabulary |
 | `umol-chem` | Elements, isotopes, spin, occupation, units, and other chemistry vocabulary |
 | `umol-edn`, `umol-edn-macros` | EDN parsing, formatting, and macros |

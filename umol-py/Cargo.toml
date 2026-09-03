@@ -17,6 +17,7 @@ bench = false
 
 [features]
 default = ["graph"]
+depiction = ["graph", "umol-io/coordgen"]
 graph = [
     "dep:umol-graph-ir",
     "dep:umol-chem",

@@ -2,13 +2,16 @@ use std::collections::HashSet;
 
 use rstest::rstest;
 use umol_chem::element::Element;
+use umol_graph::ops::aromaticity::AromaticityPerceiver;
 use umol_graph::ops::invariant::ValenceMismatch;
+use umol_graph::ops::model::AromaticityModel;
 use umol_graph::ops::transform::{KekulizeConfig, KekulizeError, Kekulizer, Transformer};
 use umol_graph::ops::validate::ValenceInvariantsValidator;
+use umol_graph::parse::parse_mol;
 use umol_graph_ir::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_graph_ir::ir::{
-    AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId, ElectronCountsForm,
-    ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
+    AromaticSystemForm, AromaticSystemId, AtomConstraintKey, AtomId, BondConstraintKey, BondId,
+    ElectronCountsForm, ElementForm, IntoIr, NumForm, UnpairedElectronsForm,
 };
 use umol_utils::solution::Solution;
 
@@ -428,6 +431,67 @@ fn test_kekulization_fixture_output(
             );
         }
     }
+}
+
+#[rstest]
+#[case::c60(include_str!(
+    "../../../umol-io/tests/mol_parsing/data/molecule/scifinder/99685-96-8.mol"
+))]
+fn test_kekulization_fixture_output_cage(#[case] source: &str) {
+    let mut input = parse_mol(source).unwrap();
+    let system_atoms: Vec<AtomId> = input.atoms().ids().collect();
+    let system_bonds: Vec<BondId> = input.bonds().ids().collect();
+    for bond in system_bonds {
+        input.bond_mut(bond).attributes.order = NumForm::Lit(1);
+    }
+    AromaticityPerceiver::new(&AromaticityModel::daylight()).add_systems(
+        &mut input,
+        vec![(
+            system_atoms.clone(),
+            AromaticSystemForm {
+                electrons: ElectronCountsForm::Lit(vec![1; 60]),
+                charge: NumForm::Lit(0),
+                unpaired_electrons: UnpairedElectronsForm::closed_shell(),
+                ..Default::default()
+            },
+        )],
+    );
+    let original = input.clone();
+    let node_order: Vec<AtomId> = input.atoms().ids().collect();
+    let kekulizer = Kekulizer::new(KekulizeConfig::default(), node_order);
+
+    let first = kekulizer.transform(&input).unwrap();
+    let second = kekulizer.transform(&input).unwrap();
+    let double_bonds: Vec<BondId> = first
+        .bonds()
+        .iter()
+        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .map(|bond| bond.id)
+        .collect();
+    let covered_atoms: HashSet<AtomId> = first
+        .bonds()
+        .iter()
+        .filter(|bond| bond.attributes.order == NumForm::Lit(2))
+        .flat_map(|bond| bond.atom_ids())
+        .collect();
+    let expected_covered_atoms: HashSet<AtomId> = system_atoms.into_iter().collect();
+
+    assert_eq!(input, original);
+    assert_eq!(first, second);
+    assert_eq!(double_bonds.len(), 30);
+    assert_eq!(covered_atoms, expected_covered_atoms);
+    assert_eq!(
+        ValenceInvariantsValidator.validate(&first),
+        Ok(Solution::Determined(()))
+    );
+    assert_eq!(first.aromatic_systems().count(), 0);
+    assert!(first.bonds().iter().all(|bond| {
+        matches!(bond.attributes.order, NumForm::Lit(1 | 2))
+            && !bond
+                .attributes
+                .constraints
+                .contains(BondConstraintKey::Aromatic)
+    }));
 }
 
 #[rstest]
