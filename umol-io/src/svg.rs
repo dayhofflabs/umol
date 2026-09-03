@@ -18,6 +18,8 @@ const WEDGE_HASH_COUNT: usize = 5;
 const DASHED_CONTOUR_WIDTH: f64 = 0.04;
 const DASHED_CONTOUR_PATTERN: &str = "0.12 0.1";
 const TEXT_SIZE: f64 = 0.45;
+const ATOM_LABEL_MASK_ID: &str = "umol-atom-label-mask";
+const ATOM_LABEL_MASK_EXPANSION: f64 = 0.3;
 const AROMATIC_MARKER_RADIUS: f64 = 0.16;
 const STEREO_MARKER_RADIUS: f64 = 0.19;
 const MARKER_WIDTH: f64 = 0.04;
@@ -26,13 +28,15 @@ const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 
 /// Renders a [`Depiction`] as a complete SVG document fragment.
 ///
-/// Depiction item order is preserved as direct child order. Coordinates are converted from the
-/// depiction's y-up convention to SVG's y-down convention. The view box extends the depiction's
-/// anchor bounds by half a nominal bond length on each side; an empty depiction uses a centered
-/// one-by-one view box. Structured references are encoded in the `data-umol-references` attribute
-/// as ordered, space-separated path tokens: molecular entity references use `molecule`,
-/// `reaction-lhs`, or `reaction-rhs` followed by entity kind and id; `correspondence-pair` and
-/// `delta` references use their kind followed by their zero-based position.
+/// Depiction item order is preserved among item groups. When atom labels are present, one leading
+/// definition masks molecular strokes beneath duplicates of the visible glyphs without painting a
+/// page-background color. Coordinates are converted from the depiction's y-up convention to SVG's
+/// y-down convention. The view box extends the depiction's anchor bounds by half a nominal bond
+/// length on each side; an empty depiction uses a centered one-by-one view box. Structured
+/// references are encoded in the `data-umol-references` attribute as ordered, space-separated path
+/// tokens: molecular entity references use `molecule`, `reaction-lhs`, or `reaction-rhs` followed
+/// by entity kind and id; `correspondence-pair` and `delta` references use their kind followed by
+/// their zero-based position.
 pub fn render(depiction: &Depiction) -> String {
     let mut output = String::new();
     let view_box = SvgViewBox::from_bounds(depiction.bounds());
@@ -47,8 +51,20 @@ pub fn render(depiction: &Depiction) -> String {
     write_number(&mut output, view_box.height);
     output.push_str("\">\n");
 
+    let has_atom_mask = depiction
+        .items()
+        .iter()
+        .any(|item| matches!(item, DepictionItem::Atom(_)));
+    if has_atom_mask {
+        render_atom_mask(&mut output, depiction, view_box);
+    }
+
     for item in depiction.items() {
-        render_item(&mut output, item);
+        render_item(
+            &mut output,
+            item,
+            has_atom_mask && item_uses_atom_mask(item),
+        );
     }
 
     output.push_str("</svg>");
@@ -82,7 +98,41 @@ impl SvgViewBox {
     }
 }
 
-fn render_item(output: &mut String, item: &DepictionItem) {
+fn render_atom_mask(output: &mut String, depiction: &Depiction, view_box: SvgViewBox) {
+    output.push_str(
+        r#"<defs><mask id="umol-atom-label-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" mask-type="luminance" x=""#,
+    );
+    write_number(output, view_box.x);
+    output.push_str(r#"" y=""#);
+    write_number(output, view_box.y);
+    output.push_str(r#"" width=""#);
+    write_number(output, view_box.width);
+    output.push_str(r#"" height=""#);
+    write_number(output, view_box.height);
+    output.push_str(r#""><rect x=""#);
+    write_number(output, view_box.x);
+    output.push_str(r#"" y=""#);
+    write_number(output, view_box.y);
+    output.push_str(r#"" width=""#);
+    write_number(output, view_box.width);
+    output.push_str(r#"" height=""#);
+    write_number(output, view_box.height);
+    output.push_str(r#"" fill="white"/>"#);
+    for item in depiction.items() {
+        if let DepictionItem::Atom(atom) = item {
+            render_atom_glyph(
+                output,
+                "umol-atom-mask",
+                atom,
+                "black",
+                Some(2.0 * ATOM_LABEL_MASK_EXPANSION),
+            );
+        }
+    }
+    output.push_str("</mask></defs>\n");
+}
+
+fn render_item(output: &mut String, item: &DepictionItem, atom_mask: bool) {
     output.push_str("<g data-umol-item=\"");
     output.push_str(item_kind(item));
     output.push('"');
@@ -92,6 +142,10 @@ fn render_item(output: &mut String, item: &DepictionItem) {
         output.push('"');
     }
     write_references(output, item.references());
+    if atom_mask {
+        write!(output, r##" mask="url(#{ATOM_LABEL_MASK_ID})""##)
+            .expect("writing to a String cannot fail");
+    }
     output.push('>');
 
     match item {
@@ -107,6 +161,13 @@ fn render_item(output: &mut String, item: &DepictionItem) {
     output.push_str("</g>\n");
 }
 
+fn item_uses_atom_mask(item: &DepictionItem) -> bool {
+    matches!(
+        item,
+        DepictionItem::Bond(_) | DepictionItem::Wedge(_) | DepictionItem::DashedContour(_)
+    )
+}
+
 fn item_kind(item: &DepictionItem) -> &'static str {
     match item {
         DepictionItem::Atom(_) => "atom",
@@ -120,13 +181,31 @@ fn item_kind(item: &DepictionItem) -> &'static str {
 }
 
 fn render_atom(output: &mut String, atom: &AtomItem) {
-    output.push_str(r#"<text class="umol-atom""#);
+    render_atom_glyph(output, "umol-atom", atom, "currentColor", None);
+}
+
+fn render_atom_glyph(
+    output: &mut String,
+    class: &str,
+    atom: &AtomItem,
+    fill: &str,
+    stroke_width: Option<f64>,
+) {
+    output.push_str("<text class=\"");
+    output.push_str(class);
+    output.push('"');
     write_point_attributes(output, atom.position);
     write!(
         output,
-        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{TEXT_SIZE}" fill="currentColor">"#
+        r#" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="{TEXT_SIZE}" fill="{fill}""#
     )
     .expect("writing to a String cannot fail");
+    if let Some(stroke_width) = stroke_width {
+        output.push_str(r#" stroke="black" stroke-width=""#);
+        write_number(output, stroke_width);
+        output.push_str(r#"" stroke-linecap="round" stroke-linejoin="round""#);
+    }
+    output.push('>');
     write_escaped_text(output, &atom.label);
     output.push_str("</text>");
 }
@@ -418,12 +497,116 @@ fn marker_kind(kind: MarkerKind) -> &'static str {
 mod tests {
     use roxmltree::Document;
     use rstest::rstest;
-    use umol_graph_ir::ir::{AromaticSystemId, BondId, Entity, Molecule};
+    use umol_graph_core::Correspondence;
+    use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, Entity, Molecule};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
     use crate::depiction::molecule::depict;
+    use crate::depiction::reaction::depict_from_sides;
     use crate::layout::MoleculeLayout;
+
+    #[rstest]
+    fn test_render_atom_mask() {
+        let molecule = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+        let layout =
+            MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(2.0, 0.0)]).unwrap();
+        let depiction = depict(&molecule, &layout).unwrap();
+
+        let svg = render(&depiction);
+        let document = Document::parse(&svg).unwrap();
+        let root = document.root_element();
+        let mask = root
+            .descendants()
+            .find(|node| node.has_tag_name("mask"))
+            .unwrap();
+        let mask_children = mask
+            .children()
+            .filter(|node| node.is_element())
+            .collect::<Vec<_>>();
+        let groups = root
+            .children()
+            .filter(|node| node.has_tag_name("g"))
+            .collect::<Vec<_>>();
+
+        assert_eq!(mask.attribute("id"), Some(ATOM_LABEL_MASK_ID));
+        assert_eq!(mask.attribute("maskUnits"), Some("userSpaceOnUse"));
+        assert_eq!(mask.attribute("maskContentUnits"), Some("userSpaceOnUse"));
+        assert_eq!(mask.attribute("mask-type"), Some("luminance"));
+        assert_eq!(
+            mask_children
+                .iter()
+                .map(|node| node.tag_name().name())
+                .collect::<Vec<_>>(),
+            ["rect", "text"]
+        );
+        assert_eq!(mask_children[0].attribute("fill"), Some("white"));
+        assert_eq!(mask_children[1].attribute("class"), Some("umol-atom-mask"));
+        assert_eq!(mask_children[1].attribute("fill"), Some("black"));
+        assert_eq!(mask_children[1].attribute("stroke"), Some("black"));
+        assert_eq!(mask_children[1].attribute("stroke-width"), Some("0.6"));
+        assert_eq!(mask_children[1].text(), Some("N"));
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.attribute("mask"))
+                .collect::<Vec<_>>(),
+            [Some("url(#umol-atom-label-mask)"), None]
+        );
+        assert_eq!(
+            groups[0].attribute("data-umol-references"),
+            Some("molecule/bond/0")
+        );
+        assert_eq!(
+            groups[1].attribute("data-umol-references"),
+            Some("molecule/atom/1")
+        );
+        assert_eq!(
+            groups[0].first_element_child().unwrap().attribute("stroke"),
+            Some("currentColor")
+        );
+        assert_eq!(
+            groups[1].first_element_child().unwrap().attribute("fill"),
+            Some("currentColor")
+        );
+        assert_eq!(
+            root.children()
+                .filter(|node| node.has_tag_name("rect"))
+                .collect::<Vec<_>>(),
+            []
+        );
+    }
+
+    #[rstest]
+    #[case::visible(
+        "umol-atom",
+        "currentColor",
+        None,
+        r#"<text class="umol-atom" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="currentColor">&lt;&amp;&gt;&quot;&apos;</text>"#
+    )]
+    #[case::mask(
+        "umol-atom-mask",
+        "black",
+        Some(0.6),
+        r#"<text class="umol-atom-mask" x="1" y="2" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="0.45" fill="black" stroke="black" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round">&lt;&amp;&gt;&quot;&apos;</text>"#
+    )]
+    fn test_render_atom_glyph(
+        #[case] class: &str,
+        #[case] fill: &str,
+        #[case] stroke_width: Option<f64>,
+        #[case] expected: &str,
+    ) {
+        let atom = AtomItem {
+            position: Point2D::new(1.0, -2.0),
+            label: "<&>\"'".to_owned(),
+            references: Vec::new(),
+        };
+        let mut output = String::new();
+
+        render_atom_glyph(&mut output, class, &atom, fill, stroke_width);
+
+        assert_eq!(output, expected);
+    }
 
     #[rstest]
     #[case::solid(
@@ -449,12 +632,12 @@ mod tests {
         });
         let mut output = String::new();
 
-        render_item(&mut output, &item);
+        render_item(&mut output, &item, true);
 
         assert_eq!(
             output,
             format!(
-                r#"<g data-umol-item="wedge" data-umol-references="molecule/bond/3">{expected_glyph}</g>
+                r#"<g data-umol-item="wedge" data-umol-references="molecule/bond/3" mask="url(#umol-atom-label-mask)">{expected_glyph}</g>
 "#
             )
         );
@@ -463,12 +646,12 @@ mod tests {
     #[rstest]
     #[case::open(
         false,
-        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2" mask="url(#umol-atom-label-mask)"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
 "#
     )]
     #[case::closed(
         true,
-        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0 Z" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
+        r#"<g data-umol-item="dashed-contour" data-umol-references="molecule/aromatic-system/2" mask="url(#umol-atom-label-mask)"><path class="umol-dashed-contour" d="M-1,-2 L0,1 L3,0 Z" fill="none" stroke="currentColor" stroke-width="0.04" stroke-dasharray="0.12 0.1" stroke-linecap="round" stroke-linejoin="round"/></g>
 "#
     )]
     fn test_render_dashed_contour(#[case] closed: bool, #[case] expected: &str) {
@@ -485,36 +668,26 @@ mod tests {
         });
         let mut output = String::new();
 
-        render_item(&mut output, &item);
+        render_item(&mut output, &item, true);
 
         assert_eq!(output, expected);
     }
 
-    #[test]
+    #[rstest]
     fn test_render_empty_depiction() {
         let molecule = Molecule::new();
         let layout = MoleculeLayout::try_new(Vec::new()).unwrap();
         let depiction = depict(&molecule, &layout).unwrap();
 
-        let svg = render(&depiction);
-        let document = Document::parse(&svg).unwrap();
-        let root = document.root_element();
-
-        assert_eq!(root.tag_name().name(), "svg");
         assert_eq!(
-            root.tag_name().namespace(),
-            Some("http://www.w3.org/2000/svg")
-        );
-        assert_eq!(root.attribute("class"), Some("umol-depiction"));
-        assert_eq!(root.attribute("viewBox"), Some("-0.5 -0.5 1 1"));
-        assert_eq!(
-            root.children().filter(|child| child.is_element()).count(),
-            0
+            render(&depiction),
+            r#"<svg xmlns="http://www.w3.org/2000/svg" class="umol-depiction" viewBox="-0.5 -0.5 1 1">
+</svg>"#
         );
     }
 
-    #[test]
-    fn test_render_preserves_molecule_item_order_and_coordinates() {
+    #[rstest]
+    fn test_render_molecule() {
         let molecule = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
         let layout =
             MoleculeLayout::try_new(vec![Point2D::new(-1.0, 2.0), Point2D::new(3.0, -4.0)])
@@ -524,15 +697,30 @@ mod tests {
         let svg = render(&depiction);
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
-        let groups: Vec<_> = root.children().filter(|child| child.is_element()).collect();
+        let children = root
+            .children()
+            .filter(|child| child.is_element())
+            .collect::<Vec<_>>();
+        let groups = children
+            .iter()
+            .copied()
+            .filter(|child| child.has_tag_name("g"))
+            .collect::<Vec<_>>();
 
         assert_eq!(root.attribute("viewBox"), Some("-1.5 -2.5 5 7"));
+        assert_eq!(
+            children
+                .iter()
+                .map(|child| child.tag_name().name())
+                .collect::<Vec<_>>(),
+            ["defs", "g", "g"]
+        );
         assert_eq!(
             groups
                 .iter()
                 .map(|group| group.attribute("data-umol-item").unwrap())
                 .collect::<Vec<_>>(),
-            ["bond", "atom", "atom"]
+            ["bond", "atom"]
         );
         assert_eq!(
             groups[0].attribute("data-umol-references"),
@@ -540,11 +728,11 @@ mod tests {
         );
         assert_eq!(
             groups[1].attribute("data-umol-references"),
-            Some("molecule/atom/0")
+            Some("molecule/atom/1")
         );
         assert_eq!(
-            groups[2].attribute("data-umol-references"),
-            Some("molecule/atom/1")
+            groups[0].attribute("mask"),
+            Some("url(#umol-atom-label-mask)")
         );
 
         let line = groups[0].first_element_child().unwrap();
@@ -554,13 +742,61 @@ mod tests {
         assert_eq!(line.attribute("x2"), Some("3"));
         assert_eq!(line.attribute("y2"), Some("4"));
 
-        let carbon = groups[1].first_element_child().unwrap();
-        let oxygen = groups[2].first_element_child().unwrap();
-        assert_eq!(carbon.attribute("x"), Some("-1"));
-        assert_eq!(carbon.attribute("y"), Some("-2"));
-        assert_eq!(carbon.text(), Some("C"));
+        let oxygen = groups[1].first_element_child().unwrap();
         assert_eq!(oxygen.attribute("x"), Some("3"));
         assert_eq!(oxygen.attribute("y"), Some("4"));
         assert_eq!(oxygen.text(), Some("O"));
+    }
+
+    #[rstest]
+    fn test_render_reaction() {
+        let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
+        let rhs = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
+        let lhs_layout =
+            MoleculeLayout::try_new(vec![Point2D::new(-1.0, 0.0), Point2D::new(0.0, 0.0)]).unwrap();
+        let rhs_layout =
+            MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 0.0)]).unwrap();
+        let correspondence =
+            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
+                .unwrap();
+        let depiction =
+            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+
+        let svg = render(&depiction);
+        let document = Document::parse(&svg).unwrap();
+        let root = document.root_element();
+        let mask_labels = root
+            .descendants()
+            .filter(|node| node.attribute("class") == Some("umol-atom-mask"))
+            .map(|node| node.text().unwrap())
+            .collect::<Vec<_>>();
+        let bond_groups = root
+            .children()
+            .filter(|node| node.attribute("data-umol-item") == Some("bond"))
+            .collect::<Vec<_>>();
+        let arrow = root
+            .children()
+            .find(|node| node.attribute("data-umol-item") == Some("arrow"))
+            .unwrap();
+
+        assert_eq!(mask_labels, ["O", "N"]);
+        assert_eq!(
+            bond_groups
+                .iter()
+                .map(|group| group.attribute("data-umol-references"))
+                .collect::<Vec<_>>(),
+            [Some("reaction-lhs/bond/0"), Some("reaction-rhs/bond/0")]
+        );
+        assert_eq!(
+            bond_groups
+                .iter()
+                .map(|group| group.attribute("mask"))
+                .collect::<Vec<_>>(),
+            [
+                Some("url(#umol-atom-label-mask)"),
+                Some("url(#umol-atom-label-mask)"),
+            ]
+        );
+        assert_eq!(arrow.attribute("mask"), None);
     }
 }

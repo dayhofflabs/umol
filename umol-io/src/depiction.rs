@@ -466,8 +466,8 @@ mod tests {
         assert_eq!(item.references(), expected);
     }
 
-    #[test]
-    fn test_svg_render_all_depiction_items_and_references() {
+    #[rstest]
+    fn test_render_items() {
         let text = "C<&>\"'";
         let depiction = Depiction::from_items(vec![
             DepictionItem::Atom(AtomItem {
@@ -517,7 +517,10 @@ mod tests {
         let svg = render(&depiction);
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
-        let groups: Vec<_> = root.children().filter(|child| child.is_element()).collect();
+        let groups = root
+            .children()
+            .filter(|child| child.has_tag_name("g"))
+            .collect::<Vec<_>>();
 
         assert_eq!(root.attribute("viewBox"), Some("-3.5 -3.5 7 6"));
         assert_eq!(
@@ -538,6 +541,10 @@ mod tests {
         );
         assert_eq!(groups[0].first_element_child().unwrap().text(), Some(text));
         assert_eq!(groups[1].attribute("data-umol-references"), None);
+        assert_eq!(
+            groups[1].attribute("mask"),
+            Some("url(#umol-atom-label-mask)")
+        );
         let bond_lines: Vec<_> = groups[1]
             .children()
             .filter(|child| child.is_element())
@@ -563,6 +570,6 @@ mod tests {
             ["line", "polygon"]
         );
         assert_eq!(groups[5].attribute("data-umol-references"), Some("delta/9"));
-        assert!(svg.contains("C&lt;&amp;&gt;&quot;&apos;"));
+        assert_eq!(svg.matches("C&lt;&amp;&gt;&quot;&apos;").count(), 3);
     }
 }

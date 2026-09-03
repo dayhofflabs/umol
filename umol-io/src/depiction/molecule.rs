@@ -2,6 +2,7 @@
 
 use std::fmt::Write;
 
+use umol_chem::element::Element;
 use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::{
     AsLit, AtomId, AtomView, Entity, IsotopeMass, Molecule, StereoAtomView, StereoBondView,
@@ -18,11 +19,13 @@ use crate::layout::{MoleculeLayout, MoleculeLayoutError};
 
 /// Constructs the first format-neutral depiction projection of `molecule` in `layout`.
 ///
-/// Localized bonds are followed by atom labels, aromatic markers, and stereo markers, with each
-/// group ordered by graph-IR id. Aromatic markers project both aromatic-system membership and
-/// definite aromatic atom or bond constraints. Nonliteral projected fields and unsupported
-/// overlays or constraints are omitted. The first projection does not represent dative,
-/// multicenter, or noncovalent bonds, unprojected inherent fields, or unsupported constraints.
+/// Localized bonds are followed by visible atom labels, aromatic markers, and stereo markers, with
+/// each group ordered by graph-IR id. Carbon labels are omitted at non-isolated skeleton vertices
+/// unless an isotope, charge, or radical count decorates the atom. Aromatic markers project both
+/// aromatic-system membership and definite aromatic atom or bond constraints. Nonliteral
+/// projected fields and unsupported overlays or constraints are omitted. The first projection does
+/// not represent dative, multicenter, or noncovalent bonds, unprojected inherent fields, or
+/// unsupported constraints.
 ///
 /// # Errors
 ///
@@ -137,30 +140,54 @@ impl Depict for Molecule {
 
 fn atom_label(atom: AtomView<'_>) -> Option<String> {
     let element = atom.element().as_lit()?;
+    let isotope = match atom.isotope_mass().as_lit() {
+        Some(IsotopeMass::MassNumber(mass)) => Some(mass),
+        _ => None,
+    };
+    let charge = atom.charge().as_lit().filter(|&charge| charge != 0);
+    let unpaired_electrons = atom
+        .unpaired_electrons()
+        .count
+        .as_lit()
+        .filter(|&count| count > 0);
+    let isolated_carbon = element == Element::C && atom.neighbors().len() == 0;
+    let decorated = isotope.is_some() || charge.is_some() || unpaired_electrons.is_some();
+    if element == Element::C && !isolated_carbon && !decorated {
+        return None;
+    }
+
     let mut label = String::new();
 
-    if let Some(IsotopeMass::MassNumber(mass)) = atom.isotope_mass().as_lit() {
+    if let Some(mass) = isotope {
         write!(label, "{mass}").expect("writing to a String cannot fail");
     }
     label.push_str(element.symbol());
 
-    if let Some(hydrogens) = atom
-        .implicit_hydrogens()
-        .as_lit()
-        .filter(|&count| count != 0)
-    {
-        label.push('H');
-        if hydrogens != 1 {
-            write!(label, "{hydrogens}").expect("writing to a String cannot fail");
+    if !isolated_carbon || decorated {
+        if let Some(hydrogens) = atom
+            .implicit_hydrogens()
+            .as_lit()
+            .filter(|&count| count != 0)
+        {
+            label.push('H');
+            if hydrogens != 1 {
+                write!(label, "{hydrogens}").expect("writing to a String cannot fail");
+            }
         }
     }
 
-    if let Some(charge) = atom.charge().as_lit().filter(|&charge| charge != 0) {
+    if let Some(charge) = charge {
         let magnitude = charge.unsigned_abs();
         if magnitude != 1 {
             write!(label, "{magnitude}").expect("writing to a String cannot fail");
         }
         label.push(if charge > 0 { '+' } else { '-' });
+    }
+
+    if let Some(count) = unpaired_electrons {
+        for _ in 0..count {
+            label.push('•');
+        }
     }
 
     Some(label)
@@ -219,9 +246,9 @@ mod tests {
             .unwrap()
     }
 
-    #[test]
+    #[rstest]
     fn test_depict_literal_atom_and_bond_projection() {
-        let molecule = mol_dsl!(r#"{:atoms ["C#i13#c+#h2" "O#c-"] :bonds [[0 1 "2"]]}"#);
+        let molecule = mol_dsl!(r#"{:atoms ["C#i13#c+#h2#u2" "O#c-"] :bonds [[0 1 "2"]]}"#);
         let layout = layout(&[[0.0, 1.0], [2.0, -1.0]]);
 
         let depiction = depict(&molecule, &layout).unwrap();
@@ -237,7 +264,7 @@ mod tests {
                 }),
                 DepictionItem::Atom(AtomItem {
                     position: Point2D::new(0.0, 1.0),
-                    label: "13CH2+".to_owned(),
+                    label: "13CH2+••".to_owned(),
                     references: vec![DepictionReference::Molecule(Entity::Atom(AtomId(0)))],
                 }),
                 DepictionItem::Atom(AtomItem {
@@ -257,29 +284,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case::element("C", "N", "C", "N")]
-    #[case::isotope("C", "C#i13", "C", "13C")]
-    #[case::charge("C", "C#c+", "C", "C+")]
-    #[case::implicit_hydrogens("C", "C#h3", "C", "CH3")]
-    fn test_depict_projected_atom_field_changes_output(
-        #[case] before: &str,
-        #[case] after: &str,
-        #[case] before_label: &str,
-        #[case] after_label: &str,
+    #[case::heteroatom(r#"{:atoms ["N#h2"] :bonds []}"#, 0, Some("NH2"))]
+    #[case::isolated_carbon(r#"{:atoms ["C#h4"] :bonds []}"#, 0, Some("C"))]
+    #[case::isolated_charged_carbon(r#"{:atoms ["C#c+#h4"] :bonds []}"#, 0, Some("CH4+"))]
+    #[case::skeleton_carbon(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#, 0, None)]
+    #[case::skeleton_carbon_with_implicit_hydrogens(
+        r#"{:atoms ["C#h3" "C"] :bonds [[0 1 "1"]]}"#,
+        0,
+        None
+    )]
+    #[case::isotopic_carbon(r#"{:atoms ["C#i13#h2" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("13CH2"))]
+    #[case::charged_carbon(r#"{:atoms ["C#c+" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("C+"))]
+    #[case::radical_carbon(r#"{:atoms ["C#u2" "C"] :bonds [[0 1 "1"]]}"#, 0, Some("C••"))]
+    #[case::multi_digit_fields(
+        r#"{:atoms ["N#i15#c-12#h12#u2"] :bonds []}"#,
+        0,
+        Some("15NH1212-••")
+    )]
+    #[case::independently_nonliteral_fields(
+        r#"{:atoms ["N#i*#c*#h*#u*#s3"] :bonds []}"#,
+        0,
+        Some("N")
+    )]
+    fn test_atom_label(
+        #[case] input: &str,
+        #[case] atom_id: usize,
+        #[case] expected: Option<&str>,
     ) {
-        let before_input = format!(r#"{{:atoms ["{before}"] :bonds []}}"#);
-        let after_input = format!(r#"{{:atoms ["{after}"] :bonds []}}"#);
-        let before = mol_dsl!(before_input.as_str());
-        let after = mol_dsl!(after_input.as_str());
-        let layout = layout(&[[0.0, 0.0]]);
+        let molecule = mol_dsl!(input);
 
         assert_eq!(
-            atom_labels(&depict(&before, &layout).unwrap()),
-            [before_label]
-        );
-        assert_eq!(
-            atom_labels(&depict(&after, &layout).unwrap()),
-            [after_label]
+            atom_label(molecule.atom(AtomId::from(atom_id))).as_deref(),
+            expected
         );
     }
 
@@ -508,17 +544,6 @@ mod tests {
         let expected = depict(&molecule, &layout).unwrap();
 
         assert_eq!(molecule.depict_with(algorithm), Ok(expected));
-    }
-
-    fn atom_labels(depiction: &Depiction) -> Vec<&str> {
-        depiction
-            .items()
-            .iter()
-            .filter_map(|item| match item {
-                DepictionItem::Atom(atom) => Some(atom.label.as_str()),
-                _ => None,
-            })
-            .collect()
     }
 
     fn bond_line_counts(depiction: &Depiction) -> Vec<u8> {

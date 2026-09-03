@@ -431,21 +431,48 @@ all feature-relevant targets.
 
 ### S2 — Atom labels and bond clearance
 
-- **S2a — Label projection** `[dep: S0]`: replace the current all-elements label rule with skeleton
+- [x] **S2a — Label projection** `[dep: S0]`: replace the current all-elements label rule with skeleton
   carbon suppression and the isolated-carbon exception. Preserve literal isotopes and implicit H
   on visible labels, append literal charge and radical dots, and read the unpaired-electron count
   independently of the undisplayed multiplicity. Omit each nonliteral field without requiring
   complete atom groundness. Cover heteroatoms, decorated carbons, isolated carbon, multi-digit
   values, and omitted/open fields with exact item tests.
-- **S2b — SVG label mask** `[dep: S2a]`: add one deterministic SVG mask derived from the same atom
+- [x] **S2b — SVG label mask** `[dep: S2a]`: add one deterministic SVG mask derived from the same atom
   glyphs used visibly and apply it to molecular bond, wedge, and contour strokes. Use mask expansion
   to cover glyph interiors and provide clearance without assuming a page background. Verify XML
   structure, escaping, references, reactions, nonwhite embedding semantics, and exact empty output.
-- **S2c — Rendering evidence** `[dep: S2b]`: tune only the fixed mask expansion against the S0
+- [x] **S2c — Rendering evidence** `[dep: S2b]`: tune only the fixed mask expansion against the S0
   label fixtures, then rerun the SVG benchmark to quantify the extra mask and duplicate-text cost.
 
 S2 is green when ordinary carbon skeletons remain connected and legible, every visible label clears
 underlying bonds without a background-colored element, and rendering remains deterministic.
+
+The fixed mask expansion is 0.30 nominal bond lengths. Rendering the label duplicate with a 0.60
+stroke width fills glyph counters and leaves visible clearance on a nonwhite background without
+adding a visible background-colored element. The S2 SVG benchmark completed all 6/6 groups:
+
+| Case | S2 time, 95% interval | Criterion change from S0, 95% interval |
+| --- | ---: | ---: |
+| chain/8 | 2.538–2.545 us | -30.28% to -29.91% |
+| chain/128 | 50.036–51.035 us | -25.97% to -24.00% |
+| representative/labeled_atoms | 1.472–1.477 us | +72.21% to +73.13% |
+| representative/tetrahedral_stereo | 2.841–2.865 us | +59.42% to +60.64% |
+| representative/fused_aromatic | 8.390–8.431 us | -16.21% to -15.66% |
+| representative/mapped_reaction | 7.604–7.646 us | +18.64% to +21.02% |
+
+The carbon-only cases are faster because S2a removes their atom text nodes. Cases retaining labels
+pay for one mask plus one duplicate text glyph per visible atom; the smallest labeled fixture adds
+about 0.62 us. Command: `cargo bench -p umol-io --bench svg -- --noplot`.
+
+S2 completed on 2026-09-02. The public-symbol audit found no new type, constructor, configuration,
+or error boundary. `Depiction` remains operation-issued, label geometry remains renderer-private,
+and the existing `depict` and `render` operations implement the settled projection and SVG-output
+changes directly. Element is the only required atom literal; each isotope, hydrogen, charge, and
+unpaired-electron field has independent omission semantics, and multiplicity is not inspected.
+Exact label, XML, reference, reaction, mask, nonwhite-background, and empty-output tests pass.
+Verification used `cargo test -p umol-io --features coordgen -q`,
+`cargo clippy -p umol-io --all-targets --features coordgen -- -D warnings`, and
+`cargo +nightly fmt --all -- --check`.
 
 ### S3 — Definite stereo depiction
 

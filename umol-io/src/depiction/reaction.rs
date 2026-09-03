@@ -383,6 +383,7 @@ fn translate(point: Point2D, offset: Point2D) -> Point2D {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_geometric_core::Point2D;
     use umol_graph_core::Correspondence;
     use umol_graph_ir::ir::{AtomId, BondId, Entity};
     #[cfg(feature = "coordgen")]
@@ -405,7 +406,6 @@ mod tests {
     use crate::layout::MoleculeLayout;
     #[cfg(feature = "coordgen")]
     use crate::layout::{layout_molecule, MoleculeLayoutAlgorithm};
-    use umol_geometric_core::Point2D;
 
     #[rstest]
     fn test_translate_item_geometry() {
@@ -471,11 +471,6 @@ mod tests {
                     references: vec![DepictionReference::ReactionLhs(Entity::Bond(BondId(0),))],
                 }),
                 DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(-3.0, 0.0),
-                    label: "C".to_owned(),
-                    references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(0)))],
-                }),
-                DepictionItem::Atom(AtomItem {
                     position: Point2D::new(-2.0, 0.0),
                     label: "O".to_owned(),
                     references: vec![DepictionReference::ReactionLhs(Entity::Atom(AtomId(1)))],
@@ -511,11 +506,6 @@ mod tests {
                     position: Point2D::new(2.0, 0.0),
                     label: "O".to_owned(),
                     references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(0)))],
-                }),
-                DepictionItem::Atom(AtomItem {
-                    position: Point2D::new(3.0, 0.0),
-                    label: "C".to_owned(),
-                    references: vec![DepictionReference::ReactionRhs(Entity::Atom(AtomId(1)))],
                 }),
                 DepictionItem::Text(TextItem {
                     position: Point2D::new(3.35, 0.35),
