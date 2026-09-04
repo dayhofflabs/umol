@@ -8,9 +8,10 @@ use umol_graph_core::{
     Correspondence, RelevantCycleEnumerationAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 use umol_graph_ir::ir::{
-    AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId, AtomForm,
-    AtomId, BondForm, Delta, Deltas, ElectronCountsForm, Molecule, MoleculeCorrespondence,
-    MoleculeEntries, Reaction, SubstructureMatchAlgorithm, SubstructureMatchConfig,
+    AromaticSystemDelta, AromaticSystemFieldChange, AromaticSystemForm, AromaticSystemId,
+    AtomConstraintForm, AtomForm, AtomId, BondForm, Constraint, ConstraintSpan, Delta, Deltas,
+    ElectronCountsForm, EntitySpan, Molecule, MoleculeCorrespondence, MoleculeEntries, Reaction,
+    ReactionSpan, ReactionSpanEntries, SubstructureMatchAlgorithm, SubstructureMatchConfig,
 };
 
 const MATCH_CONFIG: SubstructureMatchConfig = SubstructureMatchConfig {
@@ -80,8 +81,60 @@ fn application_case() -> (Reaction, Molecule, MoleculeCorrespondence) {
     (reaction, host, correspondence)
 }
 
+fn reversal_case() -> Reaction {
+    ReactionSpan::from_entries(ReactionSpanEntries {
+        atoms: vec![
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Modified {
+                lhs: AtomForm::from_element(Element::O),
+                rhs: AtomForm::from_element(Element::N),
+            },
+            EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
+            EntitySpan::Removed(AtomForm::from_element(Element::F)),
+            EntitySpan::Added(AtomForm::from_element(Element::Cl)),
+        ],
+        bonds: vec![
+            (
+                AtomId(0),
+                AtomId(1),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(1),
+                AtomId(2),
+                EntitySpan::Unchanged(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(2),
+                AtomId(3),
+                EntitySpan::Removed(BondForm::from_order(1)),
+            ),
+            (
+                AtomId(2),
+                AtomId(4),
+                EntitySpan::Added(BondForm::from_order(1)),
+            ),
+        ],
+        aromatic: vec![(
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+            EntitySpan::Modified {
+                lhs: AromaticSystemForm::default(),
+                rhs: AromaticSystemForm::from_electrons(vec![1, 1, 1]),
+            },
+        )],
+        constraints: vec![
+            ConstraintSpan::Unchanged(Constraint::Atom(AtomId(0), AtomConstraintForm::valence(3))),
+            ConstraintSpan::Removed(Constraint::Atom(AtomId(3), AtomConstraintForm::valence(1))),
+            ConstraintSpan::Added(Constraint::Atom(AtomId(4), AtomConstraintForm::valence(1))),
+        ],
+        ..Default::default()
+    })
+    .to_reaction()
+}
+
 fn benchmark_reaction(c: &mut Criterion) {
     let (reaction, host, correspondence) = application_case();
+    let reversal = reversal_case();
     let mut group = c.benchmark_group("reaction");
     group.bench_function("match_enumeration", |b| {
         b.iter(|| {
@@ -94,6 +147,9 @@ fn benchmark_reaction(c: &mut Criterion) {
     });
     group.bench_function("apply_at", |b| {
         b.iter(|| black_box(reaction.apply_at(black_box(&host), black_box(&correspondence))))
+    });
+    group.bench_function("reverse", |b| {
+        b.iter(|| black_box(black_box(&reversal).reverse()))
     });
     group.finish();
 }

@@ -5240,3 +5240,83 @@ fn test_molecule_split_constraint_routed() {
         })]
     );
 }
+
+#[rstest]
+fn test_molecule_split_constraint_entity_kinds(
+    #[from(equiv_molecule_entries)] entries: MoleculeEntries,
+) {
+    let mut left_entries = entries.clone();
+    left_entries.constraints = Constraints::new();
+    let left = Molecule::from_entries(left_entries);
+
+    let mut right_entries = entries;
+    right_entries.constraints = vec![
+        Constraint::Atom(AtomId(0), AtomConstraintForm::valence(NumForm::Lit(4))),
+        Constraint::Bond(BondId(0), BondConstraintForm::aromatic(false)),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraintForm::aromatic(false)),
+        Constraint::AromaticSystem(
+            AromaticSystemId(0),
+            AromaticSystemConstraintForm::electron_count(NumForm::Lit(6)),
+        ),
+        Constraint::MulticenterBond(
+            MulticenterBondId(0),
+            MulticenterBondConstraintForm::electron_count(NumForm::Lit(2)),
+        ),
+        Constraint::NoncovalentBond(
+            NoncovalentBondId(0),
+            NoncovalentBondConstraintForm::intramolecular(true),
+        ),
+        Constraint::StereoAtom(
+            StereoAtomId(0),
+            StereoKind::Tetrahedral,
+            StereoAtomConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        ),
+        Constraint::StereoBond(
+            StereoBondId(0),
+            StereoKind::CisTrans,
+            StereoBondConstraintForm::Stereogenicity(StereogenicityForm::Undetermined),
+        ),
+        Constraint::Relational(RelationalConstraint::DativeBondParallels {
+            dative: DativeBondId(0),
+            parallel: BondId(1),
+        }),
+        Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomId(0), AtomId(3)]),
+            sum: NumForm::Lit(1),
+        }),
+        Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+            bonds: Some(vec![BondId(0), BondId(2)]),
+            sum: NumForm::Lit(2),
+        }),
+    ]
+    .into();
+    let right = Molecule::from_entries(right_entries);
+
+    let (combined, _) = left.combine(&right);
+    let components = combined.split();
+    let expected_left = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[AtomId(0), AtomId(1), AtomId(2), AtomId(3)], 8),
+        Correspondence::from_images(&[BondId(0), BondId(1), BondId(2)], 6),
+        Correspondence::from_images(&[DativeBondId(0)], 2),
+        Correspondence::from_images(&[AromaticSystemId(0)], 2),
+        Correspondence::from_images(&[MulticenterBondId(0)], 2),
+        Correspondence::from_images(&[NoncovalentBondId(0)], 2),
+        Correspondence::from_images(&[StereoAtomId(0)], 2),
+        Correspondence::from_images(&[StereoBondId(0)], 2),
+    );
+    let expected_right = MoleculeCorrespondence::new(
+        Correspondence::from_images(&[AtomId(4), AtomId(5), AtomId(6), AtomId(7)], 8),
+        Correspondence::from_images(&[BondId(3), BondId(4), BondId(5)], 6),
+        Correspondence::from_images(&[DativeBondId(1)], 2),
+        Correspondence::from_images(&[AromaticSystemId(1)], 2),
+        Correspondence::from_images(&[MulticenterBondId(1)], 2),
+        Correspondence::from_images(&[NoncovalentBondId(1)], 2),
+        Correspondence::from_images(&[StereoAtomId(1)], 2),
+        Correspondence::from_images(&[StereoBondId(1)], 2),
+    );
+
+    assert_eq!(
+        components,
+        vec![(left, expected_left), (right, expected_right)]
+    );
+}

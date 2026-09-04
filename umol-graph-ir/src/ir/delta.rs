@@ -40,6 +40,7 @@ use super::id::{
 use super::ligand::StereoLigand;
 use super::multicenter::{MulticenterBondForm, MulticenterBondUpdate};
 use super::noncovalent::{NoncovalentBondForm, NoncovalentBondUpdate};
+#[cfg(test)]
 use super::remap::IdRemapping;
 use super::stereo::{
     StereoAtomForm, StereoAtomUpdate, StereoBondForm, StereoBondUpdate, StereoConfigurationForm,
@@ -3154,7 +3155,8 @@ fn fold_stereo_bond_group(
 /// deltas between id spaces (reverse re-anchoring, composition). The relabeling must cover every id
 /// the delta references. Participant sequences and frame-relative payloads retain their supplied
 /// frame; selecting another frame is a separate [`FrameTransport`] operation.
-pub fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
+#[cfg(test)]
+fn remap_delta(delta: Delta, map: &IdRemapping) -> Delta {
     match delta {
         Delta::Atom(a) => Delta::Atom(match a {
             AtomDelta::Add { id, attributes } => AtomDelta::Add {

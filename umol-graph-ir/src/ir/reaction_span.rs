@@ -6,7 +6,7 @@
 //! a `Molecule`. `Modified` (a preserved entity relabeled across the reaction) is the
 //! relabeling-DPO reading: the entity persists in `K`, its label resolved per side.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::Hash;
 use std::mem;
 
@@ -28,9 +28,9 @@ use super::dative::{reframe_dative_bond_spans_with, DativeBondForm, DativeBondSp
 use super::delta::{
     apply_aromatic_change, apply_atom_change, apply_bond_change, apply_dative_change,
     apply_multicenter_change, apply_noncovalent_change, apply_stereo_atom_change,
-    apply_stereo_bond_change, remap_delta, AromaticSystemDelta, AtomDelta, BondDelta,
-    ConstraintDelta, ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan,
-    MulticenterBondDelta, NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
+    apply_stereo_bond_change, AromaticSystemDelta, AtomDelta, BondDelta, ConstraintDelta,
+    ConstraintSpan, DativeBondDelta, Delta, Deltas, EntityFold, EntitySpan, MulticenterBondDelta,
+    NoncovalentBondDelta, StereoAtomDelta, StereoBondDelta,
 };
 use super::entity::{Entity, EntityKind};
 use super::error::Contradiction;
@@ -1253,6 +1253,79 @@ impl ReactionSpan {
         }
     }
 
+    fn reverse_sides(&self) -> Self {
+        let dative_bonds = self
+            .dative_bonds
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(donors, acceptor, span)| (donors, acceptor, reverse_entity_span(span)))
+            .collect();
+        let aromatic_systems = self
+            .aromatic_systems
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, span)| (atoms, reverse_entity_span(span)))
+            .collect();
+        let multicenter_bonds = self
+            .multicenter_bonds
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, span)| (atoms, reverse_entity_span(span)))
+            .collect();
+        let noncovalent_bonds = self
+            .noncovalent_bonds
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(atoms, span)| (atoms, reverse_entity_span(span)))
+            .collect();
+        let stereo_atoms = self
+            .stereo_atoms
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, span)| (site, ligands, reverse_entity_span(span)))
+            .collect();
+        let stereo_bonds = self
+            .stereo_bonds
+            .clone()
+            .into_entries()
+            .into_iter()
+            .map(|(site, ligands, span)| (site, ligands, reverse_entity_span(span)))
+            .collect();
+
+        Self {
+            graph: self.graph.clone(),
+            atoms: self
+                .atoms
+                .iter()
+                .cloned()
+                .map(reverse_entity_span)
+                .collect(),
+            bonds: self
+                .bonds
+                .iter()
+                .cloned()
+                .map(reverse_entity_span)
+                .collect(),
+            dative_bonds: DativeBondSpans::new(dative_bonds),
+            aromatic_systems: AromaticSystemSpans::new(aromatic_systems),
+            multicenter_bonds: MulticenterBondSpans::new(multicenter_bonds),
+            noncovalent_bonds: NoncovalentBondSpans::new(noncovalent_bonds),
+            stereo_atoms: StereoAtomSpans::new(stereo_atoms),
+            stereo_bonds: StereoBondSpans::new(stereo_bonds),
+            constraints: self
+                .constraints
+                .iter()
+                .cloned()
+                .map(reverse_constraint_span)
+                .collect(),
+        }
+    }
+
     /// The left-hand molecule: every entity present on the left, in a compacted id space (created
     /// entities dropped).
     pub fn lhs(&self) -> Molecule {
@@ -1876,6 +1949,23 @@ fn entity_side<T>(span: &EntitySpan<T>, side: Side) -> Option<&T> {
     }
 }
 
+fn reverse_entity_span<T>(span: EntitySpan<T>) -> EntitySpan<T> {
+    match span {
+        EntitySpan::Unchanged(value) => EntitySpan::Unchanged(value),
+        EntitySpan::Modified { lhs, rhs } => EntitySpan::Modified { lhs: rhs, rhs: lhs },
+        EntitySpan::Added(value) => EntitySpan::Removed(value),
+        EntitySpan::Removed(value) => EntitySpan::Added(value),
+    }
+}
+
+fn reverse_constraint_span(span: ConstraintSpan) -> ConstraintSpan {
+    match span {
+        ConstraintSpan::Unchanged(value) => ConstraintSpan::Unchanged(value),
+        ConstraintSpan::Added(value) => ConstraintSpan::Removed(value),
+        ConstraintSpan::Removed(value) => ConstraintSpan::Added(value),
+    }
+}
+
 impl Reaction {
     /// Materialize the superimposed reaction span. Normalizes the deltas, then annotates
     /// each `lhs` entity (in its own id space) with its before/after state — `Removed` /
@@ -2436,129 +2526,8 @@ impl Reaction {
     /// re-anchored to the product's (compacted) id space. `reverse().to_reaction_span()` swaps the
     /// sides of `self`'s span. `Err(Contradiction)` if the deltas are inconsistent.
     pub fn reverse(&self) -> Result<Reaction, Contradiction> {
-        let deltas = normalize_reaction_deltas(self.lhs(), self.deltas())?;
-        let new_lhs = self.to_reaction_span()?.rhs();
-        let atom_count = self.lhs().atoms().count();
-        let bond_count = self.lhs().bonds().count();
-
-        let mut removed_atoms: Vec<AtomId> = Vec::new();
-        let mut created_atoms: Vec<AtomId> = Vec::new();
-        let mut removed_bonds: Vec<BondId> = Vec::new();
-        let mut created_bonds: Vec<BondId> = Vec::new();
-        let mut removed_dative: Vec<DativeBondId> = Vec::new();
-        let mut created_dative: Vec<DativeBondId> = Vec::new();
-        let mut removed_aromatic: Vec<AromaticSystemId> = Vec::new();
-        let mut created_aromatic: Vec<AromaticSystemId> = Vec::new();
-        let mut removed_multicenter: Vec<MulticenterBondId> = Vec::new();
-        let mut created_multicenter: Vec<MulticenterBondId> = Vec::new();
-        let mut removed_noncovalent: Vec<NoncovalentBondId> = Vec::new();
-        let mut created_noncovalent: Vec<NoncovalentBondId> = Vec::new();
-        let mut removed_stereo_atom: Vec<StereoAtomId> = Vec::new();
-        let mut created_stereo_atom: Vec<StereoAtomId> = Vec::new();
-        let mut removed_stereo_bond: Vec<StereoBondId> = Vec::new();
-        let mut created_stereo_bond: Vec<StereoBondId> = Vec::new();
-        for delta in deltas.iter() {
-            match delta {
-                Delta::Atom(AtomDelta::Remove { id, .. }) => removed_atoms.push(*id),
-                Delta::Atom(AtomDelta::Add { id, .. }) => created_atoms.push(*id),
-                Delta::Bond(BondDelta::Remove { id, .. }) => removed_bonds.push(*id),
-                Delta::Bond(BondDelta::Add { id, .. }) => created_bonds.push(*id),
-                Delta::DativeBond(DativeBondDelta::Remove { id, .. }) => removed_dative.push(*id),
-                Delta::DativeBond(DativeBondDelta::Add { id, .. }) => created_dative.push(*id),
-                Delta::AromaticSystem(AromaticSystemDelta::Remove { id, .. }) => {
-                    removed_aromatic.push(*id)
-                }
-                Delta::AromaticSystem(AromaticSystemDelta::Add { id, .. }) => {
-                    created_aromatic.push(*id)
-                }
-                Delta::MulticenterBond(MulticenterBondDelta::Remove { id, .. }) => {
-                    removed_multicenter.push(*id)
-                }
-                Delta::MulticenterBond(MulticenterBondDelta::Add { id, .. }) => {
-                    created_multicenter.push(*id)
-                }
-                Delta::NoncovalentBond(NoncovalentBondDelta::Remove { id, .. }) => {
-                    removed_noncovalent.push(*id)
-                }
-                Delta::NoncovalentBond(NoncovalentBondDelta::Add { id, .. }) => {
-                    created_noncovalent.push(*id)
-                }
-                Delta::StereoAtom(StereoAtomDelta::Remove { id, .. }) => {
-                    removed_stereo_atom.push(*id)
-                }
-                Delta::StereoAtom(StereoAtomDelta::Add { id, .. }) => created_stereo_atom.push(*id),
-                Delta::StereoBond(StereoBondDelta::Remove { id, .. }) => {
-                    removed_stereo_bond.push(*id)
-                }
-                Delta::StereoBond(StereoBondDelta::Add { id, .. }) => created_stereo_bond.push(*id),
-                _ => {}
-            }
-        }
-
-        // Forward → reverse id-space maps, matching `rhs()`'s compaction: survivors take ids in
-        // union order (lhs in place, created appended); deleted entities become created in the
-        // reverse and take fresh ids after the survivors.
-        let remapping = IdRemapping::new(
-            reversed_remapping(atom_count, &removed_atoms, &created_atoms),
-            reversed_remapping(bond_count, &removed_bonds, &created_bonds),
-            reversed_remapping(
-                self.lhs().dative_bonds().count(),
-                &removed_dative,
-                &created_dative,
-            ),
-            reversed_remapping(
-                self.lhs().aromatic_systems().count(),
-                &removed_aromatic,
-                &created_aromatic,
-            ),
-            reversed_remapping(
-                self.lhs().multicenter_bonds().count(),
-                &removed_multicenter,
-                &created_multicenter,
-            ),
-            reversed_remapping(
-                self.lhs().noncovalent_bonds().count(),
-                &removed_noncovalent,
-                &created_noncovalent,
-            ),
-            reversed_remapping(
-                self.lhs().stereo_atoms().count(),
-                &removed_stereo_atom,
-                &created_stereo_atom,
-            ),
-            reversed_remapping(
-                self.lhs().stereo_bonds().count(),
-                &removed_stereo_bond,
-                &created_stereo_bond,
-            ),
-        );
-
-        let reversed: Deltas = deltas
-            .iter()
-            .map(|delta| remap_delta(delta.clone().inverse(), &remapping))
-            .collect();
-        Ok(Reaction::new(new_lhs, reversed))
+        Ok(self.to_reaction_span()?.reverse_sides().to_reaction())
     }
-}
-
-/// Build a forward → reverse id-space map for one entity kind: surviving lhs ids (those not in
-/// `removed`, in id order) then `created` (sorted) take reverse ids `0..k`; `removed` ids (which
-/// become created in the reverse) take fresh ids after the survivors.
-fn reversed_remapping<Id>(lhs_count: usize, removed: &[Id], created: &[Id]) -> HashMap<Id, Id>
-where
-    Id: Copy + Eq + Hash + Ord + From<usize>,
-{
-    let removed_set: HashSet<Id> = removed.iter().copied().collect();
-    let mut created: Vec<Id> = created.to_vec();
-    created.sort_unstable();
-    (0..lhs_count)
-        .map(Id::from)
-        .filter(|id| !removed_set.contains(id))
-        .chain(created)
-        .chain(removed.iter().copied())
-        .enumerate()
-        .map(|(rev, id)| (id, Id::from(rev)))
-        .collect()
 }
 
 #[cfg(test)]
@@ -2783,6 +2752,43 @@ mod tests {
                 ]),
             }),
         );
+
+        let reversed = span.reverse_sides();
+        assert_eq!(reversed.lhs(), span.rhs());
+        assert_eq!(reversed.rhs(), span.lhs());
+        assert_eq!(reversed.reverse_sides(), span);
+    }
+
+    #[rstest]
+    #[case::unchanged(EntitySpan::Unchanged(1), EntitySpan::Unchanged(1))]
+    #[case::modified(
+        EntitySpan::Modified { lhs: 1, rhs: 2 },
+        EntitySpan::Modified { lhs: 2, rhs: 1 },
+    )]
+    #[case::added(EntitySpan::Added(1), EntitySpan::Removed(1))]
+    #[case::removed(EntitySpan::Removed(1), EntitySpan::Added(1))]
+    fn test_reverse_entity_span(#[case] input: EntitySpan<i32>, #[case] expected: EntitySpan<i32>) {
+        assert_eq!(reverse_entity_span(input), expected);
+    }
+
+    #[rstest]
+    #[case::unchanged(
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Unchanged(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    #[case::added(
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    #[case::removed(
+        ConstraintSpan::Removed(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+        ConstraintSpan::Added(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })),
+    )]
+    fn test_reverse_constraint_span(
+        #[case] input: ConstraintSpan,
+        #[case] expected: ConstraintSpan,
+    ) {
+        assert_eq!(reverse_constraint_span(input), expected);
     }
 
     #[rstest]
@@ -4649,58 +4655,14 @@ mod tests {
     ) {
         // The reverse reaction's reactant is the forward product; its product is the forward
         // reactant.
-        let span = forward.reverse().unwrap().to_reaction_span().unwrap();
+        let reverse = forward.reverse().unwrap();
+        let span = reverse.to_reaction_span().unwrap();
         assert_eq!(span.lhs(), expected_reactant);
         assert_eq!(span.rhs(), expected_product);
-    }
-
-    #[rstest]
-    #[case::identity(
-        3,
-        vec![],
-        vec![],
-        HashMap::from([(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1)), (AtomId(2), AtomId(2))])
-    )]
-    #[case::removed_compacted(
-        4,
-        vec![AtomId(1), AtomId(3)],
-        vec![],
-        HashMap::from([
-            (AtomId(0), AtomId(0)),
-            (AtomId(2), AtomId(1)),
-            (AtomId(1), AtomId(2)),
-            (AtomId(3), AtomId(3)),
-        ])
-    )]
-    #[case::created_appended_sorted(
-        2,
-        vec![],
-        vec![AtomId(5), AtomId(4)],
-        HashMap::from([
-            (AtomId(0), AtomId(0)),
-            (AtomId(1), AtomId(1)),
-            (AtomId(4), AtomId(2)),
-            (AtomId(5), AtomId(3)),
-        ])
-    )]
-    #[case::removed_and_created(
-        3,
-        vec![AtomId(1)],
-        vec![AtomId(7)],
-        HashMap::from([
-            (AtomId(0), AtomId(0)),
-            (AtomId(2), AtomId(1)),
-            (AtomId(7), AtomId(2)),
-            (AtomId(1), AtomId(3)),
-        ])
-    )]
-    fn test_reversed_remapping(
-        #[case] lhs_count: usize,
-        #[case] removed: Vec<AtomId>,
-        #[case] created: Vec<AtomId>,
-        #[case] expected: HashMap<AtomId, AtomId>,
-    ) {
-        assert_eq!(reversed_remapping(lhs_count, &removed, &created), expected);
+        assert_eq!(
+            reverse.reverse().unwrap().to_reaction_span().unwrap(),
+            forward.to_reaction_span().unwrap(),
+        );
     }
 
     #[rstest]

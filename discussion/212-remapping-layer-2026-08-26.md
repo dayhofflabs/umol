@@ -236,7 +236,7 @@ added to the Python API.
 
 ### S0 — Establish the performance baseline
 
-#### S0a — Benchmark reaction reversal
+#### S0a — Benchmark reaction reversal **Done**
 
 **Module:** `umol-graph-ir/benches/reaction.rs`.
 
@@ -251,6 +251,10 @@ record the benchmark result in this document.
 **Change class:** additive evidence (green).
 
 **Dependencies:** none.
+
+The retained mixed reaction case includes added, removed, modified, and unchanged entities, an
+aromatic-system modification, and added, removed, and unchanged constraints. Before S3c, the
+sparse re-anchoring implementation measured 14.121–14.166 µs.
 
 ### S1 — Extract the graph-core remapping row
 
@@ -328,13 +332,14 @@ selected cases.
 
 ### S3 — Remove uses that are not remappings
 
-#### S3a — Keep constraint-edit handle substitution local
+#### S3a — Keep constraint-edit handle substitution local **Done**
 
 **Module:** `umol-graph-ir/src/ir/edit.rs` and its `ConstraintEdit` tests.
 
-Replace the `IdRemapping` built by `ConstraintEdit::new` with direct substitution from each
-referenced entity id to the normalized slot for its resolved handle. Keep those sparse per-kind
-lookups local to `ConstraintEdit`; do not introduce a transport carrier or a new public helper.
+Replace the `IdRemapping` built by `ConstraintEdit::new` with one local sparse mapping from each
+referenced `Entity` to the normalized `Entity` slot for its resolved handle. Apply that mapping to
+the entity references in the constraint; do not introduce a transport carrier or a new public
+helper.
 `ConstraintEdit::resolve` remains a true dense-remapping consumer and is not changed in this
 subitem.
 
@@ -346,7 +351,13 @@ focused `ConstraintEdit` tests.
 
 **Dependencies:** [dep: S2a]
 
-#### S3b — Transport split constraints through the correspondence
+`ConstraintEdit::new` now maps referenced entities through one local sparse entity map while its
+typed handle vectors retain the normalized slots; `ConstraintEdit::resolve` remains unchanged as
+the dense-remapping consumer. The focused `ConstraintEdit` suite passes all 23 selected tests,
+including sparse ids, repeated/shared handles, all entity kinds, missing handles, and handle-kind
+mismatches. Package clippy passes with warnings denied.
+
+#### S3b — Transport split constraints through the correspondence **Done**
 
 **Module:** `umol-graph-ir/src/ir/molecule.rs` and split tests.
 
@@ -364,7 +375,14 @@ returned correspondence. Run the focused molecule split tests.
 
 **Dependencies:** [dep: S3a]
 
-#### S3c — Reverse reactions through the reaction span
+`Molecule::split` now obtains component handles by looking up each routed constraint reference in
+the reverse direction of the returned component-to-original correspondence, then resolves the
+result through the ordinary `ConstraintEdit` application path. The partial original-to-component
+`IdRemapping` and its construction helper are gone. All six focused split tests pass, including an
+exact rich-component case covering every entity kind, relational and molecule constraints, and the
+complete returned correspondences. Package clippy passes with warnings denied.
+
+#### S3c — Reverse reactions through the reaction span **Done**
 
 **Module:** `umol-graph-ir/src/ir/reaction_span.rs` and its reaction reversal tests.
 
@@ -381,6 +399,18 @@ the S0a benchmark and record the comparison.
 **Change class:** internal algorithm replacement with unchanged public API (green).
 
 **Dependencies:** [dep: S3b]
+
+`Reaction::reverse` now materializes the reaction span, reverses its sides privately, and converts
+the reversed span back to a reaction. The sparse reverse bookkeeping and `reversed_remapping` are
+gone. The former `remap_delta` implementation remains test-only until S4b replaces its cases with
+the dense checked and asserted methods.
+
+Exact tests cover all four entity-span states, all three constraint-span states, every entity
+family, stereo frames, side equivalence, and reversal as an involution after span normalization.
+The existing feature-gated span-side property also passes. The full `umol-graph-ir` suite passes
+6,555 unit tests plus its integration and documentation tests, and package clippy passes with
+warnings denied. The retained benchmark now measures 13.462–13.534 µs, a statistically significant
+4.0–4.9% improvement over the S0a baseline.
 
 ### S4 — Move true remapping consumers onto the dense layer
 

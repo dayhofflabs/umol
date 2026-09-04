@@ -22,7 +22,7 @@ use super::constraint::{
 };
 use super::correspondence::MoleculeCorrespondence;
 use super::dative::{reframe_dative_bonds_with, DativeBondForm, DativeBonds};
-use super::edit::{AtomHandle, BondHandle, Edits};
+use super::edit::{AtomHandle, BondHandle, ConstraintEdit, Edits, EntityHandle};
 use super::entity::{Entity, EntityKind};
 use super::error::{Contradiction, MoleculeApplyError};
 use super::frame::OverlaysFrameAction;
@@ -1949,22 +1949,28 @@ impl Molecule {
                     .expect("split assigns each component stereo bond its original id"),
                 );
 
-                // route each constraint to the component holding its atoms (conservative union
-                // guarantees they share one), remapped to compact ids
-                let remapping = idremapping_from_correspondence(&correspondence);
-                let mut editor = entities.edit();
+                // Route each constraint to the component holding its atoms. The conservative union
+                // guarantees that all its references are present in the component correspondence.
+                let mut edits = Edits::new();
                 for constraint in self.constraints.iter() {
                     if self
                         .constraint_atoms(constraint)
                         .first()
                         .is_some_and(|a| component_of(*a) == component)
                     {
-                        editor
-                            .constraints_mut()
-                            .push(constraint.clone().remap(&remapping));
+                        let constraint = ConstraintEdit::new(constraint.clone(), |entity| {
+                            correspondence.left_of(entity).map(EntityHandle::from)
+                        })
+                        .expect("split correspondence covers every routed constraint reference");
+                        edits.add_molecule_constraint(constraint);
                     }
                 }
-                (editor.build(), correspondence)
+                let entities = entities
+                    .edit()
+                    .apply(edits)
+                    .expect("split constraint handles resolve in their component")
+                    .build();
+                (entities, correspondence)
             })
             .collect()
     }
@@ -2295,61 +2301,6 @@ fn union_participants(uf: &mut UnionFind, atoms: impl IntoIterator<Item = AtomId
             uf.union(first.index(), atom.index());
         }
     }
-}
-
-/// The per-entity-kind `original → compact` remapping a `split` component induces, read off its
-/// `component → original` correspondence.
-fn idremapping_from_correspondence(correspondence: &MoleculeCorrespondence) -> IdRemapping {
-    IdRemapping::new(
-        correspondence
-            .atoms()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .dative_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .aromatic_systems()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .multicenter_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .noncovalent_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .stereo_atoms()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-        correspondence
-            .stereo_bonds()
-            .matched_pairs()
-            .iter()
-            .map(|&(compact, original)| (original, compact))
-            .collect(),
-    )
 }
 
 #[cfg(test)]
