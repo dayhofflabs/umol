@@ -2,7 +2,7 @@
 
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
-use std::str::FromStr;
+use std::str::{from_utf8, FromStr};
 
 use bstr::ByteSlice;
 use fast_float2::FastFloat;
@@ -116,7 +116,7 @@ pub(super) trait IntParser:
             return Err(field_error(input, &start, column));
         }
         let digits: &[u8] = take(sign_len + digit_len).parse_next(input)?;
-        let value = std::str::from_utf8(digits)
+        let value = from_utf8(digits)
             .ok()
             .and_then(|digits| digits.parse().ok());
 

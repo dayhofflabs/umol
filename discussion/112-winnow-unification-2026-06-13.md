@@ -345,9 +345,23 @@ The workspace is green at the end of S1; CTfile still uses nom.
   unmigrated accumulation and top-level composition boundaries. No Nom adapter was
   added; S2e owns the next consumers.
 - **S2e — Property accumulation and conversion** (`accumulator.rs`, `context.rs`,
-  `convert.rs`): route duplicate properties, invalid codes and isotopes, invalid
+  `convert.rs`). **Done.** Route duplicate properties, invalid codes and isotopes, invalid
   references, and SGroup consistency failures through the parser-neutral error contract.
   Breaking coordinated migration. [dep: S2d]
+
+  Property accumulation now uses the settled atom- and bond-specific out-of-bounds
+  errors and the consistently named unterminated SGroup-data error. Conversion already
+  returned the parser-neutral invalid-code and invalid-isotope variants and required no
+  implementation change; its tests now assert their complete fields. Accumulator tests
+  likewise assert complete duplicate-property, reference, isotope, and SGroup errors,
+  including type constraints, missing data content and termination, and mismatched data
+  indices. `Context` remains the private state carrier and required no semantic change.
+  An isolated harness passed 910 tests on Rust 1.87, including 133 accumulator and 121
+  conversion tests, and passed Clippy with warnings denied on the current toolchain.
+
+  As expected for the coordinated S2b-S2f migration, the crate remains red only in the
+  unmigrated top-level composition. No Nom adapter was added; S2f owns the remaining
+  CTAB, MOL, and SDF consumers.
 - **S2f — CTAB, MOL, and SDF composition** (`parser.rs`, `sdf_data.rs`): port the
   top-level composition, retain backtracking where block ownership is not yet known, use
   deterministic record-oriented SDF dispatch, preserve all public whole-file entry
