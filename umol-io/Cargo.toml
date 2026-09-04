@@ -18,6 +18,7 @@ bench = false
 [features]
 conformance = []
 coordgen = ["dep:umol-coordgen-sys", "umol-coordgen-sys/native"]
+depiction = ["coordgen"]
 proptest = []
 
 [dependencies]
@@ -66,10 +67,6 @@ name = "smiles_parsing"
 name = "smiles_property"
 required-features = ["proptest"]
 
-[[test]]
-name = "depiction_property"
-required-features = ["proptest"]
-
 [[bench]]
 name = "layout"
 harness = false
@@ -86,11 +83,12 @@ harness = false
 [[bench]]
 name = "svg"
 harness = false
+required-features = ["depiction"]
 
 [[bin]]
 name = "depict_dsl"
 bench = false
-required-features = ["coordgen"]
+required-features = ["depiction"]
 
 [lints.clippy]
 absolute_paths = "warn"

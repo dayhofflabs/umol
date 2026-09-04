@@ -45,7 +45,7 @@ const ARROW_HEAD_HALF_WIDTH: f64 = 0.11;
 /// tokens: molecular entity references use `molecule`, `reaction-lhs`, or `reaction-rhs` followed
 /// by entity kind and id; `correspondence-pair` and `delta` references use their kind followed by
 /// their zero-based position.
-pub fn render(depiction: &Depiction) -> String {
+pub(crate) fn render(depiction: &Depiction) -> String {
     let mut output = String::new();
     let view_box = SvgViewBox::from_depiction(depiction);
 
@@ -568,9 +568,6 @@ fn write_reference(output: &mut String, reference: DepictionReference) {
         DepictionReference::CorrespondencePair(index) => {
             write!(output, "correspondence-pair/{index}").expect("writing to a String cannot fail");
         }
-        DepictionReference::Delta(ordinal) => {
-            write!(output, "delta/{ordinal}").expect("writing to a String cannot fail");
-        }
     }
 }
 
@@ -594,13 +591,15 @@ fn write_entity_reference(output: &mut String, frame: &str, entity: Entity) {
 mod tests {
     use roxmltree::Document;
     use rstest::rstest;
-    use umol_graph_core::Correspondence;
     use umol_graph_ir::ir::{AromaticSystemId, AtomId, BondId, Entity, Molecule};
+    #[cfg(feature = "coordgen")]
+    use umol_graph_ir::ir::{Deltas, Reaction};
     use umol_graph_ir::mol_dsl;
 
     use super::*;
     use crate::depict::molecule::depict;
-    use crate::depict::reaction::depict_from_sides;
+    #[cfg(feature = "coordgen")]
+    use crate::depict::Depict;
     use crate::layout::MoleculeLayout;
 
     #[rstest]
@@ -904,19 +903,11 @@ mod tests {
         assert_eq!(oxygen_base.text(), Some("O"));
     }
 
+    #[cfg(feature = "coordgen")]
     #[rstest]
     fn test_render_reaction() {
         let lhs = mol_dsl!(r#"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"#);
-        let rhs = mol_dsl!(r#"{:atoms ["C" "N"] :bonds [[0 1 "1"]]}"#);
-        let lhs_layout =
-            MoleculeLayout::try_new(vec![Point2D::new(-1.0, 0.0), Point2D::new(0.0, 0.0)]).unwrap();
-        let rhs_layout =
-            MoleculeLayout::try_new(vec![Point2D::new(0.0, 0.0), Point2D::new(1.0, 0.0)]).unwrap();
-        let correspondence =
-            Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 2)
-                .unwrap();
-        let depiction =
-            depict_from_sides(&lhs, &lhs_layout, &rhs, &rhs_layout, &correspondence).unwrap();
+        let depiction = Reaction::new(lhs, Deltas::new()).depict().unwrap();
 
         let svg = render(&depiction);
         let document = Document::parse(&svg).unwrap();
@@ -935,9 +926,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(mask_boxes.len(), 2);
-        assert_eq!(mask_boxes[0].attribute("x"), Some("-2.01"));
         assert_eq!(mask_boxes[0].attribute("width"), Some("0.52"));
-        assert_eq!(mask_boxes[1].attribute("x"), Some("2.49"));
         assert_eq!(mask_boxes[1].attribute("width"), Some("0.52"));
         assert_eq!(
             bond_groups

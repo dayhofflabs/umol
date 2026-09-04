@@ -234,8 +234,10 @@ PUBLIC_EXPORTS = frozenset(
     """.split()
 )
 
-if hasattr(native, "Svg"):
-    PUBLIC_EXPORTS |= frozenset({"MoleculeLayoutAlgorithm", "Svg"})
+if hasattr(native, "Depiction"):
+    PUBLIC_EXPORTS |= frozenset(
+        {"MoleculeLayoutAlgorithm", "DepictConfig", "Depiction"}
+    )
 
 EDITING_EXPORTS = frozenset(
     {

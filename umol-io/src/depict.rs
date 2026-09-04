@@ -1,38 +1,75 @@
-//! Format-neutral depiction operations and their drawing items.
+//! Format-neutral molecule and reaction depiction.
+//!
+//! This module is available with the `depiction` feature. [`Depict`] is implemented for graph-IR
+//! molecules and reactions: `depict` uses [`DepictConfig::default`], while `depict_with` accepts an
+//! explicit configuration. Both operations return an opaque [`Depiction`], whose
+//! [`Depiction::render_svg`] method produces SVG text.
 
-pub mod molecule;
-pub mod reaction;
+pub(crate) mod molecule;
+mod reaction;
 
+pub use molecule::MoleculeDepictionError;
+pub use reaction::ReactionDepictionError;
 use umol_geometric_core::Point2D;
 use umol_graph_ir::ir::Entity;
 
 #[cfg(feature = "coordgen")]
 use crate::layout::MoleculeLayoutAlgorithm;
+use crate::svg;
 
-/// Constructs a format-neutral depiction using an explicitly selected layout algorithm.
+/// Operational configuration for molecule and reaction depiction.
+///
+/// The initial configuration selects the layout algorithm. CoordGen is currently the only
+/// available variant.
+#[cfg(feature = "coordgen")]
+pub struct DepictConfig {
+    /// Algorithm used to generate the molecular layout.
+    pub layout_algorithm: MoleculeLayoutAlgorithm,
+}
+
+#[cfg(feature = "coordgen")]
+impl Default for DepictConfig {
+    fn default() -> Self {
+        Self {
+            layout_algorithm: MoleculeLayoutAlgorithm::CoordGen,
+        }
+    }
+}
+
+/// Constructs a format-neutral depiction using default or explicitly configured operations.
+///
+/// Graph-IR molecules return [`MoleculeDepictionError`]. Graph-IR reactions return
+/// [`ReactionDepictionError`] and are materialized into their two sides before either side is laid
+/// out or depicted.
 #[cfg(feature = "coordgen")]
 pub trait Depict {
     /// Failure produced while laying out or depicting this value.
     type Error;
 
-    /// Constructs the depiction with `layout_algorithm`.
+    /// Constructs the depiction with [`DepictConfig::default`].
     ///
     /// # Errors
     ///
-    /// Returns [`Self::Error`] when the selected layout algorithm or depiction operation cannot
-    /// produce the result.
-    fn depict_with(
-        &self,
-        layout_algorithm: MoleculeLayoutAlgorithm,
-    ) -> Result<Depiction, Self::Error>;
+    /// Returns [`Self::Error`] when the default layout or depiction operation cannot produce the
+    /// result.
+    fn depict(&self) -> Result<Depiction, Self::Error> {
+        self.depict_with(&DepictConfig::default())
+    }
+
+    /// Constructs the depiction with `config`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`] when the configured layout or depiction operation cannot produce
+    /// the result.
+    fn depict_with(&self, config: &DepictConfig) -> Result<Depiction, Self::Error>;
 }
 
-/// An ordered, format-neutral molecular drawing scene.
+/// An opaque, format-neutral molecular drawing scene.
 ///
 /// Item order is drawing order. Bounds cover item anchors and segment endpoints; they do
 /// not include renderer-dependent glyph extents. A depiction is issued by a graph-IR lowering or
 /// composition operation rather than assembled through a public aggregate constructor.
-#[derive(Clone, Debug, PartialEq)]
 pub struct Depiction {
     items: Vec<DepictionItem>,
     bounds: Option<Bounds>,
@@ -44,20 +81,28 @@ impl Depiction {
         Self { items, bounds }
     }
 
-    /// Drawing items in their rendering order.
-    pub fn items(&self) -> &[DepictionItem] {
+    pub(crate) fn items(&self) -> &[DepictionItem] {
         &self.items
     }
 
-    /// Anchor and endpoint bounds, or `None` when the scene has no items.
-    pub fn bounds(&self) -> Option<&Bounds> {
+    pub(crate) fn bounds(&self) -> Option<&Bounds> {
         self.bounds.as_ref()
+    }
+
+    /// Renders this depiction as a complete SVG document.
+    ///
+    /// Item order is preserved. Coordinates are converted from the depiction's y-up convention to
+    /// SVG's y-down convention. Molecular strokes are masked beneath estimated atom-label bounds,
+    /// and structured source references are encoded in `data-umol-references` attributes. The
+    /// returned text can be written directly to an SVG file.
+    pub fn render_svg(&self) -> String {
+        svg::render(self)
     }
 }
 
 /// One format-neutral item in a depiction.
 #[derive(Clone, Debug, PartialEq)]
-pub enum DepictionItem {
+pub(crate) enum DepictionItem {
     /// A positioned atom label.
     Atom(AtomItem),
     /// A localized bond segment.
@@ -73,8 +118,7 @@ pub enum DepictionItem {
 }
 
 impl DepictionItem {
-    /// Structured links from this item to the graph or reaction data it depicts.
-    pub fn references(&self) -> &[DepictionReference] {
+    pub(crate) fn references(&self) -> &[DepictionReference] {
         match self {
             Self::Atom(item) => &item.references,
             Self::Bond(item) => &item.references,
@@ -91,57 +135,57 @@ impl DepictionItem {
 /// Each optional script is positioned relative to `base`. The carrier describes presentation
 /// structure only; it does not require nonempty text or assign chemical meaning to a slot.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AtomLabel {
+pub(crate) struct AtomLabel {
     /// Text on the ordinary baseline.
-    pub base: String,
+    pub(crate) base: String,
     /// Optional superscript preceding the base.
-    pub left_superscript: Option<String>,
+    pub(crate) left_superscript: Option<String>,
     /// Optional subscript following the base.
-    pub right_subscript: Option<String>,
+    pub(crate) right_subscript: Option<String>,
     /// Optional superscript following the base and any subscript.
-    pub right_superscript: Option<String>,
+    pub(crate) right_superscript: Option<String>,
 }
 
 /// A positioned atom label.
 #[derive(Clone, Debug, PartialEq)]
-pub struct AtomItem {
+pub(crate) struct AtomItem {
     /// Center of the atom label.
-    pub position: Point2D,
+    pub(crate) position: Point2D,
     /// Structured display text selected by depiction construction.
-    pub label: AtomLabel,
+    pub(crate) label: AtomLabel,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// A localized bond drawn between two points.
 #[derive(Clone, Debug, PartialEq)]
-pub struct BondItem {
+pub(crate) struct BondItem {
     /// First line endpoint.
-    pub start: Point2D,
+    pub(crate) start: Point2D,
     /// Second line endpoint.
-    pub end: Point2D,
+    pub(crate) end: Point2D,
     /// Number of parallel lines selected by depiction construction.
-    pub line_count: u8,
+    pub(crate) line_count: u8,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// A stereochemical wedge between a narrow tip and a wider base.
 #[derive(Clone, Debug, PartialEq)]
-pub struct WedgeItem {
+pub(crate) struct WedgeItem {
     /// Narrow endpoint, located at the stereocenter in an issued depiction.
-    pub tip: Point2D,
+    pub(crate) tip: Point2D,
     /// Center of the wide endpoint at the ligand.
-    pub base: Point2D,
+    pub(crate) base: Point2D,
     /// Visible wedge treatment.
-    pub kind: WedgeKind,
+    pub(crate) kind: WedgeKind,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// Visible treatments for a stereochemical wedge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum WedgeKind {
+pub(crate) enum WedgeKind {
     /// A filled triangular wedge.
     Solid,
     /// A wedge represented by transverse hash marks.
@@ -150,35 +194,35 @@ pub enum WedgeKind {
 
 /// A dashed contour through an ordered sequence of scene points.
 #[derive(Clone, Debug, PartialEq)]
-pub struct DashedContourItem {
+pub(crate) struct DashedContourItem {
     /// Points visited by the contour in drawing order.
-    pub points: Vec<Point2D>,
+    pub(crate) points: Vec<Point2D>,
     /// Whether the last point is joined back to the first.
-    pub closed: bool,
+    pub(crate) closed: bool,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// Free text placed at one scene position.
 #[derive(Clone, Debug, PartialEq)]
-pub struct TextItem {
+pub(crate) struct TextItem {
     /// Center of the text anchor.
-    pub position: Point2D,
+    pub(crate) position: Point2D,
     /// Exact display text.
-    pub text: String,
+    pub(crate) text: String,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// A directed reaction or annotation arrow.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArrowItem {
+pub(crate) struct ArrowItem {
     /// Tail of the arrow.
-    pub start: Point2D,
+    pub(crate) start: Point2D,
     /// Tip of the arrow.
-    pub end: Point2D,
+    pub(crate) end: Point2D,
     /// Structured source references carried into rendered output.
-    pub references: Vec<DepictionReference>,
+    pub(crate) references: Vec<DepictionReference>,
 }
 
 /// A structured link from presentation data to its graph or reaction source.
@@ -186,7 +230,7 @@ pub struct ArrowItem {
 /// Entity ids remain local to the named molecular frame. Correspondence-pair and delta values are
 /// zero-based positions in their respective ordered sequences, not persistent identifiers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DepictionReference {
+pub(crate) enum DepictionReference {
     /// An entity in a standalone molecule depiction.
     Molecule(Entity),
     /// An entity on the lhs of a reaction depiction.
@@ -195,17 +239,15 @@ pub enum DepictionReference {
     ReactionRhs(Entity),
     /// The zero-based displayed index of a correspondence pair.
     CorrespondencePair(u32),
-    /// The zero-based ordinal of a reaction delta.
-    Delta(u32),
 }
 
 /// Axis-aligned bounds over item anchors and segment endpoints.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Bounds {
+pub(crate) struct Bounds {
     /// Component-wise minimum anchor coordinates.
-    pub min: Point2D,
+    pub(crate) min: Point2D,
     /// Component-wise maximum anchor coordinates.
-    pub max: Point2D,
+    pub(crate) max: Point2D,
 }
 
 impl Bounds {
@@ -326,13 +368,8 @@ mod tests {
     ) {
         let depiction = Depiction::from_items(items.clone());
 
-        assert_eq!(
-            depiction,
-            Depiction {
-                items,
-                bounds: expected_bounds,
-            }
-        );
+        assert_eq!(depiction.items, items);
+        assert_eq!(depiction.bounds, expected_bounds);
     }
 
     #[rstest]
@@ -453,7 +490,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_render_items() {
+    fn test_depiction_render_svg() {
         let text = "C<&>\"'";
         let depiction = Depiction::from_items(vec![
             DepictionItem::Atom(AtomItem {
@@ -474,7 +511,6 @@ mod tests {
                     DepictionReference::Molecule(Entity::StereoAtom(StereoAtomId(6))),
                     DepictionReference::ReactionLhs(Entity::StereoBond(StereoBondId(7))),
                     DepictionReference::CorrespondencePair(8),
-                    DepictionReference::Delta(9),
                 ],
             }),
             DepictionItem::Bond(BondItem {
@@ -491,11 +527,14 @@ mod tests {
             DepictionItem::Arrow(ArrowItem {
                 start: Point2D::new(-3.0, -2.0),
                 end: Point2D::new(3.0, -2.0),
-                references: vec![DepictionReference::Delta(9)],
+                references: Vec::new(),
             }),
         ]);
 
-        let svg = render(&depiction);
+        let svg = depiction.render_svg();
+
+        assert_eq!(svg, render(&depiction));
+
         let document = Document::parse(&svg).unwrap();
         let root = document.root_element();
         let groups = root
@@ -517,7 +556,7 @@ mod tests {
                 "molecule/atom/0 reaction-lhs/bond/1 reaction-rhs/dative-bond/2 \
                  molecule/aromatic-system/3 reaction-lhs/multicenter-bond/4 \
                  reaction-rhs/noncovalent-bond/5 molecule/stereo-atom/6 \
-                 reaction-lhs/stereo-bond/7 correspondence-pair/8 delta/9"
+                 reaction-lhs/stereo-bond/7 correspondence-pair/8"
             )
         );
         assert_eq!(
@@ -556,7 +595,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["line", "polygon"]
         );
-        assert_eq!(groups[3].attribute("data-umol-references"), Some("delta/9"));
+        assert_eq!(groups[3].attribute("data-umol-references"), None);
         assert_eq!(svg.matches("C&lt;&amp;&gt;&quot;&apos;").count(), 2);
     }
 }

@@ -3,6 +3,7 @@
 Status: Completed
 Date: 2026-08-27
 Relates: [168](168-api-hygiene-2026-07-27.md),
+[166](166-molecule-ops-2026-07-27.md),
 [204](204-reaction-application-redesign-2026-08-19.md),
 [208](208-canonicalization-scaling-2026-08-24.md),
 [209](209-normalization-canonical-semantics-2026-08-25.md),

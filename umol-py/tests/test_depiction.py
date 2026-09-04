@@ -4,7 +4,7 @@ import pytest
 
 from umol import _native as _native_module
 
-if not hasattr(_native_module, "Svg"):
+if not hasattr(_native_module, "Depiction"):
     pytest.skip("umol-py was built without the depiction feature", allow_module_level=True)
 
 from umol import (  # noqa: E402
@@ -12,13 +12,27 @@ from umol import (  # noqa: E402
     BondFieldChange,
     ContradictionError,
     Delta,
+    DepictConfig,
+    Depiction,
     Deltas,
     Molecule,
     MoleculeLayoutAlgorithm,
     NumForm,
     Reaction,
-    Svg,
 )
+
+
+def test_depict_config_new():
+    config = DepictConfig()
+
+    assert config == DepictConfig.default()
+    assert config.layout_algorithm == MoleculeLayoutAlgorithm.CoordGen()
+    assert repr(config) == "DepictConfig.default()"
+
+
+def test_depiction_constructor_error():
+    with pytest.raises(TypeError):
+        Depiction()
 
 
 def test_molecule_layout_algorithm():
@@ -26,11 +40,6 @@ def test_molecule_layout_algorithm():
 
     assert algorithm == MoleculeLayoutAlgorithm.CoordGen()
     assert repr(algorithm) == "MoleculeLayoutAlgorithm.CoordGen()"
-
-
-def test_svg_constructor_error():
-    with pytest.raises(TypeError):
-        Svg()
 
 
 @pytest.mark.parametrize(
@@ -64,13 +73,14 @@ def test_svg_constructor_error():
         ),
     ],
 )
-def test_molecule_depict_with(source, item_kind, reference, svg_class):
-    svg = Molecule.parse(source).depict_with(MoleculeLayoutAlgorithm.CoordGen())
-    text = svg._repr_svg_()
+def test_molecule_depict(source, item_kind, reference, svg_class):
+    depiction = Molecule.parse(source).depict()
+    text = depiction.render_svg()
     root = ET.fromstring(text)
     groups = list(root.findall("{http://www.w3.org/2000/svg}g"))
 
-    assert isinstance(svg, Svg)
+    assert isinstance(depiction, Depiction)
+    assert depiction._repr_svg_() == text
     assert root.attrib["class"] == "umol-depiction"
     assert any(
         group.attrib.get("data-umol-item") == item_kind
@@ -81,20 +91,39 @@ def test_molecule_depict_with(source, item_kind, reference, svg_class):
     assert 'data-umol-item="marker"' not in text
 
 
-def test_molecule_depict_with_algorithm_error():
+def test_molecule_depict_with():
+    molecule = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "2"]]}')
+
+    assert (
+        molecule.depict_with(DepictConfig()).render_svg()
+        == molecule.depict().render_svg()
+    )
+
+
+def test_molecule_depict_write_svg(tmp_path):
+    depiction = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "2"]]}').depict()
+    output = tmp_path / "molecule.svg"
+
+    output.write_text(depiction.render_svg())
+
+    assert output.read_text() == depiction.render_svg()
+
+
+def test_molecule_depict_with_config_error():
     with pytest.raises(TypeError):
         Molecule().depict_with()
 
 
-def test_reaction_depict_with():
-    svg = Reaction.parse(
+def test_reaction_depict():
+    depiction = Reaction.parse(
         """{:lhs {:atoms ["C" "O"]
                    :bonds [{:id :co :atoms [0 1] :attrs "1"}]}
              :deltas [{:bond {:modify [:co "2"]}}
                       {:atom {:add [:n "N"]}}
                       {:bond {:add [0 :n "1"]}}]}"""
-    ).depict_with(MoleculeLayoutAlgorithm.CoordGen())
-    root = ET.fromstring(svg._repr_svg_())
+    ).depict()
+    text = depiction.render_svg()
+    root = ET.fromstring(text)
     groups = list(root.findall("{http://www.w3.org/2000/svg}g"))
     mapping_groups = [
         group
@@ -104,7 +133,8 @@ def test_reaction_depict_with():
     arrow = next(group for group in groups if group.attrib.get("data-umol-item") == "arrow")
     shaft, head = list(arrow)
 
-    assert isinstance(svg, Svg)
+    assert isinstance(depiction, Depiction)
+    assert depiction._repr_svg_() == text
     assert [group.attrib["data-umol-references"] for group in mapping_groups] == [
         "reaction-lhs/atom/0 correspondence-pair/0",
         "reaction-lhs/atom/1 correspondence-pair/1",
@@ -127,6 +157,18 @@ def test_reaction_depict_with():
     }
 
 
+def test_reaction_depict_with():
+    reaction = Reaction.parse(
+        """{:lhs {:atoms ["C" "O"] :bonds [[0 1 "1"]]}
+             :deltas []}"""
+    )
+
+    assert (
+        reaction.depict_with(DepictConfig()).render_svg()
+        == reaction.depict().render_svg()
+    )
+
+
 def test_reaction_depict_with_error():
     lhs = Molecule.parse('{:atoms ["C" "O"] :bonds [[0 1 "1"]]}')
     deltas = Deltas(
@@ -144,4 +186,4 @@ def test_reaction_depict_with_error():
     )
 
     with pytest.raises(ContradictionError, match="^reached a contradiction$"):
-        Reaction(lhs, deltas).depict_with(MoleculeLayoutAlgorithm.CoordGen())
+        Reaction(lhs, deltas).depict_with(DepictConfig())

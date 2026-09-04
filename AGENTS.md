@@ -1,9 +1,10 @@
-# Working in the umol repository
+# Working in umol
 
-## Repository purpose
+umol is a Rust workspace for explicit molecular representations and operations, with Python
+bindings in `umol-py`. Graph IR, graph views, geometry, and external formats are distinct models;
+a format boundary is not the molecular model.
 
-umol is a Rust workspace for explicit, algorithmically transparent molecular
-representations and operations, with Python bindings in `umol-py`.
+## Map
 
 - `umol-graph-ir` defines the molecular and reaction DSLs and their semantic graph IR.
 - `umol-graph-core` provides graph data structures and domain-independent graph
@@ -40,86 +41,82 @@ models. Do not treat a format boundary type as the one true molecular model.
 | `umol-py` | Python bindings and Python package |
 | `umol-utils` | Small cross-cutting infrastructure |
 
-## Architectural policies
+## Repository rules
 
-- At the `umol-graph-core` and `umol-io` algorithm layers, callers select the
-  algorithm explicitly. Do not introduce silent algorithm defaults.
-- Higher-level operations in `umol-graph`, `umol-io`, and `umol-py` may define
-  defaults in operation-specific config objects. Algorithm choices are
-  operational config, not chemistry-model parameters.
-- Keep external formats behind explicit boundary types. Conversion from a
-  boundary representation to the graph IR may be lossy or model-dependent.
-- Rust-to-Python and Python-to-Rust boundary methods are named `from_rust` and
-  `to_rust`. Rust imports in `umol-py` use the crate name without the `umol-`
-  prefix when an import prefix is needed.
-- Public names and visibility are API decisions. Do not hide unfinished design
-  behind `pub(crate)` helpers, add indiscriminate re-exports, or proliferate
-  public helper layers.
-- Property tests document semantic laws as well as checking implementations.
-  Preserve the stated property when changing generators or assertions.
-- Algorithm work includes correctness fixtures, property tests, and benchmarks
-  from the beginning. Benchmarks and external comparisons are evidence, not
-  hidden runtime dependencies.
-- Code describes current behavior, not the history of how it was reached.
-  Discussion documents preserve design reasoning.
+- At the `umol-graph-core` and `umol-io` algorithm layers, callers select algorithms explicitly.
+  Higher layers may use operation-specific config defaults; algorithm choice is not a chemistry
+  parameter.
+- Keep external formats behind boundary types. Conversion to graph IR may be lossy or model-dependent.
+- Rust/Python boundary methods are `from_rust` and `to_rust`; prefixed Rust imports in `umol-py`
+  drop `umol-`.
+- Public names and visibility are design decisions. Do not hide unfinished design in `pub(crate)`
+  helpers, indiscriminately re-export, or proliferate public seams.
+- Before changing an invariant-bearing public API, enumerate its intended public symbols and match
+  each constructor, conversion, visibility, and failure boundary to a settled decision. Reconcile
+  every changed symbol before completing a staged subitem; passing tests do not override the contract.
+- Closed or producer-issued types gain no arbitrary-parts, bytes, handles, or independent-context
+  constructor unless explicitly settled. Public transformations must preserve their invariant.
+- Property tests state laws; preserve the stated law when changing generators or assertions.
+  Algorithm work starts with correctness fixtures, properties, and benchmarks. External comparisons
+  are evidence, not runtime dependencies.
+- Code states current behavior; discussion documents preserve reasoning and history.
 
-## Authority and status
+Normative guides are `docs/development/data-types.md` (construction and fallibility),
+`integrity.md` (representation contracts), `nomenclature.md` (terms and public names), and
+`property-tests.md` (property suites). Discussion documents are non-normative and must not be cited
+from source comments or public rustdoc.
 
-- Current code and tests are authoritative for implemented behavior.
-- `discussion/000-status.md` is authoritative for the status of discussion
-  documents.
-- Discussion-document filenames must be at most 55 characters so the status
-  table remains readable in source form. Prefer concise area names over
-  sentence-like summaries.
-- A completed discussion document records the completed scope; it is not a
-  substitute for inspecting the current API.
-- A proposed document describes future work and must not be reported as
-  implemented.
-- `materials/` contains research inputs and reference implementations. It is not
-  a location for runtime data or ordinary checked-in test fixtures.
+## Working rules
 
-## Session startup
+- Be direct and compact: answer first; omit preambles, restatements, closings, filler, flattery, and
+  repeated context. Correct errors plainly and retain user corrections for the session.
+- Inspect files and code before claims or edits. Say what is unknown; never invent paths, symbols,
+  signatures, or behavior. Own mistakes instead of deflecting to pre-existing or out-of-scope work.
+- Keep scope exact: no speculative features, adjacent refactors during a fix, or unnecessary files.
+- Never perform mutating git operations unless the user explicitly authorizes them; read-only git is
+  allowed.
+- Prefer direct code for one-off work. Before load-bearing design changes, discuss simplicity,
+  generality, and correctness. Expose structural problems rather than hiding them in stubs, shims,
+  bridges, or helpers; ask when the principled design is unclear.
+- Do not design for backward compatibility; make breaking changes when technically necessary. Do not
+  infer real scale from guesses or treat current tests/benchmarks as representative during design.
+  Prefer a maintained library to manual reimplementation.
+- When asked only for options, do not append unsolicited recommendations.
+- Prefer names to explanatory comments. No long comments, self-talk, implementation history,
+  decorative dividers, or stock values such as 42. Put imports at module scope and use `module.rs`,
+  not `module/mod.rs`.
+- In prose, use bare type/trait/constant names and parent-qualified free functions.
+- Apply `ir-literal-extraction` before graph-IR literal extraction in `umol-graph` or higher crates.
 
-1. Read this file and `CLAUDE.md`.
-2. Run `git status --short` and preserve unrelated user changes.
-3. Read the status vocabulary and relevant entries in
-   `discussion/000-status.md`.
-4. Open the discussion document named by the user or linked from the relevant
-   status entry.
-5. Inspect the current public API, implementation, tests, and benchmarks before
-   making claims or edits.
-6. Load every applicable repository skill before planning implementation work
-   or editing tests.
-7. For Python work, activate `umol-py/.venv` and confirm that `python` resolves
-   to Python 3.13 before building the PyO3 crate or running pytest.
+## Authority and synchronization
 
-Do not read the discussion archive chronologically. Start from the status index
-and follow only the references relevant to the task.
+- `AGENTS.md` is the sole repository instruction file; `CLAUDE.md` only points here.
+- `.agents/skills` and `.claude/skills` expose the same names. A shared skill has one canonical
+  body and a redirect in the other catalog; keep redirect frontmatter aligned.
+- Current code and tests define implemented behavior.
+- `discussion/000-status.md` defines discussion status. Proposed work is not implemented; a
+  completed record covers only its completed scope. Basenames are at most 55 characters.
+- `materials/` holds research inputs and reference implementations, not runtime data or ordinary
+  fixtures.
 
-## Task routing
+## Session start
 
-| Work area | Start with |
-| --- | --- |
-| Graph IR, DSL, constraints, entities, reactions | `umol-graph-ir`; docs 113, 131, 132, 164, 165 |
-| Graph algorithms and rewriting primitives | `umol-graph-core`; docs 136, 157-162, 167 |
-| Chemistry-aware graph operations | `umol-graph`; docs 145-149, 166 |
-| SMILES, MOL, SDF, and TableIR | `umol-io`; docs 151-153, 155 |
-| Python bindings and workflows | `umol-py`; docs 137, 140, 150, 151 |
-| Stereo and permutation work | `umol-graph-ir`, `umol-perm`; docs 103, 110, 157 |
-| Geometry and molecular symmetry | `umol-geometric*`, `umol-msym`; docs 69-76 |
-| Property-testing policy | doc 161 and the crate's property-test modules |
-| Release preparation | doc 163 |
+1. Read this file.
+2. Run `git status --short`; preserve unrelated changes.
+3. Read the status vocabulary and relevant rows in `discussion/000-status.md`.
+4. Open the named or linked discussion document.
+5. Inspect the current API, implementation, tests, and benchmarks before claims or edits.
+6. Load applicable repository skills before implementation planning or test edits.
+7. Before PyO3 builds or Python tests, activate `umol-py/.venv` and confirm Python 3.13.
+
+Start from the status index and follow relevant links; never read the archive chronologically.
 
 ## Verification
 
 - Format: `cargo fmt --all`
-- Workspace tests: `cargo test --workspace`
-- Workspace lint: `cargo clippy --workspace --all-targets -- -D warnings`
-- Python tests: activate `umol-py/.venv`, run `maturin develop`, then
-  `pytest -q umol-py/tests`
-- Feature-gated property and conformance suites must be run explicitly; inspect
-  the relevant crate's `Cargo.toml` and discussion plan for the required command.
+- Test: `cargo test --workspace`
+- Lint: `cargo clippy --workspace --all-targets -- -D warnings`
+- Python: activate `umol-py/.venv`, run `maturin develop`, then `pytest -q umol-py/tests`
 
-Use the narrowest relevant check while iterating, then run the verification
-gate specified by the implementation plan. Do not assume the default workspace
-test command covers feature-gated suites.
+Use narrow checks while iterating, then the plan's gate. Run feature-gated property and conformance
+suites explicitly; the default workspace test does not cover them.

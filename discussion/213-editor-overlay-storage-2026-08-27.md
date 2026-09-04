@@ -2,7 +2,8 @@
 
 Status: Proposed
 Date: 2026-08-27
-Relates: [211](211-relation-frames-and-api-2026-08-26.md),
+Relates: [166](166-molecule-ops-2026-07-27.md),
+[211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
 [data-type guide](../docs/development/data-types.md),
 [nomenclature guide](../docs/development/nomenclature.md)

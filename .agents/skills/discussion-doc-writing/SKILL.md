@@ -1,40 +1,26 @@
 ---
 name: discussion-doc-writing
-description: MANDATORY — load and apply before creating, restructuring, closing, or materially editing a dated document under discussion/, changing its lifecycle status, adding related-document links, or registering it in discussion/000-status.md. Also apply when turning an initial scope into a design record or preparing that settled design for a staged implementation plan. Enforces the repository header, filename, relationship, lifecycle, status-index, and post-closeout rules.
+description: MANDATORY — use for material edits to dated discussion documents, lifecycle status, related-document links, closeout, implementation-plan insertion, or registration in discussion/000-status.md. Enforces naming, headers, relationships, lifecycle, indexing, and post-closeout rules.
 ---
 
-# Discussion document writing
+# Discussion documents
 
-Treat `discussion/` as a set of dated design and implementation records. These documents preserve
-the reasoning and state of a work unit; they are not living developer documentation.
+`discussion/` contains dated design and implementation records, not living developer documentation.
 
-## Read before editing
+## Before editing
 
-1. Read `CLAUDE.md`.
-2. Read the target document's header, the sections being changed, and enough adjacent or linked
-   material to understand their role. Use its headings and targeted searches to locate that
-   context. Read the complete document only when the requested restructuring or closeout genuinely
-   requires a whole-document audit.
-3. Read the status vocabulary and the affected or directly related rows in
-   `discussion/000-status.md`; its vocabulary and index are authoritative for status. Do not load
-   the complete index merely to update one work unit.
-4. Read directly related discussion documents and permanent guides only as needed to establish the
-   current context. Do not infer their contents from titles.
+- Follow `AGENTS.md`; do not reread it if already loaded this session.
+- Read the target header, changed sections, and necessary adjacent or linked context. Read the whole
+  document only for restructuring or closeout that requires a full audit.
+- Read the status vocabulary and affected/directly related rows in `discussion/000-status.md`, not
+  the whole index. Read related documents or permanent guides only as needed; never infer content
+  from titles.
 
-## Create the file
+## Creation and index
 
-Use this filename shape:
-
-```text
-NNN-short-kebab-topic-YYYY-MM-DD.md
-```
-
-- Allocate the next document number from `discussion/000-status.md`.
-- Count the complete basename, including `.md`; it must be **shorter than 55 characters**.
-- Keep the number and ISO date. Shorten the topic instead of omitting either.
-- Use lowercase ASCII kebab case for the topic.
-
-Start new documents with this header:
+Use `NNN-short-kebab-topic-YYYY-MM-DD.md`: allocate the next number from the status index, retain the
+number and ISO date, use lowercase ASCII kebab case, and keep the complete basename at most 55
+characters.
 
 ```markdown
 # NNN — Concise title
@@ -45,102 +31,48 @@ Relates: [NNN](NNN-related-topic-YYYY-MM-DD.md),
 [development guide](../docs/development/example.md)
 ```
 
-Header rules:
+- Keep header fields in that order. Use an exact status from the index vocabulary, without styling
+  or commentary. The creation date never changes.
+- Use relative links in `Relates`; wrap additional links without reflowing unrelated text. Omit the
+  field only after confirming that no direct relationship exists.
+- Register a new document immediately and keep header/index status synchronized.
+- For open work, the index note states only the current action or blocker. Completed rows have an
+  empty note; outcomes belong in the document.
 
-- Keep the order `Status`, `Date`, `Relates`.
-- Use one exact status from the vocabulary in `discussion/000-status.md`; do not decorate it with
-  bold text or append explanatory prose.
-- `Date` is the creation date and does not change during implementation or closeout.
-- Include `Relates` when direct relationships exist. Use relative Markdown links, not bare document
-  numbers or prose references. Wrap additional links onto following lines without reformatting
-  unrelated text.
-- Omit `Relates` only after checking that the document is genuinely independent.
+## Lifecycle
 
-Add the document to `discussion/000-status.md` when creating it. Keep the index row's status in sync
-with the header. While a work unit is open, use the index note for the concrete outstanding work or
-blocker, not for a running history. Leave the note empty for a completed document; its outcome
-belongs in the document itself.
+Use one document per work unit unless a genuinely independent concern emerges.
 
-## Follow the document lifecycle
+1. **Scope:** record motivation, outcome, boundaries, exclusions, evidence, and open questions.
+   Separate facts from proposals; do not add an implementation plan. Use `Proposed` for unresolved
+   or future implementation and `Informational` only for analysis without tracked implementation.
+2. **Design:** revise stale proposals into a coherent record of settled semantics/API, useful
+   rejected alternatives, cross-crate/language/spec/test consequences, and remaining questions. Do
+   not preserve a chat transcript or implementation diary.
+3. **Plan:** only after semantics and names are settled, apply `staged-impl-plan` and append the plan
+   to the same document. A plan does not change status; use `In Progress` only once implementation
+   starts. Mark completed subitems. Use `Blocked` only for a concrete blocker and put it in the index
+   note.
+4. **Closeout:** verify all agreed non-deferred work; move deferred/new work to a linked `Proposed`
+   document; set header and index to `Completed`; update `Last Checked` to the closeout date; clear
+   the index note.
 
-Use one document for the work unit unless the scope grows into a genuinely separate concern.
+## Closed documents
 
-### 1. Scope
+- Preserve their historical semantics, names, and prose. Do not modernize or silently rewrite them.
+- Current policy belongs in `docs/development/`; source comments and public rustdoc must not cite
+  discussion documents.
+- A narrow correction may be appended under a dated, explicit addendum that identifies the corrected
+  conclusion and leaves the original intact. Broad redesign or reopened implementation needs a new
+  document.
+- A post-closeout `Relates` link is allowed; change only the link unless adding a permitted addendum.
+- The index may mark a document `Superseded` or `Outdated` and link its replacement. Use
+  `Superseded` only when the operative whole was replaced. If only part was superseded, retain the
+  ordinary status and add a dated notice at the top identifying that part and its replacement.
 
-Begin with the motivation, required outcome, boundaries, exclusions, current evidence, and open
-questions. Separate known facts from proposals. Do not present unsettled suggestions as decisions,
-and do not add an implementation plan yet.
+## Editing
 
-Use `Proposed` for future implementation or unresolved design work. Use `Informational` only when
-the document records analysis or decisions without tracked implementation scope.
-
-### 2. Discussion and technical design
-
-Develop the same document as questions are resolved. Record:
-
-- the selected semantics and public API;
-- rejected alternatives only when their rationale remains useful;
-- consequences across affected crates, languages, specifications, and tests; and
-- genuinely open questions, clearly distinguished from settled decisions.
-
-Write a coherent technical record, not a chat transcript or implementation diary. While the
-document remains open, revise stale proposals so the operative design is unambiguous. Preserve
-useful rationale without narrating every intermediate thought.
-
-### 3. Implementation plan
-
-Add a staged implementation plan only after the design, semantics, and names needed for the work
-are settled. Load and apply the `staged-impl-plan` skill, then append the plan to the same document.
-Do not use the plan to conceal unresolved design choices.
-
-A completed plan does not make the document `In Progress`. Change the status to `In Progress` only
-when implementation begins. Mark completed subitems as work proceeds so the next item is visible.
-If work is genuinely blocked, use `Blocked` and state the concrete blocker in the status-index note.
-
-### 4. Closeout
-
-Before setting `Completed`:
-
-1. Verify every agreed, non-deferred item is implemented and checked.
-2. Move deferred or newly discovered work into a separate `Proposed` document and link it.
-3. Mark the document header and status-index row `Completed`.
-4. Set the index `Last Checked` date to the closeout date and clear its note.
-
-## Preserve closed documents
-
-After closeout, treat the document as a historical artifact:
-
-- Do not silently rewrite its earlier semantics when later decisions differ.
-- Do not migrate old crate, type, method, field, or terminology names after a rename.
-- Do not perform cosmetic reflow or otherwise modernize the prose.
-- Record current policy in a permanent guide. Use a new discussion document when the correction or
-  follow-up has its own design reasoning or implementation scope.
-
-A narrow correction or clarification may be appended to a closed document when keeping it beside
-the original decision is more useful than creating another record. Give the addendum a dated,
-explicitly labeled heading; identify the earlier conclusion it corrects; and leave the original
-text intact. Do not use an addendum to conceal a broad redesign, reopen completed implementation
-scope, or retrofit current terminology throughout the historical account.
-
-Adding a `Relates` link after closeout is allowed, including a forward link to superseding or
-follow-up work. Apart from a permitted dated addendum, make only the link change; do not update the
-surrounding historical account.
-`discussion/000-status.md` may reclassify a document as `Superseded` or `Outdated` and identify the
-replacement without rewriting the closed document.
-
-`Superseded` applies only to a document that has been refuted or replaced in a significant way —
-its operative content as a whole no longer stands. When only a portion is superseded, keep the
-document's ordinary status and record the superseded portion in a dated notice at the top of the
-document, identifying the replacement. Settled scope recorded in the rest of the document remains
-authoritative and must not be hidden behind a `Superseded` index row.
-
-Permanent guides under `docs/development/` are the living normative surface. Discussion documents
-must not be cited from source comments or public rustdoc.
-
-## Editing discipline
-
-- Make narrow diffs. Do not wrap or reformat untouched lines.
-- Preserve the document's established heading and list style unless restructuring is the task.
-- Update related links reciprocally when the relationship is important for discovering either work
-  unit, including by adding the permitted link to a closed document.
-- Run `git diff --check` after edits.
+- Make narrow diffs; preserve untouched wrapping, heading style, and list style.
+- Add reciprocal `Relates` links when either document should lead readers to the other, including
+  permitted link-only changes to closed documents.
+- Run `git diff --check`.

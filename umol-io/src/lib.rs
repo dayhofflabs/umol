@@ -1,10 +1,15 @@
-//! I/O for umol: molecular file-format parsers (SMILES, CTFile)
-//! and the TableIR boundary type.
+//! External-format boundaries, two-dimensional layout, and depiction for umol.
+//!
+//! The `coordgen` feature enables explicit CoordGen layout through [`layout`]. The `depiction`
+//! feature enables the high-level `depict` API and currently selects CoordGen as its default and
+//! only layout backend.
 
 pub mod ctfile;
+#[cfg(feature = "depiction")]
 pub mod depict;
 pub mod layout;
 pub mod smiles;
-pub mod svg;
+#[cfg(feature = "depiction")]
+mod svg;
 pub mod table_ir;
 mod utils;
