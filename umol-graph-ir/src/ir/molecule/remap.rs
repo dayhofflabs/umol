@@ -1,3 +1,5 @@
+//! Molecule remapping operations.
+
 use std::sync::Arc;
 
 use umol_graph_core::{EdgeId, Graph, GraphRemapping, NodeId};

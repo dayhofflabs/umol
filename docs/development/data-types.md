@@ -704,37 +704,44 @@ property:
   changes;
 - assert only on internal paths whose producer establishes the required property.
 
-For example, converting a partial correspondence to a total-on-source remapping may return `None`
-because no total-left mapping exists. This can occur for a correspondence correctly produced for
-its molecule pair: partiality is part of the correspondence model, whereas a remapping is total on
-its source.
+For example, converting a partial correspondence to a semantic remapping may return `None` because
+the correspondence is not total on both sides. This can occur for a correspondence correctly
+produced for its molecule pair: partiality is part of the correspondence model, whereas a
+remapping is a total bijection. The current `to_remapping` conversions check only totality on the
+left; their results must not be treated as semantic remappings unless the producer also establishes
+totality on the right.
 It does not make correspondence construction, composition, reversal, or unrelated consumers
 fallible. Exact error taxonomy remains subject to the repository-wide error review; the
 construction/validation boundary does not require introducing a new error type for each method.
 
 ## Remapping
 
-Remapping is an explicit transformation between id spaces. It transports represented values and
-incidence along a total function; it does not validate chemistry, normalize attributes, repair
-references, or remove entities. The image vectors passed to a remapping constructor define its
-source domains, and every id in those domains has an image. Construction is therefore infallible.
-A general remapping need not be injective or surjective; injection or bijection is a contextual
-precondition of operations that require distinct or dense target entities. Removal uses compaction
-instead because a removed id has no image.
+Remapping is an explicit total bijection between dense id spaces. It transports represented values
+and incidence without adding, dropping, or identifying entities; it does not validate chemistry,
+normalize attributes, repair references, or remove entities. Removal uses compaction instead.
 
-The facility has two coordinated levels:
+The current dense carriers establish only the total dense source half of that contract. Their image
+vectors define their source domains, and every id in those domains has an image, but construction
+does not reject sparse or repeated target images. An operation using one as a semantic remapping
+must establish bijectivity separately until the carrier contract is tightened.
 
-- `umol_graph_core::Remapping` maps node and edge ids used by graphs and relation participants. A
-  relation-set remapping relabels each factor and leaves both the participant sequence and the
-  payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
-  stays aligned because nothing moved.
-- `IdRemapping` maps ids for all eight molecule entity kinds. It is used for graph-IR values that contain
-  entity references, including constraints and deltas; it does not duplicate graph-core participant
-  canonicalization.
+The facility has three coordinated levels:
 
-A higher-level operation that moves molecular data into another namespace derives both mappings
-from the same correspondence or construction result: the graph-core mapping transports topology
-and relation participants, while the IR mapping transports references to owned entity rows. Do not
+- `umol_graph_core::Remapping<Id>` stores the dense image vector for one typed id space;
+- `GraphRemapping` aggregates node and edge remappings used by graphs and relation participants; and
+- `MoleculeRemapping` aggregates remappings for all eight molecule entity kinds.
+
+A relation-set remapping relabels each factor and leaves both the participant sequence and the
+payload as supplied. Graph core never reorders a frame or reads a payload; a positional payload
+stays aligned because nothing moved.
+
+`IdRemapping` is the legacy sparse molecule-wide reference-transport carrier used by graph-IR
+constraints, deltas, and several construction operations. It declares neither source nor target
+counts and does not itself establish remapping semantics.
+
+When a higher-level operation moves molecular data with coordinated graph-core and graph-IR maps,
+both must derive from the same operation witness: the graph-core mapping transports topology and
+relation participants, while the IR mapping transports references to owned entity rows. Do not
 manually sort remapped relation participants or permute their payloads at individual call sites;
 that belongs to graph IR, which owns frame selection and transport.
 

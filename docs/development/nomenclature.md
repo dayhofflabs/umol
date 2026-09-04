@@ -503,11 +503,11 @@ own pairings.
 A correspondence is **valueless** — it records pairing and nothing else. Adding values and a
 direction is what lifts it to a reaction span.
 
-Correspondences compose and reverse, which is what lets a chain of operations be followed end to end,
-and `to_remapping` converts one into a total-on-source remapping when it is total on the left. The
-result may map into a larger target id space. End-to-end remapping of a standalone `Molecule`
-requires the stronger condition that every entity-kind correspondence is total on both sides, so
-the target tables are dense and contain exactly the mapped entities.
+Correspondences compose and reverse, which is what lets a chain of operations be followed end to
+end. The current `to_remapping` conversion produces a dense total-map carrier when a correspondence
+is total on the left; the result may map into a larger target id space. It is a semantic remapping
+only when the correspondence is also total on the right, so the target tables are dense and contain
+exactly the mapped entities.
 
 **Not:** a compaction, because being unmatched does not mean that an entity was removed; not a
 remapping, because a correspondence may be partial and records a relation rather than performing
@@ -1523,24 +1523,28 @@ relation.
 
 ### Remapping
 
-A **remapping** is a total old-to-new relabeling: every source id has an image and no entity is
-dropped. Totality is directional. A remapping may inject a source into a larger ambient id space,
-such as an lhs-anchored reaction union, so it is not necessarily surjective, bijective, or
-reversible.
+A **remapping** is a total bijective old-to-new relabeling with a dense source id space. Every
+source id has exactly one image, every target id has exactly one preimage, and no entity is added or
+dropped. It is semantics-preserving alpha-renaming rather than a structural edit.
 
-`umol_graph_core::Remapping` transports graph nodes, edges, and relation participants.
-`IdRemapping` transports typed references across all eight molecule entity kinds. A remapping
-relabels participants and preserves their stored sequence, so a positional payload stays aligned
-without being touched.
+The current dense carriers do not yet enforce that complete semantic contract.
+`umol_graph_core::Remapping<Id>` stores one image for every id in a dense source space but permits
+sparse or repeated target images. `GraphRemapping` aggregates the node and edge carriers, and
+`MoleculeRemapping` aggregates all eight molecule entity kinds. Producers and consumers that need a
+semantic remapping must therefore establish bijectivity separately.
 
-A correspondence that is total on the left can produce a remapping. Applying a remapping to a
-complete standalone molecule requires a bijection onto dense target tables, which corresponds to
-totality on both sides. In that case remapping is semantics-preserving alpha-renaming rather than a
-structural edit.
+`IdRemapping` is the legacy sparse molecule-wide reference-transport carrier. It declares no source
+or target counts and remains in use while operation witnesses are redesigned. Its name does not
+make an arbitrary sparse map a remapping.
+
+A correspondence produces a semantic remapping only when it is total on both sides and both id
+spaces are dense. Relabeling relation participants preserves their stored sequence, so a positional
+payload stays aligned without being touched.
 
 **Not:** a correspondence, which may be partial and only records pairing; not a compaction, which
 expresses removal by leaving removed source ids without images.
-**In code:** `umol_graph_core::Remapping`, `IdRemapping`, `remap`, `to_remapping`.
+**In code:** `Remapping`, `GraphRemapping`, `MoleculeRemapping`, `IdRemapping`, `remap`,
+`to_remapping`.
 
 ### Reset
 

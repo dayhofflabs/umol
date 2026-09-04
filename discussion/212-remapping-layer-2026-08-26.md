@@ -1,6 +1,6 @@
 # 212 — The remapping id-transport layer
 
-Status: In Progress
+Status: Completed
 Date: 2026-08-26
 Relates: [211](211-relation-frames-and-api-2026-08-26.md),
 [214](214-aggregate-frame-semantics-2026-08-28.md),
@@ -14,8 +14,9 @@ the same missing layer in the remapping row. Remapping is not on 211's critical 
 extraction turns on a representation question that compaction does not raise, so it is recorded
 separately.
 
-This document records the settled representation, public surface, and audit of existing
-construction sites. Implementation is in progress.
+This document records the dense typed carrier extracted from that audit, the removal of two
+non-remapping uses, the reaction-reversal cleanup, and the remapping-module name alignment. The
+wider operation-witness work continues in doc 218.
 
 ## Finding
 
@@ -26,10 +27,32 @@ edge spaces, and the molecule's eight entity families.
 | --- | --- | --- | --- |
 | partial bijection | `Correspondence<Id>` | `GraphCorrespondence` | `MoleculeCorrespondence` |
 | removal and dense shift | `Compaction<Id>` | `GraphCompaction` | `MoleculeCompaction` |
-| total relabel | `Remapping<Id>` | `GraphRemapping` | `MoleculeRemapping` |
+| dense total map | `Remapping<Id>` | `GraphRemapping` | `MoleculeRemapping` |
 
-The aggregate names state the layer they cover. The legacy sparse `IdRemapping` remains only until
-its consumers are classified and migrated later in this plan.
+The aggregate names state the layer they cover. The legacy sparse `IdRemapping` remains because
+migrating its consumers requires the wider operation-witness design now assigned to doc 218 on the
+`feature/mutation-witness` branch.
+
+## Semantic classification
+
+For operation witnesses, the intended concepts are narrower than the current carriers alone
+express:
+
+- a correspondence is a partially bijective mapping with explicit left and right counts;
+- a remapping is the efficient special case of a total bijection with a dense left-hand side; and
+- a compaction is the order-preserving special case with no unmatched right-hand elements, so the
+  right-hand side is no larger than the left-hand side.
+
+The special carriers should be used only when those properties are part of an operation's
+semantics. Otherwise, correspondence is the default witness. This distinction matters for witness
+direction and composition, not merely for storage.
+
+The `Remapping<Id>` implemented in this work establishes a dense, total source domain, but its
+constructor currently permits sparse or repeated target images. It therefore implements the
+representation needed by a remapping without yet enforcing the full bijection contract above.
+Tightening that contract cannot be done by adding a repeated-image check alone: existing producers
+first need to be classified by operation semantics, and multi-output operations need a target id
+space capable of distinguishing their outputs. That semantic work is transferred to doc 218.
 
 ## How remapping differs from compaction
 
@@ -38,8 +61,8 @@ Doc 211 extracts the compaction layer because the arithmetic is duplicated: `com
 `Compaction::compact_node`, `Compaction::uncompact_node`, and the sort-and-dedup in
 `Compaction::new`. That extraction is mechanical and deletes code.
 
-Remapping has no such duplication. The two layers use different representations for the same
-concept.
+Before S1a, remapping had no such duplication. The two layers used different representations for
+the same concept.
 
 ```rust
 pub struct Remapping {                  // graph.rs:643
@@ -61,10 +84,9 @@ design decision, not an extraction.
 
 ## Representation decision
 
-All three remapping layers use a dense positional representation. The image vector defines the
-source domain: source id `i` maps to the value at position `i`, so construction establishes that
-every source id has an image. The image need not be dense, injective, or surjective; a remapping may
-embed its dense source into a sparse or larger ambient id space.
+The extracted carriers use a dense positional representation. The image vector defines the source
+domain: source id `i` maps to the value at position `i`, so construction establishes that every
+source id has an image.
 
 The vector is stored as `index_vec::IndexVec<Id, Id>`. The existing id newtypes implement the
 crate's `Idx` indexing contract, which confines conversion to the machine index required by vector
@@ -73,13 +95,12 @@ between an id as a typed table index and an arbitrary integer conversion.
 
 The extracted single-id-space layer is therefore `Remapping<Id>`, graph core holds one such value
 for nodes and one for edges, and the molecule layer holds one for each of its eight entity kinds.
-The current `IdRemapping` hash maps do not establish this contract. They have no declared source
-domain, so their effective guarantee is only that every lookup made by a particular consumer happens
-to have an entry.
+The current `IdRemapping` hash maps do not establish a declared source domain, so their effective
+guarantee is only that every lookup made by a particular consumer happens to have an entry.
 
 ## Public contract
 
-The three public layers are:
+The public additions completed here are:
 
 - `Remapping<Id>`, containing one typed dense image vector;
 - `GraphRemapping`, containing node and edge remappings; and
@@ -92,81 +113,56 @@ source id and asserts that the id is in the declared source domain; `try_map` re
 out-of-domain source id. The aggregate types provide the corresponding typed pairs, such as
 `map_node` and `try_map_node`, for every component id space.
 
-`GraphCorrespondence::to_remapping` and `MoleculeCorrespondence::to_remapping` continue to return
-`Option`: a correspondence has a remapping exactly when it is total on its dense left-hand id
-spaces. Their successful results construct the corresponding dense aggregate directly.
-
-## Operation naming and failure boundary
-
-`map_*` names lookup of one id. `remap` names transport of a complete reference-bearing value. A
-public whole-value operation that accepts an independently supplied remapping provides both forms:
-
-- `try_remap` returns `None` when any referenced id lies outside the remapping's source domain; and
-- `remap` asserts complete coverage and documents that requirement.
-
-The paired whole-value surface applies to `Constraint`, `RelationalConstraint`,
-`MoleculeConstraint`, and `Delta`. The current free `remap_delta` operation becomes the inherent
-`Delta::remap` and `Delta::try_remap` pair. Existing molecule and reaction-span transport remains
-paired in the same way even where the transport carrier is a correspondence rather than a
-remapping.
-
-## Adjacent naming corrections
-
-Two existing operations do not have remapping semantics and should be renamed as part of this
-cleanup:
-
-- `MoleculeMetadata::remap` retains only metadata whose referenced entities are present in a
-  correspondence. It is projection, so the Rust and Python operation becomes `project`.
-- `Sgroup::remap_indices` translates external row indices through an independently supplied lookup
-  and returns `None` on missing coverage. It becomes `try_reindex`.
+`GraphCorrespondence::to_remapping` now constructs `GraphRemapping` directly when the
+correspondence is total on its dense left-hand node and edge spaces. The molecule-level conversion
+still returns `IdRemapping`; its migration is part of the deferred semantic work.
 
 ## Construction-site findings
 
 ### Correspondence conversion
 
-The two `to_remapping` operations are the same operation at two layers, and both are built from a
-correspondence that is total on the left over a dense left id space.
-
 `GraphCorrespondence::to_remapping` (`correspondence.rs:365`) checks `is_total_on_left`, then
 collects only the right id of each matched pair into a positional vector. That is valid precisely
 because the left space is dense and `matched_pairs` is in left order.
 
-`MoleculeCorrespondence::to_remapping` (`ir/correspondence.rs:246`) performs the identical check and
+`MoleculeCorrespondence::to_remapping` (`ir/correspondence.rs:431`) performs the identical check and
 then collects the whole pair into a hash map, discarding the density it just established.
 
-Both conversions therefore become direct construction of dense image vectors.
+Only the graph-core conversion moved in this work. Whether and how the molecule conversion should
+produce a remapping is coupled to the witness-direction and composition questions assigned to doc
+218.
 
 ### Constraint edits
 
-`ConstraintEdit` currently uses `IdRemapping` for two different operations.
+Before S3a, `ConstraintEdit` used `IdRemapping` for two different operations.
 
-`ConstraintEdit::new` collects only the entity ids referenced by the supplied constraint, maps them
-to normalized indices in private per-kind handle vectors, and rewrites the constraint to those
-indices. Its source is the finite set of references encountered in that constraint, not a declared
-dense id space. This operation is not a remapping and must no longer be represented by the remapping
-type.
+`ConstraintEdit::new` collected only the entity ids referenced by the supplied constraint, mapped
+them to normalized indices in private per-kind handle vectors, and rewrote the constraint to those
+indices. Its source was the finite set of references encountered in that constraint, not a declared
+dense id space. S3a replaced the remapping carrier with a local sparse entity map.
 
 `ConstraintEdit::resolve` maps every dense private handle index to the entity id obtained by
 resolving that handle. Its source domain is exactly each private vector's `0..len`, with one image
-for every source id. This is a remapping and admits the dense representation directly.
+for every source id. It remains an `IdRemapping` consumer until the operation-witness migration.
 
 ### Molecule splitting
 
 `Molecule::split` returns each compact component together with a `MoleculeCorrespondence` from the
-component to the original molecule. The current implementation inverts the matched pairs into a
-sparse original-to-component `IdRemapping` solely to rewrite constraints routed to that component.
-That mapping is partial on the original molecule and is therefore not a remapping. Constraint
-references should instead be transported through the existing correspondence in the reverse
-direction. The operation remains a split producing a correspondence; no compaction result is added.
+component to the original molecule. Before S3b, the implementation inverted the matched pairs into
+a sparse original-to-component `IdRemapping` solely to rewrite constraints routed to that
+component. That mapping was partial on the original molecule and therefore was not a remapping. S3b
+now transports those constraint references through the existing correspondence in the reverse
+direction. The operation remains a split producing a correspondence; no compaction result was
+added.
 
 ### Reaction reversal
 
-`Reaction::reverse` currently materializes `self.to_reaction_span()?`, but uses the span only to
-obtain its right projection as the new left-hand molecule. It separately collects removed and
-created ids, builds sparse maps over every id the inverted deltas will reference, and uses those
-maps to re-anchor the inverted deltas. This works because the hash-map representation checks
-coverage only when each reference is looked up. In particular, ids introduced by `Add` deltas need
-not form a dense source space, so these maps do not satisfy the remapping contract.
+Before S3c, `Reaction::reverse` materialized `self.to_reaction_span()?`, but used the span only to
+obtain its right projection as the new left-hand molecule. It separately collected removed and
+created ids, built sparse maps over every id the inverted deltas would reference, and used those
+maps to re-anchor the inverted deltas. This worked because the hash-map representation checked
+coverage only when each reference was looked up. In particular, ids introduced by `Add` deltas did
+not need to form a dense source space, so those maps did not satisfy the remapping contract.
 
 The selected replacement uses the reaction span as the complete intermediate:
 
@@ -189,12 +185,29 @@ path to the remapping abstraction.
 This document owns the remapping row only. The compaction row, the relation-set surface, frame
 transport, and the `Reframe` operation belong to doc
 [211](211-relation-frames-and-api-2026-08-26.md) and are not reopened here. Nothing in doc 211
-depends on this document, and doc 211 may be implemented and closed while this remains proposed.
+depends on this document.
 
 Doc 211 has landed the compaction row and supplies the naming and layering precedent. The existing
 construction sites have now been classified: only genuine total relabelings move to the dense
 layer; operation-local bookkeeping and correspondence transport do not migrate merely because they
 currently use `IdRemapping`.
+
+The following work is transferred to doc 218 on the `feature/mutation-witness` branch:
+
+- consistently generating covariant source-to-result witnesses;
+- representing multi-input and multi-output witnesses, including tagged output id spaces for
+  `Molecule::split`;
+- composing correspondences, remappings, and compactions without collapsing every operation onto
+  one carrier;
+- classifying and migrating the remaining `IdRemapping` producers and consumers, including
+  constraints, deltas, molecule combination, pushout, and reaction-span operations; and
+- enforcing the bijection semantics of remapping and retiring `IdRemapping` when its consumers have
+  valid replacements.
+
+For example, each component correspondence returned by `Molecule::split` currently points from the
+component back to the source molecule. A covariant witness for the whole split instead maps each
+source atom to a tagged target `(component_id, local_atom_id)`. Repeated bare local ids are therefore
+a codomain-representation defect, not evidence that remapping permits repeated images.
 
 ## Public-symbol inventory
 
@@ -206,9 +219,7 @@ The implementation adds:
 - `GraphRemapping` with `new`, `nodes`, `edges`, and the typed node/edge `map_*` and `try_map_*`
   methods;
 - `MoleculeRemapping` with `new`, `graph`, six overlay-component accessors, and typed `map_*` and
-  `try_map_*` methods for all eight molecule entity kinds; and
-- `try_remap` alongside `remap` on `Constraint`, `RelationalConstraint`, `MoleculeConstraint`, and
-  `Delta`.
+  `try_map_*` methods for all eight molecule entity kinds.
 
 The typed molecule methods use the complete entity names: `map_dative_bond`,
 `map_aromatic_system`, `map_multicenter_bond`, `map_noncovalent_bond`, `map_stereo_atom`, and
@@ -221,16 +232,14 @@ The implementation changes or retires:
   generic `Compaction<Id>` method;
 - the current graph aggregate `Remapping`, renamed to `GraphRemapping` so the generic type can own
   the unqualified name;
-- `IdRemapping`, replaced by `MoleculeRemapping`;
-- the return types of `GraphCorrespondence::to_remapping` and
-  `MoleculeCorrespondence::to_remapping`;
-- free `remap_delta`, replaced by `Delta::remap` and `Delta::try_remap`;
-- Rust and Python `MoleculeMetadata::remap`, renamed to `project`; and
-- `Sgroup::remap_indices`, renamed to `try_reindex`.
+- the return type of `GraphCorrespondence::to_remapping`; and
+- the private graph-core operation modules, named `remap` and `compact`.
 
 `Reaction::reverse`, `Molecule::{remap, try_remap}`, and
 `ReactionSpan::{remap, try_remap}` retain their current public signatures. No remapping carrier is
-added to the Python API.
+added to the Python API. `IdRemapping`, molecule-level correspondence conversion, constraint and
+delta transport, metadata projection, and S-group reindexing retain their current APIs in this
+document's scope.
 
 ## Implementation plan
 
@@ -402,8 +411,8 @@ the S0a benchmark and record the comparison.
 
 `Reaction::reverse` now materializes the reaction span, reverses its sides privately, and converts
 the reversed span back to a reaction. The sparse reverse bookkeeping and `reversed_remapping` are
-gone. The former `remap_delta` implementation remains test-only until S4b replaces its cases with
-the dense checked and asserted methods.
+gone. The former `remap_delta` implementation remains test-only; its disposition is part of the
+delta witness work transferred to doc 218.
 
 Exact tests cover all four entity-span states, all three constraint-span states, every entity
 family, stereo frames, side equivalence, and reversal as an involution after span normalization.
@@ -412,147 +421,63 @@ The existing feature-gated span-side property also passes. The full `umol-graph-
 warnings denied. The retained benchmark now measures 13.462–13.534 µs, a statistically significant
 4.0–4.9% improvement over the S0a baseline.
 
-### S4 — Move true remapping consumers onto the dense layer
+### S4 — Align the molecule remapping module name
 
-The public signature changes in this stage may leave the workspace red between subitems. The stage
-ends with every producer migrated and `IdRemapping` removed.
+#### S4a — Rename the private molecule remapping modules **Done**
 
-#### S4a — Add checked constraint transport
+**Module:** `umol-graph-ir/src/ir/molecule/remapping.rs`,
+`umol-graph-ir/tests/property/molecule/remapping.rs`,
+`umol-graph-ir/tests/property/reaction/span/remapping.rs`, and their parent module declarations.
 
-**Module:** `umol-graph-ir/src/ir/constraint/molecule.rs`, `relational.rs`, the leaf constraint
-modules, and their unit tests.
+Rename the molecule implementation module and the molecule and reaction-span property-test modules
+from `remapping` to `remap`, matching the operation noun used by graph core and the rest of graph
+IR. This is a private module rename only; do not change remapping carriers, producers, consumers,
+operation direction, or public APIs.
 
-Change constraint remapping to accept `MoleculeRemapping`. Add `try_remap` to `Constraint`,
-`RelationalConstraint`, and `MoleculeConstraint`; it returns `None` when any referenced id is outside
-the corresponding source domain. Make `remap` the asserted counterpart with a documented coverage
-requirement. Leaf forms that contain no entity references remain infallible and do not acquire a
-meaningless checked variant.
+**Tests and evidence:** Run `cargo test -p umol-graph-ir` and
+`cargo test -p umol-graph-ir --features proptest --test property`.
 
-**Tests and evidence:** Exhaustive table cases cover the id-bearing variants and recursive
-`And`/`Or`/`Not`, with exact successful values and missing coverage in each id family. Keep each
-no-reference variant as an exact identity case. Run the focused constraint tests once the stage is
-green.
+**Change class:** private naming correction (green).
 
-**Change class:** breaking public signature and additive checked operations (red until S4d).
+**Dependencies:** [dep: S3c]
 
-**Dependencies:** [dep: S2a, S3c]
+The molecule implementation module and the molecule and reaction-span property-test modules are now
+named `remap`; no public symbol or behavior changed. The graph-IR test suite and its feature-gated
+property target pass.
 
-#### S4b — Move delta transport onto `Delta`
+### S5 — Align documentation and close
 
-**Module:** `umol-graph-ir/src/ir/delta.rs` and its unit tests.
-
-Replace free `remap_delta` with inherent `Delta::try_remap` and `Delta::remap` over
-`MoleculeRemapping`. The checked method declines on the first uncovered entity or participant; the
-asserted method documents and asserts complete coverage. Preserve participant sequence and stereo
-frame order.
-
-**Tests and evidence:** Exhaustive table cases cover all delta families, entity ids, participants,
-stereo sites and ligands, and nested constraint deltas. Assert exact `None` results for missing
-coverage and retain the inverse-remapping roundtrip as a targeted unit test. Do not add a property
-test for this finite variant surface.
-
-**Change class:** breaking free-to-inherent API migration (red until S4d).
-
-**Dependencies:** [dep: S4a]
-
-#### S4c — Convert correspondence and molecule producers
-
-**Module:** `umol-graph-ir/src/ir/correspondence.rs`, `edit.rs`, `molecule.rs`,
-`molecule/remapping.rs`, `molecule/pushout.rs`, and their unit tests.
-
-Change `MoleculeCorrespondence::to_remapping` to construct dense image vectors and return
-`MoleculeRemapping`. Convert the true remapping producers in `ConstraintEdit::resolve`, molecule
-combination, molecule remapping, and pushout from hash maps to dense vectors. Update their
-constraint transport to the checked or asserted operation justified by each producer's coverage.
-Delete the now-unused offset hash-map helper.
-
-**Tests and evidence:** Retain correspondence totality, combination, molecule remapping, edit
-resolution, and pushout cases. Add exact coverage assertions where a producer establishes the dense
-source domains. Run the focused tests for those modules once the stage is green.
-
-**Change class:** breaking producer and caller migration (red until S4d).
-
-**Dependencies:** [dep: S4b]
-
-#### S4d — Convert reaction-span producers and retire `IdRemapping`
-
-**Module:** `umol-graph-ir/src/ir/reaction_span.rs`, `remap.rs`, `ir.rs`, and their unit tests.
-
-Convert the genuine remappings used by superimposition, side projection, and `to_reaction` to dense
-image vectors and `MoleculeRemapping`. Replace direct hash-map indexing with the typed asserted
-lookups whose domains those producers establish. Remove `IdRemapping`, its hash-map imports, and all
-remaining old-name references.
-
-**Tests and evidence:** Retain exact superimposition, lhs/rhs projection, span-to-reaction,
-roundtrip, and invalid-reference cases. Search the workspace for `IdRemapping` and `remap_delta`;
-only historical discussion text may remain. Run `cargo test -p umol-graph-ir` and rerun both the S0a
-reaction benchmark and the existing molecule-remapping benchmark.
-
-**Change class:** final caller migration and type retirement (restores green).
-
-**Dependencies:** [dep: S4c]
-
-### S5 — Correct adjacent operation names
-
-This stage is deferrable relative to the dense-remapping deliverable, but required before this
-document can close.
-
-#### S5a — Rename metadata projection in Rust and Python
-
-**Module:** `umol-graph-ir/src/dsl/metadata.rs`, `umol-py/src/metadata.rs`, Rust tests, and
-`umol-py/tests/test_metadata.py`.
-
-Rename `MoleculeMetadata::remap` to `project` on both language surfaces and migrate all callers. The
-operation continues to retain matched keywords, omit unmatched keywords, and preserve atom aliases.
-
-**Tests and evidence:** Exact Rust and Python cases cover a total correspondence, unmatched keyword
-omission, alias preservation, and composition. For Python verification, activate `umol-py/.venv`,
-confirm Python 3.13, rebuild with `maturin develop`, and run the focused metadata tests.
-
-**Change class:** breaking rename with caller migration (red then green within the subitem).
-
-**Dependencies:** [dep: S4d]
-
-#### S5b — Rename S-group index translation
-
-**Module:** `umol-io/src/table_ir/sgroup.rs`, `ctfile_data.rs`, `cx_data.rs`, and their unit tests.
-
-Rename `Sgroup::remap_indices` to `try_reindex` and migrate both TableIR callers. Preserve its
-checked lookup behavior and the callers' existing omission of an S-group whose required indices
-cannot be translated.
-
-**Tests and evidence:** Exact cases cover every index-bearing S-group field and missing atom and
-bond coverage, including connecting bonds. Run `cargo test -p umol-io`.
-
-**Change class:** breaking rename with caller migration (red then green within the subitem).
-
-**Dependencies:** [dep: S5a]
-
-### S6 — Align documentation and close
-
-#### S6a — Update the guides and complete verification
+#### S5a — Complete verification and close the record **Done**
 
 **Module:** `docs/development/nomenclature.md`, `docs/development/data-types.md`, crate rustdoc,
 this document, and `discussion/000-status.md`.
 
-Record the three-layer remapping vocabulary, dense source-domain contract, `map`/`remap` distinction,
-and checked/asserted naming rule. Replace stale names and examples. Reconcile every changed public
-symbol against the inventory above, record the benchmark comparison and verification results, then
-mark this document Completed only when the implementation and all required checks have landed.
+Reconcile the public additions against the inventory above, preserve the explicit boundary between
+the implemented total-map carrier and the deferred remapping semantics, record final verification,
+and mark this document Completed only after S4a and the checks have landed.
 
-**Tests and evidence:** Run `cargo +nightly fmt --all`, `cargo test --workspace`, and
-`cargo clippy --workspace --all-targets -- -D warnings`. Run the Python gate from S5a. Search code
-and current guides for every retired symbol, and run `git diff --check`.
+**Tests and evidence:** Run `cargo +nightly fmt --all`, `cargo test -p umol-graph-core`,
+`cargo test -p umol-graph-ir`, `cargo test -p umol-graph-ir --features proptest --test property`,
+package clippy for both crates with warnings denied, and `git diff --check`.
 
-**Change class:** documentation migration and verification (green).
+**Change class:** documentation alignment and verification (green).
 
-**Dependencies:** [dep: S5b]
+**Dependencies:** [dep: S4a]
+
+The nomenclature and data-type guides now distinguish the intended total-bijection semantics from
+the weaker contract currently enforced by the dense carriers, and they record the sparse
+`IdRemapping` as legacy transport. `cargo +nightly fmt --all -- --check`, both package test suites,
+the feature-gated graph-IR property target, and package clippy with warnings denied pass.
 
 ### Dependency summary
 
-The critical path is
-`S0a -> S1a -> S1b -> S2a -> S3a -> S3b -> S3c -> S4a -> S4b -> S4c -> S4d -> S5a -> S5b -> S6a`.
+S0 through S5 are complete. Witness semantics and migration were not prerequisites for closing
+this document; they are now one coherent work item in doc 218.
 
-The dense-remapping deliverable is green at S4d. S5 is independently deferrable if only that core
-deliverable is required, but the adjacent public names remain part of this document's accepted
-scope and the document remains Proposed until S5 and S6 are complete.
+## Closeout
+
+This work extracted the generic dense carrier, renamed the graph aggregate, added the corresponding
+molecule aggregate, removed two improper sparse-remapping uses, and simplified reaction reversal
+through `ReactionSpan`. It does not claim that the current dense constructors enforce remapping's
+full bijection semantics, nor does it retire `IdRemapping`. Those coupled changes remain with the
+witness design in doc 218.

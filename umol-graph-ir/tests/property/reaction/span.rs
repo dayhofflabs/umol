@@ -24,8 +24,8 @@ use crate::strategies::{
 mod canonicalize;
 #[path = "span/reframe.rs"]
 mod reframe;
-#[path = "span/remapping.rs"]
-mod remapping;
+#[path = "span/remap.rs"]
+mod remap;
 
 #[derive(Clone, Copy)]
 enum SpanPresence {

@@ -53,7 +53,7 @@ mod editor;
 mod fragment;
 pub(crate) mod integrity;
 mod pushout;
-mod remapping;
+mod remap;
 pub mod spec;
 pub(crate) mod transact;
 
