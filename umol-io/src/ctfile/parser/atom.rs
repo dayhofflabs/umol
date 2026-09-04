@@ -166,7 +166,7 @@ pub(super) fn extended_atom_block<'inp>(
 /// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
 ///       Increasing strictness: skip < validate < zero/blank
 ///
-pub fn atom_input<'inp>(
+fn atom_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (Atom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp> {
     move |input: &'inp [u8]| {
@@ -370,7 +370,7 @@ pub fn atom_input<'inp>(
 /// | eee   | 67-69    | exact change     | 0, 1         | Reaction                                  |
 /// --------------------------------------------------------------------------------------------------
 ///
-pub fn extended_atom_input<'inp>(
+fn extended_atom_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (ExtendedAtom, Point3D), Error = NomError<&'inp [u8]>> + use<'inp>
 {

@@ -256,20 +256,38 @@ The workspace is green at the end of S0.
   `cargo test -p umol-io cx` passed 196 focused tests, and `cargo test -p umol-io`
   passed 3,393 tests in total (3,387 unit tests and 6 integration tests).
   `cargo clippy -p umol-io --all-targets -- -D warnings` also passed.
-- **S1b — CXSMILES evidence** (`umol-io` tests and `smiles_parsing` benchmark): run the
-  existing CX tests and the S0d top-level CX cases, and account for any material
-  regression. Additive, green. [dep: S1a]
+- **S1b — CXSMILES evidence.** **Done.** (`umol-io` tests and `smiles_parsing`
+  benchmark): run the existing CX tests and the S0d top-level CX cases, and account for
+  any material regression. Additive, green. [dep: S1a]
+
+  The Winnow measurements on 2026-09-03 were:
+
+  - coordinates: 256.34–262.33 ns;
+  - ferrocene multicenter bonds: 739.49–746.18 ns; and
+  - SGroup hierarchy: 296.27–298.10 ns.
+
+  All three intervals are slightly lower than the recorded nom baseline, so there is no
+  material regression. `cargo test -p umol-io cx` passed 196 focused tests.
 
 The workspace is green at the end of S1; CTfile still uses nom.
 
 ### S2 — CTfile parser and error migration
 
-- **S2a — Full-file CTfile benchmark baseline and privacy cleanup**
+- **S2a — Full-file CTfile benchmark baseline and privacy cleanup.** **Done.**
   (`umol-io/benches/mol_parsing.rs`, `umol-io/src/ctfile/parser.rs` and record modules):
   replace record-level microbenchmarks with a few representative top-level basic MOL,
   extended MOL, and SDF parsing cases; make the CTAB block and record parser functions
   private; and record the full-file baseline against the unchanged nom implementation.
   Breaking public-surface cleanup, red to green within the subitem. [dep: S0a]
+
+  The benchmark now measures the public whole-file parsers using the existing caffeine
+  MOL, RDKit copolymer/SGroup MOL, and ten-component wwPDB SDF conformance inputs. The
+  unchanged nom implementation measured 2.7175–2.7352 us, 4.6568–4.6641 us, and
+  78.328–78.446 us, respectively, on 2026-09-03. The benchmark-only public exposure of
+  the CTAB block and record parsers was removed; the public whole-file parsers are
+  unchanged. `cargo test -p umol-io` passed 3,393 tests (3,387 unit tests and 6
+  integration tests), and `cargo clippy -p umol-io --all-targets -- -D warnings`
+  passed.
 - **S2b — Parser-neutral errors and input foundation** (`umol-io/src/ctfile/error.rs`,
   `umol-io/src/ctfile/parser/utils.rs`): replace the nom-bearing public error machinery
   with the cause-based contract above and port line, location, fixed-width, integer,

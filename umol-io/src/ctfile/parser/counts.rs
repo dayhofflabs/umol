@@ -57,7 +57,7 @@ pub(super) fn counts_block<'inp>(
 /// | vvvvvv  | 34-39    | version stamp              | V2000      | Generic |
 /// --------------------------------------------------------------------------
 ///
-pub fn counts_input<'inp>(
+fn counts_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (Counts, Vec<PropertyEntries>), Error = NomError<&'inp [u8]>>
        + use<'inp> {

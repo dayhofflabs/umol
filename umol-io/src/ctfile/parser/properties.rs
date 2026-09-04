@@ -480,7 +480,7 @@ pub(super) fn extended_properties_block<'inp>(
 
 /// Parse property line (basic properties only)
 /// Note: A  (atom alias) and M  END are handled at the block level, not here.
-pub fn property_input<'inp>(
+fn property_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
     let allow_clark_extensions = flags.contains(CtabParseFlags::CLARK_EXTENSIONS);
@@ -565,7 +565,7 @@ pub fn property_input<'inp>(
 
 /// Parse extended property line
 /// Note: A  (atom alias) and M  END are handled at the block level, not here.
-pub fn extended_property_input<'inp>(
+fn extended_property_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
     let allow_queries = flags.contains(CtabParseFlags::WILDCARDS);

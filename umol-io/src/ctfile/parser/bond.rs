@@ -112,7 +112,7 @@ pub(super) fn extended_bond_block<'inp>(
 /// NOTE: Basic parser should accept a strict subset of inputs accepted by extended parser
 ///       Increasing strictness: skip < validate < zero/blank
 ///
-pub fn bond_input<'inp>(
+fn bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = Bond, Error = NomError<&'inp [u8]>> + use<'inp> {
     move |input: &'inp [u8]| {
@@ -192,7 +192,7 @@ pub fn bond_input<'inp>(
 /// -------------------------------------------------------------------------
 ///
 ///
-pub fn extended_bond_input<'inp>(
+fn extended_bond_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = ExtendedBond, Error = NomError<&'inp [u8]>> + use<'inp> {
     let skip_unused_fields = flags.contains(CtabParseFlags::SKIP_UNUSED_FIELDS);

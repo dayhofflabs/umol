@@ -14,16 +14,11 @@ use umol_utils::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
-pub use self::atom::{atom_input, extended_atom_input}; // NOTE: Re-exported for benchmarks
 use self::bond::{bond_block, extended_bond_block};
-pub use self::bond::{bond_input, extended_bond_input}; // NOTE: Re-exported for benchmarks
 use self::counts::counts_block;
-pub use self::counts::counts_input; // NOTE: Re-exported for benchmarks
 use self::header::header_block;
 use self::legacy_atom_list::legacy_atom_list_block;
-pub use self::legacy_atom_list::legacy_atom_list_input; // NOTE: Re-exported for benchmarks
 use self::properties::{extended_properties_block, properties_block, PropertyEntries};
-pub use self::properties::{extended_property_input, property_input}; // NOTE: Re-exported for benchmarks
 use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
@@ -50,7 +45,7 @@ mod utils;
 /// Parse CTAB block (basic parser, optimized for performance, basic molecules only)
 ///
 /// This parser is optimized for basic molecules. For extended molecules, use extended_ctab_block.
-pub fn ctab_block<'inp>(
+fn ctab_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (Molecule, u32), Error = ParseError> + use<'inp> {
@@ -104,7 +99,7 @@ pub fn ctab_block<'inp>(
 /// Parse CTAB block (general parser, handles all features including queries)
 ///
 /// This parser handles extended molecules. For basic molecules, use ctab_block.
-pub fn extended_ctab_block<'inp>(
+fn extended_ctab_block<'inp>(
     line_offset: u32,
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = (ExtendedMolecule, u32), Error = ParseError> + use<'inp> {

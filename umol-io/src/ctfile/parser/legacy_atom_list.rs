@@ -59,7 +59,7 @@ pub(super) fn legacy_atom_list_block<'inp>(
 /// k: exclusion flag
 /// n: count
 /// 111 222 333 444 555: element symbols
-pub fn legacy_atom_list_input<'inp>(
+fn legacy_atom_list_input<'inp>(
     flags: CtabParseFlags,
 ) -> impl Parser<&'inp [u8], Output = PropertyEntries, Error = NomError<&'inp [u8]>> + use<'inp> {
     let legacy_atom_lists = flags.contains(CtabParseFlags::LEGACY_ATOM_LISTS);
