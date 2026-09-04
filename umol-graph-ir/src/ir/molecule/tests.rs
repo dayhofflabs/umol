@@ -4988,7 +4988,7 @@ fn test_molecule_combine_overlay() {
 }
 
 #[rstest]
-fn test_molecule_combine_stereo() {
+fn test_molecule_combine_from_stereo() {
     let left = Molecule::from_entries(MoleculeEntries {
         atoms: vec![AtomForm::from_element(Element::C)],
         ..Default::default()
@@ -5008,18 +5008,74 @@ fn test_molecule_combine_stereo() {
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
-        constraints: Constraints::new(),
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(4)]),
+            },
+        )]),
         ..Default::default()
     });
-    let (union, _) = left.combine(&right);
-
-    assert_eq!(union.stereo_atoms().count(), 1);
-    let stereo = union.stereo_atoms().iter().next().unwrap();
-    // right's site (atom 0) and ligands (atoms 1..=4) shift by left's one atom
-    assert_eq!(stereo.site_id(), AtomId(1));
+    let mut union = left;
+    let correspondence = union.combine_from(&right);
+    let expected = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 6],
+        bonds: vec![
+            (AtomId(1), AtomId(2), BondForm::from_order(1)),
+            (AtomId(1), AtomId(3), BondForm::from_order(1)),
+            (AtomId(1), AtomId(4), BondForm::from_order(1)),
+            (AtomId(1), AtomId(5), BondForm::from_order(1)),
+        ],
+        stereo_atoms: vec![(
+            AtomId(1),
+            vec![
+                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(1), AtomId(5)]),
+            },
+        )]),
+        ..Default::default()
+    });
+    assert_eq!(union, expected);
     assert_eq!(
-        stereo.ligands().map(|l| l.atom_id()).collect::<Vec<_>>(),
-        vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)]
+        correspondence,
+        MoleculeCorrespondence::new(
+            Correspondence::new(
+                vec![
+                    (AtomId(0), AtomId(1)),
+                    (AtomId(1), AtomId(2)),
+                    (AtomId(2), AtomId(3)),
+                    (AtomId(3), AtomId(4)),
+                    (AtomId(4), AtomId(5))
+                ],
+                5,
+                6
+            )
+            .unwrap(),
+            Correspondence::new(
+                vec![
+                    (BondId(0), BondId(0)),
+                    (BondId(1), BondId(1)),
+                    (BondId(2), BondId(2)),
+                    (BondId(3), BondId(3))
+                ],
+                4,
+                4
+            )
+            .unwrap(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::empty(),
+            Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
+            Correspondence::empty(),
+        )
     );
 }
 
@@ -5139,13 +5195,42 @@ fn test_molecule_combine_split_roundtrip() {
 
 #[rstest]
 fn test_molecule_split_stereo() {
-    // A stereo atom remains attached to its site component, separate from a lone bond.
     let mol = Molecule::from_entries(MoleculeEntries {
         atoms: (0..7).map(|_| AtomForm::from_element(Element::C)).collect(),
-        bonds: (1..=4)
-            .map(|id| (AtomId(0), AtomId(id), BondForm::from_order(1)))
-            .chain(iter::once((AtomId(5), AtomId(6), BondForm::from_order(1))))
+        bonds: iter::once((AtomId(0), AtomId(1), BondForm::from_order(1)))
+            .chain((3..=6).map(|id| (AtomId(2), AtomId(id), BondForm::from_order(1))))
             .collect(),
+        stereo_atoms: vec![(
+            AtomId(2),
+            vec![
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
+            ],
+            StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
+        )],
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(2), AtomId(6)]),
+            },
+        )]),
+        ..Default::default()
+    });
+    let components = mol.split();
+    let lone = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 2],
+        bonds: vec![(AtomId(0), AtomId(1), BondForm::from_order(1))],
+        ..Default::default()
+    });
+    let bound = Molecule::from_entries(MoleculeEntries {
+        atoms: vec![AtomForm::from_element(Element::C); 5],
+        bonds: vec![
+            (AtomId(0), AtomId(1), BondForm::from_order(1)),
+            (AtomId(0), AtomId(2), BondForm::from_order(1)),
+            (AtomId(0), AtomId(3), BondForm::from_order(1)),
+            (AtomId(0), AtomId(4), BondForm::from_order(1)),
+        ],
         stereo_atoms: vec![(
             AtomId(0),
             vec![
@@ -5156,25 +5241,58 @@ fn test_molecule_split_stereo() {
             ],
             StereoAtomForm::new(StereoKind::Tetrahedral, 1u32),
         )],
-        constraints: Constraints::new(),
+        constraints: Constraints::from_iter([Constraint::Molecule(
+            MoleculeConstraint::Connected {
+                atoms: Some(vec![AtomId(0), AtomId(4)]),
+            },
+        )]),
         ..Default::default()
     });
-    let components = mol.split();
-
-    assert_eq!(components.len(), 2);
-    let (bound, _) = &components[0];
-    assert_eq!(bound.atoms().count(), 5);
-    assert_eq!(bound.stereo_atoms().count(), 1);
-    let stereo = bound.stereo_atoms().iter().next().unwrap();
-    assert_eq!(stereo.site_id(), AtomId(0));
-    assert_eq!(
-        stereo.ligands().map(|l| l.atom_id()).collect::<Vec<_>>(),
-        vec![AtomId(1), AtomId(2), AtomId(3), AtomId(4)]
+    let lone_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 7).unwrap(),
+        Correspondence::new(vec![(BondId(0), BondId(0))], 1, 5).unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::new(vec![], 0, 1).unwrap(),
+        Correspondence::empty(),
     );
-    let (lone, _) = &components[1];
-    assert_eq!(lone.atoms().count(), 2);
-    assert_eq!(lone.stereo_atoms().count(), 0);
-    assert_eq!(lone.bond(BondId(0)).atom_ids(), [AtomId(0), AtomId(1)]);
+    let bound_correspondence = MoleculeCorrespondence::new(
+        Correspondence::new(
+            vec![
+                (AtomId(0), AtomId(2)),
+                (AtomId(1), AtomId(3)),
+                (AtomId(2), AtomId(4)),
+                (AtomId(3), AtomId(5)),
+                (AtomId(4), AtomId(6)),
+            ],
+            5,
+            7,
+        )
+        .unwrap(),
+        Correspondence::new(
+            vec![
+                (BondId(0), BondId(1)),
+                (BondId(1), BondId(2)),
+                (BondId(2), BondId(3)),
+                (BondId(3), BondId(4)),
+            ],
+            4,
+            5,
+        )
+        .unwrap(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::empty(),
+        Correspondence::new(vec![(StereoAtomId(0), StereoAtomId(0))], 1, 1).unwrap(),
+        Correspondence::empty(),
+    );
+    assert_eq!(
+        components,
+        vec![(lone, lone_correspondence), (bound, bound_correspondence)]
+    );
 }
 
 #[rstest]

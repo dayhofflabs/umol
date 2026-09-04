@@ -423,11 +423,35 @@ mod tests {
             ],
             ..Default::default()
         });
+        let result = left.meet_pushout(&right, &overlap).unwrap();
+        assert_eq!(result.object, expected);
         assert_eq!(
-            left.meet_pushout(&right, &overlap)
-                .expect("admissible glue")
-                .object,
-            expected,
+            result.left,
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(1))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(BondId(0), BondId(0))], 1, 2).unwrap(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
+        );
+        assert_eq!(
+            result.right,
+            MoleculeCorrespondence::new(
+                Correspondence::new(vec![(AtomId(0), AtomId(0)), (AtomId(1), AtomId(2))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(BondId(0), BondId(1))], 1, 2).unwrap(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+                Correspondence::empty(),
+            )
         );
     }
 

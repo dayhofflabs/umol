@@ -304,18 +304,31 @@ mod tests {
     }
 
     #[rstest]
-    fn test_pushout_glue_at_node() {
-        // path 0-1 glued to path 0-1 identifying left node 1 with right node 0 → path 0-1-2.
+    fn test_graph_pushout_partial() {
         let left = Graph::new(2, &[[0, 1]]);
         let right = Graph::new(2, &[[0, 1]]);
-        let overlap = node_overlap(vec![(1, 0)], &left, &right);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
         let po = left.pushout(&right, &overlap);
-        assert_eq!(po.object.node_count(), 3);
-        assert_eq!(po.object.edge_count(), 2);
-        assert_eq!(po.object.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
-        assert_eq!(po.right.nodes().right_of(NodeId(0)), Some(NodeId(1)));
-        assert_eq!(po.right.nodes().right_of(NodeId(1)), Some(NodeId(2)));
-        assert_eq!(po.right.edges().right_of(EdgeId(0)), Some(EdgeId(1)));
+        assert_eq!(po.object, Graph::new(3, &[[0, 1], [1, 2]]));
+        assert_eq!(
+            po.left,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(0)), (NodeId(1), NodeId(1))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(0))], 1, 2).unwrap(),
+            )
+        );
+        assert_eq!(
+            po.right,
+            GraphCorrespondence::new(
+                Correspondence::new(vec![(NodeId(0), NodeId(1)), (NodeId(1), NodeId(2))], 2, 3)
+                    .unwrap(),
+                Correspondence::new(vec![(EdgeId(0), EdgeId(1))], 1, 2).unwrap(),
+            )
+        );
     }
 
     #[rstest]

@@ -234,25 +234,15 @@ spelling.
 | --- | --- | --- |
 | `projection` for a stored constraint or the incidence category | `constraint`, `incidence constraint` | `projection` names an actual mapping between representations |
 | `predicate` or `representation` for the stored object | `constraint` | the repository term for a possibly non-ground assertion |
-| `EntityConstraint` for the non-ring subset | `incidence constraint` | entity constraints include ring constraints |
-| `relational constraint` for an incidence constraint | `incidence constraint` | `RelationalConstraint` already means a molecule-scope, reference-bearing constraint |
 | `undetermined` for an operation outcome | `underdetermined` | stored state versus outcome |
 | `underdetermined` for stored lattice state | `undetermined` | as above |
-| `reset` for removing or replacing an entity | `remove`, `replace` | reset clears a constraint to its undetermined form |
 | `config` for semantic acceptance choices | `model` | config is operational |
 | `policy` for chemical acceptance | `model` | policy acts after acceptance is established |
 | `validate_integrity` | `check_integrity` | tier-1 integrity is a graph-IR construction check, not semantic validation |
 | `*Validator` in `umol-graph-ir` | `check_integrity` for tier 1, or move the validator to `umol-graph` for tiers 2 and 3 | validators are chemistry-layer semantic operations |
 | `*Selection` for nested structural layers | `*Level` | selection does not state that the alternatives form an ordered, nested hierarchy |
 | `*Features` for mutually exclusive nested presets | `*Level` | features are independently combinable switches |
-| `iterative` for visitor delivery | visitor delivery, `visit_*` | the implementation may remain recursive while visiting results |
-| a bare plural method name for an eager collection-returning operation | `enumerate_*` | delivery must be legible at the call site; the bare plural is reserved for single-value operations |
-| `*Ast` for graph-IR values | `*Form` for a `Lattice` type; bare aggregate name otherwise | the suffix records lattice semantics, not syntax-tree shape |
-| `ast` as the graph-IR module or entity payload member | `ir` for the module; `attributes` for the payload | the graph model is an IR, and the payload is the entity's complete attribute form |
-| `:type` for an entity payload in the DSL | `:attrs` | the payload contains attributes, not the entity kind |
-| `Ctx` in a public identifier | `Context` | public identifiers use complete words |
-| `apply_remapping`, `try_apply_remapping` | `remap`, `try_remap` | the receiver is transported through the supplied remapping |
-| `apply_compaction` | `compact` | the receiver is transported through the supplied compaction |
+| `try_*` solely because an operation returns `Option` or `Result` | the ordinary operation name | fallibility is part of the signature; `try_*` distinguishes a checked counterpart or restricted dispatch |
 | agent-stem composites for run artifacts (`ResolverError`, `ValidatorError`, `KekulizerError`) | verb stem (`ResolveError`, `ValidateError`, `KekulizeError`) | errors, configs, and state belong to the run, not the engine |
 | operation-noun composites for run artifacts (`KekulizationConfig`) | verb stem (`KekulizeConfig`) | the operation noun names a completed act, not a run's parameters |
 | `CanonicalizeLevel`, `CanonicalizationLevel` | private `DescriptionLevel` | the internal hierarchy describes represented prefixes; public canonicalization is complete-only |
@@ -999,8 +989,8 @@ model-independent derived value is also an invariant.
 ### Key and kind
 
 A **kind** is a unit-variant discriminant enum naming an alternative without parameters; a
-**key** is a discriminant that carries parameters. `AtomFieldKind` mirrors `AtomFieldChange`'s
-variants; `AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
+**key** is a discriminant that carries parameters. `AtomFieldKind` enumerates atom field keys;
+`AtomConstraintKey` is a key because `RingMembership(RingScope)` carries its scope.
 Peer entity forms gain `*FieldKind` enums as consumers arrive.
 
 **Not:** interchangeable — a parameterless discriminant enum is a kind, not a key.
@@ -1578,10 +1568,12 @@ says how results arrive.
 
 An operation returning a single value — one output struct, one set, one coloring, a count, an
 `Option` — takes none of these prefixes and has no visitor form; plural-sounding names for
-single-value operations, such as `automorphisms`, are not delivery prefixes. `try_*` and
-`*_fallback` mark input-domain dispatch (simple graph against subdivision fallback) and compose
-with the delivery prefix. The execution contract behind the prefixes — streamability, visitor
-payload, and emission order — is defined in the algorithm execution guide.
+single-value operations, such as `automorphisms`, are not delivery prefixes. In this family,
+`try_*` marks restricted input-domain dispatch (simple graph against subdivision fallback), while
+`*_fallback` marks the corresponding fallback route. Both compose with the delivery prefix. The
+general meaning of `try_*` is defined under *Try prefix*. The execution contract behind the
+prefixes — streamability, visitor payload, and emission order — is defined in the algorithm
+execution guide.
 
 **Not:** *iterative* for visitor delivery — an implementation may remain recursive while visiting
 results. Not a bare plural name for an eager collection-returning operation.
@@ -1719,6 +1711,23 @@ representation rather than fill undetermined state.
 
 **Not:** a resolver policy; not resolution.
 **In code:** `umol-graph/src/ops/transform`.
+
+### Try prefix
+
+The **`try_*` prefix** distinguishes a checked operation from an unprefixed asserted or panicking
+counterpart, or marks an attempt at a restricted input-domain dispatch for which the caller may use
+a fallback. It does not merely announce that a method returns `Option` or `Result`. An operation
+whose ordinary contract is fallible keeps its ordinary verb and expresses failure in its return
+type, as `apply`, `parse`, `rollback`, `reverse`, and `to_reaction_span` do. Standard trait names
+such as `TryFrom` and `TryInto` are unaffected.
+
+Use checked/asserted pairs only when both public routes are useful. An internal producer that knows
+a checked operation cannot fail handles that result explicitly rather than requiring a second
+public method solely to avoid it.
+
+**Not:** a general marker for fallibility.
+**In code:** `map`/`try_map`, `remap`/`try_remap`, `from_entries`/`try_from_entries`, and
+`try_visit_relevant_cycles` for restricted dispatch.
 
 ### Underdetermined
 

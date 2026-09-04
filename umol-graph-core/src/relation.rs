@@ -2347,6 +2347,8 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::correspondence::GraphCorrespondence;
+    use crate::graph::Graph;
 
     fn hash<T: Hash>(value: &T) -> u64 {
         let mut hasher = DefaultHasher::new();
@@ -3437,6 +3439,34 @@ mod tests {
                 factor_2: vec![40, 41, 42],
             }
         );
+    }
+
+    #[rstest]
+    #[case::forward(vec![NodeId(0), NodeId(1)], vec![NodeId(1), NodeId(2)])]
+    #[case::reversed(vec![NodeId(1), NodeId(0)], vec![NodeId(2), NodeId(1)])]
+    fn test_fixed_var_birelation_set_remap_pushout(
+        #[case] participants: Vec<NodeId>,
+        #[case] expected_participants: Vec<NodeId>,
+    ) {
+        let left = Graph::new(2, &[[0, 1]]);
+        let right = Graph::new(2, &[[0, 1]]);
+        let overlap = GraphCorrespondence::new(
+            Correspondence::new(vec![(NodeId(1), NodeId(0))], 2, 2).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
+        let pushout = left.pushout(&right, &overlap);
+        let remapping = GraphRemapping::new(
+            vec![
+                pushout.right.nodes().right_of(NodeId(0)).unwrap(),
+                pushout.right.nodes().right_of(NodeId(1)).unwrap(),
+            ],
+            vec![pushout.right.edges().right_of(EdgeId(0)).unwrap()],
+        );
+        let relations: FixedVarBirelationSet<EdgeId, 1, NodeId, Vec<u32>> =
+            FixedVarBirelationSet::new(vec![([EdgeId(0)], participants, vec![7, 11])]);
+        let expected =
+            FixedVarBirelationSet::new(vec![([EdgeId(1)], expected_participants, vec![7, 11])]);
+        assert_eq!(relations.remap(&remapping), expected);
     }
 
     #[rstest]

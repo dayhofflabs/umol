@@ -5280,12 +5280,23 @@ mod tests {
             4,
         )
         .expect("correspondence producer preserves partial-bijection invariants");
-        let correspondence = MoleculeCorrespondence::induce(&left, &right, atoms)
-            .expect("the atom correspondence describes the molecule pair");
+        let correspondence = MoleculeCorrespondence::new(
+            atoms,
+            Correspondence::new(vec![(BondId(0), BondId(0)), (BondId(1), BondId(1))], 3, 3)
+                .unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+            Correspondence::new(vec![], 1, 1).unwrap(),
+        );
+        let span = ReactionSpan::superimpose(&left, &right, &correspondence).unwrap();
+        assert_eq!(span.correspondence(), correspondence);
 
         assert_eq!(
-            ReactionSpan::superimpose(&left, &right, &correspondence),
-            Some(ReactionSpan::from_entries(ReactionSpanEntries {
+            span,
+            ReactionSpan::from_entries(ReactionSpanEntries {
                 atoms: vec![
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
                     EntitySpan::Unchanged(AtomForm::from_element(Element::C)),
@@ -5410,7 +5421,7 @@ mod tests {
                         atoms: Some(vec![AtomId(1), AtomId(4)]),
                     },)),
                 ],
-            })),
+            }),
         );
     }
 
